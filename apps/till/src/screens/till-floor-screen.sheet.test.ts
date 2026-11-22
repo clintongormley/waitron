@@ -255,6 +255,19 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(targetIds(el)).toEqual(["t2", "t3"]);
   });
 
+  it("Join with… leaves out a table needing moving", async () => {
+    const el = await mount(
+      [
+        planned("t1", 2, {}, party("P", 1, ["t1"])),
+        planned("t2", 20, { needsMoving: true }),
+        planned("t3", 40),
+      ],
+      stubApi(),
+    );
+    await press(el, "t1", "join-with");
+    expect(targetIds(el)).toEqual(["t3"]);
+  });
+
   it("Join with… names a merge as the map does, once", async () => {
     const el = await mount(
       [

@@ -740,6 +740,38 @@ describe("a party change that changes a room answers its revision", () => {
     expect(await holders(a, b, c)).toEqual([p, p, null]);
   });
 
+  it("a join with a merge refuses a table needing clearing without changing the floor", async () => {
+    const { zoneId, a, b, c } = await room();
+    const p = await seat(a);
+    await inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ needsClearingSince: NOW.toISOString() })
+        .where(eq(diningTables.id, b)),
+    );
+    const roomBefore = await zoneRevisionOf(v, zoneId);
+    const partyBefore = await revision(p);
+
+    expect(
+      await refusal(
+        join(p, {
+          tableId: b,
+          expectedPartyRevision: partyBefore,
+          otherPartyId: null,
+          merge: { moving: a, target: b, side: "left", seats: 8 },
+          zoneRevision: roomBefore,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.needs_clearing", params: { tableId: b } } },
+    });
+    expect(await zoneRevisionOf(v, zoneId)).toBe(roomBefore);
+    expect(await revision(p)).toBe(partyBefore);
+    expect(await mergeOf(v, b)).toBeNull();
+    expect(await holders(a, b, c)).toEqual([p, null, null]);
+  });
+
   it("a join with a merge sent from an old revision is refused and writes nothing", async () => {
     const { zoneId, a, b, c } = await room();
     const p = await seat(a);

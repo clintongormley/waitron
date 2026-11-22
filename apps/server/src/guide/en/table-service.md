@@ -826,6 +826,8 @@ opens as a map when it has tables placed on its plan, and as a list when it has 
 
 A saved joined table starts as its real tables together in a named group. To add a table, open its details on the map and choose **Join with…**. To separate tables, open the group, choose **Split tables…**, tick the tables to take out and confirm **Split**. Use **Join with…** to put a table back in the group.
 
+Before you join tables to seat guests, mark any table that needs clearing or moving as cleared or moved, since **Join with…** leaves it out until then.
+
 If an unsent order blocks a join from the map, choose **Take over draft** for each bill listed.
 Close the message and drag again or use **Join with…** again.
 

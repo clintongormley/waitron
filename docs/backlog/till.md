@@ -72,9 +72,6 @@ Left open by A429 slice 4
   table whose master table was deleted, and one never on a plan" checks both the existing row and that refusal (A476
   run-it review). Decide whether this needs its own saved-place code and wording; the owner's
   A476 rename is retained for both paths.
-- A second drop made while the first is still being sent replaces the first's drawn place.
-- When a table is dropped on another to seat a party, the till checks only the dragged table's
-  gates; the server's join refusals are believed to cover the target, but that was not run.
 - From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
   tables' labels overlap while they line up mid-drag.
 - The new floor test files repeat their setup; shared helpers were left out to avoid churn.

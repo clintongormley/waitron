@@ -144,9 +144,52 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(refreshes.count).toBe(1);
     expect(drawnAt(el, "t1")).toBe(12);
 
+    el.tablesReadAt = nextFloorMoment();
+    el.tablesAnswered = true;
     el.tables = [planned("t1", 30), planned("t2", 20)];
     await el.updateComplete;
     expect(drawnAt(el, "t1")).toBe(30);
+  });
+
+  it("keeps two drops drawn while their room saves them in order", async () => {
+    const api = stubApi();
+    let acceptFirst!: (answer: FloorAnswer) => void;
+    let rejectSecond!: (reason: unknown) => void;
+    api.moveToday
+      .mockReturnValueOnce(new Promise<FloorAnswer>((resolve) => (acceptFirst = resolve)))
+      .mockReturnValueOnce(new Promise<FloorAnswer>((_, reject) => (rejectSecond = reject)));
+    const el = await mount(
+      [planned("t1", 2, { zoneRevision: 7 }), planned("t2", 20, { zoneRevision: 7 })],
+      api,
+    );
+    el.tablesReadAt = nextFloorMoment();
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await drop(el, { tableId: "t2", x: 26, y: 5, targetId: null });
+
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 26]);
+    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 }, 7);
+
+    const overlappingRead = nextFloorMoment();
+    acceptFirst({ zoneId: "z1", revision: 8 });
+    await vi.waitFor(() => {
+      expect(api.moveToday).toHaveBeenNthCalledWith(2, "t2", { x: 26, y: 5 }, 8);
+    });
+
+    el.tablesAnswered = true;
+    el.tablesReadAt = overlappingRead;
+    el.tables = [planned("t1", 2, { zoneRevision: 7 }), planned("t2", 20, { zoneRevision: 7 })];
+    await el.updateComplete;
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 26]);
+
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = [planned("t1", 12, { zoneRevision: 8 }), planned("t2", 20, { zoneRevision: 8 })];
+    await el.updateComplete;
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 26]);
+
+    rejectSecond({ code: "table.fixed", status: 409 });
+    await settle(el);
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 20]);
+    expect(refusal(el)).toBe("That table is fixed in place");
   });
 
   it("a refused move puts the table back and says why", async () => {
