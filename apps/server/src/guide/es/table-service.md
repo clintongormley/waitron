@@ -268,6 +268,12 @@ Si eliges **Descartar** en un pedido aparcado con platos enviados, el terminal a
 pedido. Cancela sus platos enviados antes de descartarlo. Si conservas el cobro de un plato
 cancelado, cobra la cuenta.
 
+## Pasar un pedido aparcado a una mesa {#move-parked-order}
+
+En **Pedidos aparcados**, elige **Pasar a mesa** y selecciona una mesa. Si un pedido sin enviar de
+esa mesa bloquea el traslado, elige **Tomar el pedido** en cada cuenta indicada. Cierra el aviso
+y vuelve a elegir la mesa.
+
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
 Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la estación deje de
@@ -857,6 +863,9 @@ tiene ninguna.
 ## Unir y separar mesas {#join-tables}
 
 Una mesa unida guardada empieza como sus mesas reales juntas en un grupo con nombre. Para añadir una mesa, abre sus detalles en el mapa y elige **Unir con…**. Para separar mesas, abre el grupo, elige **Separar mesas…**, marca las mesas que quieres sacar y confirma **Separar**. Usa **Unir con…** para volver a añadir una mesa al grupo.
+
+Si un pedido sin enviar impide unir mesas desde el mapa, elige **Tomar el pedido** en cada cuenta
+indicada. Cierra el aviso y vuelve a arrastrar la mesa o a elegir **Unir con…**.
 
 ## Restablecer una zona al plano de hoy {#zone-reset}
 

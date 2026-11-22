@@ -670,12 +670,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, not scheduled for
+  picker, has landed; it leaves open A1359. Remaining: pre-bills through A446, not scheduled for
   the foreseeable future (owner, 2026-11-17).
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
-
-
-- **Take over offered where it is needed** (bundle of 1, size M). Holds A1349. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
 
 
 - **Table screen panels that do not fit** (bundle of 4, size S). Holds A1359, A1265, A1290, A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)

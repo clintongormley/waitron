@@ -252,6 +252,12 @@ it, then choose a reason. Removing that charge may need a supervisor's PIN.
 If you choose **Discard** on a parked order with sent dishes, the till opens that order first.
 Cancel its sent dishes before discarding it. If you keep a cancelled dish's charge, pay the bill.
 
+## Move a parked order to a table {#move-parked-order}
+
+In **Parked orders**, choose **Move to table** and pick a table. If an unsent order at that table
+blocks the move, choose **Take over draft** for each bill listed. Close the message, then choose
+the table again.
+
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
 When a table has paid for a dish that is not coming, cancel it so the station stops making it and
@@ -799,6 +805,9 @@ opens as a map when it has tables placed on its plan, and as a list when it has 
 ## Join and split tables {#join-tables}
 
 A saved joined table starts as its real tables together in a named group. To add a table, open its details on the map and choose **Join with…**. To separate tables, open the group, choose **Split tables…**, tick the tables to take out and confirm **Split**. Use **Join with…** to put a table back in the group.
+
+If an unsent order blocks a join from the map, choose **Take over draft** for each bill listed.
+Close the message and drag again or use **Join with…** again.
 
 ## Reset a zone to today's plan {#zone-reset}
 

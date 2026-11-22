@@ -211,6 +211,14 @@ export interface FloorRefreshDetail {
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
 
+export interface FloorJoinRefusal {
+  cause: unknown;
+  api: TillApi;
+  operatorSession: number;
+  parties: readonly { party: TableParty; edits: BillEditExpected[] }[];
+  current: () => boolean;
+}
+
 /** What a floor change was asked under; a change to any of it retires the question. */
 interface FloorContext {
   api: TillApi;
@@ -224,7 +232,7 @@ interface FloorJoin extends FloorContext {
   action: JoinAction;
   room: Room;
   read: AbortController;
-  expectedEdits: BillEditExpected[];
+  parties: { party: TableParty; edits: BillEditExpected[] }[];
 }
 
 type ZonedTable = TableState & { zoneId: string };
@@ -914,6 +922,7 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
   @property({ attribute: false }) api?: TillApi;
+  @property({ attribute: false }) offerJoinConflicts?: (refusal: FloorJoinRefusal) => boolean;
   @property({ attribute: false }) operatorSession = 0;
   /** The device's profile allows `take-orders`. */
   @property({ attribute: false }) canChangeToday = false;
@@ -1635,7 +1644,7 @@ export class TillFloorScreen extends LitElement {
       action,
       room,
       read: new AbortController(),
-      expectedEdits: [],
+      parties: [],
     };
     this.#joinWork = asked;
     const limit = limited(TABLE_REQUEST_LIMIT_MS, asked.read.signal);
@@ -1643,28 +1652,29 @@ export class TillFloorScreen extends LitElement {
       for (const party of [action.party, ...(action.other === null ? [] : [action.other])]) {
         const answer = await api.listDrafts(party.id, { signal: limit.signal });
         if (!this.#joinCurrent(asked)) return;
-        asked.expectedEdits.push(
-          ...answer.billEdits.map(({ billId, editorVersion, draftId, draftRevision }) => ({
+        asked.parties.push({
+          party,
+          edits: answer.billEdits.map(({ billId, editorVersion, draftId, draftRevision }) => ({
             billId,
             editorVersion,
             draftId,
             draftRevision,
           })),
-        );
+        });
       }
-      asked.expectedEdits.sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
-      if (
-        new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
-      )
+      const expectedEdits = asked.parties
+        .flatMap(({ edits }) => edits)
+        .sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
+      if (new Set(expectedEdits.map(({ billId }) => billId)).size !== expectedEdits.length)
         throw { code: "draft.out_of_date" };
       const { merge } = action;
-      if (merge === null) await this.#join(asked, null);
+      if (merge === null) await this.#join(asked, null, expectedEdits);
       else
         this.askingSeats = {
           heading: action.heading,
           seats: this.#joinSeats(merge.moving, merge.target),
           action: "join",
-          resend: (chosen) => void this.#join(asked, { ...merge, seats: chosen }),
+          resend: (chosen) => void this.#join(asked, { ...merge, seats: chosen }, expectedEdits),
           context: asked,
         };
     } catch (cause) {
@@ -1681,9 +1691,13 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  async #join(asked: FloorJoin, merge: JoinMerge | null): Promise<void> {
+  async #join(
+    asked: FloorJoin,
+    merge: JoinMerge | null,
+    expectedEdits: BillEditExpected[],
+  ): Promise<void> {
     if (!this.#joinCurrent(asked)) return;
-    const { api, action, room, expectedEdits } = asked;
+    const { api, action, room } = asked;
     const { party, tableId, other } = action;
     const revisions = {
       expectedPartyRevision: party.revision,
@@ -1704,7 +1718,17 @@ export class TillFloorScreen extends LitElement {
             const revision = answer.zoneRevisions?.[room.zoneId];
             return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
-    await this.#settle(call, { current: () => this.#joinCurrent(asked) });
+    await this.#settle(call, {
+      current: () => this.#joinCurrent(asked),
+      offerRefusal: (cause) =>
+        this.offerJoinConflicts?.({
+          cause,
+          api,
+          operatorSession: asked.operatorSession,
+          parties: asked.parties,
+          current: () => this.#inContext(asked),
+        }) === true,
+    });
     if (this.#joinCurrent(asked)) this.#joinWork = null;
   }
 
@@ -1739,9 +1763,11 @@ export class TillFloorScreen extends LitElement {
     {
       refresh,
       current = () => true,
+      offerRefusal,
     }: {
       refresh?: FloorRefreshDetail;
       current?: () => boolean;
+      offerRefusal?: (cause: unknown) => boolean;
     } = {},
   ): Promise<void> {
     try {
@@ -1751,7 +1777,7 @@ export class TillFloorScreen extends LitElement {
     } catch (cause) {
       if (!current()) return;
       const refused = (cause ?? {}) as Refused;
-      this.refusal = this.#refusalText(refused);
+      if (offerRefusal?.(cause) !== true) this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
     this.#requestFloorRefresh(refresh);

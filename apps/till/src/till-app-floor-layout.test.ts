@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { emit, party } from "../test/allergy-app-fixture.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -116,6 +118,84 @@ async function mount(over: Record<string, unknown>) {
 }
 
 const banner = (floor: TillFloorScreen) => floor.shadowRoot!.querySelector("[data-layout-due]");
+
+it.each(["drag", "Join with"])(
+  "%s lets staff take over the blocked draft before retrying",
+  async (entry) => {
+    const original = { billId: "b2", editorVersion: 7, draftId: "d2", draftRevision: 3 };
+    const conflict = { ...original, editorId: "luis", editorName: "Luis" };
+    const own = { billId: "b1", editorVersion: 2, draftId: "d1", draftRevision: 1 };
+    const newEdit = { ...original, editorVersion: 8 };
+    let received = conflict;
+    const rows = [
+      { ...placed, party: party({ id: "p1", tableIds: ["t1"] }) },
+      {
+        ...placed,
+        id: "t2",
+        label: "2",
+        shortName: "2",
+        today: { ...placed.today!, placement: { ...placed.today!.placement, x: 20 } },
+        party: party({ id: "p2", tableIds: ["t2"] }),
+      },
+    ];
+    const joinTables = vi
+      .fn<TillApi["joinTables"]>()
+      .mockRejectedValueOnce({ code: "draft.taken_over", conflicts: [conflict] })
+      .mockResolvedValue({} as Awaited<ReturnType<TillApi["joinTables"]>>);
+    const takeOverDraft = vi.fn(async () => {
+      received = { ...newEdit, editorId: "person", editorName: "Ana" };
+    });
+    const { el, floor } = await mount({
+      listZones: vi.fn().mockResolvedValue([offered]),
+      getTablesState: vi.fn().mockResolvedValue(rows),
+      listDrafts: vi.fn(async (id: string) => ({
+        drafts: [],
+        billEdits: id === "p2" ? [received] : [{ ...own, editorId: "person", editorName: "Ana" }],
+      })),
+      joinTables,
+      takeOverDraft,
+    });
+    const root = floor.shadowRoot!;
+    const join = async () => {
+      const map = root.querySelector("wt-floor-map")!;
+      if (entry === "drag") {
+        emit(map, "wt-table-drag-end", { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+      } else {
+        emit(map, "wt-table-details", { tableId: "t1" });
+        await floor.updateComplete;
+        const sheet = root.querySelector("till-table-details-sheet")!;
+        await sheet.updateComplete;
+        await userEvent.click(
+          sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="join-with"]')!,
+        );
+        const choices = root.querySelector("till-join-with-dialog")!;
+        emit(choices, "join-with-pick", { tableId: "t1", targetId: "t2" });
+        emit(choices, "join-with-close");
+      }
+      await vi.waitFor(() => expect(root.querySelector("till-today-seats-dialog")).not.toBeNull());
+      emit(root.querySelector("till-today-seats-dialog")!, "today-seats-confirm", { seats: 4 });
+    };
+    await join();
+    await vi.waitFor(() => expect(joinTables).toHaveBeenCalledOnce());
+    const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+    await vi.waitFor(() => expect(prompt()).not.toBeNull());
+    const buttons = prompt()!.shadowRoot!;
+    await userEvent.click(buttons.querySelector<HTMLElement>('[data-split-take-over="b2"]')!);
+    await userEvent.click(buttons.querySelector<HTMLElement>("[data-confirm-take-over]")!);
+    expect(takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "p2",
+      "d2",
+      { revision: 3, expectedEdit: original, submissionId: expect.any(String) },
+      { signal: expect.any(AbortSignal) },
+    );
+    await userEvent.click(buttons.querySelector<HTMLElement>("[data-finish-conflicts]")!);
+    await vi.waitFor(() => expect(prompt()).toBeNull());
+    expect(joinTables).toHaveBeenCalledOnce();
+    await join();
+    await vi.waitFor(() => expect(joinTables).toHaveBeenCalledTimes(2));
+    expect(joinTables.mock.calls[1]?.[2].expectedEdits).toEqual([own, newEdit]);
+  },
+);
 
 async function press(floor: TillFloorScreen): Promise<void> {
   floor.shadowRoot!.querySelector<HTMLElement>("[data-update-layout]")!.click();
