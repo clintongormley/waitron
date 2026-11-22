@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import "./main-server-strip.js";
 import type { TillMainServerStrip } from "./main-server-strip.js";
 
@@ -157,7 +157,8 @@ it("counts the last contact up once a second, in seconds and then in minutes", a
     setLocale("es");
     vi.advanceTimersByTime(1_000);
     await el.updateComplete;
-    expect(line()).toBe("Último contacto: hace 2 minutos.");
+    expect(line()).toBe(fill(t("server.last_contact_minutes", "es"), { n: "2" }));
+    expect(line()).not.toBe("Last contact: 2 minutes ago.");
     el.remove();
     expect(vi.getTimerCount()).toBe(0);
   } finally {
