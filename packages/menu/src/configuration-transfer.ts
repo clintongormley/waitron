@@ -1,6 +1,7 @@
 import {
   AppError,
   type ContentLanguages,
+  stringToBasisPoints,
   colorOrNull,
   HOME_DEVICES,
   MAX_SET_MENU_AMOUNT_CENTS,
@@ -11,6 +12,7 @@ import { menus, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkSectionMemberRows } from "./include-folder.js";
 import { syncMenuOffers } from "./menu-structure.js";
+import { readVenueVatRates } from "./takeaway-vat-rates.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -89,6 +91,34 @@ function checkMenuShells(tables: Readonly<Record<string, Rows>>): void {
   for (const counts of owned.values())
     if (counts.menu_root !== 1 || counts.home_layout !== 1)
       throw new AppError("setup.request_invalid", { field: "sections.owner_menu_id" });
+}
+
+/** Every top-level product has one takeaway rate from the beginning; a variant may have none and
+ * takes its parent's. Checked only where the bundle carries the table, which it does whenever it
+ * carries products. */
+function checkTakeawayVatRates(tables: Readonly<Record<string, Rows>>): void {
+  const rates = tables.product_takeaway_vat_rates;
+  if (rates === undefined) return;
+  const firstRows = new Map<unknown, number>();
+  for (const row of rates)
+    if (row.starts_on == null)
+      firstRows.set(row.product_id, (firstRows.get(row.product_id) ?? 0) + 1);
+  const refuse = () => {
+    throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates" });
+  };
+  for (const count of firstRows.values()) if (count > 1) refuse();
+  for (const row of tables.products ?? [])
+    if (row.parent_id == null && firstRows.get(row.id) !== 1) refuse();
+}
+
+/** A takeaway rate the importing venue's area does not offer for picking is refused, as a save
+ * refuses it. */
+async function checkPickableTakeawayVatRates(tx: Transaction, rows: Rows | undefined) {
+  if (rows === undefined || rows.length === 0) return;
+  const pickable = new Set((await readVenueVatRates(tx)).pickable.map(stringToBasisPoints));
+  for (const row of rows)
+    if (!pickable.has(row.rate as number))
+      throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates" });
 }
 
 function isSetMenuAmount(cents: unknown): boolean {
@@ -222,6 +252,7 @@ export function validateMenuConfiguration(
   checkHomeDisplays(tables.menus);
   checkSetMenus(tables);
   checkColors(tables.products, "products");
+  checkTakeawayVatRates(tables);
   for (const row of tables.products ?? [])
     if (row.parent_id != null)
       for (const column of ["category_id", "color"])
@@ -292,7 +323,7 @@ export const MENU_CONFIGURATION_TRANSFER = {
   validate: validateMenuConfiguration,
   async beforeImport(
     tx: Transaction,
-    _tables: Readonly<Record<string, Rows>>,
+    tables: Readonly<Record<string, Rows>>,
     bundle?: { readonly contentLanguages: unknown },
   ): Promise<void> {
     const country = (await readTaxpayer(tx))?.country;
@@ -301,6 +332,7 @@ export const MENU_CONFIGURATION_TRANSFER = {
       country,
       area: (await readVenue(tx)).province,
     });
+    await checkPickableTakeawayVatRates(tx, tables.product_takeaway_vat_rates);
   },
   async afterImport(tx: Transaction): Promise<void> {
     const rows = await tx.select({ id: menus.id }).from(menus);
