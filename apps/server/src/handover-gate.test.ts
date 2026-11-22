@@ -5,6 +5,7 @@ import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { corsForVenue } from "./cors.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
+import { STANDING_DOWN_PAGE_WORDS } from "./i18n/restricted-page.js";
 
 function hold() {
   let release!: () => void;
@@ -456,18 +457,19 @@ describe("a closed gate's page for a person", () => {
     const res = await closedApp().request("/till/", { headers: { "Accept-Language": "es" } });
     const html = await res.text();
     expect(html).toContain('<html lang="es">');
-    expect(html).toContain("<h1>Este servidor se está retirando</h1>");
-    expect(html).toContain("<p>Otro servidor lleva ahora el local.</p>");
-    expect(html).toContain("<p>Reiniciando…</p>");
+    const words = STANDING_DOWN_PAGE_WORDS["es-ES"];
+    expect(html).toContain(`<h1>${words.title}</h1>`);
+    expect(html).toContain(`<p>${words.body}</p>`);
+    expect(html).toContain(`<p>${words.restarting}</p>`);
   });
 
   it.each([
     ["en", "This box is standing down", "Restarting…", "Another box now runs the venue."],
     [
       "es",
-      "Este servidor se está retirando",
-      "Reiniciando…",
-      "Otro servidor lleva ahora el local.",
+      STANDING_DOWN_PAGE_WORDS["es-ES"].title,
+      STANDING_DOWN_PAGE_WORDS["es-ES"].restarting,
+      STANDING_DOWN_PAGE_WORDS["es-ES"].body,
     ],
   ])(
     "names no other box when the gate was closed with no successor known (%s)",

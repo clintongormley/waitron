@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { RESTRICTED_PAGE_WORDS } from "./restricted-page.js";
+import { RESTRICTED_PAGE_WORDS, STANDING_DOWN_PAGE_WORDS } from "./restricted-page.js";
 
 describe("stepped-down page wording", () => {
   it.each([
@@ -20,6 +20,18 @@ describe("stepped-down page wording", () => {
     expect(RESTRICTED_PAGE_WORDS[locale].title).toBe(title);
     expect(RESTRICTED_PAGE_WORDS[locale].body).toEqual([body, "."]);
     expect(RESTRICTED_PAGE_WORDS[locale].failed).toBe(failed);
+  });
+
+  it.each([
+    ["en-GB", "This box is standing down", "Another box now runs the venue.", "Restarting…"],
+    [
+      "es-ES",
+      "Este servidor se está retirando",
+      "Otro servidor lleva ahora el local.",
+      "Reiniciando…",
+    ],
+  ] as const)("provides the %s standing-down words", (locale, title, body, restarting) => {
+    expect(STANDING_DOWN_PAGE_WORDS[locale]).toEqual({ title, body, restarting });
   });
 
   // Reads the module's source as text; it does not observe what loads at runtime.
