@@ -245,20 +245,15 @@ configuration normalizes that domain remains unchecked.
 From source reading, adoption writes files and the deployment stamp before its single `node.db`
 transaction. A failure partway through those steps remains unqualified. The optional
 `MirrorBundle.wireguardPublicKey` still has no production supplier or consumer beyond bundle
-assembly. `recovery-race.test.ts`'s header still lacks the house rule's “weaker than its name”
-qualification. Remaining test wording: the obsolete media-directory title in `backup-sweep`,
-“C2b Task 9” in `mirror-bundle-fetch`, “swap S2” in `mirror-bundle`, and the historical-file
-wording in `recovery-state`.
+assembly. Remaining test wording: “C2b Task 9” in `mirror-bundle-fetch`, “swap S2” in
+`mirror-bundle`, and the historical-file wording in `recovery-state`.
 
-## Boot membership fetch and remaining entry fixtures
+## Boot membership fetch
 
 The credential-free fetch remains item (ii) of **Still open after A63** above. Boot re-reads the
 saved chart after reconciliation, so ignoring the helper's `superseded` return does not by itself
 mean the persisted fence is ignored. The helper and boot fixture tests exercise those separate
 steps; the authenticated production fetch remains unqualified.
-
-`node-entry.test.ts` still uses PostgreSQL-shaped failure fixtures (`Failed query`, `42703`).
-This is a source-reading finding.
 
 ## Fiscal-certificate distribution
 
@@ -595,9 +590,8 @@ Slice 3.
 - **Adoption transaction boundaries and remaining fixture wording.** Partial-write qualification,
   the optional WireGuard field and named wording notes remain.
   [Detail](replication-cloud.md#adoption-transaction-boundaries-and-remaining-fixture-wording)
-- **Boot membership fetch and remaining entry fixtures.** The credential-free chart read and
-  PostgreSQL-shaped fixtures remain.
-  [Detail](replication-cloud.md#boot-membership-fetch-and-remaining-entry-fixtures)
+- **Boot membership fetch.** The credential-free chart read remains.
+  [Detail](replication-cloud.md#boot-membership-fetch)
 - **Replication, membership & failover residuals.** The setup-wizard choice, carry-in qualification,
   retirement, re-admission, restore/promotion, certificates and payment qualification remain.
   [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)

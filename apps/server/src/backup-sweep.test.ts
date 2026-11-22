@@ -234,7 +234,7 @@ describe("runOnce (fan-out)", () => {
     expect(entriesOf(a).get("db.dump")!.toString()).toBe("DUMP-BYTES");
   });
 
-  it("assembles database and secret entries without copying the obsolete media directory", async () => {
+  it("assembles the manifest, database and secret entries, and copies no photo files from disk", async () => {
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const entries = entriesOf(a);
@@ -242,6 +242,7 @@ describe("runOnce (fan-out)", () => {
     expect(entries.has("manifest.json")).toBe(true);
     expect(entries.has("db.dump")).toBe(true);
     expect(entries.has("media/abc123.jpg")).toBe(false);
+    expect([...entries.values()].some((bytes) => bytes.toString() === "IMG")).toBe(false);
     expect(entries.has("secrets/secrets.env")).toBe(true);
     for (const rel of RECOVERY_FILES) expect(entries.has(`secrets/${rel}`)).toBe(true);
     expect(entries.get("secrets/secrets.env")!.toString()).toBe("secrets.env-contents");
