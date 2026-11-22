@@ -46,8 +46,7 @@ function compReason(
 /** The starter Void reason Finish table's reason starts on, matched by its English name. */
 export const NOT_SERVED_REASON = "Not served";
 
-/** A758 design §4. "Other" asks for a note: a venue always keeps a Void reason that does
- * (D27). */
+/** "Other" asks for a note: a venue always keeps a Void reason that does. */
 const STARTERS: readonly Starter[] = [
   voidReason("Entry error"),
   voidReason("Item not available"),

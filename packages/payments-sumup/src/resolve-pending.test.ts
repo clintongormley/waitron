@@ -597,7 +597,8 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect((await state("r")).state).toBe("attempting");
     expect(raised).toHaveLength(1);
     // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
-    // no `saleId` is passed (an attempting row has no sale; §4: toMatchObject checks only listed keys).
+    // no `saleId` is passed (an attempting row has no sale; CLAUDE.md §4: toMatchObject checks only
+    // listed keys).
     expect(raised[0]).toEqual({
       origin: jobOrigin("payment_check"),
       error: expect.any(AppError),
