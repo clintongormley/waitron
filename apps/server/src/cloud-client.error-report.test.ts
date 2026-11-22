@@ -9,7 +9,7 @@ it("signs the original error-report body and requires an accepted reply", async 
   let accepted = true;
   const received: unknown[] = [];
   const cloud = await installationFixture(undefined, {
-    errorReport: (claims, _saved, request, response, envelope) => {
+    errorReport: async (claims, _saved, request, response, envelope) => {
       received.push([request.method, request.url, claims[4], claims[7], Object.keys(envelope)]);
       response.end(JSON.stringify({ accepted }));
     },

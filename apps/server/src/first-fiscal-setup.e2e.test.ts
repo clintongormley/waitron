@@ -422,6 +422,14 @@ it.each([
       }
       time.clock.advance(provisionAfterMs ?? 0);
       const optedIn = staffLanguage === "en";
+      if (optedIn) {
+        expect(await post("/setup-api/provision", { ...live, errorReportsEnabled: null })).toEqual({
+          status: 400,
+          body: {
+            error: { code: "setup.request_invalid", params: { field: "errorReportsEnabled" } },
+          },
+        });
+      }
       const activated = await post("/setup-api/provision", {
         ...live,
         ...(optedIn ? { errorReportsEnabled: true } : {}),

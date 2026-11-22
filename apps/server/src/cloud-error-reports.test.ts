@@ -15,12 +15,14 @@ beforeEach(() => seedTaxpayer(suite.db));
 const signal = () => new AbortController().signal;
 const day = "2026-01-01";
 
-async function fixture(initialRegistration: string | undefined = "registration-one") {
+async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "waitron-error-reports-"));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));
   await writeFile(join(dir, VENUE_FILE), "first file");
-  let registration = initialRegistration;
-  const sendErrorReport = vi.fn(async (_registration: string, _id: string, _body: string) => {});
+  let registration: string | undefined = "registration-one";
+  const sendErrorReport = vi.fn(
+    async (_registration: string, _id: string, _body: string, _signal?: AbortSignal) => {},
+  );
   return {
     sendErrorReport,
     registration(next: string | undefined) {
@@ -161,6 +163,31 @@ it.each(["opt-out", "database replacement", "registration replacement", "revocat
     expect(JSON.parse(f.sendErrorReport.mock.calls[1]![2]).time).toBe(1767225780000);
   },
 );
+
+it("turning reporting off cancels a send in progress", async () => {
+  const f = await fixture();
+  const sender = f.reports();
+  await sender.setEnabled(true);
+  await incident(1);
+  const reached = Promise.withResolvers<AbortSignal>();
+  const reply = Promise.withResolvers<void>();
+  f.sendErrorReport.mockImplementationOnce(async (_registration, _id, _body, request) => {
+    reached.resolve(request!);
+    await reply.promise;
+    request!.throwIfAborted();
+  });
+  const waiting = sender.run(signal());
+  const request = await reached.promise;
+  try {
+    await sender.setEnabled(false);
+  } finally {
+    reply.resolve();
+  }
+  expect(await waiting).toBe(false);
+  expect(request.aborted).toBe(true);
+  await sender.run(signal());
+  expect(f.sendErrorReport).toHaveBeenCalledTimes(1);
+});
 
 it("holds opted-in incidents collected before the first registration", async () => {
   const f = await fixture();

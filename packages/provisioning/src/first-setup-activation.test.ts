@@ -13,6 +13,7 @@ import { box } from "@waitron/node-db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { planVenue } from "./venue-plan.js";
 import { applyVenue, type VenueResult } from "./venue-apply.js";
@@ -300,14 +301,20 @@ it.each(["throw", "return", "check-refuses"])(
   },
 );
 
-it("refuses a changed publication digest before replaying or writing", async () => {
+it("refuses a changed error-report choice before replaying or writing", async () => {
   const f = await fixture();
-  await f.activate();
+  const before = (await f.runtime.store.read())!;
+  const optedIn = firstSetupPublicationDigest(before, { errorReportsEnabled: true });
+  await f.runtime.coordinator.run((hold) =>
+    activateFirstSetup(f.runtime, f.deps, f.owner, optedIn, hold),
+  );
   const state = (await f.runtime.store.read())!;
   f.owner.revision = state.revision;
+  const optedOut = firstSetupPublicationDigest(state, { errorReportsEnabled: false });
+  expect(optedOut).toBe(firstSetupPublicationDigest(state, {}));
   await expect(
     f.runtime.coordinator.run((hold) =>
-      activateFirstSetup(f.runtime, f.deps, f.owner, "b".repeat(64), hold),
+      activateFirstSetup(f.runtime, f.deps, f.owner, optedOut, hold),
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await f.runtime.store.read()).toEqual(state);
