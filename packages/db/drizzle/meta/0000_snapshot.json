@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2b94d095-c3bf-4800-acea-3b01e1e60fcb",
+  "id": "337a42dd-3051-474c-b0db-a3d64bfbe3ec",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15993,6 +15993,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "estimated_margin_bp": {
+          "name": "estimated_margin_bp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -16069,6 +16076,10 @@
         "departments_dining_starts_as_ck": {
           "name": "departments_dining_starts_as_ck",
           "value": "\"departments\".\"dining_starts_as\" in ('eat_in', 'takeaway')"
+        },
+        "departments_estimated_margin_ck": {
+          "name": "departments_estimated_margin_ck",
+          "value": "\"departments\".\"estimated_margin_bp\" is null or (typeof(\"departments\".\"estimated_margin_bp\") = 'integer' and \"departments\".\"estimated_margin_bp\" between 0 and 10000)"
         }
       }
     },
