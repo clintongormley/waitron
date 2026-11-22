@@ -1,5 +1,6 @@
 import { persons, readVenue } from "@waitron/db";
 import { eq } from "drizzle-orm";
+import { cloudEmailLocale } from "./cloud-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
 import { SECURITY_CHANGE_EMAIL_WORDS } from "./i18n/security-change-email.js";
 
@@ -34,15 +35,24 @@ export function securityChangeMail(deps: {
       };
     },
     async compose(words, mail) {
+      const timeZone = await deps.readTimeZone();
       const copy = SECURITY_CHANGE_EMAIL_WORDS[words.locale === "es-ES" ? "es" : "en"];
       const when = new Intl.DateTimeFormat(words.locale, {
         dateStyle: "medium",
         timeStyle: "short",
-        timeZone: await deps.readTimeZone(),
+        timeZone,
       }).format(new Date(mail.queuedAt));
       return {
         subject: copy.subject,
         text: copy.text(words.venue, copy.changes[words.change], when),
+        staffNotice: {
+          class: "security_change",
+          displayName: words.venue,
+          locale: cloudEmailLocale(words.locale),
+          timeZone,
+          expiresAt: mail.notAfter,
+          facts: { change: words.change, at: mail.queuedAt },
+        },
       };
     },
     async settle() {},

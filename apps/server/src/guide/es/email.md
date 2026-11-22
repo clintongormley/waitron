@@ -38,6 +38,7 @@ para abrir los mensajes guardados.
 En **Sistema → Correo**, activa **Enviar el informe diario por correo**, elige los destinatarios
 y guarda. Cada destinatario necesita una dirección de correo en su cuenta y acceso a **Ventas y
 cobros**. Configura un servidor de correo en la misma página para que Waitron pueda enviar el informe.
+También puedes imprimir o descargar el informe del día seleccionado en **Ventas y cobros**.
 
 Waitron envía el informe del último día de actividad terminado cuando concluye el cierre
 automático. También puedes recibirlo después de un reinicio de la caja. Tras un cierre que abarque
@@ -51,9 +52,11 @@ en blanco y continúa, o introduce los datos de tu servidor y envía una prueba.
 reinicie y se conecte, Cloud podrá enviar invitaciones al personal, enlaces para restablecer
 contraseñas y códigos de cambio de correo.
 
-Añade un servidor de correo en **Sistema → Correo** para ofrecer el envío a clientes desde la
-caja y el panel, y para enviar el informe diario, los demás avisos al personal y el aviso de
-seguridad a la dirección anterior cuando alguien del personal cambie su correo.
+Tu servidor de correo envía los avisos sobre cambios de seguridad de la cuenta y de roles,
+y el aviso a la dirección anterior cuando otra persona cambia el correo de un miembro del
+personal en **Usuarios**. Si eliges Cloud y dejas en blanco el servidor de correo, Cloud envía
+esos tres avisos. Para enviar correos a clientes, el informe diario u otros avisos al personal,
+añade un servidor de correo en **Sistema → Correo**.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
 **Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.

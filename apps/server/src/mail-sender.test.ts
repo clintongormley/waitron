@@ -19,7 +19,7 @@ import {
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { resolveMailDeliveryIn } from "./email-delivery.js";
+import { hasSavedSmtp, resolveMailDeliveryIn } from "./email-delivery.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { LiveEvents } from "./live-api.js";
 import {
@@ -727,6 +727,68 @@ describe("one mail sender", () => {
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
   });
+  it.each(["enabled", "offline", "off", "server_saved", "unusable_server_saved"] as const)(
+    "routes a staff notice with Cloud %s",
+    async (relay) => {
+      await seedVenue(suite.db);
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const grant = {
+        id: randomUUID(),
+        revision: 1,
+        expiresAt: "2026-11-10T00:00:00.000Z",
+        enabled: true,
+      };
+      const staffNotice = {
+        class: "security_change" as const,
+        facts: { change: "password_changed" as const, at: time.toISOString() },
+        displayName: "Corner Bistro",
+        locale: "en-GB",
+        timeZone: "Europe/Madrid",
+        expiresAt: "2026-11-09T13:00:00.000Z",
+      };
+      await queue("one", { kind: "security_change" });
+      deps.owners = [
+        {
+          ...owner,
+          kind: "security_change",
+          compose: async () => ({ subject: "Notice", text: "Message", staffNotice }),
+        },
+      ];
+      deps.noticeRelayAllowed = async (tx) => !(await hasSavedSmtp(tx));
+      deps.resolveDelivery = (tx, rule) =>
+        resolveMailDeliveryIn(tx, ring, { devMode: false, onboardingIntent: "prepare" }, rule);
+      const resolveAccountRelay = vi.fn(async () => {
+        if (relay === "offline") throw new Error("offline");
+        if (relay === "server_saved" || relay === "unusable_server_saved")
+          await withTransaction(suite.db, (tx) =>
+            saveSmtpForTest(tx, ring, {
+              url: "smtp://mail.test",
+              from: relay === "server_saved" ? "from@example.test" : "missing-address",
+            }),
+          );
+        return relay === "off" ? null : grant;
+      });
+      const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+      await runMailPass({ ...deps, resolveAccountRelay, sendCloudEmail });
+      expect(resolveAccountRelay).toHaveBeenCalledOnce();
+      if (relay === "enabled") {
+        expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
+          grant,
+          expect.any(String),
+          { ...staffNotice, recipient: "private@example.test" },
+          controller.signal,
+        );
+      } else expect(sendCloudEmail).not.toHaveBeenCalled();
+      expect(deps.send).toHaveBeenCalledTimes(relay === "server_saved" ? 1 : 0);
+      expect(await row()).toMatchObject({
+        status: relay === "enabled" || relay === "server_saved" ? "sent" : "pending",
+        attempts: relay === "enabled" || relay === "server_saved" ? 1 : 0,
+      });
+    },
+  );
   it("logs a relay availability failure once until recovery", async () => {
     await queue("account", { kind: "account_action" });
     deps.owners = [{ ...owner, kind: "account_action" }];

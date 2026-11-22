@@ -51,9 +51,11 @@ async function queue(change: string, locale: string | null = "en-GB") {
 
 async function deliver(venueLocale = "en-GB") {
   const send = vi.fn(async () => ({ status: "sent" as const }));
+  const owner = securityChangeMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" });
+  const compose = vi.spyOn(owner, "compose");
   await runMailPass({
     db: suite.db,
-    owners: [securityChangeMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" })],
+    owners: [owner],
     now: () => new Date("2026-11-13T13:00:00Z"),
     isPrimary: () => true,
     signal: new AbortController().signal,
@@ -64,7 +66,7 @@ async function deliver(venueLocale = "en-GB") {
     send,
     log: () => {},
   });
-  return send;
+  return { send, composed: await compose.mock.results[0]?.value };
 }
 
 it.each(
@@ -90,7 +92,7 @@ it.each(
   "delivers $change in $locale at the original change time",
   async ({ change, locale, subject, text }) => {
     await queue(change, locale);
-    const send = await deliver(locale === "es-ES" ? "en-GB" : "es-ES");
+    const { send } = await deliver(locale === "es-ES" ? "en-GB" : "es-ES");
     expect(send).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
       to: "original@example.test",
       subject,
@@ -118,11 +120,19 @@ it("uses the current address and venue language at claim, without sending to a s
       )
       .where(eq(persons.id, f.personId)),
   );
-  const send = await deliver("es-ES");
+  const { send, composed } = await deliver("es-ES");
   expect(send).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
     to: "current@example.test",
     subject: SECURITY_CHANGE_EMAIL_WORDS.es.subject,
     text: expect.stringContaining(SECURITY_CHANGE_EMAIL_WORDS.es.changes.password_changed),
+  });
+  expect(composed?.staffNotice).toEqual({
+    class: "security_change",
+    displayName: "Corner Bistro",
+    locale: "es-ES",
+    timeZone: "Europe/Madrid",
+    expiresAt: "2026-11-14T12:00:00.000Z",
+    facts: { change: "password_changed", at: "2026-11-13T12:00:00.000Z" },
   });
 });
 
@@ -134,7 +144,7 @@ it("cancels a notice with no current address", async () => {
       .set(withFoldedPersonChanges({ email: null, emailFolded: null }))
       .where(eq(persons.id, f.personId)),
   );
-  const send = await deliver();
+  const { send } = await deliver();
   expect(send).not.toHaveBeenCalled();
   expect((await suite.db.select().from(outgoingMail))[0]).toMatchObject({
     status: "cancelled",

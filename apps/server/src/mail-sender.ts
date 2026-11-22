@@ -1,4 +1,10 @@
-import type { CloudAccountEmail, CloudEmailGrant, CloudEmailOutcome } from "./cloud-email.js";
+import type {
+  CloudAccountEmail,
+  CloudEmail,
+  CloudEmailGrant,
+  CloudEmailOutcome,
+  CloudStaffNotice,
+} from "./cloud-email.js";
 import { publishState } from "./live-publish.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -38,6 +44,7 @@ export interface MailMessage {
   html?: string;
   attachments?: SendMailOptions["attachments"];
   accountEmail?: CloudAccountEmail;
+  staffNotice?: CloudStaffNotice;
 }
 export type MailSettlement =
   | { status: "sent" }
@@ -93,11 +100,12 @@ export interface MailSenderDeps {
   signal: AbortSignal;
   resolveDelivery: (tx: Transaction, rule: MailDeliveryRule) => Promise<EmailDelivery>;
   send?: MailTransport;
+  noticeRelayAllowed?: (tx: Transaction) => Promise<boolean>;
   resolveAccountRelay?: (signal: AbortSignal) => Promise<CloudEmailGrant | null>;
   sendCloudEmail?: (
     grant: CloudEmailGrant,
     id: string,
-    message: CloudAccountEmail,
+    message: CloudEmail,
     signal: AbortSignal,
   ) => Promise<CloudEmailOutcome>;
   beforeClaim?: () => Promise<void>;
@@ -205,6 +213,12 @@ export async function abandonMailClaims(
       .settle(tx, row, { status: "unknown", failureCode: "mail.claim_abandoned" }, now);
   return rows.length;
 }
+function isCloudStaffNotice(kind: OutgoingMailKind): boolean {
+  return (
+    kind === "email_changed" || kind === "security_change" || kind === "role_membership_changed"
+  );
+}
+
 export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult> {
   const allowed = () => !deps.signal.aborted && deps.isPrimary();
   if (!allowed()) return { processed: false };
@@ -237,21 +251,23 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
   let accountRelayRead = deps.resolveAccountRelay === undefined;
   let accountDelivery:
     { mode: "cloud"; grant: CloudEmailGrant } | { mode: "unconfigured" } | undefined;
-  if (
-    deps.resolveAccountRelay &&
-    first.some(
-      (r) =>
-        r.kind === "account_action" &&
-        due(r, owners.get(r.kind)!, firstNow) &&
-        Date.parse(r.notAfter) > firstNow,
-    )
-  ) {
-    try {
-      accountRelayRead = true;
-      const grant = await deps.resolveAccountRelay(deps.signal);
-      if (grant) accountDelivery = { mode: "cloud", grant };
-    } catch {
-      accountDelivery = { mode: "unconfigured" };
+  if (deps.resolveAccountRelay) {
+    const ready = first.filter(
+      (r) => due(r, owners.get(r.kind)!, firstNow) && Date.parse(r.notAfter) > firstNow,
+    );
+    if (
+      ready.some((r) => r.kind === "account_action") ||
+      (deps.noticeRelayAllowed &&
+        ready.some((r) => isCloudStaffNotice(r.kind)) &&
+        (await withTransaction(deps.db, deps.noticeRelayAllowed)))
+    ) {
+      try {
+        accountRelayRead = true;
+        const grant = await deps.resolveAccountRelay(deps.signal);
+        if (grant) accountDelivery = { mode: "cloud", grant };
+      } catch {
+        accountDelivery = { mode: "unconfigured" };
+      }
     }
   }
   let result: MailPassResult;
@@ -300,9 +316,18 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         const owner = owners.get(row.kind)!;
         if (!due(row, owner, now.getTime()) || Date.parse(row.notAfter) <= now.getTime()) continue;
         if (row.kind === "account_action" && !accountRelayRead) continue;
-        const delivery =
+        let delivery =
           (row.kind === "account_action" ? accountDelivery : undefined) ??
           deliveries.get(owner.deliveryRule)!;
+        if (
+          delivery.mode === "unconfigured" &&
+          deps.resolveAccountRelay &&
+          isCloudStaffNotice(row.kind) &&
+          (await deps.noticeRelayAllowed?.(tx))
+        ) {
+          if (!accountRelayRead) continue;
+          delivery = accountDelivery ?? delivery;
+        }
         if (delivery.mode === "unconfigured") {
           unconfigured = true;
           continue;
@@ -422,7 +447,9 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       outcome = await deps.sendCloudEmail!(
         delivery.grant,
         mail.claimToken!,
-        message.accountEmail!,
+        message.staffNotice
+          ? { ...message.staffNotice, recipient: mail.recipient! }
+          : message.accountEmail!,
         deps.signal,
       );
     } catch {
@@ -433,6 +460,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     try {
       const smtpMessage = { ...message };
       delete smtpMessage.accountEmail;
+      delete smtpMessage.staffNotice;
       sent = await (deps.send ?? sendSmtpMessage)(delivery.smtp, {
         ...smtpMessage,
         to: mail.recipient!,

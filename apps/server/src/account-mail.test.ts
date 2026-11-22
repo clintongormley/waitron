@@ -92,6 +92,7 @@ describe("account mail owner", () => {
       let submitted: import("./cloud-email.js").CloudAccountEmail | undefined;
       let messageId: string | undefined;
       deps.sendCloudEmail = async (g, id, payload) => {
+        if ("facts" in payload) throw new Error("Expected an account link or code");
         expect(g).toEqual(authority);
         expect(
           suite.db.get<{ status: string }>(sql`select status from outgoing_mail`)?.status,
@@ -166,6 +167,7 @@ describe("account mail owner", () => {
     const ids: string[] = [],
       tokens: string[] = [];
     deps.sendCloudEmail = async (_g, id, payload) => {
+      if ("facts" in payload) throw new Error("Expected an account link or code");
       ids.push(id);
       tokens.push(payload.token!);
       return ids.length === 1
@@ -301,6 +303,7 @@ describe("account mail owner", () => {
           expiresAt: new Date(Date.now() + 3600000).toISOString(),
         });
         deps.sendCloudEmail = async (_grant, _id, payload) => {
+          if ("facts" in payload) throw new Error("Expected an account link or code");
           expect(payload).toMatchObject({
             class: "email_change",
             recipient: "second@example.test",

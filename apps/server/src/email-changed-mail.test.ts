@@ -49,9 +49,11 @@ it.each([
       }),
     );
     const send = vi.fn(async () => ({ status: "sent" as const }));
+    const owner = emailChangedMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" });
+    const compose = vi.spyOn(owner, "compose");
     await runMailPass({
       db: suite.db,
-      owners: [emailChangedMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" })],
+      owners: [owner],
       now: () => now,
       isPrimary: () => true,
       signal: new AbortController().signal,
@@ -66,6 +68,14 @@ it.each([
       to: "old@example.test",
       subject,
       text,
+    });
+    expect((await compose.mock.results[0]!.value).staffNotice).toEqual({
+      class: "email_changed",
+      displayName: "Corner Bistro",
+      locale: locale ?? venueLocale,
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-14T12:00:00.000Z",
+      facts: { editorName: "Editor", at: "2026-11-13T12:00:00.000Z" },
     });
     const [mail] = await suite.db.select().from(outgoingMail);
     expect(mail).toMatchObject({ status: "sent", recipient: "old@example.test", attempts: 1 });

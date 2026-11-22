@@ -19,7 +19,7 @@ import {
   requestSetupCloudEmailGrant,
   sendCloudEmail,
   type CloudEmailGrant,
-  type CloudAccountEmail,
+  type CloudEmail,
 } from "./cloud-email.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
@@ -1095,12 +1095,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       );
       return grant;
     },
-    async sendEmail(
-      grant: CloudEmailGrant,
-      id: string,
-      message: CloudAccountEmail,
-      signal?: AbortSignal,
-    ) {
+    async sendEmail(grant: CloudEmailGrant, id: string, message: CloudEmail, signal?: AbortSignal) {
       let state: SavedCloudState;
       try {
         state = await leaseState(signal);

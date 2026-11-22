@@ -242,6 +242,86 @@ it("submits one signed structured message and waits for acceptance with a separa
   }
 });
 
+const securityNotice = {
+  class: "security_change" as const,
+  recipient: "person@example.test",
+  displayName: "Corner Bistro",
+  locale: "en-GB",
+  timeZone: "Europe/Madrid",
+  facts: { change: "password_changed" as const, at: "2026-11-13T12:00:00.000Z" },
+};
+
+it.each([1, 25])(
+  "signs a v2 notice due in %s hours and reads a v1 reply and status",
+  async (hours) => {
+    const id = randomUUID();
+    const authority = grant();
+    const notice = {
+      ...securityNotice,
+      expiresAt: new Date(Date.now() + hours * 3600000).toISOString(),
+    };
+    const f = await installationFixture(undefined, {
+      emailConfiguration: true,
+      email: async (v, _saved, _req, res) => {
+        const submitting = v[2] === "email-submit";
+        const body = JSON.parse(String(v[7]));
+        res.end(
+          JSON.stringify({
+            version: 1,
+            messageId: id,
+            state: submitting ? "queued" : "accepted",
+            statusRevision: submitting ? 1 : 2,
+            expiresAt: submitting ? body.expiresAt : notice.expiresAt,
+            reason: null,
+          }),
+        );
+      },
+    });
+    try {
+      expect(await f.client.sendEmail(authority, id, notice)).toEqual({ status: "sent" });
+      const [submit, status] = f.requests.filter((v) => String(v[2]).startsWith("email-"));
+      expect(submit![4]).toBe(id);
+      expect(JSON.parse(String(submit![7]))).toEqual({
+        version: 2,
+        messageId: id,
+        grantId: authority.id,
+        grantRevision: 1,
+        ...notice,
+        expiresAt:
+          hours === 1 ? notice.expiresAt : new Date(Number(submit![5]) + 86400000).toISOString(),
+      });
+      expect(status![4]).not.toBe(id);
+      expect(JSON.parse(String(status![7]))).toEqual({ version: 1, messageId: id });
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("records an explicit refusal when older Cloud refuses the v2 submission", async () => {
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    email: async (v, _saved, _req, res) => {
+      const { version } = JSON.parse(String(v[7]));
+      res.writeHead(version === 2 ? 400 : 500);
+      res.end('{"error":"invalid_message"}');
+    },
+  });
+  try {
+    const notice = { ...securityNotice, expiresAt: message().expiresAt };
+    expect(await f.client.sendEmail(grant(), randomUUID(), notice)).toEqual({
+      status: "rejected",
+      failureCode: "mail.relay_refused",
+      serverRefused: true,
+    });
+    expect(f.requests.filter((v) => String(v[2]).startsWith("email-")).map((v) => v[2])).toEqual([
+      "email-submit",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
 it.each([
   "refused",
   "unavailable",

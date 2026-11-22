@@ -33,7 +33,8 @@ In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Ad
 
 In **System → Email**, turn on **Email the daily report**, choose recipients and save. Each
 recipient needs an account email address and access to **Sales & takings**. Set up a mail server
-on the same page so Waitron can deliver the report.
+on the same page so Waitron can deliver the report. You can also print or download the report
+for the selected day in **Sales & takings**.
 
 Waitron emails the most recently ended trading day's report after the automatic close completes.
 You can also receive that report after a box restart. After a closure spanning several days, open
@@ -46,9 +47,10 @@ Cloud** on the email step. Leave the mail server blank and continue, or enter an
 server. Once the box restarts and connects, Cloud can send staff invitations, password-reset links
 and email-change codes.
 
-Add a mail server in **System → Email** to offer customer email on the till and dashboard and
-send the daily report, other staff notices, and the security notice to the old address when a
-staff member changes their email.
+Your mail server sends account security and role change notices, including the warning to a
+staff member's previous address when someone else changes it in **Users**. If you choose Cloud
+and leave the mail server blank, Cloud sends those three notices. To email customers, the daily
+report or other staff notices, add a mail server in **System → Email**.
 
 If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
 the mail server you use for staff email.

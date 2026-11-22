@@ -1476,7 +1476,7 @@ export const en = {
   "email.settings.heading": "Mail server",
   "email.daily_report.heading": "Daily Sales & takings email",
   "email.daily_report.hint":
-    "Waitron emails the most recently ended trading day after automatic close. Set up a mail server to send this report.",
+    "Set up a mail server to email the last trading day’s report after automatic close. You can also print or download the report from Sales & takings.",
   "email.daily_report.enabled": "Email the daily report",
   "email.daily_report.recipients": "Recipients (required)",
   "email.daily_report.pick_recipient": "Choose at least one person who can view Sales & takings.",
@@ -6169,7 +6169,7 @@ export const es: Record<StringKey, string> = {
   "email.settings.heading": "Servidor de correo",
   "email.daily_report.heading": "Correo diario de Ventas y cobros",
   "email.daily_report.hint":
-    "Waitron envía el informe del último día de actividad terminado después del cierre automático. Configura un servidor de correo para enviarlo.",
+    "Configura un servidor de correo para enviar el informe del último día de actividad después del cierre automático. También puedes imprimirlo o descargarlo desde Ventas y cobros.",
   "email.daily_report.enabled": "Enviar el informe diario por correo",
   "email.daily_report.recipients": "Destinatarios (obligatorio)",
   "email.daily_report.pick_recipient": "Elige al menos a una persona con acceso a Ventas y cobros.",

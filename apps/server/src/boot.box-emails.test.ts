@@ -1,3 +1,4 @@
+import * as cloudClient from "./cloud-client.js";
 import * as liveApi from "./live-api.js";
 import { runTestJob } from "./testing/run-job.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
@@ -280,6 +281,25 @@ async function bootServer(
   });
 }
 
+async function queueSecurityNotice(cloudVenueId?: string) {
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Notice recipient",
+    email: "notice@example.test",
+  });
+  await withTransaction(suite.db, async (tx) => {
+    if (cloudVenueId !== undefined) await saveCloudVenueId(tx, cloudVenueId);
+    const now = new Date();
+    await enqueueMail(tx, {
+      kind: "security_change",
+      dedupeKey: "notice",
+      personId: person!.id,
+      params: { change: "password_changed" },
+      now,
+      notAfter: new Date(now.getTime() + 3600000),
+    });
+  });
+}
+
 async function shutDown(booted: Booted): Promise<void> {
   if (booted.server !== undefined) await booted.server.close();
   holder.deps = undefined;
@@ -431,6 +451,65 @@ describe("the running server's notice and email checks", () => {
       }
     },
   );
+  it("Prepare without a mail server sends a staff notice through the Cloud relay", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    let submitted: Record<string, unknown> | undefined;
+    const f = await installationFixture(undefined, {
+      emailConfiguration: true,
+      managementOrigin: "http://localhost:5191",
+      email: async (v, _saved, _req, res) => {
+        submitted = JSON.parse(String(v[7]));
+        res.end(
+          JSON.stringify({
+            version: 1,
+            messageId: v[4],
+            state: "accepted",
+            statusRevision: 1,
+            expiresAt: submitted!.expiresAt,
+            reason: null,
+          }),
+        );
+      },
+    });
+    const origin = vi.spyOn(cloudClient, "loadCloudOrigin").mockReturnValue(f.options.origin);
+    try {
+      f.patch({
+        emailRelay: {
+          version: 1,
+          grant: {
+            id: randomUUID(),
+            revision: 1,
+            enabled: true,
+            expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          },
+        },
+      });
+      await queueSecurityNotice(f.venueId);
+      holder.pauseMail = true;
+      await bootServer(
+        booted,
+        venue,
+        { intent: "prepare", development: false },
+        undefined,
+        {},
+        { origin: f.options.origin, stateDir: f.stateDir },
+      );
+      await holder.cloudPass;
+      await runMailPass(holder.mail!);
+      expect(submitted).toMatchObject({
+        version: 2,
+        class: "security_change",
+        recipient: "notice@example.test",
+      });
+      expect(holder.smtp).toEqual([]);
+    } finally {
+      await shutDown(booted);
+      origin.mockRestore();
+      await f.close();
+    }
+  });
+
   it("boot wires venue-space errors and retries failed notice checks through the bell", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
@@ -590,6 +669,8 @@ describe("the running server's notice and email checks", () => {
         { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
       ),
     );
+    await queueSecurityNotice();
+    holder.pauseMail = true;
     const booted: Booted = {};
     try {
       await bootServer(booted, venue, { intent: "prepare", development: false });
@@ -614,6 +695,13 @@ describe("the running server's notice and email checks", () => {
       expect(
         (await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice"))).mode,
       ).toBe("smtp");
+      await runMailPass(holder.mail!);
+      expect(holder.sent).toContainEqual(
+        expect.objectContaining({
+          recipient: "notice@example.test",
+          smtp: expect.objectContaining({ url: "smtp://smtp.example.test:2525" }),
+        }),
+      );
     } finally {
       await shutDown(booted);
     }

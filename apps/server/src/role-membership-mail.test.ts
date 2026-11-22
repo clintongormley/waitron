@@ -6,6 +6,7 @@ import {
   withTransaction,
   withFoldedPersonChanges,
 } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
@@ -54,6 +55,7 @@ it.each([
 ])(
   "sends $change to the current address using $locale before $venueLocale",
   async ({ locale, venueLocale, change, builtInKey, roleName, subject, text }) => {
+    await seedVenue(suite.db, { name: "Corner Bistro" });
     const [person] = await seedPersons(suite.db, {
       displayName: "Waiter",
       email: "old@example.test",
@@ -74,9 +76,11 @@ it.each([
       .set(withFoldedPersonChanges({ email: "current@example.test" }))
       .where(eq(persons.id, person!.id));
     const send = vi.fn(async () => ({ status: "sent" as const }));
+    const owner = roleMembershipMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" });
+    const compose = vi.spyOn(owner, "compose");
     await runMailPass({
       db: suite.db,
-      owners: [roleMembershipMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" })],
+      owners: [owner],
       now: () => now,
       isPrimary: () => true,
       signal: new AbortController().signal,
@@ -91,6 +95,19 @@ it.each([
       to: "current@example.test",
       subject: typeof subject === "function" ? subject() : subject,
       text: typeof text === "function" ? text() : text,
+    });
+    expect((await compose.mock.results[0]!.value).staffNotice).toEqual({
+      class: "role_membership_changed",
+      displayName: "Corner Bistro",
+      locale: locale ?? venueLocale,
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-14T12:00:00.000Z",
+      facts: {
+        change,
+        editorName: "Editor",
+        at: "2026-11-13T12:00:00.000Z",
+        ...(builtInKey === null ? { roleName: "Night service" } : { builtInKey }),
+      },
     });
     expect((await suite.db.select().from(outgoingMail))[0]).toMatchObject({
       status: "sent",
