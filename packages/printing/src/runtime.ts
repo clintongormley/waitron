@@ -142,7 +142,7 @@ export async function claimPrintJobs(
         cross join print_jobs pending indexed by print_jobs_pull_idx
         where p.kind = 'receipt' and pending.printer_id = p.id
           and pending.status in ('queued', 'failed', 'printing')
-          and p.active = true and p.deleted_at is null
+          and p.active = true
           and (p.transport = 'network_tcp' or ${usbBt})
           ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       )

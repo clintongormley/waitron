@@ -112,7 +112,7 @@ export async function collectBoxHealth(
     const printerRows = await db
       .select({ id: printers.id, name: printers.name })
       .from(printers)
-      .where(and(isReceiptPrinter(), eq(printers.active, true), isNull(printers.deletedAt)))
+      .where(and(isReceiptPrinter(), eq(printers.active, true)))
       .orderBy(asc(printers.name));
     const readerRows = readers.paymentsEnabled
       ? await db

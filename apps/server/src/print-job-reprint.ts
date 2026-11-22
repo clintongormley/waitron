@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import {
   receiptRollColumns,
   kitchenPrintJobs,
@@ -139,14 +139,7 @@ export async function reprintJobOn(
   const [target] = await tx
     .select({ id: printers.id, ...receiptRollColumns })
     .from(printers)
-    .where(
-      and(
-        isReceiptPrinter(),
-        eq(printers.id, targetId),
-        eq(printers.active, true),
-        isNull(printers.deletedAt),
-      ),
-    );
+    .where(and(isReceiptPrinter(), eq(printers.id, targetId), eq(printers.active, true)));
   if (target === undefined)
     throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
   if (completedOriginal)

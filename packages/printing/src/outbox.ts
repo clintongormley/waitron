@@ -98,8 +98,7 @@ async function insertPrintJob(
       and(
         kind === "a4" ? isA4Printer() : isReceiptPrinter(),
         eq(printers.id, printerId),
-        whileSwitchedOff ? undefined : eq(printers.active, true),
-        isNull(printers.deletedAt),
+        whileSwitchedOff ? isNull(printers.deletedAt) : eq(printers.active, true),
       ),
     );
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });

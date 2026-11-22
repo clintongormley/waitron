@@ -1605,14 +1605,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const [target] = await tx
           .select({ ...receiptRollColumns })
           .from(printers)
-          .where(
-            and(
-              isReceiptPrinter(),
-              eq(printers.id, printerId),
-              eq(printers.active, true),
-              isNull(printers.deletedAt),
-            ),
-          );
+          .where(and(isReceiptPrinter(), eq(printers.id, printerId), eq(printers.active, true)));
         if (target === undefined) throw new AppError("printer.not_found", { id: printerId });
         const [label] =
           kind === "printer"
@@ -1859,7 +1852,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ...receiptRollColumns,
             })
             .from(printers)
-            .where(and(isReceiptPrinter(), eq(printers.active, true), isNull(printers.deletedAt)))
+            .where(and(isReceiptPrinter(), eq(printers.active, true)))
         ).map((printer) => ({
           id: printer.id,
           dots: textGrid(printer.paperWidth, printer.resolution).widthDots,
@@ -1927,7 +1920,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               transport: printerTransport,
               localKey: printerLocalKey,
             };
-            const unseen = printer.active && printer.deletedAt === null && !seenNow(printer);
+            const unseen = printer.active && !seenNow(printer);
             const stuck = isStuckJob({ ...job, kind }, printer, seenNow);
             return {
               ...job,
