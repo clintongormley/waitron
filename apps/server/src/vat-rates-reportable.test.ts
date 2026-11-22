@@ -5,14 +5,20 @@ import { describe, expect, it } from "vitest";
 
 const ZERO = decimal("0.00");
 
-const supportedAreas = COUNTRY_PACKS.flatMap((pack) =>
-  pack.fiscalJurisdictions
-    .filter(({ supported, modules }) => supported && modules !== undefined)
-    .map(({ id }) => [pack.countryCode, id] as const),
+// Modelo 303 is Spain's VAT return, so only Spanish areas whose tax module is VAT file it.
+const modelo303Areas = COUNTRY_PACKS.filter(({ countryCode }) => countryCode === "ES").flatMap(
+  (pack) =>
+    pack.fiscalJurisdictions
+      .filter(({ supported, modules }) => supported && modules?.tax === "vat")
+      .map(({ id }) => [pack.countryCode, id] as const),
 );
 
 describe("every rate a person may pick", () => {
-  it.each(supportedAreas)("in %s %s has a box on the VAT return", (country, territory) => {
+  it("is checked in at least one area that files modelo 303", () => {
+    expect(modelo303Areas).toContainEqual(["ES", "ES-common"]);
+  });
+
+  it.each(modelo303Areas)("in %s %s has a box on modelo 303", (country, territory) => {
     const pickable = vatRatesFor(country, territory)?.pickable;
     expect(pickable).toBeDefined();
     const vatReturn = {

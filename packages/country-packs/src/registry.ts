@@ -119,7 +119,7 @@ export interface AreaVatRates {
   readonly defaultTakeaway: string;
 }
 
-/** The area's VAT rates, or `undefined` when the area is unknown or its pack lists none. */
+/** The area's VAT rates, or `undefined` when the area is unknown or lacks any of the four lists. */
 export function vatRatesFor(country: string, territory: string): AreaVatRates | undefined {
   const jurisdiction = getCountryPack(country)?.fiscalJurisdictions.find(
     ({ id }) => id === territory,

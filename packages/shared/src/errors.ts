@@ -118,7 +118,8 @@ export interface ErrorParams {
   "diet.invalid_label": { field: string; value: string };
   /** A diet override both adds and removes the same contains-tag — a contradiction. */
   "diet.add_remove_conflict": { tag: string };
-  /** `value`, a date handed to `caller` or one in its rate table, is not a `YYYY-MM-DD` calendar date. */
+  /** `value`, a date handed to `caller` or an entry's date in the rates it was handed, is not a
+   * `YYYY-MM-DD` calendar date. */
   "vat_rate.date_invalid": { caller: "vatRateOn" | "vatRatesOn" | "rateOn"; value: string };
   /** `caller`'s rate table lists `vatClass` with a missing or dated first entry, or not dated oldest
    * first. */
