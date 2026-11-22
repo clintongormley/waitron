@@ -28,10 +28,6 @@ their full text.
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
   re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
-    existing test pins that), while Reset and the dashboard sign-in move it to the password; the
-    owner's rule covers marking fields, not the cursor, so whether Connect should match is the
-    owner's call (left by A153, #952).
   - The PIN back-off
     (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
     one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
@@ -274,7 +270,7 @@ show a cost during service.
 - **New credential hashes stay inside their existing write transactions** (watcher, 2026-11-14
   17:30, Lane K questions.md). Their derivation now yields the event loop; other writes still wait
   for that transaction. Existing secret checks retain their treatment before the write lock.
-  Setup-only parsing/reset proof, startup dummy hashes and offline commands retain synchronous
+  Setup-only parsing, startup dummy hashes and offline commands retain synchronous
   hashing. See [the cleared plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-kdf-off-main-thread.md).
 
 - **An unreadable authenticator secret is a sign-in refusal (C95, #930).**
