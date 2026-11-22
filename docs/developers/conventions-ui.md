@@ -719,7 +719,7 @@ the server checks each at the route, never trusting the till's copy:
   registrations and does not walk other APIs, including theme, node, box and backup routes.
   The independent zone map remains a comment.
 - **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
-  on a station screen. `profileAllows` (`packages/layouts/src/device-profile.ts`)
+  that offers sign-in on its station screen. `profileAllows` (`packages/layouts/src/device-profile.ts`)
   allows only `prepare-orders`, `take-orders` and `hand-over-orders`. The shared till session
   check answers `session.required` for a kitchen display based on its current profile type.
   A kitchen sign-in carries no separate type field. Its pass screen's bill

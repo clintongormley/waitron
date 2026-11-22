@@ -5723,6 +5723,8 @@ export class TillApp extends LitElement {
         }
         if (overtaken()) return;
         show();
+        if (this.initialDeviceStation === undefined && this.kitchenOperator !== "")
+          this.#onKitchenLogout();
         this.#sayIfSwitched(from);
         this.deviceMode = true;
         this.#kitchenSetupPoll.start();

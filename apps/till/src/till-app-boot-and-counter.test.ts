@@ -6542,45 +6542,59 @@ it("keeps a kitchen pass as a device board when its profile admits staff", async
   expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
 });
 
-it("clears the cook's name when the station reloads on another kitchen profile", async () => {
-  const identity = {
-    deviceId: "staff-kitchen",
-    name: "Kitchen",
-    formFactor: "kds",
-    profileId: "original-kitchen",
-    kitchenScreens: [kitchenScreen("station")],
-  };
-  const getDeviceIdentity = vi.fn().mockResolvedValue(identity);
-  const { el } = await mountApp({
-    getTill: vi
-      .fn()
-      .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
-    getDeviceIdentity,
-    getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
-    listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
-  });
-  await flush(el);
-  const compact = () => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]");
-  emit(compact()!, "logged-in", {
-    personId: "p1",
-    displayName: "Ana",
-    permissions: [],
-    locale: null,
-  });
-  await flush(el);
-  expect(compact()?.shadowRoot?.querySelector("[data-kitchen-operator]")?.textContent).toBe("Ana");
+it.each(["profile", "screen"] as const)(
+  "clears the cook when the station reloads on a changed %s",
+  async (changed) => {
+    const identity = {
+      deviceId: "staff-kitchen",
+      name: "Kitchen",
+      formFactor: "kds",
+      profileId: "original-kitchen",
+      kitchenScreens: [kitchenScreen("station")],
+    };
+    const getDeviceIdentity = vi.fn().mockResolvedValue(identity);
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
+      getDeviceIdentity,
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+      listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
+    });
+    await flush(el);
+    const compact = () => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]");
+    emit(compact()!, "logged-in", {
+      personId: "p1",
+      displayName: "Ana",
+      permissions: [],
+      locale: null,
+    });
+    await flush(el);
+    expect(compact()?.shadowRoot?.querySelector("[data-kitchen-operator]")?.textContent).toBe(
+      "Ana",
+    );
 
-  getDeviceIdentity.mockResolvedValue({ ...identity, profileId: "other-kitchen" });
-  emit(el.shadowRoot!.querySelector("till-station-screen")!, "kitchen-screen-changed", {
-    from: "station",
-  });
-  await vi.waitFor(() => expect(getDeviceIdentity).toHaveBeenCalledTimes(2));
-  await flush(el);
+    getDeviceIdentity.mockResolvedValue(
+      changed === "profile"
+        ? { ...identity, profileId: "other-kitchen" }
+        : { ...identity, kitchenScreens: [kitchenScreen("pass")] },
+    );
+    emit(el.shadowRoot!.querySelector("till-station-screen")!, "kitchen-screen-changed", {
+      from: "station",
+    });
+    await vi.waitFor(() => expect(getDeviceIdentity).toHaveBeenCalledTimes(2));
+    await flush(el);
 
-  expect(compact()?.shadowRoot?.querySelector("[data-kitchen-operator]") ?? null).toBeNull();
-  expect(compact()?.shadowRoot?.querySelector("[data-kitchen-sign-in]")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
-});
+    if (changed === "screen") {
+      expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
+      expect(api.logout).toHaveBeenCalledOnce();
+      return;
+    }
+    expect(compact()?.shadowRoot?.querySelector("[data-kitchen-operator]") ?? null).toBeNull();
+    expect(compact()?.shadowRoot?.querySelector("[data-kitchen-sign-in]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
+  },
+);
 
 it("opens the profile starting screen in the sign-in history entry", async () => {
   history.replaceState(null, "", "/");

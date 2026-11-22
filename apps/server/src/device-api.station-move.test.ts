@@ -161,7 +161,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     ]);
     expect(await inTx(venue, (tx) => readBillEditState(tx, tabId))).toEqual(saved.edit);
   });
-  it.each(["signed-out", "signed-in", "ended"] as const)(
+  it.each([false, true])(
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
       const screen = await display(stationScreen(bar));
