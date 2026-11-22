@@ -1044,6 +1044,7 @@ export class SetupApp extends LitElement {
    * leave a field red on a value the operator has already corrected.
    */
   @state() private venueInvalidField?: string;
+  @state() private venueInvalidFieldMessage?: Message;
 
   /** A new object for every refusal of Finish joining, which is how the join screen sees it. */
   @state() private joinRefusal?: { code: string; params?: Record<string, unknown> };
@@ -1399,6 +1400,7 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryBusy = false;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
+    this.venueInvalidFieldMessage = undefined;
     this.reviewError = undefined;
     this.joinRefusal = undefined;
     this.connectError = undefined;
@@ -1454,6 +1456,7 @@ export class SetupApp extends LitElement {
     if (this.screen !== "venue") return;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
+    this.venueInvalidFieldMessage = undefined;
     this.reviewError = undefined;
     if (this.draft.mode === "live") void this.#claimFirstSetup();
     else this.#afterFirstOwner();
@@ -1907,6 +1910,7 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
+    this.venueInvalidFieldMessage = undefined;
     this.#clearProvisionOutcome();
     this.#registerRoot();
     const submitted = structuredClone(this.draft);
@@ -1999,6 +2003,17 @@ export class SetupApp extends LitElement {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (this.#mapFirstSetupError(error)) return;
+    const field = typeof error.params?.field === "string" ? error.params.field : undefined;
+    if (
+      code === "provisioning.duplicate_series_code" &&
+      field !== undefined &&
+      Object.hasOwn(VENUE_SERVER_FIELDS, field)
+    ) {
+      this.venueInvalidField = field;
+      this.venueInvalidFieldMessage = say("shell.venue_error.duplicate_series_code");
+      this.screen = "venue";
+      return;
+    }
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
       const key = VENUE_ERROR_MESSAGES[code];
       this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
@@ -2008,7 +2023,6 @@ export class SetupApp extends LitElement {
     switch (code) {
       case "setup.request_invalid":
       case "venue.detail_invalid": {
-        const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         // The same list the venue form marks and explains from, so a path can never route back to a
         // form that has nothing to say about it.
         if (field !== undefined && Object.hasOwn(VENUE_SERVER_FIELDS, field)) {
@@ -3076,6 +3090,7 @@ export class SetupApp extends LitElement {
           .errorMessage=${this.venueError?.()}
           .refusal=${this.venueError}
           .invalidField=${this.venueInvalidField}
+          .invalidFieldMessage=${this.venueInvalidFieldMessage}
         ></setup-venue-screen>`;
       case "cert":
         return html`<setup-cert-screen

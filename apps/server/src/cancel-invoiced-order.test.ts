@@ -396,7 +396,7 @@ function receivePayment(billId: string) {
 const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
-  it("credits the whole invoice in the rectificative series, settles it owing nothing, and abandons the order", async () => {
+  it("credits the whole invoice in the corrective series, settles it owing nothing, and abandons the order", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
     expect(original.total).toBe(300);
@@ -812,7 +812,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await creditsOf(original.id)).toHaveLength(1);
   });
 
-  it("refuses when the node has no live rectificative series, writing nothing", async () => {
+  it("refuses when the node has no live corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const retired = await activeCorrective();
     await inTx(venue, (tx) =>
@@ -835,7 +835,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
 
-  it("refuses an operator without sale.rectify before looking for a rectificative series, writing nothing", async () => {
+  it("refuses an operator without sale.rectify before looking for a corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const retired = await activeCorrective();
     await inTx(venue, (tx) =>
@@ -993,7 +993,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     ).toEqual([]);
   });
 
-  it("fails loudly when the node has two live rectificative series, writing nothing", async () => {
+  it("fails loudly when the node has two live corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const code = `R${randomUUID().slice(0, 8)}`;
     await inTx(venue, (tx) =>

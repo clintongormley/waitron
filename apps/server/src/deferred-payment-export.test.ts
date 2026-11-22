@@ -244,7 +244,7 @@ const HEADER_KEYS = [
   "replacedBy",
 ] as const;
 const EN_HEADER =
-  '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Corrections total (EUR)","Replaced by"';
+  '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Correctives total (EUR)","Replaced by"';
 const ES_HEADER = HEADER_KEYS.map((key) => `"${DEFERRED_PAYMENT_EXPORT_WORDS.es[key]}"`).join(",");
 
 function text(bytes: Uint8Array): string {

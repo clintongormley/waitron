@@ -372,7 +372,7 @@ async function rawPaymentsFor(
   return rows.map((r) => ({ state: r.state, hasSale: r.has_sale === 1 })); // 0/1 — see `orderState`
 }
 
-/** The venue's rectificative series. */
+/** The venue's corrective series. */
 function correctiveSeries(cfg: DeviceRequestConfig): string {
   return suite.db.all<{ id: string }>(sql`
     select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'corrective'

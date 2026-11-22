@@ -486,7 +486,7 @@ describe("setup-review-screen in Spanish", () => {
       dt.textContent?.replace(dt.querySelector("wt-help-tooltip")?.textContent ?? "", "").trim(),
     );
     expect(labels).toContain("Razón social");
-    expect(labels).toContain("Serie de correcciones");
+    expect(labels).toContain("Serie rectificativa");
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
     expect(text(el, "[data-test=provision]")).toBe("Configurar este servidor");
     expect(text(el, "[data-test=back]")).toBe("Volver");

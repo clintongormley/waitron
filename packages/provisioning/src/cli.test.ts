@@ -1009,7 +1009,7 @@ describe("runCli venue", () => {
       "time zone (e.g. Europe/Madrid): ",
       "day cutover (HH:MM): ",
       "series code: ",
-      "rectificative series code: ",
+      "corrective series code: ",
       "admin name: ",
       "admin email: ",
     ]);

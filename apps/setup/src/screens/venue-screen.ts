@@ -407,6 +407,9 @@ export class SetupVenueScreen extends LitElement {
   /** A field path the server refused (the `params.field` of `setup.request_invalid` or
    * `venue.detail_invalid`), routed back by the shell. */
   @property() invalidField?: string;
+  /** Words for `invalidField`'s refusal when they are not that field's own, such as a repeated
+   * series code; read on each render, so they follow a language switch. */
+  @property({ attribute: false }) invalidFieldMessage?: () => string;
 
   @state() private values: Record<TextField, string> = {
     country: "ES",
@@ -545,8 +548,18 @@ export class SetupVenueScreen extends LitElement {
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
-      const refusal =
+      const field =
         this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
+      const words = this.invalidFieldMessage;
+      const refusal: ServerField | undefined =
+        field === undefined || words === undefined
+          ? field
+          : {
+              key: field.key,
+              get message() {
+                return words();
+              },
+            };
       this.serverInvalid =
         refusal === undefined
           ? undefined

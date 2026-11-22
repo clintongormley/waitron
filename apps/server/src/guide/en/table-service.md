@@ -379,7 +379,7 @@ payment** filled in for that card; refund the cards one at a time. While a card 
 
 When a card refund finishes a correction later, its corrective receipt does not print by itself.
 To give it to the customer, open it in **Find a bill**, on the **Transactions** tab, where its type
-is **Correction**, and print it there.
+is **Corrective**, and print it there.
 
 If you close the window before the money is all back, the correction stays open. **Find a bill**
 lists it under **Corrections under way**; choose it to carry on, then choose one of these:

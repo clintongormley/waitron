@@ -5,7 +5,7 @@ import { saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
 
 /**
- * Inserts a corrective of `correctsSaleId` directly, numbered next in its node's rectificative
+ * Inserts a corrective of `correctsSaleId` directly, numbered next in its node's corrective
  * series (made when the node has none): a replacement repeating the corrected sale's total and
  * customer (with `supplyDay`, the real day of the sale), or, with `total`, an ordinary corrective
  * such as a refund of a replacement.

@@ -1909,7 +1909,7 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       (b) => void (asRec(b.venue).seriesCode = "Series A"),
     ],
     [
-      "a rectificative series code with a space",
+      "a corrective series code with a space",
       "correctiveSeriesCode",
       (b) => void (asRec(b.venue).correctiveSeriesCode = "Series R"),
     ],

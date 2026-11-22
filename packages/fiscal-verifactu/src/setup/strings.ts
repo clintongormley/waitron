@@ -15,7 +15,7 @@ export const fiscalSetupStrings = {
     source: "Setup source",
     standard: "Standard",
     full: "Full invoice",
-    corrective: "Correction",
+    corrective: "Corrective",
     production: "Live / Production",
     preproduction: "Live / Preproduction",
     question: "Does this scope already have a current master?",

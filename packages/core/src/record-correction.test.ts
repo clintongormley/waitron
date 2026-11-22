@@ -144,7 +144,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /** A full reversal of the €14.41 sale: negative total and negative delta lines, drawn from the
- * rectificative series. The locale list is inherited from the original, not supplied. */
+ * corrective series. The locale list is inherited from the original, not supplied. */
 function correctionInput(
   correctsSaleId: SaleId,
   overrides: Partial<RecordCorrectionInput> = {},
@@ -355,7 +355,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
   });
 
-  it("rejects a rectificative series belonging to another node", async () => {
+  it("rejects a corrective series belonging to another node", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTaxpayer(suite.db);
@@ -371,7 +371,7 @@ describe("recordCorrection — numbering", () => {
   it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    // The rectificative series' counter still stands at 1, so the correction draws this number.
+    // The corrective series' counter still stands at 1, so the correction draws this number.
     await seedBareSale(
       suite.db,
       { deviceId, nodeId, seriesId: rectSeriesId },
@@ -466,7 +466,7 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.fiscalBackend).toBe(backend.id);
   });
 
-  it("allocates the corrective number from the rectificative series", async () => {
+  it("allocates the corrective number from the corrective series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 

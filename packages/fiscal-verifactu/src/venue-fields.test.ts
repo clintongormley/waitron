@@ -26,7 +26,7 @@ describe("validateVenueFiscalFields", () => {
     );
   });
 
-  it("refuses the rectificative code by its own name, not the standard one's", () => {
+  it("refuses the corrective code by its own name, not the standard one's", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, correctiveSeriesCode: "Rectificativa A" }),
     ).toThrow(expect.objectContaining({ params: { field: "correctiveSeriesCode" } }));

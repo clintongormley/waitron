@@ -1008,7 +1008,7 @@ describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
 
-  it("restores standard, full and rectificative series through the real fiscal hook", async () => {
+  it("restores standard, full and corrective series through the real fiscal hook", async () => {
     await withTransaction(suite.db, async (tx) => {
       const sif = await registerSif(tx, {
         ...T,

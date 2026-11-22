@@ -6,7 +6,7 @@ export const DAILY_REPORT_EMAIL_WORDS = {
     tips: "Tips",
     billsClosed: "Bills closed",
     sales: "Sales",
-    corrections: "Corrections",
+    corrections: "Correctives",
     voids: "Voids",
     vat: "VAT by rate",
     rate: "Rate",

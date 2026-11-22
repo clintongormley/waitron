@@ -256,7 +256,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
       ),
     );
 
-    // 4. A rectificativa correcting the second sale, drawn from the rectificative series.
+    // 4. A rectificativa correcting the second sale, drawn from the corrective series.
     await asApp((tx) =>
       recordCorrection(tx, backend, {
         operationDescription: "Sale on premises",

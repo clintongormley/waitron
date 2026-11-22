@@ -143,7 +143,7 @@ describe("corrections workbook", () => {
   );
 
   it.each([
-    ["correction", "Correction", CORRECTIONS_REPORT_WORDS.es.kinds.correction],
+    ["correction", "Corrective", CORRECTIONS_REPORT_WORDS.es.kinds.correction],
     ["date_moved_out", "Date moved out", CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_out],
     ["date_moved_in", "Date moved in", CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_in],
   ] as const)("labels a %s row in English and Spanish", async (kind, english, spanish) => {

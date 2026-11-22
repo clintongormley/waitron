@@ -97,7 +97,7 @@ export function createDemoVenueProvisioner(
       ),
       { db: db(), modules: fixture.modules },
     );
-    // planVenue puts the standard series before the rectificative one.
+    // planVenue puts the standard series before the corrective one.
     return {
       ...venue,
       seriesId: venue.seriesIds[0]!,

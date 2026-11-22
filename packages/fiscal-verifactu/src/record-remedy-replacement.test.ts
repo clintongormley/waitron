@@ -523,7 +523,7 @@ it("refuses an original that already has a partial refund, using no number", asy
   await refuses(body, "sale.replacement_not_first");
 });
 
-it("refuses when this node has no live rectificative series", async () => {
+it("refuses when this node has no live corrective series", async () => {
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: TODAY })

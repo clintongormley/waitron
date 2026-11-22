@@ -1741,7 +1741,7 @@ it.each([
     "en",
     "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
-    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"],
+    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"],
   ],
   [
     "es",

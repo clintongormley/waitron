@@ -919,7 +919,7 @@ describe("recordSale — series validation", () => {
     ).rejects.toMatchObject({ code: "sale.series_wrong_node" });
   });
 
-  it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
+  it("rejects a corrective series: an ordinary sale must not draw a corrective number", async () => {
     const rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),

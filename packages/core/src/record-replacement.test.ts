@@ -420,7 +420,7 @@ describe("recordReplacement — refusals use no number", () => {
     await expectRefused(backend, saleId, {}, { code: "sale.voided", params: { saleId } });
   });
 
-  it("refuses a series that is not a rectificative one", async () => {
+  it("refuses a series that is not a corrective one", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await expectRefused(
@@ -434,7 +434,7 @@ describe("recordReplacement — refusals use no number", () => {
     );
   });
 
-  it("refuses another node's rectificative series", async () => {
+  it("refuses another node's corrective series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTaxpayer(suite.db);

@@ -108,7 +108,7 @@ describe("reserved-identity accessors", () => {
     expect(Number(after.rows[0]!.count)).toBe(Number(before.rows[0]!.count));
   });
 
-  it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
+  it("readStandardSeriesId returns the node's standard series id, not the corrective", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
@@ -167,7 +167,7 @@ describe("reserved-identity accessors", () => {
     );
   });
 
-  it("readLiveSeriesIdTx reads the node's live rectificative series, not the standard", async () => {
+  it("readLiveSeriesIdTx reads the node's live corrective series, not the standard", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
@@ -228,7 +228,7 @@ describe("reserved-identity accessors", () => {
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 
-  it("readLiveSeriesIdTx is LOUD on two live rectificative series", async () => {
+  it("readLiveSeriesIdTx is LOUD on two live corrective series", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [

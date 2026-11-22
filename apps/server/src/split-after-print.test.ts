@@ -566,7 +566,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
-  it("refuses an operator without sale.rectify before looking for a rectificative series", async () => {
+  it("refuses an operator without sale.rectify before looking for a corrective series", async () => {
     const party = await printed("Tarta");
     const [live] = await inTx(venue, (tx) =>
       tx

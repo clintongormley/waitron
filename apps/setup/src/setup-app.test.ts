@@ -1606,6 +1606,26 @@ describe("setup-app", () => {
     expect(next.disabled).toBe(false);
   });
 
+  it("shows a repeated series code under the field the refusal names", async () => {
+    const provision = vi.fn().mockRejectedValue({
+      code: "provisioning.duplicate_series_code",
+      params: { code: "FS", field: "correctiveSeriesCode" },
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const venue = await screenHost(el, "venue");
+    const input = venue.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("[data-test=correctiveSeriesCode]")!;
+    await input.updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
+    expect(input.error).toBe(
+      "Two invoice series have the same code. Give each series its own code.",
+    );
+    expect(await bottomOf(venue)).toBe("Correct the highlighted fields to continue.");
+  });
+
   it("sends a refused start-of-day time back to the venue form with the field explained", async () => {
     const provision = vi.fn().mockRejectedValue({
       code: "venue.detail_invalid",
@@ -1901,7 +1921,7 @@ describe("setup-app", () => {
   it.each([
     ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
     ["provisioning.invalid_locales", "Choose the receipt language."],
-    ["provisioning.duplicate_series_code", "must differ"],
+    ["provisioning.duplicate_series_code", "Give each series its own code."],
     ["fiscal.regime_not_implemented", "isn't supported yet"],
   ])(
     "routes venue-data code %s BACK to the venue form with its message",

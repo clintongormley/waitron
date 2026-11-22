@@ -269,7 +269,7 @@ describe("a paper reservation for a dormant named standby", () => {
     ).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
-  it("requires the complete standard, full and rectificative series", () => {
+  it("requires the complete standard, full and corrective series", () => {
     expect(
       check(undefined, trust, { ...context, requiredBases: context.requiredBases.slice(0, 2) }),
     ).toEqual({ ok: false, reason: "series_mismatch" });

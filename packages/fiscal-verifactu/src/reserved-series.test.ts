@@ -74,7 +74,7 @@ describe("liveSeriesBases", () => {
 describe("liveSeriesBases across purposes", () => {
   const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
-  it("keeps FA standard and FA-S000001 rectificative distinct when S000001 is registered", async () => {
+  it("keeps FA standard and FA-S000001 corrective distinct when S000001 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {
       const node = { nodeId: TENANT_A.nodeId };
       const sif = await registerSif(tx, {

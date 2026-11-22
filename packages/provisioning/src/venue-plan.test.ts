@@ -331,7 +331,7 @@ describe("planVenue", () => {
     expect(venue).toMatchObject({ dayCutover: stored });
   });
 
-  it("emits distinct standard, full and rectificative series with the requested codes", () => {
+  it("emits distinct standard, full and corrective series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
@@ -397,7 +397,7 @@ describe("planVenue", () => {
     }
   });
 
-  it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
+  it("REFUSES equal standard and corrective series codes before emitting anything", () => {
     try {
       planVenue(request({ seriesCode: "A", correctiveSeriesCode: "A" }), MODULES);
       expect.unreachable("should have refused equal series codes");

@@ -37,7 +37,7 @@ const NODE: ProvisionedNode = {
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
-/** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (rectificative). */
+/** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (corrective). */
 async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
