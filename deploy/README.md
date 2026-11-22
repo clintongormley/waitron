@@ -795,7 +795,7 @@ on a fresh database. Its menus, layouts, staff and settings can come from the ol
 3. Leave the old box and its backups as they are, and do not reset it (see
    [Resetting a box](#resetting-a-box)). Keep it switched on and online so it can send its last sales
    to AEAT; its dashboard raises an alert once a sale has waited four hours to be sent.
-4. In the new box's setup wizard, choose Live, then on Import a configuration load the export with
+4. In the new box's setup wizard, choose **Start a new restaurant**, then on Import a configuration load the export with
    its passphrase. On Whose restaurant is this?, choose New tax ID, then enter the new taxpayer's
    tax ID, legal name, registered business address, invoice series and AEAT certificate.
 5. Once it is running, check what came over that may still name the old business: the receipt

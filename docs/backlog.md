@@ -455,13 +455,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Linux tmpfs; the box's ext4 is measured only for what it allocates. Left open by A1127.
   [Detail](backlog/setup.md#a-start-on-a-full-ext4-disk-is-not-tried)
 
-- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?**
-  Since 3b-F a test on two separate databases joins a spare that then takes over, by a handover and
-  by an emergency switch; no joined spare's takeover has run on two started servers, so an operator
-  who adds one still spends a box on a standby no real box has tried. Removing or disabling the
-  option is a product call, not a wording one.
-  [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
-
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
 - **Starter courses for Italy.** When its country pack is built, add the four courses and settle

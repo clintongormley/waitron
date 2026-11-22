@@ -19,7 +19,7 @@ Mail sent through your saved server and the test on this page use your venue nam
 the sender address. If the page says the saved sender address is not valid, choose
 **Change mail server** and correct **Sender address** before testing again.
 
-During Prepare or Live setup, enter your mail server settings and send a test to the administrator
+While setting up with **Prepare your restaurant** or **Start a new restaurant**, enter your mail server settings and send a test to the administrator
 address. Setup tests only a mail server that offers a username-and-password login. If yours takes mail
 without a login, use one that has a login during setup, then switch to yours in **System → Email**,
 where **Use authentication** can stay off. You can skip the mail server in development or when you

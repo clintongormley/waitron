@@ -339,7 +339,7 @@ Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y compr
 ## Conectar un servidor de pruebas durante la configuración {#setup-cloud-sign-in}
 
 En un servidor de pruebas preparado para Cloud, introduce primero los datos del administrador
-en **Preparación** o al empezar de cero en un ensayo de Puesta en marcha en un servidor de
+en **Preparación** o al empezar de cero en un ensayo de **Empezar un restaurante nuevo** en un servidor de
 desarrollo. Luego elige **Iniciar sesión en Waitron Cloud** e inicia sesión o crea una cuenta.
 La configuración se reanuda en el formulario del local, en la misma pestaña. Waitron registra el
 local cuando lo guardas y se reinicia el servidor. Comprueba la conexión en **Sistema → Servicios

@@ -308,7 +308,7 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 ## Connect a test box during setup {#setup-cloud-sign-in}
 
 On a test box prepared for Cloud sign-in, enter the administrator’s details first in **Prepare**
-or when starting empty in a development Live rehearsal. Then choose **Sign in to Waitron Cloud**
+or when starting empty in a development rehearsal of **Start a new restaurant**. Then choose **Sign in to Waitron Cloud**
 and sign in or create an account. Setup resumes at the venue form in the same tab. Waitron files
 the venue after you save it and the box restarts. Check **System → Cloud services** for the connection.
 

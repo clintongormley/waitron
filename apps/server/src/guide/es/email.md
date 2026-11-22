@@ -19,7 +19,7 @@ Los mensajes enviados por tu servidor guardado y la prueba de esta página muest
 local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,
 elige **Cambiar servidor de correo** y corrige **Dirección del remitente** antes de repetir la prueba.
 
-Durante la configuración en Preparación o En vivo, introduce los ajustes del servidor de correo
+Durante la configuración con **Prepara tu restaurante** o **Empezar un restaurante nuevo**, introduce los ajustes del servidor de correo
 y envía una prueba a la dirección del administrador. La configuración solo prueba un servidor de
 correo que ofrezca inicio de sesión con nombre de usuario y contraseña. Si el tuyo acepta correo sin
 iniciar sesión, usa durante la configuración uno que lo ofrezca y cámbialo después por el tuyo en **Sistema → Correo**, donde **Usar
