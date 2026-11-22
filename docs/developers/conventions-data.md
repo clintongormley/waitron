@@ -4093,8 +4093,9 @@ lines because they can contain key material. A non-empty process value takes pre
 The development launcher passes its env files to Node before the server starts, so those values
 have process precedence.
 
-`scripts/environment-variables.test.ts` checks names in tracked text. Review the code to verify
-which accessor reads a setting and to follow names assembled at runtime.
+`scripts/environment-variables.test.ts` checks names in tracked text. Its code-constant exceptions
+apply across source files. Review the code to verify which accessor reads a setting and to follow
+names assembled at runtime.
 
 ## Every read of printers names its kind
 

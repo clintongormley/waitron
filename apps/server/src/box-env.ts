@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 
-/** Order matters: a later file's value wins over an earlier one's. */
 const FILES = [SECRETS_ENV_FILE, TRADING_ENV_FILE, BACKUP_ENV_FILE] as const;
 const SETTING_NAME = /^WAITRON_[A-Z0-9_]*[A-Z0-9]$/;
 
