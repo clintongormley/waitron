@@ -1,5 +1,5 @@
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
-import { deviceZonesFixture } from "../test/device-zones.js";
+import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -412,6 +412,38 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   const noCourses = { ...till(drillFormFactor), courses: [], setupRevision: "s1" };
   const moved = { ...till(drillFormFactor), courses, setupRevision: "s2" };
+
+  it("updates the payment controls without dropping the dishes in an unsaved counter basket", async () => {
+    const offers = menu("v1");
+    const collection = {
+      ...offers,
+      context: { ...offers.context, serviceMode: "ticket_then_pay" as const },
+    };
+    const prepay = {
+      ...offers,
+      context: { ...offers.context, serviceMode: "prepay" as const },
+    };
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(collection)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(collection),
+      listZoneOffers: vi.fn().mockResolvedValue(collection),
+    });
+    await flush(el);
+    await signIn(el);
+    const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
+    counter.store.addProduct(counter.products[0]!, "1");
+    await flush(el);
+    const controls = counter.shadowRoot!.querySelector("till-tender-pay")!.shadowRoot!;
+    expect(controls.querySelector(".place")).not.toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    api.getDeviceZones.mockResolvedValue({ ...deviceZonesFor(prepay), snapshot: "prepay" });
+    api.listZoneOffers.mockResolvedValue(prepay);
+    await poll(el);
+
+    expect(controls.querySelector(".place")).toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
 
   it("refreshes screen navigation when the profile's screen changes", async () => {
     const info = { ...noCourses, capabilities: ["show-station", "show-expo"] };
