@@ -41,6 +41,9 @@ and a counter takeover endpoint are outside this item.
 | Move dishes | The dishes haven't moved. Take over the orders below, then review the move. | Los platos siguen en su cuenta. Toma los pedidos de abajo y luego revisa el traslado. |
 | Counter bill without a party | Someone else has unsent dishes on this counter order. Choose a table with no unsent orders, or leave the order where it is. | Otra persona tiene platos sin enviar en este pedido de barra. Elige una mesa sin pedidos pendientes o deja el pedido donde está. |
 
+At 02:51 on 22 November, the watcher cleared the wording that matches **Parked orders** in the
+[till strings](../../../apps/till/src/i18n/strings.ts).
+
 **Checks and size.** Test first. The watcher cleared two pull requests at 01:00 on 22 November:
 1. Shared rows and dialog and the five table-screen actions. Test draft ownership and labels in
    `state/bill-edit-conflicts.test.ts` and `widgets/bill-edit-conflicts-dialog.test.ts`. Keep the

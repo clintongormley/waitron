@@ -291,15 +291,14 @@ it("explains what staff can do when the counter order itself has an unsent draft
   const heldReads = api.listWorkingOrders!;
   const before = heldReads.mock.calls.length;
   move();
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain(
-      "Someone else has unsent dishes on this parked order. Choose a table with no unsent orders, or leave the order where it is.",
-    ),
+  await vi.waitFor(() => expect(heldReads.mock.calls).toHaveLength(before + 1));
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain(
+    "Someone else has unsent dishes on this parked order. Choose a table with no unsent orders, or leave the order where it is.",
   );
   expect(el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog")).toBeNull();
   expect(takeOverDraft).not.toHaveBeenCalled();
   expect(write).not.toHaveBeenCalled();
-  await vi.waitFor(() => expect(heldReads.mock.calls).toHaveLength(before + 1));
 });
 
 describe("A669 counter move refusal recovery", () => {
