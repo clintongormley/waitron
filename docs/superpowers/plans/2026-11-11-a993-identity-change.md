@@ -17,7 +17,7 @@ different producer refuses `sif.producer_changed` as today.
 the marker from the old and new images and hands it to its own check containers. Its online trial
 and its stopped checks open the new installation on their throwaway copies. Its last stopped check
 then opens it on the live data, reading the box's time service at that moment. A failure anywhere
-leaves or puts back the old release, as for any failed upgrade check. No start ever opens an
+leaves or puts back the old release, as for any failed upgrade check (in manual mode, once the person runs Restore). No start ever opens an
 installation, so no start waits, and the start's refusal is unchanged. The opening uses the
 activation that restore and the conflict switch already use (`withHourAdmission` →
 `activateModuleAllocation` → the writes at `allocation.ts:435-478`), with a new action
@@ -146,6 +146,30 @@ producer, and the producer it replaces.
   split (Tasks 6 and 7).
 - **Rejected:** none.
 
+## Changed after read 2
+
+Read 2 is `~/waitron-campaign-l/receipts/a993-plan-read-2.md`.
+
+- **C1:** read 2 ran the real locks. During the stop, the host holds `recovery.lock` and
+  `venue/venue.lock` (`holdUpgradeState`, `host.mjs:452-482`, taken at `:324-326`). It keeps them
+  until `resume()` (`:333-337`), after the attempt is recorded committed. So the live step's
+  `lockVenueDatabase` (`upgrade-checks.ts:50`) is refused with `provisioning.database_in_use`.
+  - The fix is decision 11: the step runs under the host's hold.
+  - A real-lock test is in Task 4. A call-order test is in Task 6.
+- **I1:** once the installation is opened, the chain head is empty (`allocation.ts:455-461`), and
+  the start check passes an empty chain (`producer-change.ts:31`). This is stated under ★1 and ★2,
+  with a guard as an option, and the claims are narrowed.
+- **I2:** manual mode leaves the box stopped until Restore (decision 4). Keep's refusal moves into
+  `transaction.mjs:227` (Task 6).
+- **Minors:**
+  - The live container is named and labelled like the others, so leftover-container cleanup
+    removes it (Task 6).
+  - Three more stale texts are listed (Task 7).
+  - Where the opening is recorded is stated (decision 11).
+  - An interrupted-upgrade test is added (Task 6).
+- **Rejected:** none. Each finding matched the code I read (`host.mjs:452-482`,
+  `transaction.mjs:194-199,227-232`, `candidate.mjs:13-17,76-92`, `waitron.sh:44`, `CLAUDE.md:692`).
+
 ## Decisions (recommended defaults; ★ needs the owner)
 
 1. ★ **Producer only, with no stored identity column** (departs from the design's "What each chain
@@ -153,20 +177,49 @@ producer, and the producer it replaces.
    mode cannot differ today.
 2. ★ **No check when a record is written** (departs from the design's "The guard"). It would sit in
    `chain.ts`. The start's refusal stays the guard (`boot.producer-change.test.ts:171`, unedited).
+
+   **What 1 and 2 leave open (read 2, I1).** The opening empties the chain head
+   (`allocation.ts:455-461`). The start check returns when there is no head
+   (`producer-change.ts:31`). So between the opening and the first record, a start under any
+   producer passes. Here is how that can happen:
+   1. The attempt is recorded committed.
+   2. The new release does not come up within A950's 180-second wait (`host.mjs:641`). A committed
+      attempt is never restored (`transaction.mjs:216`).
+   3. Someone starts the old images by hand, and the two releases differ in no migration.
+      (Otherwise `assertNotAhead` refuses the old release.)
+   4. The old release (producer A) then writes the first record of the installation opened for B.
+
+   That record names A truthfully. But B's later start refuses `sif.producer_changed`, and needs
+   another upgrade that opens yet another installation.
+
+   **Option (the smallest guard):**
+   - The operator text becomes `identity-change:<release>:<producerTaxId>`.
+   - When the head is empty, `refuseProducerChange` reads the live SIF row's `fiscal_allocations`
+     row. If its operator names another producer, it refuses `sif.producer_changed`.
+   - Cost: about 20 lines and 3 cases in `producer-change.ts`, read-only, with no schema change.
+     It covers only installations this step opened. A setup or restore opened under one release
+     and first started under another stays uncovered, as today.
+
+   **Recommended:** add it, in Task 3, with its cases in `producer-change.test.ts`. Without it, the
+   plan's claim narrows to: every start whose chain has a record under another producer refuses.
 3. ★ **The upgrade opens the installation during its stop, as its last check, on the live data,
    reading the time service then.** The trial and the stopped checks open it first on their own
-   copies, which are thrown away. No start opens one. So the owner's 2026-11-06 constraint holds:
-   every start with a producer difference refuses, and only the upgrade's own step, handed its own
-   marker, opens. This matches the design's way A, step 4 ("Migrate, then make the change"). It
+   copies, which are thrown away. No start opens one. Only the upgrade's own step, handed its own
+   marker, opens. A start whose chain holds a record under another producer refuses. With the
+   option under ★1 and ★2, so does a start on an installation this step opened for another producer. This matches the design's way A, step 4 ("Migrate, then make the change"). It
    drops step 3's clock reading carried across the stop, because the time service is read inside
    the stop through the relay.
 4. ★ **No stuck page, and no phone's or till's clock.** The design's stuck cases were a crash
    between the migration and the change, and a start by hand.
    - **A crash:** A950's recovery restores the old data automatically, or offers Restore
      (`transaction.mjs:205-236`). Keep is refused for an identity-changing attempt (Task 6).
-   - **A start by hand:** it refuses, with words that say to install the release as an upgrade.
+   - **A start by hand of the new release, before any opening:** it refuses, with words that say
+     to install the release as an upgrade. (For a start after an opening, see ★1 and ★2.)
    - **No time service at the trial:** the upgrade stops there and the old release sells on.
-   - **No time service at the stop:** the old release is put back.
+   - **No time service at the stop, automatic mode:** the old release is put back by itself.
+   - **No time service at the stop, manual mode:** the box stays stopped at `awaiting-choice`
+     (`transaction.mjs:194-199`) until the person at the console runs `waitron.sh restore`. Keep's
+     refusal tells them to.
 5. **The approval and operator shape.** It is the existing version 2 with
    `oldMachineRelinquished: true`, and `oldMachineOffline` and `oldMachineAbsent` false (the old
    installation is this box's, closed by its own step). The operator is the text
@@ -203,6 +256,20 @@ producer, and the producer it replaces.
 10. **`openIdentityChange` takes `Database` and opens its own transaction.** It reads the time
     service (up to 2 seconds, `hour-clock-time-service.ts:4`) outside the write lock. This is
     stated as a commented decision at its site (CLAUDE.md §3).
+11. **The live step runs under the host's hold.** It does not release the hold and take it again.
+    - **What changes:** the `open` mode calls `checkUpgradeData` with `{ heldByUpgrade: true }`,
+      which skips `lockVenueDatabase` at `upgrade-checks.ts:50`. The host keeps the two locks it
+      took at the stop (`host.mjs:324-326`) for the whole step.
+    - **Why no window:** releasing and retaking would leave a moment when the folder is free. A
+      second host operation is shut out by `flock` on `${WAITRON_DIR}.upgrade.lock`
+      (for example `waitron.sh:1141-1142`). But any process that opens the folder directly, such as a
+      `docker compose up` by hand, could take it in that moment. Under the hold, nothing can.
+    - **The exception, stated at its site:** CLAUDE.md §3's "file-changing commands take
+      `lockVenueDatabase`" gets a stated exception. The holder here is the upgrade's host process,
+      which owns the folder for the stop, and the step is a child it waits for.
+    - **Where the opening is recorded:** the `fiscal_allocations` row (`allocation.ts:466-478`) is
+      the durable record. The step's report and error text land in `attempt.json`'s `checks` or
+      `failure`. The step mounts the throwaway `work/logs`, so its log lines are not kept.
 
 ## Changed test checks
 
@@ -343,6 +410,10 @@ How it works:
      plan's minute is planted in `registro_sif` between the plan and the transaction.
   4. `verifyBackupFiscalHistory` (`backup-verification-history.ts:492`) over the changed database
      passes.
+  5. Only if the owner takes the option under ★1 and ★2, in `producer-change.test.ts`:
+     - opened for B, with an empty head, started as A → `sif.producer_changed`;
+     - started as B → passes;
+     - an empty head after a restore's opening → passes, as today.
 - [ ] **Step 2: Run them and watch them fail.** Same command as Task 2 → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run them and watch them pass**, with the fiscal gates and
@@ -359,8 +430,9 @@ check opens the installation on the data it is given. About 80 production lines 
 **Files:**
 - Modify: `apps/server/src/upgrade-checks.ts:35-89`, adding an
   `options: { socketPath?: string }` parameter that `upgrade-sale.ts:160` passes on.
-- Modify: `upgrade-check-entry.ts:25-42`, adding the mode `open`, which is `checkUpgradeData` with
-  no listener and refuses unless the value is set.
+- Modify: `upgrade-check-entry.ts:25-42`, adding the mode `open`. It is
+  `checkUpgradeData(config, env, { heldByUpgrade: true })` with no listener (decision 11: it skips
+  `lockVenueDatabase` at `upgrade-checks.ts:50`), and it refuses unless the value is set.
 - Create: `identity-change-marker.ts`.
 - Tests: `upgrade-trial.test.ts`, `upgrade-sale.test.ts`, `identity-change-marker.test.ts`.
 
@@ -380,8 +452,14 @@ A waiting refusal is thrown and fails the check. The details report `identityCha
   - No value → still `sif.producer_changed`.
   - The sale with a matching value → its record starts the new chain.
   - `open` with no value → refused.
+  - **The real lock**, in a new `upgrade-open.test.ts`. A child process runs the real
+    `holdUpgradeState` (`scripts/box/upgrades/host.mjs:452`) on a scratch state folder and reports
+    when it holds it. It starts first, as CLAUDE.md §4 requires for two writers on one lock.
+    - `checkUpgradeData` in its ordinary mode → `provisioning.database_in_use`. This is the control
+      that shows why the exception exists.
+    - `open` mode → `opened`.
 - [ ] **Step 2: Run them and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/identity-change-marker.test.ts src/upgrade-trial.test.ts src/upgrade-sale.test.ts` → FAIL.
+  `pnpm --filter @waitron/server exec vitest run src/identity-change-marker.test.ts src/upgrade-trial.test.ts src/upgrade-sale.test.ts src/upgrade-open.test.ts` → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run them and watch them pass**, plus the root's `scripts/module-seams.test.ts` → PASS.
 - [ ] **Step 5: Commit** with `git commit -s`.
@@ -418,13 +496,19 @@ Result: the outcome. About 120 production lines and 250 test lines, plus documen
 **Files:**
 - Modify `scripts/box/upgrades/candidate.mjs`:
   - `:39-92`: when the attempt holds `identity-change.json`, add its value to the check env file.
-  - After the sale (`:172-175`): run `docker run --rm --network none … --entrypoint node <candidate> /app/upgrade-checks.js open`
-    with the readiness run's mounts (`:76-87`), but with the live state (`marker.paths[0]`) in place
+  - After the sale (`:172-175`), run the live step:
+    `docker run --rm --name <prefix>-open --label waitron.upgrade.directory=<directory> --network none … --entrypoint node <candidate> /app/upgrade-checks.js open`.
+    It uses the readiness run's mounts (`:76-87`), with the live state (`marker.paths[0]`) in place
     of `work/state`. Push its report.
-- Modify `cli.mjs:420-430`: `keep` on an attempt holding `identity-change.json` throws "This
-  upgrade changes the software producer, so it can only be restored." The words are shown on the
-  host console.
-- Tests: `candidate.test.mjs`, `cli.test.mjs`, `transaction.test.mjs`.
+    - The host's hold, taken at `host.mjs:324-326`, stays held throughout (decision 11).
+    - `namesFor` (`:13-17`) gains `<prefix>-open`, so `removeUpgradeCheckContainers` removes a
+      leftover one before recovery (`cli.mjs:420`).
+- Modify `transaction.mjs:227-232`: the Keep branch of `recoverUpgrade` refuses an attempt whose
+  directory holds `identity-change.json`. Every Keep passes through it (`waitron.sh:1454` →
+  `cli.mjs` → `:227`). The message: "This upgrade changes the software producer, so it cannot be
+  kept after a failed check. Run `waitron.sh restore` to put the selling version back, then try
+  the upgrade again."
+- Tests: `candidate.test.mjs`, `transaction.test.mjs`, `host.test.mjs`.
 
 - [ ] **Step 1: Write the failing tests.**
   - The readiness and sale env files carry the value.
@@ -432,8 +516,15 @@ Result: the outcome. About 120 production lines and 250 test lines, plus documen
   - Its failure fails the checks.
   - Restore after a failed live step puts the live state back byte for byte.
   - Keep on an identity-changing attempt is refused; Keep on any other attempt is unchanged.
+  - **The hold, by the order of calls** (`host.test.mjs`): no release of the hold happens between
+    the stop and the live `open` run, and the hold is released only in `resume`.
+  - **An interrupted upgrade:** the live step commits its opening, then the process stops before
+    the attempt is recorded committed. Running `recover` restores the copy taken before the opening.
+    The restored `venue.db` has the old SIF row live and no `identity-change` row in
+    `fiscal_allocations`.
+  - A leftover `<prefix>-open` container is removed by `removeUpgradeCheckContainers`.
 - [ ] **Step 2: Run them and watch them fail.**
-  `pnpm exec vitest run scripts/box/upgrades/candidate.test.mjs scripts/box/upgrades/cli.test.mjs scripts/box/upgrades/transaction.test.mjs` → FAIL.
+  `pnpm exec vitest run scripts/box/upgrades/candidate.test.mjs scripts/box/upgrades/host.test.mjs scripts/box/upgrades/transaction.test.mjs` → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run them and watch them pass.** Same command → PASS.
 - [ ] **Step 5: Commit** with `git commit -s`.
@@ -445,7 +536,7 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 **Files:**
 - `CLAUDE.md`: the producer bullet at `:1026-1033` becomes "A production box opens a new
   installation for another producer only through the checked upgrade, whose stopped checks open it;
-  every start with a producer difference refuses `sif.producer_changed`". It names this plan's
+  every start whose chain holds a record under another producer refuses `sif.producer_changed`". It names this plan's
   guards. The restore and promotion bullet at `:1034` gains the identity change.
 - `.github/workflows/ci.yml`: the comment at `:4692-4694`, and the refusal message at `:4734-4737`,
   which becomes "…and production boxes refuse to start on it unless it is installed as an upgrade,
@@ -461,6 +552,13 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
   1–4 and 7 to `## Decisions and deliberate limits` (`:1086`).
 - `docs/compliance/2026-11-19-adviser-meeting.md:463`: a dated pointer only, since it is a
   historical record.
+- `deploy/waitron.sh:44`: the help line "keep … start the candidate despite its failed checks"
+  gains "(not for an upgrade that changes the software producer)".
+- `CLAUDE.md:692`: "holds a failed check for Restore or Keep" gains "(Restore only when it changes
+  the producer)".
+- The design's §5.6 (`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md`):
+  a dated pointer in its header, beside the existing ones at `:9-18`. It says this plan replaces
+  the stuck page, the phone's or till's clock, and the clock reading carried across the stop.
 - `i18n/recovery-page.ts:308-320` and its test (the table above).
 
 - [ ] **Step 1: Change the test first.** Change `recovery-surface.test.ts:440-462` to the new
@@ -476,7 +574,8 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 
 | Risk | Guard |
 | --- | --- |
-| A sale joins the old chain under the new producer | `checkFilingIdentity` at every start (`boot.ts:2595-2598`) and in every check (`upgrade-checks.ts:90`), unedited |
+| A sale joins the old chain under the new producer | `checkFilingIdentity` at every start (`boot.ts:2595-2598`) and in every check (`upgrade-checks.ts:90`), unedited; it sees a chain with records only |
+| The old release, started by hand after the opening, writes the new installation's first record | Not guarded unless the owner takes the option under ★1 and ★2 (Task 3, case 5) |
 | A stray setting opens one | Only the upgrade's check containers carry the value; it must name this release, this producer and the head's (Task 2, case 2) |
 | Another caller opens one | A private, one-use authority, refused for every other action (Task 1) |
 | A name from a wrong clock, or one already used | A synchronised time service, the release floor, the history, `installation_used` (Tasks 2 and 3) |
@@ -488,3 +587,6 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 - What Box status shows for an automatic attempt refused at the online trial because the time
   service was not synchronised. A950's existing handling of a failed trial applies; I read it, I did
   not run it.
+- The live step has never been run on a real box. Task 4's real-lock test and Task 6's
+  call-order test cover the hold. Opening the live data inside the upgrade's containers on Linux
+  is unqualified until a physical box upgrade, which A950 itself still lists as open.
