@@ -18,9 +18,9 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import {
-  type BusinessDayStartPlan,
   clockTransitionAt,
   planBusinessDayStart,
+  type BusinessDayStartPlan,
 } from "./business-day-changeover.js";
 import type {
   BusinessDayClockModel,
