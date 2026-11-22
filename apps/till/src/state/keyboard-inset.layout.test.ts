@@ -121,7 +121,7 @@ function product(key: string, name: string): TillProduct {
 
 it("the Counter's product search moves to the top of what the keyboard leaves, with a result below it", async () => {
   await pageAt(PAGE.width, PAGE.height);
-  const products = [product("cafe", "Café solo"), product("croquetas", "Croquetas")];
+  const products = [product("coffee", "Coffee"), product("chips", "Chips")];
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     products,
@@ -133,10 +133,10 @@ it("the Counter's product search moves to the top of what the keyboard leaves, w
   });
   const browser = el.shadowRoot!.querySelector("till-menu-browser")!;
   const field = inner(browser.shadowRoot!.querySelector('[data-region="search"] wt-input')!);
-  await userEvent.type(field, "Cro");
+  await userEvent.type(field, "Chi");
   const result = await vi.waitFor(() => {
     const found = [...browser.shadowRoot!.querySelectorAll<HTMLElement>("wt-button, button")].find(
-      (each) => each.textContent!.includes("Croquetas"),
+      (each) => each.textContent!.includes("Chips"),
     );
     expect(found).toBeDefined();
     return found!;
