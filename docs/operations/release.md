@@ -10,18 +10,17 @@ lane on the owner's instruction, in two commands: `pnpm release prepare` writes 
 and `pnpm release tag` puts the version's name (a git tag, `v1.0.0`) on the release branch tip once that pull
 request has landed. Use `main` for new releases and a protected maintenance branch for an older release line.
 
-## No release can be cut yet
+## The declaration's item d)
 
-Both commands refuse today, on purpose. The declaration's template,
-[`template.md`](../../packages/fiscal-verifactu/declarations/template.md), opens with a
-"release blocker" line, and the package command both release commands call refuses while one is
-present, answering `declaration.release_blocked {"count":1}`.
-
-The line is for question 9 of the [19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md) (Q53
-before it). Item d) of the declaration, which lists what the system is made of, is still an earlier
-draft of the one put to the asesor (the tax adviser) in that question. Whoever records the
-asesor's answer replaces item d) with the answered wording, keeping the cloud-server phrase and the
-spare-server sentence only if the version can do them, and deletes the line.
+Version 1.0.0's declaration uses the earlier draft of item d), which lists what the system is made
+of (question 9 of the [19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md), Q53
+before it), without its cloud-server phrase and without saying that `@waitron/verifactu` has its
+own declaration: this version cannot run in Waitron Cloud, and the library's 0.2.1 has none (owner,
+22 November: "Just put in whatever we have for now, we can update it later"). The asesor's (tax
+adviser's) answer goes into the template for a later version, since a released version's
+declaration never changes. A line starting `<!-- release-blocker:` at the top of
+[`template.md`](../../packages/fiscal-verifactu/declarations/template.md) still makes both release
+commands refuse, answering `declaration.release_blocked {"count":1}`.
 
 Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). The two commands check
 what they can before the tag exists, and a tag pushed by hand skips those checks. CI then refuses to

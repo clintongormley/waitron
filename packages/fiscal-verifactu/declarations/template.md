@@ -1,4 +1,3 @@
-<!-- release-blocker: Item 1.d) is Q53's draft. Question 9 of docs/compliance/2026-11-19-adviser-meeting.md asks the asesor about a later one, which drops the cloud-server phrase and the spare-server sentence and says what the terminal applications and the print agent do. Replace item 1.d) with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
 **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 
 **1.a) Nombre del sistema informático a que se refiere esta declaración responsable:**
@@ -15,7 +14,7 @@ esta declaración responsable, junto con una breve descripción de lo que hace d
 informático y de sus principales funcionalidades:**
 
 Waitron es un software de punto de venta para restaurantes y bares. Se ejecuta en un servidor
-—un equipo del propio establecimiento o un servidor en la nube— con Linux y Docker, y los
+—un equipo del propio establecimiento— con Linux y Docker, y los
 terminales del establecimiento (cajas, comanderos, pantallas de cocina y el panel de gestión) se
 conectan a él por la red mediante un navegador. Opcionalmente, un segundo servidor de reserva en
 el establecimiento mantiene una copia continua de los datos y puede sustituir al principal si este
@@ -26,8 +25,7 @@ anterior.
 
 Software: el servidor Waitron, que genera, encadena, conserva y remite los registros de
 facturación; la biblioteca @waitron/verifactu (versión ‹versión de @waitron/verifactu›), que
-construye cada registro, su huella y el contenido del código QR, y lo remite, y que cuenta con su propia declaración
-responsable; las aplicaciones de los terminales, que no generan registros de facturación; el
+construye cada registro, su huella y el contenido del código QR, y lo remite; las aplicaciones de los terminales, que no generan registros de facturación; el
 agente de impresión; y los componentes de terceros de los que nos hacemos responsables: Node.js,
 SQLite, Litestream, Linux y Docker (la lista completa se muestra en el propio sistema).
 
