@@ -2299,6 +2299,7 @@ describe("the Calendar's module views", () => {
     const content = el.shadowRoot!.querySelector("[data-test=stub-staffing]");
     expect(content).not.toBeNull();
     expect(content!.textContent).toContain("2027-03");
+    expect(hostsSeen["staffing"]![0]!.today).toBe("2027-03-05");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
   });
@@ -2313,8 +2314,8 @@ describe("the Calendar's module views", () => {
     expect(error.textContent).toBe(t("opening.load_error"));
   });
 
-  it("waits for a successful hours read before drawing its business month", async () => {
-    vi.setSystemTime(new Date("2027-04-01T01:30:00Z"));
+  it("waits for a successful hours read before exposing the venue business date and month", async () => {
+    vi.setSystemTime(new Date("2027-02-01T01:30:00Z"));
     history.replaceState(null, "", "/opening-hours/view/staffing");
     let release!: (value: OpeningHoursModel) => void;
     const pending = new Promise<OpeningHoursModel>((resolve) => {
@@ -2328,9 +2329,10 @@ describe("the Calendar's module views", () => {
       release(model());
       await expect
         .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]")?.textContent)
-        .toContain("2027-03");
+        .toContain("2027-01");
+      expect(hostsSeen["staffing"]![0]!.today).toBe("2027-01-31");
       const after = el.shadowRoot!.querySelector("[data-test=stub-staffing]")!.textContent;
-      expect([before, after]).toEqual([null, "2027-03 {}"]);
+      expect([before, after]).toEqual([null, "2027-01 {}"]);
     } finally {
       release(model());
       read.mockRestore();
@@ -2378,6 +2380,18 @@ describe("the Calendar's module views", () => {
     await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2027-03");
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
     expect(checked(el)).toBe("hours");
+  });
+
+  it("omits the shown month on a tab that chooses its own default", async () => {
+    history.replaceState(null, "", "/opening-hours/view/staffing/month/2027-03");
+    const el = await mountCalendar([
+      { view: staffing, canWrite: true },
+      { view: { ...rota, carryMonthOnTab: false }, canWrite: true },
+    ]);
+    await expect.poll(() => hostsSeen["staffing"]?.[0]?.month).toBe("2027-03");
+    await choose(el, "rota");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/rota");
+    expect(hostsSeen["rota"]![0]!.params).toEqual({});
   });
 
   it("moves to another address through host.open and hands the view its params", async () => {

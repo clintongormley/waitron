@@ -1046,8 +1046,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Staffing reads the day start in force on each date** (bundle of 2, size M, needs the owner). Holds A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
 
-- **Open the Rota tab on the last picked week** (A763 point 9). [Detail](backlog/workforce.md#bundle-staffing-month-day-box)
-
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).
 

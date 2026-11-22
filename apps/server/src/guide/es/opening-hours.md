@@ -57,6 +57,8 @@ En **Calendario** → **Personal**, elige una fecha para ver cuántas personas n
 
 Para planificar el personal de una temporada, abre la temporada desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula.
 
+Abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
+
 ## Edita los periodos y consulta sus horarios {#periods}
 
 Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila para editarla, o **Añadir periodo** para crear uno. Usa el menú **⋯** de la fila para editarlo o eliminarlo.

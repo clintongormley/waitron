@@ -382,10 +382,14 @@ export class OpeningHoursScreen extends LitElement {
     }
     return params;
   }
+  private moduleToday() {
+    if (this.model) return businessDateToday(this.model) || browserToday();
+    return this.readError ? browserToday() : "";
+  }
   private moduleMonth() {
     return (
       parseCalendarMonth(this.moduleView?.params["month"]) ??
-      ((this.model && businessDateToday(this.model)) || browserToday()).slice(0, 7)
+      (this.moduleToday() || browserToday()).slice(0, 7)
     );
   }
   private openCalendarView(view: string, params: Record<string, string>) {
@@ -403,8 +407,11 @@ export class OpeningHoursScreen extends LitElement {
   private hoursUrl(params: Readonly<Record<string, string>>) {
     return this.calendarUrl(hoursPath(parseCalendarMonth(params["month"])));
   }
-  /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
+    if (this.calendarView(id)?.view.carryMonthOnTab === false) {
+      this.openCalendarView(id, {});
+      return;
+    }
     const month = this.moduleView ? this.moduleView.params["month"] : this.switchMonth();
     this.openCalendarView(id, month ? { month } : {});
   }
@@ -421,6 +428,9 @@ export class OpeningHoursScreen extends LitElement {
     ) {}
     get month() {
       return this.screen.moduleMonth();
+    }
+    get today() {
+      return this.screen.moduleToday();
     }
     get params() {
       const shown = this.screen.moduleView;

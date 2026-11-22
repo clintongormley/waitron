@@ -61,6 +61,8 @@ export interface DashboardFurtherScreen {
 export interface CalendarViewHost {
   /** The month the Calendar is showing, YYYY-MM. */
   month: string;
+  /** The venue business date, YYYY-MM-DD. Empty while opening hours load. */
+  today?: string;
   /** The address's `<key>/<value>` pairs after `view/<id>`. */
   params: Readonly<Record<string, string>>;
   canWrite: boolean;
@@ -120,6 +122,8 @@ export interface DashboardCalendarView {
   id: string;
   labelKey: string;
   order: number;
+  /** Set false when the tab chooses its own default date. */
+  carryMonthOnTab?: boolean;
   requiresPermission: string;
   readPermission?: string;
   create(ctx: DashboardModuleContext, host: CalendarViewHost): DashboardScreenHandle;

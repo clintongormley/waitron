@@ -1,5 +1,11 @@
 import { html, nothing } from "lit";
-import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
+import type {
+  CalendarViewHost,
+  DashboardContribution,
+  DashboardFurtherScreen,
+  DashboardModuleContext,
+} from "@waitron/dashboard-kit";
+import { mondayOf } from "@waitron/venue-service/dashboard/calendar-grid";
 import { StaffingApi } from "./client.js";
 import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
@@ -7,6 +13,8 @@ import "./staffing-month.js";
 import "./rota-view.js";
 import "./staffing-season-painter.js";
 import "./staffing-special-day-painter.js";
+
+const lastPickedDay = new WeakMap<DashboardModuleContext, string>();
 
 export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "staffing",
@@ -36,6 +44,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
                 .canWrite=${host.canWrite}
                 .canOpenRota=${ctx.calendarViews?.some((entry) => entry.view.id === "rota") ?? false}
                 .open=${host.open}
+                .pickDate=${(day: string) => lastPickedDay.set(ctx, day)}
               ></staffing-month
               >${
                 host.params.painter === "season" && host.params.season
@@ -68,6 +77,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
       ],
       labelKey: "staffing.rota.tab",
       order: 20,
+      carryMonthOnTab: false,
       requiresPermission: "schedule.manage",
       readPermission: "schedule.manage",
       create(ctx, host) {
@@ -76,7 +86,7 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
           render: () =>
             html`<staffing-rota
               .api=${api}
-              .week=${validWeek(host.params.week) ? host.params.week! : monday(host.month)}
+              .week=${rotaWeek(ctx, host)}
               .params=${host.params}
               .canWrite=${host.canWrite}
               .canWriteStaffing=${ctx.calendarViews?.some((entry) => entry.view.id === "staffing" && entry.canWrite) ?? false}
@@ -100,10 +110,15 @@ export const STAFFING_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
   },
 };
 
-function monday(month: string): string {
-  const date = new Date(`${month}-01T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-  return date.toISOString().slice(0, 10);
+function rotaWeek(ctx: DashboardModuleContext, host: CalendarViewHost): string {
+  const { week, month } = host.params;
+  if (validWeek(week)) return week;
+  const firstOfMonth = `${host.month}-01`;
+  const day =
+    week !== undefined || month !== undefined
+      ? firstOfMonth
+      : lastPickedDay.get(ctx) || host.today || firstOfMonth;
+  return mondayOf(day);
 }
 
 function validWeek(value: string | undefined): value is string {
