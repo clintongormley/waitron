@@ -216,10 +216,13 @@ function offerMatch(
   }
   return undefined;
 }
-/** What a season days read depends on in the model: a change re-reads, a bare refresh does not. */
+/** What a season days read depends on in the model: a change re-reads, a bare refresh does not.
+ *  The read cuts each day's ranges against the start in force when it is made, which the
+ *  model's `dayCutover` tracks. */
 function seasonSignature(model: Model): string {
   return JSON.stringify([
     model.businessDayClock,
+    model.dayCutover,
     model.seasons,
     model.departments.map(({ id, active, seasonWeeks, zones }) => [
       id,

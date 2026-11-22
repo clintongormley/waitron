@@ -594,7 +594,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const dates = parseSeasonDates(c.req.query("dates"));
         if (dates === null) throw new AppError("management.request_invalid", { field: "dates" });
-        return c.json(await viewed(sessionId, (tx) => readSeasonDays(tx, dates)));
+        const at = new Date();
+        return c.json(await viewed(sessionId, (tx) => readSeasonDays(tx, dates, at)));
       }),
     );
 

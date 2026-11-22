@@ -792,7 +792,7 @@ describe("the season days read", () => {
       ],
     });
     const read = await run((tx) =>
-      readSeasonDays(tx, ["2030-12-24", "2030-11-30", "2030-12-01", "2030-12-24"]),
+      readSeasonDays(tx, ["2030-12-24", "2030-11-30", "2030-12-01", "2030-12-24"], AT),
     );
     const barDepartment = {
       departmentId: v.barDepartment,
@@ -859,7 +859,7 @@ describe("the season days read", () => {
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
-    const read = await run((tx) => readSeasonDays(tx, ["2030-12-09", "2030-12-10"]));
+    const read = await run((tx) => readSeasonDays(tx, ["2030-12-09", "2030-12-10"], AT));
     expect(read.days.map(({ date, dayCutover }) => ({ date, dayCutover }))).toEqual([
       { date: "2030-12-09", dayCutover: "06:00" },
       { date: "2030-12-10", dayCutover: "07:00" },
@@ -869,7 +869,13 @@ describe("the season days read", () => {
 
 describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
-  async function lateSaturday() {
+  /** From 2026-10-28 the start returns to the venue's first start, 05:00. */
+  const BACK_TO_FIRST = {
+    dayCutover: "05:00:00",
+    dinner: { startsAt: "22:00", endsAt: "04:30" },
+    closed: { startsAt: "23:00", endsAt: "04:00" },
+  };
+  async function lateSaturday(after = BACK_TO_FIRST) {
     await venue([]);
     await seedBusinessDay(suite.db, { dayCutover: "05:00:00" });
     await run(async (tx) => {
@@ -879,7 +885,7 @@ describe("a past day's range around a start change", () => {
         .where(eq(businessDaySettingsTable.module, "business_day"));
       await tx.insert(dayCutoverChanges).values([
         { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
-        { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
+        { effectiveBusinessDay: "2026-10-28", dayCutover: after.dayCutover },
       ]);
     });
     return run(async (tx) => {
@@ -897,10 +903,7 @@ describe("a past day's range around a start change", () => {
         diningDepartment,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
-          slots:
-            weekday === 2 || weekday === 6
-              ? [{ periodId: dinner, startsAt: "22:00", endsAt: "04:30" }]
-              : [],
+          slots: weekday === 2 || weekday === 6 ? [{ periodId: dinner, ...after.dinner }] : [],
         })),
         AFTER_RETURN,
         2,
@@ -912,7 +915,7 @@ describe("a past day's range around a start change", () => {
         zone!.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
-          ranges: weekday === 6 ? [{ startsAt: "23:00", endsAt: "04:00" }] : [],
+          ranges: weekday === 6 ? [after.closed] : [],
         })),
         2,
         AFTER_RETURN,
@@ -923,6 +926,15 @@ describe("a past day's range around a start change", () => {
   const october = () => run((tx) => readOpeningHoursMonth(tx, "2026-10", AFTER_RETURN));
   const onSaturday = (month: Awaited<ReturnType<typeof october>>, date: string) => {
     const day = month.days.find((d) => d.date === date)!;
+    return {
+      dayCutover: day.dayCutover,
+      ranges: day.departments[0]!.ranges,
+      closed: day.departments[0]!.zones[0]!.closed,
+    };
+  };
+  const seasonDays = (dates: string[]) => run((tx) => readSeasonDays(tx, dates, AFTER_RETURN));
+  const seasonDay = (read: Awaited<ReturnType<typeof seasonDays>>, date: string) => {
+    const day = read.days.find((d) => d.date === date)!;
     return {
       dayCutover: day.dayCutover,
       ranges: day.departments[0]!.ranges,
@@ -943,6 +955,43 @@ describe("a past day's range around a start change", () => {
       ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
       closed: [{ startsAt: "23:00", endsAt: "04:00" }],
     });
+  });
+
+  it("gives the special-day painter's season days the same cut as the Calendar", async () => {
+    const v = await lateSaturday();
+    const month = await october();
+    const read = await seasonDays(["2026-10-24", "2026-10-31"]);
+    expect(seasonDay(read, "2026-10-24")).toEqual({
+      dayCutover: "03:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
+      closed: [{ startsAt: "23:00", endsAt: "03:00" }],
+    });
+    expect(seasonDay(read, "2026-10-31")).toEqual({
+      dayCutover: "05:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
+      closed: [{ startsAt: "23:00", endsAt: "04:00" }],
+    });
+    expect([seasonDay(read, "2026-10-24"), seasonDay(read, "2026-10-31")]).toEqual([
+      onSaturday(month, "2026-10-24"),
+      onSaturday(month, "2026-10-31"),
+    ]);
+  });
+
+  it("cuts the painter's season days against the start in force, not the venue's first start", async () => {
+    // From 2026-10-28 the start is 07:00; these hours fit 07:00 but not the first start, 05:00.
+    const v = await lateSaturday({
+      dayCutover: "07:00:00",
+      dinner: { startsAt: "22:00", endsAt: "06:30" },
+      closed: { startsAt: "23:00", endsAt: "06:00" },
+    });
+    const month = await october();
+    const saturday = seasonDay(await seasonDays(["2026-10-24"]), "2026-10-24");
+    expect(saturday).toEqual({
+      dayCutover: "03:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
+      closed: [{ startsAt: "23:00", endsAt: "03:00" }],
+    });
+    expect(saturday).toEqual(onSaturday(month, "2026-10-24"));
   });
 
   it("cuts a range fitting a shortened day's own start at that day's end", async () => {
