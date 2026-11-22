@@ -63,10 +63,10 @@ your adviser. Its first two sheets list what was recorded in the period for earl
   it belongs to.
 
 Its **Given free** sheet lists each comp and each discount to zero on the bills opened in the
-period, one row per dish or for a whole bill on each bill its dishes are on, with its
-**Invoice number**, **Menu price (EUR)** and **Estimated cost (EUR)**. A row counts only what is
-still on a bill, so a dish taken off the bill is not listed. The estimated cost is the menu price
-without VAT less the department's estimated margin, and stays blank when the department has none.
+period, one row per dish or for a whole bill, with its **Invoice number**, **Menu price (EUR)** and
+**Estimated cost (EUR)**. A row counts only what is still on a bill, so a dish taken off the bill is
+not listed. The estimated cost is the menu price without VAT less the department's estimated margin,
+and stays blank when the department has none.
 
 Set a department's margin in **Departments and zones**: open the department and fill in
 **Estimated margin (%)** on its **Details** tab. The workbook uses the margins saved when you

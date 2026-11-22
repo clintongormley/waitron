@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { adjustments } from "@waitron/adjustments";
 import {
   departments,
@@ -468,6 +468,57 @@ describe("the free list", () => {
     expect(await freeOn(billId)).toEqual([
       row({ ...wholeBill, menuPrice: decimal("10.00"), amountTakenOff: decimal("10.00") }),
       row({ ...wholeBill, invoice: number(invoice) }),
+    ]);
+  });
+
+  it("names, for a whole bill given free whose dishes are now on two bills, each bill's own department", async () => {
+    const terrace = await inTx(venue, (tx) => createDepartment(tx, { name: "Terrace" }));
+    await setMargin(terrace.id, 5000);
+    await setMargin(departmentId, 3000);
+    onTestFinished(async () => {
+      await setMargin(departmentId, null);
+    });
+    const { partyId, billId } = await bill([
+      { name: "Burger" },
+      { name: "Salad" },
+      { name: "Water" },
+    ]);
+    await reprice(billId, 1, 1210, "general");
+    await reprice(billId, 2, 1100, "reduced");
+    const other = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 3 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await partyRevision(tx, partyId),
+      }),
+    );
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ departmentId: terrace.id })
+        .where(eq(workingOrders.id, other.billId)),
+    );
+    await adjust(billId, { action: "discount_percent", percentBp: 10000 });
+    await inTx(venue, async (tx) =>
+      transferItems(tx, venue.cfg, billId, other.billId, [{ lineNo: 1 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await partyRevision(tx, partyId),
+      }),
+    );
+    const wholeBill = { item: null, quantity: null, kind: "discount" as const };
+    expect(await freeOn(billId)).toEqual([
+      row({
+        ...wholeBill,
+        menuPrice: decimal("11.00"),
+        amountTakenOff: decimal("11.00"),
+        estimatedCost: decimal("7.00"),
+      }),
+      row({
+        ...wholeBill,
+        department: "Terrace",
+        menuPrice: decimal("12.10"),
+        amountTakenOff: decimal("12.10"),
+        estimatedCost: decimal("5.00"),
+      }),
     ]);
   });
 

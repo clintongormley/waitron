@@ -368,9 +368,9 @@ VAT × (10000 − margin in basis points) ÷ 10000, blank when the department ha
 on a bill, extras included, is priced without VAT at its own rate: `vatRateOn` of its `vat_class`
 (or `takeaway_vat_class` when the bill's `dining` is takeaway) on the adjustment's civil day in the
 venue's zone. Those prices are summed exactly, the margin applied once, and the result rounded half
-up to the cent once. The department is the dish's line's `offer_department_id`, else the bill's
-`department_id` (D11); for a whole bill, the discounted bill's, or while that bill is abandoned, the
-one its rows are on.
+up to the cent once per row, so once for each bill the rows are on. The department is the dish's
+line's `offer_department_id`, else the bill's `department_id` (D11); for a whole bill, the
+`department_id` of the bill the row's dishes are on.
 
 **Where the margin lives.** A nullable column `departments.estimated_margin_bp` (basis points,
 `rate()` from `packages/db/src/schema/columns.ts:71`, CHECK between 0 and 10000), not a settings
@@ -779,7 +779,7 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
   entry when neither its `lineId` nor any row its `splits` names still exists in
   `working_order_lines` (D3). _As built, 2026-11-22:_ it checks instead the rows each adjustment
   took money off, through `adjustment_lines`: one query reads those rows with their lines, leaving
-  out rows on abandoned bills; one reads each bill's status, opening time, department and invoice
+  out rows on abandoned bills; one reads each of those bills' opening time, department and invoice
   (series code, number; `sales_working_order_id_key` makes it one); one reads the departments'
   names and margins. Each entry gives one free row per bill its rows are on. The menu price and
   estimated cost are worked out from those rows as Design; the amount taken off is `standingOff`
@@ -787,9 +787,10 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
 - **Failing tests first:** listed: a comp on a dish that reached the bill; a 100% discount; an
   amount discount to zero on a dish; a whole-bill discount to zero ("Whole bill", the bill's
   department); a comped dish cancelled with its charge kept; a comped dish moved to another bill
-  (the new bill's invoice number). Not listed: a comped dish later taken off the bill, before firing
-  and after serving; a partial discount; any cancel; an adjustment on a bill opened outside the
-  period. Estimated cost (D14, without VAT): an €11.00 dish at 10%, 30% margin, gives
+  (the new bill's invoice number); a comp, and a whole bill, whose rows are on two bills (one row
+  per bill, each with its own invoice). Not listed: a comped dish later taken off the bill, before
+  firing and after serving; a partial discount; any cancel; an adjustment on a bill opened outside
+  the period. Estimated cost (D14, without VAT): an €11.00 dish at 10%, 30% margin, gives
   €7.00; a €12.10 dish at 21% at 33.33% gives €6.67 (10.00 × 0.6667, half up); a takeaway bill takes
   the dish's takeaway class; a whole bill of an €11.00 dish at 10% and a €12.10 dish at 21%, 30%
   margin, gives €14.00; a department with no margin, and a bill with no department, leave it blank;

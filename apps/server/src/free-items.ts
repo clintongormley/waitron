@@ -182,7 +182,6 @@ export async function listFreeItems(
   const bills = await tx
     .select({
       id: workingOrders.id,
-      status: workingOrders.status,
       openedAt: workingOrders.openedAt,
       departmentId: workingOrders.departmentId,
       seriesCode: invoiceSeries.code,
@@ -192,10 +191,10 @@ export async function listFreeItems(
     .leftJoin(sales, eq(sales.workingOrderId, workingOrders.id))
     .leftJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(
-      inIds(workingOrders.id, [
-        ...entries.map((entry) => entry.workingOrderId),
-        ...reduced.map((line) => line.workingOrderId),
-      ]),
+      inIds(
+        workingOrders.id,
+        reduced.map((line) => line.workingOrderId),
+      ),
     );
   const billById = new Map(bills.map((bill) => [bill.id, bill]));
   const departmentIds = [
@@ -215,7 +214,6 @@ export async function listFreeItems(
   const items: FreeItem[] = [];
   for (const entry of entries) {
     const date = civilDateOf(new Date(entry.createdAt), clock.timeZone);
-    const own = billById.get(entry.workingOrderId)!;
     const groups = [...(linesOf.get(entry.id) ?? new Map<string, typeof reduced>())]
       .map(([billId, lines]) => ({ bill: billById.get(billId)!, lines }))
       .sort(
@@ -227,7 +225,7 @@ export async function listFreeItems(
       const counted = dishes.length > 0 ? dishes : lines;
       const departmentId =
         entry.lineId === null
-          ? (own.status === "abandoned" ? bill : own).departmentId
+          ? bill.departmentId
           : (counted[0]!.offerDepartmentId ?? bill.departmentId);
       const department = departmentId === null ? undefined : departmentById.get(departmentId);
       const prices = lines.map((line) => ({
