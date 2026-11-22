@@ -32,6 +32,8 @@ it.each([
   "sends to the old address using person $locale before venue $venueLocale",
   async ({ locale, venueLocale, subject, text }) => {
     await seedVenue(suite.db, { name: "Corner Bistro" });
+    const editor = locale === null ? "E".repeat(79) + "\u{1F37D}" : "Editor";
+    const fullEditor = locale === null ? editor + " long name" : editor;
     const [person] = await seedPersons(suite.db, {
       displayName: "Waiter",
       email: "new@example.test",
@@ -43,7 +45,7 @@ it.each([
         dedupeKey: "change",
         subjectId: "activity",
         personId: person!.id,
-        params: { oldEmail: "old@example.test", editorName: "Editor", at: now.toISOString() },
+        params: { oldEmail: "old@example.test", editorName: fullEditor, at: now.toISOString() },
         now,
         notAfter: new Date(now.getTime() + 86400000),
       }),
@@ -67,7 +69,7 @@ it.each([
     expect(send).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
       to: "old@example.test",
       subject,
-      text,
+      text: text.replace("Editor", fullEditor),
     });
     expect((await compose.mock.results[0]!.value).staffNotice).toEqual({
       class: "email_changed",
@@ -75,7 +77,7 @@ it.each([
       locale: locale ?? venueLocale,
       timeZone: "Europe/Madrid",
       expiresAt: "2026-11-14T12:00:00.000Z",
-      facts: { editorName: "Editor", at: "2026-11-13T12:00:00.000Z" },
+      facts: { editorName: editor, at: "2026-11-13T12:00:00.000Z" },
     });
     const [mail] = await suite.db.select().from(outgoingMail);
     expect(mail).toMatchObject({ status: "sent", recipient: "old@example.test", attempts: 1 });

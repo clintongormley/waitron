@@ -727,68 +727,104 @@ describe("one mail sender", () => {
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
   });
-  it.each(["enabled", "offline", "off", "server_saved", "unusable_server_saved"] as const)(
-    "routes a staff notice with Cloud %s",
-    async (relay) => {
-      await seedVenue(suite.db);
-      const ring = loadKeyRing({
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      });
-      const grant = {
-        id: randomUUID(),
-        revision: 1,
-        expiresAt: "2026-11-10T00:00:00.000Z",
-        enabled: true,
-      };
-      const staffNotice = {
-        class: "security_change" as const,
-        facts: { change: "password_changed" as const, at: time.toISOString() },
-        displayName: "Corner Bistro",
-        locale: "en-GB",
-        timeZone: "Europe/Madrid",
-        expiresAt: "2026-11-09T13:00:00.000Z",
-      };
-      await queue("one", { kind: "security_change" });
-      deps.owners = [
-        {
-          ...owner,
-          kind: "security_change",
-          compose: async () => ({ subject: "Notice", text: "Message", staffNotice }),
-        },
-      ];
-      deps.noticeRelayAllowed = async (tx) => !(await hasSavedSmtp(tx));
-      deps.resolveDelivery = (tx, rule) =>
-        resolveMailDeliveryIn(tx, ring, { devMode: false, onboardingIntent: "prepare" }, rule);
-      const resolveAccountRelay = vi.fn(async () => {
-        if (relay === "offline") throw new Error("offline");
-        if (relay === "server_saved" || relay === "unusable_server_saved")
-          await withTransaction(suite.db, (tx) =>
-            saveSmtpForTest(tx, ring, {
-              url: "smtp://mail.test",
-              from: relay === "server_saved" ? "from@example.test" : "missing-address",
-            }),
-          );
-        return relay === "off" ? null : grant;
-      });
-      const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
-      await runMailPass({ ...deps, resolveAccountRelay, sendCloudEmail });
-      expect(resolveAccountRelay).toHaveBeenCalledOnce();
-      if (relay === "enabled") {
-        expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
-          grant,
-          expect.any(String),
-          { ...staffNotice, recipient: "private@example.test" },
-          controller.signal,
+  const noticeRelayCases = [
+    "enabled",
+    "offline",
+    "off",
+    "server_saved",
+    "unusable_server_saved",
+    "already_saved",
+    "daily_report",
+    "invoice",
+    "box_alert",
+  ] as const;
+  it.each(noticeRelayCases)("routes a staff notice with Cloud %s", async (relay) => {
+    await seedVenue(suite.db);
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    const grant = {
+      id: randomUUID(),
+      revision: 1,
+      expiresAt: "2026-11-10T00:00:00.000Z",
+      enabled: true,
+    };
+    const staffNotice = {
+      class: "security_change" as const,
+      facts: { change: "password_changed" as const, at: time.toISOString() },
+      displayName: "Corner Bistro",
+      locale: "en-GB",
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-09T13:00:00.000Z",
+    };
+    const otherMail = relay === "daily_report" || relay === "invoice" || relay === "box_alert";
+    const kind = otherMail ? relay : "security_change";
+    await queue("one", { kind });
+    if (relay === "offline") await queue("second", { kind });
+    if (relay === "already_saved")
+      await withTransaction(suite.db, (tx) =>
+        saveSmtpForTest(tx, ring, { url: "smtp://mail.test", from: "from@example.test" }),
+      );
+    deps.owners = [
+      {
+        ...owner,
+        kind,
+        deliveryRule:
+          relay === "daily_report" ? "venue_smtp" : relay === "invoice" ? "invoice" : "notice",
+        compose: async () => ({
+          subject: "Notice",
+          text: "Message",
+          ...(otherMail ? {} : { staffNotice }),
+        }),
+      },
+    ];
+    const noticeRelayAllowed = vi.fn<NonNullable<MailSenderDeps["noticeRelayAllowed"]>>(
+      async (tx) => !(await hasSavedSmtp(tx)),
+    );
+    deps.resolveDelivery = (tx, rule) =>
+      resolveMailDeliveryIn(tx, ring, { devMode: false, onboardingIntent: "prepare" }, rule);
+    const resolveAccountRelay = vi.fn(async () => {
+      if (relay === "offline") throw new Error("offline");
+      if (relay === "server_saved" || relay === "unusable_server_saved")
+        await withTransaction(suite.db, (tx) =>
+          saveSmtpForTest(tx, ring, {
+            url: "smtp://mail.test",
+            from: relay === "server_saved" ? "from@example.test" : "missing-address",
+          }),
         );
-      } else expect(sendCloudEmail).not.toHaveBeenCalled();
-      expect(deps.send).toHaveBeenCalledTimes(relay === "server_saved" ? 1 : 0);
-      expect(await row()).toMatchObject({
-        status: relay === "enabled" || relay === "server_saved" ? "sent" : "pending",
-        attempts: relay === "enabled" || relay === "server_saved" ? 1 : 0,
-      });
-    },
-  );
+      return relay === "off" ? null : grant;
+    });
+    const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+    const writeTurn = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      await runMailPass({ ...deps, noticeRelayAllowed, resolveAccountRelay, sendCloudEmail });
+      if (relay === "offline") {
+        expect(noticeRelayAllowed).toHaveBeenCalledTimes(2);
+        expect(writeTurn).toHaveBeenCalledOnce();
+      }
+    } finally {
+      writeTurn.mockRestore();
+    }
+    expect(resolveAccountRelay).toHaveBeenCalledTimes(
+      otherMail || relay === "already_saved" ? 0 : 1,
+    );
+    if (relay === "enabled") {
+      expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
+        grant,
+        expect.any(String),
+        { ...staffNotice, recipient: "private@example.test" },
+        controller.signal,
+      );
+    } else expect(sendCloudEmail).not.toHaveBeenCalled();
+    const usedSmtp = relay === "server_saved" || relay === "already_saved";
+    expect(deps.send).toHaveBeenCalledTimes(usedSmtp ? 1 : 0);
+    const sent = relay === "enabled" || usedSmtp;
+    expect(await row()).toMatchObject({
+      status: sent ? "sent" : "pending",
+      attempts: sent ? 1 : 0,
+    });
+  });
   it("logs a relay availability failure once until recovery", async () => {
     await queue("account", { kind: "account_action" });
     deps.owners = [{ ...owner, kind: "account_action" }];
@@ -804,7 +840,7 @@ describe("one mail sender", () => {
     });
     expect(
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.delivery_unavailable"),
-    ).toHaveLength(1);
+    ).toEqual([expect.arrayContaining([expect.objectContaining({ rule: "cloud_relay" })])]);
     expect((await row("account"))?.status).toBe("pending");
   });
   it("sleeps until a scheduled row or an active claim is due", async () => {

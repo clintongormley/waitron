@@ -259,7 +259,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       ready.some((r) => r.kind === "account_action") ||
       (deps.noticeRelayAllowed &&
         ready.some((r) => isCloudStaffNotice(r.kind)) &&
-        (await withTransaction(deps.db, deps.noticeRelayAllowed)))
+        (await deps.noticeRelayAllowed(deps.db)))
     ) {
       try {
         accountRelayRead = true;
@@ -312,6 +312,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         )
           deliveries.set(owner.deliveryRule, await deps.resolveDelivery(tx, owner.deliveryRule));
       let unconfigured = false;
+      let noticeRelayAllowed: boolean | undefined;
       for (const row of rows) {
         const owner = owners.get(row.kind)!;
         if (!due(row, owner, now.getTime()) || Date.parse(row.notAfter) <= now.getTime()) continue;
@@ -323,10 +324,13 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           delivery.mode === "unconfigured" &&
           deps.resolveAccountRelay &&
           isCloudStaffNotice(row.kind) &&
-          (await deps.noticeRelayAllowed?.(tx))
+          deps.noticeRelayAllowed
         ) {
-          if (!accountRelayRead) continue;
-          delivery = accountDelivery ?? delivery;
+          noticeRelayAllowed ??= await deps.noticeRelayAllowed(tx);
+          if (noticeRelayAllowed) {
+            if (!accountRelayRead) continue;
+            delivery = accountDelivery ?? delivery;
+          }
         }
         if (delivery.mode === "unconfigured") {
           unconfigured = true;
@@ -543,7 +547,7 @@ export function mailSendJob(
       throw new Error("Mail longest wait is below a retry delay");
   }
   let waitingForSetup = false;
-  const unavailable = new Set<MailDeliveryRule | "account_action">();
+  const unavailable = new Set<MailDeliveryRule | "cloud_relay">();
   const resolveDelivery: MailSenderDeps["resolveDelivery"] = async (tx, rule) => {
     try {
       const delivery = await deps.resolveDelivery(tx, rule);
@@ -561,15 +565,15 @@ export function mailSendJob(
     (async (signal) => {
       try {
         const grant = await deps.resolveAccountRelay!(signal);
-        unavailable.delete("account_action");
+        unavailable.delete("cloud_relay");
         return grant;
       } catch (error) {
-        if (!unavailable.has("account_action"))
+        if (!unavailable.has("cloud_relay"))
           deps.log("error", "mail.delivery_unavailable", {
-            rule: "account_action",
+            rule: "cloud_relay",
             errorCode: codeOf(error),
           });
-        unavailable.add("account_action");
+        unavailable.add("cloud_relay");
         throw error;
       }
     });

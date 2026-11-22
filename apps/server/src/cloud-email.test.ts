@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { requestSetupCloudEmailGrant, sendCloudEmail } from "./cloud-email.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
@@ -251,14 +251,15 @@ const securityNotice = {
   facts: { change: "password_changed" as const, at: "2026-11-13T12:00:00.000Z" },
 };
 
-it.each([1, 25])(
-  "signs a v2 notice due in %s hours and reads a v1 reply and status",
-  async (hours) => {
+it.each([false, true])(
+  "signs a v2 notice and reads v1 replies after a backward clock step: %s",
+  async (clockWentBack) => {
     const id = randomUUID();
     const authority = grant();
+    const queuedAt = Date.now();
     const notice = {
       ...securityNotice,
-      expiresAt: new Date(Date.now() + hours * 3600000).toISOString(),
+      expiresAt: new Date(queuedAt + (clockWentBack ? 24 : 1) * 3600000).toISOString(),
     };
     const f = await installationFixture(undefined, {
       emailConfiguration: true,
@@ -278,17 +279,28 @@ it.each([1, 25])(
       },
     });
     try {
-      expect(await f.client.sendEmail(authority, id, notice)).toEqual({ status: "sent" });
+      await f.client.refresh();
+      const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
+      const clock = clockWentBack
+        ? vi.spyOn(Date, "now").mockReturnValueOnce(queuedAt - 3600000)
+        : null;
+      try {
+        expect(await sendCloudEmail(saved, authority, id, notice)).toEqual({ status: "sent" });
+      } finally {
+        clock?.mockRestore();
+      }
       const [submit, status] = f.requests.filter((v) => String(v[2]).startsWith("email-"));
       expect(submit![4]).toBe(id);
+      if (clockWentBack) expect(Number(submit![5])).toBe(queuedAt - 3600000);
       expect(JSON.parse(String(submit![7]))).toEqual({
         version: 2,
         messageId: id,
         grantId: authority.id,
         grantRevision: 1,
         ...notice,
-        expiresAt:
-          hours === 1 ? notice.expiresAt : new Date(Number(submit![5]) + 86400000).toISOString(),
+        expiresAt: clockWentBack
+          ? new Date(queuedAt + 23 * 3600000).toISOString()
+          : notice.expiresAt,
       });
       expect(status![4]).not.toBe(id);
       expect(JSON.parse(String(status![7]))).toEqual({ version: 1, messageId: id });

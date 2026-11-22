@@ -38,7 +38,7 @@ para abrir los mensajes guardados.
 En **Sistema → Correo**, activa **Enviar el informe diario por correo**, elige los destinatarios
 y guarda. Cada destinatario necesita una dirección de correo en su cuenta y acceso a **Ventas y
 cobros**. Configura un servidor de correo en la misma página para que Waitron pueda enviar el informe.
-También puedes imprimir o descargar el informe del día seleccionado en **Ventas y cobros**.
+Para imprimir las ventas por categoría o descargar el archivo para tu gestor, abre **Ventas y cobros** y selecciona el día.
 
 Waitron envía el informe del último día de actividad terminado cuando concluye el cierre
 automático. También puedes recibirlo después de un reinicio de la caja. Tras un cierre que abarque
