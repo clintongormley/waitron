@@ -887,7 +887,7 @@ The ones worth grepping for:
   opening, paused, refused or off. The warning can also describe a slow wait on a box with no
   bucket copy configured. Remaining cleanup is still awaited. Requests or late duties committing
   after this point can miss the final upload.
-- **`server.stopped`** / **`loop.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
+- **`server.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
 
 Never prose, and never a secret: every credential-adjacent error reports a structured code and — at
 most — a purpose and a field NAME, never decrypted material, a Stripe secret, or a PFX passphrase.

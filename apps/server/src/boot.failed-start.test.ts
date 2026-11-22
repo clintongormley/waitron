@@ -917,14 +917,13 @@ describe("a start that fails after the venue folder is opened gives the folder b
       };
     });
 
-    const events = await withLoggedEvents(async () => {
-      await expect(startServer(env)).rejects.toBe(failure);
-    });
+    await expect(startServer(env)).rejects.toBe(failure);
     expect(readVenueHolder(venueDir)).toBeNull();
     expect(adopted.has(Number(env.WAITRON_HTTP_PORT))).toBe(true);
     await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
     expect(unsubscribe).toHaveBeenCalledOnce();
-    expect(events).toContain("loop.stopped");
+    const jobs = vi.mocked(createJobRunner).mock.results.at(-1)!.value.views();
+    expect(jobs["card.follow_up"]?.state).toBe("stopped");
     expect(mdnsStop).toHaveBeenCalledOnce();
     expect(
       vi.mocked(createJobRunner).mock.results.at(-1)!.value.views()["cloud.connection"].state,
@@ -1521,7 +1520,7 @@ describe("closing a started server", () => {
     const events = await withLoggedEvents(async () => {
       await expect(server.close()).rejects.toBe(failure);
     });
-    expect(events).toContain("loop.stopped");
+    expect(server.health.readJobs?.()["card.follow_up"]?.state).toBe("stopped");
     // The last stop in trading mode's teardown.
     expect(events).toContain("stream.stopped");
     expect(readVenueHolder(venueDir)).toBeNull();
