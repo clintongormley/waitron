@@ -178,7 +178,8 @@ export async function listFreeItems(
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));
-  // Each line at the rates it is invoiced at, taken on the adjustment's day below.
+  // Each line's rates as read now, taken on the adjustment's day below. A takeaway product line's
+  // are its product's current rows, which may differ from those it was invoiced at.
   const ratesOf = new Map<(typeof reduced)[number], readonly DatedRate[]>();
   for (const dining of ["eat_in", "takeaway"] as const satisfies readonly Dining[]) {
     const lines = reduced.filter((line) => line.dining === dining);

@@ -5,6 +5,12 @@
 > checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as
 > `subagent_type: "implementer"`.
 
+> **2026-11-22:** VAT rates piece A PR 2 changed what this plan builds on: a product needs one
+> takeaway rate row in `product_takeaway_vat_rates` (written through `createProduct` or
+> `insertFirstTakeawayVatRate`), or a takeaway sale of it is refused `vat_rate.unavailable`; the
+> product's `takeaway_vat_class` label is no longer written; and the pickable rates come from
+> `readVenueVatRates(tx).pickable`. See `docs/superpowers/plans/2026-11-22-vat-rates-a.md`.
+
 **Goal:** Staff on the Counter can ring up something that is not on the menu — typed name, typed
 VAT-inclusive price, a takeaway VAT rate when the order is taken away, and a kitchen station or
 none — gated by a new permission that can be assigned to anyone.

@@ -14,12 +14,12 @@ que lo corriges.
 
 ## Elige la clase de IVA {#vat}
 
-El IVA de un producto empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
+El IVA de un producto cuando se consume en el local empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
 publicó la carta. Para corregir la clase en la carta publicada sin volver a publicar desde los productos, consulta
-[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
+[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Si se consume en el local, una línea que ya
 está en un pedido conserva la clase con la que se añadió.
 
 Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda el tipo con el

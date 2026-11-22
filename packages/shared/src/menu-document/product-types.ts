@@ -74,8 +74,9 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
  * One variant as the product list nests it under its parent: the variant as the editor reads it
  * (`unitPrice` and `courseId` its OWN, null where it takes its parent's) and, in `effective`, what
  * it actually carries: its allergens, price and VAT class once its blanks read as its parent's, its
- * takeaway VAT rate today (its own, else its parent's), its parent's main category, and the course
- * it is fired in (`variant-fallback.ts`).
+ * takeaway VAT rate today (its own, else its parent's: `readTakeawayVatSchedules`,
+ * `packages/menu/src/takeaway-vat-rates.ts`), its parent's main category, and the course it is fired
+ * in (`variant-fallback.ts`).
  */
 export interface ListedVariant extends ProductVariant {
   allergensInherited: boolean;
@@ -174,8 +175,9 @@ export interface ProductEditorInput {
   available: boolean;
   vatClass: VatClass | null;
   /** One of the area's pickable rates ("10.00"), required in the body. Null only on a variant, which
-   * then takes its parent's. Saving it replaces the product's rates with this one from the beginning
-   * of time; read back, it is the rate in force on the venue's date today. */
+   * then takes its parent's. Read back, it is the rate in force on the venue's date today. A save
+   * that sends back that rate keeps the product's rates; any other replaces them with this one from
+   * the beginning of time. */
   takeawayVatRate: string | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];

@@ -366,8 +366,8 @@ export interface TillProduct {
   pricingUnit?: "each" | "weight";
   unitPrice: string;
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
-  /** The class charged taken away, as the published menu holds it; absent on a product synthesised
-   * from a retrieved held line. */
+  /** The takeaway label the published menu holds; not what a product line taken away files at,
+   * which is its product's takeaway rate. Absent on a product synthesised from a retrieved held line. */
   takeawayVatClass?: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
   /** EU-14 allergen declaration keyed by allergen code; null = not reviewed. */

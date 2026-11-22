@@ -1442,7 +1442,8 @@ export class ProductEditor extends LitElement {
     ></wt-segmented-control>`;
   }
 
-  /** On a variant the empty choice is its product's rate (packages/menu/src/variant-fallback.ts). */
+  /** On a variant the empty choice is its product's rate (`readTakeawayVatSchedules`,
+   * packages/menu/src/takeaway-vat-rates.ts). */
   private renderTakeawayTax() {
     const parent = this.inherited;
     const same = parent

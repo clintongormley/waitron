@@ -176,7 +176,8 @@ eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuD
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
 product's current ones. A line added to a held order or a tab stores that class
 (`working_order_lines.vat_class`) with its gross price, which is the same either way; its
-`takeaway_vat_class` is read only for a set-menu line. The order's `working_orders.dining` picks
+`takeaway_vat_class` sets the rate only of a set-menu line; on other lines it is part of what
+groups portions (`readLockedLines`), never their rate. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
@@ -785,8 +786,9 @@ become Unavailable" there). The till sends such a raise to the server and shows 
 own words ("sends a raise to the server, and words the server's refusal" in
 `apps/till/src/till-app.test.ts`); the counter does not mark that line. A table round refused
 `product.variant_unavailable` has its line marked from the offers read again ("says a sold-out
-variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices and
-at the stored VAT class the order's way of selling picks, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
+variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the stored
+class's rate on the day of issue, and taken away, at the product's takeaway rate, as _What a sold
+line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
 a card payment already captured is filed as it stands). On the till, retrieving the order keeps

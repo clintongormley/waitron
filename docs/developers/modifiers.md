@@ -128,11 +128,10 @@ the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
-The VAT classes are never resolved that way — an extra carries the picked PRODUCT's two classes,
-served here and taken away, because it is sold as that product, as the published menu version froze
-them for that product (a variant's blank class resolves as [products.md](products.md) says), and
-never the dish's. The class
-the order's way of selling picks is taxed at the rate [products.md](products.md) says.
+VAT is never resolved that way: an extra is sold as the picked PRODUCT, never the dish. Eaten
+here, it carries that product's VAT class as the published menu version froze it. Taken away, it
+files at that product's takeaway rate, or its parent's when a variant has none
+(`readLineVatRates`, `apps/server/src/line-vat-rates.ts`).
 
 ### The dashboard
 
@@ -210,9 +209,9 @@ the basket resolved, and decides what is stored:
   list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
-  that product's three frozen names, the price the offer resolved and the PRODUCT's two VAT classes, served here and taken away, as the
-  published menu version froze them for that product, never the dish's. The one the order's way
-  picks is taxed at the rate [products.md](products.md) says.
+  that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class as
+  the published menu version froze it, never the dish's. Taken away, the line files at the picked
+  product's takeaway rate, or its parent's when a variant has none (`readLineVatRates`).
   The child's stored quantity is dish quantity × pick quantity × the item's frozen portion. Its
   `price_quantity` stores that portion, so its price remains per portion when the physical amount
   is fractional.
@@ -458,11 +457,11 @@ Six things it is worth knowing about that payload:
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
   `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
-- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT classes, its
+- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them. Each is the product's own or, where a variant leaves it blank, its parent's —
-  except the names, which are always the variant's own, and the takeaway VAT class, which resolves as
-  [products.md](products.md) says. The two declaration fields take the names
+  except the names, which are always the variant's own. Taken away, its line files at the
+  product's takeaway rate, or its parent's when a variant has none (`readLineVatRates`). The two declaration fields take the names
   a following CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`,
   the field names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens —
   because a pick is what becomes such a line. A split-off child puts those same marks on the
