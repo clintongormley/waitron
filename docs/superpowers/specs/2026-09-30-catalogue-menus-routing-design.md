@@ -624,6 +624,9 @@ These were not discussed. Each is the default this document takes.
    the manager changed is fixed on the include. The dashboard row still reads "Menu: <name>" with
    the included menu's own name. Plan:
    [A322](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-07-a322-included-menu-direct-sections.md)._
+   _2026-11-22 (A322): saving again keeps an unchanged fixed name, photo or colour even when the
+   included menu now has the same value. Setting a previously different value back to the menu's
+   value makes it follow again._
 4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
    nearest claim above, or appear on the unassigned list. Deleting it shows this in the routing
    preview (§5.12).
