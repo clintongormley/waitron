@@ -22,7 +22,7 @@ export function steppingDownResponse(c: Context): Response {
   });
 }
 
-/** The paths `restrictedPageRoute` serves once the box has restarted, so a refresh lands there. */
+/** The paths `restrictedPageRoute` answers, so a box that restarts restricted shows its page at the next refresh. */
 function isPersonPage(c: Context): boolean {
   if (c.req.method !== "GET" && c.req.method !== "HEAD") return false;
   const path = c.req.path;
@@ -50,9 +50,10 @@ function standingDownPage(c: Context): Response {
 }
 
 /**
- * Counts the requests inside while open; once closed, refuses every request `allowed` does not name.
- * A Hono middleware is not inside a route's error boundary, so the refusal is written in the
- * boundary's response shape directly rather than thrown.
+ * Counts the requests inside while open; once closed, refuses every request `allowed` does not name:
+ * a GET or HEAD of a till or dashboard page gets the standing-down page, anything else the
+ * boundary's JSON refusal. A Hono middleware is not inside a route's error boundary, so both are
+ * written directly rather than thrown.
  *
  * The gate runs ahead of the start's own CORS layer, so a closed gate applies `cors` itself to an
  * `/api/*` refusal and answers that path's preflight: without them a till on another box's page

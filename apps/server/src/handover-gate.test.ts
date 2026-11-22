@@ -3,7 +3,6 @@ import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { corsForVenue } from "./cors.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
-import { STANDING_DOWN_PAGE_WORDS } from "./i18n/restricted-page.js";
 
 function hold() {
   let release!: () => void;
@@ -43,7 +42,7 @@ function rig(): {
       await h.wait;
     }),
   );
-  app.get("/fast", (c) => c.json({ ok: true }));
+  app.get("/api/fast", (c) => c.json({ ok: true }));
   app.get("/health", (c) => c.json({ healthy: true }));
   return { app, gate, holds, contexts };
 }
@@ -132,7 +131,7 @@ describe("createHandoverGate", () => {
   it("is open until closed", async () => {
     const r = rig();
     expect(r.gate.isClosed()).toBe(false);
-    expect((await r.app.request("/fast")).status).toBe(200);
+    expect((await r.app.request("/api/fast")).status).toBe(200);
   });
 
   it("a request inside before close still completes after it", async () => {
@@ -364,10 +363,9 @@ describe("a closed gate's page for a person", () => {
     const res = await closedApp().request("/till/", { headers: { "Accept-Language": "es" } });
     const html = await res.text();
     expect(html).toContain('<html lang="es">');
-    const words = STANDING_DOWN_PAGE_WORDS["es-ES"];
-    expect(html).toContain(`<h1>${words.title}</h1>`);
-    expect(html).toContain(`<p>${words.body}</p>`);
-    expect(html).toContain(`<p>${words.restarting}</p>`);
+    expect(html).toContain("<h1>Este servidor se está retirando</h1>");
+    expect(html).toContain("<p>Otro servidor lleva ahora el local.</p>");
+    expect(html).toContain("<p>Reiniciando…</p>");
   });
 
   it.each([
