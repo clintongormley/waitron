@@ -55,7 +55,7 @@ const REAL_HOLIDAY_NAMES =
 export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
   "apps/server/src/upgrade-sale.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 5,
+    findings: 3,
   },
   "packages/shared/src/locales.ts": {
     reason: "a language's own name in the language picker",
@@ -65,14 +65,6 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: "a passkey provider's own product name",
     findings: 1,
   },
-  "packages/migrations/migrations.manifest.json": {
-    reason: VERIFACTU_NAMES,
-    findings: 2,
-  },
-  "packages/db/src/immutability.sql.md": {
-    reason: VERIFACTU_NAMES,
-    findings: 2,
-  },
   "apps/server/src/log-personal-data.ts": {
     reason: "AEAT's wire field name `idEmisorFactura`",
     findings: 2,
@@ -80,35 +72,27 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
   "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
   "apps/server/scripts/bench/measure.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 2,
+    findings: 1,
   },
   "apps/server/scripts/bench/trading-day.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 8,
-  },
-  "apps/server/src/first-setup-database-holdings.test.ts": {
-    reason: VERIFACTU_NAMES,
-    findings: 3,
+    findings: 6,
   },
   "apps/server/src/first-setup-start-again-hour.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 9,
+    findings: 1,
   },
   "apps/server/src/invoice-corrections.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 14,
+    findings: 8,
   },
   "apps/server/src/return-records.real.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 77,
-  },
-  "apps/server/src/start-again-full-disk.e2e.test.ts": {
-    reason: VERIFACTU_NAMES,
-    findings: 2,
+    findings: 60,
   },
   "apps/server/src/testing/later-sale-date-fixture.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 7,
+    findings: 5,
   },
   "packages/venue-service/src/configuration-transfer.test.ts": {
     reason: REAL_HOLIDAY_NAMES,
@@ -366,7 +350,7 @@ function blankGuillemets(source: string): string {
  * Blanks `` `…` `` backtick citations with equal-width whitespace. Applied ONLY to comment text: a
  * backticked term cites a specific identifier, wire-protocol field or owned term (a quotation of a
  * name), so it is exempt. It is NEVER applied to code — there a backtick opens a TEMPLATE LITERAL,
- * such as `` sql`… verifactu_records` ``, which the guard exists to catch.
+ * such as `` sql`… estado` ``, which the guard exists to catch.
  */
 function blankBackticks(comment: string): string {
   return comment.replace(/`[^`]*`/g, (match) => match.replace(/[^\n]/g, " "));

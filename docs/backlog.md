@@ -1570,10 +1570,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
 
-- **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index names that still
-  read `tenant`, and `server.credential_unusable`'s prefix (fiscal: one index is on
-  `verifactu_records`; its own slice, not a tidy-up, because three `persons_*` names are
-  matched by name in error translation).
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index and key names that
+  still read `tenant`, and the prefix for `server.credential_unusable`.
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
 
 - **Go-live day steps.**
