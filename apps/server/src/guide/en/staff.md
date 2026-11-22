@@ -192,8 +192,8 @@ Leave every job unticked to let nobody sign in. When you add a profile, it start
 job selected. Copying a profile keeps its selections. When you add a job later, select it on the
 profiles where its holders need to sign in.
 
-After you change the idle timeout or clocking in a device profile, an open till
-picks up the change when it has no order open. After the till picks up a new
+After you change the idle timeout, clocking or the available screens in a device
+profile, an open till picks up the change when it has no order open. After the till picks up a new
 starting screen, sign out and sign in again to open it.
 
 ## Hours and breaks {#hours}

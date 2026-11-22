@@ -2140,7 +2140,8 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
 
 On a signed-in till, the setup revision and device-zone reads both queue profile changes. The
 latest answer takes effect once the till has no order open, its order requests have settled and
-its edits are clear. If a read finishes after sign-out, the profile is ready for the next sign-in.
+its edits are clear. This updates the idle timeout, clock controls and available screens. If a read
+finishes after sign-out, the profile is ready for the next sign-in.
 The starting screen is used at sign-in after the till receives the change. The server refuses a
 layout change to an assigned profile with `device_profile.in_use`.
 

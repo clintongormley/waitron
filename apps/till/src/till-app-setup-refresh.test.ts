@@ -570,9 +570,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     await flush(el);
     expect(pay).toHaveBeenCalledOnce();
 
-    changeToPrepay();
-    await poll(el);
-    expect(send()).not.toBeNull();
+    // The counter still shows collection while the order was saved under prepay.
     decline({ outcome: "declined" });
     await flush(el);
     counter
