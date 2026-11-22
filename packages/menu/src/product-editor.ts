@@ -235,12 +235,20 @@ export async function saveProductEditor(
       allergens: value.allergens,
       dietaryDeclarations: value.dietaryDeclarations,
     });
-    await setTakeawayVatRate(
-      tx,
-      productId,
-      value.takeawayVatRate,
-      await readVenueVatRates(tx, venue.revision === 0 ? undefined : venue.doc),
-    );
+    // Replacing the list erases its dated rows, so a save that sends back the rate the editor read
+    // leaves them alone.
+    const own = (await readOwnTakeawayVatSchedules(tx, [productId])).get(productId);
+    const today =
+      own === undefined
+        ? null
+        : (await takeawayVatRatesToday(tx, new Map([[productId, own]]))).get(productId)!;
+    if (value.takeawayVatRate !== today)
+      await setTakeawayVatRate(
+        tx,
+        productId,
+        value.takeawayVatRate,
+        await readVenueVatRates(tx, venue.revision === 0 ? undefined : venue.doc),
+      );
   }
   if (isVariant) {
     // A variant's category and colour are always its parent's, so it stores neither.

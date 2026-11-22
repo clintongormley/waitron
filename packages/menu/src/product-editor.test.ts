@@ -278,6 +278,65 @@ describe("a product's and a variant's takeaway VAT rate", () => {
     expect((await read(saved.id)).takeawayVatRate).toBe("4.00");
   });
 
+  const ownRows = (productId: string) =>
+    fx.db
+      .select({ startsOn: productTakeawayVatRates.startsOn, rate: productTakeawayVatRates.rate })
+      .from(productTakeawayVatRates)
+      .where(eq(productTakeawayVatRates.productId, productId))
+      .orderBy(productTakeawayVatRates.startsOn);
+  const datedRows = [
+    { startsOn: null, rate: 1000 },
+    { startsOn: "2000-01-01", rate: 400 },
+    { startsOn: "2999-01-01", rate: 2100 },
+  ];
+
+  it("keeps a product's and a variant's dated rows when a save leaves today's rate as it was", async () => {
+    await seedBusinessDay(fx.db);
+    const saved = await saveNew({ ...input, takeawayVatRate: "10.00" });
+    const variantId = saved.variants[0]!.id;
+    await save(variantId, { ...(await read(variantId)), takeawayVatRate: "10.00" });
+    await fx.db
+      .delete(productTakeawayVatRates)
+      .where(sql`${productTakeawayVatRates.productId} in (${saved.id}, ${variantId})`);
+    await fx.db
+      .insert(productTakeawayVatRates)
+      .values([
+        ...datedRows.map((row) => ({ productId: saved.id, ...row })),
+        ...datedRows.map((row) => ({ productId: variantId, ...row })),
+      ]);
+    const product = await read(saved.id);
+    expect(product.takeawayVatRate).toBe("4.00");
+    await save(saved.id, { ...product, name: "Coffee renamed" });
+    expect(await ownRows(saved.id)).toEqual(datedRows);
+    const variant = await read(variantId);
+    expect(variant.takeawayVatRate).toBe("4.00");
+    await save(variantId, { ...variant, name: "Small renamed" });
+    expect(await ownRows(variantId)).toEqual(datedRows);
+    expect(await ownRows(saved.id)).toEqual(datedRows);
+  });
+
+  it("keeps a variant taking its parent's rate without rows when a save sends none", async () => {
+    const saved = await saveNew({ ...input, takeawayVatRate: "4.00" });
+    const variantId = saved.variants[0]!.id;
+    const variant = await read(variantId);
+    expect(variant.takeawayVatRate).toBeNull();
+    await save(variantId, { ...variant, name: "Small renamed" });
+    expect(await ownRows(variantId)).toEqual([]);
+    expect(await ownRows(saved.id)).toEqual([{ startsOn: null, rate: 400 }]);
+  });
+
+  it("replaces a product's dated rows with one from the beginning of time when today's rate changes", async () => {
+    await seedBusinessDay(fx.db);
+    const saved = await saveNew({ ...input, takeawayVatRate: "10.00" });
+    await fx.db
+      .insert(productTakeawayVatRates)
+      .values(datedRows.slice(1).map((row) => ({ productId: saved.id, ...row })));
+    const product = await read(saved.id);
+    expect(product.takeawayVatRate).toBe("4.00");
+    await save(saved.id, { ...product, takeawayVatRate: "10.00" });
+    expect(await ownRows(saved.id)).toEqual([{ startsOn: null, rate: 1000 }]);
+  });
+
   it("refuses a product with no rate, or a blank one", async () => {
     for (const body of [
       { ...input, takeawayVatRate: undefined },
