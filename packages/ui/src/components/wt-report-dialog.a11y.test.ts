@@ -75,12 +75,16 @@ test.each(["light", "dark"] as const)(
         ...copy,
         cloud: {
           scope: "Send the Cloud attachment or download a separate file.",
-          localDescription: "What happened? (download only)",
+          descriptionReview: "An administrator can review and send the description.",
+          descriptionDirect: "Sending shares the description with Cloud.",
+          waiting: "Your description is waiting for a manager to send it.",
+          descriptionQueued: "Your description is queued to send.",
           preview: "Cloud attachment",
           send: "Send to Waitron Cloud",
           sent: "Sent to Waitron Cloud.",
           queued: "The box will try again.",
           refused: "Could not send. You can download the report instead.",
+          descriptionRefused: "Clear the description or download the report.",
         },
       },
     });
@@ -103,8 +107,9 @@ test.each(["light", "dark"] as const)(
     expect(
       el.shadowRoot!.querySelector('[role="status"]')!.closest('wt-form-actions[slot="footer"]'),
     ).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-textarea")!.label).toBe(
-      "What happened? (download only)",
+    expect(el.shadowRoot!.querySelector("wt-textarea")!.label).toBe("What happened?");
+    expect(el.shadowRoot!.textContent).toContain(
+      "An administrator can review and send the description.",
     );
     await expectNoA11yViolations(host);
   },

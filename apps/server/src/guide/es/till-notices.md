@@ -159,7 +159,8 @@ encima de la página. Abre la caja por HTTPS si no aparece el botón.
 Si aparece **Enviar a Waitron Cloud**, revisa el informe adjunto antes de enviarlo. Incluye los
 códigos de error, la versión de Waitron y datos básicos de la instalación. El servidor te avisa
 cuando Cloud lo recibe o cuando lo ha guardado para volver a intentar enviarlo más adelante.
+Si añades una descripción, queda pendiente de que un administrador la revise en el servidor.
+Si eres administrador, puedes enviar tu propia descripción directamente.
 
 Para conservar un archivo, describe qué ha pasado, revisa la vista previa de la descarga y elige
-**Descargar informe**. Tu descripción y la actividad reciente de este navegador quedan solo en ese
-archivo. No incluyas contraseñas, datos de pago ni información personal en la descripción.
+**Descargar informe**. El archivo incluye tu descripción y la actividad reciente de este navegador. No incluyas contraseñas, datos de pago ni información personal en la descripción.

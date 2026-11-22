@@ -137,7 +137,10 @@ export async function installationFixture(
         );
       return;
     }
-    if (values[2] === "staff-report" && options.staffReport) {
+    if (
+      (values[2] === "staff-report" || values[2] === "staff-description") &&
+      options.staffReport
+    ) {
       await options.staffReport(values, saved, req, res, sent);
       return;
     }

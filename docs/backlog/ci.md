@@ -149,6 +149,11 @@ had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 
 was this case. Earlier sightings were not searched further. The log is kept at
 `~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
 
+The same case failed on PR #4104 (2026-11-23, [run 45083073547](https://github.com/clintongormley/waitron/actions/runs/45083073547),
+`test-till (3)`, job 137395736631). Again the request still held `q: ''` after searching for `0091 `.
+The focused case passed locally. Lane K kept the failed log under
+`receipts/a1047-slice2/ci-till3-failed.log`. The test still needs a root-cause fix.
+
 
 **Native Chromium startup exceeded its test budget once (PR #3686, 2026-11-17).**
 Run [44177182245](https://github.com/clintongormley/waitron/actions/runs/44177182245),

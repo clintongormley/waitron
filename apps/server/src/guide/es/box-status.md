@@ -15,11 +15,13 @@ Durante la configuración, elige **Informar de un problema** en la cabecera de l
 guardar un informe aunque el servidor no responda o esta página ya abierta pierda la conexión.
 Si aparece **Enviar a Waitron Cloud**, revisa el informe adjunto antes de enviarlo. Incluye
 códigos de error, la versión de Waitron y datos básicos de la instalación. El servidor te indica
-si Cloud lo ha recibido o si volverá a intentar enviarlo.
+si Cloud lo ha recibido o si volverá a intentar enviarlo. Si añades una descripción, queda
+pendiente de que un administrador la revise en el servidor. Si eres administrador, puedes
+enviar tu propia descripción directamente.
 
 Para conservar un archivo, describe qué ha pasado, revisa la vista previa de la descarga y elige
-**Descargar informe**. Tu descripción y la actividad reciente de este navegador quedan solo en el
-archivo descargado. No incluyas contraseñas, datos de pago ni información personal en tu descripción.
+**Descargar informe**. El archivo incluye tu descripción y la actividad reciente de este navegador.
+No incluyas contraseñas, datos de pago ni información personal en tu descripción.
 
 En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
 
@@ -39,6 +41,11 @@ Abre **Sistema → Diagnóstico**. La lista muestra avisos y errores al abrirse,
 zona horaria del local. Busca por evento, detalle o identificador de solicitud. Para reproducir un
 problema, elige **Activar el registro detallado**. Justo después de reproducirlo, elige **Todos los
 niveles (últimos 5 minutos)**.
+
+Si eres administrador, lee las descripciones del personal en **Descripciones de problemas
+pendientes de revisión**. Elige **Enviar descripción** para compartirla con Waitron Cloud o
+**Descartar descripción** para borrarla del servidor. Pulsa **Actualizar descripciones** para
+comprobar si hay nuevas solicitudes.
 
 ## Lee las filas {#rows}
 

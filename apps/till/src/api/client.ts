@@ -3004,11 +3004,12 @@ export class TillApi {
   sendProblemReport(
     id: string,
     signal: AbortSignal,
+    description?: string,
   ): ReturnType<ReportDialogCloud["sendProblemReport"]> {
     return this.#request(
       `/api/problem-reports/${encodeURIComponent(id)}/send`,
       "POST",
-      undefined,
+      description === undefined ? undefined : { description },
       signal,
     );
   }

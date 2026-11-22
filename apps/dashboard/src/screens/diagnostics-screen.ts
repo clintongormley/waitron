@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -37,6 +37,11 @@ export class DiagnosticsScreen extends LitElement {
       .verbosity {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .description {
+        overflow-wrap: anywhere;
+        text-wrap: wrap;
+        font-family: inherit;
       }
       .filters {
         display: flex;
@@ -99,6 +104,13 @@ export class DiagnosticsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canReviewDescriptions = false;
+
+  @state() private descriptions?: Awaited<ReturnType<DashboardApi["getProblemDescriptions"]>>;
+  @state() private reviewBusy = false;
+  @state() private reviewError = false;
+  @state() private reviewResult?: "review_queued" | "review_discarded";
+  #reviewRead?: AbortController;
 
   @state() private recent?: DiagnosticsLog;
   @state() private level: DiagnosticsLevel = "warn";
@@ -118,6 +130,7 @@ export class DiagnosticsScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#refresh();
+    if (this.hasUpdated && this.canReviewDescriptions) void this.#loadDescriptions();
     this.#timer = setInterval(() => {
       if (!this.paused) void this.#refresh(true);
     }, POLL_MS);
@@ -127,7 +140,94 @@ export class DiagnosticsScreen extends LitElement {
     // A leaked interval would keep fetching against a detached screen.
     if (this.#timer !== undefined) clearInterval(this.#timer);
     this.#timer = undefined;
+    this.#reviewRead?.abort();
     super.disconnectedCallback();
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("canReviewDescriptions") && this.canReviewDescriptions)
+      void this.#loadDescriptions();
+  }
+
+  async #loadDescriptions(): Promise<void> {
+    if (this.reviewBusy) return;
+    const read = new AbortController();
+    this.#reviewRead = read;
+    this.reviewBusy = true;
+    this.reviewResult = undefined;
+    try {
+      const drafts = await this.api.getProblemDescriptions(read.signal);
+      if (!read.signal.aborted) {
+        this.descriptions = drafts;
+        this.reviewError = false;
+      }
+    } catch (error) {
+      if (!read.signal.aborted) {
+        this.reviewError = codeOf(error) !== "authorization.not_permitted";
+        if (!this.reviewError) this.descriptions = undefined;
+      }
+    } finally {
+      this.reviewBusy = false;
+    }
+  }
+
+  async #decideDescription(id: string, decision: "send" | "discard"): Promise<void> {
+    if (this.reviewBusy || !this.canReviewDescriptions) return;
+    this.reviewBusy = true;
+    this.reviewError = false;
+    this.reviewResult = undefined;
+    try {
+      await this.api.decideProblemDescription(id, decision);
+      this.descriptions = this.descriptions?.filter(({ reportId }) => reportId !== id);
+      this.reviewResult = decision === "send" ? "review_queued" : "review_discarded";
+      await this.updateComplete;
+      this.renderRoot.querySelector<HTMLElement>("[data-description-heading]")?.focus();
+    } catch (error) {
+      if (codeOf(error) === "authorization.not_permitted") this.descriptions = undefined;
+      this.reviewError = true;
+    } finally {
+      this.reviewBusy = false;
+    }
+  }
+
+  #renderDescriptions() {
+    if (!this.canReviewDescriptions || !this.descriptions) return nothing;
+    return html`
+      <h2 data-description-heading tabindex="-1">${t("problem_report.review_title")}</h2>
+      <wt-button
+        data-description-refresh
+        variant="secondary"
+        ?disabled=${this.reviewBusy}
+        @click=${this.#loadDescriptions}
+        >${t("problem_report.review_refresh")}</wt-button
+      >
+      <p role="status">${this.reviewResult ? t(`problem_report.${this.reviewResult}`) : ""}</p>
+      ${this.reviewError ? html`<p class="error" role="alert">${t("problem_report.review_failed")}</p>` : nothing}
+      ${this.descriptions?.length === 0 ? html`<p>${t("problem_report.review_empty")}</p>` : nothing}
+      ${this.descriptions?.map(
+        ({ reportId, description, time }) => html`
+          <div data-problem-description>
+            <time datetime=${new Date(time).toISOString()}
+              >${new Date(time).toLocaleString(currentLocale())}</time
+            >
+            <pre class="description">${description}</pre>
+            <div class="controls">
+              ${(["send", "discard"] as const).map(
+                (decision) => html`
+                  <wt-button
+                    data-description-decision=${decision}
+                    variant=${decision === "send" && !this.reviewBusy ? "primary" : "secondary"}
+                    ?disabled=${this.reviewBusy}
+                    @click=${() => this.#decideDescription(reportId, decision)}
+                    >${t(`problem_report.review_${decision}`)}</wt-button
+                  >
+                `,
+              )}
+            </div>
+          </div>
+        `,
+      )}
+    `;
   }
 
   async #refresh(passive = false): Promise<void> {
@@ -275,6 +375,8 @@ export class DiagnosticsScreen extends LitElement {
         </wt-button>
         ${this.#renderVerbosity()}
       </div>
+
+      ${this.#renderDescriptions()}
 
       <div class="filters">
         <wt-combobox

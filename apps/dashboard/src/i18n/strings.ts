@@ -187,12 +187,27 @@ export const en = {
   "problem_report.download_failed": "Could not create the download. Try again.",
   "problem_report.cloud_scope":
     "Review the Cloud attachment before sending. The download keeps this browser's activity and your description in a file.",
-  "problem_report.local_description": "What happened? (download only)",
+  "problem_report.description_review":
+    "An administrator can review your description on this box and decide whether to send it.",
+  "problem_report.description_direct":
+    "Sending this report also sends your description to Waitron Cloud.",
+  "problem_report.description_waiting": "Your description is waiting for a manager to send it.",
+  "problem_report.description_queued": "Your description is queued to send.",
+  "problem_report.review_title": "Problem descriptions awaiting review",
+  "problem_report.review_empty": "There are no descriptions to review.",
+  "problem_report.review_refresh": "Refresh descriptions",
+  "problem_report.review_send": "Send description",
+  "problem_report.review_discard": "Discard description",
+  "problem_report.review_queued": "Description queued for Waitron Cloud.",
+  "problem_report.review_discarded": "Description discarded.",
+  "problem_report.review_failed": "Could not complete the request. Refresh the list and try again.",
   "problem_report.cloud_preview": "Cloud attachment",
   "problem_report.send": "Send to Waitron Cloud",
   "problem_report.sent": "Sent to Waitron Cloud.",
   "problem_report.queued": "Saved on this box. It will try sending again.",
   "problem_report.refused": "Could not send the report. Download it to keep a copy.",
+  "problem_report.description_refused":
+    "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
   "time.today_at": "Today {time}",
   "time.yesterday_at": "Yesterday {time}",
   "zone_repair.sign_in": "Sign in as a manager",
@@ -4885,12 +4900,29 @@ export const es: Record<StringKey, string> = {
   "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
   "problem_report.cloud_scope":
     "Revisa el informe adjunto antes de enviarlo a Cloud. La descarga guarda la actividad de este navegador y tu descripción en un archivo.",
-  "problem_report.local_description": "¿Qué ha pasado? (solo para la descarga)",
+  "problem_report.description_review":
+    "Un administrador puede revisar tu descripción en este servidor y decidir si la envía.",
+  "problem_report.description_direct":
+    "Al enviar este informe, también envías tu descripción a Waitron Cloud.",
+  "problem_report.description_waiting":
+    "Tu descripción está pendiente de que un administrador la envíe.",
+  "problem_report.description_queued": "Tu descripción está en cola para enviarse.",
+  "problem_report.review_title": "Descripciones de problemas pendientes de revisión",
+  "problem_report.review_empty": "No hay descripciones pendientes de revisión.",
+  "problem_report.review_refresh": "Actualizar descripciones",
+  "problem_report.review_send": "Enviar descripción",
+  "problem_report.review_discard": "Descartar descripción",
+  "problem_report.review_queued": "Descripción en cola para enviar a Waitron Cloud.",
+  "problem_report.review_discarded": "Descripción descartada.",
+  "problem_report.review_failed":
+    "No se pudo completar la solicitud. Actualiza la lista e inténtalo de nuevo.",
   "problem_report.cloud_preview": "Informe adjunto para Cloud",
   "problem_report.send": "Enviar a Waitron Cloud",
   "problem_report.sent": "Enviado a Waitron Cloud.",
   "problem_report.queued": "Guardado en este servidor. Volverá a intentar enviarlo.",
   "problem_report.refused": "No se ha podido enviar el informe. Descárgalo para guardar una copia.",
+  "problem_report.description_refused":
+    "No se ha podido enviar el informe. Borra la descripción para intentar enviar solo los datos de diagnóstico o descarga una copia.",
   "time.today_at": "Hoy {time}",
   "time.yesterday_at": "Ayer {time}",
   "zone_repair.sign_in": "Iniciar sesión como responsable",

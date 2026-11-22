@@ -140,8 +140,10 @@ the button is missing.
 
 If **Send to Waitron Cloud** is available, review the Cloud attachment before sending it. It
 contains error codes, the Waitron version and basic details about the installation. The box tells
-you when Cloud receives it or when it has saved the report to try again later.
+you when Cloud receives it or when it has saved the report to try again later. If you add a
+description, it waits on the box for an administrator to review. As an administrator, you can
+send your own description directly.
 
 To keep a file yourself, describe what happened, check the download preview, then choose
-**Download report**. Your description and this browser's recent activity go into that file only.
+**Download report**. The file includes your description and this browser’s recent activity.
 Keep passwords, payment details and personal information out of your description.

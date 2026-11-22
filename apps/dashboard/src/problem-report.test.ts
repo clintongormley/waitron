@@ -241,41 +241,66 @@ it("retains the editable description after a failed download and retries without
   await expect.poll(() => dialog.open).toBe(false);
 });
 
-it("uses its signed-in API to preview and send only the Cloud attachment", async () => {
-  const urls: string[] = [];
-  const api = new DashboardApi("", async (url, init) => {
-    urls.push(`${init.method} ${url}`);
-    if (init.method === "GET")
-      return Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' });
-    expect(init.body).toBeUndefined();
-    return Response.json({ delivery: "sent" });
-  });
-  const { dialog } = await fixture(api);
-  await describeProblem(dialog, "Private staff note");
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
-    .toBe('{"version":"1.2.3"}');
-  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
-    .toBe("Sent to Waitron Cloud.");
-  expect(urls).toEqual([
-    "GET /management-api/problem-reports/preview",
-    "POST /management-api/problem-reports/preview/send",
-  ]);
-});
+it.each([
+  ["", undefined, undefined, "Sent to Waitron Cloud."],
+  [
+    "Private staff note",
+    "waiting",
+    undefined,
+    "Sent to Waitron Cloud. Your description is waiting for a manager to send it.",
+  ],
+  ["Printer jammed", "queued", true, "Sent to Waitron Cloud. Your description is queued to send."],
+] as const)(
+  "sends the Cloud attachment with the requested description handling (%s)",
+  async (text, result, admin, status) => {
+    const urls: string[] = [];
+    const api = new DashboardApi("", async (url, init) => {
+      urls.push(`${init.method} ${url}`);
+      if (init.method === "GET")
+        return Response.json({
+          available: true,
+          id: "preview",
+          attachment: '{"version":"1.2.3"}',
+          admin,
+        });
+      expect(init.body).toBe(text ? JSON.stringify({ description: text }) : undefined);
+      return Response.json({ delivery: "sent", description: result });
+    });
+    const { dialog } = await fixture(api);
+    if (text) await describeProblem(dialog, text);
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
+      .toBe('{"version":"1.2.3"}');
+    await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+      .toBe(status);
+    expect(urls).toEqual([
+      "GET /management-api/problem-reports/preview",
+      "POST /management-api/problem-reports/preview/send",
+    ]);
+  },
+);
 
-it("offers a download when Cloud delivery is refused", async () => {
+const canDownload = "Could not send the report. Download it to keep a copy.";
+it.each([
+  ["", "cloud.busy", canDownload],
+  ["Printer jammed", "cloud.not_configured", canDownload],
+  [
+    "Printer jammed",
+    "cloud.busy",
+    "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
+  ],
+] as const)("recovery for %s and %s", async (description, code, message) => {
   const api = new DashboardApi("", async (_, init) =>
     init.method === "GET"
       ? Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' })
-      : Response.json({ error: { code: "cloud.busy", params: {} } }, { status: 409 }),
+      : Response.json({ error: { code, params: {} } }, { status: 409 }),
   );
   const { dialog } = await fixture(api);
   await expect.poll(() => dialog.shadowRoot!.querySelector("[data-send]")).not.toBeNull();
+  if (description) await describeProblem(dialog, description);
   await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error)
-    .toBe("Could not send the report. Download it to keep a copy.");
+  await expect.poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error).toBe(message);
   expect(dialog.shadowRoot!.querySelector<WtButton>("[data-download]")!.disabled).toBe(false);
 });

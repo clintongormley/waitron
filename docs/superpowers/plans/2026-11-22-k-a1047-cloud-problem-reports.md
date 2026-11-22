@@ -1,6 +1,6 @@
 # A1047 Cloud problem reports
 
-[A1047](../../backlog/alerts.md#a1047-send-a-problem-report-to-waitron-cloud) and the watcher’s 20:56 assignment define the work. Lane G confirmed the unchanged Cloud requests at 20:59, recorded by the watcher at 21:01 on 22 November. Follow Cloud’s `docs/box-error-reports.md` and monitoring design §11. Build test-first after Claude review and watcher clearance.
+[A1047](https://github.com/clintongormley/waitron/blob/f348f3545b9891cb93d8454673664e7fd19d1b68/docs/backlog/alerts.md#a1047-send-a-problem-report-to-waitron-cloud) and the watcher’s 20:56 assignment define the work. Lane G confirmed the unchanged Cloud requests at 20:59, recorded by the watcher at 21:01 on 22 November. Follow Cloud’s `docs/box-error-reports.md` and monitoring design §11. Build test-first after Claude review and watcher clearance.
 
 ## 1. Send diagnostics from the till and dashboard
 

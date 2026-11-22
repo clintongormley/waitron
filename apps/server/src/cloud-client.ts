@@ -1304,6 +1304,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       operationId: string,
       body: string,
       signal?: AbortSignal,
+      action: "staff-report" | "staff-description" = "staff-report",
     ): Promise<StaffReportDelivery> {
       const bytes = Buffer.from(body, "utf8");
       if (bytes.length === 0 || bytes.length > 16_384) return "stop";
@@ -1324,7 +1325,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         });
         const reply = await serviceExchange(
           state,
-          "staff-report",
+          action,
           operationId,
           signedBody,
           { body },

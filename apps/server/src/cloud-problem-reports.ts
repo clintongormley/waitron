@@ -12,7 +12,7 @@ import { cloudReportBinding, sameCloudReportBinding } from "./cloud-report-bindi
 import { errnoOf } from "./errno.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
-import type { ProblemReports } from "./problem-report-api.js";
+import type { ProblemDescription, ProblemReports } from "./problem-report-api.js";
 import "./errors.js";
 
 interface Options {
@@ -30,12 +30,34 @@ interface Options {
 }
 
 type Binding = { nodeId: string; venue: string; database: string; registration: string };
-type Pending = { id: string; body: string };
-type Queue = Binding & { pending: Pending[] };
+type Pending = { id: string; body: string; reportId?: string };
+type Queue = Binding & { pending: Pending[]; drafts: ProblemDescription[] };
 type Preview = Pending & { binding: Binding; expiresAt: number };
 type Attempt = { state: Queue; pending: Pending };
 
 const maxPending = 16;
+const draftLifetime = 30 * 24 * 60 * 60_000;
+
+function makeDescription(reportId: string, text: string, time: number): ProblemDescription {
+  const description = text.replaceAll("\r\n", "\n");
+  const bytes = Buffer.from(description, "utf8");
+  if (
+    !description.trim() ||
+    [...description].length > 2000 ||
+    bytes.length > 8192 ||
+    bytes.toString("utf8") !== description ||
+    [...description].some((character) => {
+      const code = character.charCodeAt(0);
+      return (code < 32 && code !== 9 && code !== 10) || (code >= 127 && code <= 159);
+    })
+  )
+    throw new AppError("cloud.request_invalid", {});
+  return { reportId, description, time };
+}
+
+function approve(draft: ProblemDescription): Pending {
+  return { id: randomUUID(), reportId: draft.reportId, body: JSON.stringify(draft) };
+}
 const maxPreviews = 256;
 const previewLifetimeMs = 5 * 60_000;
 const retryIntervalMs = 30_000;
@@ -85,14 +107,28 @@ export function createCloudProblemReports({
   async function read(): Promise<Queue | undefined> {
     try {
       const state = JSON.parse(await readFile(file, "utf8")) as Queue;
+      const drafts = state?.drafts ?? [];
       if (
         typeof state?.registration !== "string" ||
         !Array.isArray(state.pending) ||
-        state.pending.length > maxPending ||
-        !state.pending.every((entry) => isUuid(entry?.id) && typeof entry.body === "string")
+        state.pending.length > 2 * maxPending ||
+        !state.pending.every(
+          (entry) =>
+            isUuid(entry?.id) &&
+            typeof entry.body === "string" &&
+            (entry.reportId === undefined || isUuid(entry.reportId)),
+        ) ||
+        !Array.isArray(drafts) ||
+        drafts.length > maxPending ||
+        !drafts.every(
+          (draft) =>
+            isUuid(draft?.reportId) &&
+            typeof draft.description === "string" &&
+            Number.isSafeInteger(draft.time),
+        )
       )
         throw new AppError("cloud.state_invalid", {});
-      return state;
+      return { ...state, drafts };
     } catch (error) {
       if (errnoOf(error) === "ENOENT") return undefined;
       if (error instanceof SyntaxError) throw new AppError("cloud.state_invalid", {});
@@ -102,6 +138,26 @@ export function createCloudProblemReports({
   async function write(state: Queue): Promise<void> {
     await mkdirDurable(dirname(file), 0o700);
     await writeFileDurable(file, JSON.stringify(state), 0o600);
+  }
+  function unexpired(drafts: ProblemDescription[]): ProblemDescription[] {
+    const cutoff = now().getTime() - draftLifetime;
+    return drafts.filter(({ time }) => time > cutoff);
+  }
+  async function currentQueue(): Promise<Queue | undefined> {
+    const saved = await read();
+    if (!saved || (!saved.pending.length && !saved.drafts.length)) return undefined;
+    const current = await currentBinding();
+    if (!isPrimary()) return undefined;
+    if (!sameBinding(saved, current)) {
+      await write({ ...saved, pending: [], drafts: [] });
+      log("warn", "cloud.not_configured");
+      return undefined;
+    }
+    const drafts = unexpired(saved.drafts);
+    if (drafts.length === saved.drafts.length) return saved;
+    const state = { ...saved, drafts };
+    await write(state);
+    return state;
   }
   function attachment(device: string, release: string): string {
     const logs = db
@@ -160,12 +216,20 @@ export function createCloudProblemReports({
         pending.id,
         pending.body,
         signal,
+        pending.reportId ? "staff-description" : "staff-report",
       );
       if (outcome !== "retry") {
         await turn(async () => {
           const latest = await read();
           if (!latest || latest.pending[0]?.id !== pending.id) return;
-          await write({ ...latest, pending: latest.pending.slice(1) });
+          const refusedReport = outcome === "stop" && !pending.reportId ? pending.id : undefined;
+          await write({
+            ...latest,
+            pending: latest.pending
+              .slice(1)
+              .filter((item) => !refusedReport || item.reportId !== refusedReport),
+            drafts: latest.drafts.filter((draft) => draft.reportId !== refusedReport),
+          });
           if (outcome === "stop") log("warn", "cloud.request_invalid");
         });
       }
@@ -177,16 +241,9 @@ export function createCloudProblemReports({
   async function run(signal: AbortSignal) {
     const attempt = await turn(async () => {
       if (signal.aborted || active || !isPrimary()) return undefined;
-      const state = await read();
+      const state = await currentQueue();
       const pending = state?.pending[0];
-      if (!state || !pending) return undefined;
-      const current = await currentBinding();
-      if (signal.aborted || !isPrimary()) return undefined;
-      if (!sameBinding(state, current)) {
-        await write({ ...state, pending: [] });
-        log("warn", "cloud.not_configured");
-        return undefined;
-      }
+      if (!state || !pending || signal.aborted || !isPrimary()) return undefined;
       active = true;
       return { state, pending };
     });
@@ -212,7 +269,25 @@ export function createCloudProblemReports({
       previews.set(key, preview);
       return { available: true, id: preview.id, attachment: preview.body };
     },
-    async send(device, sessionId, id) {
+    async descriptions() {
+      return turn(async () => (isPrimary() ? ((await currentQueue())?.drafts ?? []) : []));
+    },
+    async decideDescription(id, decision) {
+      await turn(async () => {
+        if (!isPrimary()) throw new AppError("cloud.not_primary", {});
+        const state = await currentQueue();
+        if (!isPrimary()) throw new AppError("cloud.not_primary", {});
+        const draft = state?.drafts.find(({ reportId }) => reportId === id);
+        if (!state || !draft) throw new AppError("cloud.request_invalid", {});
+        await write({
+          ...state,
+          pending: decision === "send" ? [...state.pending, approve(draft)] : state.pending,
+          drafts: state.drafts.filter((item) => item !== draft),
+        });
+      });
+    },
+    async send(device, sessionId, id, description) {
+      const draft = description && makeDescription(id, description.text, now().getTime());
       const attempt = await turn(async () => {
         const key = device + sessionId;
         const preview = previews.get(key);
@@ -223,14 +298,29 @@ export function createCloudProblemReports({
         if (!current || !sameBinding(preview.binding, current))
           throw new AppError("cloud.not_configured", {});
         const saved = await read();
-        const pending = saved && sameBinding(saved, current) ? saved.pending : [];
-        if (pending.length >= maxPending) throw new AppError("cloud.busy", {});
+        const previous = saved && sameBinding(saved, current) ? saved : undefined;
+        const pending = previous?.pending ?? [];
+        const drafts = unexpired(previous?.drafts ?? []);
+        const descriptions = pending.filter((item) => item.reportId !== undefined).length;
+        if (
+          pending.length - descriptions >= maxPending ||
+          (draft && drafts.length + descriptions >= maxPending)
+        )
+          throw new AppError("cloud.busy", {});
         if (previews.get(key) !== preview) throw new AppError("cloud.request_invalid", {});
         if (!isPrimary()) throw new AppError("cloud.not_primary", {});
         const report = { id, body: preview.body };
-        const state = { ...current, pending: [...pending, report] };
+        const state = {
+          ...current,
+          pending:
+            draft && description?.admin
+              ? [...pending, report, approve(draft)]
+              : [...pending, report],
+          drafts: draft && !description?.admin ? [...drafts, draft] : drafts,
+        };
         await write(state);
-        if (saved?.pending.length && pending.length === 0) log("warn", "cloud.not_configured");
+        if (saved && !previous && (saved.pending.length || saved.drafts.length))
+          log("warn", "cloud.not_configured");
         if (previews.get(key) === preview) previews.delete(key);
         if (active || pending.length !== 0) return undefined;
         active = true;

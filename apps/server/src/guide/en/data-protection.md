@@ -159,8 +159,9 @@ asks the notice to say:
   invoices, your email provider and the provider of your backup storage. If your staff can
   send problem reports, include Waitron as a recipient through Waitron Cloud. It receives the
   error codes, their sources, the Waitron version, the report time and basic installation details
-  linked to your box’s Cloud registration. If you turn on automatic error reports, include Waitron
-  as a recipient of error codes, sources, versions, times and incident counts.
+  linked to your box’s Cloud registration, plus any description an administrator sends. If you turn
+  on automatic error reports, include Waitron as a recipient of error codes, sources, versions,
+  times and incident counts.
   [Automatic error reports](servers.md#error-reports).
 - where it applies, that you intend to transfer the data to a third country or an international
   organisation, as the law calls them, and whether the European Commission has found that
