@@ -900,7 +900,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 
 
 
-- **Stripe adapter upkeep** (bundle of 4, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
+- **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 
 - **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner

@@ -285,6 +285,11 @@ Remaining Stripe qualification and maintenance.
   left open by A519 (#1566). Whether test-mode Stripe answers those two cases the same way is
   unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
   [Detail](payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
+- **Check Stripe's reader paging on real Stripe.** The reader list (`readers.list` in
+  `packages/payments-stripe/src/card-provider.ts`) asks for 100 readers a page and follows
+  `starting_after` until Stripe says there are no more. Its tests use a fake Stripe, and no sandbox
+  case lists readers. A check needs more than 100 readers on one account, since the page size is
+  fixed at 100.
 - **Stripe's two return addresses (`successUrl`, `cancelUrl`) are still sealed with its secrets**,
   and their only reader, `createCheckoutSession`, has no production caller (read, not run). A1308's
   env4 left them as they are (owner, 2026-11-09: "Leave this for when we test Stripe"): decide then
