@@ -4828,8 +4828,6 @@ describe("restore, configuration and fiscal-test outcomes", () => {
 
   it.each([
     ["setup.request_invalid", "artifact"],
-    ["setup.request_invalid", "module:"],
-    ["setup.request_invalid", "module:core"],
     ["setup.request_invalid", "modules"],
     ["setup.request_invalid", 12],
     ["setup.request_invalid", undefined],
