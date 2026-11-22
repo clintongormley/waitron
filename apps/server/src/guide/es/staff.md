@@ -120,9 +120,12 @@ la copia también puede contener tus datos de contrato, tus turnos, tus ausencia
 personal y las preguntas sobre tus fichajes en archivos `.json`, y tu registro de jornada en PDF y
 en una hoja de cálculo `.csv`. Puede haber también un `actions.json`: las ventas completas ya
 registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado
-registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste. Puede haber también un
-`adjustments.json`: las cancelaciones y los descuentos en una cuenta que hiciste indicando un
-motivo, o que autorizaste a otra persona.
+registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste. También incluye
+el efectivo que añadiste, retiraste o contaste, los cierres de cajón que terminaste, los pagos de
+cuentas que pediste o confirmaste y las reimpresiones de recibos que pediste. El archivo
+`adjustments.json` recoge las cancelaciones y los descuentos en una cuenta que hiciste indicando un
+motivo o que autorizaste a otra persona. Si tomaste alguna decisión sobre un pago retenido,
+búscala en `payment-holds.json`.
 
 Consulta `service-actions.json` para ver tus acciones en pedidos y en el servicio de mesas, y
 `department-transfers.json` para ver los traspasos entre departamentos que resolviste.

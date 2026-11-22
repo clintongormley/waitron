@@ -80,6 +80,7 @@ import {
   paymentsBackupVerification,
   PAYMENTS_CHANGE_SOURCES,
   PAYMENTS_HANDOVER,
+  PAYMENTS_PERSONAL_DATA,
   SCHEDULER_BACKUP_VERIFICATION,
 } from "@waitron/payments";
 import {
@@ -285,6 +286,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: { kind: "none" },
     alerts: PAYMENTS_ALERTS,
     handover: PAYMENTS_HANDOVER,
+    personalData: PAYMENTS_PERSONAL_DATA,
     settings: [PAYMENTS_SETTINGS],
     permissions: PAYMENTS_PERMISSIONS,
   },

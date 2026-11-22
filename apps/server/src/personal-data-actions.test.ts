@@ -2,12 +2,16 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  appendDrawerEntry,
   refunds,
   billPayments,
   CORE_MIGRATIONS,
+  drawerEntries,
   drawerOpens,
   invoiceSeries,
   printers,
+  printJobs,
+  receiptReprints,
   sales,
   saleVoids,
   tenders,
@@ -29,6 +33,7 @@ import { ACTIONS_FILES, actionsPersonalData } from "./personal-data-actions.js";
 
 const MARTHA = "cccccccc-0000-4000-8000-0000000000a1";
 const LEWIS = "cccccccc-0000-4000-8000-0000000000b2";
+const ADA = "cccccccc-0000-4000-8000-0000000000d4";
 const NOBODY = "cccccccc-0000-4000-8000-0000000000c3";
 
 interface Place {
@@ -159,7 +164,16 @@ let orderNumber = 0;
 async function seedBillPayment(
   db: Database,
   at: Place,
-  bill: { method: "cash" | "card"; applied: number },
+  bill: {
+    method: "cash" | "card";
+    applied: number;
+    tip?: number;
+    requestedBy?: string;
+    attestedBy?: string;
+    state?: "received" | "declined" | "failed";
+    createdAt?: string;
+    receivedAt?: string;
+  },
 ): Promise<{ workingOrderId: string; billPaymentId: string }> {
   orderNumber += 1;
   const order = await seedWorkingOrder(db, {
@@ -176,10 +190,17 @@ async function seedBillPayment(
       kind: "contribution",
       method: bill.method,
       applied: bill.applied,
-      ...(bill.method === "cash" ? { tendered: bill.applied } : {}),
-      state: "received",
-      receivedAt: "2026-10-20T08:00:00.000Z",
-      requestedBy: MARTHA,
+      tip: bill.tip ?? 0,
+      ...(bill.method === "cash" ? { tendered: bill.applied + (bill.tip ?? 0) } : {}),
+      state: bill.state ?? "received",
+      createdAt: bill.createdAt ?? "2026-10-20T07:00:00.000Z",
+      ...(bill.state === "failed"
+        ? { failedAt: "2026-10-20T08:05:00.000Z" }
+        : { receivedAt: bill.receivedAt ?? "2026-10-20T08:00:00.000Z" }),
+      requestedBy: bill.requestedBy ?? MARTHA,
+      ...(bill.attestedBy === undefined
+        ? {}
+        : { attestedBy: bill.attestedBy, attestationNote: `Payment note ${orderNumber}` }),
       source: "device",
       deviceId: at.deviceId,
     })
@@ -245,6 +266,7 @@ async function seedDrawerOpen(
 async function seedActions(db: Database, at: Place): Promise<void> {
   await seedPerson(db, { id: MARTHA, displayName: "Martha" });
   await seedPerson(db, { id: LEWIS, displayName: "Lewis" });
+  await seedPerson(db, { id: ADA, displayName: "Ada" });
   const marthaVoided = await seedSale(db, at, {
     code: "TA",
     number: 7,
@@ -376,7 +398,12 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     createdAt: "2026-10-20T11:20:00.000Z",
   });
 
-  const marthaInvoicedCard = await seedBillPayment(db, at, { method: "card", applied: 6000 });
+  const marthaInvoicedCard = await seedBillPayment(db, at, {
+    method: "card",
+    applied: 6000,
+    tip: 125,
+    attestedBy: LEWIS,
+  });
   await seedSale(db, at, {
     code: "TB",
     number: 41,
@@ -384,8 +411,16 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     method: "card",
     workingOrderId: marthaInvoicedCard.workingOrderId,
   });
-  const marthaOpenBill = await seedBillPayment(db, at, { method: "cash", applied: 2000 });
-  const lewisBill = await seedBillPayment(db, at, { method: "cash", applied: 9000 });
+  const marthaOpenBill = await seedBillPayment(db, at, {
+    method: "cash",
+    applied: 2000,
+    createdAt: "2026-10-20T07:01:00.000Z",
+  });
+  const lewisBill = await seedBillPayment(db, at, {
+    method: "cash",
+    applied: 9000,
+    requestedBy: LEWIS,
+  });
   await seedSale(db, at, {
     code: "TB",
     number: 42,
@@ -393,13 +428,104 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     method: "cash",
     workingOrderId: lewisBill.workingOrderId,
   });
-  const marthaInvoicedCash = await seedBillPayment(db, at, { method: "cash", applied: 3000 });
+  const marthaInvoicedCash = await seedBillPayment(db, at, {
+    method: "cash",
+    applied: 3000,
+    createdAt: "2026-10-20T07:02:00.000Z",
+  });
   await seedSale(db, at, {
     code: "TA",
     number: 44,
     total: 3000,
     method: "cash",
     workingOrderId: marthaInvoicedCash.workingOrderId,
+  });
+
+  await seedBillPayment(db, at, {
+    method: "card",
+    applied: 411,
+    requestedBy: ADA,
+    attestedBy: ADA,
+    state: "declined",
+    createdAt: "2026-10-20T07:01:00.000Z",
+    receivedAt: "2026-10-20T07:23:00.000Z",
+  });
+  await seedBillPayment(db, at, {
+    method: "card",
+    applied: 718,
+    requestedBy: LEWIS,
+    attestedBy: ADA,
+    state: "failed",
+    createdAt: "2026-10-20T07:02:00.000Z",
+  });
+  await withTransaction(db, async (tx) => {
+    const actor = { nodeId: at.nodeId, printerId: at.printerId, deviceId: at.deviceId };
+    const entry = {
+      ...actor,
+      personId: ADA,
+      recordedAt: "2026-10-20T09:00:00.000Z",
+    };
+    await appendDrawerEntry(tx, {
+      ...entry,
+      id: "drawer-cash-in",
+      kind: "cash_in",
+      amount: 212,
+      facts: { reason: "Float for Friday" },
+    });
+    await appendDrawerEntry(tx, {
+      ...entry,
+      id: "drawer-cash-out",
+      kind: "cash_out",
+      amount: -105,
+      facts: { reason: "Paid the driver" },
+    });
+    const count = await appendDrawerEntry(tx, {
+      ...entry,
+      kind: "count",
+      amount: 333,
+      recordedAt: "2026-10-20T14:00:00.000Z",
+      facts: { expected: "5.90" },
+    });
+    await appendDrawerEntry(tx, {
+      ...entry,
+      kind: "recount",
+      amount: 444,
+      firstCountId: count.id,
+      recordedAt: "2026-10-20T14:01:00.000Z",
+    });
+    await appendDrawerEntry(tx, {
+      ...entry,
+      kind: "finish",
+      amount: 244,
+      firstCountId: count.id,
+      recordedAt: "2026-10-20T14:02:00.000Z",
+      facts: { amountLeft: "2.00", difference: "-1.46" },
+    });
+    await appendDrawerEntry(tx, { ...entry, kind: "cash_in", amount: 889, personId: LEWIS });
+    await appendDrawerEntry(tx, {
+      ...entry,
+      kind: "cash_payment",
+      amount: 2000,
+      billPaymentId: marthaOpenBill.billPaymentId,
+      personId: MARTHA,
+    });
+    for (const [saleId, personId] of [
+      [marthaVoided.saleId, ADA],
+      [lewisVoided.saleId, LEWIS],
+    ] as const) {
+      const [job] = await tx
+        .insert(printJobs)
+        .values({
+          printerId: at.printerId,
+          payload: Uint8Array.from([0x01]),
+          saleId,
+          receiptCopy: true,
+        })
+        .returning({ id: printJobs.id });
+      await tx
+        .insert(receiptReprints)
+        .values({ saleId, personId, printJobId: job!.id, requestedAt: "2026-10-20T12:00:00.000Z" });
+    }
   });
 
   // Dated between her tender refunds of 10:30 and 11:45, so the refunds must be merged by time; it
@@ -541,7 +667,14 @@ describe("actionsPersonalData", () => {
 
   it("writes the person's sale voids, refunds and drawer openings, and nobody else's", async () => {
     expect(JSON.parse(await text(MARTHA))).toEqual({
-      counts: { voids: 2, refunds: 6, drawerOpenings: 6 },
+      counts: {
+        voids: 2,
+        refunds: 6,
+        drawerOpenings: 6,
+        drawerEntries: 0,
+        billPayments: 3,
+        receiptReprints: 0,
+      },
       voids: [
         { sale: formatInvoiceNumber("TA", 11), amount: "24.68", at: "2026-10-20T09:05:00.000Z" },
         { sale: formatInvoiceNumber("TA", 7), amount: "12.34", at: "2026-10-20T09:15:00.000Z" },
@@ -652,16 +785,111 @@ describe("actionsPersonalData", () => {
           yourPart: ["opened", "authorized"],
         },
       ],
+      drawerEntries: [],
+      billPayments: [
+        {
+          sale: "TB/41",
+          method: "card",
+          amount: "60.00",
+          tip: "1.25",
+          state: "received",
+          at: "2026-10-20T07:00:00.000Z",
+          yourPart: ["requested"],
+          outcomeAt: null,
+        },
+        {
+          sale: null,
+          method: "cash",
+          amount: "20.00",
+          tip: "0.00",
+          state: "received",
+          at: "2026-10-20T07:01:00.000Z",
+          yourPart: ["requested"],
+          outcomeAt: null,
+        },
+        {
+          sale: "TA/44",
+          method: "cash",
+          amount: "30.00",
+          tip: "0.00",
+          state: "received",
+          at: "2026-10-20T07:02:00.000Z",
+          yourPart: ["requested"],
+          outcomeAt: null,
+        },
+      ],
+      receiptReprints: [],
+    });
+  });
+
+  it("includes just Ada's recorded drawer amounts, bill roles and reprint requests", async () => {
+    expect(JSON.parse(await text(ADA))).toEqual({
+      counts: {
+        voids: 0,
+        refunds: 0,
+        drawerOpenings: 0,
+        drawerEntries: 5,
+        billPayments: 2,
+        receiptReprints: 1,
+      },
+      voids: [],
+      refunds: [],
+      drawerOpenings: [],
+      drawerEntries: [
+        { kind: "cash_in", at: "2026-10-20T09:00:00.000Z", amount: "2.12" },
+        { kind: "cash_out", at: "2026-10-20T09:00:00.000Z", amount: "-1.05" },
+        { kind: "count", at: "2026-10-20T14:00:00.000Z", amount: "3.33" },
+        { kind: "recount", at: "2026-10-20T14:01:00.000Z", amount: "4.44" },
+        { kind: "finish", at: "2026-10-20T14:02:00.000Z", amount: "2.44" },
+      ],
+      billPayments: [
+        {
+          sale: null,
+          method: "card",
+          amount: "4.11",
+          tip: "0.00",
+          state: "declined",
+          at: "2026-10-20T07:01:00.000Z",
+          yourPart: ["requested", "attested"],
+          outcomeAt: "2026-10-20T07:23:00.000Z",
+        },
+        {
+          sale: null,
+          method: "card",
+          amount: "7.18",
+          tip: "0.00",
+          state: "failed",
+          at: "2026-10-20T07:02:00.000Z",
+          yourPart: ["attested"],
+          outcomeAt: "2026-10-20T08:05:00.000Z",
+        },
+      ],
+      receiptReprints: [{ sale: formatInvoiceNumber("TA", 7), at: "2026-10-20T12:00:00.000Z" }],
     });
   });
 
   it("writes each entry's keys in the plan's order", async () => {
     const file = JSON.parse(await text(MARTHA));
     expect(JSON.stringify(Object.keys(file))).toBe(
-      JSON.stringify(["counts", "voids", "refunds", "drawerOpenings"]),
+      JSON.stringify([
+        "counts",
+        "voids",
+        "refunds",
+        "drawerOpenings",
+        "drawerEntries",
+        "billPayments",
+        "receiptReprints",
+      ]),
     );
     expect(JSON.stringify(file.counts)).toBe(
-      JSON.stringify({ voids: 2, refunds: 6, drawerOpenings: 6 }),
+      JSON.stringify({
+        voids: 2,
+        refunds: 6,
+        drawerOpenings: 6,
+        drawerEntries: 0,
+        billPayments: 3,
+        receiptReprints: 0,
+      }),
     );
     expect(JSON.stringify(file.voids[0])).toBe(
       JSON.stringify({
@@ -729,12 +957,20 @@ describe("actionsPersonalData", () => {
       ...(await suite.db.select({ text: saleVoids.reason }).from(saleVoids)),
       ...(await suite.db.select({ text: refunds.reason }).from(refunds)),
       ...(await suite.db.select({ text: refunds.attestationNote }).from(refunds)),
+      ...(await suite.db.select({ text: billPayments.attestationNote }).from(billPayments)),
+      ...(await suite.db.select({ text: drawerEntries.facts }).from(drawerEntries)).flatMap(
+        ({ text }) => (typeof text?.reason === "string" ? [{ text: text.reason }] : []),
+      ),
     ]
       .map((row) => row.text)
       .filter((value): value is string => value !== null);
     expect(new Set(typed).size).toBe(typed.length);
-    expect(typed.length).toBe(15);
-    for (const value of typed) expect(content).not.toContain(value);
+    expect(typed.length).toBe(20);
+    const ada = await text(ADA);
+    for (const value of typed) {
+      expect(content).not.toContain(value);
+      expect(ada).not.toContain(value);
+    }
   });
 
   it("builds the same file in bounded turns, one per row read and one per chunk of ids", async () => {
@@ -745,7 +981,7 @@ describe("actionsPersonalData", () => {
     try {
       const files = await build();
       expect(lock.mock.calls.length).toBe(
-        2 + Math.ceil(MARTHA_SALE_IDS / 2) + Math.ceil(MARTHA_BILL_PAYMENT_IDS / 2),
+        5 + Math.ceil(MARTHA_SALE_IDS / 2) + Math.ceil(MARTHA_BILL_PAYMENT_IDS / 2),
       );
       expect(files.map((f) => f.name)).toEqual(["actions.json"]);
       expect(files[0]!.content).toBe(expected[0]!.content);
@@ -760,7 +996,7 @@ describe("actionsPersonalData", () => {
     const lock = vi.spyOn(suite.db, "withWriteLock");
     try {
       await build();
-      expect(lock.mock.calls.length).toBe(2 + MARTHA_SALE_IDS + MARTHA_BILL_PAYMENT_IDS);
+      expect(lock.mock.calls.length).toBe(5 + MARTHA_SALE_IDS + MARTHA_BILL_PAYMENT_IDS);
     } finally {
       lock.mockRestore();
     }

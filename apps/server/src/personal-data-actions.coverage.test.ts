@@ -5,8 +5,8 @@
 // `@waitron/db`'s core schema alone: the tables its root exports less those of the module folders
 // in MODULE_SCHEMAS, and, for the tables the root does not export, the newest core drizzle
 // snapshot's columns. The adjustments module's actor columns are classified by
-// packages/adjustments/src/personal-data.coverage.test.ts; other modules' are in the backlog point
-// headed The rest of "who did what" in the download, in docs/backlog/data-protection.md, not here.
+// packages/adjustments/src/personal-data.coverage.test.ts and payments' by
+// packages/payments/src/personal-data.coverage.test.ts. The remaining modules are in the backlog.
 // And it proves a column was classified, not that the actions part honours the classification
 // (personal-data-actions.test.ts does that).
 import { readFileSync, readdirSync } from "node:fs";
@@ -32,6 +32,10 @@ const READ = [
   "refunds.attested_by",
   "drawer_opens.person_id",
   "drawer_opens.authorized_by",
+  "receipt_reprints.person_id",
+  "drawer_entries.person_id",
+  "bill_payments.requested_by",
+  "bill_payments.attested_by",
   "line_service_cancellations.actor_id",
   "order_amendments.actor_id",
   "order_events.actor_id",
@@ -52,12 +56,9 @@ const NOT_YET_REASON =
 const NOT_YET: Record<string, string> = Object.fromEntries(
   [
     "working_orders.editor_id",
-    "bill_payments.attested_by",
-    "bill_payments.requested_by",
     "device_invoice_save_operations.person_id",
     "document_delivery_requests.person_id",
     "document_page_reprints.person_id",
-    "drawer_entries.person_id",
     "incidents.acknowledged_by",
     "invoice_corrections.authorized_by",
     "invoice_corrections.ended_by",
@@ -69,7 +70,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "activity_log.person_id",
     "order_drafts.owner_id",
     "print_jobs.handed_over_by",
-    "receipt_reprints.person_id",
     "recovery_packs.made_by",
     "sales.authorized_by",
     "sales.operator_id",
@@ -139,6 +139,52 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
       "authorized_by",
     ],
     out: ["id", "device_id", "printer_id", "tender_refund_id"],
+  },
+  drawer_entries: {
+    in: ["id", "person_id", "kind", "recorded_at", "amount"],
+    // Bill payments and refunds already carry these payment and refund actors.
+    out: [
+      "printer_id",
+      "node_id",
+      "sequence",
+      "device_id",
+      "bill_payment_id",
+      "refund_id",
+      "first_count_id",
+      "facts",
+    ],
+  },
+  bill_payments: {
+    in: [
+      "id",
+      "working_order_id",
+      "method",
+      "applied",
+      "tip",
+      "state",
+      "created_at",
+      "requested_by",
+      "attested_by",
+      "received_at",
+      "failed_at",
+    ],
+    out: [
+      "submission_id",
+      "fingerprint",
+      "kind",
+      "share_of",
+      "tendered",
+      "remaining_after",
+      "source",
+      "device_id",
+      "attestation_note",
+      "slip_wanted",
+      "own_receipt",
+    ],
+  },
+  receipt_reprints: {
+    in: ["id", "sale_id", "person_id", "requested_at"],
+    out: ["print_job_id"],
   },
 };
 

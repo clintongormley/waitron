@@ -169,10 +169,20 @@ describe("the own personal-data download", () => {
       "actions.json",
     ]);
     expect(JSON.parse(strFromU8(files["actions.json"]!))).toEqual({
-      counts: { voids: 1, refunds: 0, drawerOpenings: 0 },
+      counts: {
+        voids: 1,
+        refunds: 0,
+        drawerOpenings: 0,
+        drawerEntries: 0,
+        billPayments: 0,
+        receiptReprints: 0,
+      },
       voids: [{ sale: "TA/7", amount: "12.50", at: "2026-10-20T09:00:00.000Z" }],
       refunds: [],
       drawerOpenings: [],
+      drawerEntries: [],
+      billPayments: [],
+      receiptReprints: [],
     });
     const words = PERSONAL_DATA_README_WORDS.en.files["actions.json"]!;
     expect(strFromU8(files["README.txt"]!)).toContain(

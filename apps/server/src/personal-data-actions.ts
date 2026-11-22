@@ -3,8 +3,10 @@ import { formatInvoiceNumber } from "@waitron/core";
 import {
   refunds as refundRows,
   billPayments,
+  drawerEntries,
   drawerOpens,
   invoiceSeries,
+  receiptReprints,
   sales,
   saleVoids,
   type Database,
@@ -12,15 +14,8 @@ import {
 import { jsonFile, type PersonalDataFile, type PersonalDataPart } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 
-// Commented decision, departing from the seat's doc comment: `prepare` reads nothing, and the
-// build reads through the `Database` this part was built with, in short `withWriteLock`
-// turns of its own after the snapshot turn has closed: one turn for the person's voids and
-// refunds, one for their drawer openings, neither joining another table; then one turn per
-// `chunk` sale ids, by primary key; then one turn per `chunk` bill-payment ids, by primary key,
-// each finding the sale filed from the payment's order.
-// Each is awaited in turn, none inside `withTransaction`, so nothing is written. An action
-// committed between the snapshot turn and these turns may appear in the file; it happened before
-// the download was sent, and the route's re-check still runs before any bytes go.
+// The actions part reads in its own short withWriteLock turns after the snapshot. Each
+// turn leaves change delivery alone so a download can still run on a full disk.
 
 export const ACTIONS_FILES = ["actions.json"] as const;
 export const SALE_LOOKUP_CHUNK = 500;
@@ -188,27 +183,81 @@ export function actionsPersonalData(
                 .where(or(eq(drawerOpens.personId, person), eq(drawerOpens.authorizedBy, person)))
                 .orderBy(asc(drawerOpens.openedAt), asc(drawerOpens.id)),
             );
+            // Payment and refund entries duplicate actors already covered by the bill and refund reads.
+            const entries = await db.withWriteLock(() =>
+              db
+                .select({
+                  kind: drawerEntries.kind,
+                  at: drawerEntries.recordedAt,
+                  amount: drawerEntries.amount,
+                })
+                .from(drawerEntries)
+                .where(
+                  and(
+                    eq(drawerEntries.personId, person),
+                    inArray(drawerEntries.kind, [
+                      "cash_in",
+                      "cash_out",
+                      "count",
+                      "recount",
+                      "finish",
+                    ]),
+                  ),
+                )
+                .orderBy(asc(drawerEntries.recordedAt), asc(drawerEntries.id)),
+            );
+            const payments = await db.withWriteLock(() =>
+              db
+                .select({
+                  id: billPayments.id,
+                  method: billPayments.method,
+                  amount: billPayments.applied,
+                  tip: billPayments.tip,
+                  state: billPayments.state,
+                  at: billPayments.createdAt,
+                  requestedBy: billPayments.requestedBy,
+                  attestedBy: billPayments.attestedBy,
+                  receivedAt: billPayments.receivedAt,
+                  failedAt: billPayments.failedAt,
+                })
+                .from(billPayments)
+                .where(
+                  or(eq(billPayments.requestedBy, person), eq(billPayments.attestedBy, person)),
+                )
+                .orderBy(asc(billPayments.createdAt), asc(billPayments.id)),
+            );
+            const reprints = await db.withWriteLock(() =>
+              db
+                .select({ saleId: receiptReprints.saleId, at: receiptReprints.requestedAt })
+                .from(receiptReprints)
+                .where(eq(receiptReprints.personId, person))
+                .orderBy(asc(receiptReprints.requestedAt), asc(receiptReprints.id)),
+            );
             if (
               rows.voids.length === 0 &&
               rows.refunds.length === 0 &&
               rows.billRefunds.length === 0 &&
-              openings.length === 0
+              openings.length === 0 &&
+              entries.length === 0 &&
+              payments.length === 0 &&
+              reprints.length === 0
             )
               return [];
             const saleIds = [
               ...new Set(
-                [...rows.voids, ...rows.refunds, ...openings].flatMap((row) =>
+                [...rows.voids, ...rows.refunds, ...openings, ...reprints].flatMap((row) =>
                   row.saleId === null ? [] : [row.saleId],
                 ),
               ),
             ];
             const facts = await saleFacts(db, saleIds, chunk);
             const billPaymentIds = [
-              ...new Set(
-                [...rows.billRefunds, ...openings].flatMap((row) =>
+              ...new Set([
+                ...payments.map((row) => row.id),
+                ...[...rows.billRefunds, ...openings].flatMap((row) =>
                   row.billPaymentId === null ? [] : [row.billPaymentId],
                 ),
-              ),
+              ]),
             ];
             const bills = await billPaymentFacts(db, billPaymentIds, chunk);
             // Every `sale_id` and `bill_payment_id` read has a foreign key restricting its target's
@@ -280,16 +329,47 @@ export function actionsPersonalData(
                 yourPart,
               };
             });
+            const drawerMoves = entries.map(({ kind, at, amount }) => ({
+              kind,
+              at,
+              amount: centsToDecimal(amount),
+            }));
+            const billsPaid = payments.map((row) => {
+              const yourPart: Role[] = [];
+              if (row.requestedBy === person) yourPart.push("requested");
+              if (row.attestedBy === person) yourPart.push("attested");
+              return {
+                sale: bill(row.id).sale,
+                method: row.method,
+                amount: centsToDecimal(row.amount),
+                tip: centsToDecimal(row.tip),
+                state: row.state,
+                at: row.at,
+                yourPart,
+                // Declining a received payment keeps its original receipt time.
+                outcomeAt: row.attestedBy === person ? (row.receivedAt ?? row.failedAt) : null,
+              };
+            });
+            const receiptCopies = reprints.map((row) => ({
+              sale: sale(row.saleId).number,
+              at: row.at,
+            }));
             return [
               jsonFile("actions.json", {
                 counts: {
                   voids: voids.length,
                   refunds: refunds.length,
                   drawerOpenings: drawerOpenings.length,
+                  drawerEntries: drawerMoves.length,
+                  billPayments: billsPaid.length,
+                  receiptReprints: receiptCopies.length,
                 },
                 voids,
                 refunds,
                 drawerOpenings,
+                drawerEntries: drawerMoves,
+                billPayments: billsPaid,
+                receiptReprints: receiptCopies,
               }),
             ];
           };

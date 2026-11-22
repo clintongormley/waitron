@@ -1791,7 +1791,8 @@ _Formerly entries spread across the old sections._
 - **Third party licence notices** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/data-protection.md#bundle-third-party-licence-notices)
 
 - **A980 — data protection, Waitron's side.** Design revision 2 (2026-10-24) records the owner's
-  ten answers; its small slices are planned. S9 and S11 wait for the specialists.
+  ten answers. The staff download still needs menu publications, bookings and the other actor
+  columns in the detail. S9 and S11 wait for the specialists.
   [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
 
 ### Later and parked

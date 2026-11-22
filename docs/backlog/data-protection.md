@@ -78,16 +78,12 @@ by the answers):
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
   openings (S2b decision 11).
-- **The rest of "who did what" in the download** (design §2.1 row s12). S2c's `actions.json` holds
-  only whole-sale voids, refunds and cash-drawer openings (S2c decisions 2 and 3), and S2d's
-  `adjustments.json` the line voids, comps and discounts. What is left:
+- **The rest of "who did what" in the download** (design §2.1 row s12). What is left:
   - **The core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
     lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
     `authorized_by`, who authorised a corrective invoice); `invoice_corrections` (`requested_by`,
     `authorized_by`, `ended_by`: who asked for, approved and ended a correction); `unpaid_departures` (`authorized_by`,
-    `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;
-    `invoice_deliveries.person_id`; `bill_payments` (`requested_by`, `attested_by`);
-    `drawer_entries.person_id`, who asked for the payment or refund;
+    `recorded_by`); `invoice_pdf_downloads.person_id`; `invoice_deliveries.person_id`;
     `order_drafts.owner_id`, who holds the current draft; `working_order_lines.credited_to`, whose
     sale a line counts as; `working_orders.editor_id`, who is editing a bill;
     `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves
@@ -95,12 +91,11 @@ by the answers):
     recovery pack. The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
-  - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds
-    and resolutions, department transfer senders, service steps, handover activations
-    (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the adjustments
-    module's `credited_to`, whose sale the item counted as. The S2c guard reads core's tables only;
-    since S2d the adjustments module's columns are held by its own guard,
-    `packages/adjustments/src/personal-data.coverage.test.ts`.
+  - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment
+    requests and resolutions, payment refund approvals, department transfer senders, service
+    steps, handover activations (`handover_activations.person_id`, and `authorisedBy` inside its
+    signed evidence), and the adjustments module's `credited_to`, whose sale the item counted
+    as. Adjustments and payments have their own `personal-data.coverage.test.ts` guards.
   - **The invoice number of an adjusted bill in `adjustments.json`.** The file gives the order
     number only, which is what the Adjustment report shows of each entry. The invoice number of the
     sale later filed from the bill could be found through `sales.working_order_id`, but formatting

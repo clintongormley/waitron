@@ -178,3 +178,4 @@ export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS } from "./settings.js";
 export { PAYMENT_CHANGE_REFUSAL, PAYMENT_DELETE_REFUSAL } from "./trigger-refusals.js";
 
 export { paymentResolutionOutcome, paymentHoldOutcome } from "./schema/payments.js";
+export { PAYMENTS_PERSONAL_DATA } from "./personal-data.js";

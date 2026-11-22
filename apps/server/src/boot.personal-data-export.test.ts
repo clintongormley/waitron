@@ -8,6 +8,8 @@ import { eq, sql } from "drizzle-orm";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { drawerOpens, personStaffRoles, stampDeployment, withTransaction } from "@waitron/db";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
@@ -53,6 +55,22 @@ describe("the personal-data downloads in a real start", () => {
       deviceId: venue.deviceId,
       openedAt: new Date("2026-05-01T09:30:00.000Z"),
     });
+    const order = await seedWorkingOrder(suite.db, { orderNumber: 41 });
+    const decidedAt = "2026-05-01T09:50:00.000Z";
+    await suite.db.insert(payments).values({
+      workingOrderId: order.id,
+      source: "device",
+      deviceId: venue.deviceId,
+      provider: "stripe",
+      paymentRef: "held-payment",
+      amount: 1800,
+      state: "captured",
+      heldAt: "2026-05-01T09:45:00.000Z",
+      holdProviderAmount: 1700,
+      holdOutcome: "kept",
+      holdDecidedAt: decidedAt,
+      holdDecidedBy: venue.personId,
+    });
     await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const [admin, manager] = await seedPersons(suite.db, [
       { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
@@ -89,10 +107,10 @@ describe("the personal-data downloads in a real start", () => {
         WAITRON_ENV: "preproduction",
       });
       await awaitListening(httpPort());
-      const response = await fetch(
-        `http://127.0.0.1:${httpPort()}/management-api/me/personal-data/export`,
-        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
-      );
+      const ownUrl = `http://127.0.0.1:${httpPort()}/management-api/me/personal-data/export`;
+      const response = await fetch(ownUrl, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/zip");
       const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
@@ -112,6 +130,11 @@ describe("the personal-data downloads in a real start", () => {
         actions.drawerOpenings.map(({ reason, at, yourPart }) => ({ reason, at, yourPart })),
       ).toEqual([{ reason: "manual", at: "2026-05-01T09:30:00.000Z", yourPart: ["opened"] }]);
 
+      expect(JSON.parse(strFromU8(files["payment-holds.json"]!))).toEqual({
+        entries: [{ order: 41, decision: "kept", at: decidedAt }],
+      });
+      expect(strFromU8(files["README.txt"]!)).toContain("- payment-holds.json: ");
+
       const url = `http://127.0.0.1:${httpPort()}/management-api/staff/${venue.personId}/personal-data/export`;
       const other = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` },
@@ -124,6 +147,18 @@ describe("the personal-data downloads in a real start", () => {
         unknown
       >;
       expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Anna"]);
+      expect(otherFiles["payment-holds.json"]).toEqual(files["payment-holds.json"]);
+
+      const colleague = await fetch(ownUrl, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
+      });
+      expect(colleague.status).toBe(200);
+      const colleagueFiles = unzipSync(new Uint8Array(await colleague.arrayBuffer()));
+      expect(JSON.parse(strFromU8(colleagueFiles["profile.json"]!))).toMatchObject({
+        id: manager!.id,
+      });
+      expect(Object.keys(colleagueFiles)).not.toContain("payment-holds.json");
+      expect(Object.keys(colleagueFiles)).not.toContain("actions.json");
 
       const refused = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
