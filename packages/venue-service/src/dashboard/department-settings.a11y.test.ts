@@ -460,3 +460,42 @@ describe.each(["light", "dark"] as const)("department-settings service steps (%s
     await expectNoA11yViolations(host);
   });
 });
+describe.each(["light", "dark"] as const)("department-settings estimated margin (%s)", (theme) => {
+  it.each(["margin-empty", "margin-filled", "margin-refused"] as const)("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    el.model = {
+      ...structuredClone(model),
+      estimatedMarginByDepartment: state === "margin-filled" ? { d1: "30.50" } : {},
+    };
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path) =>
+      path.endsWith("/profiles")
+        ? [{ id: "p1", name: "Restaurant counter" }]
+        : {
+            departmentId: "d1",
+            receivingProfileId: "p1",
+            destinationDepartmentIds: ["d2"],
+          }) as DashboardRequest);
+    await el.updateComplete;
+    const control = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "wt-input[name=estimatedMargin]",
+      )!;
+    await expect.poll(() => control()).not.toBeNull();
+    expect(control().checkVisibility()).toBe(true);
+    if (state === "margin-filled") expect(control().value).toBe("30.50");
+    if (state === "margin-refused") {
+      control().dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "101" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+      await expect.poll(() => control().error).not.toBe("");
+    }
+    await expectNoA11yViolations(host);
+  });
+});

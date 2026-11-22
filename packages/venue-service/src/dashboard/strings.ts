@@ -510,6 +510,9 @@ const en = {
   "venue.same_as_department": "Same as department ({value})",
   "venue.name": "Department name",
   "venue.trading_name": "Trading name",
+  "venue.estimated_margin": "Estimated margin (%)",
+  "venue.estimated_margin_hint": "For the estimated cost of free items in the corrections workbook",
+  "venue.estimated_margin_invalid": "Enter a percentage from 0 to 100 with at most two decimals.",
   "venue.operation_description": "Invoice operation description",
   "venue.operation_description_hint": "Sent to the tax agency; not printed",
   "venue.on_receipt": "On the receipt",
@@ -1455,6 +1458,11 @@ const es: Record<keyof typeof en, string> = {
   "venue.same_as_department": "Igual que el departamento ({value})",
   "venue.name": "Nombre del departamento",
   "venue.trading_name": "Nombre comercial",
+  "venue.estimated_margin": "Margen estimado (%)",
+  "venue.estimated_margin_hint":
+    "Para el coste estimado de los artículos gratuitos en el libro de correcciones",
+  "venue.estimated_margin_invalid":
+    "Introduce un porcentaje de 0 a 100 con dos decimales como máximo.",
   "venue.operation_description": "Descripción de la operación",
   "venue.operation_description_hint": "Se envía a Hacienda; no se imprime",
   "venue.on_receipt": "En el recibo",

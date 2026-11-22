@@ -3,6 +3,7 @@ import { applyTokens, draftScopeFor, LeaveController, type DraftScope } from "@w
 import { property } from "lit/decorators.js";
 import { createRef, ref } from "lit/directives/ref.js";
 import { type DashboardRequest } from "@waitron/dashboard-kit";
+import { basisPointsToDecimal, stringToBasisPoints } from "@waitron/shared";
 import { expect } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
@@ -50,6 +51,11 @@ export function departmentSettingsAnswer(
       ...answer.lateSendManagerDepartmentIds.filter((id) => id !== departmentId),
       ...(input.lateSendNeedsManager ? [departmentId] : []),
     ];
+  if (input.estimatedMargin === null) delete answer.estimatedMarginByDepartment[departmentId];
+  else if (input.estimatedMargin !== undefined)
+    answer.estimatedMarginByDepartment[departmentId] = basisPointsToDecimal(
+      stringToBasisPoints(input.estimatedMargin),
+    );
   if (input.courseSettings !== undefined)
     answer.courseSettingsByDepartment[departmentId] = input.courseSettings.filter(
       (row) => !row.heldUntilFired || row.reminderMinutes !== 10,
