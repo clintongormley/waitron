@@ -24,10 +24,10 @@ describe("the filing loop wakes for a failed batch's scheduled retry", () => {
     async ({ attempts, gateSeconds, sleeps, retryAt }) => {
       const seeded = await seedPendingEnvios(suite.db, { count: 1 });
       await suite.db.execute(sql`
-        update envios set intentos = ${attempts} where registro_id = ${seeded.registroIds[0]}
+        update verifactu_submissions set intentos = ${attempts} where registro_id = ${seeded.registroIds[0]}
       `);
       await suite.db.execute(sql`
-        insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+        insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
         values (1, ${START.toISOString()}, ${gateSeconds})
       `);
       const aeat = createFakeAeat({ serverNow: START, tiempoEsperaInicial: gateSeconds });
@@ -92,7 +92,7 @@ describe("the filing loop wakes for a failed batch's scheduled retry", () => {
       expect(submittedAt).toEqual([0, retryAt]);
       expect(accepted).toEqual([0, 0, 1]);
       const { rows } = await suite.db.execute<{ estado: string; intentos: number }>(sql`
-        select estado, intentos from envios where registro_id = ${seeded.registroIds[0]}
+        select estado, intentos from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
       `);
       expect(rows).toEqual([{ estado: "aceptado", intentos: attempts + 2 }]);
     },

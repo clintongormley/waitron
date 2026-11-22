@@ -139,11 +139,11 @@ async function state(db: Pick<typeof suite.db, "execute"> = suite.db) {
   return snapshot;
 }
 const FISCAL_TABLES = [
-  "registro_sif",
+  "verifactu_identities",
   "invoice_series",
   "fiscal_reservations",
   "fiscal_allocations",
-  "registros_facturacion",
+  "verifactu_records",
 ];
 async function fiscalState() {
   const all = await state();

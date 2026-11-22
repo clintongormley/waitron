@@ -33,14 +33,14 @@ import {
 import { computeHuella, validate } from "@waitron/verifactu";
 import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 
 /** What is stored feeds the calculator, whose lines and split the writer files and the regime validates. */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -53,7 +53,7 @@ let rectSeriesId: SeriesId;
 let sessionId: string;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
@@ -86,7 +86,7 @@ async function snapshot(saleId: SaleId) {
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   return { sale: sale!, lines, registro: decodeRegistroRow(rows[0]!) };
 }
@@ -188,9 +188,9 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
   // No line gross, so the history read would refuse: each refusal must come before it.
   const { saleId, before } = await sell(null);
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: "1161" })
-    .where(eq(envios.registroId, before.registro.id));
+    .where(eq(verifactuSubmissions.registroId, before.registro.id));
   const refused = await captureError(() => preview(saleId, "1.00"));
 
   vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");

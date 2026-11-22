@@ -3,7 +3,7 @@ import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEFAULT_SKIP_RETRY_MS, VerifactuBackend, drain } from "@waitron/fiscal-verifactu";
-import { seedTenantWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayerWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -19,7 +19,7 @@ async function filingBox() {
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
   vi.setSystemTime(START);
   const db = suite.db;
-  const { nodeId, seriesId } = await seedTenantWithSif(db);
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(db);
   const clock = {
     ...steadyClock,
     now: () => ({ ...steadyClock.now(), instant: new Date() }),

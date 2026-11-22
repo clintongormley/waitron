@@ -26,8 +26,8 @@ import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu/src/drai
 import { listFilingCases, openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy-routes.js";
 import { REMEDY_KINDS, type RemedyKind } from "@waitron/fiscal-verifactu/src/record-remedy.js";
-import { envios } from "@waitron/fiscal-verifactu/src/schema/envios.js";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { verifactuSubmissions } from "@waitron/fiscal-verifactu/src/schema/verifactu-submissions.js";
+import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { currentSif } from "@waitron/fiscal-verifactu/src/registro-sif.js";
 import { verifyChain } from "@waitron/fiscal-verifactu/src/verify.js";
@@ -175,9 +175,9 @@ async function cancelAndRefund() {
 
 async function rejectOriginal(code = 1161) {
   await store.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: String(code) })
-    .where(eq(envios.registroId, originalId));
+    .where(eq(verifactuSubmissions.registroId, originalId));
   return withTransaction(store.db, (tx) =>
     openFilingCase(tx, {
       registroId: originalId,
@@ -190,8 +190,8 @@ async function rejectOriginal(code = 1161) {
 
 async function fiscalFacts() {
   return withTransaction(store.db, async (tx) => ({
-    records: await tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
-    deliveries: await tx.select().from(envios).orderBy(envios.registroId),
+    records: await tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
+    deliveries: await tx.select().from(verifactuSubmissions).orderBy(verifactuSubmissions.registroId),
     cases: await listFilingCases(tx),
     head: await readChainHead(tx, venue.cfg.nodeId),
   }));
@@ -217,7 +217,7 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
   expect((await drain(deps, NOW)).recordsAccepted).toBe(0);
   expect(aeat.stored()).toEqual([]);
   expect(submissions).not.toHaveBeenCalled();
-  const [held] = await store.db.select().from(envios).where(eq(envios.registroId, cancellationId));
+  const [held] = await store.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, cancellationId));
   expect(held).toMatchObject({ estado: "retenido", intentos: 1, enviadoEn: NOW });
   const cases = await withTransaction(store.db, (tx) => listFilingCases(tx));
   const heldCase = cases.find((row) => row.registroId === cancellationId)!;
@@ -237,8 +237,8 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
   expect((await drain(deps, NOW)).recordsAccepted).toBe(1);
   const immutable = await store.db
     .select()
-    .from(registrosFacturacion)
-    .orderBy(registrosFacturacion.secuencia);
+    .from(verifactuRecords)
+    .orderBy(verifactuRecords.secuencia);
   const head = await withTransaction(store.db, (tx) => readChainHead(tx, venue.cfg.nodeId));
   const request = {
     kind: "release-held-cancellation",
@@ -264,7 +264,7 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
   expect(await refund(refundBody)).toEqual(refunded);
   expect(await accounting()).toEqual(facts);
   expect(
-    await store.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+    await store.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
   ).toEqual(immutable);
   expect(await withTransaction(store.db, (tx) => readChainHead(tx, venue.cfg.nodeId))).toEqual(
     head,
@@ -320,7 +320,7 @@ it.each(["pendiente", "enviando", "detenido"])(
   async (estado) => {
     const originalCase = await rejectOriginal();
     const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
-    await store.db.update(envios).set({ estado }).where(eq(envios.registroId, originalId));
+    await store.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, originalId));
     const before = await fiscalFacts();
     for (const kind of ["record-correction", "absent-original-cancellation"] as const) {
       const refused = await remedy(
@@ -355,9 +355,9 @@ it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
   async (cause) => {
     const { refundBody, refunded, facts } = await cancelAndRefund();
     await store.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "detenido", codigoError: "3000" })
-      .where(eq(envios.registroId, originalId));
+      .where(eq(verifactuSubmissions.registroId, originalId));
     const filingCase = await withTransaction(store.db, (tx) =>
       openFilingCase(tx, {
         registroId: originalId,
@@ -465,7 +465,7 @@ it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado
   async (estado) => {
     const originalCase = await rejectOriginal();
     const { cancellationId, facts } = await cancelAndRefund();
-    await store.db.update(envios).set({ estado }).where(eq(envios.registroId, cancellationId));
+    await store.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, cancellationId));
     const before = await fiscalFacts();
     const response = await remedy(
       {
@@ -532,9 +532,9 @@ it.each([3000, 1100, null])(
   async (code) => {
     const originalCase = await rejectOriginal(code === 3000 ? 3000 : 1161);
     await store.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ codigoError: code === null ? null : String(code) })
-      .where(eq(envios.registroId, originalId));
+      .where(eq(verifactuSubmissions.registroId, originalId));
     const before = await fiscalFacts();
     const response = await remedy(
       {

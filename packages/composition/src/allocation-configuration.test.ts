@@ -15,7 +15,7 @@ import { withOperationAuthority } from "@waitron/module";
 import type { ProvisionedNode } from "@waitron/module";
 
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
 import {
   paperCustodianFingerprint,
@@ -28,7 +28,7 @@ import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -137,7 +137,7 @@ beforeEach(async () => {
   vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", undefined);
   vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", undefined);
   vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", undefined);
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)

@@ -1,7 +1,7 @@
-/** Raw inserts of a `fiscal_certificate_installs` row, for tests that write `venue.db` directly. */
+/** Raw inserts of a `verifactu_certificates` row, for tests that write `venue.db` directly. */
 function certificateRow(id: string, source: "setup" | "dashboard") {
   const dashboard = source === "dashboard";
-  return `insert into fiscal_certificate_installs
+  return `insert into verifactu_certificates
     (id, node_id, installed_at, source, person_id, kind, fingerprint, valid_from, valid_until,
      checked_endpoint, checked_at)
     values ('${id}', '00000000-0000-4000-8000-0000000000a1', '2026-10-18T10:00:00.000Z',

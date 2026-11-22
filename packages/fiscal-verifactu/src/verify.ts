@@ -43,12 +43,12 @@ export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<Inte
   // concurrently replacing verifies nothing.
   await readChainHead(tx, nodeId);
 
-  // (node_id, secuencia) is already uniquely indexed (registros_tenant_node_secuencia_uq). Ordered
+  // (node_id, secuencia) is already uniquely indexed (verifactu_records_node_secuencia_uq). Ordered
   // by chain POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
   // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure
   // on an intact chain.
   const { rows } = await tx.execute<Record<string, unknown>>(sql`
-    select * from registros_facturacion
+    select * from verifactu_records
     where node_id = ${nodeId}
     order by secuencia desc
     limit 2
@@ -96,7 +96,7 @@ export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<Inte
       // expected: n−2's own huella, read live off its row — the ground truth this check validates
       // the pointer against. found: what n−1's own stored predecessor pointer actually says, which
       // may not agree with it. No `?? ""` fallback needed: `previous.primer_registro` was already
-      // false to reach this line, and registros_encadenamiento_ck (./schema/registros.ts)
+      // false to reach this line, and verifactu_records_encadenamiento_ck (./schema/registros.ts)
       // guarantees `anterior_huella` is NOT NULL whenever that is the case.
       params: { expected: beforePrevious.huella, found: previous.anterior_huella },
     });

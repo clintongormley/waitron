@@ -324,7 +324,7 @@ describe("a counter sale", () => {
       const before = written();
       const beforeOrder = venue.db.all(sql`select * from working_orders where id = ${id}`);
       const beforeSeries = venue.db.all(sql`select * from invoice_series order by id`);
-      const beforeFiscal = venue.db.all(sql`select * from registros_facturacion order by id`);
+      const beforeFiscal = venue.db.all(sql`select * from verifactu_records order by id`);
       const beforeJobs = venue.db.all(sql`select * from print_jobs order by id`);
 
       const basket = {
@@ -350,7 +350,7 @@ describe("a counter sale", () => {
       expect(written()).toEqual(before);
       expect(venue.db.all(sql`select * from working_orders where id = ${id}`)).toEqual(beforeOrder);
       expect(venue.db.all(sql`select * from invoice_series order by id`)).toEqual(beforeSeries);
-      expect(venue.db.all(sql`select * from registros_facturacion order by id`)).toEqual(
+      expect(venue.db.all(sql`select * from verifactu_records order by id`)).toEqual(
         beforeFiscal,
       );
       expect(venue.db.all(sql`select * from print_jobs order by id`)).toEqual(beforeJobs);

@@ -2078,7 +2078,7 @@ describe("a start on a real full disk", () => {
           source: {
             read: ({ tx }) => {
               const [row] = tx.all<{ n: number }>(
-                sql`select count(*) as n from envios where estado in ('pendiente', 'enviando', 'detenido', 'retenido')`,
+                sql`select count(*) as n from verifactu_submissions where estado in ('pendiente', 'enviando', 'detenido', 'retenido')`,
               );
               return Promise.resolve([
                 { key: "unsent", code: "x.unsent", severity: "notice", params: { count: row!.n } },

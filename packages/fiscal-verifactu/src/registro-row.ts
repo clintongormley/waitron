@@ -12,14 +12,14 @@ import type {
   TipoHuella,
 } from "@waitron/verifactu";
 import type { SaleOrigin } from "@waitron/shared";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 /** The insertable row shape, derived from the table's own schema rather than hand-duplicated. */
-export type RegistroRowInsert = typeof registrosFacturacion.$inferInsert;
+export type RegistroRowInsert = typeof verifactuRecords.$inferInsert;
 
 /**
  * Which deployment a registro was generated for. A union, not a bare `string`, so an
- * unrepresentable value is a `tsc` error instead of a `registros_entorno_ck` refusal inside a
+ * unrepresentable value is a `tsc` error instead of a `verifactu_records_entorno_ck` refusal inside a
  * sale's transaction.
  */
 export type Entorno = "production" | "preproduction";
@@ -260,7 +260,7 @@ export function pointerTo(row: {
 }
 
 /**
- * One `select * from registros_facturacion` row after {@link decodeRegistroRow} — snake_case
+ * One `select * from verifactu_records` row after {@link decodeRegistroRow} — snake_case
  * columns, each value in the shape Drizzle's read mapping produces. Deliberately NOT `typeof
  * registrosFacturacion.$inferSelect` (camelCase, the shape Drizzle's own typed `.select()` query
  * builder produces): a raw `sql` execution is not tied to any schema column, so Drizzle has no
@@ -339,7 +339,7 @@ export type RegistroRow = {
  * `offset_minutos` rather than read off the column.
  *
  * A column the row carries that this table does not declare passes through untouched — ./drain.ts's
- * claim selects `r.*, e.intentos`, and `intentos` belongs to `envios`.
+ * claim selects `r.*, e.intentos`, and `intentos` belongs to `verifactu_submissions`.
  */
 export function decodeRegistroRow<Row extends RegistroRow = RegistroRow>(
   raw: Record<string, unknown>,
@@ -357,7 +357,7 @@ export function decodeRegistroRow<Row extends RegistroRow = RegistroRow>(
 
 /** Keyed by the SQL column name, which is what a raw row is keyed by — `getTableColumns` returns
  * the camelCase property names Drizzle's typed select uses. */
-const REGISTRO_COLUMNS = Object.values(getTableColumns(registrosFacturacion));
+const REGISTRO_COLUMNS = Object.values(getTableColumns(verifactuRecords));
 
 /**
  * Rebuilds a record from its stored columns, for recomputation only (art. 7.i, ./verify.ts).
@@ -372,7 +372,7 @@ const REGISTRO_COLUMNS = Object.values(getTableColumns(registrosFacturacion));
  */
 export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulacion {
   // Casts, not `?? ""` runtime fallbacks, for the four `anterior_*` columns: this branch only
-  // runs when `row.primer_registro` is false, and `registros_encadenamiento_ck`
+  // runs when `row.primer_registro` is false, and `verifactu_records_encadenamiento_ck`
   // (./schema/registros.ts) guarantees all four are NOT NULL together whenever that is the case.
   // Of the four, only `.Huella` is read for hashing (`@waitron/verifactu`'s `huellaAnteriorOf`).
   const encadenamiento: Encadenamiento = row.primer_registro

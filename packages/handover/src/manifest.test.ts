@@ -22,7 +22,7 @@ describe("the node-local manifest", () => {
       "document_delivery_requests|venue.db|source-only",
       "document_delivery_sequences|venue.db|source-only",
       "device_invoice_save_operations|venue.db|source-only",
-      "fiscal_certificate_installs|venue.db|transferred",
+      "verifactu_certificates|venue.db|transferred",
       "fiscal_certificate_reminders|venue.db|transferred",
       "venue_credentials|venue.db|transferred",
       "secrets.env|state|transferred",

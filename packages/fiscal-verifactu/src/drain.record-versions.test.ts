@@ -10,8 +10,8 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 import { appendToChain } from "./chain.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   altaFor,
   anulacionFor,
@@ -44,7 +44,7 @@ async function version(position: number, estado: string, correctsRegistroId?: st
         DescripcionOperacion: `Restaurant service version ${position}`,
       },
     });
-    await tx.insert(envios).values({
+    await tx.insert(verifactuSubmissions).values({
       registroId: record.id,
       estado,
       intentos: estado === "pendiente" ? 0 : 1,
@@ -62,7 +62,7 @@ async function cancellation() {
       node.nodeId,
       anulacionFor(node, saleId, 1, 4, "preproduction"),
     );
-    await tx.insert(envios).values({ registroId: record.id, proximoIntentoEn: NOW });
+    await tx.insert(verifactuSubmissions).values({ registroId: record.id, proximoIntentoEn: NOW });
     return record.id;
   });
 }
@@ -75,7 +75,7 @@ async function laterSale() {
       node.nodeId,
       altaFor(node, later, 2, 5, "preproduction"),
     );
-    await tx.insert(envios).values({ registroId: record.id, proximoIntentoEn: NOW });
+    await tx.insert(verifactuSubmissions).values({ registroId: record.id, proximoIntentoEn: NOW });
     return record.id;
   });
 }
@@ -84,7 +84,7 @@ async function sending(versions: string[]) {
   const aeat = createFakeAeat({ serverNow: NOW, tiempoEsperaInicial: 5 });
   const client = aeat.client();
   for (const id of versions) {
-    const raw = await suite.db.execute(sql`select * from registros_facturacion where id = ${id}`);
+    const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${id}`);
     const record = fromRegistroRow(decodeRegistroRow(raw.rows[0]!)) as RegistroAlta;
     const response = await client.submit(
       { ObligadoEmision: { NIF: TEST_NIF, NombreRazon: "Waitron SL" } },
@@ -117,12 +117,12 @@ async function sending(versions: string[]) {
 }
 
 async function state(id: string) {
-  const [row] = await suite.db.select().from(envios).where(eq(envios.registroId, id));
+  const [row] = await suite.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, id));
   return row!;
 }
 
 async function immutableRows() {
-  return suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+  return suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
 }
 
 it.each(["aceptado", "aceptado_con_errores"])(
@@ -205,7 +205,7 @@ it("keeps a brake-held cancellation held when the current version is unknown and
   const latest = await version(3, "enviando", first);
   const cancel = await cancellation();
   const later = await laterSale();
-  await suite.db.update(envios).set({ estado: "detenido" }).where(eq(envios.registroId, cancel));
+  await suite.db.update(verifactuSubmissions).set({ estado: "detenido" }).where(eq(verifactuSubmissions.registroId, cancel));
   const before = await immutableRows();
   const wire = await sending([original, first]);
 

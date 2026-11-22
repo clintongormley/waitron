@@ -159,7 +159,7 @@ it("uses one supplied isolated issue reading for the sample invoice and actual g
     expect(
       db
         .prepare(
-          "select fecha_expedicion_factura, fecha_hora_huso_gen_registro, offset_minutos from registros_facturacion",
+          "select fecha_expedicion_factura, fecha_hora_huso_gen_registro, offset_minutos from verifactu_records",
         )
         .all(),
     ).toEqual([

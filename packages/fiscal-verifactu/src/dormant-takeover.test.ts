@@ -6,13 +6,13 @@ import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "../test/fixtures.js";
 
 import { establishDormantAllocation } from "./standby-allocation.js";
 import * as activation from "./allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -29,8 +29,8 @@ import type {
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const target = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -160,7 +160,7 @@ async function rows(table: string) {
 }
 async function activeRows() {
   return [
-    await rows("registro_sif"),
+    await rows("verifactu_identities"),
     await rows("cadenas"),
     await rows("invoice_series"),
     await rows("fiscal_allocations"),
@@ -171,7 +171,7 @@ async function activeRows() {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
@@ -227,7 +227,7 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
         authenticated(token, { ...context, reauthentication: null }),
       ),
     ).resolves.toMatchObject({ activationEventId: "takeover-1", series: candidate.series });
-    expect((await rows("registro_sif")).find((row) => row.node_id === target.nodeId)).toMatchObject(
+    expect((await rows("verifactu_identities")).find((row) => row.node_id === target.nodeId)).toMatchObject(
       {
         numero_instalacion: "P000042",
         revocado_en: null,
@@ -265,8 +265,8 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
   it("activates the exact spare identity and all three purposes without changing the primary or reservation", async () => {
     const primarySif = await suite.db
       .select()
-      .from(registroSif)
-      .where(eq(registroSif.nodeId, primary.nodeId));
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, primary.nodeId));
     const primarySeries = await suite.db
       .select()
       .from(invoiceSeries)
@@ -274,13 +274,13 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
     const retained = await rows("fiscal_reservations");
     const result = await takeover();
     expect(result).toMatchObject({ activationEventId: "takeover-1", series: candidate.series });
-    const active = await rows("registro_sif");
+    const active = await rows("verifactu_identities");
     expect(active.find((row) => row.node_id === target.nodeId)).toMatchObject({
       numero_instalacion: "P000042",
       revocado_en: null,
     });
     expect(
-      await suite.db.select().from(registroSif).where(eq(registroSif.nodeId, primary.nodeId)),
+      await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.nodeId, primary.nodeId)),
     ).toEqual(primarySif);
     expect(
       await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, primary.nodeId)),
@@ -344,7 +344,7 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
       input = consumed(candidate, permission);
     }
     if (kind === "target") {
-      node = { ...target, nodeId: TENANT_B.nodeId };
+      node = { ...target, nodeId: TAXPAYER_B.nodeId };
       permission = { ...approval, targetNodeId: node.nodeId };
       expected = { ...context, targetNodeId: node.nodeId };
       input = consumed(candidate, permission);

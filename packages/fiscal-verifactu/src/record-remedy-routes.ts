@@ -69,7 +69,7 @@ export function mountRecordRemedies(
           const [target] =
             typeof raw.registroId === "string"
               ? tx.all<{ node_id: string }>(
-                  sql`select node_id from registros_facturacion where id = ${raw.registroId}`,
+                  sql`select node_id from verifactu_records where id = ${raw.registroId}`,
                 )
               : [];
           if (source && source !== ctx.recordGeneration.nodeId && target?.node_id === source)

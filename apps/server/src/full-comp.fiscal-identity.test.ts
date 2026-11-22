@@ -10,7 +10,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { saleLines, sales, workingOrders, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import {
   decodeRegistroRow,
   fromRegistroRow,
@@ -111,7 +111,7 @@ const SALE_COLUMNS = columnsOf(sales, [
 ]);
 /** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
  * time of the insert rather than the fixed clock's. */
-const REGISTRO_COLUMNS = columnsOf(registrosFacturacion, [
+const REGISTRO_COLUMNS = columnsOf(verifactuRecords, [
   "id",
   "sale_id",
   "node_id",
@@ -216,7 +216,7 @@ async function fileFullComps(db: Database) {
         return row;
       });
     const registros = db.all<Record<string, unknown>>(sql`
-      select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from registros_facturacion`);
+      select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from verifactu_records`);
     const lines = db
       .all<Record<string, unknown>>(
         sql.raw(`select ${LINE_COLUMNS.map((c) => `l.${c}`).join(", ")},
@@ -231,7 +231,7 @@ async function fileFullComps(db: Database) {
           key === "id" ? undefined : value,
         ) as unknown,
       }));
-    const [row] = db.all<RegistroRow>(sql`select * from registros_facturacion`);
+    const [row] = db.all<RegistroRow>(sql`select * from verifactu_records`);
     const cabecera: Cabecera = {
       ObligadoEmision: { NombreRazon: row!.nombre_razon_emisor, NIF: row!.id_emisor_factura },
     };

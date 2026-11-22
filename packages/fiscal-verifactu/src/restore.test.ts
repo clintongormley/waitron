@@ -14,12 +14,12 @@ import type { ProvisionedNode } from "@waitron/module";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
+import { TAXPAYER_A, seedSoldRegistro, seedTaxpayers } from "../test/fixtures.js";
 import { appendToChain } from "./chain.js";
 import { currentSif, esPrimerRegistro, type SifRegistration } from "./registro-sif.js";
 import { MAX_BASE_CODE_LENGTH, liveSeriesBases } from "./reserved-series.js";
 import { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedSale, seedNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
@@ -32,7 +32,7 @@ beforeAll(() => {
 });
 
 const NODE: ProvisionedNode = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
 };
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NOW = new Date("2026-09-06T10:00:00.000Z");
@@ -40,11 +40,11 @@ const NOW = new Date("2026-09-06T10:00:00.000Z");
 /** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (corrective). */
 async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
-    registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
+    registerSif(tx, { ...SIF, nodeId: TAXPAYER_A.nodeId }),
   );
   await db.insert(invoiceSeries).values([
-    { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
-    { nodeId: TENANT_A.nodeId, code: "RE", purpose: "corrective", nextNumber: 1 },
+    { nodeId: TAXPAYER_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
+    { nodeId: TAXPAYER_A.nodeId, code: "RE", purpose: "corrective", nextNumber: 1 },
   ]);
   return sif;
 }
@@ -52,7 +52,7 @@ async function seedLiveNode(): Promise<SifRegistration> {
 async function liveSeriesCodes(): Promise<string[]> {
   const { rows } = await db.execute<{ code: string }>(sql`
     select code from invoice_series
-    where node_id = ${TENANT_A.nodeId} and retired_at is null order by code
+    where node_id = ${TAXPAYER_A.nodeId} and retired_at is null order by code
   `);
   return rows.map((r) => r.code);
 }
@@ -68,14 +68,14 @@ afterEach(() => vi.useRealTimers());
 
 describe("restoreFiscal", () => {
   beforeEach(async () => {
-    await seedTenants(db);
+    await seedTaxpayers(db);
     await db.insert(deployment).values({ id: 1, environment: "preproduction" });
   });
 
   it("activates the supplied restore identity and complete series, resets the head and keeps the ledger", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       sifId: first.id,
       nif: SIF.nif,
       secuencia: 7,
@@ -91,21 +91,21 @@ describe("restoreFiscal", () => {
       ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
     );
 
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.id).not.toBe(first.id);
     expect(fresh.numeroInstalacion).toBe("P000042");
     expect(fresh.numeroInstalacion).not.toBe(first.numeroInstalacion);
     const { rows: old } = await db.execute<{ revocado_en: string | null }>(
-      sql`select revocado_en from registro_sif where id = ${first.id}`,
+      sql`select revocado_en from verifactu_identities where id = ${first.id}`,
     );
     expect(old[0]?.revocado_en).not.toBeNull();
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TENANT_A.nodeId))).toBe(true);
+    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(true);
     const { rows: head } = await db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${TENANT_A.nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${TAXPAYER_A.nodeId}`,
     );
     expect(head[0]?.secuencia).toBe(7); // ours; never reset
     const { rows: ledger } = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from registros_facturacion`,
+      sql`select cast(count(*) as int) as n from verifactu_records`,
     );
     expect(ledger[0]?.n).toBe(1); // the seeded S7/1 registro is untouched
     // seedSoldRegistro also opened an `S7` series on the node — it is live, so it is re-derived too.
@@ -123,11 +123,11 @@ describe("restoreFiscal", () => {
   it("THE REUSE EXPERIMENT: restoring an older artifact cannot re-mint a number a later restore used", async () => {
     await seedLiveNode();
     const later = await withTransaction(db, (tx) =>
-      registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId, numeroInstalacion: "P000042" }),
+      registerSif(tx, { ...SIF, nodeId: TAXPAYER_A.nodeId, numeroInstalacion: "P000042" }),
     );
-    await db.execute(sql`delete from registro_sif where id = ${later.id}`);
+    await db.execute(sql`delete from verifactu_identities where id = ${later.id}`);
     await db.execute(
-      sql`update registro_sif set revocado_en = null where node_id = ${TENANT_A.nodeId}`,
+      sql`update verifactu_identities set revocado_en = null where node_id = ${TAXPAYER_A.nodeId}`,
     );
     const fixture = recoveryFixture(
       [
@@ -137,7 +137,7 @@ describe("restoreFiscal", () => {
       "P000043",
     );
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.numeroInstalacion).not.toBe(later.numeroInstalacion);
     expect(fresh.numeroInstalacion).toBe("P000043");
   });
@@ -150,7 +150,7 @@ describe("restoreFiscal", () => {
       { code: "RE", purpose: "corrective" },
     ]);
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.numeroInstalacion).toBe("P000042");
     expect(counterAbsent()).toBe(true);
   });
@@ -162,18 +162,18 @@ describe("restoreFiscal", () => {
       { code: "RE", purpose: "corrective" },
     ]);
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.numeroInstalacion).toBe("P000042");
     expect(counterAbsent()).toBe(true);
   });
 
   it("does nothing for a node with no live SIF: no mint, no series", async () => {
-    await db.insert(invoiceSeries).values({ nodeId: TENANT_A.nodeId, code: "FA" });
+    await db.insert(invoiceSeries).values({ nodeId: TAXPAYER_A.nodeId, code: "FA" });
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE));
     expect(outcome.series).toBeUndefined();
     expect(outcome.report).toMatch(/no live SIF/);
     const { rows } = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from registro_sif`,
+      sql`select cast(count(*) as int) as n from verifactu_identities`,
     );
     expect(rows[0]?.n).toBe(0);
   });
@@ -192,7 +192,7 @@ describe("restoreFiscal", () => {
     const outcome = await fixture.transaction(db, "restore", (tx, operation) =>
       ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
     );
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.numeroInstalacion).toBe("P000042");
     expect(outcome.series).toBeUndefined();
     expect(await activeSeriesWithPurposes()).toEqual([{ code: "FA-P000042", purpose: "standard" }]);
@@ -212,7 +212,7 @@ describe("restoreFiscal", () => {
     expect(isAppError(err) && err.code).toBe("series.code_too_long");
     // Only the seeded SIF remains after the transaction rolls back.
     const { rows } = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from registro_sif`,
+      sql`select cast(count(*) as int) as n from verifactu_identities`,
     );
     expect(rows[0]?.n).toBe(1);
   });
@@ -249,12 +249,12 @@ describe("restoreFiscal", () => {
     // Through the builder: only it maps the stored 0/1 `primer_registro` back to a boolean.
     const rec = await db
       .select({
-        primer_registro: registrosFacturacion.primerRegistro,
-        anterior_huella: registrosFacturacion.anteriorHuella,
-        sif_id: registrosFacturacion.sifId,
+        primer_registro: verifactuRecords.primerRegistro,
+        anterior_huella: verifactuRecords.anteriorHuella,
+        sif_id: verifactuRecords.sifId,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, after.id));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, after.id));
     expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
     expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
     const report = await withTransaction(db, (tx) => verifyChain(tx, seededNode.nodeId));
@@ -271,7 +271,7 @@ describe("restoreFiscal", () => {
     await fixture.transaction(db, "restore", (tx, operation) =>
       FISCAL_RESTORE(tx, NODE, operation),
     );
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(fresh.numeroInstalacion).toBe("P000042");
   });
 });

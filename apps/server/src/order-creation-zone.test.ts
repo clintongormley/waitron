@@ -92,7 +92,7 @@ it.each(["cash", "integrated"] as const)(
     ]);
     expect(
       suite.db.all(sql`
-      select r.descripcion_operacion as description from registros_facturacion r
+      select r.descripcion_operacion as description from verifactu_records r
       join sales s on s.id = r.sale_id where s.working_order_id = ${id}
     `),
     ).toEqual([{ description: "Counter meals" }]);

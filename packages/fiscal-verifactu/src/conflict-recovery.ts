@@ -14,16 +14,16 @@ import { readActiveConflicts } from "./conflict-evidence.js";
 import type { RecoveryConflictRef as ConflictRef } from "./conflict-types.js";
 import { conflictSourceId } from "./conflict-reference.js";
 export { conflictSourceId } from "./conflict-reference.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import {
   parseConflictActivation,
   type ConflictAllocationInput,
 } from "./conflict-recovery-contract.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { filingCases } from "./schema/filing-cases.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { activateModuleAllocation, readModuleAllocationSeries } from "./allocation-operation.js";
@@ -56,14 +56,14 @@ async function checkOriginal(
   if ("lookupId" in conflict) {
     const [lookup] = await tx
       .select({
-        sifId: fiscalSeriesConflicts.sifId,
-        nodeId: registroSif.nodeId,
+        sifId: verifactuSeriesConflicts.sifId,
+        nodeId: verifactuIdentities.nodeId,
         seriesNode: invoiceSeries.nodeId,
       })
-      .from(fiscalSeriesConflicts)
-      .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
-      .innerJoin(invoiceSeries, eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId))
-      .where(eq(fiscalSeriesConflicts.id, conflict.lookupId));
+      .from(verifactuSeriesConflicts)
+      .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuSeriesConflicts.sifId))
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, verifactuSeriesConflicts.seriesId))
+      .where(eq(verifactuSeriesConflicts.id, conflict.lookupId));
     if (
       lookup?.sifId !== conflict.sifId ||
       lookup.nodeId !== node.nodeId ||
@@ -74,8 +74,8 @@ async function checkOriginal(
   }
   const [original] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, conflict.registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, conflict.registroId));
   const [incident] = await tx.select().from(filingCases).where(eq(filingCases.id, conflict.caseId));
   if (
     original?.nodeId !== node.nodeId ||
@@ -83,7 +83,7 @@ async function checkOriginal(
     incident?.registroId !== conflict.registroId
   )
     return refuse("event_mismatch");
-  const [reply] = await tx.select().from(envios).where(eq(envios.registroId, conflict.registroId));
+  const [reply] = await tx.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, conflict.registroId));
   const [lookup] = await tx
     .select()
     .from(fiscalLookupConflicts)

@@ -1,6 +1,6 @@
 import { createClient, VerifactuTransportError } from "@waitron/verifactu";
 import { firstCodeInCauseChain } from "@waitron/shared";
-import type { CertKind, CertMaterial, TenantTransport } from "./aeat-transport.js";
+import type { CertKind, CertMaterial, AeatTransport } from "./aeat-transport.js";
 import { localDate } from "./certificate-dates.js";
 
 export type CheckRefusal =
@@ -12,7 +12,7 @@ export type CheckRefusal =
 
 export interface CheckTransport {
   endpointFor(kind: CertKind): string;
-  fetchFor(material: CertMaterial): TenantTransport;
+  fetchFor(material: CertMaterial): AeatTransport;
 }
 
 export type CheckResult = { ok: true; endpoint: string } | ({ ok: false } & CheckRefusal);

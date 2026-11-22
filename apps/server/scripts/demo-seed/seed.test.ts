@@ -1064,7 +1064,7 @@ describe("seedDemoRestaurant", () => {
         sql`select fiscal_backend from sales`,
       );
       const { rows: registros } = await tx.execute<{ count: number }>(
-        sql`select count(*) as count from registros_facturacion`,
+        sql`select count(*) as count from verifactu_records`,
       );
       const { rows: takeawayRates } = await tx.execute<{ rate: number }>(
         sql`select distinct rate from product_takeaway_vat_rates`,

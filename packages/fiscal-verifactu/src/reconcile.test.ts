@@ -22,8 +22,8 @@ import {
   seedSecondChain,
 } from "../test/drain-fixtures.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
@@ -49,7 +49,7 @@ const reconcileDeps = (
 ): ReconcileDeps => ({ db: suite.db, resolveClient, clock });
 
 /** Drives AEAT to hold every seeded record as `Correcto` (keyed by `RefExterna` = registro id) and
- * marks our own `envios` `aceptado` — the drainer's happy path, the starting point every
+ * marks our own `verifactu_submissions` `aceptado` — the drainer's happy path, the starting point every
  * divergence below is then produced from with the fake's Task-1 consulta hooks. */
 async function storeAllAtAeat(resolveClient: DrainDeps["resolveClient"]): Promise<void> {
   await drain(drainDeps(resolveClient), DRAIN_AT);
@@ -80,7 +80,7 @@ async function incidentOrigins(): Promise<{ source: string; device_id: string | 
 async function estadosFor(): Promise<Map<string, string>> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ registro_id: string; estado: string }>(
-      sql`select registro_id, estado from envios`,
+      sql`select registro_id, estado from verifactu_submissions`,
     ),
   );
   return new Map(rows.map((r) => [r.registro_id, r.estado]));
@@ -96,7 +96,7 @@ async function ackStatesFor(): Promise<Map<string, string>> {
 async function reconciledResubmitAtFor(registroId: string): Promise<string | null> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ reconciled_resubmit_at: string | null }>(
-      sql`select reconciled_resubmit_at from envios where registro_id = ${registroId}`,
+      sql`select reconciled_resubmit_at from verifactu_submissions where registro_id = ${registroId}`,
     ),
   );
   return rows[0]?.reconciled_resubmit_at ?? null;
@@ -111,7 +111,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
       sql`
         select id, id_emisor_factura, num_serie_factura,
           fecha_expedicion_factura as fecha
-        from registros_facturacion
+        from verifactu_records
         where sale_id = ${saleId} and tipo_registro = 'alta'
       `,
     ),
@@ -132,7 +132,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
  */
 async function fileThenVoid(options: { submitAnulacion: boolean }) {
   const period = { year: "2026", month: "03" };
-  const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db);
   // recordVoid requires `sale.void`: a manager session authorizes it.
   const mgr = await seedPersons(suite.db, {
     id: newId(),
@@ -159,7 +159,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   // An envío takes `proximo_intento_en` from the wall clock; pin it so the drain is deterministic.
   const pinDue = () =>
     withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
+      await tx.execute(sql`update verifactu_submissions set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
     });
   await pinDue();
   await drain(drainDeps(resolveClient), DRAIN_AT);
@@ -177,7 +177,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   });
   expect(await hasAnulacion(alta.id)).toBe(true);
   const { rows: anul } = await suite.db.execute<{ id: string }>(
-    sql`select id from registros_facturacion
+    sql`select id from verifactu_records
         where sale_id = ${sale.saleId} and tipo_registro = 'anulacion'`,
   );
   const anulacionId = anul[0]!.id;
@@ -185,7 +185,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   if (options.submitAnulacion) {
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`
-        update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}
+        update verifactu_submissions set proximo_intento_en = ${DRAIN_AT.toISOString()}
         where registro_id = ${anulacionId}
       `);
     });
@@ -198,7 +198,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
 
 async function huellaOf(registroId: string): Promise<string> {
   const { rows } = await suite.db.execute<{ huella: string }>(
-    sql`select huella from registros_facturacion where id = ${registroId}`,
+    sql`select huella from verifactu_records where id = ${registroId}`,
   );
   return rows[0]!.huella;
 }
@@ -207,8 +207,8 @@ async function huellaOf(registroId: string): Promise<string> {
 async function hasAnulacion(altaRegistroId: string): Promise<boolean> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ sale_id: string }>(sql`
-      select r2.sale_id from registros_facturacion r1
-      join registros_facturacion r2
+      select r2.sale_id from verifactu_records r1
+      join verifactu_records r2
         on r2.sale_id = r1.sale_id and r2.tipo_registro = 'anulacion'
       where r1.id = ${altaRegistroId}
     `),
@@ -241,7 +241,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Our acknowledgement was lost.
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'pendiente'`),
+      tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`),
     );
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -309,7 +309,7 @@ describe("reconcile — the three audit cases", () => {
     // but AEAT STILL has no trace of it.
     await withTransaction(suite.db, (tx) =>
       tx.execute(
-        sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
+        sql`update verifactu_submissions set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
       ),
     );
 
@@ -372,7 +372,7 @@ describe("reconcile — the three audit cases", () => {
     // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
     await withTransaction(suite.db, (tx) =>
       tx.execute(
-        sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
+        sql`update verifactu_submissions set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
       ),
     );
 
@@ -616,7 +616,7 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
     const [record] = seeded.registroIds;
     await storeAllAtAeat(staticResolver(aeat.client()));
     const { rows } = await suite.db.execute<{ csv: string }>(
-      sql`select csv from envios where registro_id = ${record}`,
+      sql`select csv from verifactu_submissions where registro_id = ${record}`,
     );
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
@@ -642,7 +642,7 @@ describe("reconcile — a record AEAT holds accepted with errors opens a case", 
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [record] = seeded.registroIds;
     await storeAllAtAeat(staticResolver(aeat.client()));
-    await suite.db.execute(sql`update envios set estado = 'pendiente', csv = null`);
+    await suite.db.execute(sql`update verifactu_submissions set estado = 'pendiente', csv = null`);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadoConErrores");
 
     const result = await reconcile(
@@ -747,7 +747,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     // A record we already know AEAT refused: not stored there, and our side reads rechazado.
     aeat.forget(seeded.facturaKeys[0]!);
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'rechazado'`),
+      tx.execute(sql`update verifactu_submissions set estado = 'rechazado'`),
     );
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -778,7 +778,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     // The foreign record is skipped, never keyed; our own record still matches cleanly.
-    expect(result.checked).toBe(1); // only OUR envios row is in scope
+    expect(result.checked).toBe(1); // only OUR verifactu_submissions row is in scope
     expect(result.lostAck).toEqual([]);
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
@@ -786,7 +786,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   });
 
   it("no records for the period → checked 0, and never contacts AEAT", async () => {
-    await seedTenantWithSif(suite.db); // a venue with a node/SIF but no envios
+    await seedTaxpayerWithSif(suite.db); // a venue with a node/SIF but no verifactu_submissions
     const throwing: VerifactuClient = {
       submit: () => Promise.reject(new Error("reconcile must not submit")),
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
@@ -845,7 +845,7 @@ describe("reconcile — an invoice the old box issued and the box that took over
     });
     await drain(drainDeps(staticResolver(aeat.client())), new Date("2026-07-21T00:02:00Z"));
     expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
-    const records = await suite.db.select().from(registrosFacturacion);
+    const records = await suite.db.select().from(verifactuRecords);
     const issued = records.find((row) => row.id === original)!;
     const selling = brandNodeId(records.find((row) => row.id === cancellation)!.nodeId);
     await recordTakeover(suite.db, old.nodeId, selling);
@@ -895,8 +895,8 @@ describe("reconcile — an invoice the old box issued and the box that took over
     )!;
     const [cancelled] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, cancellation));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, cancellation));
     // The control that this case is the one it names: AEAT reports the cancellation's own record.
     expect(record.EstadoRegistro).toBe("Anulado");
     expect(record.DatosRegistroFacturacion.Huella).toBe(cancelled!.huella);
@@ -960,8 +960,8 @@ describe("reconcile — an invoice the old box issued and the box that took over
     const issuing = issued.sistemaInformatico as { NumeroInstalacion: string };
     const [cancelled] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, cancellation));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, cancellation));
     const mixed: VerifactuClient = {
       submit: (...args) => client.submit(...args),
       consultar: async (...args) => {
@@ -1000,7 +1000,7 @@ describe("reconcile — an invoice the old box issued and the box that took over
   it("still reports a conflict when AEAT reports another sale's fingerprint for this invoice", async () => {
     const { aeat, issued, cancellation, deps } = await crossBox();
     const client = aeat.client();
-    const other = (await suite.db.select().from(registrosFacturacion)).find(
+    const other = (await suite.db.select().from(verifactuRecords)).find(
       (row) => row.id !== issued.id && row.id !== cancellation,
     )!;
     expect(other.saleId).not.toBe(issued.saleId);
@@ -1037,7 +1037,7 @@ describe("reconcile — a conflict on a record of the box this one took over fro
     const head = await seedSecondChain(suite.db, old, 5);
     await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
     expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
-    const records = await suite.db.select().from(registrosFacturacion);
+    const records = await suite.db.select().from(verifactuRecords);
     const inherited = records.find((row) => row.id === old.registroIds[1])!;
     const selling = brandNodeId(records.find((row) => row.id === head.registroId)!.nodeId);
     await recordTakeover(suite.db, old.nodeId, selling);
@@ -1139,7 +1139,7 @@ describe("reconcile — malformed consulta paging", () => {
 describe("reconcile — lazy client resolution", () => {
   it("a zero-row period never resolves a client, even one that would throw", async () => {
     // A zero-row period must not fail because the venue's credential is missing or unusable.
-    await seedTenantWithSif(suite.db); // a venue with a node/SIF but no envios
+    await seedTaxpayerWithSif(suite.db); // a venue with a node/SIF but no verifactu_submissions
     let calls = 0;
     const resolveClient = (): Promise<VerifactuClient> => {
       calls += 1;

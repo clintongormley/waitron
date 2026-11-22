@@ -8,7 +8,7 @@ import {
   type AnsweringServer,
   type Candidate,
 } from "../test/certificate-fixtures.js";
-import { mtlsFetch, type CertMaterial, type TenantTransport } from "./aeat-transport.js";
+import { mtlsFetch, type CertMaterial, type AeatTransport } from "./aeat-transport.js";
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 
 const authority = makeAuthority();
@@ -212,7 +212,7 @@ describe("checkWithAuthority", () => {
     const pass = await serve({ status: 200, body: SIN_DATOS_BODY });
     const fail = await serve({ status: 403, body: "<html>forbidden</html>" });
     for (const origin of [pass.origin, fail.origin]) {
-      const opened: TenantTransport[] = [];
+      const opened: AeatTransport[] = [];
       const inner = transportTo(origin);
       const transport: CheckTransport = {
         endpointFor: inner.endpointFor,

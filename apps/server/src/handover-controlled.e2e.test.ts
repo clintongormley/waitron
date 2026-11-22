@@ -754,7 +754,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
 
 /** The filing state one record's row says, on either box. */
 const filingStateOf = (file: string, recordId: string): string | undefined =>
-  readRows<{ estado: string }>(file, "select estado from envios where registro_id = ?", recordId)[0]
+  readRows<{ estado: string }>(file, "select estado from verifactu_submissions where registro_id = ?", recordId)[0]
     ?.estado;
 
 /** What the run saw up to M1's restart after its stepdown. */
@@ -890,7 +890,7 @@ function askSale(boxes: Boxes, box: Box, orderId = randomUUID()) {
 }
 
 function recordIds(file: string): string[] {
-  return readRows<{ id: string }>(file, "select id from registros_facturacion").map((r) => r.id);
+  return readRows<{ id: string }>(file, "select id from verifactu_records").map((r) => r.id);
 }
 
 async function sendOutbox(boxes: Boxes, box: Box = boxes.m1): Promise<void> {
@@ -1132,7 +1132,7 @@ function orderInvoices(box: Box, orderId: string): OrderInvoice[] {
     box.venueFile,
     `select series.code, sales.invoice_number, sales.total, sales.id as sale_id, record.id as record_id
      from sales join invoice_series series on series.id = sales.series_id
-     join registros_facturacion record on record.sale_id = sales.id
+     join verifactu_records record on record.sale_id = sales.id
      where sales.working_order_id = ?`,
     orderId,
   );
@@ -1652,7 +1652,7 @@ async function inheritedWork(
     () =>
       readRows<{ id: string; node_id: string }>(
         m2.venueFile,
-        "select id, node_id from registros_facturacion where sale_id = ?",
+        "select id, node_id from verifactu_records where sale_id = ?",
         tabSale[0]?.id ?? "",
       ).map((row) => ({ ...row, estado: filingStateOf(m2.venueFile, row.id) })),
     [],
@@ -1705,7 +1705,7 @@ async function inheritedWork(
     () =>
       readRows<{ sale_id: string; node_id: string; tender_id: string; amount: number }>(
         m2.venueFile,
-        `select r.sale_id, r.node_id, t.id as tender_id, t.amount from registros_facturacion r
+        `select r.sale_id, r.node_id, t.id as tender_id, t.amount from verifactu_records r
          join tenders t on t.sale_id = r.sale_id and t.method = 'cash' where r.id = ?`,
         stepdown.records.inFlight,
       ),
@@ -1717,7 +1717,7 @@ async function inheritedWork(
       () =>
         readRows<{ n: number }>(
           m2.venueFile,
-          "select count(*) as n from registros_facturacion where node_id = ?",
+          "select count(*) as n from verifactu_records where node_id = ?",
           m1.nodeId,
         )[0]!.n,
       -1,
@@ -1763,7 +1763,7 @@ async function inheritedWork(
       }>(
         m2.venueFile,
         `select sale_id, node_id, num_serie_factura, id_emisor_factura, fecha_expedicion_factura
-         from registros_facturacion where id = ?`,
+         from verifactu_records where id = ?`,
         stepdown.records.filed,
       ),
     [],
@@ -1773,7 +1773,7 @@ async function inheritedWork(
     () =>
       readRows<{ sif_id: string }>(
         m2.venueFile,
-        "select sif_id from registros_facturacion where id = ?",
+        "select sif_id from verifactu_records where id = ?",
         selling.ownRecord,
       ),
     [],
@@ -1827,7 +1827,7 @@ async function inheritedWork(
           () => {
             const rows = readRows<{ id: string }>(
               m2.venueFile,
-              "select id from registros_facturacion where sale_id = ? and tipo_registro = 'anulacion'",
+              "select id from verifactu_records where sale_id = ? and tipo_registro = 'anulacion'",
               voidTarget.sale_id,
             );
             expect(rows.length).toBeGreaterThan(0);
@@ -1844,7 +1844,7 @@ async function inheritedWork(
       () =>
         readRows<{ id: string; node_id: string; sif_id: string; tipo_registro: string }>(
           m2.venueFile,
-          "select id, node_id, sif_id, tipo_registro from registros_facturacion where sale_id = ? and tipo_registro = 'anulacion'",
+          "select id, node_id, sif_id, tipo_registro from verifactu_records where sale_id = ? and tipo_registro = 'anulacion'",
           voidTarget.sale_id,
         ).map((row) => ({ ...row, estado: filingStateOf(m2.venueFile, row.id) })),
       [],
@@ -1921,7 +1921,7 @@ async function resendAfterRestart(boxes: Boxes, recordId: string): Promise<Resen
   try {
     raw
       .prepare(
-        `update envios set estado = 'enviando', csv = null, codigo_error = null,
+        `update verifactu_submissions set estado = 'enviando', csv = null, codigo_error = null,
          mensaje_error = null, confirmado_en = null where registro_id = ?`,
       )
       .run(recordId);
@@ -1965,7 +1965,7 @@ async function refileInherited(boxes: Boxes, stepdown: StepdownSeen): Promise<Re
   )!;
   const [{ num_serie_factura: numSerieFactura }] = readRows<{ num_serie_factura: string }>(
     m2.venueFile,
-    "select num_serie_factura from registros_facturacion where id = ?",
+    "select num_serie_factura from verifactu_records where id = ?",
     recordId,
   ) as [{ num_serie_factura: string }];
   const invoiceNumbers = () =>

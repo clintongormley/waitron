@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { nodeId } from "@waitron/shared";
 
@@ -78,8 +78,8 @@ export async function prepareStandbyDatabase(
   const node = (await source.select().from(nodes).where(eq(nodes.id, primary.nodeId)))[0]!;
   const sif = await source
     .select()
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, primary.nodeId), isNull(registroSif.revocadoEn)));
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)));
   const series = await source
     .select()
     .from(invoiceSeries)
@@ -91,7 +91,7 @@ export async function prepareStandbyDatabase(
   await seedVenueSettings(target, (await readVenueSettings(source)).doc);
   await target.insert(nodes).values(node);
   await target.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await target.insert(registroSif).values(sif);
+  await target.insert(verifactuIdentities).values(sif);
   await target.insert(invoiceSeries).values(series);
 }
 

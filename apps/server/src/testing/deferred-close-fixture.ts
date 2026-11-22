@@ -26,8 +26,8 @@ import { offerProducts } from "./zone-offers.js";
 /** The fiscal records and their outbox rows, by id: a refused close adds to neither. */
 export function fiscalWrites(db: Database) {
   return {
-    records: db.all(sql`select id from registros_facturacion order by id`),
-    outbox: db.all(sql`select registro_id from envios order by registro_id`),
+    records: db.all(sql`select id from verifactu_records order by id`),
+    outbox: db.all(sql`select registro_id from verifactu_submissions order by registro_id`),
   };
 }
 
@@ -154,7 +154,7 @@ export function deferredCloseKit(venue: BillVenue, counterZone: string) {
 
   function latestRecordMs(): number {
     const [row] = venue.db.all<{ at: string }>(sql`
-      select fecha_hora_huso_gen_registro as at from registros_facturacion
+      select fecha_hora_huso_gen_registro as at from verifactu_records
       order by fecha_hora_huso_gen_registro desc, id desc limit 1
     `);
     return new Date(row!.at).getTime();

@@ -18,8 +18,8 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
-import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
@@ -107,10 +107,10 @@ export async function stagedHourRestore(
     await rm(root, { recursive: true, force: true });
   };
   try {
-    await seedTenants(db);
+    await seedTaxpayers(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
-    const node = { nodeId: TENANT_A.nodeId };
+    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TAXPAYER_A.nodeId);
+    const node = { nodeId: TAXPAYER_A.nodeId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
       action: "setup",
@@ -271,7 +271,7 @@ export async function stagedHourRestore(
       try {
         return {
           allocations: await copy.venue.select().from(fiscalAllocations),
-          registrations: await copy.venue.select().from(registroSif),
+          registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select().from(invoiceSeries),
         };
       } finally {

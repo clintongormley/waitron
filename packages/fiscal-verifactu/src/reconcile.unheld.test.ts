@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroConsultado, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "../test/fixtures.js";
 import { withOperationAuthority } from "@waitron/module";
 import { createHourPreparation } from "./hour-preparation.js";
 import { compareHourClocks } from "./hour-clock.js";
@@ -23,7 +23,7 @@ import { appendPendingAlta, seedPendingEnvios, seedPinnedChain } from "../test/d
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { readActiveConflicts, assertNoActiveConflict } from "./conflict-evidence.js";
 import { drain } from "./drain.js";
@@ -93,10 +93,10 @@ function run(f: Fixture, client = f.client, period = PERIOD) {
 async function snapshot() {
   const result: Record<string, unknown> = {};
   for (const table of [
-    "registros_facturacion",
-    "envios",
+    "verifactu_records",
+    "verifactu_submissions",
     "acks",
-    "registro_sif",
+    "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
     "filing_cases",
@@ -177,7 +177,7 @@ it.each(["taxpayer", "retired-series", "retired-sif", "other-node", "known-numbe
     if (change === "retired-series")
       await suite.db.execute(sql`update invoice_series set retired_at = ${NOW.toISOString()}`);
     if (change === "retired-sif")
-      await suite.db.execute(sql`update registro_sif set revocado_en = ${NOW.toISOString()}`);
+      await suite.db.execute(sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`);
     if (change === "other-node") f.seeded.nodeId = "other-node" as typeof f.seeded.nodeId;
     if (change === "known-number") f.returned.registros = f.real.registros;
     await run(f);
@@ -214,7 +214,7 @@ it.each(["series", "identity"] as const)(
         await suite.db.execute(
           retired === "series"
             ? sql`update invoice_series set retired_at = ${NOW.toISOString()}`
-            : sql`update registro_sif set revocado_en = ${NOW.toISOString()}`,
+            : sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`,
         );
         return f.returned;
       },
@@ -223,7 +223,7 @@ it.each(["series", "identity"] as const)(
     expect(
       await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
     ).toEqual([]);
-    expect((await suite.db.execute(sql`select * from fiscal_series_conflicts`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
   },
 );
 it("keeps a sale committed during the lookup from becoming missing-history evidence", async () => {
@@ -238,11 +238,11 @@ it("keeps a sale committed during the lookup from becoming missing-history evide
     },
   };
   await run(f, client);
-  expect((await suite.db.execute(sql`select * from registros_facturacion`)).rows).toHaveLength(2);
+  expect((await suite.db.execute(sql`select * from verifactu_records`)).rows).toHaveLength(2);
   expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId))).toEqual(
     [],
   );
-  expect((await suite.db.execute(sql`select * from fiscal_series_conflicts`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
 });
 it("detects the same number already held on a different date across a month boundary", async () => {
   const f = await fixture();
@@ -263,7 +263,7 @@ it("keeps a response outside the requested month unknown without retaining a par
   const f = await fixture();
   f.foreign.IDFactura.FechaExpedicionFactura = "01-08-2026";
   await expect(run(f)).rejects.toThrow("consulta returned an invoice outside the requested period");
-  expect((await suite.db.execute(sql`select * from fiscal_series_conflicts`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
 });
 
 it.each(["update", "delete", "replace"] as const)(
@@ -271,18 +271,18 @@ it.each(["update", "delete", "replace"] as const)(
   async (operation) => {
     const f = await fixture();
     await run(f);
-    const before = await suite.db.execute(sql`select * from fiscal_series_conflicts`);
+    const before = await suite.db.execute(sql`select * from verifactu_series_conflicts`);
     const error = await captureError(() =>
       suite.db.execute(
         operation === "update"
-          ? sql`update fiscal_series_conflicts set evidence = '{}'`
+          ? sql`update verifactu_series_conflicts set evidence = '{}'`
           : operation === "delete"
-            ? sql`delete from fiscal_series_conflicts`
-            : sql`insert or replace into fiscal_series_conflicts select * from fiscal_series_conflicts`,
+            ? sql`delete from verifactu_series_conflicts`
+            : sql`insert or replace into verifactu_series_conflicts select * from verifactu_series_conflicts`,
       ),
     );
-    expect(triggerRaised(error, "fiscal_series_conflicts is append-only")).toBe(true);
-    expect(await suite.db.execute(sql`select * from fiscal_series_conflicts`)).toEqual(before);
+    expect(triggerRaised(error, "verifactu_series_conflicts is append-only")).toBe(true);
+    expect(await suite.db.execute(sql`select * from verifactu_series_conflicts`)).toEqual(before);
   },
 );
 
@@ -290,7 +290,7 @@ it("observes a freshly allocated identity before its first local invoice", async
   let instant = Date.parse("2026-10-16T11:38:00Z");
   let monotonic = 0;
   let value: unknown = null;
-  const node = { nodeId: TENANT_A.nodeId };
+  const node = { nodeId: TAXPAYER_A.nodeId };
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(instant);
   try {
@@ -386,7 +386,7 @@ it("observes a freshly allocated identity before its first local invoice", async
         result: expect.objectContaining({ checked: 0 }),
       }),
     ]);
-    expect((await suite.db.execute(sql`select * from registros_facturacion`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select * from verifactu_records`)).rows).toEqual([]);
     expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual(
       [],
     );
@@ -407,7 +407,7 @@ it.each(["missing", "different"] as const)(
     await expect(run(f, f.client, { year: "2026", month: "08" })).rejects.toThrow(
       "reconciliation requires the scoped venue taxpayer",
     );
-    expect((await suite.db.execute(sql`select * from fiscal_series_conflicts`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
   },
 );
 
@@ -435,9 +435,9 @@ it("retains the invoice identity of an unheld active-series number when optional
 /** Revokes the live identity and retires its series with one timestamp, as an activation does. */
 async function retireAndRevoke(nodeId: string, at: Date) {
   await suite.db
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: at })
-    .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)));
+    .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)));
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: at })
@@ -499,7 +499,7 @@ async function storedConflicts() {
   return (
     await suite.db.execute<{ sif_id: string; series_code: string; invoice_identity: string }>(sql`
       select c.sif_id, i.code as series_code, c.invoice_identity
-      from fiscal_series_conflicts c join invoice_series i on i.id = c.series_id
+      from verifactu_series_conflicts c join invoice_series i on i.id = c.series_id
       order by c.rowid
     `)
   ).rows;

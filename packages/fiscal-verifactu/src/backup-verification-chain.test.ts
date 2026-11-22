@@ -35,7 +35,7 @@ async function append(
     nif: string;
     numero_instalacion: string;
   }>(
-    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+    sql`select nif, numero_instalacion from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
   );
   const pending =
     kind === "void"
@@ -85,7 +85,7 @@ async function append(
 
 async function replaceNodeIdentity(node: SeededNode, installation: string) {
   const [sif] = suite.db.all<{ nif: string }>(
-    sql`select nif from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+    sql`select nif from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
   );
   await suite.db.transaction((tx) =>
     registerSif(tx, {
@@ -154,7 +154,7 @@ function rehash(side: "before" | "after", keepPredecessorAt?: number) {
       .all() as { name: string; sql: string }[];
     for (const trigger of triggers) db.exec(`drop trigger "${trigger.name.replaceAll('"', '""')}"`);
     const rows = db
-      .prepare("select * from registros_facturacion order by node_id, secuencia")
+      .prepare("select * from verifactu_records order by node_id, secuencia")
       .all();
     let previous: ReturnType<typeof decodeRegistroRow> | undefined;
     for (const raw of rows) {
@@ -172,7 +172,7 @@ function rehash(side: "before" | "after", keepPredecessorAt?: number) {
       }
       row.huella = computeHuella(fromRegistroRow(row));
       db.prepare(
-        `update registros_facturacion set huella = ?, anterior_id_emisor_factura = ?,
+        `update verifactu_records set huella = ?, anterior_id_emisor_factura = ?,
         anterior_num_serie_factura = ?, anterior_fecha_expedicion_factura = ?, anterior_huella = ? where id = ?`,
       ).run(
         row.huella,
@@ -238,75 +238,75 @@ describe("complete captured fiscal chains", () => {
   it.each([
     [
       "old hashed content",
-      "update registros_facturacion set importe_total = '999.99' where secuencia = 1",
+      "update verifactu_records set importe_total = '999.99' where secuencia = 1",
     ],
     [
       "old hash",
-      "update registros_facturacion set huella = '" + "F".repeat(64) + "' where secuencia = 1",
+      "update verifactu_records set huella = '" + "F".repeat(64) + "' where secuencia = 1",
     ],
     [
       "predecessor issuer",
-      "update registros_facturacion set anterior_id_emisor_factura = '00000000T' where secuencia = 3",
+      "update verifactu_records set anterior_id_emisor_factura = '00000000T' where secuencia = 3",
     ],
     [
       "predecessor number",
-      "update registros_facturacion set anterior_num_serie_factura = 'other/1' where secuencia = 3",
+      "update verifactu_records set anterior_num_serie_factura = 'other/1' where secuencia = 3",
     ],
     [
       "predecessor date",
-      "update registros_facturacion set anterior_fecha_expedicion_factura = '2026-07-19' where secuencia = 3",
+      "update verifactu_records set anterior_fecha_expedicion_factura = '2026-07-19' where secuencia = 3",
     ],
     [
       "predecessor hash",
-      "update registros_facturacion set anterior_huella = '" +
+      "update verifactu_records set anterior_huella = '" +
         "E".repeat(64) +
         "' where secuencia = 3",
     ],
-    ["sequence gap", "delete from registros_facturacion where secuencia = 2"],
+    ["sequence gap", "delete from verifactu_records where secuencia = 2"],
     [
       "duplicate genesis",
-      "update registros_facturacion set primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null, anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 3",
+      "update verifactu_records set primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null, anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 3",
     ],
     ["missing head", "delete from cadenas"],
-    ["lost tail", "delete from registros_facturacion where secuencia = 6"],
+    ["lost tail", "delete from verifactu_records where secuencia = 6"],
     ["head sequence", "update cadenas set secuencia = secuencia + 1"],
     [
       "head hash",
       "update cadenas set ultima_huella = 'wrong' where ultimo_registro_id is not null",
     ],
     ["half head", "update cadenas set ultima_huella = null where ultimo_registro_id is not null"],
-    ["missing identity", "delete from registro_sif where revocado_en is not null"],
+    ["missing identity", "delete from verifactu_identities where revocado_en is not null"],
     [
       "wrong installation",
-      "update registro_sif set numero_instalacion = 'other' where revocado_en is not null",
+      "update verifactu_identities set numero_instalacion = 'other' where revocado_en is not null",
     ],
     [
       "wrong system identity",
-      "update registro_sif set id_sistema_informatico = 'XX' where revocado_en is not null",
+      "update verifactu_identities set id_sistema_informatico = 'XX' where revocado_en is not null",
     ],
     [
       "wrong taxpayer identity",
-      "update registro_sif set nif = '00000000T' where id = (select id from registro_sif where revocado_en is not null limit 1)",
+      "update verifactu_identities set nif = '00000000T' where id = (select id from verifactu_identities where revocado_en is not null limit 1)",
     ],
     [
       "invalid record payload",
-      "update registros_facturacion set desglose = '[]' where secuencia = 3",
+      "update verifactu_records set desglose = '[]' where secuencia = 3",
     ],
     [
       "malformed JSON",
-      "update registros_facturacion set sistema_informatico = '{' where secuencia = 1",
+      "update verifactu_records set sistema_informatico = '{' where secuencia = 1",
     ],
     [
       "invalid timestamp",
-      "update registros_facturacion set fecha_hora_huso_gen_registro = 'invalid' where secuencia = 1",
+      "update verifactu_records set fecha_hora_huso_gen_registro = 'invalid' where secuencia = 1",
     ],
-    ["fractional sequence", "update registros_facturacion set secuencia = 1.5 where secuencia = 1"],
-    ["invalid flag", "update registros_facturacion set primer_registro = 2 where secuencia = 1"],
+    ["fractional sequence", "update verifactu_records set secuencia = 1.5 where secuencia = 1"],
+    ["invalid flag", "update verifactu_records set primer_registro = 2 where secuencia = 1"],
     [
       "unknown record kind",
-      "update registros_facturacion set tipo_registro = 'other' where secuencia = 1",
+      "update verifactu_records set tipo_registro = 'other' where secuencia = 1",
     ],
-    ["missing current identity", "delete from registro_sif where revocado_en is null"],
+    ["missing current identity", "delete from verifactu_identities where revocado_en is null"],
     ["unsafe head", "update cadenas set secuencia = 9007199254740992"],
     ["negative head", "update cadenas set secuencia = -1"],
     [
@@ -315,20 +315,20 @@ describe("complete captured fiscal chains", () => {
     ],
     [
       "offset out of range",
-      "update registros_facturacion set offset_minutos = 841 where secuencia = 1",
+      "update verifactu_records set offset_minutos = 841 where secuencia = 1",
     ],
     [
       "fractional offset",
-      "update registros_facturacion set offset_minutos = 1.5 where secuencia = 1",
+      "update verifactu_records set offset_minutos = 1.5 where secuencia = 1",
     ],
-    ["malformed identity time", "update registro_sif set registrado_en = 'invalid'"],
+    ["malformed identity time", "update verifactu_identities set registrado_en = 'invalid'"],
     [
       "malformed retirement time",
-      "update registro_sif set revocado_en = 'invalid' where revocado_en is not null",
+      "update verifactu_identities set revocado_en = 'invalid' where revocado_en is not null",
     ],
     [
       "empty installation",
-      "update registro_sif set numero_instalacion = '' where id = (select id from registro_sif limit 1)",
+      "update verifactu_identities set numero_instalacion = '' where id = (select id from verifactu_identities limit 1)",
     ],
     ["orphan node", "delete from nodes"],
     [
@@ -337,42 +337,42 @@ describe("complete captured fiscal chains", () => {
     ],
     [
       "duplicate sequence",
-      "drop index registros_tenant_node_secuencia_uq; update registros_facturacion set secuencia = 2 where secuencia = 1",
+      "drop index verifactu_records_node_secuencia_uq; update verifactu_records set secuencia = 2 where secuencia = 1",
     ],
     [
       "duplicate current identity",
-      "drop index registro_sif_activo_uq; update registro_sif set revocado_en = null",
+      "drop index verifactu_identities_activo_uq; update verifactu_identities set revocado_en = null",
     ],
     [
       "non-text node",
-      "update registro_sif set node_id = x'00ff' where id = (select id from registro_sif limit 1)",
+      "update verifactu_identities set node_id = x'00ff' where id = (select id from verifactu_identities limit 1)",
     ],
     [
       "non-text identity",
-      "update registro_sif set id = x'00ff' where id = (select id from registro_sif limit 1)",
+      "update verifactu_identities set id = x'00ff' where id = (select id from verifactu_identities limit 1)",
     ],
     [
       "non-text identity field",
-      "update registro_sif set nif = x'00ff' where id = (select id from registro_sif limit 1)",
+      "update verifactu_identities set nif = x'00ff' where id = (select id from verifactu_identities limit 1)",
     ],
-    ["non-text registration time", "update registro_sif set registrado_en = x'00ff'"],
+    ["non-text registration time", "update verifactu_identities set registrado_en = x'00ff'"],
     [
       "non-text retirement time",
-      "update registro_sif set revocado_en = x'00ff' where revocado_en is not null",
+      "update verifactu_identities set revocado_en = x'00ff' where revocado_en is not null",
     ],
     [
       "non-text generation time",
-      "update registros_facturacion set fecha_hora_huso_gen_registro = x'00ff' where secuencia = 1",
+      "update verifactu_records set fecha_hora_huso_gen_registro = x'00ff' where secuencia = 1",
     ],
     [
       "unsafe captured integer",
-      "update registros_facturacion set secuencia = 9007199254740992 where secuencia = 1",
+      "update verifactu_records set secuencia = 9007199254740992 where secuencia = 1",
     ],
     [
       "malformed system object",
-      "update registros_facturacion set sistema_informatico = 'null' where secuencia = 1",
+      "update verifactu_records set sistema_informatico = 'null' where secuencia = 1",
     ],
-    ["all identities retired", "update registro_sif set revocado_en = '2026-10-20T00:00:00Z'"],
+    ["all identities retired", "update verifactu_identities set revocado_en = '2026-10-20T00:00:00Z'"],
   ])("rejects %s even when both copies contain the same damage", async (_label, statement) => {
     await capture();
     expect(await verify()).toBe(true);
@@ -382,7 +382,7 @@ describe("complete captured fiscal chains", () => {
 
   it.each(["before", "after"] as const)("walks %s independently", async (side) => {
     await capture();
-    damage(side, "update registros_facturacion set importe_total = '999.99' where secuencia = 1");
+    damage(side, "update verifactu_records set importe_total = '999.99' where secuencia = 1");
     expect(await verify()).toBe(false);
   });
 
@@ -390,7 +390,7 @@ describe("complete captured fiscal chains", () => {
     await capture();
     damage(
       "after",
-      "update registros_facturacion set descripcion_operacion = 'Different valid meal' where secuencia = 3",
+      "update verifactu_records set descripcion_operacion = 'Different valid meal' where secuencia = 3",
     );
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(b, b)).toBe(true);
@@ -403,10 +403,10 @@ describe("complete captured fiscal chains", () => {
     const node = other.nodeId;
     damage(
       "after",
-      `delete from registros_facturacion where node_id = '${node}' and secuencia = 6;
+      `delete from verifactu_records where node_id = '${node}' and secuencia = 6;
       update cadenas set secuencia = 5,
-      ultimo_registro_id = (select id from registros_facturacion where node_id = '${node}' and secuencia = 5),
-      ultima_huella = (select huella from registros_facturacion where node_id = '${node}' and secuencia = 5)
+      ultimo_registro_id = (select id from verifactu_records where node_id = '${node}' and secuencia = 5),
+      ultima_huella = (select huella from verifactu_records where node_id = '${node}' and secuencia = 5)
       where node_id = '${node}'`,
     );
     await queries(async (a, b) => {
@@ -427,7 +427,7 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const)
       damage(
         side,
-        "update registros_facturacion set primer_registro = 0, anterior_id_emisor_factura = '89890001K', anterior_num_serie_factura = 'invented', anterior_fecha_expedicion_factura = '2026-07-20', anterior_huella = '" +
+        "update verifactu_records set primer_registro = 0, anterior_id_emisor_factura = '89890001K', anterior_num_serie_factura = 'invented', anterior_fecha_expedicion_factura = '2026-07-20', anterior_huella = '" +
           "F".repeat(64) +
           "' where secuencia = 5",
       );
@@ -439,7 +439,7 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const) {
       damage(
         side,
-        "update registros_facturacion set primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null, anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 3",
+        "update verifactu_records set primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null, anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 3",
       );
       rehash(side);
     }
@@ -451,7 +451,7 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const) {
       damage(
         side,
-        "update registros_facturacion set anterior_huella = '" +
+        "update verifactu_records set anterior_huella = '" +
           "E".repeat(64) +
           "' where secuencia = 3",
       );
@@ -465,7 +465,7 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const) {
       damage(
         side,
-        "update registros_facturacion set id_emisor_factura = '00000000T' where secuencia = 1",
+        "update verifactu_records set id_emisor_factura = '00000000T' where secuencia = 1",
       );
       rehash(side);
     }
@@ -477,11 +477,11 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const) {
       damage(
         side,
-        `update registros_facturacion set primer_registro = 0,
-        anterior_id_emisor_factura = (select id_emisor_factura from registros_facturacion where node_id = '${other.nodeId}' and secuencia = 4),
-        anterior_num_serie_factura = (select num_serie_factura from registros_facturacion where node_id = '${other.nodeId}' and secuencia = 4),
+        `update verifactu_records set primer_registro = 0,
+        anterior_id_emisor_factura = (select id_emisor_factura from verifactu_records where node_id = '${other.nodeId}' and secuencia = 4),
+        anterior_num_serie_factura = (select num_serie_factura from verifactu_records where node_id = '${other.nodeId}' and secuencia = 4),
         anterior_fecha_expedicion_factura = '2026-07-20',
-        anterior_huella = (select huella from registros_facturacion where node_id = '${other.nodeId}' and secuencia = 4)
+        anterior_huella = (select huella from verifactu_records where node_id = '${other.nodeId}' and secuencia = 4)
         where secuencia = 5`,
       );
       rehash(side);
@@ -495,8 +495,8 @@ describe("complete captured fiscal chains", () => {
       damage(
         side,
         `update cadenas set
-        ultimo_registro_id = (select id from registros_facturacion where registros_facturacion.node_id = cadenas.node_id and secuencia = 4),
-        ultima_huella = (select huella from registros_facturacion where registros_facturacion.node_id = cadenas.node_id and secuencia = 4)
+        ultimo_registro_id = (select id from verifactu_records where verifactu_records.node_id = cadenas.node_id and secuencia = 4),
+        ultima_huella = (select huella from verifactu_records where verifactu_records.node_id = cadenas.node_id and secuencia = 4)
         where ultimo_registro_id is null and secuencia = 4`,
       );
     expect(await verify()).toBe(false);
@@ -507,9 +507,9 @@ describe("complete captured fiscal chains", () => {
     for (const side of ["before", "after"] as const) {
       damage(
         side,
-        `update registros_facturacion set
-        sif_id = (select sif_id from registros_facturacion where node_id = '${other.nodeId}' and secuencia = 1),
-        sistema_informatico = (select sistema_informatico from registros_facturacion where node_id = '${other.nodeId}' and secuencia = 1),
+        `update verifactu_records set
+        sif_id = (select sif_id from verifactu_records where node_id = '${other.nodeId}' and secuencia = 1),
+        sistema_informatico = (select sistema_informatico from verifactu_records where node_id = '${other.nodeId}' and secuencia = 1),
         primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null,
         anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 6`,
       );
@@ -521,7 +521,7 @@ describe("complete captured fiscal chains", () => {
   it("rejects an invalid non-hashed payload even with valid hashes", async () => {
     await capture();
     for (const side of ["before", "after"] as const)
-      damage(side, "update registros_facturacion set desglose = '[]' where secuencia = 3");
+      damage(side, "update verifactu_records set desglose = '[]' where secuencia = 3");
     expect(await verify()).toBe(false);
   });
 
@@ -529,7 +529,7 @@ describe("complete captured fiscal chains", () => {
     await capture();
     damage(
       "after",
-      "update registros_facturacion set importe_total = '123.46' where secuencia = 3",
+      "update verifactu_records set importe_total = '123.46' where secuencia = 3",
     );
     rehash("after");
     await queries(async (a, b) => {
@@ -540,7 +540,7 @@ describe("complete captured fiscal chains", () => {
   });
 
   it.each([
-    ["identity", "update registro_sif set registrado_en = '2026-10-19T00:00:00Z'"],
+    ["identity", "update verifactu_identities set registrado_en = '2026-10-19T00:00:00Z'"],
     ["head", "update cadenas set actualizado_en = '2026-10-19T00:00:00Z'"],
   ])("preserves the complete captured %s rows", async (_name, statement) => {
     await capture();
@@ -555,7 +555,7 @@ describe("complete captured fiscal chains", () => {
     await capture();
     damage(
       "before",
-      "drop table cadenas; drop table registros_facturacion; drop table registro_sif",
+      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
     );
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(b, b)).toBe(true);
@@ -563,7 +563,7 @@ describe("complete captured fiscal chains", () => {
     });
   });
 
-  it.each(["registros_facturacion", "registro_sif", "cadenas"])(
+  it.each(["verifactu_records", "verifactu_identities", "cadenas"])(
     "refuses a partial schema missing %s",
     async (table) => {
       await capture(false);
@@ -576,7 +576,7 @@ describe("complete captured fiscal chains", () => {
     await capture(false);
     damage(
       "before",
-      "drop table cadenas; drop table registros_facturacion; drop table registro_sif",
+      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
     );
     expect(await verify()).toBe(true);
     damage(
@@ -590,7 +590,7 @@ describe("complete captured fiscal chains", () => {
     await capture(false);
     damage(
       "after",
-      "drop table cadenas; drop table registros_facturacion; drop table registro_sif",
+      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
     );
     expect(await verify()).toBe(false);
   });

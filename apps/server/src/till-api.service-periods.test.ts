@@ -58,7 +58,7 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   type MenuSlot,
 } from "@waitron/venue-service";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { createPrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
@@ -1524,7 +1524,7 @@ describe("a dish whose period ended earlier today", () => {
           lateSend,
         },
       });
-    const filingRows = async () => (await suite.db.select().from(registrosFacturacion)).length;
+    const filingRows = async () => (await suite.db.select().from(verifactuRecords)).length;
 
     it("refuses an unconfirmed cash sale at 14:05 and writes no order", async () => {
       const v = await counterVenue();

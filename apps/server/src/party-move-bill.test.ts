@@ -278,7 +278,7 @@ async function placedCounterOrder(...names: string[]): Promise<string> {
 
 function fiscalRecordCount(billId: string): number {
   const [row] = v.db.all<{ count: number }>(sql`
-    select count(*) as count from registros_facturacion r
+    select count(*) as count from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${billId}`);
   return row!.count;

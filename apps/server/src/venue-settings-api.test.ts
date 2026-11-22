@@ -140,7 +140,7 @@ describe("department invoice settings", () => {
       ).toBe(204);
       await sell();
       const descriptions = await suite.db.execute<{ description: string }>(sql`
-        select descripcion_operacion as description from registros_facturacion
+        select descripcion_operacion as description from verifactu_records
         order by secuencia`);
       expect(descriptions.rows).toEqual([
         { description: "Venta en establecimiento" },
@@ -164,7 +164,7 @@ describe("department invoice settings", () => {
         (
           await suite.db.execute(sql`
       select (select count(*) from sales) as sales,
-        (select count(*) from registros_facturacion) as records,
+        (select count(*) from verifactu_records) as records,
         (select count(*) from print_jobs) as jobs,
         (select group_concat(next_number) from invoice_series) as numbers`)
         ).rows;

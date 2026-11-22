@@ -321,7 +321,7 @@ const ADDED_TABLES = [
   "drawer_entries",
   "fiscal_conflict_evidence",
   "fiscal_lookup_conflicts",
-  "fiscal_series_conflicts",
+  "verifactu_series_conflicts",
   "handover_activations",
   "handover_return_batches",
   "invoice_correction_refunds",
@@ -1211,7 +1211,7 @@ for (const locale of ["en", "es"] as const) {
       records.foreignKeys.push({
         id: 4,
         seq: 0,
-        table: "registros_facturacion",
+        table: "verifactu_records",
         from: "corrects_registro_id",
         to: "id",
         on_update: "NO ACTION",

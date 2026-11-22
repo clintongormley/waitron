@@ -109,7 +109,7 @@ it("enrols a real till and records a primary cash sale on the copy, continuing i
       ]);
       expect(
         copy.venue.all(
-          sql`select descripcion_operacion as description from registros_facturacion order by secuencia desc limit 1`,
+          sql`select descripcion_operacion as description from verifactu_records order by secuencia desc limit 1`,
         ),
       ).toEqual([{ description: FISCAL_SLOT.venueFields!.defaults!.operationDescription! }]);
     } finally {

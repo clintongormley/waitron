@@ -8,7 +8,7 @@ import { releaseBrakeHold } from "./drain.js";
 import { recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export async function releaseRecordBrake(
   tx: Transaction,
@@ -32,8 +32,8 @@ export async function releaseRecordBrake(
   generation.requireWritable();
   const [target] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   if (
     target === undefined ||
     !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||

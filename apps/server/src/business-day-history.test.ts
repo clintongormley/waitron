@@ -125,7 +125,7 @@ async function frozen() {
       "bill_payments",
       "refunds",
       "invoice_series",
-      "registros_facturacion",
+      "verifactu_records",
       "drawer_entries",
       "adjustments",
       "working_orders",

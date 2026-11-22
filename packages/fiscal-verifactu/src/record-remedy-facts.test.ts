@@ -14,8 +14,8 @@ import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { ACCEPTED_WITH_ERRORS_CORRECTION } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 
@@ -67,7 +67,7 @@ beforeEach(async () => {
       altaFor(node, saleId, 1, 1, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,
@@ -111,8 +111,8 @@ function send(facts: unknown, enabled = true) {
 
 async function snapshot() {
   return {
-    records: await suite.db.select().from(registrosFacturacion),
-    deliveries: await suite.db.select().from(envios),
+    records: await suite.db.select().from(verifactuRecords),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
@@ -289,7 +289,7 @@ async function targetRefusedOfType(invoiceType: "R5" | "F3") {
       },
     });
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,
@@ -316,8 +316,8 @@ it.each(["R5", "F3"] as const)(
     const { registroId } = (await res.json()) as { registroId: string };
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, registroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, registroId));
     expect(row).toMatchObject({
       tipoFactura: invoiceType,
       fechaExpedicionFactura: "2026-07-20",
@@ -422,9 +422,9 @@ it("replays complete facts in another key order after the clock and delivery cha
   const result = await first.json();
   instant = new Date("2026-12-20T17:20:35Z");
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado" })
-    .where(eq(envios.registroId, body.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, body.registroId as string));
   const before = await snapshot();
   const replay = await send({
     description: "Corrected restaurant service",
@@ -446,7 +446,7 @@ async function targetAcceptedWithErrors() {
       altaFor(node, saleId, 2, 2, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: accepted.id, estado: "aceptado_con_errores", codigoError: "2000" });
     const filingCase = await openFilingCase(tx, {
       registroId: accepted.id,
@@ -714,7 +714,7 @@ describe("a fix never changes the invoice's amounts or what a line is", () => {
         },
       });
       await tx
-        .insert(envios)
+        .insert(verifactuSubmissions)
         .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
       const filingCase = await openFilingCase(tx, {
         registroId: original.id,
@@ -731,8 +731,8 @@ describe("a fix never changes the invoice's amounts or what a line is", () => {
     const { registroId } = (await res.json()) as { registroId: string };
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, registroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, registroId));
     return row;
   }
 
@@ -788,7 +788,7 @@ describe("a fix never changes the invoice's amounts or what a line is", () => {
         },
       });
       await tx
-        .insert(envios)
+        .insert(verifactuSubmissions)
         .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
       const filingCase = await openFilingCase(tx, {
         registroId: original.id,

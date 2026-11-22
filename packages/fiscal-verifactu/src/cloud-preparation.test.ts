@@ -8,7 +8,7 @@ import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@wa
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationPreparation } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import * as fiscal from "./index.js";
@@ -18,18 +18,18 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = SERIES_BASES;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
   eventId: "cloud-restore",
   sourceId: "archive-digest",
-  targetNodeId: TENANT_A.nodeId,
+  targetNodeId: TAXPAYER_A.nodeId,
 };
 const operatorId = {
   kind: "recovery-key" as const,
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
   eventId: binding.eventId,
 };
 let root: string;
@@ -39,7 +39,7 @@ let current: Record<string, unknown>;
 let fixture: ReturnType<typeof cloudReceiptFixture>;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)

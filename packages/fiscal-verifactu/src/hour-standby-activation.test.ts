@@ -4,7 +4,7 @@ import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission, type AllocationContext } from "./allocation-envelope.js";
 import { activateModuleAllocation, withCollectedModuleAllocation } from "./allocation-operation.js";
 import { activateAuthenticatedHourStandbyAllocation } from "./allocation.js";
@@ -14,12 +14,12 @@ import { createHourSelection } from "./hour-selection.js";
 import type { HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { cadenas } from "./schema/cadenas.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
@@ -97,7 +97,7 @@ async function activate(
 
 async function snapshot() {
   return {
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
@@ -108,7 +108,7 @@ async function snapshot() {
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await activate(fixture("setup", "0CNNW", "original"));
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
@@ -169,7 +169,7 @@ it("refuses a new event for an already active standby without retiring its serie
 });
 
 it("also refuses reuse after the original SIF and every original series are retired", async () => {
-  await suite.db.update(registroSif).set({ revocadoEn: new Date("2026-10-16T11:45:00Z") });
+  await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date("2026-10-16T11:45:00Z") });
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date("2026-10-16T11:45:00Z") });
   const before = await snapshot();
   await expect(activate(fixture("promote", "0CNNW"))).rejects.toMatchObject({
@@ -383,9 +383,9 @@ it.each(["sif", "series"] as const)(
         .where(eq(invoiceSeries.nodeId, standby.nodeId));
     } else {
       await suite.db
-        .update(registroSif)
+        .update(verifactuIdentities)
         .set({ revocadoEn: new Date() })
-        .where(eq(registroSif.nodeId, standby.nodeId));
+        .where(eq(verifactuIdentities.nodeId, standby.nodeId));
     }
     const before = await snapshot();
     await expect(activate(fixture("promote", "0CNRC", "new-event"))).rejects.toMatchObject({

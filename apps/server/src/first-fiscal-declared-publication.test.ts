@@ -136,7 +136,7 @@ it("installs the staged named verifier after exact fiscal commit and before trad
 
 it("browser setup records a readable certificate against its committed node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
-  const { fiscalCertificateInstalls } =
+  const { verifactuCertificates } =
     await import("@waitron/fiscal-verifactu/src/schema/index.js");
   const candidate = makeAuthority().issue();
   const f = await fixture({
@@ -145,7 +145,7 @@ it("browser setup records a readable certificate against its committed node", as
     certKind: "sello",
   });
   const result = await f.activate();
-  const rows = await suite.db.select().from(fiscalCertificateInstalls);
+  const rows = await suite.db.select().from(verifactuCertificates);
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({
     nodeId: result.nodeId,

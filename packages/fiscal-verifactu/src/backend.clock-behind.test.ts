@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 
@@ -21,7 +21,7 @@ let seriesId: SeriesId;
 let backend: FiscalBackend;
 
 beforeEach(async () => {
-  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,

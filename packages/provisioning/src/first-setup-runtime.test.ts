@@ -16,8 +16,8 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import * as hour from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { readModulePreparationHistory } from "./module-preparation-state.js";
 import { createFirstSetupRuntime as createFirstSetupModuleHost } from "./first-setup-runtime.js";
@@ -146,12 +146,12 @@ it("uses the database stamp rather than an ambient environment", async () => {
 });
 
 it("includes a revoked identity on another node in the actual local history", async () => {
-  await seedTenants(venue.db);
+  await seedTaxpayers(venue.db);
   await stampDeployment(venue.db, "preproduction");
   await withTransaction(venue.db, async (tx) => {
-    await tx.insert(registroSif).values({
+    await tx.insert(verifactuIdentities).values({
       id: "history-other-node",
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "OTHER",
       numeroInstalacion: "0CNPH",
@@ -160,14 +160,14 @@ it("includes a revoked identity on another node in the actual local history", as
     });
   });
   const f = await fixture();
-  expect(f.context.binding.targetNodeId).not.toBe(TENANT_A.nodeId);
+  expect(f.context.binding.targetNodeId).not.toBe(TAXPAYER_A.nodeId);
   const facts = await f.read();
   expect(facts.localHistory).toMatchObject({
     complete: true,
     records: [
       expect.objectContaining({
         identity: "0CNPH",
-        nodeId: TENANT_A.nodeId,
+        nodeId: TAXPAYER_A.nodeId,
         softwareId: "OTHER",
         environment: "preproduction",
         recordedAtMs: Date.parse("2026-10-16T12:02:00Z"),
@@ -321,11 +321,11 @@ it.each(["production", "preproduction"] as const)(
 );
 
 it("the hosted selector refuses a minute another node's revoked identity already uses", async () => {
-  await seedTenants(venue.db);
+  await seedTaxpayers(venue.db);
   await stampDeployment(venue.db, "preproduction");
   await withTransaction(venue.db, async (tx) => {
-    await tx.insert(registroSif).values({
-      nodeId: TENANT_A.nodeId,
+    await tx.insert(verifactuIdentities).values({
+      nodeId: TAXPAYER_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
       numeroInstalacion: "0CNNY",
@@ -367,10 +367,10 @@ it("an imported setup retains its fresh host identity and exact configured base 
 });
 
 it("the hosted selector refuses an occupied inventory with no deployment stamp", async () => {
-  await seedTenants(venue.db);
+  await seedTaxpayers(venue.db);
   await withTransaction(venue.db, async (tx) => {
-    await tx.insert(registroSif).values({
-      nodeId: TENANT_A.nodeId,
+    await tx.insert(verifactuIdentities).values({
+      nodeId: TAXPAYER_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
       numeroInstalacion: "0CNM0",

@@ -722,7 +722,7 @@ and answers `503` at once. A skip means this database's due fiscal
 work (or, for `payments.reconcile`, one duty's sweep) could not be attempted THIS pass,
 even though the pass itself completed and the other duty was served. `consecutiveFailures`
 increments and `lastOkAt` does not advance for as long as anything is skipped. Find why
-via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
+via the `drain.skipped` / `reconcile.pair_skipped` log lines (next section); the most
 common cause is a missing, unreadable, or stale-shaped credential.
 
 **`parked` > 0, `payments.reconcile` only, is not a `503` by itself while the duty's last
@@ -790,7 +790,7 @@ cause (usually the database or an external endpoint) needs fixing, not the proce
 One structured JSON line per event on stdout, `{ ...fields, at, level, event }` (`src/logger.ts`).
 The ones worth grepping for:
 
-- **`drain.tenant_skipped`** (`warn`) — `{ errorCode }`. The pass had due fiscal work and could not
+- **`drain.skipped`** (`warn`) — `{ errorCode }`. The pass had due fiscal work and could not
   submit any of it — unless `drain.restart_reset_failed` is also logged, in which case the restart
   reset failed before any work was looked for, and the cause is the database, not the credential.
   There is at most one of these per pass: one database files for one taxpayer. This line is the
@@ -805,7 +805,7 @@ The ones worth grepping for:
 - **`drain.restart_reset_failed`** (`error`) — `{ errorCode }`. Before this process's first drain,
   the reset that returns a previous run's in-flight submissions to the queue failed
   (`src/restart-reset.ts`), so no drain ran. Logged once per failed attempt; each pass that waited
-  on it also logs `drain.tenant_skipped` with the same `errorCode` (`unknown` for a raw database
+  on it also logs `drain.skipped` with the same `errorCode` (`unknown` for a raw database
   error), and the next pass tries the reset again.
 - **`reconcile.pair_skipped`** (`warn`) — `{ duty, errorCode }`. The payment-audit
   equivalent, one duty abandoned mid-sweep — an infrastructure failure, a credential

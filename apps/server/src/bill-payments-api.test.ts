@@ -52,7 +52,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
@@ -629,7 +629,7 @@ async function tendersOf(saleId: string) {
 function fiscalRecordCount(billId: string): number {
   const [row] = suite.db.all<{ count: string }>(sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${billId}
   `);
@@ -2149,10 +2149,10 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
           .where(eq(sales.workingOrderId, billId));
         const records = await tx
-          .select({ nodeId: registrosFacturacion.nodeId, sifNode: registroSif.nodeId })
-          .from(registrosFacturacion)
-          .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
-          .where(eq(registrosFacturacion.saleId, saleRows[0]?.id ?? ""));
+          .select({ nodeId: verifactuRecords.nodeId, sifNode: verifactuIdentities.nodeId })
+          .from(verifactuRecords)
+          .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuRecords.sifId))
+          .where(eq(verifactuRecords.saleId, saleRows[0]?.id ?? ""));
         return { saleRows, records };
       });
       const here = venue.cfg.nodeId;
@@ -3371,7 +3371,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         expect.objectContaining({ counterpartyTaxId: "B12345674", total: 2500 }),
       ]);
       expect(
-        suite.db.all(sql`select tipo_factura from registros_facturacion
+        suite.db.all(sql`select tipo_factura from verifactu_records
       where sale_id = ${(await saleOf(billId))[0]!.id}`),
       ).toEqual([{ tipo_factura: "F1" }]);
     } finally {
@@ -3676,7 +3676,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       const [sale] = await saleOf(billId);
       expect(
         suite.db.all(
-          sql`select tipo_factura from registros_facturacion where sale_id = ${sale!.id}`,
+          sql`select tipo_factura from verifactu_records where sale_id = ${sale!.id}`,
         ),
       ).toEqual([{ tipo_factura: "F1" }]);
       expect(sale).toMatchObject({

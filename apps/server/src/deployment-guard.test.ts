@@ -78,7 +78,7 @@ describe("an unstamped venue's fiscal history", () => {
         .all<{ name: string; file: string }>(sql`pragma database_list`)
         .find((row) => row.name === "main")!.file,
     );
-    const before = venue.db.all(sql`select * from registros_facturacion`);
+    const before = venue.db.all(sql`select * from verifactu_records`);
     const error = await captureError(() =>
       startServer({
         WAITRON_VENUE_DIR: directory,
@@ -91,7 +91,7 @@ describe("an unstamped venue's fiscal history", () => {
       }),
     );
     expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
-    expect(venue.db.all(sql`select * from registros_facturacion`)).toEqual(before);
+    expect(venue.db.all(sql`select * from verifactu_records`)).toEqual(before);
     expect(venue.db.all(sql`select * from deployment`)).toEqual([]);
   });
 

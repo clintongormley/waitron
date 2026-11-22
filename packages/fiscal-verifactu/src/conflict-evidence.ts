@@ -8,10 +8,10 @@ import {
   type ConflictEvidence,
 } from "./schema/conflict-evidence.js";
 import { filingCases } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 
 export type {
   ConflictComparison,
@@ -39,37 +39,37 @@ export async function readActiveConflicts(
 ): Promise<readonly ActiveConflict[]> {
   const rows = await tx
     .select({
-      registroId: registrosFacturacion.id,
+      registroId: verifactuRecords.id,
       caseId: filingCases.id,
-      sifId: registroSif.id,
-      installationIdentity: registroSif.numeroInstalacion,
-      invoiceIdentity: registrosFacturacion.numSerieFactura,
+      sifId: verifactuIdentities.id,
+      installationIdentity: verifactuIdentities.numeroInstalacion,
+      invoiceIdentity: verifactuRecords.numSerieFactura,
       caseCause: filingCases.cause,
       openedAt: filingCases.openedAt,
       observation: fiscalConflictEvidence,
       lookup: fiscalLookupConflicts,
     })
-    .from(registrosFacturacion)
+    .from(verifactuRecords)
     .innerJoin(
-      registroSif,
+      verifactuIdentities,
       and(
-        eq(registroSif.id, registrosFacturacion.sifId),
-        eq(registroSif.nodeId, registrosFacturacion.nodeId),
+        eq(verifactuIdentities.id, verifactuRecords.sifId),
+        eq(verifactuIdentities.nodeId, verifactuRecords.nodeId),
       ),
     )
-    .innerJoin(filingCases, eq(filingCases.registroId, registrosFacturacion.id))
+    .innerJoin(filingCases, eq(filingCases.registroId, verifactuRecords.id))
     .leftJoin(
       fiscalConflictEvidence,
       and(
-        eq(fiscalConflictEvidence.registroId, registrosFacturacion.id),
+        eq(fiscalConflictEvidence.registroId, verifactuRecords.id),
         eq(fiscalConflictEvidence.caseId, filingCases.id),
       ),
     )
-    .leftJoin(fiscalLookupConflicts, eq(fiscalLookupConflicts.registroId, registrosFacturacion.id))
+    .leftJoin(fiscalLookupConflicts, eq(fiscalLookupConflicts.registroId, verifactuRecords.id))
     .where(
       and(
-        eq(registroSif.nodeId, nodeId),
-        isNull(registroSif.revocadoEn),
+        eq(verifactuIdentities.nodeId, nodeId),
+        isNull(verifactuIdentities.revocadoEn),
         or(
           isNotNull(fiscalConflictEvidence.id),
           isNotNull(fiscalLookupConflicts.id),
@@ -77,7 +77,7 @@ export async function readActiveConflicts(
         ),
       ),
     )
-    .orderBy(asc(registrosFacturacion.secuencia), asc(fiscalConflictEvidence.attempt));
+    .orderBy(asc(verifactuRecords.secuencia), asc(fiscalConflictEvidence.attempt));
   const found = new Set<string>();
   const active: ActiveConflict[] = [];
   for (const row of rows) {
@@ -103,24 +103,24 @@ export async function readActiveConflicts(
     });
   }
   const external = await tx
-    .select({ lookup: fiscalSeriesConflicts, installationIdentity: registroSif.numeroInstalacion })
-    .from(fiscalSeriesConflicts)
-    .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
+    .select({ lookup: verifactuSeriesConflicts, installationIdentity: verifactuIdentities.numeroInstalacion })
+    .from(verifactuSeriesConflicts)
+    .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuSeriesConflicts.sifId))
     .innerJoin(
       invoiceSeries,
       and(
-        eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId),
-        eq(invoiceSeries.nodeId, registroSif.nodeId),
+        eq(invoiceSeries.id, verifactuSeriesConflicts.seriesId),
+        eq(invoiceSeries.nodeId, verifactuIdentities.nodeId),
       ),
     )
     .where(
       and(
-        eq(registroSif.nodeId, nodeId),
-        isNull(registroSif.revocadoEn),
+        eq(verifactuIdentities.nodeId, nodeId),
+        isNull(verifactuIdentities.revocadoEn),
         isNull(invoiceSeries.retiredAt),
       ),
     )
-    .orderBy(asc(fiscalSeriesConflicts.recordedAt), asc(fiscalSeriesConflicts.id));
+    .orderBy(asc(verifactuSeriesConflicts.recordedAt), asc(verifactuSeriesConflicts.id));
   for (const { lookup, installationIdentity } of external)
     active.push({
       lookupId: lookup.id,

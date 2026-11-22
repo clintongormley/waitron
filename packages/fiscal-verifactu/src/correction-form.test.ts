@@ -11,7 +11,7 @@ import { seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -32,7 +32,7 @@ let rectSeriesId: SeriesId;
 let rectifySessionId: string;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999E" }));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, { nif: "20009999E" }));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
@@ -96,7 +96,7 @@ describe("a by-differences corrective's filed form", () => {
   it("files the pinned fields, fingerprint input and envelope", async () => {
     const saleId = await correctedSale();
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+      sql`select * from verifactu_records where sale_id = ${saleId}`,
     );
     const row = decodeRegistroRow(rows[0]!);
 
@@ -154,7 +154,7 @@ describe("a by-differences corrective's filed form", () => {
   it("files the pinned fields, fingerprint input and envelope when issued on a later day", async () => {
     const saleId = await correctedSale(laterDayClock);
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+      sql`select * from verifactu_records where sale_id = ${saleId}`,
     );
     const row = decodeRegistroRow(rows[0]!);
 

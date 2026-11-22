@@ -175,8 +175,8 @@ async function configurationArtifact() {
   for (const name of [
     "invoice_series",
     "fiscal_allocations",
-    "registros_facturacion",
-    "registro_sif",
+    "verifactu_records",
+    "verifactu_identities",
   ])
     expect(bundle.tables).not.toHaveProperty(name);
   return {
@@ -346,7 +346,7 @@ it.each([
               )
               .all(),
           ).toEqual([{ environment, identity: "0CNNY" }]);
-          expect(disk.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
+          expect(disk.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
           expect(disk.prepare("select id from nodes").all()).not.toContainEqual({
             id: sourceNodeId,
           });

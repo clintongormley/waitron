@@ -6,9 +6,9 @@ import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { recoveryDocumentBytes } from "./recovery-document.js";
 import { serverKeyPage } from "./server-key-page.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 
@@ -18,7 +18,7 @@ const suite = useVenueDb({
     null,
   ),
 });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",
@@ -35,11 +35,11 @@ const row = {
   recordedAtMs: Date.parse("2026-10-16T13:00:00Z"),
 };
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   for (const [nodeId, code] of [
     [node.nodeId, "0CNNW"],
-    [TENANT_A.nodeId2, "0CNPG"],
+    [TAXPAYER_A.nodeId2, "0CNPG"],
   ] as const) {
     await seedFixtureSif(suite.db, {
       nodeId,
@@ -56,18 +56,18 @@ beforeEach(async () => {
     );
   }
   await suite.db
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: new Date("2026-10-16T12:30:00Z") })
-    .where(eq(registroSif.nodeId, TENANT_A.nodeId2));
+    .where(eq(verifactuIdentities.nodeId, TAXPAYER_A.nodeId2));
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: new Date("2026-10-16T12:30:00Z") })
-    .where(eq(invoiceSeries.nodeId, TENANT_A.nodeId2));
+    .where(eq(invoiceSeries.nodeId, TAXPAYER_A.nodeId2));
 });
 async function snapshot() {
   return {
     series: await suite.db.select().from(invoiceSeries),
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     chains: await suite.db.select().from(cadenas),
     allocations: await suite.db.select().from(fiscalAllocations),
   };
@@ -182,7 +182,7 @@ describe("the pack's server-key page seat", () => {
     ],
     [
       "a key held for another node",
-      async () => ({ keyInForce: { ...keyInForce, nodeId: TENANT_A.nodeId2 } }),
+      async () => ({ keyInForce: { ...keyInForce, nodeId: TAXPAYER_A.nodeId2 } }),
     ],
   ];
   for (const withNewKey of [false, true])

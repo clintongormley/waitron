@@ -157,7 +157,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   }
   const fiscal = resolveFiscalModules(request.fiscalTerritory); // throws for unimplemented
   // The territory must belong to the taxpayer's country: applyVenue writes tax_id into
-  // `registro_sif.nif` (a Spanish-NIF field), so `country=PT` + `ES-common` would file under a
+  // `verifactu_identities.nif` (a Spanish-NIF field), so `country=PT` + `ES-common` would file under a
   // non-NIF identity, a mis-filing that a hash-chained record cannot take back. Checked after
   // resolveFiscalModules so an unimplemented territory fails first with the more specific code.
   if (!request.fiscalTerritory.toUpperCase().startsWith(`${country}-`)) {

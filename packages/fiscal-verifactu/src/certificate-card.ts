@@ -6,7 +6,7 @@ import { calendarDaysLeft, certificateStage, type CertificateStage } from "./cer
 import { normaliseTaxId } from "./certificate-file.js";
 import { venueTimeZone } from "./certificate-install.js";
 import { latestInstall } from "./certificate-record.js";
-import { envios } from "./schema/index.js";
+import { verifactuSubmissions } from "./schema/index.js";
 
 export interface CertificateCard {
   revision: string | null;
@@ -39,18 +39,18 @@ export interface CertificateCardDeps {
 // every node's records with it.
 export function lastAcceptedQuery(tx: Transaction, since: Date) {
   return tx
-    .select({ confirmadoEn: envios.confirmadoEn })
-    .from(envios)
+    .select({ confirmadoEn: verifactuSubmissions.confirmadoEn })
+    .from(verifactuSubmissions)
     .where(
       and(
-        // The unary `+` keeps the planner off `envios_drenaje_idx`: through it the query reads every
+        // The unary `+` keeps the planner off `verifactu_submissions_drenaje_idx`: through it the query reads every
         // accepted envío and sorts those confirmed at or after `since`, where a newest-first walk of
-        // `envios_confirmado_idx` stops at the first accepted one.
-        sql`+${envios.estado} in (${"aceptado"}, ${"aceptado_con_errores"})`,
-        gte(envios.confirmadoEn, since),
+        // `verifactu_submissions_confirmado_idx` stops at the first accepted one.
+        sql`+${verifactuSubmissions.estado} in (${"aceptado"}, ${"aceptado_con_errores"})`,
+        gte(verifactuSubmissions.confirmadoEn, since),
       ),
     )
-    .orderBy(desc(envios.confirmadoEn))
+    .orderBy(desc(verifactuSubmissions.confirmadoEn))
     .limit(1);
 }
 

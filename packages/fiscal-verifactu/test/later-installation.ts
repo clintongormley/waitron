@@ -2,11 +2,11 @@ import { invoiceSeries, newId, withTransaction, type Database } from "@waitron/d
 import { and, eq, isNull } from "drizzle-orm";
 import type { FiscalAllocation } from "../src/allocation-envelope.js";
 import { fiscalAllocations } from "../src/schema/allocations.js";
-import { registroSif } from "../src/schema/sif.js";
+import { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 
 /**
  * Writes a later installation `identity` beside the node's active one, as a copy of its activation:
- * one revoked `registro_sif` row, its retired series under the new name, and an allocation row
+ * one revoked `verifactu_identities` row, its retired series under the new name, and an allocation row
  * naming them, each consistent with the others so `readHourHistory` still reads the database as
  * complete.
  */
@@ -18,15 +18,15 @@ export async function writeLaterInstallation(
   await withTransaction(db, async (tx) => {
     const [sif] = await tx
       .select()
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)));
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)));
     const [activation] = await tx
       .select()
       .from(fiscalAllocations)
       .where(eq(fiscalAllocations.sifId, sif!.id));
     const at = new Date();
     const sifId = newId();
-    await tx.insert(registroSif).values({
+    await tx.insert(verifactuIdentities).values({
       id: sifId,
       nodeId,
       nif: sif!.nif,

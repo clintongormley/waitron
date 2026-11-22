@@ -52,7 +52,7 @@ const active = (nodeId: string) =>
 
 async function retry(registroId: string) {
   await suite.db.execute(sql`
-    update envios set estado = 'pendiente', proximo_intento_en = ${SECOND.toISOString()}
+    update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${SECOND.toISOString()}
     where registro_id = ${registroId}
   `);
 }
@@ -64,7 +64,7 @@ describe("durable conflict observations", () => {
     const rejected = fake();
     rejected.reject(seeded.facturaKeys[0]!, 1100, "Missing required field");
     await run(clientFor(rejected));
-    const original = await suite.db.execute(sql`select * from registros_facturacion`);
+    const original = await suite.db.execute(sql`select * from verifactu_records`);
     const oldCase = await suite.db.execute<{ id: string }>(sql`select * from filing_cases`);
     expect(oldCase.rows).toHaveLength(1);
     expect(await observations()).toEqual([]);
@@ -85,7 +85,7 @@ describe("durable conflict observations", () => {
     const outcome = await run(client, SECOND);
 
     expect(outcome.recordsHalted).toBe(1);
-    expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(original);
+    expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(original);
     expect(await suite.db.execute(sql`select * from filing_cases`)).toEqual(oldCase);
     expect((await suite.db.execute(sql`select state from acks`)).rows).toEqual([
       { state: "rejected" },
@@ -158,7 +158,7 @@ describe("durable conflict observations", () => {
     await run(clientFor(aeat));
     const [observed] = await observations();
     const accepted = await suite.db.execute<{ csv: string | null; estado: string }>(sql`
-      select csv, estado from envios where registro_id = ${seeded.registroIds[1]}
+      select csv, estado from verifactu_submissions where registro_id = ${seeded.registroIds[1]}
     `);
     expect(accepted.rows[0]).toEqual({ estado: "aceptado", csv: expect.any(String) });
     expect(observed!.evidence.csv).toBe(accepted.rows[0]!.csv);
@@ -297,7 +297,7 @@ describe("durable conflict observations", () => {
     await run(client, SECOND);
     expect(await observations()).toEqual([]);
     expect(await active(seeded.nodeId)).toEqual([]);
-    expect((await suite.db.execute(sql`select estado from envios`)).rows).toEqual([
+    expect((await suite.db.execute(sql`select estado from verifactu_submissions`)).rows).toEqual([
       {
         estado:
           mode === "matching"
@@ -358,9 +358,9 @@ describe("durable conflict observations", () => {
     const before = await observations();
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`update registro_sif set revocado_en = ${SECOND.toISOString()} where id = ${seeded.sifId}`,
+        sql`update verifactu_identities set revocado_en = ${SECOND.toISOString()} where id = ${seeded.sifId}`,
       );
-      await tx.execute(sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
+      await tx.execute(sql`insert into verifactu_identities (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
         values ('44444444-4444-4444-8444-444444444444', ${seeded.nodeId}, ${seeded.nif}, 'WT', '2', ${SECOND.toISOString()})`);
     });
     expect(await active(seeded.nodeId)).toEqual([]);
@@ -380,7 +380,7 @@ describe("durable conflict observations", () => {
       expect(await observations()).toEqual([]);
       expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
       expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
-      expect((await suite.db.execute(sql`select estado, csv from envios`)).rows).toEqual([
+      expect((await suite.db.execute(sql`select estado, csv from verifactu_submissions`)).rows).toEqual([
         { estado: "pendiente", csv: null },
       ]);
     } finally {
@@ -396,21 +396,21 @@ describe("durable conflict observations", () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const aeat = fake();
     await collideAtAeat(suite.db, aeat, seeded, seeded.registroIds[0]!);
-    const identities = await suite.db.execute(sql`select * from registro_sif`);
+    const identities = await suite.db.execute(sql`select * from verifactu_identities`);
     await run(clientFor(aeat));
     const before = await observations();
-    const response = await suite.db.execute(sql`select * from envios`);
+    const response = await suite.db.execute(sql`select * from verifactu_submissions`);
     await expect(
       withTransaction(suite.db, async (tx) => {
         await tx.execute(
-          sql`update registro_sif set revocado_en = ${SECOND.toISOString()} where id = ${seeded.sifId}`,
+          sql`update verifactu_identities set revocado_en = ${SECOND.toISOString()} where id = ${seeded.sifId}`,
         );
         throw new Error("Later recovery failed");
       }),
     ).rejects.toThrow("Later recovery failed");
     expect(await observations()).toEqual(before);
-    expect(await suite.db.execute(sql`select * from envios`)).toEqual(response);
-    expect(await suite.db.execute(sql`select * from registro_sif`)).toEqual(identities);
+    expect(await suite.db.execute(sql`select * from verifactu_submissions`)).toEqual(response);
+    expect(await suite.db.execute(sql`select * from verifactu_identities`)).toEqual(identities);
     const files = await suite.db.execute<{ name: string; file: string }>(sql`pragma database_list`);
     const file = files.rows.find((row) => row.name === "main")!.file;
     const read = execFileSync(

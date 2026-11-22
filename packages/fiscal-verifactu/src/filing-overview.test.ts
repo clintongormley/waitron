@@ -12,10 +12,10 @@ import {
 import { recordConflictEvidence } from "./conflict-evidence.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { readFilingOverview } from "./filing-overview.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -38,9 +38,9 @@ function huellaOf(secuencia: number): string {
 
 async function setEnvio(
   registroId: string,
-  values: Partial<typeof envios.$inferInsert>,
+  values: Partial<typeof verifactuSubmissions.$inferInsert>,
 ): Promise<void> {
-  await suite.db.update(envios).set(values).where(eq(envios.registroId, registroId));
+  await suite.db.update(verifactuSubmissions).set(values).where(eq(verifactuSubmissions.registroId, registroId));
 }
 
 async function openCase(
@@ -177,7 +177,7 @@ async function seedOverview() {
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, seeded.nodeId), eq(invoiceSeries.code, "S1")));
-  await suite.db.insert(fiscalSeriesConflicts).values({
+  await suite.db.insert(verifactuSeriesConflicts).values({
     sifId: seeded.sifId,
     seriesId: series!.id,
     invoiceIdentity: "S1/99",
@@ -197,9 +197,9 @@ async function seedOverview() {
   });
 
   const [sif] = await suite.db
-    .select({ numeroInstalacion: registroSif.numeroInstalacion })
-    .from(registroSif)
-    .where(eq(registroSif.id, seeded.sifId));
+    .select({ numeroInstalacion: verifactuIdentities.numeroInstalacion })
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.id, seeded.sifId));
   return {
     seeded,
     installation: sif!.numeroInstalacion,

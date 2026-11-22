@@ -16,7 +16,7 @@ import {
 } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { activateAllocation } from "./allocation.js";
 import {
@@ -31,7 +31,7 @@ import { FISCAL_CLASSIFICATION } from "./classification.js";
 import { FISCAL_BACKUP_VERIFICATION } from "./index.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const time = "2026-10-16T11:00:00.000Z";
 const bases = [
   { code: "A", purpose: "standard" },
@@ -109,7 +109,7 @@ async function activation(hour: number) {
 
 async function capture(populate = true) {
   if (populate) {
-    await seedTenants(suite.db);
+    await seedTaxpayers(suite.db);
     await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
     await activation(0);
     await activation(1);
@@ -324,7 +324,7 @@ it("accepts a genuinely empty zero-schema predecessor", async () => {
 it.each(["before", "after"] as const)("checks every stored hour source in %s", async (side) => {
   await capture();
   edit(side, (db) =>
-    db.exec("update registro_sif set numero_instalacion='0CNJR' where revocado_en is not null"),
+    db.exec("update verifactu_identities set numero_instalacion='0CNJR' where revocado_en is not null"),
   );
   expect((await verify()).status).toBe("invalid");
 });
@@ -387,7 +387,7 @@ it("rejects a malformed stored history time", async () => {
 it("keeps a stored non-hour identity unsupported rather than certifying an hourly floor", async () => {
   await capture();
   both((db) =>
-    db.exec("update registro_sif set numero_instalacion='S000001' where revocado_en is not null"),
+    db.exec("update verifactu_identities set numero_instalacion='S000001' where revocado_en is not null"),
   );
   expectCheck(await verify(), "entries", "unsupported");
 });
@@ -407,8 +407,8 @@ it("includes dormant reservation timestamps without executing the reservation", 
       .run(
         "retained-spare",
         "spare",
-        TENANT_A.nodeId2,
-        TENANT_A.nodeId,
+        TAXPAYER_A.nodeId2,
+        TAXPAYER_A.nodeId,
         "89890001K",
         "old-software",
         "preproduction",

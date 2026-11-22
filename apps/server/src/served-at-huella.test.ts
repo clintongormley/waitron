@@ -24,7 +24,7 @@ import {
   readProductEditor,
   writeProductModifiers,
 } from "@waitron/menu";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -157,7 +157,7 @@ interface Shop {
  * Provision a shop in ITS OWN database, register its node's SIF under the SHARED emisor NIF,
  * seed an IDENTICAL two-product menu, and create one dining table.
  *
- * The huella hashes the AEAT identity fields that `registros_identidad_uq` makes unique, so the two
+ * The huella hashes the AEAT identity fields that `verifactu_records_identidad_uq` makes unique, so the two
  * records a test compares must share them — which only separate databases allow. The shared emisor
  * NIF keeps `IDEmisorFactura` identical; restoring (`registerSif` revokes the old identity,
  * mints a fresh installation number and resets the chain) makes each shop file a first record under
@@ -266,9 +266,9 @@ async function openServeAndPay(
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx
-      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+      .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, cfg.nodeId));
     expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
@@ -376,9 +376,9 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx
-      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+      .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, cfg.nodeId));
     expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
@@ -525,9 +525,9 @@ async function openWithExtraAndPay(
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx
-      .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, cfg.nodeId));
+      .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, cfg.nodeId));
     expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;

@@ -7,9 +7,9 @@ import { AppError } from "@waitron/shared";
 import { deleteAck } from "./acks.js";
 import { recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export async function releaseHeldCancellation(
   tx: Transaction,
@@ -34,8 +34,8 @@ export async function releaseHeldCancellation(
   generation.requireWritable();
   const [target] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   if (
     target === undefined ||
     !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
@@ -63,16 +63,16 @@ export async function releaseHeldCancellation(
     return { registroId, eventId: stored.id };
   }
   const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx.select().from(envios).where(eq(envios.registroId, registroId));
+  const [delivery] = await tx.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, registroId));
   const [accepted] = await tx
-    .select({ record: registrosFacturacion, delivery: envios })
-    .from(registrosFacturacion)
-    .innerJoin(envios, eq(envios.registroId, registrosFacturacion.id))
-    .where(eq(registrosFacturacion.id, acceptedRegistroId));
+    .select({ record: verifactuRecords, delivery: verifactuSubmissions })
+    .from(verifactuRecords)
+    .innerJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
+    .where(eq(verifactuRecords.id, acceptedRegistroId));
   const [successor] = await tx
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.correctsRegistroId, acceptedRegistroId));
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.correctsRegistroId, acceptedRegistroId));
   if (
     filingCase?.registroId !== registroId ||
     filingCase.cause !== "fiscal.anulacion_retenida" ||
@@ -91,9 +91,9 @@ export async function releaseHeldCancellation(
   }
   const now = generation.clock.now().instant;
   await tx
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "pendiente", proximoIntentoEn: now })
-    .where(and(eq(envios.registroId, registroId), eq(envios.estado, "retenido")));
+    .where(and(eq(verifactuSubmissions.registroId, registroId), eq(verifactuSubmissions.estado, "retenido")));
   await deleteAck(tx, registroId);
   const event = await recordCaseEvent(tx, {
     caseId,

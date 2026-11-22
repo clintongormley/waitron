@@ -61,7 +61,7 @@ async function state() {
   return inTx(venue, async (tx) => ({
     series: await tx.select().from(invoiceSeries),
     rows: tx.all(
-      sql`select (select count(*) from sales) sales, (select count(*) from registros_facturacion) records, (select count(*) from tenders) tenders, (select count(*) from payments) payments, (select count(*) from bill_payments) billPayments, (select count(*) from drawer_opens) drawers, (select count(*) from print_jobs) jobs`,
+      sql`select (select count(*) from sales) sales, (select count(*) from verifactu_records) records, (select count(*) from tenders) tenders, (select count(*) from payments) payments, (select count(*) from bill_payments) billPayments, (select count(*) from drawer_opens) drawers, (select count(*) from print_jobs) jobs`,
     ),
   }));
 }

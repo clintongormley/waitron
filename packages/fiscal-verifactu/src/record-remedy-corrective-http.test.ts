@@ -25,9 +25,9 @@ import { readChainHead } from "./chain.js";
 import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
@@ -133,9 +133,9 @@ beforeEach(async () => {
       }),
     );
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "aceptado_con_errores", codigoError: "2000" })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     const filingCase = await openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: "fiscal.aceptado_con_errores",
@@ -191,13 +191,13 @@ async function snapshot() {
   return {
     records: await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia),
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
     series: await suite.db.select().from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
-    deliveries: await suite.db.select().from(envios),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     tenders: await suite.db.select().from(tenders),
     refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
@@ -331,9 +331,9 @@ it("replays the saved HTTP decision after clock, outcome and JSON key order chan
   const result = await first.json();
   instant = new Date("2026-03-01T15:00:00Z");
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado" })
-    .where(eq(envios.registroId, body.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, body.registroId as string));
   const reordered = JSON.parse(
     JSON.stringify(body, (_key, value: unknown) =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -604,9 +604,9 @@ async function anotherOriginal(environment: "production" | "preproduction") {
       }),
     );
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "rechazado", codigoError: "1161" })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     const filingCase = await openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: "fiscal.registro_rechazado",

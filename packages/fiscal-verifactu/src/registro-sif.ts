@@ -6,12 +6,12 @@ import type { NodeId } from "@waitron/shared";
 import { now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 /**
  * AEAT caps `IdSistemaInformatico` at two characters (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`).
  *
- * `registro_sif` carries no CHECK on the column, so the bound is applied in code: `registerSif`
+ * `verifactu_identities` carries no CHECK on the column, so the bound is applied in code: `registerSif`
  * and `writeReservedSif` below each open with `assertUsableIdSistema`.
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
@@ -72,7 +72,7 @@ function resetChainHead(tx: Transaction, nodeId: NodeId): Promise<unknown> {
  * is inert because no sale resolves this node, and `currentSif` gates on the node. A fresh empty
  * `cadenas` head (both-null pointer) makes it a brand-new chain, never a resume of anyone's
  * (CLAUDE.md §5). No prior identity to retire — a reserved node is new.
- * The `registro_sif_instalacion_uq` unique on (nif, id_sistema_informatico, numero_instalacion)
+ * The `verifactu_identities_instalacion_uq` unique on (nif, id_sistema_informatico, numero_instalacion)
  * is the never-reuse backstop.
  */
 export async function writeReservedSif(
@@ -88,18 +88,18 @@ export async function writeReservedSif(
   assertSuppliedInstallation(params.numeroInstalacion);
 
   const [inserted] = await tx
-    .insert(registroSif)
+    .insert(verifactuIdentities)
     .values({
       nodeId: params.nodeId,
       nif: params.nif,
       idSistemaInformatico: params.idSistemaInformatico,
       numeroInstalacion: params.numeroInstalacion,
     })
-    .returning({ id: registroSif.id });
+    .returning({ id: verifactuIdentities.id });
 
   /* v8 ignore start */
   if (inserted === undefined) {
-    throw new Error("registro_sif: reserved insert returned no row");
+    throw new Error("verifactu_identities: reserved insert returned no row");
   }
   /* v8 ignore stop */
 
@@ -116,30 +116,30 @@ export async function registerSif(
   assertSuppliedInstallation(params.numeroInstalacion);
 
   // Retire any live identity for this node first, so the partial unique index
-  // (registro_sif_activo_uq) has room for the new one. The old row is never updated beyond this
+  // (verifactu_identities_activo_uq) has room for the new one. The old row is never updated beyond this
   // timestamp: its registros are immutable and must keep pointing at the identity that actually
   // generated them.
   await tx
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: now() })
-    .where(and(eq(registroSif.nodeId, params.nodeId), isNull(registroSif.revocadoEn)));
+    .where(and(eq(verifactuIdentities.nodeId, params.nodeId), isNull(verifactuIdentities.revocadoEn)));
 
   const numeroInstalacion = params.numeroInstalacion;
 
   const [inserted] = await tx
-    .insert(registroSif)
+    .insert(verifactuIdentities)
     .values({
       nodeId: params.nodeId,
       nif: params.nif,
       idSistemaInformatico: params.idSistemaInformatico,
       numeroInstalacion,
     })
-    .returning({ id: registroSif.id, registradoEn: registroSif.registradoEn });
+    .returning({ id: verifactuIdentities.id, registradoEn: verifactuIdentities.registradoEn });
 
   // INSERT VALUES returns one row on success; a failed constraint raises an error.
   /* v8 ignore start */
   if (inserted === undefined) {
-    throw new Error("registro_sif: insert returned no row");
+    throw new Error("verifactu_identities: insert returned no row");
   }
   /* v8 ignore stop */
 
@@ -160,15 +160,15 @@ export async function registerSif(
 export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRegistration> {
   const [row] = await tx
     .select({
-      id: registroSif.id,
-      nif: registroSif.nif,
-      idSistemaInformatico: registroSif.idSistemaInformatico,
-      numeroInstalacion: registroSif.numeroInstalacion,
-      registradoEn: registroSif.registradoEn,
-      revocadoEn: registroSif.revocadoEn,
+      id: verifactuIdentities.id,
+      nif: verifactuIdentities.nif,
+      idSistemaInformatico: verifactuIdentities.idSistemaInformatico,
+      numeroInstalacion: verifactuIdentities.numeroInstalacion,
+      registradoEn: verifactuIdentities.registradoEn,
+      revocadoEn: verifactuIdentities.revocadoEn,
     })
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)))
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)))
     .limit(1);
 
   if (row === undefined) {

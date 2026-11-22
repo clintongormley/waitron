@@ -19,7 +19,7 @@ import {
 } from "@waitron/shared";
 import { computeHuella, validate } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -38,7 +38,7 @@ let rectSeriesId: SeriesId;
 let sessionId: string;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
@@ -73,7 +73,7 @@ async function snapshot(saleId: SaleId) {
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   return { sale: sale!, lines, registro: decodeRegistroRow(rows[0]!) };
 }

@@ -66,7 +66,7 @@ function seat(
 
 async function estadoOf(registroId: string): Promise<{ estado: string; csv: string | null }> {
   const { rows } = await suite.db.execute<{ estado: string; csv: string | null }>(sql`
-    select estado, csv from envios where registro_id = ${registroId}
+    select estado, csv from verifactu_submissions where registro_id = ${registroId}
   `);
   return rows[0]!;
 }

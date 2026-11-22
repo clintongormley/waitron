@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, json, label, newId, table, ts } from "@waitron/db";
 import type { FilingCaseCause } from "../filing-states.js";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 export type { FilingCaseCause };
 
@@ -26,7 +26,7 @@ export const filingCases = table(
     id: id("id").primaryKey().$defaultFn(newId),
     registroId: id("registro_id")
       .notNull()
-      .references(() => registrosFacturacion.id),
+      .references(() => verifactuRecords.id),
     cause: label("cause").$type<FilingCaseCause>().notNull(),
     evidence: json<FilingCaseEvidence>("evidence").notNull(),
     openedAt: ts("opened_at").notNull(),
@@ -54,7 +54,7 @@ export const filingCaseEvents = table(
     // route that will record events (plan Tasks 8–9) must take it from the signed-in person.
     personId: id("person_id").notNull(),
     action: label("action").notNull(),
-    remedyRegistroId: id("remedy_registro_id").references(() => registrosFacturacion.id),
+    remedyRegistroId: id("remedy_registro_id").references(() => verifactuRecords.id),
     recordedAt: ts("recorded_at").notNull(),
   },
   (t) => [

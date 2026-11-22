@@ -108,7 +108,7 @@ describe("throwawayApplyInput", () => {
         ...throwawayApplyInput(plan, ALL_MODULES, ["preproduction", "preproduction"])!,
       });
 
-      expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
+      expect(suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`)).toEqual([
         { numero_instalacion: "0CNNW", node_id: venue.nodeId },
       ]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([

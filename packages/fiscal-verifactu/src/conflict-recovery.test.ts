@@ -11,7 +11,7 @@ import {
 } from "@waitron/module";
 import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import { createHourRecoveryPreparation } from "./hour-recovery-preparation.js";
@@ -20,24 +20,24 @@ import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import type { HourSelectionStore } from "./hour-selection.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { filingCases } from "./schema/filing-cases.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { cadenas } from "./schema/cadenas.js";
 import { VerifactuBackend } from "./backend.js";
 import { openFilingCase } from "./filing-cases.js";
 import { readActiveConflicts, type ConflictRef } from "./conflict-evidence.js";
 import * as recovery from "./conflict-recovery.js";
 import { retainLookupConflict } from "./reconcile-conflicts.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import type { RecoveryConflictRef } from "./conflict-types.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = SERIES_BASES;
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
@@ -105,12 +105,12 @@ function liveScope(
 }
 async function snapshot() {
   return {
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
-    records: await suite.db.select().from(registrosFacturacion),
+    records: await suite.db.select().from(verifactuRecords),
     cases: await suite.db.select().from(filingCases),
-    replies: await suite.db.select().from(envios),
+    replies: await suite.db.select().from(verifactuSubmissions),
     head: await suite.db.select().from(cadenas),
   };
 }
@@ -162,14 +162,14 @@ beforeEach(async () => {
     deploymentEnvironment: "preproduction",
   });
   const original = await withTransaction(suite.db, (tx) =>
-    recordSale(tx, backend, saleInput({ nodeId: TENANT_A.nodeId, seriesId: seriesId(series!.id) })),
+    recordSale(tx, backend, saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId: seriesId(series!.id) })),
   );
-  const [record] = await suite.db.select().from(registrosFacturacion);
+  const [record] = await suite.db.select().from(verifactuRecords);
   const opened = await withTransaction(suite.db, async (tx) => {
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "rechazado" })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     return openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: "fiscal.huella_divergente",
@@ -386,9 +386,9 @@ it("refuses changed input and an event whose committed replacement has since bee
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   await suite.db
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: new Date() })
-    .where(eq(registroSif.id, result.sifId));
+    .where(eq(verifactuIdentities.id, result.sifId));
   const before = await snapshot();
   await withOperationAuthority(a.binding, a.operator, async (authority) => {
     await expect(
@@ -431,9 +431,9 @@ it.each(["binding", "input", "conflict", "operator"])(
 it("refuses a reference whose conflict reply was not committed", async () => {
   const a = await attempt();
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "pendiente" })
-    .where(eq(envios.registroId, conflict.registroId));
+    .where(eq(verifactuSubmissions.registroId, conflict.registroId));
   const before = await snapshot();
   await withOperationAuthority(a.binding, a.operator, async (authority) => {
     await expect(
@@ -480,7 +480,7 @@ it.each(["pendiente", "aceptado", "aceptado_con_errores"] as const)(
   "recovers a retained lookup conflict without replacing its %s submission result",
   async (estado) => {
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(envios).set({ estado }).where(eq(envios.registroId, conflict.registroId));
+      await tx.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, conflict.registroId));
       await retainLookupConflict(
         tx,
         conflict.registroId,
@@ -536,7 +536,7 @@ it("recovers and replays an unheld invoice observation without fabricating a fil
     .from(invoiceSeries)
     .where(isNull(invoiceSeries.retiredAt));
   const [lookup] = await suite.db
-    .insert(fiscalSeriesConflicts)
+    .insert(verifactuSeriesConflicts)
     .values({
       sifId: conflict.sifId,
       seriesId: series!.id,
@@ -573,7 +573,7 @@ it("recovers and replays an unheld invoice observation without fabricating a fil
   expect(after.records).toEqual(before.records);
   expect(after.cases).toEqual(before.cases);
   expect(after.replies).toEqual(before.replies);
-  expect(await suite.db.select().from(fiscalSeriesConflicts)).toEqual([lookup]);
+  expect(await suite.db.select().from(verifactuSeriesConflicts)).toEqual([lookup]);
   expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual([]);
   expect(
     await withOperationAuthority(a.binding, a.operator, (authority) =>

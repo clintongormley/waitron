@@ -8,17 +8,17 @@ import { recordSale } from "@waitron/core";
 import { invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 describe("device receipt evidence", () => {
   it.each(["production", "preproduction"] as const)(
     "reads the stored %s invoice after issuer and backend settings change",
     async (environment) => {
-      const { nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "89890001K" });
+      const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, { nif: "89890001K" });
       const backend = new VerifactuBackend({
         db: suite.db,
         clock: steadyClock,
@@ -29,8 +29,8 @@ describe("device receipt evidence", () => {
       );
       const [record] = await suite.db
         .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, result.saleId));
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.saleId, result.saleId));
       await suite.db.update(taxpayer).set({ taxId: "changed-taxpayer" });
       await suite.db
         .update(invoiceSeries)
@@ -60,8 +60,8 @@ describe("device receipt evidence", () => {
       expect(
         await suite.db
           .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.saleId, result.saleId)),
+          .from(verifactuRecords)
+          .where(eq(verifactuRecords.saleId, result.saleId)),
       ).toEqual([record]);
     },
   );
@@ -81,7 +81,7 @@ it("has no device evidence for a sale without an original fiscal record", async 
 });
 
 it("keeps the original invoice fingerprint after a cancellation, in either query order", async () => {
-  const { nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "89890001K" });
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, { nif: "89890001K" });
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
@@ -109,7 +109,7 @@ it("keeps the original invoice fingerprint after a cancellation, in either query
 it("reads the original fingerprint after a correction even when later rows are returned first", async () => {
   const node = await seedNode(suite.db);
   const id = await seedSale(suite.db, node, 1);
-  let original: typeof registrosFacturacion.$inferSelect | undefined;
+  let original: typeof verifactuRecords.$inferSelect | undefined;
   for (const position of [1, 2]) {
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
@@ -138,7 +138,7 @@ it("reads the original fingerprint after a correction even when later rows are r
           : { RegistroAnterior: pointerTo(original) },
     });
     const [stored] = await suite.db
-      .insert(registrosFacturacion)
+      .insert(verifactuRecords)
       .values({
         ...toRegistroRow(built, {
           origin: deviceOrigin(node.deviceId),

@@ -27,7 +27,7 @@ import {
   seedSecondChain,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
@@ -41,9 +41,9 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   environment: "production",
 });
 
-/** The `envios` rows of ONE seeded fixture's own chain, by that fixture's node. */
+/** The `verifactu_submissions` rows of ONE seeded fixture's own chain, by that fixture's node. */
 const ownChain = (seeded: { nodeId: string }) =>
-  sql`registro_id in (select id from registros_facturacion where node_id = ${seeded.nodeId})`;
+  sql`registro_id in (select id from verifactu_records where node_id = ${seeded.nodeId})`;
 
 /** A raw read returns the flag as 0 or 1; this puts `incidencia` back into a boolean. */
 const decodeFlags = <Row extends { incidencia: number }>(result: {
@@ -82,7 +82,7 @@ describe("drain — happy path", () => {
 
     const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null; confirmado_en: string | null }>(sql`
-      select estado, csv, confirmado_en from envios order by registro_id
+      select estado, csv, confirmado_en from verifactu_submissions order by registro_id
     `),
     );
     expect(rows.rows.every((r) => r.estado === "aceptado")).toBe(true);
@@ -99,7 +99,7 @@ describe("drain — happy path", () => {
   it("TEETH: dropping the CSV write leaves a row with no CSV — this test must fail if csv is not persisted", async () => {
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
     const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ csv: string | null }>(sql`select csv from envios`),
+      tx.execute<{ csv: string | null }>(sql`select csv from verifactu_submissions`),
     );
     expect(rows.rows.every((r) => r.csv !== null)).toBe(true);
   });
@@ -111,7 +111,7 @@ async function sellAndVoid(
     identity?: SoftwareIdentity;
   } = {},
 ): Promise<{ nodeId: string }> {
-  const { nodeId, seriesId } = await seedTenantWithSif(
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(
     suite.db,
     options.nif === undefined ? {} : { nif: options.nif },
   );
@@ -166,8 +166,8 @@ describe("drain — happy path, an anulación row", () => {
     expect(first.recordsSubmitted).toBe(1);
     expect(first.recordsAccepted).toBe(1);
     const pending = await suite.db.execute<{ tipo_registro: string; estado: string }>(sql`
-      select r.tipo_registro, e.estado from envios e
-      join registros_facturacion r on r.id = e.registro_id
+      select r.tipo_registro, e.estado from verifactu_submissions e
+      join verifactu_records r on r.id = e.registro_id
       where r.node_id = ${nodeId} order by r.secuencia
     `);
     expect(pending.rows).toEqual([
@@ -180,7 +180,7 @@ describe("drain — happy path, an anulación row", () => {
 
     const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
-        select estado, csv from envios where ${ownChain({ nodeId })}
+        select estado, csv from verifactu_submissions where ${ownChain({ nodeId })}
       `),
     );
     expect(rows.rows).toHaveLength(2);
@@ -241,7 +241,7 @@ describe("drain — batching (the >cap split)", () => {
 
     const pending = await withTransaction(suite.db, (tx) =>
       tx.execute<{ count: number }>(sql`
-      select count(*) as count from envios where ${ownChain(seeded)} and estado = 'pendiente'
+      select count(*) as count from verifactu_submissions where ${ownChain(seeded)} and estado = 'pendiente'
     `),
     );
     expect(pending.rows[0].count).toBe(1);
@@ -253,7 +253,7 @@ describe("drain — batching (the >cap split)", () => {
   });
 });
 
-describe("drain — flow control (envio_flujo)", () => {
+describe("drain — flow control (verifactu_sending_state)", () => {
   let seeded: SeededDrain;
   let aeat: ReturnType<typeof createFakeAeat>;
   let deps: DrainDeps;
@@ -265,16 +265,16 @@ describe("drain — flow control (envio_flujo)", () => {
   });
 
   afterEach(async () => {
-    await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
-    await suite.db.execute(sql`delete from envio_flujo`);
+    await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
+    await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
-  it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
+  it("persists the server's TiempoEsperaEnvio into verifactu_sending_state and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     const flujo = await withTransaction(suite.db, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
-        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+        sql`select proximo_envio_en, tiempo_espera_seg from verifactu_sending_state`,
       ),
     );
     expect(flujo.rows[0]?.tiempo_espera_seg).toBeGreaterThan(0);
@@ -290,7 +290,7 @@ describe("drain — flow control (envio_flujo)", () => {
     const deps2 = drainDeps(staticResolver(big.client()));
     await drain(deps2, new Date("2026-07-21T00:01:00Z"));
     const flujo = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ tiempo_espera_seg: number }>(sql`select tiempo_espera_seg from envio_flujo`),
+      tx.execute<{ tiempo_espera_seg: number }>(sql`select tiempo_espera_seg from verifactu_sending_state`),
     );
     expect(flujo.rows[0]?.tiempo_espera_seg).toBe(9999); // fake clamps its initial t to ≤9999 per the schema
   });
@@ -302,7 +302,7 @@ describe("drain — flow control (envio_flujo)", () => {
   it("defers the pass behind a still-open gate, claiming nothing and leaving its backlog pending", async () => {
     const proximoEnvioEn = new Date("2026-07-21T00:05:00Z"); // still in the future relative to `now` below
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${proximoEnvioEn.toISOString()}, 300)
     `);
 
@@ -315,7 +315,7 @@ describe("drain — flow control (envio_flujo)", () => {
 
     // Select only this case's own chain.
     const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+      tx.execute<{ estado: string }>(sql`select estado from verifactu_submissions where ${ownChain(seeded)}`),
     );
     expect(rows.rows).toHaveLength(3);
     expect(rows.rows.every((r) => r.estado === "pendiente")).toBe(true);
@@ -355,14 +355,14 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
   });
 
   afterEach(async () => {
-    await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
-    await suite.db.execute(sql`delete from envio_flujo`);
+    await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
+    await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
   async function flujo() {
     const { rows } = await withTransaction(suite.db, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
-        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+        sql`select proximo_envio_en, tiempo_espera_seg from verifactu_sending_state`,
       ),
     );
     return rows[0];
@@ -375,7 +375,7 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
     expect(result.recordsAccepted).toBe(3);
     const { rows } = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
-        sql`select estado, csv from envios where ${ownChain(seeded)}`,
+        sql`select estado, csv from verifactu_submissions where ${ownChain(seeded)}`,
       ),
     );
     expect(rows.filter((r) => r.estado === "aceptado" && r.csv !== null)).toHaveLength(3);
@@ -384,7 +384,7 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
 
   it("gates the next send on the last wait AEAT gave", async () => {
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${new Date("2026-07-21T00:00:00Z").toISOString()}, 120)
     `);
 
@@ -415,7 +415,7 @@ describe("drain — stale claim recovery", () => {
     // An abandoned claim, stamped well over RECUPERACION_ENVIANDO_MS ago.
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
         where ${ownChain(seeded)}
       `),
     );
@@ -425,7 +425,7 @@ describe("drain — stale claim recovery", () => {
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
-        select estado, incidencia from envios where ${ownChain(seeded)}
+        select estado, incidencia from verifactu_submissions where ${ownChain(seeded)}
       `),
       ),
     );
@@ -442,7 +442,7 @@ describe("drain — stale claim recovery", () => {
     // a record its own persist step may still be about to write a CSV for.
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
         where ${ownChain(seeded)}
       `),
     );
@@ -453,7 +453,7 @@ describe("drain — stale claim recovery", () => {
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
-        select estado, incidencia from envios where ${ownChain(seeded)}
+        select estado, incidencia from verifactu_submissions where ${ownChain(seeded)}
       `),
       ),
     );
@@ -469,7 +469,7 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
   const claimOneSecondAgo = (seeded: SeededDrain) =>
     withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
         where ${ownChain(seeded)}
       `),
     );
@@ -478,7 +478,7 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
     decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number; proximo_intento_en: string }>(sql`
-          select estado, incidencia, proximo_intento_en from envios where ${ownChain(seeded)}
+          select estado, incidencia, proximo_intento_en from verifactu_submissions where ${ownChain(seeded)}
         `),
       ),
     ).rows;
@@ -512,8 +512,8 @@ describe("resetInFlightClaims — the restart reset (topology design §5.2)", ()
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const [, second, third] = seeded.registroIds;
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set estado = 'aceptado' where registro_id = ${second}`);
-      await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${third}`);
+      await tx.execute(sql`update verifactu_submissions set estado = 'aceptado' where registro_id = ${second}`);
+      await tx.execute(sql`update verifactu_submissions set estado = 'detenido' where registro_id = ${third}`);
     });
     const before = await stateOf(seeded);
     expect(before.map((row) => row.estado).sort()).toEqual(["aceptado", "detenido", "pendiente"]);
@@ -546,7 +546,7 @@ describe("drain — retry backoff on a transient submit failure", () => {
           incidencia: number;
           proximo_intento_en: string;
         }>(sql`
-        select estado, intentos, incidencia, proximo_intento_en from envios
+        select estado, intentos, incidencia, proximo_intento_en from verifactu_submissions
         where ${ownChain(seeded)}
       `),
       ),
@@ -579,18 +579,18 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 
   /** One due row, an already-elapsed gate so the pass claims it, and `tiempo_espera_seg` set to
    * `seconds` so the tail fold lands at `now + seconds`. Cleans up both tables: the row stays
-   * `pendiente` after the backoff, and `envio_flujo` holds ONE row for the whole database. */
+   * `pendiente` after the backoff, and `verifactu_sending_state` holds ONE row for the whole database. */
   async function passWithGate(seconds: number): Promise<Awaited<ReturnType<typeof drain>>> {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${new Date(NOW.getTime() - 1000).toISOString()}, ${seconds})
     `);
     try {
       return await drain(drainDeps(staticResolver(failing)), NOW);
     } finally {
-      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
-      await suite.db.execute(sql`delete from envio_flujo`);
+      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from verifactu_sending_state`);
     }
   }
 
@@ -623,7 +623,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
-        select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
+        select r.secuencia, e.estado, e.incidencia from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId}
         order by r.secuencia
       `),
@@ -666,7 +666,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
-        sql`select estado, csv from envios where ${ownChain(seeded)}`,
+        sql`select estado, csv from verifactu_submissions where ${ownChain(seeded)}`,
       ),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado_con_errores");
@@ -705,7 +705,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const row4 = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
-        select e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
+        select e.estado, e.incidencia from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} and r.secuencia = 5
       `),
       ),
@@ -738,7 +738,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
     const chainA4 = await appendPendingAlta(suite.db, seeded, 4);
     // secuencia 5, not 1: `NumSerieFactura` derives from `secuencia`, and invoice identities are
-    // unique across chains (`registros_identidad_uq`); chain A already used 1-4.
+    // unique across chains (`verifactu_records_identidad_uq`); chain A already used 1-4.
     const chainB1 = await seedSecondChain(suite.db, seeded, 5);
 
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
@@ -746,7 +746,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const rowA = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(
-          sql`select estado, incidencia from envios where registro_id = ${chainA4.registroId}`,
+          sql`select estado, incidencia from verifactu_submissions where registro_id = ${chainA4.registroId}`,
         ),
       ),
     );
@@ -755,7 +755,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     const rowB = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
-        sql`select estado, csv from envios where registro_id = ${chainB1.registroId}`,
+        sql`select estado, csv from verifactu_submissions where registro_id = ${chainB1.registroId}`,
       ),
     );
     expect(rowB.rows[0]?.estado).toBe("aceptado"); // healthy chain, unaffected by chain A's halt
@@ -791,14 +791,14 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     // 3000 with `EstadoRegistroDuplicado` "Correcta", which must read as an accept.
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
       `),
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // gate opens 00:01:05Z
 
     const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+      tx.execute<{ estado: string }>(sql`select estado from verifactu_submissions where ${ownChain(seeded)}`),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado"); // despite the outer Incorrecto on the 3000 line
     expect(result.recordsAccepted).toBe(1);
@@ -822,7 +822,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     aeat.annul(seeded.facturaKeys[0]!); // AEAT's own copy of secuencia 1's identity is now Anulada
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
       `),
     );
@@ -831,7 +831,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
-        select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
+        select r.secuencia, e.estado, e.incidencia from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
       ),
@@ -860,7 +860,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
         where ${ownChain(seeded)}
       `),
     );
@@ -869,7 +869,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(
-          sql`select estado, incidencia from envios where ${ownChain(seeded)}`,
+          sql`select estado, incidencia from verifactu_submissions where ${ownChain(seeded)}`,
         ),
       ),
     );
@@ -885,7 +885,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   });
 
   /**
-   * Our own stored huella cannot be changed (`registros_facturacion` is append-only), so AEAT's copy
+   * Our own stored huella cannot be changed (`verifactu_records` is append-only), so AEAT's copy
    * is made to diverge: a separate submit under secuencia 1's identity, with a different `Huella`,
    * lands in the fake's store FIRST. Secuencia 2 is fresh and accepted on its own merits, and keeps
    * that outcome: it was in the same envío.
@@ -947,7 +947,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const rows = decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
-        select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
+        select r.secuencia, e.estado, e.incidencia from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
       ),
@@ -990,7 +990,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
   /** Filed rows back to `pendiente` with no CSV, as a lost reply leaves them. */
   const requeue = (ids: string[]) =>
     suite.db.execute(sql`
-      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
       where registro_id in ${ids}
     `);
 
@@ -1003,7 +1003,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
         incidencia: number;
         proximo_intento_en: string;
       }>(sql`
-      select registro_id, estado, csv, incidencia, proximo_intento_en from envios
+      select registro_id, estado, csv, incidencia, proximo_intento_en from verifactu_submissions
       where registro_id in ${ids}
     `),
     );
@@ -1029,7 +1029,7 @@ describe("drain — Route B's lookup and the write transaction", () => {
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
     await requeue(seeded.registroIds);
 
-    const venue = await seedTenantWithSif(suite.db);
+    const venue = await seedTaxpayerWithSif(suite.db);
     // After the seeded envíos' own record time, or the chain refuses the sale as behind them.
     const afterSeeded = {
       ...steadyClock,
@@ -1167,7 +1167,7 @@ describe("drain — a reply line whose reference names no record in the batch", 
     );
 
     const { rows } = await suite.db.execute<{ estado: string; csv: string | null }>(sql`
-      select e.estado, e.csv from envios e join registros_facturacion r on r.id = e.registro_id
+      select e.estado, e.csv from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
       where ${ownChain(seeded)} order by r.secuencia
     `);
     expect(rows).toEqual([
@@ -1188,14 +1188,14 @@ describe("drain — a reply line whose reference names no record in the batch", 
 describe("drain — error 3000 Anulada on a resent anulación", () => {
   let aeat: ReturnType<typeof createFakeAeat>;
   let backend: VerifactuBackend;
-  let venue: Awaited<ReturnType<typeof seedTenantWithSif>>;
+  let venue: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
   let voidSessionId: string;
   // Envíos default to the wall-clock insert time, so a minute past it has them due.
   let firstPass: Date;
   let secondPass: Date;
 
   beforeEach(async () => {
-    venue = await seedTenantWithSif(suite.db);
+    venue = await seedTaxpayerWithSif(suite.db);
     const mgr = await seedPersons(suite.db, {
       id: newId(),
       createdAt: nowIso(),
@@ -1230,8 +1230,8 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     decodeFlags(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ tipo_registro: string; estado: string; incidencia: number }>(sql`
-          select r.tipo_registro, e.estado, e.incidencia from envios e
-          join registros_facturacion r on r.id = e.registro_id
+          select r.tipo_registro, e.estado, e.incidencia from verifactu_submissions e
+          join verifactu_records r on r.id = e.registro_id
           where r.node_id = ${venue.nodeId} order by r.secuencia
         `),
       ),
@@ -1239,7 +1239,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
   const anulacionId = async () => {
     const { rows } = await suite.db.execute<{ id: string }>(sql`
-      select id from registros_facturacion
+      select id from verifactu_records
       where node_id = ${venue.nodeId} and tipo_registro = 'anulacion'
     `);
     return rows[0]!.id;
@@ -1296,7 +1296,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     const anulacion = await anulacionId();
     // As a restart reset or a lost reply leaves it: pending again, though AEAT holds it.
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${firstPass.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${firstPass.toISOString()}
       where registro_id = ${anulacion}
     `);
 
@@ -1311,7 +1311,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     const { rows: confirmed } = await suite.db.execute<{
       csv: string | null;
       confirmado_en: string | null;
-    }>(sql`select csv, confirmado_en from envios where registro_id = ${anulacion}`);
+    }>(sql`select csv, confirmado_en from verifactu_submissions where registro_id = ${anulacion}`);
     expect(confirmed[0]?.csv).toEqual(expect.any(String));
     expect(confirmed[0]?.confirmado_en).toBe(secondPass.toISOString());
   });
@@ -1340,7 +1340,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
   it("does not submit a cancellation while its original collides with a foreign invoice", async () => {
     const sale = await sell();
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion
+      select * from verifactu_records
       where node_id = ${venue.nodeId} and tipo_registro = 'alta'
     `);
     const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
@@ -1373,7 +1373,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
   it("does not send a successor past a cancellation held for its original", async () => {
     const sale = await sell();
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion
+      select * from verifactu_records
       where node_id = ${venue.nodeId} and tipo_registro = 'alta'
     `);
     const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
@@ -1401,7 +1401,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
   it("makes a later cancellation visible when its original was rejected", async () => {
     const sale = await sell();
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion
+      select * from verifactu_records
       where node_id = ${venue.nodeId} and tipo_registro = 'alta'
     `);
     const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
@@ -1470,8 +1470,8 @@ describe("drain — a reply line with no recognisable status", () => {
           proximo_intento_en: string;
           csv: string | null;
         }>(sql`
-        select e.estado, e.incidencia, e.proximo_intento_en, e.csv from envios e
-        join registros_facturacion r on r.id = e.registro_id
+        select e.estado, e.incidencia, e.proximo_intento_en, e.csv from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
       ),
@@ -1532,7 +1532,7 @@ describe("drain — a reply line with no recognisable status", () => {
     const result = await drain(drainDeps(staticResolver(aeat.client())), later);
 
     const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+      tx.execute<{ estado: string }>(sql`select estado from verifactu_submissions where ${ownChain(seeded)}`),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
     expect(result.recordsAccepted).toBe(1);
@@ -1556,8 +1556,8 @@ describe("drain — halted records get a halted ack (the bulk chain-halt path)",
     // secuencia 1-3 rejected with one code, 4 held behind them by `haltOpenChainClaims`.
     const envios = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
-        select e.registro_id, r.secuencia, e.estado from envios e
-        join registros_facturacion r on r.id = e.registro_id
+        select e.registro_id, r.secuencia, e.estado from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId}
         order by r.secuencia
       `),
@@ -1608,7 +1608,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.incidentsRaised).toBe(1);
 
       const envio = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+        tx.execute<{ estado: string }>(sql`select estado from verifactu_submissions where ${ownChain(seeded)}`),
       );
       // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
       expect(envio.rows[0]!.estado).toBe("pendiente");
@@ -1630,7 +1630,7 @@ describe("drain — the deployment-environment guard", () => {
         hostEnvironment: "production",
       });
     } finally {
-      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
     }
   });
 
@@ -1644,7 +1644,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBe(0);
 
       const envio = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
+        tx.execute<{ estado: string }>(sql`select estado from verifactu_submissions where ${ownChain(seeded)}`),
       );
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
@@ -1661,7 +1661,7 @@ describe("drain — the deployment-environment guard", () => {
         hostEnvironment: "production",
       });
     } finally {
-      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
     }
   });
 
@@ -1675,7 +1675,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBeGreaterThan(0);
       expect(result.recordsAccepted).toBeGreaterThan(0);
     } finally {
-      await suite.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
     }
   });
 
@@ -1704,8 +1704,8 @@ describe("drain — the deployment-environment guard", () => {
 
       const rows = await withTransaction(suite.db, (tx) =>
         tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
-          select r.secuencia, e.estado, e.intentos from envios e
-          join registros_facturacion r on r.id = e.registro_id
+          select r.secuencia, e.estado, e.intentos from verifactu_submissions e
+          join verifactu_records r on r.id = e.registro_id
           where r.node_id = ${seeded.nodeId}
           order by r.secuencia
         `),
@@ -1729,7 +1729,7 @@ describe("drain — the deployment-environment guard", () => {
     } finally {
       if (cleanupNodeId !== undefined) {
         await suite.db.execute(
-          sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`,
+          sql`delete from verifactu_submissions where ${ownChain({ nodeId: cleanupNodeId })}`,
         );
       }
     }
@@ -1769,14 +1769,14 @@ describe("drain — the deployment-environment guard", () => {
 
       const healthyRow = await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string }>(
-          sql`select estado from envios where registro_id = ${healthy.registroId}`,
+          sql`select estado from verifactu_submissions where registro_id = ${healthy.registroId}`,
         ),
       );
       expect(healthyRow.rows[0]?.estado).toBe("aceptado");
 
       const refused = await withTransaction(suite.db, (tx) =>
         tx.execute<{ count: number }>(sql`
-            select count(*) as count from envios
+            select count(*) as count from verifactu_submissions
             where ${ownChain(seeded)} and estado = 'pendiente'
           `),
       );
@@ -1790,9 +1790,9 @@ describe("drain — the deployment-environment guard", () => {
     } finally {
       if (cleanupNodeId !== undefined) {
         await suite.db.execute(
-          sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`,
+          sql`delete from verifactu_submissions where ${ownChain({ nodeId: cleanupNodeId })}`,
         );
-        await suite.db.execute(sql`delete from envios where estado = 'aceptado'`);
+        await suite.db.execute(sql`delete from verifactu_submissions where estado = 'aceptado'`);
       }
     }
   });
@@ -1842,16 +1842,16 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
       expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
       // The first drain closed the flow-control gate; clear it so the second pass is ungated.
-      await suite.db.execute(sql`delete from envio_flujo`);
+      await suite.db.execute(sql`delete from verifactu_sending_state`);
       defaultNode = (await seedPendingEnvios(suite.db, { count: 1 })).nodeId;
       const omitted = await drain(depsWith(), NOW);
       expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
     } finally {
       if (capNode !== undefined) {
-        await suite.db.execute(sql`delete from envios where ${ownChain({ nodeId: capNode })}`);
+        await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain({ nodeId: capNode })}`);
       }
       if (defaultNode !== undefined) {
-        await suite.db.execute(sql`delete from envios where ${ownChain({ nodeId: defaultNode })}`);
+        await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain({ nodeId: defaultNode })}`);
       }
     }
   });

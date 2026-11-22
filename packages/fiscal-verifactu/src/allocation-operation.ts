@@ -19,7 +19,7 @@ import {
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { ActivationResult } from "./schema/allocations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 type SeriesBases = readonly { readonly code: string; readonly purpose: string }[];
 
@@ -39,13 +39,13 @@ export async function readModuleAllocationSeries(
   if (storedNode === undefined) return refuse("node_mismatch");
   const [sif] = await tx
     .select({
-      id: registroSif.id,
-      taxpayerNif: registroSif.nif,
-      softwareId: registroSif.idSistemaInformatico,
-      identity: sql<string>`${registroSif.numeroInstalacion}`,
+      id: verifactuIdentities.id,
+      taxpayerNif: verifactuIdentities.nif,
+      softwareId: verifactuIdentities.idSistemaInformatico,
+      identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
     })
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
   if (sif === undefined) return refuse("activation_superseded");
   const [retained] = await tx
     .select()

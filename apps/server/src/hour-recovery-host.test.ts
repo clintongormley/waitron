@@ -27,7 +27,7 @@ import { createFirstSetupCoordinator, readModulePreparationHistory } from "@wait
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
@@ -509,7 +509,7 @@ describe("the database supplied by the placement runner", () => {
   it("checks the selected named key against the placed copy rather than a still-open preview", async () => {
     const f = await host();
     const selected = (await f.selectPastWaits()) as { input: unknown };
-    await seedTenants(placed.db);
+    await seedTaxpayers(placed.db);
     await stampDeployment(placed.db, "preproduction");
     const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
     await withNodeTransaction(placed.node, (tx) =>

@@ -50,7 +50,7 @@ async function storedSource(
   query: BackupQuery,
   context: BackupVerificationContext,
 ): Promise<HourHistorySource> {
-  const sifs = await rows(query, "registro_sif");
+  const sifs = await rows(query, "verifactu_identities");
   const series = await rows(query, "invoice_series");
   const allocations = await rows(query, "fiscal_allocations");
   const reservations = await rows(query, "fiscal_reservations");
@@ -58,7 +58,7 @@ async function storedSource(
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
-      reference: `registro_sif/${row.id}`,
+      reference: `verifactu_identities/${row.id}`,
       kind: "activation",
       taxpayerNif: row.nif,
       environment: context.source.environment,

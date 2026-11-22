@@ -25,7 +25,7 @@ import {
 } from "@waitron/db";
 import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/menu";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { createPinThrottle, hashPin, loginWithPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -247,7 +247,7 @@ function creditsOf(saleId: string) {
 
 async function registroOf(saleId: string) {
   const [row] = await inTx(venue, (tx) =>
-    tx.select().from(registrosFacturacion).where(eq(registrosFacturacion.saleId, saleId)),
+    tx.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
   );
   return row as typeof row & {
     desglose: {
@@ -327,7 +327,7 @@ function fiscalSnapshot() {
       (select count(*) from sales) as sales,
       (select count(*) from sale_lines) as saleLines,
       (select count(*) from sale_settlements) as settlements,
-      (select count(*) from registros_facturacion) as registros,
+      (select count(*) from verifactu_records) as registros,
       (select count(*) from order_amendments) as amendments,
       (select group_concat(id || ':' || next_number, ',') from invoice_series) as series,
       (select group_concat(node_id || ':' || secuencia || ':' || coalesce(ultima_huella, ''), ',')

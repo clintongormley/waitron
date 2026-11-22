@@ -1,7 +1,7 @@
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, label, nodes, now, table, ts } from "@waitron/db";
 import type { FiscalAllocation, RecoveryApproval } from "../allocation-envelope.js";
-import { registroSif } from "./sif.js";
+import { verifactuIdentities } from "./verifactu-identities.js";
 
 export type { ActivationResult } from "../allocation-types.js";
 import type { ActivationResult } from "../allocation-types.js";
@@ -17,7 +17,7 @@ export const fiscalAllocations = table(
       .references(() => nodes.id),
     sifId: id("sif_id")
       .notNull()
-      .references(() => registroSif.id),
+      .references(() => verifactuIdentities.id),
     taxpayerNif: label("taxpayer_nif").notNull(),
     softwareId: label("software_id").notNull(),
     environment: label("environment").notNull(),

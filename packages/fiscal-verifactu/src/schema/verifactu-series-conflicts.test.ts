@@ -1,10 +1,10 @@
 import { getTableName } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { expect, it } from "vitest";
-import { fiscalSeriesConflicts } from "./series-conflicts.js";
+import { verifactuSeriesConflicts } from "./verifactu-series-conflicts.js";
 
 it("exports the retained observation's identity and series links and number uniqueness in its runtime schema", () => {
-  const config = getTableConfig(fiscalSeriesConflicts);
+  const config = getTableConfig(verifactuSeriesConflicts);
   expect(
     config.foreignKeys.map((key) => {
       const ref = key.reference();
@@ -15,7 +15,7 @@ it("exports the retained observation's identity and series links and number uniq
       };
     }),
   ).toEqual([
-    { columns: ["sif_id"], table: "registro_sif", target: ["id"] },
+    { columns: ["sif_id"], table: "verifactu_identities", target: ["id"] },
     { columns: ["series_id"], table: "invoice_series", target: ["id"] },
   ]);
   expect(
@@ -26,7 +26,7 @@ it("exports the retained observation's identity and series links and number uniq
     })),
   ).toEqual([
     {
-      name: "fiscal_series_conflicts_invoice_uq",
+      name: "verifactu_series_conflicts_invoice_uq",
       unique: true,
       columns: ["sif_id", "invoice_identity"],
     },

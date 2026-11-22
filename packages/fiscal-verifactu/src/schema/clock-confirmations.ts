@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, json, newId, nodes, table, ts } from "@waitron/db";
 import { clockChecks } from "./clock-checks.js";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 export const clockConfirmationSource = enumType([
   "authority",
@@ -50,7 +50,7 @@ export const clockConfirmations = table(
     reason: clockConfirmationReason("reason").notNull(),
     proof: json<unknown>("proof").notNull(),
     checkId: id("check_id").references(() => clockChecks.id),
-    registroId: id("registro_id").references(() => registrosFacturacion.id),
+    registroId: id("registro_id").references(() => verifactuRecords.id),
     recordAt: ts("record_at"),
   },
   (t) => [

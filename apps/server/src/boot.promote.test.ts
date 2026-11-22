@@ -193,7 +193,7 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
   expect(state.lastPassAt).not.toBeNull();
 }
 
-/** One due `envios` row and a usable `fiscal.aeat` credential, so a singleton's drain tries it. */
+/** One due `verifactu_submissions` row and a usable `fiscal.aeat` credential, so a singleton's drain tries it. */
 async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
@@ -223,7 +223,7 @@ async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
   const rows = await appDb.execute<{ estado: string; intentos: number; incidencia: number }>(
-    sql`select estado, intentos, incidencia from envios where registro_id = ${registroId}`,
+    sql`select estado, intentos, incidencia from verifactu_submissions where registro_id = ${registroId}`,
   );
   const row = rows.rows[0]!;
   return { estado: row.estado, intentos: row.intentos, incidencia: row.incidencia === 1 };
@@ -232,7 +232,7 @@ async function readEnvio(
 /** Keeps the shared directory order-independent; `incidents` has no registro id, so it is cleared
  * wholesale. Every caller runs after `server.close()`. */
 async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
-  await appDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+  await appDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
   await appDb.execute(sql`delete from incidents `);
 }
 
@@ -517,8 +517,8 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       await mirrorDb.execute(
         sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
       );
-      const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
-      const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);
+      const records = mirrorDb.all(sql`select * from verifactu_records order by secuencia`);
+      const attempts = mirrorDb.all(sql`select * from verifactu_submissions order by registro_id`);
       const restarted = await startServer(
         {
           ...KEY_ENV,
@@ -537,10 +537,10 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
         const health = await fetch(`http://127.0.0.1:${httpPort()}/health`);
         expect(await health.json()).toEqual({ ok: true, tradingAvailable: false });
         expect(restarted.promoteMirrorToPrimary).toBeUndefined();
-        expect(mirrorDb.all(sql`select * from registros_facturacion order by secuencia`)).toEqual(
+        expect(mirrorDb.all(sql`select * from verifactu_records order by secuencia`)).toEqual(
           records,
         );
-        expect(mirrorDb.all(sql`select * from envios order by registro_id`)).toEqual(attempts);
+        expect(mirrorDb.all(sql`select * from verifactu_submissions order by registro_id`)).toEqual(attempts);
         expect((await readNodeMode(mirrorNode, seed.nodeId)).mode).toBe("primary");
       } finally {
         await restarted.close();
@@ -636,7 +636,7 @@ describe("a mirror's promotion whose role write is lost", () => {
         await second.close();
       }
       const live = await db.execute<{ id: string }>(
-        sql`select id from registro_sif where node_id = ${seed.nodeId} and revocado_en is null`,
+        sql`select id from verifactu_identities where node_id = ${seed.nodeId} and revocado_en is null`,
       );
       expect(live.rows).toHaveLength(1);
     } finally {

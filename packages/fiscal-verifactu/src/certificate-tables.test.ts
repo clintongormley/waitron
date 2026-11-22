@@ -31,7 +31,7 @@ function insertInstall(
   const id = fields.id ?? newId();
   return withTransaction(db, (tx) =>
     tx.execute(sql`
-      insert into fiscal_certificate_installs (
+      insert into verifactu_certificates (
         id, node_id, installed_at, source, person_id, kind, fingerprint, organisation, tax_id,
         issuer, valid_from, valid_until, checked_endpoint, checked_at
       ) values (
@@ -65,11 +65,11 @@ const DASHBOARD = {
   checkedAt: "2026-10-18T10:00:00.000Z",
 };
 
-describe("fiscal_certificate_installs and fiscal_certificate_reminders", () => {
+describe("verifactu_certificates and fiscal_certificate_reminders", () => {
   it("accepts a setup install with no person, endpoint or check time", async () => {
     const id = await insertInstall(pg.db, SETUP);
     const { rows } = await pg.db.execute<{ id: string; person_id: string | null }>(
-      sql`select id, person_id from fiscal_certificate_installs`,
+      sql`select id, person_id from verifactu_certificates`,
     );
     expect(rows).toEqual([{ id, person_id: null }]);
   });
@@ -77,15 +77,15 @@ describe("fiscal_certificate_installs and fiscal_certificate_reminders", () => {
   it("refuses an UPDATE and a DELETE of an install row", async () => {
     const id = await insertInstall(pg.db, SETUP);
     const update = await captureError(async () =>
-      pg.db.execute(sql`update fiscal_certificate_installs set fingerprint = 'changed'`),
+      pg.db.execute(sql`update verifactu_certificates set fingerprint = 'changed'`),
     );
-    expect(triggerRaised(update, "fiscal_certificate_installs is append-only")).toBe(true);
+    expect(triggerRaised(update, "verifactu_certificates is append-only")).toBe(true);
     const remove = await captureError(async () =>
-      pg.db.execute(sql`delete from fiscal_certificate_installs`),
+      pg.db.execute(sql`delete from verifactu_certificates`),
     );
-    expect(triggerRaised(remove, "fiscal_certificate_installs is append-only")).toBe(true);
+    expect(triggerRaised(remove, "verifactu_certificates is append-only")).toBe(true);
     const { rows } = await pg.db.execute<{ id: string; fingerprint: string }>(
-      sql`select id, fingerprint from fiscal_certificate_installs`,
+      sql`select id, fingerprint from verifactu_certificates`,
     );
     expect(rows).toEqual([{ id, fingerprint: "AB".repeat(32) }]);
   });
@@ -96,14 +96,14 @@ describe("fiscal_certificate_installs and fiscal_certificate_reminders", () => {
     ["checked endpoint", { checkedEndpoint: null }],
   ] as const)("refuses a dashboard install with no %s", async (_, missing) => {
     const error = await captureError(() => insertInstall(pg.db, { ...DASHBOARD, ...missing }));
-    expect(checkFailed(error, "fiscal_certificate_installs_dashboard_ck")).toBe(true);
-    const { rows } = await pg.db.execute(sql`select id from fiscal_certificate_installs`);
+    expect(checkFailed(error, "verifactu_certificates_dashboard_ck")).toBe(true);
+    const { rows } = await pg.db.execute(sql`select id from verifactu_certificates`);
     expect(rows).toEqual([]);
   });
 
   it("accepts a dashboard install with a person, endpoint and check time", async () => {
     const id = await insertInstall(pg.db, DASHBOARD);
-    const { rows } = await pg.db.execute(sql`select id, source from fiscal_certificate_installs`);
+    const { rows } = await pg.db.execute(sql`select id, source from verifactu_certificates`);
     expect(rows).toEqual([{ id, source: "dashboard" }]);
   });
 

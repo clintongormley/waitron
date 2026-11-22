@@ -25,9 +25,9 @@ import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
@@ -112,9 +112,9 @@ async function refusedOriginal(
       }),
     );
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado, codigoError: codigo })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     const filingCase = await openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: estado === "rechazado" ? "fiscal.registro_rechazado" : "fiscal.aceptado_con_errores",
@@ -184,8 +184,8 @@ async function snapshot() {
   return {
     records: await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia),
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     series: await suite.db.select().from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
@@ -266,9 +266,9 @@ it("copies the target's operation description byte for byte into the replacement
   expect(response.status).toBe(200);
   const result = (await response.json()) as { registroId: string };
   const [replacement] = await suite.db
-    .select({ description: registrosFacturacion.descripcionOperacion })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, result.registroId));
+    .select({ description: verifactuRecords.descripcionOperacion })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, result.registroId));
   expect(replacement).toEqual({ description: "  Meals\tand drinks\n " });
 });
 
@@ -284,8 +284,8 @@ it("sends no operation date when the day given is the replacement's own day", as
   const { registroId } = (await res.json()) as { registroId: string };
   const [record] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   expect(record).toMatchObject({ tipoRectificativa: "S", fechaOperacion: null });
 });
 
@@ -337,9 +337,9 @@ it("refuses a case AEAT refused with another code", async () => {
 
 it("refuses a case whose code changed since it opened", async () => {
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ codigoError: "1100" })
-    .where(eq(envios.registroId, body.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, body.registroId as string));
   await refuses(body, "fiscal.remedy_invalid");
 });
 
@@ -468,9 +468,9 @@ it("refuses an exchanged ticket (F3) with full-invoice replacement switched on",
       { substitutedSaleIds: [ticket.saleId] },
     );
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "rechazado", codigoError: "1112" })
-      .where(eq(envios.registroId, recorded.recordId));
+      .where(eq(verifactuSubmissions.registroId, recorded.recordId));
     const filingCase = await openFilingCase(tx, {
       registroId: recorded.recordId,
       cause: "fiscal.registro_rechazado",
@@ -480,9 +480,9 @@ it("refuses an exchanged ticket (F3) with full-invoice replacement switched on",
     return { registroId: recorded.recordId, caseId: filingCase.id };
   });
   const [record] = await suite.db
-    .select({ tipoFactura: registrosFacturacion.tipoFactura })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, exchanged.registroId));
+    .select({ tipoFactura: verifactuRecords.tipoFactura })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, exchanged.registroId));
   expect(record).toEqual({ tipoFactura: "F3" });
   await refuses({ ...body, ...exchanged }, "fiscal.remedy_invalid");
 });
@@ -495,9 +495,9 @@ it("refuses while the start's time check holds", async () => {
 it("refuses an original that already has a partial refund, using no number", async () => {
   await withTransaction(suite.db, async (tx) => {
     const [original] = await tx
-      .select({ saleId: registrosFacturacion.saleId })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, body.registroId as string));
+      .select({ saleId: verifactuRecords.saleId })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, body.registroId as string));
     await recordCorrection(tx, backend(), {
       origin: jobOrigin("operator_script"),
       nodeId: node.nodeId,
@@ -565,8 +565,8 @@ it("accepts an operation date exactly twenty years before today", async () => {
   const { registroId } = (await res.json()) as { registroId: string };
   const [record] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   expect(record).toMatchObject({ fechaOperacion: "2006-03-01" });
 });
 

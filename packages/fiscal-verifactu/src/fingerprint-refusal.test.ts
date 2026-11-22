@@ -13,7 +13,7 @@ import {
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 
@@ -47,7 +47,7 @@ vi.mock("@waitron/verifactu", async (importOriginal) => {
 });
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-let node: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let node: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
 let backend: VerifactuBackend;
 let fullSeries: ReturnType<typeof brandSeriesId>;
 let correctionSeries: ReturnType<typeof brandSeriesId>;
@@ -57,7 +57,7 @@ const recipient = { taxId: "B12345674", legalName: "Business Customer Ltd", coun
 beforeEach(async () => {
   fault.mode = "none";
   fault.issues = [];
-  node = await seedTenantWithSif(suite.db);
+  node = await seedTaxpayerWithSif(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "1 Market Street" });
   const [full, correction] = await suite.db
     .insert(invoiceSeries)
@@ -107,8 +107,8 @@ function snapshot() {
     "sale_voids",
     "sale_substitutions",
     "cadenas",
-    "registros_facturacion",
-    "envios",
+    "verifactu_records",
+    "verifactu_submissions",
   ]) {
     if (!/^[a-z_]+$/.test(name)) throw new Error("invalid snapshot identifier");
     result[name] = suite.db.all(sql.raw(`select * from "${name}" order by rowid`));
@@ -231,20 +231,20 @@ describe("new-record fingerprint refusal", () => {
   it("reports a bad stored predecessor and continues without changing its bytes", async () => {
     await withIssuanceTransaction(suite.db, (tx) => recordSale(tx, backend, input()));
     const triggers = suite.db.all<{ name: string; sql: string }>(sql`
-      select name, sql from sqlite_master where type = 'trigger' and tbl_name = 'registros_facturacion'
+      select name, sql from sqlite_master where type = 'trigger' and tbl_name = 'verifactu_records'
     `);
     expect(triggers.length).toBeGreaterThan(0);
     for (const trigger of triggers) {
       suite.db.run(sql.raw(`drop trigger "${trigger.name.replaceAll('"', '""')}"`));
     }
     try {
-      suite.db.run(sql`update registros_facturacion set huella = ${"F".repeat(64)}`);
+      suite.db.run(sql`update verifactu_records set huella = ${"F".repeat(64)}`);
     } finally {
       for (const trigger of triggers) suite.db.run(sql.raw(trigger.sql));
     }
-    const [before] = suite.db.all(sql`select * from registros_facturacion`);
+    const [before] = suite.db.all(sql`select * from verifactu_records`);
     await withIssuanceTransaction(suite.db, (tx) => recordSale(tx, backend, input()));
-    const rows = suite.db.all(sql`select * from registros_facturacion order by secuencia`);
+    const rows = suite.db.all(sql`select * from verifactu_records order by secuencia`);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual(before);
     expect(rows[1]).toMatchObject({ anterior_huella: "F".repeat(64), secuencia: 2 });

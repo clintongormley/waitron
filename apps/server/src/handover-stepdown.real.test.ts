@@ -212,7 +212,7 @@ describe("a card sale in flight when the box steps down", () => {
           where node_id = ${nodeId} and purpose = 'standard' and id <> ${venue.seriesId}`,
     );
     const later = new Date(Date.now() + 60 * 60_000).toISOString();
-    await suite.db.execute(sql`update envios set proximo_intento_en = ${later}`);
+    await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${later}`);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         personId: null,

@@ -43,7 +43,7 @@ export interface ReconcileScope {
 }
 
 /**
- * `id` is `registros_facturacion.id`, which the drainer sends as `RefExterna`, so it keys AEAT's
+ * `id` is `verifactu_records.id`, which the drainer sends as `RefExterna`, so it keys AEAT's
  * view. `fecha_expedicion_factura` holds AEAT's `DD-MM-YYYY` form, NOT the stored `YYYY-MM-DD`
  * (`rowsForPeriod` converts it), so an incident's identity triple reads as the authority holds it.
  *
@@ -77,7 +77,7 @@ type Reported = {
   mensaje: string | null;
 };
 
-/** `envios.estado` values we read as "we believe AEAT accepted this". A `rechazado`/`detenido`
+/** `verifactu_submissions.estado` values we read as "we believe AEAT accepted this". A `rechazado`/`detenido`
  * record is in neither set: a sweep does not re-classify what we already know was refused or halted. */
 const ACEPTADO = new Set(["aceptado", "aceptado_con_errores"]);
 
@@ -104,7 +104,7 @@ function isDrift(localEstado: string, reported: EstadoRegistroConsulta): boolean
 }
 
 /**
- * The local `envios.estado` a mismatch is corrected to, keyed only by what AEAT reports. `Anulado`
+ * The local `verifactu_submissions.estado` a mismatch is corrected to, keyed only by what AEAT reports. `Anulado`
  * is deliberately absent: there is no local estado for it, so it is never corrected.
  */
 const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_con_errores">> = {
@@ -266,7 +266,7 @@ export async function reconcile(
 }
 
 /**
- * Our envios for the month AEAT files them under (`imputationMonth`), joined to their registros.
+ * Our verifactu_submissions for the month AEAT files them under (`imputationMonth`), joined to their registros.
  *
  * Plain text work on the stored `YYYY-MM-DD` string, no engine date parsing near a value AEAT will
  * judge. The prefix filter relies on the stored month always being two digits: both date columns'
@@ -303,7 +303,7 @@ async function rowsForPeriod(
     select
       r.id, r.sale_id,
       case when r.tipo_registro = 'alta' then (
-        select a.id from registros_facturacion a
+        select a.id from verifactu_records a
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
         limit 1
       ) end as anulacion_id,
@@ -313,18 +313,18 @@ async function rowsForPeriod(
             known.huella, json_extract(known.sistema_informatico, '$.NumeroInstalacion')
           )
         )
-        from registros_facturacion known
+        from verifactu_records known
         where ${sameInvoice}
       ) as known_records,
       r.huella, r.tipo_registro, r.sistema_informatico,
       e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
-    from envios e
-    join registros_facturacion r on r.id = e.registro_id
+    from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     where ${imputationMonth(sql`r.fecha_operacion`, sql`r.fecha_expedicion_factura`)} = ${`${period.year}-${period.month}`}
       and not exists (
-        select 1 from registros_facturacion replacement
+        select 1 from verifactu_records replacement
         where replacement.corrects_registro_id = r.id
       )
     ${scoped}
@@ -520,7 +520,7 @@ async function correct(
   const target = CORRECTION[reported.estado];
   if (target === undefined) return; // Anulado / no clean local estado — incident-only.
   await tx.execute(sql`
-    update envios set estado = ${target}, confirmado_en = ${now.toISOString()}
+    update verifactu_submissions set estado = ${target}, confirmado_en = ${now.toISOString()}
     where registro_id = ${row.id}
   `);
   await writeAck(tx, row.id, now);
@@ -554,7 +554,7 @@ async function correct(
  * later sweep can tell this from a first detection. A `pendiente` row carries no ack. */
 async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Promise<void> {
   await tx.execute(sql`
-    update envios set
+    update verifactu_submissions set
       estado = 'pendiente',
       csv = null,
       confirmado_en = null,
@@ -569,7 +569,7 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
 
 async function clearReconciledMarker(tx: Transaction, row: PeriodRow): Promise<void> {
   await tx.execute(sql`
-    update envios set reconciled_resubmit_at = null
+    update verifactu_submissions set reconciled_resubmit_at = null
     where registro_id = ${row.id}
   `);
 }
@@ -604,7 +604,7 @@ async function raise(
 /** Not period-scoped: an anulación's expedition date may differ from its alta's. */
 async function hasSiblingAnulacion(tx: Transaction, row: PeriodRow): Promise<boolean> {
   const { rows } = await tx.execute<{ one: number }>(sql`
-    select 1 as one from registros_facturacion
+    select 1 as one from verifactu_records
     where sale_id = ${row.sale_id} and tipo_registro = 'anulacion'
     limit 1
   `);

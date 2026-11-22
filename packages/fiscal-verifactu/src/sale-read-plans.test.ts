@@ -13,7 +13,7 @@ import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { altaFor, seedNode, seedSale } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -67,21 +67,21 @@ describe("reads of a sale's filed alta", () => {
   it("finds the receipt's alta through the sale index", async () => {
     const plan = await planOf((tx) => backend().filedReceiptFor(tx, brandSaleId(newId())));
     expect(plan).toEqual([
-      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
     ]);
   });
 
   it("finds the device receipt's evidence through the sale index", async () => {
     const plan = await planOf((tx) => readDeviceReceiptEvidence(tx, brandSaleId(newId())));
     expect(plan).toEqual([
-      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
     ]);
   });
 
   it("finds each sale's filed figures through the sale index", async () => {
     const plan = await planOf((tx) => backend().filedFiguresFor(tx, [brandSaleId(newId())]));
     expect(plan).toEqual([
-      "SEARCH r USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH r USING INDEX verifactu_records_sale_idx (sale_id=?)",
       "SEARCH e USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
@@ -92,8 +92,8 @@ describe("reads of a sale's filed alta", () => {
       backend().correctionAdmissionFor(tx, brandSaleId(newId()), node.nodeId),
     );
     expect(plan).toEqual([
-      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
-      "SEARCH envios USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
+      "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
+      "SEARCH verifactu_submissions USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
 
@@ -105,7 +105,7 @@ describe("reads of a sale's filed alta", () => {
       ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" }),
     );
     expect(plan).toEqual([
-      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
     ]);
   });
 
@@ -126,7 +126,7 @@ describe("reads of a sale's filed alta", () => {
         altaFor(node, saleId, 1, 1, "preproduction"),
       );
       await tx
-        .insert(envios)
+        .insert(verifactuSubmissions)
         .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
       const filingCase = await openFilingCase(tx, {
         registroId: original.id,
@@ -166,7 +166,7 @@ describe("reads of a sale's filed alta", () => {
       ),
     );
     expect(plan).toEqual([
-      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
     ]);
   });
 });

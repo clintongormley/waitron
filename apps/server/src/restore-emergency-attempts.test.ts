@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let f: Awaited<ReturnType<typeof stagedHourRestore>> | undefined;
@@ -40,7 +40,7 @@ it.each(["archive", "stream"] as const)(
       binding: f.binding,
     });
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-      `WAITRON_NODE_ID=${TENANT_A.nodeId}`,
+      `WAITRON_NODE_ID=${TAXPAYER_A.nodeId}`,
     );
     expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
       "0CNNY",
@@ -144,7 +144,7 @@ it.each(["archive", "stream"] as const)(
       "0CNQT",
     ]);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-      `WAITRON_NODE_ID=${TENANT_A.nodeId}`,
+      `WAITRON_NODE_ID=${TAXPAYER_A.nodeId}`,
     );
   },
 );

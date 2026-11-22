@@ -188,7 +188,7 @@ export const timeEntries = table(
     ),
     // The backstop against a forked chain: refuses a taken position whatever wrote the row.
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.sequenceNo),
-    // Mirrors `registros_huella_ck`, and shares its gap: a NUL byte after 64 hex digits passes,
+    // Mirrors `verifactu_records_huella_ck`, and shares its gap: a NUL byte after 64 hex digits passes,
     // because `length()` and `glob` stop at the first NUL.
     check(
       "time_entries_entry_hash_ck",

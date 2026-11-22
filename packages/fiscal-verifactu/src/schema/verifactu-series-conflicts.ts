@@ -1,15 +1,15 @@
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, invoiceSeries, json, label, newId, table, ts } from "@waitron/db";
 import type { LookupConflictEvidence } from "../conflict-types.js";
-import { registroSif } from "./sif.js";
+import { verifactuIdentities } from "./verifactu-identities.js";
 
-export const fiscalSeriesConflicts = table(
-  "fiscal_series_conflicts",
+export const verifactuSeriesConflicts = table(
+  "verifactu_series_conflicts",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     sifId: id("sif_id")
       .notNull()
-      .references(() => registroSif.id),
+      .references(() => verifactuIdentities.id),
     seriesId: id("series_id")
       .notNull()
       .references(() => invoiceSeries.id),
@@ -17,5 +17,5 @@ export const fiscalSeriesConflicts = table(
     evidence: json<LookupConflictEvidence>("evidence").notNull(),
     recordedAt: ts("recorded_at").notNull(),
   },
-  (t) => [uniqueIndex("fiscal_series_conflicts_invoice_uq").on(t.sifId, t.invoiceIdentity)],
+  (t) => [uniqueIndex("verifactu_series_conflicts_invoice_uq").on(t.sifId, t.invoiceIdentity)],
 );

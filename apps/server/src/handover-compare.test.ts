@@ -207,7 +207,7 @@ afterEach(async () => {
 async function appendRecord(node: SeededNode, number: number): Promise<void> {
   const sale = await seedSale(suite.db, node, number);
   const [sif] = suite.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+    sql`select nif, numero_instalacion from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
   );
   const pending = altaFor(node, sale, number, number);
   pending.input.SistemaInformatico = {
@@ -698,7 +698,7 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       alter(
         r.path,
-        `${AHEAD}; update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+        `${AHEAD}; update verifactu_records set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
       );
       const summarise = vi.fn(async () => ({}));
       const checkCopy = vi.fn(async () => "ok" as const);
@@ -874,7 +874,7 @@ describe("compareFinalCopy", () => {
       `update persons set display_name = 'Late', display_name_folded = 'late' where id = '${r.authorisedBy}'`;
 
     const FORGED_AMOUNT = (r: Awaited<ReturnType<typeof rig>>) =>
-      `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`;
+      `update verifactu_records set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`;
 
     it("a change after it passed is found before the next answer, and a new file's bytes are read", async () => {
       const r = await rig();
@@ -1058,7 +1058,7 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       const found: CopyFileChecks = {};
       expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
-      await damageRootPage(r.path, "registros_facturacion");
+      await damageRootPage(r.path, "verifactu_records");
       expect(await r.compareRow(r.indicator, {}, found)).toMatchObject({
         reason: "handover.summary_unreadable",
       });
@@ -1172,7 +1172,7 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       alter(
         r.path,
-        `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
+        `update verifactu_records set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
       );
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.chain_broken", { module: FISCAL }),
@@ -1371,7 +1371,7 @@ describe("compareFinalCopy", () => {
       alter(
         r.path,
         `delete from cadenas where node_id = '${r.m2.nodeId}';
-         delete from registro_sif where node_id = '${r.m2.nodeId}';
+         delete from verifactu_identities where node_id = '${r.m2.nodeId}';
          delete from invoice_series where node_id = '${r.m2.nodeId}';
          delete from nodes where id = '${r.m2.nodeId}'`,
       );
@@ -1474,7 +1474,7 @@ describe("compareFinalCopy", () => {
       alter(
         r.path,
         `insert into __drizzle_migrations_db (hash, created_at) values ('from-later', 1);
-         update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+         update verifactu_records set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
       );
       const lying = await r.resignedForFile((body) => {
         (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
@@ -1489,7 +1489,7 @@ describe("compareFinalCopy", () => {
       await copyFile(finalCopyPath(r.m1State, OP), r.path);
       alter(
         r.path,
-        `update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+        `update verifactu_records set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
       );
       const stillLying = await r.resignedForFile((body) => {
         (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
@@ -1760,7 +1760,7 @@ describe("the spare's duty runs the real comparison", () => {
         if (tries === 2) {
           alter(
             path,
-            `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
+            `update verifactu_records set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
           );
           await rm(join(r.m2State, "backup.env"));
         }
@@ -1817,7 +1817,7 @@ describe("the spare's duty runs the real comparison", () => {
       { timeout: 15_000 },
     );
     expect(r.copyReads()).toBe(1);
-    await damageRootPage(r.path, "registros_facturacion");
+    await damageRootPage(r.path, "verifactu_records");
     await rm(join(r.m2State, "backup.env"));
     // Failing case: the count stays at 1, waiting on `summary_unreadable` until the box restarts.
     await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 15_000 });

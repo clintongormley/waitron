@@ -1593,8 +1593,8 @@ AEAT identifies an invoicing system by the taxpayer's NIF,
 the two-character code and the installation number, and the code counts only together with its
 producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
 to another fiscal policy (the owner: one installation, one policy) makes a different system.
-Each chain stores the producer and compliance mode it was opened under (today `registro_sif`
-stores neither, `packages/fiscal-verifactu/src/schema/sif.ts:20-22`); the upgrade's step and
+Each chain stores the producer and compliance mode it was opened under (today `verifactu_identities`
+stores neither, `packages/fiscal-verifactu/src/schema/verifactu-identities.ts:20-22`); the upgrade's step and
 every start compare them with the running release's and, on a difference, open a new installation, series and chain in
 one transaction, on the filing node only, through a new `identity-change` activation that only
 the upgrade's step, or a start that finds the change not made, can authorise (A947's slice 4a

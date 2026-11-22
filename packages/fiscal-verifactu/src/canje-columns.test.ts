@@ -11,7 +11,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
+import { TAXPAYER_A, seedTaxpayerNodeSif } from "../test/fixtures.js";
 
 /**
  * Check canje JSON round-trips and the constraint limiting facturas_sustituidas to F3.
@@ -20,12 +20,12 @@ import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
  */
 const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  setup: seedTenantNodeSif,
+  setup: seedTaxpayerNodeSif,
   resetPerTest: false,
 });
 
 // One shared database backs the whole file, so every insert must claim a fresh secuencia
-// (registros_tenant_node_secuencia_uq) and a fresh num_serie (registros_identidad_uq).
+// (verifactu_records_node_secuencia_uq) and a fresh num_serie (verifactu_records_identidad_uq).
 let secuenciaSeq = 0;
 function nextSecuencia(): number {
   secuenciaSeq += 1;
@@ -57,14 +57,14 @@ const A_FACTURA_SUSTITUIDA = {
 async function insertRegistro(exec: Database, fields: RegistroFields = {}): Promise<void> {
   const secuencia = nextSecuencia();
   await exec.execute(sql`
-    insert into registros_facturacion (
+    insert into verifactu_records (
       id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, facturas_sustituidas, destinatarios,
       descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, 'device', (select device_id from sales where id = ${TENANT_A.saleId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${newId()}, 'device', (select device_id from sales where id = ${TAXPAYER_A.saleId}), ${TAXPAYER_A.nodeId}, ${TAXPAYER_A.sifId}, ${TAXPAYER_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"F/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "F3" : fields.tipoFactura},
@@ -81,7 +81,7 @@ describe("the destinatarios column is JSON and round-trips", () => {
   it("stores and returns destinatarios verbatim", async () => {
     await insertRegistro(suite.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
     const { rows } = await suite.db.execute<{ destinatarios: string }>(
-      sql`select destinatarios from registros_facturacion
+      sql`select destinatarios from verifactu_records
            where destinatarios is not null order by secuencia desc limit 1`,
     );
     // A raw read returns the column's TEXT; drizzle's `json` read mapping does not run.
@@ -95,7 +95,7 @@ describe("the destinatarios column is JSON and round-trips", () => {
   });
 });
 
-describe("registros_facturas_sustituidas_f3_ck — a substitution block only on an F3", () => {
+describe("verifactu_records_facturas_sustituidas_f3_ck — a substitution block only on an F3", () => {
   it("accepts facturas_sustituidas on an F3", async () => {
     await expect(
       insertRegistro(suite.db, {
@@ -135,10 +135,10 @@ describe("the destinatarios column inherits the table's immutability", () => {
   it("refuses an UPDATE of destinatarios by the append-only trigger", async () => {
     await insertRegistro(suite.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
     const error = await captureError(async () =>
-      suite.db.execute(sql`update registros_facturacion set destinatarios = '{}'`),
+      suite.db.execute(sql`update verifactu_records set destinatarios = '{}'`),
     );
     // `triggerRaised` matches the words too, so an `ON DELETE RESTRICT` refusal under the same
     // result code cannot satisfy it.
-    expect(triggerRaised(error, "registros_facturacion is append-only")).toBe(true);
+    expect(triggerRaised(error, "verifactu_records is append-only")).toBe(true);
   });
 });

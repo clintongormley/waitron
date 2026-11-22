@@ -1,8 +1,8 @@
 import { eq, isNull, ne, or } from "drizzle-orm";
 import { tableExists } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import type { FiscalBackendDeps, FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { runningIdentity } from "./software-identity.js";
@@ -48,22 +48,22 @@ export const FISCAL_SLOT: FiscalContribution = {
   activationReadinessTarget: (secret) =>
     secret === undefined ? null : aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
   hasNonproductionRecords: async (db) => {
-    if (!(await tableExists(db, "registros_facturacion"))) return false;
+    if (!(await tableExists(db, "verifactu_records"))) return false;
     const rows = await db
-      .select({ id: registrosFacturacion.id })
-      .from(registrosFacturacion)
+      .select({ id: verifactuRecords.id })
+      .from(verifactuRecords)
       .where(
-        or(isNull(registrosFacturacion.entorno), ne(registrosFacturacion.entorno, "production")),
+        or(isNull(verifactuRecords.entorno), ne(verifactuRecords.entorno, "production")),
       )
       .limit(1);
     return rows.length > 0;
   },
   readinessRejections: (db) =>
     db
-      .select({ code: envios.codigoError, message: envios.mensajeError })
-      .from(envios)
-      .where(eq(envios.estado, "rechazado"))
-      .orderBy(envios.registroId),
+      .select({ code: verifactuSubmissions.codigoError, message: verifactuSubmissions.mensajeError })
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.estado, "rechazado"))
+      .orderBy(verifactuSubmissions.registroId),
   makeBackend: (deps) => makeVerifactuBackend(deps),
   refuseSettings: (environment) => {
     runningIdentity(environment);

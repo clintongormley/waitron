@@ -31,7 +31,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readModulePreparationHistory } from "@waitron/provisioning";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import {
@@ -348,7 +348,7 @@ describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
     "%s recovery boots for trading twice without changing its selected hour or recovered counters",
     async (source) => {
-      await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
+      await suite.db.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
       const history = await recoveryInvoices();
       const credentialKey = Buffer.alloc(32, 7).toString("base64");
       await establishNodeIdentity(

@@ -10,11 +10,11 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SistemaInformatico } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
-import { seedTenantWithSif } from "../../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../../test/fixtures.js";
 import { declarationSourceFor, testProducer as producer } from "../../test/declaration.js";
 import { saleInput, steadyClock } from "../../test/write-path-fixtures.js";
 import { VerifactuBackend } from "../backend.js";
-import { registrosFacturacion } from "../schema/registros.js";
+import { verifactuRecords } from "../schema/verifactu-records.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
 import { runningIdentity, softwareVersion } from "../software-identity.js";
 import { fillProducer } from "./render.js";
@@ -38,7 +38,7 @@ async function recordedSoftware(
   onTestFinished(() => {
     vi.unstubAllEnvs();
   });
-  const { nodeId, seriesId } = await seedTenantWithSif(pg.db, {
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(pg.db, {
     idSistemaInformatico: WAITRON_ID_SISTEMA,
   });
   const backend = new writer.VerifactuBackend({
@@ -51,9 +51,9 @@ async function recordedSoftware(
     recordSale(tx, backend, saleInput({ nodeId, seriesId })),
   );
   const [row] = await pg.db
-    .select({ sistemaInformatico: registrosFacturacion.sistemaInformatico })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.saleId, saleId));
+    .select({ sistemaInformatico: verifactuRecords.sistemaInformatico })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.saleId, saleId));
   return row!.sistemaInformatico as SistemaInformatico;
 }
 

@@ -231,7 +231,7 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
     expect(row.name).toBe("Butifarra con judías");
     expect(JSON.parse(row.descriptions)).toEqual({ "ca-ES": expected.sausage.customer.ca });
   }
-  expect(suite.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`)).toEqual(
+  expect(suite.db.all<{ n: number }>(sql`select count(*) as n from verifactu_records`)).toEqual(
     [{ n: count }],
   );
 });
@@ -470,7 +470,7 @@ it.each([
     expect(JSON.parse(row.descriptions)).toEqual({ "es-ES": customer });
   }
   expect(count).toBeGreaterThan(0);
-  expect(suite.db.all(sql`select count(*) as n from registros_facturacion`)).toEqual([
+  expect(suite.db.all(sql`select count(*) as n from verifactu_records`)).toEqual([
     { n: count },
   ]);
 });
@@ -681,7 +681,7 @@ it.each([
     expect(JSON.parse(row.descriptions)).toEqual({ "es-ES": customer });
   }
   expect(count).toBeGreaterThan(0);
-  expect(suite.db.all(sql`select count(*) as n from registros_facturacion`)).toEqual([
+  expect(suite.db.all(sql`select count(*) as n from verifactu_records`)).toEqual([
     { n: count },
   ]);
 });

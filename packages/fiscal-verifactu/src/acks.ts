@@ -7,7 +7,7 @@ import type { AckState } from "@waitron/fiscal";
  * The ack contract, its durable-table transport, and the in-process consumer that projects an
  * unsent count from a stream of acks (plan 3b design §7).
  *
- * The invariant: an ack never disagrees with the committed `envios.estado`/`csv` it reflects.
+ * The invariant: an ack never disagrees with the committed `verifactu_submissions.estado`/`csv` it reflects.
  * `writeAck` is the sole producer, always called in the SAME transaction as the estado write, and
  * derives the ack from the row that transaction wrote. `ackStateOf` is the ONE place the
  * estado→AckState mapping lives, so it is never re-expressed in SQL where it could drift.
@@ -45,11 +45,11 @@ export function ackStateOf(estado: string): AckState | null {
 }
 
 /**
- * Upserts the ack for `registroId`, derived from the `envios` row THIS transaction just wrote — so
+ * Upserts the ack for `registroId`, derived from the `verifactu_submissions` row THIS transaction just wrote — so
  * the ack and the estado it reflects commit atomically and can never disagree. A no-op when
  * `ackStateOf` returns null (`pendiente`, `enviando`): there is nothing to acknowledge yet.
  *
- * `submitted_at` coalesces `envios.enviado_en` to `now` because the column is NOT NULL and a
+ * `submitted_at` coalesces `verifactu_submissions.enviado_en` to `now` because the column is NOT NULL and a
  * lost-ack row reconcile corrects may never have been claimed (no `enviado_en`). `csv` rides
  * straight off the row (null for a reconcile correction — consulta can never return it). The
  * upsert resets `delivered_at` to null on conflict, so a corrected state re-delivers downstream.
@@ -59,7 +59,7 @@ export function ackStateOf(estado: string): AckState | null {
  */
 export async function writeAck(tx: Transaction, registroId: string, now: Date): Promise<void> {
   const { rows } = await tx.execute<{ estado: string }>(
-    sql`select estado from envios where registro_id = ${registroId}`,
+    sql`select estado from verifactu_submissions where registro_id = ${registroId}`,
   );
   const estado = rows[0]?.estado;
   if (estado === undefined) return; // no envío row — nothing to acknowledge
@@ -74,7 +74,7 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
       e.csv,
       ${state},
       null
-    from envios e
+    from verifactu_submissions e
     where e.registro_id = ${registroId}
     on conflict (registro_id) do update set
       state = excluded.state,

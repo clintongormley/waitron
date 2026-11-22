@@ -14,7 +14,7 @@ import {
   seedPinnedChain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { readActiveConflicts } from "./conflict-evidence.js";
 import { drain } from "./drain.js";
 import { createReconciliationSweep } from "./reconcile-sweep.js";
@@ -47,7 +47,7 @@ async function fixture() {
       entorno: "production",
     });
     ids.push(row.registroId);
-    await suite.db.insert(envios).values({ registroId: row.registroId });
+    await suite.db.insert(verifactuSubmissions).values({ registroId: row.registroId });
   }
   const aeat = createFakeAeat({ serverNow: START, consultaPageSize: 1 });
   const client = aeat.client();
@@ -61,7 +61,7 @@ async function fixture() {
     START,
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.execute(sql`update envios set estado = 'pendiente'`);
+    await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
     await tx.execute(sql`delete from acks`);
   });
   const deps = {
@@ -114,7 +114,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     const sweep = createReconciliationSweep(deps);
     await sweep(START);
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set estado = 'pendiente' where registro_id = ${ids[2]}`);
+      await tx.execute(sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`);
       await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
@@ -130,7 +130,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     const sweep = createReconciliationSweep(deps);
     await sweep(START);
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set estado = 'pendiente' where registro_id = ${ids[2]}`);
+      await tx.execute(sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`);
       await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
@@ -173,7 +173,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
 
   it("reports unavailable certificate resolution as unknown and does not alter deliveries", async () => {
     const { deps } = await fixture();
-    const before = (await suite.db.execute(sql`select * from envios order by registro_id`)).rows;
+    const before = (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows;
     const sweep = createReconciliationSweep({
       ...deps,
       resolveClient: async () => {
@@ -186,7 +186,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     expect(result.periods.map(({ outcome }) => outcome)).toEqual(["unknown", "unknown"]);
     expect(result.nextDueAt).toEqual(new Date("2027-02-01T12:05:00Z"));
     expect(await acknowledgements()).toEqual([]);
-    expect((await suite.db.execute(sql`select * from envios order by registro_id`)).rows).toEqual(
+    expect((await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows).toEqual(
       before,
     );
   });
@@ -194,7 +194,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
   it("retries a month with a live filing claim instead of treating its checked count as a completed observation", async () => {
     const { deps, ids } = await fixture();
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'enviando' where registro_id = ${ids[2]}`),
+      tx.execute(sql`update verifactu_submissions set estado = 'enviando' where registro_id = ${ids[2]}`),
     );
     const sweep = createReconciliationSweep(deps);
 
@@ -296,7 +296,7 @@ it("abandons an in-flight lookup and starts no later month after stepdown", asyn
   await pending;
   expect(months).toEqual(["12"]);
   expect(await acknowledgements()).toEqual([]);
-  expect((await suite.db.execute(sql`select estado from envios order by rowid`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select estado from verifactu_submissions order by rowid`)).rows).toEqual([
     { estado: "pendiente" },
     { estado: "pendiente" },
     { estado: "pendiente" },

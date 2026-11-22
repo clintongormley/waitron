@@ -109,7 +109,7 @@ it.each(["passed", "wrong-key", "invalid-chain", "undeclared-entry"])(
     if (kind === "invalid-chain")
       await f.corrupt((db) =>
         db
-          .prepare("update registros_facturacion set huella=? where secuencia=1")
+          .prepare("update verifactu_records set huella=? where secuencia=1")
           .run("0".repeat(64)),
       );
     let exposed = false;

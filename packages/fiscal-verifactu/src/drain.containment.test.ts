@@ -6,7 +6,7 @@ import type { VerifactuClient } from "@waitron/verifactu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 
 // A `now` a minute after the fixtures' fixed `2026-07-21T00:00:00Z`, so the seeded rows are due.
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -40,7 +40,7 @@ const idle = useVenueDb({
   migrations: TEST_MIGRATIONS,
   // Wrapped: `seedTenantWithSif` resolves to the seeded till, and `setup` returns `Promise<void>`.
   setup: async (db) => {
-    await seedTenantWithSif(db);
+    await seedTaxpayerWithSif(db);
   },
 });
 
@@ -53,7 +53,7 @@ const solo = useVenueDb({ migrations: TEST_MIGRATIONS, resetPerTest: false });
 
 describe("drain resolves a client only when it has work", () => {
   it("never asks the resolver when nothing is due", async () => {
-    // `idle` is seeded with a venue, a till and a SIF, but no envios.
+    // `idle` is seeded with a venue, a till and a SIF, but no verifactu_submissions.
     const resolver = recordingResolver();
     const result = await drain(
       {
@@ -65,7 +65,7 @@ describe("drain resolves a client only when it has work", () => {
       NOW,
     );
     expect(resolver.asked).toBe(0);
-    expect(result.tenantsWithWork).toBe(0);
+    expect(result.passesWithWork).toBe(0);
   });
 
   it("reports a pass whose client cannot be resolved, rather than throwing out of the sweep", async () => {
@@ -86,7 +86,7 @@ describe("drain resolves a client only when it has work", () => {
 
     expect(result.skipped).toEqual([{ errorCode: "sif.not_registered" }]);
     // Counted anyway, so the host can tell this apart from a pass with no work.
-    expect(result.tenantsWithWork).toBe(1);
+    expect(result.passesWithWork).toBe(1);
   });
 
   it("reports the skip-retry interval when the pass was skipped", async () => {
@@ -170,7 +170,7 @@ describe("the due-work gate's thresholds", () => {
     // row sitting for a whole pass.
     await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
     `);
 
     const early = recordingResolver();
@@ -183,7 +183,7 @@ describe("the due-work gate's thresholds", () => {
       },
       new Date(NOW.getTime() - 1),
     );
-    expect(notYet.tenantsWithWork).toBe(0);
+    expect(notYet.passesWithWork).toBe(0);
     expect(early.asked).toBe(0);
 
     const onTime = recordingResolver();
@@ -196,7 +196,7 @@ describe("the due-work gate's thresholds", () => {
       },
       NOW,
     );
-    expect(due.tenantsWithWork).toBe(1);
+    expect(due.passesWithWork).toBe(1);
     expect(onTime.asked).toBe(1);
   });
 
@@ -205,7 +205,7 @@ describe("the due-work gate's thresholds", () => {
     // only shape in which this disjunct decides the answer on its own.
     await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(sql`
-      update envios set estado = 'enviando',
+      update verifactu_submissions set estado = 'enviando',
         enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS).toISOString()}
     `);
 
@@ -219,11 +219,11 @@ describe("the due-work gate's thresholds", () => {
       },
       NOW,
     );
-    expect(notYet.tenantsWithWork).toBe(0);
+    expect(notYet.passesWithWork).toBe(0);
     expect(exact.asked).toBe(0);
 
     await suite.db.execute(sql`
-      update envios set estado = 'enviando',
+      update verifactu_submissions set estado = 'enviando',
         enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS - 1).toISOString()}
     `);
 
@@ -237,7 +237,7 @@ describe("the due-work gate's thresholds", () => {
       },
       NOW,
     );
-    expect(due.tenantsWithWork).toBe(1);
+    expect(due.passesWithWork).toBe(1);
     expect(stale.asked).toBe(1);
   });
 });

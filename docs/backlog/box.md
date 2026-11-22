@@ -1948,7 +1948,7 @@ migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md))
 
 Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
-  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
+  `verifactu_records` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
 
 ## The email about a clock set before 28 October 2024 rarely leaves the box.
 

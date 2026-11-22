@@ -154,7 +154,7 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
     { kind: "wait", targetMs: Date.parse("2026-10-16T11:40:00Z") },
     { kind: "intent", identity: "0CNNW" },
   ]);
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
+  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
     rows: [{ count: 0 }],
   });
   expect(await venue.db.execute("select count(*) as count from taxpayer")).toMatchObject({
@@ -666,7 +666,7 @@ it("the command runtime retains public delivery bindings but requires a fresh ke
     code: "setup.not_ready",
   });
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
+  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
     rows: [{ count: 0 }],
   });
 });

@@ -4,19 +4,19 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { drawEmergencyIdentity } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
 import {
   fiscalAllocations,
   type ActivationResult,
 } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -28,7 +28,7 @@ const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: 
 let secret: string;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: node.nodeId, code: "A", purpose: "standard" },
@@ -118,7 +118,7 @@ it("authenticates the real node key, collects outside the write lock and activat
     { code: `FF-${draw.identity}`, purpose: "full" },
     { code: `R-${draw.identity}`, purpose: "corrective" },
   ]);
-  expect(await suite.db.select().from(registroSif)).toHaveLength(1);
+  expect(await suite.db.select().from(verifactuIdentities)).toHaveLength(1);
   const ledger = await suite.db.select().from(fiscalAllocations);
   expect(ledger).toHaveLength(1);
   expect(ledger[0]?.approval.operatorId).toEqual(operator);

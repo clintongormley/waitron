@@ -20,7 +20,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { cadenas, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { cadenas, verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
 import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin, nodeId } from "@waitron/shared";
@@ -134,7 +134,7 @@ beforeAll(async () => {
     });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "RE", purpose: "corrective" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FF", purpose: "full" });
-    await tx.insert(registroSif).values({
+    await tx.insert(verifactuIdentities).values({
       id: ids.sif,
       nodeId: ids.node,
       nif: "89890001K",
@@ -221,7 +221,7 @@ async function seedFiscalRecord(db: Database): Promise<void> {
     fiscalState: "recorded",
   });
   const [registro] = await db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       source: "device",
       deviceId: device,
@@ -246,7 +246,7 @@ async function seedFiscalRecord(db: Database): Promise<void> {
       tipoHuella: "01",
       huella: HUELLA,
     })
-    .returning({ id: registrosFacturacion.id });
+    .returning({ id: verifactuRecords.id });
   await db.insert(cadenas).values({
     nodeId: ids.node,
     secuencia: 1,
@@ -463,12 +463,12 @@ describe("waitron-restore restore --from-archive", () => {
       expect(await db.select().from(settings).orderBy(settings.module)).toEqual(expectedSettings);
       const sifs = await db
         .select({
-          numeroInstalacion: registroSif.numeroInstalacion,
-          revocadoEn: registroSif.revocadoEn,
+          numeroInstalacion: verifactuIdentities.numeroInstalacion,
+          revocadoEn: verifactuIdentities.revocadoEn,
         })
-        .from(registroSif)
-        .where(eq(registroSif.nodeId, ids.node))
-        .orderBy(registroSif.registradoEn);
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.nodeId, ids.node))
+        .orderBy(verifactuIdentities.registradoEn);
       expect(sifs).toHaveLength(2);
       expect(sifs[0]).toMatchObject({ numeroInstalacion: "1" });
       expect(sifs[0]?.revocadoEn).not.toBeNull();

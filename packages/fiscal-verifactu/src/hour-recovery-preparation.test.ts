@@ -7,7 +7,7 @@ import {
   type OperationBinding,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import {
   createHourRecoveryPreparation,
@@ -19,11 +19,11 @@ import { readHourHistory } from "./hour-history-reader.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = SERIES_BASES;
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const binding: OperationBinding = {
@@ -80,7 +80,7 @@ function store() {
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   let setupClock = clock("2026-10-16T11:38:00.000Z");
   let setupMonotonic = 0;
@@ -160,7 +160,7 @@ async function settled(
 async function snapshot() {
   return {
     series: await suite.db.select().from(invoiceSeries),
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     activations: await suite.db.select().from(fiscalAllocations),
   };
 }
@@ -209,7 +209,7 @@ it("selects and activates the next hour through the unchanged restore hook while
 
 it.each([
   "administrator",
-  { ...operator, nodeId: TENANT_A.nodeId2 },
+  { ...operator, nodeId: TAXPAYER_A.nodeId2 },
   { ...operator, eventId: "different-event" },
 ])("refuses an authority that does not name the recovered node and event: %j", async (supplied) => {
   const f = await fixture();
@@ -252,7 +252,7 @@ it("refuses a settle-target minute a surviving host already names, beside an old
           {
             ...scope,
             reference: "other-node",
-            nodeId: TENANT_A.nodeId2,
+            nodeId: TAXPAYER_A.nodeId2,
             softwareId: "OTHER",
             kind: "retirement",
             identity: "0CNQR",

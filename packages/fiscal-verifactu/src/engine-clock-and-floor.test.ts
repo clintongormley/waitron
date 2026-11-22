@@ -58,7 +58,7 @@ describe("supplied installation identities", () => {
     );
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "registro_sif",
+        table: "verifactu_identities",
         columns: ["nif", "id_sistema_informatico", "numero_instalacion"],
       }),
     ).toBe(true);
@@ -75,7 +75,7 @@ describe("registerSif stamps the clock", () => {
     );
 
     const rows = venue.db.all<{ id: string; revocado_en: string | null }>(
-      sql`select id, revocado_en from registro_sif order by numero_instalacion`,
+      sql`select id, revocado_en from verifactu_identities order by numero_instalacion`,
     );
     expect(rows.map((r) => r.id)).toEqual([first.id, second.id]);
     expect(rows[1]!.revocado_en).toBeNull();
@@ -110,7 +110,7 @@ describe("registerSif stamps the clock", () => {
 
 describe("markDelivered", () => {
   /**
-   * Seeded through raw SQL with the foreign key off, so no `registros_facturacion` row is needed:
+   * Seeded through raw SQL with the foreign key off, so no `verifactu_records` row is needed:
    * `markDelivered` updates `delivered_at`, which no key reads.
    */
   beforeEach(() => {

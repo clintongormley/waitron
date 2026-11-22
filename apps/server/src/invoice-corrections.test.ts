@@ -246,7 +246,7 @@ async function lineIdsOfSale(saleId: string) {
 async function original(saleId: string) {
   const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
   const lines = await venue.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
-  const records = venue.db.all(sql`select * from registros_facturacion where sale_id = ${saleId}`);
+  const records = venue.db.all(sql`select * from verifactu_records where sale_id = ${saleId}`);
   return { sale, lines, records };
 }
 
@@ -316,7 +316,7 @@ const MINUTE = 60_000;
 
 function behindLatestRecord(): TrustedClock {
   const [latest] = venue.db.all<{ at: string }>(
-    sql`select max(fecha_hora_huso_gen_registro) as at from registros_facturacion`,
+    sql`select max(fecha_hora_huso_gen_registro) as at from verifactu_records`,
   );
   const base = systemClock();
   const reading = { ...base.now(), instant: new Date(new Date(latest!.at).getTime() - 2 * MINUTE) };
@@ -1484,9 +1484,9 @@ describe("File now and Close", () => {
     const { refunds } = await cash(correction.id, "15.00");
     const [record] = (await original(saleId)).records as { id: string }[];
     const filingState = (to: string) =>
-      venue.db.run(sql`update envios set estado = ${to} where registro_id = ${record!.id}`);
+      venue.db.run(sql`update verifactu_submissions set estado = ${to} where registro_id = ${record!.id}`);
     const [{ state }] = venue.db.all<{ state: string }>(
-      sql`select estado as state from envios where registro_id = ${record!.id}`,
+      sql`select estado as state from verifactu_submissions where registro_id = ${record!.id}`,
     ) as [{ state: string }];
     filingState("detenido");
     try {

@@ -5,7 +5,7 @@ import { invoiceSeries, sales, saleSubstitutions, withTransaction } from "@waitr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { seedTenantWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayerWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { filedKindsBySale, refuseRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -13,12 +13,12 @@ import { decimal, jobOrigin, saleId, stringToCents, type SaleId } from "@waitron
 import { listTaxOfficeInvoices } from "./tax-office-list.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let seeded: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let seeded: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
 let seriesCode: string;
 let backend: VerifactuBackend;
 
 beforeEach(async () => {
-  seeded = await seedTenantWithSif(suite.db);
+  seeded = await seedTaxpayerWithSif(suite.db);
   const [series] = await suite.db
     .select({ code: invoiceSeries.code })
     .from(invoiceSeries)

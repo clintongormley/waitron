@@ -3,11 +3,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
+import { TAXPAYER_A, seedTaxpayerNodeSif } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  setup: seedTenantNodeSif,
+  setup: seedTaxpayerNodeSif,
 });
 
 /**
@@ -26,13 +26,13 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
     const cuotaTotal = "173913043.47";
 
     const result = await suite.db.execute<{ cuota_total: string; importe_total: string }>(sql`
-      insert into registros_facturacion (
+      insert into verifactu_records (
         id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
         tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-      ) values (${newId()}, 'device', (select device_id from sales where id = ${TENANT_A.saleId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ) values (${newId()}, 'device', (select device_id from sales where id = ${TAXPAYER_A.saleId}), ${TAXPAYER_A.nodeId}, ${TAXPAYER_A.sifId}, ${TAXPAYER_A.saleId},
         1, 'alta',
         '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
         'F2', 'Venta en establecimiento', '[]', ${cuotaTotal}, ${importeTotal},

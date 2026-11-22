@@ -6,12 +6,12 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { lastAcceptedQuery, readCertificateCard } from "./certificate-card.js";
 import { recordInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
-import { envios } from "./schema/index.js";
+import { verifactuSubmissions } from "./schema/index.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
 
@@ -74,16 +74,16 @@ async function setEnvio(
   confirmadoEn: string | null,
 ): Promise<void> {
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado, confirmadoEn: confirmadoEn === null ? null : new Date(confirmadoEn) })
-    .where(eq(envios.registroId, registroId));
+    .where(eq(verifactuSubmissions.registroId, registroId));
 }
 
 async function recordDashboardInstall(): Promise<void> {
   const replacement = authority.issue({ notAfter: new Date("2027-01-01T00:00:00Z") });
   await withTransaction(suite.db, (tx) =>
     recordInstall(tx, {
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       installedAt: new Date("2026-10-10T08:00:00.000Z"),
       source: "dashboard",
       personId: "p-1",
@@ -102,8 +102,8 @@ async function recordDashboardInstall(): Promise<void> {
 
 describe("readCertificateCard", () => {
   it("answers no revision and nothing installed for an empty vault", async () => {
-    await seedTenantNodeSif(suite.db);
-    await expect(readCertificateCard(depsFor(TENANT_A.nodeId), NOW)).resolves.toEqual({
+    await seedTaxpayerNodeSif(suite.db);
+    await expect(readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW)).resolves.toEqual({
       revision: null,
       timeZone: "Europe/Madrid",
       installed: null,
@@ -111,7 +111,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers the vault's revision and nothing installed when the vault has no install row", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, testRing(), {
         personId: null,
@@ -119,7 +119,7 @@ describe("readCertificateCard", () => {
         value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
       }),
     );
-    const card = await readCertificateCard(depsFor(TENANT_A.nodeId), NOW);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW);
     expect(card).toEqual({
       revision: await revision(),
       timeZone: "Europe/Madrid",
@@ -129,11 +129,11 @@ describe("readCertificateCard", () => {
   });
 
   it("answers every fact of a setup install, and none of the certificate's personal fields", async () => {
-    await seedTenantNodeSif(suite.db);
-    await sealSetup(TENANT_A.nodeId);
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
     const nameOf = vi.fn(async () => "Never asked");
 
-    const card = await readCertificateCard(depsFor(TENANT_A.nodeId, { nameOf }), NOW);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId, { nameOf }), NOW);
 
     expect(card).toEqual({
       revision: await revision(),
@@ -148,8 +148,8 @@ describe("readCertificateCard", () => {
   });
 
   it("names the person who installed a dashboard install, asked inside the read transaction", async () => {
-    await seedTenantNodeSif(suite.db);
-    await sealSetup(TENANT_A.nodeId);
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
     await recordDashboardInstall();
     let seenTx: Transaction | null = null;
     const authorize = vi.fn(async (tx: Transaction) => {
@@ -160,7 +160,7 @@ describe("readCertificateCard", () => {
       return personId === "p-1" ? "Marta Ruiz" : null;
     });
 
-    const card = await readCertificateCard(depsFor(TENANT_A.nodeId, { authorize, nameOf }), NOW);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId, { authorize, nameOf }), NOW);
 
     expect(card.installed).toEqual({
       ...SETUP_INSTALLED,
@@ -175,43 +175,43 @@ describe("readCertificateCard", () => {
   });
 
   it("says the tax ID does not match when the certificate names another taxpayer", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     await sealSetup(
-      TENANT_A.nodeId,
+      TAXPAYER_A.nodeId,
       authority.issue({
         organizationIdentifier: "VATES-B12345674",
         notAfter: new Date("2027-01-01T00:00:00Z"),
       }),
     );
-    const card = await readCertificateCard(depsFor(TENANT_A.nodeId), NOW);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW);
     expect(card.installed).toMatchObject({ taxId: "B12345674", taxIdMatches: false });
   });
 
   it("answers null for the match when the certificate names no tax ID", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     await sealSetup(
-      TENANT_A.nodeId,
+      TAXPAYER_A.nodeId,
       authority.issue({
         organizationIdentifier: null,
         notAfter: new Date("2027-01-01T00:00:00Z"),
       }),
     );
-    const card = await readCertificateCard(depsFor(TENANT_A.nodeId), NOW);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW);
     expect(card.installed).toMatchObject({ taxId: null, taxIdMatches: null });
   });
 
   it("answers expired, with negative days left, for a certificate past its end", async () => {
-    await seedTenantNodeSif(suite.db);
-    await sealSetup(TENANT_A.nodeId);
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
     const card = await readCertificateCard(
-      depsFor(TENANT_A.nodeId),
+      depsFor(TAXPAYER_A.nodeId),
       new Date("2027-01-03T12:00:00Z"),
     );
     expect(card.installed).toMatchObject({ daysLeft: -2, stage: "expired" });
   });
 
   it("answers the latest acceptance at or after the install, either accepted state, on any node", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     const seeded = await seedPendingEnvios(suite.db, { count: 5 });
     const other = await seedPendingEnvios(suite.db, { count: 1 });
     await sealSetup(seeded.nodeId);
@@ -251,12 +251,12 @@ describe("readCertificateCard", () => {
       return tx.execute<{ detail: string }>(sql`explain query plan ${sql.join(chunks)}`);
     });
     const detail = plan.rows.map((row) => row.detail).join("\n");
-    expect(detail).toContain("SEARCH envios USING INDEX envios_confirmado_idx (confirmado_en>?)");
+    expect(detail).toContain("SEARCH verifactu_submissions USING INDEX verifactu_submissions_confirmado_idx (confirmado_en>?)");
     expect(detail).not.toContain("TEMP B-TREE");
   });
 
   it("answers no acceptance when every accepted envío predates the install", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await sealSetup(seeded.nodeId);
     await setEnvio(seeded.registroIds[0] as string, "aceptado", "2026-09-30T23:00:00.000Z");
@@ -265,15 +265,15 @@ describe("readCertificateCard", () => {
   });
 
   it("refuses to match a certificate when there is no taxpayer", async () => {
-    await sealSetup(TENANT_A.nodeId);
-    await expect(readCertificateCard(depsFor(TENANT_A.nodeId), NOW)).rejects.toThrow(
+    await sealSetup(TAXPAYER_A.nodeId);
+    await expect(readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW)).rejects.toThrow(
       "taxpayer is empty",
     );
   });
 
   it("runs authorize first, inside the one read transaction, and reads nothing after it refuses", async () => {
-    await seedTenantNodeSif(suite.db);
-    await sealSetup(TENANT_A.nodeId);
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
     await recordDashboardInstall();
     const refusal = new Error("not permitted");
     const nameOf = vi.fn(async () => "Marta Ruiz");
@@ -282,7 +282,7 @@ describe("readCertificateCard", () => {
       throw refusal;
     });
     await expect(
-      readCertificateCard(depsFor(TENANT_A.nodeId, { authorize, nameOf }), NOW),
+      readCertificateCard(depsFor(TAXPAYER_A.nodeId, { authorize, nameOf }), NOW),
     ).rejects.toBe(refusal);
     expect(authorize).toHaveBeenCalledTimes(1);
     expect(nameOf).not.toHaveBeenCalled();

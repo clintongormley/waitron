@@ -8,7 +8,7 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { compareHourClocks } from "./hour-clock.js";
 import {
@@ -18,7 +18,7 @@ import {
 } from "./hour-selection.js";
 import { createHourPreparation, createHostedHourPreparation } from "./hour-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const instant = Date.parse("2026-10-16T11:40:00.000Z");
@@ -33,7 +33,7 @@ const binding: OperationBinding = {
   action: "setup",
   eventId: "owned-hour",
   sourceId: "first-setup:owned-attempt",
-  targetNodeId: TENANT_A.nodeId,
+  targetNodeId: TAXPAYER_A.nodeId,
 };
 const refuse = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 function clock(at = instant, browserAt = at) {
@@ -127,7 +127,7 @@ function fixture() {
             activatePreparedModuleAllocation(
               tx,
               {
-                nodeId: TENANT_A.nodeId,
+                nodeId: TAXPAYER_A.nodeId,
               },
               operation,
             ),
@@ -138,7 +138,7 @@ function fixture() {
   };
 }
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 
@@ -197,7 +197,7 @@ it("activates every exact base through the real prepared seed boundary without a
     { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   expect(f.revisions).toHaveLength(2);
-  expect((await suite.db.select().from(registroSif)).map((row) => row.numeroInstalacion)).toEqual([
+  expect((await suite.db.select().from(verifactuIdentities)).map((row) => row.numeroInstalacion)).toEqual([
     "0CNNW",
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
@@ -227,7 +227,7 @@ it("preparation reuses an existing intent across an ordinary hour boundary", asy
   f.facts = { ...f.facts, clock: clock(Date.parse("2026-10-16T12:01:00.000Z")) };
   await f.activate(selected.input);
   expect(f.revisions).toHaveLength(2);
-  expect((await suite.db.select().from(registroSif))[0]!.numeroInstalacion).toBe("0CNNW");
+  expect((await suite.db.select().from(verifactuIdentities))[0]!.numeroInstalacion).toBe("0CNNW");
 });
 
 it.each(["bases", "scope", "contextKey"] as const)(
@@ -289,7 +289,7 @@ it("keeps the shared exclusion held through the complete prepared callback", asy
       activatePreparedModuleAllocation(
         tx,
         {
-          nodeId: TENANT_A.nodeId,
+          nodeId: TAXPAYER_A.nodeId,
         },
         retained,
       ),
@@ -320,7 +320,7 @@ it("a different authenticated operator cannot adopt another operator's spent int
           activatePreparedModuleAllocation(
             tx,
             {
-              nodeId: TENANT_A.nodeId,
+              nodeId: TAXPAYER_A.nodeId,
             },
             prepared,
           ),
@@ -552,7 +552,7 @@ it("the hosted adapter keeps the host scope separate from clock metadata", async
         activatePreparedModuleAllocation(
           tx,
           {
-            nodeId: TENANT_A.nodeId,
+            nodeId: TAXPAYER_A.nodeId,
           },
           operation,
         ),

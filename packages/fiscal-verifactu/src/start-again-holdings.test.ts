@@ -5,12 +5,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
 import type { ModuleOperationHost } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
 import { recordInstall } from "./certificate-record.js";
 
@@ -25,7 +25,7 @@ describe("startAgainHoldings", () => {
 
   it.each(contributions)("counts invoice records and AEAT's acceptances in %s", async (_, seat) => {
     expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 0, accepted: 0 });
-    const { nodeId, seriesId: series } = await seedTenantWithSif(suite.db);
+    const { nodeId, seriesId: series } = await seedTaxpayerWithSif(suite.db);
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
@@ -36,26 +36,26 @@ describe("startAgainHoldings", () => {
         recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),
       );
     const rows = await suite.db
-      .select({ id: registrosFacturacion.id })
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia);
+      .select({ id: verifactuRecords.id })
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia);
     expect(rows).toHaveLength(2);
     expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 2, accepted: 0 });
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "aceptado" })
-      .where(eq(envios.registroId, rows[0]!.id));
+      .where(eq(verifactuSubmissions.registroId, rows[0]!.id));
     // The second record's envío is still `pendiente`, which AEAT has not accepted.
     expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 2, accepted: 1 });
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "aceptado_con_errores" })
-      .where(eq(envios.registroId, rows[1]!.id));
+      .where(eq(verifactuSubmissions.registroId, rows[1]!.id));
     expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 2, accepted: 2 });
   });
 
   it.each(contributions)("does not count a refused record as accepted in %s", async (_, seat) => {
-    const { nodeId, seriesId: series } = await seedTenantWithSif(suite.db);
+    const { nodeId, seriesId: series } = await seedTaxpayerWithSif(suite.db);
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
@@ -64,7 +64,7 @@ describe("startAgainHoldings", () => {
     await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),
     );
-    await suite.db.update(envios).set({ estado: "rechazado" });
+    await suite.db.update(verifactuSubmissions).set({ estado: "rechazado" });
     expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 1, accepted: 0 });
   });
 });
@@ -111,7 +111,7 @@ describe("startAgainKept with the certificate table missing", () => {
     migrations: TEST_MIGRATIONS,
     resetPerTest: false,
     setup: async (db) => {
-      await db.execute(sql`drop table fiscal_certificate_installs`);
+      await db.execute(sql`drop table verifactu_certificates`);
     },
   });
 
@@ -142,11 +142,11 @@ describe("startAgainHoldings on a database missing the fiscal tables", () => {
   });
 });
 
-describe("startAgainHoldings with an invoice record and the envios table missing", () => {
+describe("startAgainHoldings with an invoice record and the verifactu_submissions table missing", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS, resetPerTest: false });
 
   it("still counts the invoice record, and no acceptance", async () => {
-    const { nodeId, seriesId: series } = await seedTenantWithSif(suite.db);
+    const { nodeId, seriesId: series } = await seedTaxpayerWithSif(suite.db);
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
@@ -155,18 +155,18 @@ describe("startAgainHoldings with an invoice record and the envios table missing
     await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),
     );
-    await suite.db.execute(sql`drop table envios`);
+    await suite.db.execute(sql`drop table verifactu_submissions`);
     for (const [, seat] of contributions)
       expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 1, accepted: 0 });
   });
 });
 
-describe("startAgainHoldings with no invoice record and the envios table missing", () => {
+describe("startAgainHoldings with no invoice record and the verifactu_submissions table missing", () => {
   const suite = useVenueDb({
     migrations: TEST_MIGRATIONS,
     resetPerTest: false,
     setup: async (db) => {
-      await db.execute(sql`drop table envios`);
+      await db.execute(sql`drop table verifactu_submissions`);
     },
   });
 
@@ -178,6 +178,6 @@ describe("startAgainHoldings with no invoice record and the envios table missing
 it("lists the append-only tables the fiscal activation writes as deletable", () => {
   expect(FISCAL_START_AGAIN_DELETABLE).toEqual([
     "fiscal_allocations",
-    "fiscal_certificate_installs",
+    "verifactu_certificates",
   ]);
 });

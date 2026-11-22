@@ -14,8 +14,8 @@ import { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } from "@waitron/
 import { invoiceSeries, readMembershipTrustSet, withNodeTransaction } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { createClient } from "@waitron/verifactu";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
-import { envios } from "@waitron/fiscal-verifactu/src/schema/envios.js";
+import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
+import { verifactuSubmissions } from "@waitron/fiscal-verifactu/src/schema/verifactu-submissions.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readStartAgainMarker } from "@waitron/provisioning";
@@ -244,8 +244,8 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
 
 const facts = async () => ({
   series: await suite.db.select().from(invoiceSeries),
-  records: await suite.db.select().from(registrosFacturacion),
-  filing: await suite.db.select().from(envios),
+  records: await suite.db.select().from(verifactuRecords),
+  filing: await suite.db.select().from(verifactuSubmissions),
 });
 // Every AEAT request is built by `createClient`; the internet clock is mocked above.
 function expectNothingSentToAeat(fetched: { mock: { calls: unknown[] } }) {

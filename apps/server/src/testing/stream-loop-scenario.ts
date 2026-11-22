@@ -15,8 +15,8 @@ import { loadKeyRing, nodeSigningPublicKey, readNodeSigningKey } from "@waitron/
 import { nodeSealedState, nodes, openVenueDatabase, readStandardSeriesId } from "@waitron/db";
 import {
   createPaperAllocationPreparation,
-  registroSif,
-  registrosFacturacion,
+  verifactuIdentities,
+  verifactuRecords,
 } from "@waitron/fiscal-verifactu";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { verifySecretAsync } from "@waitron/identity";
@@ -725,13 +725,13 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     try {
       const sifs = await readB.venue
         .select({
-          id: registroSif.id,
-          numeroInstalacion: registroSif.numeroInstalacion,
-          revocadoEn: registroSif.revocadoEn,
+          id: verifactuIdentities.id,
+          numeroInstalacion: verifactuIdentities.numeroInstalacion,
+          revocadoEn: verifactuIdentities.revocadoEn,
         })
-        .from(registroSif)
-        .where(eq(registroSif.nodeId, a.nodeId))
-        .orderBy(registroSif.registradoEn);
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.nodeId, a.nodeId))
+        .orderBy(verifactuIdentities.registradoEn);
       expect(sifs).toHaveLength(2);
       const [old, fresh] = sifs;
       expect(old!.revocadoEn).not.toBeNull();
@@ -740,11 +740,11 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       expect(fresh!.numeroInstalacion).not.toBe(old!.numeroInstalacion);
       const records = await readB.venue
         .select({
-          saleId: registrosFacturacion.saleId,
-          sifId: registrosFacturacion.sifId,
-          primerRegistro: registrosFacturacion.primerRegistro,
+          saleId: verifactuRecords.saleId,
+          sifId: verifactuRecords.sifId,
+          primerRegistro: verifactuRecords.primerRegistro,
         })
-        .from(registrosFacturacion);
+        .from(verifactuRecords);
       expect(records).toHaveLength(2 + 2 * TIMED_SALES); // A's, B's, and stage 8b's
       expect(records).toEqual(
         expect.arrayContaining([

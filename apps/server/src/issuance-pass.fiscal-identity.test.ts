@@ -219,7 +219,7 @@ async function fileOneSale(db: Database) {
   );
   const registros = db.all<Record<string, unknown>>(sql`
     select huella, anterior_huella, importe_total, cuota_total, desglose, fecha_hora_huso_gen_registro
-    from registros_facturacion`);
+    from verifactu_records`);
   return { header, lines, registros };
 }
 

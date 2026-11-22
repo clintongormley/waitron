@@ -15,7 +15,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const SEND_AT = new Date("2026-07-21T00:00:10Z");
 
 async function drainOnce(client: VerifactuClient) {
-  await suite.db.execute(sql`delete from envio_flujo`);
+  await suite.db.execute(sql`delete from verifactu_sending_state`);
   return drain(
     {
       db: suite.db,
@@ -84,13 +84,13 @@ describe("latestFutureDateRefusal", () => {
     const accepted = await seedPendingEnvios(suite.db, { count: 1, futureDated: true });
     await drainOnce(fake.client());
     const acceptedState = await suite.db.execute<{ estado: string }>(
-      sql`select estado from envios`,
+      sql`select estado from verifactu_submissions`,
     );
 
     expect(acceptedState.rows).toEqual([{ estado: "aceptado_con_errores" }]);
     expect(await refusalOn(accepted.nodeId)).toBeNull();
 
-    await suite.db.execute(sql`update envios set estado = 'rechazado', codigo_error = '1100'`);
+    await suite.db.execute(sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1100'`);
 
     expect(await refusalOn(accepted.nodeId)).toBeNull();
   });
@@ -102,16 +102,16 @@ describe("latestFutureDateRefusal", () => {
     fake.reject(other.facturaKey, FUTURE_DATE_REFUSAL, "Rechazo");
     await drainOnce(fake.client());
     const { rows } = await suite.db.execute<{ estado: string }>(
-      sql`select estado from envios where registro_id = ${other.registroId}`,
+      sql`select estado from verifactu_submissions where registro_id = ${other.registroId}`,
     );
 
     expect(rows).toEqual([{ estado: "rechazado" }]);
     expect(await refusalOn(seeded.nodeId)).toBeNull();
   });
 
-  it("starts from the refused filing replies through envios_drenaje_idx", async () => {
+  it("starts from the refused filing replies through verifactu_submissions_drenaje_idx", async () => {
     const plan = await planOfRead();
 
-    expect(plan[0]).toBe("SEARCH e USING INDEX envios_drenaje_idx (estado=?)");
+    expect(plan[0]).toBe("SEARCH e USING INDEX verifactu_submissions_drenaje_idx (estado=?)");
   });
 });

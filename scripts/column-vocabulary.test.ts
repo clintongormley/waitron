@@ -60,13 +60,13 @@ const ENGINE_ADAPTER = "packages/store/src/";
 /**
  * The one legitimate direct import in the tree, scoped to the single builder.
  *
- * `registros_facturacion.cuota_total` and `importe_total` store the exact bytes that went into the
+ * `verifactu_records.cuota_total` and `importe_total` store the exact bytes that went into the
  * Veri*Factu huella, so they must not pass through a helper that could ever re-render them (the
  * comment above the two declarations in that file). Scoped to `text` on purpose: a different
  * builder appearing in that file is a new decision.
  */
 const ALLOWED: ReadonlyArray<{ readonly file: string; readonly name: string }> = [
-  { file: "packages/fiscal-verifactu/src/schema/registros.ts", name: "text" },
+  { file: "packages/fiscal-verifactu/src/schema/verifactu-records.ts", name: "text" },
 ];
 
 /**

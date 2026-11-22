@@ -16,7 +16,7 @@ import {
   seedLiveConflict,
   liveConflictNode,
 } from "@waitron/fiscal-verifactu/test/live-conflict-fixture.js";
-import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -56,7 +56,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
     },
   });
   await withTransaction(suite.db, async (tx) => {
-    await tx.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
+    await tx.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
   });
   const key = "synthetic-boot-current-recovery-key";
   await withNodeTransaction(suite.node, (tx) =>

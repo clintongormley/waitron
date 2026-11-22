@@ -118,7 +118,7 @@ describe("closeBillDeferredTx, new work", () => {
     expect(fiscalRecordCount(t.venue, party.tabId)).toBe(1);
     expect(
       t.venue.db.all(
-        sql`select tipo_factura from registros_facturacion where sale_id = ${sale!.id}`,
+        sql`select tipo_factura from verifactu_records where sale_id = ${sale!.id}`,
       ),
     ).toEqual([{ tipo_factura: "F1" }]);
     expect(

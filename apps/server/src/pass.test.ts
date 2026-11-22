@@ -17,7 +17,7 @@ const PERIOD = { from: new Date("2026-07-25T00:00:00Z"), to: new Date("2026-07-2
 function drainResult(over: Partial<DrainResult> = {}): DrainResult {
   return {
     nextDueAt: null,
-    tenantsWithWork: 0,
+    passesWithWork: 0,
     batchesSent: 0,
     recordsSubmitted: 0,
     recordsAccepted: 0,
@@ -119,7 +119,7 @@ describe("fiscal and payment job reports", () => {
         ),
     });
     await runDrain(d);
-    expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
+    expect(d.lines.some((line) => line.startsWith("warn drain.skipped"))).toBe(true);
     expect(d.lines.some((line) => line.includes("credentials.missing"))).toBe(true);
   });
 
@@ -131,7 +131,7 @@ describe("fiscal and payment job reports", () => {
         Promise.resolve(
           drainResult({
             nextDueAt: NOW,
-            tenantsWithWork: 1,
+            passesWithWork: 1,
             skipped: [{ errorCode: "credentials.missing" }],
           }),
         ),
@@ -139,7 +139,7 @@ describe("fiscal and payment job reports", () => {
     await expect(runDrain(d)).resolves.toEqual({ nextDueAt: NOW, degraded: true });
     expect(d.awaitingCert.current).toBe(true);
     expect(d.lines.some((line) => line.startsWith("warn fiscal.awaiting_certificate"))).toBe(true);
-    expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
+    expect(d.lines.some((line) => line.startsWith("warn drain.skipped"))).toBe(true);
     // It counts toward the duty's skipped total, so /health sees the unmet obligation.
     expect(d.health.duties[DRAIN_DUTY]?.skipped).toBe(1);
   });
@@ -150,7 +150,7 @@ describe("fiscal and payment job reports", () => {
         Promise.resolve(
           drainResult({
             nextDueAt: NOW,
-            tenantsWithWork: 1,
+            passesWithWork: 1,
             skipped: [{ errorCode: "credentials.missing" }],
           }),
         ),
@@ -171,10 +171,10 @@ describe("fiscal and payment job reports", () => {
           missing
             ? drainResult({
                 nextDueAt: NOW,
-                tenantsWithWork: 1,
+                passesWithWork: 1,
                 skipped: [{ errorCode: "credentials.missing" }],
               })
-            : drainResult({ nextDueAt: SOON, tenantsWithWork: 1, batchesSent: 1 }),
+            : drainResult({ nextDueAt: SOON, passesWithWork: 1, batchesSent: 1 }),
         ),
     });
     await runDrain(d); // missing → flag true, one warn
@@ -203,7 +203,7 @@ describe("fiscal and payment job reports", () => {
           missing
             ? drainResult({
                 nextDueAt: NOW,
-                tenantsWithWork: 1,
+                passesWithWork: 1,
                 skipped: [{ errorCode: "credentials.missing" }],
               })
             : drainResult(),
@@ -229,12 +229,12 @@ describe("fiscal and payment job reports", () => {
           missing
             ? drainResult({
                 nextDueAt: NOW,
-                tenantsWithWork: 1,
+                passesWithWork: 1,
                 skipped: [{ errorCode: "credentials.missing" }],
               })
             : drainResult({
                 nextDueAt: SOON,
-                tenantsWithWork: 1,
+                passesWithWork: 1,
                 batchesSent: 1,
                 recordsSubmitted: 1,
               }),

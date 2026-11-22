@@ -14,7 +14,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { isMinuteSeriesBases } from "./hour-identity.js";
 import { liveSeriesBases } from "./reserved-series.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { publicHourSelectionHistory } from "./hour-selection.js";
 
 interface Dormant {
@@ -220,8 +220,8 @@ async function configuration(
     return refuse("node_mismatch");
   const [activeSif] = await tx
     .select()
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, standby.nodeId), isNull(registroSif.revocadoEn)))
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)))
     .limit(1);
   const [activeSeries] = await tx
     .select()
@@ -241,8 +241,8 @@ async function configuration(
     return refuse("environment_unstamped");
   const [sif] = await tx
     .select()
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, primary.nodeId), isNull(registroSif.revocadoEn)))
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)))
     .limit(1);
   if (sif === undefined) return refuse("primary_not_registered");
   if (sif.nif !== taxpayer.taxId) return refuse("scope_mismatch");

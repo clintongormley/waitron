@@ -133,7 +133,7 @@ describe("future order customer fallback", () => {
           "sales",
           "sale_lines",
           "invoice_series",
-          "registros_facturacion",
+          "verifactu_records",
           "menu_versions",
           "menu_releases",
         ].map((name) => [

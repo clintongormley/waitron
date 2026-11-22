@@ -15,7 +15,7 @@ const flag = "<sf:Incidencia>S</sf:Incidencia>";
 it.each(["restart", "stale"])("flags the interrupted claim and unsent tail on %s", async (mode) => {
   const seeded = await seedPendingEnvios(suite.db, { count: 2 });
   await suite.db.execute(sql`
-    update envios set estado = 'enviando', enviado_en = '2026-07-21T00:00:00.000Z'
+    update verifactu_submissions set estado = 'enviando', enviado_en = '2026-07-21T00:00:00.000Z'
     where registro_id = ${seeded.registroIds[0]!}
   `);
   if (mode === "restart") await resetInFlightClaims(suite.db, now);
@@ -40,7 +40,7 @@ it.each(["restart", "stale"])("flags the interrupted claim and unsent tail on %s
   expect(result.recordsAccepted).toBe(2);
   expect(xml).toHaveLength(1);
   expect(xml[0]).toContain(flag);
-  expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual([
     { technical_incidence: 1 },
     { technical_incidence: 1 },
   ]);
@@ -61,26 +61,26 @@ it.each([
     if (stamp !== null) await stampDeployment(suite.db, stamp);
     if (gate === "waiting")
       await suite.db.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, '2026-07-21T00:11:00.000Z', 60)
   `);
     if (gate === "retry")
       await suite.db.execute(sql`
-    update envios set proximo_intento_en = '2026-07-21T00:11:00.000Z'
+    update verifactu_submissions set proximo_intento_en = '2026-07-21T00:11:00.000Z'
   `);
     const before = (
       await suite.db.execute(
-        sql`select estado, intentos, incidencia, proximo_intento_en from envios`,
+        sql`select estado, intentos, incidencia, proximo_intento_en from verifactu_submissions`,
       )
     ).rows;
     await resetInFlightClaims(suite.db, now);
-    expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual([
+    expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual([
       { technical_incidence: expected },
     ]);
     expect(
       (
         await suite.db.execute(
-          sql`select estado, intentos, incidencia, proximo_intento_en from envios`,
+          sql`select estado, intentos, incidencia, proximo_intento_en from verifactu_submissions`,
         )
       ).rows,
     ).toEqual(before);
@@ -90,10 +90,10 @@ it.each([
 it("does not open an incident on an idle reset or a live nonstale claim", async () => {
   await stampDeployment(suite.db, "production");
   await resetInFlightClaims(suite.db, now);
-  expect((await suite.db.execute(sql`select * from envio_flujo`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from verifactu_sending_state`)).rows).toEqual([]);
   await seedPendingEnvios(suite.db, { count: 1 });
   await suite.db.execute(
-    sql`update envios set estado = 'enviando', enviado_en = ${now.toISOString()}`,
+    sql`update verifactu_submissions set estado = 'enviando', enviado_en = ${now.toISOString()}`,
   );
   const authority = createFakeAeat({ serverNow: now });
   const result = await drain(
@@ -106,19 +106,19 @@ it("does not open an incident on an idle reset or a live nonstale claim", async 
     now,
   );
   expect(result.recordsSubmitted).toBe(0);
-  expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual([
     { technical_incidence: 0 },
   ]);
-  expect((await suite.db.execute(sql`select * from envio_flujo`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from verifactu_sending_state`)).rows).toEqual([]);
 });
 
 it("does not infer an outage for a recent pending row under the initial wait", async () => {
   await seedPendingEnvios(suite.db, { count: 1 });
   await stampDeployment(suite.db, "production");
-  await suite.db.execute(sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+  await suite.db.execute(sql`insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, '2026-07-21T00:01:00.000Z', 60)`);
   await resetInFlightClaims(suite.db, new Date("2026-07-21T00:00:30Z"));
-  expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual([
     { technical_incidence: 0 },
   ]);
 });
@@ -141,19 +141,19 @@ it("does not mistake a pending cancellation or refusal-braked successor for a se
   await appendPendingAlta(suite.db, seeded, 5);
   await stampDeployment(suite.db, "production");
   const before = {
-    deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
+    deliveries: (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   };
   await resetInFlightClaims(suite.db, new Date(now.getTime() + 120_000));
   expect({
-    deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
+    deliveries: (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   }).toEqual(before);
-  expect((await suite.db.execute(sql`select technical_incidence from envios`)).rows).toEqual(
+  expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual(
     Array.from({ length: 5 }, () => ({ technical_incidence: 0 })),
   );
 });
@@ -172,11 +172,11 @@ it.each([false, true])(
       })),
     });
     await stampDeployment(suite.db, "production");
-    await suite.db.execute(sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    await suite.db.execute(sql`insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, '2026-07-21T00:11:00.000Z', 60)`);
     await resetInFlightClaims(suite.db, now);
     const result = await suite.db.execute(
-      sql`select sum(technical_incidence) as affected from envios`,
+      sql`select sum(technical_incidence) as affected from verifactu_submissions`,
     );
     expect(result.rows).toEqual([{ affected: nameBoundary ? 0 : 1000 }]);
   },
@@ -188,13 +188,13 @@ it.each([null, "preproduction", "production"] as const)(
     await seedPendingEnvios(suite.db, { count: 2, entorno: "preproduction" });
     if (stamp !== null) await stampDeployment(suite.db, stamp);
     await suite.db
-      .execute(sql`update envios set estado = 'enviando', enviado_en = '2026-07-21T00:09:59.000Z'
-    where registro_id = (select id from registros_facturacion where secuencia = 1)`);
+      .execute(sql`update verifactu_submissions set estado = 'enviando', enviado_en = '2026-07-21T00:09:59.000Z'
+    where registro_id = (select id from verifactu_records where secuencia = 1)`);
     await resetInFlightClaims(suite.db, now);
     expect(
       (
         await suite.db.execute(
-          sql`select estado, technical_incidence from envios order by registro_id`,
+          sql`select estado, technical_incidence from verifactu_submissions order by registro_id`,
         )
       ).rows,
     ).toEqual(

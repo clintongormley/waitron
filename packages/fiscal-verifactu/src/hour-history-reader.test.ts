@@ -6,7 +6,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, seedVenueNodes, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, seedVenueNodes, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import {
   readModuleAllocationSeries,
@@ -17,8 +17,8 @@ import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { registroSif } from "./schema/sif.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { VerifactuBackend } from "./backend.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
@@ -29,11 +29,11 @@ async function readInventory() {
 }
 const bases = SERIES_BASES;
 it("enumerates the higher retired other-node hour that current-node readers omit", async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   for (const [nodeId, identity, issuedAt] of [
-    [TENANT_A.nodeId, "0CNNW", "2026-10-16T11:40:00.000Z"],
-    [TENANT_A.nodeId2, "0CNPG", "2026-10-16T12:00:00.000Z"],
+    [TAXPAYER_A.nodeId, "0CNNW", "2026-10-16T11:40:00.000Z"],
+    [TAXPAYER_A.nodeId2, "0CNPG", "2026-10-16T12:00:00.000Z"],
   ] as const) {
     const binding: OperationBinding = {
       module: "fiscal-verifactu",
@@ -85,12 +85,12 @@ it("enumerates the higher retired other-node hour that current-node readers omit
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: new Date("2026-10-16T12:30:00Z") })
-    .where(eq(invoiceSeries.nodeId, TENANT_A.nodeId2));
+    .where(eq(invoiceSeries.nodeId, TAXPAYER_A.nodeId2));
   await suite.db
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: new Date("2026-10-16T12:30:00Z") })
-    .where(eq(registroSif.nodeId, TENANT_A.nodeId2));
-  const node = { nodeId: TENANT_A.nodeId };
+    .where(eq(verifactuIdentities.nodeId, TAXPAYER_A.nodeId2));
+  const node = { nodeId: TAXPAYER_A.nodeId };
   const result = await withTransaction(suite.db, async (tx) => ({
     bases: await liveSeriesBases(tx, node),
     series: await readModuleAllocationSeries(tx, node, bases),
@@ -123,24 +123,24 @@ it("positively inventories an unprovisioned empty database", async () => {
 async function seedRows(
   options: { identity?: string; nif?: string; softwareId?: string; retired?: boolean } = {},
 ) {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const identity = options.identity ?? "0CNN8";
   const [sif] = await suite.db
-    .insert(registroSif)
+    .insert(verifactuIdentities)
     .values({
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       nif: options.nif ?? "89890001K",
       idSistemaInformatico: options.softwareId ?? "W1",
       numeroInstalacion: identity,
       registradoEn: new Date("2026-10-16T11:20:00Z"),
       revocadoEn: options.retired ? new Date("2026-10-16T11:30:00Z") : null,
     })
-    .returning({ id: registroSif.id });
+    .returning({ id: verifactuIdentities.id });
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       code: `other-base-${identity}`,
       purpose: "full",
       retiredAt: options.retired ? new Date("2026-10-16T11:35:00Z") : null,
@@ -181,9 +181,9 @@ it("another taxpayer's higher identity stays independent", async () => {
   expect((await projection()).contradictions).toEqual([]);
 });
 it("does not assume a nonempty unstamped database is the requested environment", async () => {
-  await seedTenants(suite.db);
-  await suite.db.insert(registroSif).values({
-    nodeId: TENANT_A.nodeId,
+  await seedTaxpayers(suite.db);
+  await suite.db.insert(verifactuIdentities).values({
+    nodeId: TAXPAYER_A.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "W1",
     numeroInstalacion: "0CNPG",
@@ -194,7 +194,7 @@ it("an unassignable series refuses completeness instead of disappearing", async 
   await seedRows();
   await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "corrective" });
+    .values({ nodeId: TAXPAYER_A.nodeId2, code: "R-0CNPG", purpose: "corrective" });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 it("a malformed hour suffix cannot become empty history", async () => {
@@ -206,8 +206,8 @@ it("a dormant reservation's time is recorded without active series on its node",
   await suite.db.insert(fiscalReservations).values({
     eventKey: "dormant",
     allocationKey: "reserved",
-    nodeId: TENANT_A.nodeId2,
-    sourceNodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId2,
+    sourceNodeId: TAXPAYER_A.nodeId,
     taxpayerNif: "89890001K",
     softwareId: "OTHER",
     environment: "preproduction",
@@ -227,8 +227,8 @@ it("an explicit reservation environment remains separate from the database stamp
   await suite.db.insert(fiscalReservations).values({
     eventKey: "foreign",
     allocationKey: "reserved",
-    nodeId: TENANT_A.nodeId2,
-    sourceNodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId2,
+    sourceNodeId: TAXPAYER_A.nodeId,
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "production",
@@ -245,7 +245,7 @@ async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferIns
   // A standard base is required by admission; retain both purposes in this synthetic receipt.
   const [standard] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId, code: "A-0CNN8", purpose: "standard" })
+    .values({ nodeId: TAXPAYER_A.nodeId, code: "A-0CNN8", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   series.push({ id: standard!.id, code: "A-0CNN8", purpose: "standard" });
   const input = {
@@ -265,7 +265,7 @@ async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferIns
     eventId: "event",
     operatorId: "administrator",
     sourceId: "attempt",
-    targetNodeId: TENANT_A.nodeId,
+    targetNodeId: TAXPAYER_A.nodeId,
     oldMachineOffline: false,
     oldMachineAbsent: true,
     noParallelRecovery: true,
@@ -275,7 +275,7 @@ async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferIns
   await suite.db.insert(fiscalAllocations).values({
     eventKey: "event",
     allocationKey: "allocation",
-    nodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId,
     sifId: ids.sifId,
     taxpayerNif: input.taxpayerNif,
     softwareId: input.softwareId,
@@ -303,7 +303,7 @@ it.each([
   { allocationKey: "changed" },
   { softwareId: "OTHER" },
   { installationIdentity: "0CNPG" },
-  { nodeId: TENANT_A.nodeId2 },
+  { nodeId: TAXPAYER_A.nodeId2 },
   { allocation: {} },
   { approval: {} },
   { result: {} },
@@ -313,15 +313,15 @@ it.each([
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 
-it.each([{ evidence: [] }, { evidence: "bad" }, { bases: [] }, { sourceNodeId: TENANT_A.nodeId2 }])(
+it.each([{ evidence: [] }, { evidence: "bad" }, { bases: [] }, { sourceNodeId: TAXPAYER_A.nodeId2 }])(
   "a malformed reservation %j cannot masquerade as complete history",
   async (change) => {
     await seedRows();
     await suite.db.insert(fiscalReservations).values({
       eventKey: "damaged",
       allocationKey: "reserved",
-      nodeId: TENANT_A.nodeId2,
-      sourceNodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId2,
+      sourceNodeId: TAXPAYER_A.nodeId,
       taxpayerNif: "89890001K",
       softwareId: "W1",
       environment: "preproduction",
@@ -341,7 +341,7 @@ it("retains a later recorded approval time even when its database commit timesta
       eventId: "event",
       operatorId: "administrator",
       sourceId: "attempt",
-      targetNodeId: TENANT_A.nodeId,
+      targetNodeId: TAXPAYER_A.nodeId,
       oldMachineOffline: false,
       oldMachineAbsent: true,
       noParallelRecovery: true,
@@ -368,7 +368,7 @@ it("the shared history never carries the newest fiscal record's time", async () 
     action: "setup",
     eventId: identity,
     sourceId: `attempt/${identity}`,
-    targetNodeId: TENANT_A.nodeId,
+    targetNodeId: TAXPAYER_A.nodeId,
   };
   const input = {
     allocation: {
@@ -388,7 +388,7 @@ it("the shared history never carries the newest fiscal record's time", async () 
       eventId: identity,
       operatorId: "administrator",
       sourceId: binding.sourceId,
-      targetNodeId: TENANT_A.nodeId,
+      targetNodeId: TAXPAYER_A.nodeId,
       oldMachineOffline: false,
       oldMachineAbsent: true,
       noParallelRecovery: true,
@@ -408,7 +408,7 @@ it("the shared history never carries the newest fiscal record's time", async () 
           (write) =>
             withTransaction(suite.db, (tx) =>
               write(tx, {
-                nodeId: TENANT_A.nodeId,
+                nodeId: TAXPAYER_A.nodeId,
               }),
             ),
         ),
@@ -432,22 +432,22 @@ it("the shared history never carries the newest fiscal record's time", async () 
     recordSale(
       tx,
       backend,
-      saleInput({ nodeId: TENANT_A.nodeId, seriesId: seriesId(standard!.id), clock }),
+      saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId: seriesId(standard!.id), clock }),
     ),
   );
   expect(await readInventory()).not.toHaveProperty("timeFloorMs");
 });
 
-it("reads the shared history without touching registros_facturacion", async () => {
-  await seedTenants(suite.db);
+it("reads the shared history without touching verifactu_records", async () => {
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await suite.db.execute(sql`alter table registros_facturacion rename to registros_hidden`);
+  await suite.db.execute(sql`alter table verifactu_records rename to registros_hidden`);
   try {
     await expect(readInventory()).resolves.toMatchObject({ reference: "venue" });
-    await expect(suite.db.select().from(registrosFacturacion)).rejects.toThrow(
+    await expect(suite.db.select().from(verifactuRecords)).rejects.toThrow(
       /no such table: registros_facturacion/,
     );
   } finally {
-    await suite.db.execute(sql`alter table registros_hidden rename to registros_facturacion`);
+    await suite.db.execute(sql`alter table registros_hidden rename to verifactu_records`);
   }
 });

@@ -47,9 +47,9 @@ describe("the shared fixtures seed a real migrated venue", () => {
       select r.huella, r.entorno,
              r.fecha_hora_huso_gen_registro as fecha, r.creado_en as creado,
              c.ultima_huella as chain, e.estado as envio
-      from registros_facturacion r
+      from verifactu_records r
       join cadenas c on c.node_id = r.node_id
-      join envios e on e.registro_id = r.id
+      join verifactu_submissions e on e.registro_id = r.id
       where r.id = ${seeded.registroId}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -69,7 +69,7 @@ describe("the shared fixtures seed a real migrated venue", () => {
     const second = await insertFiscalRegistro(db, first, { secuencia: 2, numSerie: "A/2" });
     expect(second.secuencia).toBe(2);
     const { rows } = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from registros_facturacion where node_id = ${first.nodeId}`,
+      sql`select cast(count(*) as int) as n from verifactu_records where node_id = ${first.nodeId}`,
     );
     expect(rows[0]!.n).toBe(2);
   });

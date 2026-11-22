@@ -5,7 +5,7 @@ import type { InitialSetupContribution } from "@waitron/module";
 /** Must equal the append-only tables a first-setup activation writes. */
 export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = [
   "fiscal_allocations",
-  "fiscal_certificate_installs",
+  "verifactu_certificates",
 ];
 
 type Target = Pick<Database, "execute">;
@@ -18,11 +18,11 @@ async function count(db: Target, query: ReturnType<typeof sql>): Promise<number>
 export const startAgainHoldings: NonNullable<
   InitialSetupContribution["startAgainHoldings"]
 > = async (db) => {
-  const records = await count(db, sql`select count(*) as n from registros_facturacion`);
+  const records = await count(db, sql`select count(*) as n from verifactu_records`);
   try {
     const accepted = await count(
       db,
-      sql`select count(*) as n from envios where estado in ('aceptado', 'aceptado_con_errores')`,
+      sql`select count(*) as n from verifactu_submissions where estado in ('aceptado', 'aceptado_con_errores')`,
     );
     return { records, accepted };
   } catch (error) {
@@ -35,4 +35,4 @@ export const startAgainHoldings: NonNullable<
 
 /** A certificate installed from the dashboard was installed after setup, so it is not the setup's. */
 export const startAgainKept: NonNullable<InitialSetupContribution["startAgainKept"]> = (db) =>
-  count(db, sql`select count(*) as n from fiscal_certificate_installs where source <> 'setup'`);
+  count(db, sql`select count(*) as n from verifactu_certificates where source <> 'setup'`);

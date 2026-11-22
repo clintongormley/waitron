@@ -30,13 +30,13 @@ function deps(client: VerifactuClient) {
 
 /** Drains at `now` with AEAT's sending wait cleared, so each pass may send. */
 async function drainAt(client: VerifactuClient, now: Date) {
-  await suite.db.execute(sql`delete from envio_flujo`);
+  await suite.db.execute(sql`delete from verifactu_sending_state`);
   return drain(deps(client), now);
 }
 
 async function envioOf(id: string) {
   const { rows } = await suite.db.execute<{ estado: string; intentos: number }>(
-    sql`select estado, intentos from envios where registro_id = ${id}`,
+    sql`select estado, intentos from verifactu_submissions where registro_id = ${id}`,
   );
   return rows[0]!;
 }
@@ -127,7 +127,7 @@ describe("drain — a run of future-date refusals (1112)", () => {
     const fourth = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`
-        update envios set estado = 'detenido', incidencia = true, intentos = 1,
+        update verifactu_submissions set estado = 'detenido', incidencia = true, intentos = 1,
           enviado_en = ${at(10_000).toISOString()}
         where registro_id = ${fourth}
       `);

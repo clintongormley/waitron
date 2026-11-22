@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { invoiceSeries, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
-import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { cadenas, verifactuSubmissions, verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 
@@ -16,7 +16,7 @@ const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 /** Deployment-environment stamp carried on a registro (stored verbatim, never HASHED — CLAUDE.md §5). */
 export type Entorno = "production" | "preproduction";
 
-/** The FK closure a `registros_facturacion` row hangs off. */
+/** The FK closure a `verifactu_records` row hangs off. */
 export interface FiscalIds {
   nodeId: string;
   seriesId: string;
@@ -32,7 +32,7 @@ export interface SeededFiscalRegistro extends FiscalIds {
   secuencia: number;
 }
 
-// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion) and a suite shares
+// verifactu_identities carries UNIQUE (nif, id_sistema_informatico, numero_instalacion) and a suite shares
 // one database, so each seed call takes a distinct numero_instalacion. Only the FIRST call in a
 // database sets the taxpayer's tax id.
 let seedSeq = 0;
@@ -51,7 +51,7 @@ export interface SeedParentsOptions {
   /** Fixed ids for the closure. Unless `reuseExistingParents`, the venue and node are seeded here and
    * their ids replace any given. Unset → all random. */
   ids?: Partial<FiscalIds>;
-  /** registro_sif.numero_instalacion. Default: deterministic-unique per call. */
+  /** verifactu_identities.numero_instalacion. Default: deterministic-unique per call. */
   numeroInstalacion?: number;
   /** Skip the `sales` insert, leaving the rest of the closure; {@link insertFiscalSale} plants it later. */
   skipSale?: boolean;
@@ -104,7 +104,7 @@ export async function seedFiscalParents(
     await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });
   }
   if (!opts.skipSale) await insertFiscalSale(db, ids);
-  await db.insert(registroSif).values({
+  await db.insert(verifactuIdentities).values({
     id: ids.sifId,
     nodeId: ids.nodeId,
     nif: "89890001K",
@@ -124,19 +124,19 @@ export interface AnteriorPointer {
 }
 
 export interface RegistroOptions {
-  /** Explicit registros_facturacion.id. Default: a fresh random uuid. */
+  /** Explicit verifactu_records.id. Default: a fresh random uuid. */
   id?: string;
   /** deployment environment stamped on the row — stored verbatim, never hashed. Default "production". */
   entorno?: Entorno;
   /** The 64-char huella. Default `"F".repeat(64)`. */
   huella?: string;
-  /** registros_facturacion.secuencia (and cadenas.secuencia). Default 1. */
+  /** verifactu_records.secuencia (and cadenas.secuencia). Default 1. */
   secuencia?: number;
   /** num_serie_factura. Default `A/${secuencia}`. */
   numSerie?: string;
   /**
    * The predecessor pointer. Set → `primer_registro=false` and the four `anterior_*` columns carry
-   * these values (the registros_encadenamiento_ck "all four set" branch). Unset → `primer_registro=true`
+   * these values (the verifactu_records_encadenamiento_ck "all four set" branch). Unset → `primer_registro=true`
    * and all four are NULL (the "all four null" branch).
    */
   anterior?: AnteriorPointer;
@@ -147,8 +147,8 @@ export interface RegistroOptions {
 }
 
 /**
- * Inserts one `registros_facturacion` row against the given parent `ids`. Vary `secuencia` / `numSerie`
- * per row so two registros do not trip registros_identidad_uq / registros_tenant_node_secuencia_uq.
+ * Inserts one `verifactu_records` row against the given parent `ids`. Vary `secuencia` / `numSerie`
+ * per row so two registros do not trip verifactu_records_identidad_uq / verifactu_records_node_secuencia_uq.
  *
  * `entorno` is ALWAYS set: the invariant is that entorno is never HASHED, not that it is never
  * stored — a mirror must carry it so `drain` on the far side can still refuse the wrong environment.
@@ -165,7 +165,7 @@ export async function insertFiscalRegistro(
   const registroId = opts.id ?? randomUUID();
   const a = opts.anterior;
   const [row] = await conn
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       id: registroId,
       source: sql`(select source from sales where id = ${ids.saleId})`,
@@ -196,19 +196,19 @@ export async function insertFiscalRegistro(
       huella,
       entorno,
     })
-    .returning({ id: registrosFacturacion.id });
+    .returning({ id: verifactuRecords.id });
   return { registroId: row!.id, huella, entorno, secuencia };
 }
 
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /** Also seed a `cadenas` chain-head row pointing at this registro. */
   cadena?: boolean;
-  /** Also seed an `envios` sidecar row for this registro. `true` → estado 'pendiente'. */
+  /** Also seed an `verifactu_submissions` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };
 }
 
 /**
- * Seeds the FK closure AND the registro (optionally its `cadenas`/`envios` companions).
+ * Seeds the FK closure AND the registro (optionally its `cadenas`/`verifactu_submissions` companions).
  */
 export async function seedFiscalRegistro(
   db: Database,
@@ -228,7 +228,7 @@ export async function seedFiscalRegistro(
   if (opts.envio) {
     const estado =
       typeof opts.envio === "object" ? (opts.envio.estado ?? "pendiente") : "pendiente";
-    await db.insert(envios).values({ registroId: registro.registroId, estado });
+    await db.insert(verifactuSubmissions).values({ registroId: registro.registroId, estado });
   }
 
   return { ...ids, ...registro };

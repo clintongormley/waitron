@@ -8,13 +8,13 @@ import {
   fiscalAllocations,
   activateAllocation,
   currentSif,
-  envios,
+  verifactuSubmissions,
   esPrimerRegistro,
   fromRegistroRow,
   readChainHead,
   registerSif,
-  registroSif,
-  registrosFacturacion,
+  verifactuIdentities,
+  verifactuRecords,
   toRegistroRow,
   VerifactuBackend,
   verifyChain,
@@ -27,9 +27,9 @@ describe("package public surface (./index.js)", () => {
     expect(FISCAL_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_fiscal");
     expect(getTableName(cadenas)).toBe("cadenas");
     expect(getTableName(fiscalAllocations)).toBe("fiscal_allocations");
-    expect(getTableName(envios)).toBe("envios");
-    expect(getTableName(registroSif)).toBe("registro_sif");
-    expect(getTableName(registrosFacturacion)).toBe("registros_facturacion");
+    expect(getTableName(verifactuSubmissions)).toBe("verifactu_submissions");
+    expect(getTableName(verifactuIdentities)).toBe("verifactu_identities");
+    expect(getTableName(verifactuRecords)).toBe("verifactu_records");
   });
 
   it("re-exports the registration surface (registerSif, currentSif, esPrimerRegistro) from the package root", () => {

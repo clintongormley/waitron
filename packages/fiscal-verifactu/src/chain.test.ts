@@ -5,7 +5,7 @@ import { captureError, constraintTarget, isUniqueViolation, refusalError } from 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
@@ -34,15 +34,15 @@ async function records(): Promise<
   // number, so `toBe(true)` reads `expected 1 to be true` against a perfectly correct row.
   return suite.db
     .select({
-      secuencia: registrosFacturacion.secuencia,
-      huella: registrosFacturacion.huella,
-      primer_registro: registrosFacturacion.primerRegistro,
-      anterior_huella: registrosFacturacion.anteriorHuella,
-      num_serie_factura: registrosFacturacion.numSerieFactura,
+      secuencia: verifactuRecords.secuencia,
+      huella: verifactuRecords.huella,
+      primer_registro: verifactuRecords.primerRegistro,
+      anterior_huella: verifactuRecords.anteriorHuella,
+      num_serie_factura: verifactuRecords.numSerieFactura,
     })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.nodeId, node.nodeId))
-    .orderBy(registrosFacturacion.secuencia);
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.nodeId, node.nodeId))
+    .orderBy(verifactuRecords.secuencia);
 }
 
 describe("appendToChain", () => {
@@ -151,7 +151,7 @@ describe("appendToChain", () => {
       offset_minutos: number;
     }>(sql`
       select importe_total, cuota_total, huella, fecha_hora_huso_gen_registro, offset_minutos
-      from registros_facturacion where node_id = ${node.nodeId} and secuencia = 1
+      from verifactu_records where node_id = ${node.nodeId} and secuencia = 1
     `);
     const row = rows[0];
     expect(row?.importe_total).toBe("123.45");
@@ -176,7 +176,7 @@ describe("appendToChain", () => {
     );
 
     const { rows } = await suite.db.execute<{ entorno: string }>(
-      sql`select entorno from registros_facturacion where id = ${appended.id}`,
+      sql`select entorno from verifactu_records where id = ${appended.id}`,
     );
     expect(rows[0]?.entorno).toBe("preproduction");
   });
@@ -188,7 +188,7 @@ describe("appendToChain", () => {
     // Bypasses appendToChain entirely: this is the backstop, and it must hold against a writer
     // that never went through it.
     const error = await captureError(() =>
-      suite.db.insert(registrosFacturacion).values({
+      suite.db.insert(verifactuRecords).values({
         source: "device",
         deviceId: node.deviceId,
         nodeId: node.nodeId,
@@ -212,7 +212,7 @@ describe("appendToChain", () => {
     // index over plain columns (`packages/db/src/constraint-target.ts`).
     expect(isUniqueViolation(error)).toBe(true);
     expect(constraintTarget(error)).toEqual({
-      table: "registros_facturacion",
+      table: "verifactu_records",
       columns: ["node_id", "secuencia"],
     });
   });
@@ -227,7 +227,7 @@ describe("appendToChain", () => {
     // cases below fail that deletion only because their stub has nothing but `transaction`. No case
     // in this file holds the savepoint.
     const occupied = await seedSale(suite.db, node, 1);
-    await suite.db.insert(registrosFacturacion).values({
+    await suite.db.insert(verifactuRecords).values({
       source: "device",
       deviceId: node.deviceId,
       nodeId: node.nodeId,
@@ -270,7 +270,7 @@ describe("appendToChain", () => {
       transaction: () =>
         Promise.reject(
           refusalError({
-            unique: { table: "registros_facturacion", columns: ["node_id", "secuencia"] },
+            unique: { table: "verifactu_records", columns: ["node_id", "secuencia"] },
           }),
         ),
     } as never;
@@ -308,7 +308,7 @@ describe("appendToChain", () => {
           if (calls > 1) return tx.transaction(body);
           return tx
             .transaction(async (nested) => {
-              await nested.insert(registrosFacturacion).values({
+              await nested.insert(verifactuRecords).values({
                 source: "device",
                 deviceId: node.deviceId,
                 nodeId: node.nodeId,
@@ -342,18 +342,18 @@ describe("appendToChain", () => {
 
     expect(calls).toBe(2);
     expect(constraintTarget(firstRefusal)).toEqual({
-      table: "registros_facturacion",
+      table: "verifactu_records",
       columns: ["node_id", "secuencia"],
     });
     const rows = await suite.db
       .select({
-        id: registrosFacturacion.id,
-        saleId: registrosFacturacion.saleId,
-        secuencia: registrosFacturacion.secuencia,
-        huella: registrosFacturacion.huella,
+        id: verifactuRecords.id,
+        saleId: verifactuRecords.saleId,
+        secuencia: verifactuRecords.secuencia,
+        huella: verifactuRecords.huella,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, node.nodeId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, node.nodeId));
     expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
     expect(result.secuencia).toBe(1);
     const { rows: head } = await suite.db.execute<{
@@ -422,9 +422,9 @@ describe("appendToChain — pre-fetched SIF", () => {
     );
     expect(
       await suite.db
-        .select({ id: registrosFacturacion.id })
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.nodeId, node.nodeId)),
+        .select({ id: verifactuRecords.id })
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.nodeId, node.nodeId)),
     ).toEqual([]);
   });
 

@@ -41,7 +41,7 @@ async function calendar(directory: string) {
       await store.venue.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
       );
-      const before = store.venue.all(sql`select * from registros_facturacion order by secuencia`);
+      const before = store.venue.all(sql`select * from verifactu_records order by secuencia`);
       const instant = new Date(at);
       const clock = {
         ...v.clock,
@@ -72,10 +72,10 @@ async function calendar(directory: string) {
         sql`select issued_at, issued_offset_minutes from sales where working_order_id = ${id}`,
       );
       const raw = store.venue
-        .all<Record<string, unknown>>(sql`select * from registros_facturacion order by secuencia`)
+        .all<Record<string, unknown>>(sql`select * from verifactu_records order by secuencia`)
         .at(-1)!;
       const record = fromRegistroRow(decodeRegistroRow(raw));
-      const after = store.venue.all(sql`select * from registros_facturacion order by secuencia`);
+      const after = store.venue.all(sql`select * from verifactu_records order by secuencia`);
       results.push({
         key,
         instant: row!.issued_at,

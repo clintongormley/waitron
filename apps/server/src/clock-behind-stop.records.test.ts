@@ -74,7 +74,7 @@ const INSIDE = 59_000;
 function latest(): { at: Date; offsetMinutes: number } {
   const [row] = venue.db.all<{ at: string; offsetMinutes: number }>(sql`
     select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
-    from registros_facturacion
+    from verifactu_records
     order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);
@@ -116,7 +116,7 @@ function count(table: string, where = sql`1 = 1`): number {
   return row!.n;
 }
 
-const allRecords = () => count("registros_facturacion");
+const allRecords = () => count("verifactu_records");
 const ticketItemsOf = (billId: string) =>
   count(
     "ticket_items",

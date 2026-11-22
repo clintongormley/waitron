@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
 import { eq } from "drizzle-orm";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import * as sources from "./allocation-paper-source.js";
 import {
@@ -16,12 +16,12 @@ import {
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { runPaperCustodian } from "./paper-custodian.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -138,7 +138,7 @@ async function attempt(
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -154,7 +154,7 @@ it("activates only the complete signed allocation confirmed by the separate file
       { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
-      await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
+      await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
     ).toEqual([{ identity: "P000042" }]);
     expect(
       await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
@@ -169,7 +169,7 @@ it("does not enrol a key using the fingerprint in its own file", async () => {
       code: "sif.allocation_invalid",
       params: { reason: "reservation_untrusted" },
     });
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   });
 });
@@ -243,7 +243,7 @@ it.each([
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     expect(
       await suite.db
@@ -316,7 +316,7 @@ it("replays the committed event without recreating series or resetting its count
       .set({ nextNumber: 14 })
       .where(eq(invoiceSeries.id, first.series[0]!.id));
     const series = await suite.db.select().from(invoiceSeries);
-    const sifs = await suite.db.select().from(registroSif);
+    const sifs = await suite.db.select().from(verifactuIdentities);
     const activations = await suite.db.select().from(fiscalAllocations);
     await writeFile(
       paths.confirmationPath,
@@ -324,7 +324,7 @@ it("replays the committed event without recreating series or resetting its count
     );
     expect(await attempt(paths)).toEqual(first);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
-    expect(await suite.db.select().from(registroSif)).toEqual(sifs);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(activations);
   });
 });
@@ -348,7 +348,7 @@ it("cannot free the outside consumed entry when the local caller rolls back", as
       ),
     ).rejects.toThrow("caller-rollback");
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);
   });
@@ -405,7 +405,7 @@ it("refuses current confirmation for another allocation in the same block", asyn
       params: { reason: "reservation_mismatch" },
     });
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   });
 });
 

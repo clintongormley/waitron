@@ -29,7 +29,7 @@ import {
 } from "@waitron/module";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { FISCAL_HOUR_BACKUP_STATE } from "@waitron/fiscal-verifactu";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
@@ -42,7 +42,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -61,8 +61,8 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 // One venue file holds both nodes: a mirror's venue.db is M1's whole database, so it is the copy.
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { nodeId: TAXPAYER_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-handover-password";
 const credentials = { personId: ADMIN, password: PASSWORD };
@@ -298,8 +298,8 @@ async function sparePromotes(s: ReturnType<typeof spareService>, input: unknown)
 }
 /** M1's later name, recorded in the copy as a retired installation of M1's. */
 async function recordLaterNameInCopy(minute: number) {
-  const [live] = await suite.db.select().from(registroSif);
-  await suite.db.insert(registroSif).values({
+  const [live] = await suite.db.select().from(verifactuIdentities);
+  await suite.db.insert(verifactuIdentities).values({
     nodeId: primary.nodeId,
     nif: live!.nif,
     idSistemaInformatico: live!.idSistemaInformatico,
@@ -310,7 +310,7 @@ async function recordLaterNameInCopy(minute: number) {
 }
 const minuteOf = (identity: string) => EPOCH_MS + decodeMinuteIdentity(identity) * MINUTE_MS;
 const thisMinute = () => Math.floor(Date.now() / 60_000) * 60_000;
-const firstName = async () => (await suite.db.select().from(registroSif))[0]!.numeroInstalacion;
+const firstName = async () => (await suite.db.select().from(verifactuIdentities))[0]!.numeroInstalacion;
 
 it("a later name M1 recorded in the copy is not reused: the spare waits past its minute", async () => {
   const s = spareService();
@@ -344,7 +344,7 @@ it("a name M1 selected and never activated is not in the copy, and the spare wit
   const selected = await spareSelects(s);
   expect(selected).toMatchObject({ status: "selected", identity: abandoned.identity });
   await sparePromotes(s, selected.input);
-  const sif = await suite.db.select().from(registroSif);
+  const sif = await suite.db.select().from(verifactuIdentities);
   expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
     abandoned.identity,
   );
@@ -405,7 +405,7 @@ it("holding M1's selections on two adjacent minutes, the spare waits past both, 
   const selected = await spareSelects(s);
   expect(selected).toMatchObject({ status: "selected" });
   await sparePromotes(s, selected.input);
-  const sif = await suite.db.select().from(registroSif);
+  const sif = await suite.db.select().from(verifactuIdentities);
   expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
     selected.identity,
   );
@@ -555,7 +555,7 @@ describe("a merged file close to its limit", () => {
     const selected = await spareSelects(s);
     expect(selected).toMatchObject({ status: "selected" });
     await sparePromotes(s, selected.input);
-    const sif = await suite.db.select().from(registroSif);
+    const sif = await suite.db.select().from(verifactuIdentities);
     expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
       selected.identity,
     );

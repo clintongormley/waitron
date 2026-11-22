@@ -63,7 +63,7 @@ it("certificate: true leaves the setup's one certificate row", async () => {
   const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"), { readOnly: true });
   try {
     expect(
-      venue.prepare("select source, node_id as nodeId from fiscal_certificate_installs").all(),
+      venue.prepare("select source, node_id as nodeId from verifactu_certificates").all(),
     ).toEqual([{ source: "setup", nodeId }]);
   } finally {
     venue.close();

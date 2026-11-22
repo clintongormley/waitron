@@ -13,7 +13,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { FISCAL_SLOT, ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import {
   paperCustodianFingerprint,
   signPaperBlock,
@@ -199,7 +199,7 @@ async function emptyVenue() {
   expect(await suite.db.select().from(taxpayer)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 }
@@ -207,7 +207,7 @@ async function allocatedVenue() {
   expect((await suite.db.select().from(nodes)).map((row) => row.id)).toEqual([NODE]);
   expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
   expect(
-    await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
+    await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
   ).toEqual([{ identity: "S000042" }]);
   expect(
     (await suite.db.select().from(invoiceSeries))

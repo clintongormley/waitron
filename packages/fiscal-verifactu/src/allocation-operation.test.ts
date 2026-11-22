@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import * as activation from "./allocation-operation.js";
 import type { AllocationOperationEvidence } from "./allocation-operation.js";
 import {
@@ -18,7 +18,7 @@ import {
   type PaperAllocation,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envelope.js";
 import { establishDormantAllocation } from "./standby-allocation.js";
 
@@ -26,7 +26,7 @@ import { fiscalReservations } from "./schema/reservations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -119,7 +119,7 @@ function run(
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -128,7 +128,7 @@ beforeEach(async () => {
 
 async function snapshot() {
   return {
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     activations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
@@ -253,7 +253,7 @@ it("activates the exact retained dormant reservation at promotion", async () => 
       idSistemaInformatico: "W1",
     }),
   );
-  const target = { ...node, nodeId: TENANT_A.nodeId2 };
+  const target = { ...node, nodeId: TAXPAYER_A.nodeId2 };
   const join = {
     eventId: "join-1",
     sourceId: node.nodeId,
@@ -358,7 +358,7 @@ it("preserves a genuine in-process emergency draw while detaching the outside hi
 it.each([
   ["module", "another-module"],
   ["action", "reserve"],
-  ["targetNodeId", TENANT_A.nodeId2],
+  ["targetNodeId", TAXPAYER_A.nodeId2],
 ])("refuses a valid authority bound to another %s", async (field, value) => {
   const wrong = { ...binding, [field]: value };
   const before = await snapshot();
@@ -450,7 +450,7 @@ it("does not round a supplied installation identity through the numeric declarat
   await withOperationAuthority(binding, operator, (authority) =>
     withTransaction(suite.db, (tx) => run(tx, { input, binding, authority })),
   );
-  expect((await suite.db.execute(sql`select numero_instalacion from registro_sif`)).rows).toEqual([
+  expect((await suite.db.execute(sql`select numero_instalacion from verifactu_identities`)).rows).toEqual([
     { numero_instalacion: "P000042" },
   ]);
 });
@@ -563,7 +563,7 @@ it("activates all purposes from opaque module input with the independently authe
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
   ]);
-  const [sif] = await suite.db.select().from(registroSif);
+  const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.id).toBe(result.sifId);
   const [retained] = await suite.db.select().from(fiscalAllocations);
   expect(retained!.result).toEqual(result);
@@ -648,7 +648,7 @@ it.each([
   if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
   if (field === "environment") await suite.db.update(deployment).set({ environment: "production" });
   if (field === "identity")
-    await suite.db.execute(sql`update registro_sif set numero_instalacion = 'P000043'`);
+    await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'P000043'`);
   if (field === "code")
     await suite.db
       .update(invoiceSeries)
@@ -663,8 +663,8 @@ it.each([
     await suite.db
       .insert(invoiceSeries)
       .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
-  if (field === "software") await suite.db.update(registroSif).set({ idSistemaInformatico: "W2" });
-  if (field === "sif-retired") await suite.db.update(registroSif).set({ revocadoEn: new Date() });
+  if (field === "software") await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
+  if (field === "sif-retired") await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
   const before = await snapshot();
   await expect(readAllocated()).rejects.toMatchObject({
     code: "sif.allocation_invalid",

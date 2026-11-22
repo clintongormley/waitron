@@ -52,7 +52,7 @@ function facts() {
       "bill_payments",
       "refunds",
       "invoice_series",
-      "registros_facturacion",
+      "verifactu_records",
       "cadenas",
       "drawer_entries",
     ].map((name) => [name, v.db.all(sql`select * from ${sql.identifier(name)} order by rowid`)]),
@@ -60,7 +60,7 @@ function facts() {
 }
 function records() {
   return v.db
-    .all<Record<string, unknown>>(sql`select * from registros_facturacion order by secuencia`)
+    .all<Record<string, unknown>>(sql`select * from verifactu_records order by secuencia`)
     .map((raw) => {
       const record = fromRegistroRow(decodeRegistroRow(raw));
       assertValid(record, { now: SEND });
@@ -110,7 +110,7 @@ async function closeHistory() {
 }
 async function due(at = SEND) {
   await v.db.execute(
-    sql`update envios set proximo_intento_en = ${at.toISOString()} where estado = 'pendiente'`,
+    sql`update verifactu_submissions set proximo_intento_en = ${at.toISOString()} where estado = 'pendiente'`,
   );
 }
 function wire(client: VerifactuClient) {
@@ -240,7 +240,7 @@ it.each(["failed-send", "lost-answer", "restart", "duplicate-lookup", "no-trace"
       expect(facts()).toEqual(before);
     } else if (mode === "restart") {
       await v.db.execute(
-        sql`update envios set estado = 'enviando', enviado_en = ${SEND.toISOString()}`,
+        sql`update verifactu_submissions set estado = 'enviando', enviado_en = ${SEND.toISOString()}`,
       );
       await resetInFlightClaims(v.db, SEND);
     } else {
@@ -259,7 +259,7 @@ it.each(["failed-send", "lost-answer", "restart", "duplicate-lookup", "no-trace"
         expect(result.noTrace).toHaveLength(1);
       } else {
         aeat.dropRegistroDuplicadoDetail(keyOf(saved[0]!));
-        await v.db.execute(sql`update envios set estado = 'pendiente'`);
+        await v.db.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
       }
     }
     const later = new Date(SEND.getTime() + 3_600_000);
@@ -346,7 +346,7 @@ it("configuration export carries settings without fiscal, payment, venue history
     "nodes",
     "day_cutover_changes",
     "fiscal_allocations",
-    "registro_sif",
+    "verifactu_identities",
   ])
     expect(exported.tables).not.toHaveProperty(name);
   expect(facts()).toEqual(before);

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readActivityForPerson } from "@waitron/db";
 import type { Database, NodeDatabase } from "@waitron/db";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
@@ -208,7 +208,7 @@ describe("a spare on a real placed copy", () => {
           { oldNodeNeutralised: true },
         ),
     );
-    const sif = await store.venue.select().from(registroSif);
+    const sif = await store.venue.select().from(verifactuIdentities);
     expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
       selected.body.identity,
     );
@@ -218,7 +218,7 @@ describe("a spare on a real placed copy", () => {
     const store = (placed = await fixture.placeRealCopy());
     vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
     const venueBefore = allRows(store.venue);
-    expect(venueBefore.get("registro_sif")).toBeDefined();
+    expect(venueBefore.get("verifactu_identities")).toBeDefined();
     const nodeBefore = allRows(store.node as unknown as Database);
     expect(nodeBefore.get("node_handover_events")).toContain("copy_placed");
     const fileBefore = await readFile(join(dirs().spareState, FILE));

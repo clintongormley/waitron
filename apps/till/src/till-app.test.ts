@@ -12134,7 +12134,7 @@ describe("till-app", () => {
   });
 
   it("single-flight: a second confirm-payment while recordSale is pending files the sale EXACTLY ONCE", async () => {
-    // The double-file safety (CLAUDE.md §5): two chained registros_facturacion for one basket are
+    // The double-file safety (CLAUDE.md §5): two chained verifactu_records for one basket are
     // unrepairable. First recordSale never settles, so the sale stays in flight; a second
     // confirm-payment dispatched in that window (double-tap / laggy link) must be a no-op.
     const recordSale = vi.fn(() => new Promise<TillSaleResult>(() => {}));

@@ -1,7 +1,7 @@
 // Browser-safe: the Fiscal filing screen reaches this file, so it imports nothing
 // (`scripts/dashboard-browser-purity.test.ts`).
 
-/** The states `envios_estado_ck` admits. */
+/** The states `verifactu_submissions_estado_ck` admits. */
 export const ENVIO_STATES = [
   "pendiente",
   "enviando",

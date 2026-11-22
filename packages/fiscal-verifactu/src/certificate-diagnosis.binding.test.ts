@@ -13,7 +13,7 @@ import {
   rawState,
 } from "../test/certificate-diagnosis-parent-fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A } from "../test/fixtures.js";
+import { TAXPAYER_A } from "../test/fixtures.js";
 import { diagnoseCertificate } from "./certificate-diagnosis.js";
 import { latestInstall, recordInstall } from "./certificate-record.js";
 
@@ -32,7 +32,7 @@ describe("certificate evidence association", () => {
         });
         if (association !== "no-install")
           await recordInstall(tx, {
-            nodeId: association === "other-node" ? TENANT_A.nodeId2 : TENANT_A.nodeId,
+            nodeId: association === "other-node" ? TAXPAYER_A.nodeId2 : TAXPAYER_A.nodeId,
             installedAt: new Date(INSTALLED_AT),
             source: "setup",
             personId: null,
@@ -79,7 +79,7 @@ describe("certificate evidence association", () => {
               value: material(change === "replace" ? candidate : installed),
             });
           else {
-            const latest = (await latestInstall(tx, TENANT_A.nodeId))!;
+            const latest = (await latestInstall(tx, TAXPAYER_A.nodeId))!;
             await recordInstall(tx, {
               ...latest,
               id: "a0000000-0000-4000-8000-000000000777",

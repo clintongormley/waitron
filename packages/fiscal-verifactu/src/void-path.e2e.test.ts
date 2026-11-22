@@ -13,9 +13,9 @@ import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
@@ -42,7 +42,7 @@ let voidSessionId: string;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   // Seed a manager (holds `sale.void`) and open its session.
   const rows = await seedPersons(suite.db, {
     id: newId(),
@@ -81,7 +81,7 @@ async function voidSale(saleId: SaleId, reason = "staff error") {
  * sale it annuls, not an identity of its own. */
 async function rawAnulacion(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
+    sql`select * from verifactu_records where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawAnulacion: no anulación row for sale ${saleId}`);
@@ -100,8 +100,8 @@ describe("alta and anulación interleave in one chain", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(asc(registrosFacturacion.secuencia));
+      .from(verifactuRecords)
+      .orderBy(asc(verifactuRecords.secuencia));
 
     expect(rows.map((r) => r.tipoRegistro)).toEqual(["alta", "alta", "anulacion"]);
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3]);
@@ -125,7 +125,7 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own pending sidecar row", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    const rows = await suite.db.select().from(envios);
+    const rows = await suite.db.select().from(verifactuSubmissions);
     // Two registros, two sidecars. An anulación that shared the alta's row would be submitted to
     // AEAT never or twice, both unrecoverable.
     expect(rows).toHaveLength(2);

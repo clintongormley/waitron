@@ -21,7 +21,7 @@ import {
 } from "./allocation-envelope.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { currentSif } from "./registro-sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -75,9 +75,9 @@ async function validateForActivation(
   if (environment !== "production" && environment !== "preproduction")
     return { ok: false, reason: "environment_unstamped" };
   const [liveSif] = await tx
-    .select({ softwareId: registroSif.idSistemaInformatico })
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
+    .select({ softwareId: verifactuIdentities.idSistemaInformatico })
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
   const storedBases = dormantBases ?? (await liveSeriesBases(tx, node));
   if (storedBases.length === 0 && context.mode !== "initial-setup")
     return { ok: false, reason: "series_mismatch" };
@@ -101,13 +101,13 @@ async function validateForActivation(
     .where(eq(fiscalAllocations.allocationKey, validated.allocation.allocationId));
   if (usedAllocation !== undefined) return { ok: false, reason: "allocation_consumed" };
   const [usedIdentity] = await tx
-    .select({ id: registroSif.id })
-    .from(registroSif)
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
     .where(
       and(
-        eq(registroSif.nif, validated.allocation.taxpayerNif),
-        eq(registroSif.idSistemaInformatico, validated.allocation.softwareId),
-        sql`${registroSif.numeroInstalacion} = ${validated.allocation.installationIdentity}`,
+        eq(verifactuIdentities.nif, validated.allocation.taxpayerNif),
+        eq(verifactuIdentities.idSistemaInformatico, validated.allocation.softwareId),
+        sql`${verifactuIdentities.numeroInstalacion} = ${validated.allocation.installationIdentity}`,
       ),
     )
     .limit(1);
@@ -328,9 +328,9 @@ async function activateDormant(
   }
   if (context.priorActivation !== "committed") {
     const [activeSif] = await tx
-      .select({ id: registroSif.id })
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)))
+      .select({ id: verifactuIdentities.id })
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)))
       .limit(1);
     const [activeSeries] = await tx
       .select({ id: invoiceSeries.id })
@@ -398,13 +398,13 @@ async function activate(
     if (!validated.ok) return refuse(validated.reason);
     const [activeSif] = await tx
       .select({
-        id: registroSif.id,
-        nif: registroSif.nif,
-        softwareId: registroSif.idSistemaInformatico,
-        identity: sql<string>`${registroSif.numeroInstalacion}`,
+        id: verifactuIdentities.id,
+        nif: verifactuIdentities.nif,
+        softwareId: verifactuIdentities.idSistemaInformatico,
+        identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
       })
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
     const live = await tx
       .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
       .from(invoiceSeries)
@@ -435,10 +435,10 @@ async function activate(
   const retiredAt = now();
   const sifId = newId();
   await tx
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: retiredAt })
-    .where(and(eq(registroSif.nodeId, node.nodeId), isNull(registroSif.revocadoEn)));
-  await tx.insert(registroSif).values({
+    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
+  await tx.insert(verifactuIdentities).values({
     id: sifId,
     nodeId: node.nodeId,
     nif: validated.allocation.taxpayerNif,

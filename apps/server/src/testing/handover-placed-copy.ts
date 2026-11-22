@@ -26,7 +26,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { signEnvelope } from "@waitron/handover";
 import { fixturePasswordHash } from "./known-secret-hashes.js";
 import { endorseKey, signDocumentBody, type SignedMembershipDocument } from "@waitron/membership";
@@ -46,8 +46,8 @@ import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js"
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import { pinMainBoxKey } from "./pinned-main-box.js";
 
-export const primary = { nodeId: TENANT_A.nodeId };
-export const standby = { nodeId: TENANT_A.nodeId2 };
+export const primary = { nodeId: TAXPAYER_A.nodeId };
+export const standby = { nodeId: TAXPAYER_A.nodeId2 };
 export const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const ADMIN = "e1000000-0000-4000-8000-000000000004";
 export const ADMIN_EMAIL = "admin@venue.test";

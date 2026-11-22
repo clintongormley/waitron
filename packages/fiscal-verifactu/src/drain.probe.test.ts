@@ -17,7 +17,7 @@ import {
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, resetInFlightClaims, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, openFilingCase } from "./filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -97,7 +97,7 @@ type EnvioState = {
 
 async function envioOf(registroId: string): Promise<EnvioState> {
   const { rows } = await suite.db.execute<EnvioState>(sql`
-    select estado, intentos, enviado_en, proximo_intento_en, csv from envios
+    select estado, intentos, enviado_en, proximo_intento_en, csv from verifactu_submissions
     where registro_id = ${registroId}
   `);
   return rows[0]!;
@@ -206,7 +206,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
     const due = await drain(deps(wire.client), at(HOUR));
     expect(wire.sent).toEqual([held]);
-    expect(due.tenantsWithWork).toBe(1);
+    expect(due.passesWithWork).toBe(1);
   });
 
   it("reports the probe's instant, not the skip retry, after a pass that holds a new record on the stopped chain", async () => {
@@ -454,7 +454,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     const real = aeat.client();
     // The crash: the send fails, and so does the transaction that would back the envío off.
     await suite.db.execute(sql`
-      create trigger test_refuse_backoff before update of estado on envios
+      create trigger test_refuse_backoff before update of estado on verifactu_submissions
       when old.estado = 'enviando' and new.estado = 'pendiente'
       begin select raise(abort, 'refused by test'); end
     `);
@@ -512,13 +512,13 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     const [first, second] = held;
     // Stands in for any path that settles the first held record without a reply of this drain.
     await suite.db.execute(sql`
-      update envios set estado = 'aceptado' where registro_id = ${first!}
+      update verifactu_submissions set estado = 'aceptado' where registro_id = ${first!}
     `);
     const wire = recording(aeat.client());
 
     const result = await drain(deps(wire.client), at(MINUTE));
 
-    expect(result.tenantsWithWork).toBe(1);
+    expect(result.passesWithWork).toBe(1);
     expect(wire.sent).toEqual([[second]]);
   });
 
@@ -528,7 +528,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     const [first, second] = held;
     // Stands in for a record before the held ones whose answer has not been read yet.
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${at(HOUR).toISOString()}
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${at(HOUR).toISOString()}
       where registro_id = ${first!}
     `);
 
@@ -555,7 +555,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     await drain(deps(aeat.client()), T0);
     const older = await appendPendingAlta(suite.db, seeded, 4);
     await suite.db.execute(sql`
-      update envios set estado = 'detenido', incidencia = true, intentos = 1,
+      update verifactu_submissions set estado = 'detenido', incidencia = true, intentos = 1,
         enviado_en = ${T.toISOString()}
       where registro_id = ${older.registroId}
     `);
@@ -628,8 +628,8 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     const other = await seedSecondChain(suite.db, seeded, 10);
     const [otherHead] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, other.registroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, other.registroId));
     const cancellation = await appendCancellation(suite.db, seeded, original!, 11, {
       otherChainHeadId: other.registroId,
     });
@@ -896,7 +896,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       );
 
       expect(wire.sent).toEqual([]);
-      expect(elsewhere.tenantsWithWork).toBe(0);
+      expect(elsewhere.passesWithWork).toBe(0);
       expect(elsewhere.nextDueAt).toBeNull();
       expect(await incidentCodes()).toEqual([
         "fiscal.registro_rechazado",

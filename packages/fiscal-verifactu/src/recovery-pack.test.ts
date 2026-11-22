@@ -2,14 +2,14 @@ import { beforeEach, expect, it } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
   venueId: "contract-venue",
 };
 const bases = [
@@ -19,7 +19,7 @@ const bases = [
 ];
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await seedFixtureSif(suite.db, {
     nodeId: node.nodeId,
     nif: "89890001K",

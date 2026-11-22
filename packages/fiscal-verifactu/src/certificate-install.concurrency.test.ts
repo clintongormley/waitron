@@ -13,7 +13,7 @@ import {
   startAnsweringServer,
   type AnsweringServer,
 } from "../test/certificate-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
@@ -59,7 +59,7 @@ function revision(): Promise<string | null> {
 
 describe("installCertificate beside the sale path", () => {
   it("a sale commits while the live check is held open", async () => {
-    const { nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: NIF });
+    const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, { nif: NIF });
     const ring = testRing();
     let release!: () => void;
     const hold = new Promise<void>((resolve) => (release = resolve));
@@ -110,7 +110,7 @@ describe("installCertificate beside the sale path", () => {
   });
 
   it("a pass that resolved its client before the install keeps the old certificate, and the next pass uses the new one", async () => {
-    const { nodeId } = await seedTenantWithSif(suite.db, { nif: NIF });
+    const { nodeId } = await seedTaxpayerWithSif(suite.db, { nif: NIF });
     const ring = testRing();
     await sealAeatSecret(
       { db: suite.db, ring, nodeId, now: () => new Date("2026-10-18T10:00:00Z") },

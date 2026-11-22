@@ -57,7 +57,7 @@ export async function readReturnedOriginals(
   sourceNodeId: string,
 ): Promise<ReturnedOriginals> {
   const saleIds = sql`(with recursive parents(id) as (
-    select sale_id from registros_facturacion where node_id = ${sourceNodeId}
+    select sale_id from verifactu_records where node_id = ${sourceNodeId}
     union select s.corrects_sale_id from sales s join parents p on p.id = s.id
       where s.corrects_sale_id is not null
     union select s.substituted_sale_id from sale_substitutions s
@@ -75,10 +75,10 @@ export async function readReturnedOriginals(
     where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
   const records = tx.all<ReturnRow>(sql`
-    select * from registros_facturacion where node_id = ${sourceNodeId} order by secuencia`);
+    select * from verifactu_records where node_id = ${sourceNodeId} order by secuencia`);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
-    select device_id from registros_facturacion where node_id = ${sourceNodeId}
+    select device_id from verifactu_records where node_id = ${sourceNodeId}
     union select device_id from sales where id in ${saleIds}
     union select device_id from refunds where sale_id in ${saleIds} and state <> 'failed'
     union select p.device_id from payments p join refunds r
@@ -89,8 +89,8 @@ export async function readReturnedOriginals(
       where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
   const heads = tx.all<ReturnRow>(sql`select * from cadenas where node_id = ${sourceNodeId}`);
-  const deliveries = tx.all<ReturnRow>(sql`select e.* from envios e
-    join registros_facturacion r on r.id = e.registro_id
+  const deliveries = tx.all<ReturnRow>(sql`select e.* from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     where r.node_id = ${sourceNodeId} order by e.registro_id`);
   const tenders = tx.all<ReturnRow>(
     sql`select * from tenders where sale_id in ${saleIds} order by id`,
@@ -163,7 +163,7 @@ export async function inspectReturnedPayments(
   };
   const outstanding = (
     [
-      ["registros_facturacion", returned.records],
+      ["verifactu_records", returned.records],
       ["sales", returned.sales],
       ["tenders", returned.tenders],
       ["refunds", returned.refunds],
@@ -199,13 +199,13 @@ export async function inspectReturnedPayments(
     const originalsMatch =
       matches("sales", sale) &&
       records.length > 0 &&
-      records.every((row) => matches("registros_facturacion", row));
+      records.every((row) => matches("verifactu_records", row));
     if (canonicalize(incoming) === canonicalize(own)) continue;
     const original = { sale: normalized("sales", sale), records };
     const eligible =
       originalsMatch &&
       records.every(
-        (row) => row.node_id === sourceNodeId && matches("registros_facturacion", row),
+        (row) => row.node_id === sourceNodeId && matches("verifactu_records", row),
       ) &&
       !forSale(returned.captures).length &&
       !returned.orders.some((row) => row.id === sale.working_order_id) &&
@@ -269,7 +269,7 @@ export async function receiveReturnedOriginals(
   for (const record of returned.records) {
     if (
       record.node_id !== sourceNodeId ||
-      held(tx, "registro_sif", record.sif_id)?.node_id !== sourceNodeId
+      held(tx, "verifactu_identities", record.sif_id)?.node_id !== sourceNodeId
     )
       throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
     const recordAt = String(record.fecha_hora_huso_gen_registro);
@@ -282,8 +282,8 @@ export async function receiveReturnedOriginals(
     (a, b) => Number(a.secuencia) - Number(b.secuencia),
   )) {
     if (blocked) continue;
-    const own = held(tx, "registros_facturacion", record.id);
-    const [collision] = tx.all<ReturnRow>(sql`select * from registros_facturacion where
+    const own = held(tx, "verifactu_records", record.id);
+    const [collision] = tx.all<ReturnRow>(sql`select * from verifactu_records where
       (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
       (${record.corrects_registro_id} is not null and corrects_registro_id = ${record.corrects_registro_id}) or
       (${record.corrects_registro_id} is null and corrects_registro_id is null and
@@ -439,13 +439,13 @@ export async function receiveReturnedOriginals(
   }
   let inserted = false;
   for (const record of allowed) {
-    if (held(tx, "registros_facturacion", record.id)) continue;
-    await insertRow(tx, "registros_facturacion", record);
+    if (held(tx, "verifactu_records", record.id)) continue;
+    await insertRow(tx, "verifactu_records", record);
     inserted = true;
     const delivery = returned.deliveries.find((row) => row.registro_id === record.id);
     await insertRow(
       tx,
-      "envios",
+      "verifactu_submissions",
       delivery ?? {
         registro_id: record.id!,
         estado: "pendiente",
@@ -505,7 +505,7 @@ export async function receiveReturnedOriginals(
       if (conflict) missing = true;
     }
   }
-  const [last] = tx.all<ReturnRow>(sql`select * from registros_facturacion
+  const [last] = tx.all<ReturnRow>(sql`select * from verifactu_records
     where node_id = ${sourceNodeId} order by secuencia desc limit 1`);
   const head = held(tx, "cadenas", sourceNodeId, "node_id");
   if (last && Number(last.secuencia) > Number(head?.secuencia ?? 0)) {
@@ -517,7 +517,7 @@ export async function receiveReturnedOriginals(
   if (inserted && (await checkFiscalChains(transactionQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
   for (const [table, rows] of [
-    ["registros_facturacion", returned.records],
+    ["verifactu_records", returned.records],
     ["sales", returned.sales],
     ["tenders", returned.tenders],
     ["refunds", returned.refunds],

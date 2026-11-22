@@ -1243,7 +1243,7 @@ describe("configuration transfer database path", () => {
         select s.invoice_number, r.primer_registro as first_record,
           r.anterior_huella as previous_hash
         from sales s
-        join registros_facturacion r on r.sale_id = s.id
+        join verifactu_records r on r.sale_id = s.id
       `,
     );
     expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);

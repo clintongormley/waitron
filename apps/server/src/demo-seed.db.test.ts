@@ -73,7 +73,7 @@ it("provisions Spain's demo business and files its practice sales under the demo
       sql`select count(*) as n from sales`,
     );
     const { rows: records } = await suite.db.execute<{ issuer: string; n: number }>(
-      sql`select id_emisor_factura as issuer, count(*) as n from registros_facturacion group by id_emisor_factura`,
+      sql`select id_emisor_factura as issuer, count(*) as n from verifactu_records group by id_emisor_factura`,
     );
     expect(departments.map((d) => d.trading_name)).toEqual(["Bar Casa Delgado", "Deli Delgado"]);
     expect(sales[0]!.n).toBeGreaterThan(0);

@@ -142,7 +142,7 @@ it.each([
 it("full fiscal walk refuses an old damaged record beside an empty current registration", async () => {
   const f = await suite.create();
   await f.corrupt((db) =>
-    db.prepare("update registros_facturacion set huella=? where secuencia=1").run("0".repeat(64)),
+    db.prepare("update verifactu_records set huella=? where secuencia=1").run("0".repeat(64)),
   );
   const answer = await verify(f);
   expect(answer.status).toBe("invalid");

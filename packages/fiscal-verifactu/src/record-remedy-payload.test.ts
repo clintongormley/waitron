@@ -11,7 +11,7 @@ import {
 } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { decodeRegistroRow, fromRegistroRow, toRegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, seedSale, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -23,7 +23,7 @@ beforeEach(async () => {
 
 async function roundTrip(record: RegistroAlta | RegistroAnulacion) {
   const saleId = await seedSale(suite.db, node, 1);
-  await suite.db.insert(registrosFacturacion).values(
+  await suite.db.insert(verifactuRecords).values(
     toRegistroRow(record, {
       origin: deviceOrigin(node.deviceId),
       nodeId: node.nodeId,
@@ -36,7 +36,7 @@ async function roundTrip(record: RegistroAlta | RegistroAnulacion) {
     }),
   );
   const { rows } = await suite.db.execute(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   return fromRegistroRow(decodeRegistroRow(rows[0]!));
 }

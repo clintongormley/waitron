@@ -11,8 +11,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { envios, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
-// Seeds a due `envios` row and its registro WITHOUT a `fiscal.aeat` credential.
+import { verifactuSubmissions, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+// Seeds a due `verifactu_submissions` row and its registro WITHOUT a `fiscal.aeat` credential.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { createHealthState } from "./health.js";
 import { createLogger } from "./logger.js";
@@ -107,9 +107,9 @@ async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
   const rows = await db
-    .select({ estado: envios.estado, intentos: envios.intentos, incidencia: envios.incidencia })
-    .from(envios)
-    .where(eq(envios.registroId, registroId));
+    .select({ estado: verifactuSubmissions.estado, intentos: verifactuSubmissions.intentos, incidencia: verifactuSubmissions.incidencia })
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, registroId));
   return rows[0]!;
 }
 
@@ -121,7 +121,7 @@ async function readRegistro(
     huella: string;
     num_serie_factura: string;
   }>(
-    sql`select secuencia, huella, num_serie_factura from registros_facturacion where id = ${registroId}`,
+    sql`select secuencia, huella, num_serie_factura from verifactu_records where id = ${registroId}`,
   );
   return rows.rows[0]!;
 }
@@ -160,7 +160,7 @@ describe("promoted primary awaiting the fiscal certificate", () => {
     expect(lines.filter((line) => line.includes("fiscal.awaiting_certificate"))).toHaveLength(1);
     expect(
       lines.some(
-        (line) => line.includes("drain.tenant_skipped") && line.includes("credentials.missing"),
+        (line) => line.includes("drain.skipped") && line.includes("credentials.missing"),
       ),
     ).toBe(true);
 

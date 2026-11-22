@@ -827,8 +827,8 @@ describe("venue details preserve committed history", () => {
     "tenders",
     "sale_settlements",
     "sale_voids",
-    "registros_facturacion",
-    "registro_sif",
+    "verifactu_records",
+    "verifactu_identities",
     "fiscal_allocations",
     "fiscal_reservations",
     "working_orders",
@@ -1280,7 +1280,7 @@ describe("venue detail consumer reads", () => {
     );
     const retained = () => ({
       drawerEntries: suite.db.all(sql`select * from drawer_entries order by sequence`),
-      fiscal: suite.db.all(sql`select * from registros_facturacion`),
+      fiscal: suite.db.all(sql`select * from verifactu_records`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
     });
     const history = retained();

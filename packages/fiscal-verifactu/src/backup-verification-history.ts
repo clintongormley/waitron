@@ -25,7 +25,7 @@ import { verifyRetainedPaperReservation, type PaperCustodianTrust } from "./pape
 import { FISCAL_BACKUP_PUBLIC_TRUST } from "./backup-verification-trust.js";
 
 const TABLES = FISCAL_CLASSIFICATION.map((row) => row.table).filter(
-  (table) => !["registros_facturacion", "cadenas"].includes(table),
+  (table) => !["verifactu_records", "cadenas"].includes(table),
 );
 type RecordValue = Record<string, unknown>;
 function object(value: unknown): value is RecordValue {
@@ -314,7 +314,7 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
     )
   )
     return "invalid";
-  const sif = await first(query, "select * from registro_sif where id=?", [row.sif_id!]);
+  const sif = await first(query, "select * from verifactu_identities where id=?", [row.sif_id!]);
   if (
     sif === undefined ||
     sif.node_id !== row.node_id ||
@@ -427,25 +427,25 @@ async function reservationRow(query: BackupQuery, row: BackupRow): Promise<Backu
     : "invalid";
 }
 const LINKS = [
-  ["returned_invoice_records", "record_id", "registros_facturacion", "id"],
-  ["registro_sif", "node_id", "nodes", "id"],
+  ["returned_invoice_records", "record_id", "verifactu_records", "id"],
+  ["verifactu_identities", "node_id", "nodes", "id"],
   ["fiscal_allocations", "node_id", "nodes", "id"],
-  ["filing_cases", "registro_id", "registros_facturacion", "id"],
+  ["filing_cases", "registro_id", "verifactu_records", "id"],
   ["filing_case_events", "case_id", "filing_cases", "id"],
-  ["filing_case_events", "remedy_registro_id", "registros_facturacion", "id"],
-  ["fiscal_conflict_evidence", "registro_id", "registros_facturacion", "id"],
+  ["filing_case_events", "remedy_registro_id", "verifactu_records", "id"],
+  ["fiscal_conflict_evidence", "registro_id", "verifactu_records", "id"],
   ["fiscal_conflict_evidence", "case_id", "filing_cases", "id"],
-  ["fiscal_lookup_conflicts", "registro_id", "registros_facturacion", "id"],
+  ["fiscal_lookup_conflicts", "registro_id", "verifactu_records", "id"],
   ["fiscal_lookup_conflicts", "case_id", "filing_cases", "id"],
-  ["fiscal_series_conflicts", "sif_id", "registro_sif", "id"],
-  ["fiscal_series_conflicts", "series_id", "invoice_series", "id"],
-  ["envios", "registro_id", "registros_facturacion", "id"],
-  ["acks", "registro_id", "registros_facturacion", "id"],
-  ["fiscal_certificate_reminders", "install_id", "fiscal_certificate_installs", "id"],
+  ["verifactu_series_conflicts", "sif_id", "verifactu_identities", "id"],
+  ["verifactu_series_conflicts", "series_id", "invoice_series", "id"],
+  ["verifactu_submissions", "registro_id", "verifactu_records", "id"],
+  ["acks", "registro_id", "verifactu_records", "id"],
+  ["fiscal_certificate_reminders", "install_id", "verifactu_certificates", "id"],
   ["clock_stop_restarts", "node_id", "nodes", "id"],
-  ["clock_stop_restarts", "registro_id", "registros_facturacion", "id"],
+  ["clock_stop_restarts", "registro_id", "verifactu_records", "id"],
   ["clock_confirmations", "node_id", "nodes", "id"],
-  ["clock_confirmations", "registro_id", "registros_facturacion", "id"],
+  ["clock_confirmations", "registro_id", "verifactu_records", "id"],
   ["clock_confirmations", "check_id", "clock_checks", "id"],
   ["clock_checks", "node_id", "nodes", "id"],
 ] as const;
@@ -464,8 +464,8 @@ async function walk(
     )
       return "invalid";
   }
-  if (await exists(query, "registro_sif"))
-    for await (const row of query.rows("select * from registro_sif")) {
+  if (await exists(query, "verifactu_identities"))
+    for await (const row of query.rows("select * from verifactu_identities")) {
       if (
         !text(row.nif) ||
         !text(row.id_sistema_informatico) ||

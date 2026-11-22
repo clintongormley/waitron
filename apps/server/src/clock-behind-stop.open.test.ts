@@ -50,7 +50,7 @@ function clockAt(ms: number): TrustedClock {
 function latest(db: Database): { at: Date; offsetMinutes: number } | undefined {
   const [row] = db.all<{ at: string; offsetMinutes: number }>(sql`
     select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
-    from registros_facturacion
+    from verifactu_records
     order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);

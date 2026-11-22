@@ -66,7 +66,7 @@ import {
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -390,7 +390,7 @@ async function drawerOpensFor(): Promise<
 
 async function fiscalRecordCount(): Promise<number> {
   return withTransaction(suite.db, async (tx) => {
-    const rows = await tx.select().from(registrosFacturacion);
+    const rows = await tx.select().from(verifactuRecords);
     return rows.length;
   });
 }
@@ -959,7 +959,7 @@ describe("simplified invoice original requests", () => {
           .where(eq(printJobs.saleId, saleId)),
       );
       const before = await suite.db.select().from(printJobs);
-      const fiscal = await suite.db.select().from(registrosFacturacion);
+      const fiscal = await suite.db.select().from(verifactuRecords);
       const invoices = await suite.db.select().from(sales);
       await Promise.all([
         printSaleReceipt(deps(), cfg, workingOrderId, "original"),
@@ -967,7 +967,7 @@ describe("simplified invoice original requests", () => {
       ]);
       expect(await suite.db.select().from(printJobs)).toEqual(before);
       expect(await suite.db.select().from(sales)).toEqual(invoices);
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscal);
     },
   );
 
@@ -2518,7 +2518,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)));
     const [sale] = v.db.all<Record<string, unknown>>(sql`select * from sales where id = ${saleId}`);
     const [fiscalRecord] = v.db.all<Record<string, unknown>>(
-      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+      sql`select * from verifactu_records where sale_id = ${saleId}`,
     );
     return {
       sale: strip(sale!, [
@@ -3030,7 +3030,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       expect(await suite.db.select().from(sales)).toEqual([]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
       expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
       expect(
         (
           await suite.db.execute(
@@ -3046,7 +3046,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it("returns an explicit copy failure without rewriting an already-issued invoice", async () => {
     const { cfg, saleId, ticket } = await issued();
     const before = await suite.db.select().from(sales);
-    const fiscalBefore = await suite.db.select().from(registrosFacturacion);
+    const fiscalBefore = await suite.db.select().from(verifactuRecords);
     const formatter = vi.spyOn(receiptTicket, "formatReceipt").mockImplementationOnce(() => {
       throw new Error("explicit print failure");
     });
@@ -3055,7 +3055,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId)),
       ).rejects.toThrow("explicit print failure");
       expect(await suite.db.select().from(sales)).toEqual(before);
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscalBefore);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscalBefore);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
       expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
     } finally {
@@ -3194,7 +3194,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it("enrolls the explicit original with its recorded issuer", async () => {
     const { cfg, printerId, saleId, ticket, personId } = await issued();
     const invoices = await suite.db.select().from(sales);
-    const fiscal = await suite.db.select().from(registrosFacturacion);
+    const fiscal = await suite.db.select().from(verifactuRecords);
     await withTransaction(suite.db, (tx) =>
       enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
@@ -3220,7 +3220,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
     expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
     expect(await suite.db.select().from(sales)).toEqual(invoices);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscal);
     expect(await suite.db.select().from(drawerOpens)).toEqual([]);
   });
 
@@ -3242,7 +3242,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           .where(eq(workingOrders.id, orderId));
       });
       const invoices = await suite.db.select().from(sales);
-      const fiscal = await suite.db.select().from(registrosFacturacion);
+      const fiscal = await suite.db.select().from(verifactuRecords);
       await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
       const deliveries = await suite.db.select().from(invoiceDeliveries);
       expect(deliveries).toEqual([
@@ -3287,7 +3287,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       expect(await suite.db.select().from(invoiceDeliveries)).toEqual(completed);
       expect(await suite.db.select().from(printJobs)).toEqual(jobs);
       expect(await suite.db.select().from(sales)).toEqual(invoices);
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscal);
     },
   );
 
@@ -3619,7 +3619,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(await suite.db.select().from(sales)).toEqual([]);
       expect(await suite.db.select().from(tenders)).toEqual([]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
     } finally {
       await suite.db.execute(sql`drop trigger test_mandatory_drawer_refusal`);
     }
@@ -4121,7 +4121,7 @@ it("keeps the original history after printer deletion and prints a marked copy o
     "2.00",
   );
   await printSaleReceipt(deps(), cfg, workingOrderId, "original");
-  const fiscal = await suite.db.select().from(registrosFacturacion);
+  const fiscal = await suite.db.select().from(verifactuRecords);
   const drawer = await suite.db.select().from(drawerOpens);
   await withTransaction(suite.db, (tx) => deletePrinter(tx, firstPrinter));
   const replacement = await makePrinter();
@@ -4143,7 +4143,7 @@ it("keeps the original history after printer deletion and prints a marked copy o
   expect(copies[0]).toMatchObject({ printerId: replacement, status: "queued" });
   expect(decodeTicket(copies[0]!.payload)).toContain(receiptLabelsFor(ticket.locale).duplicate);
   expect(decodeTicket(copies[0]!.payload)).toContain(ticket.invoiceNumber);
-  expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+  expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscal);
   expect(await suite.db.select().from(drawerOpens)).toEqual(drawer);
 });
 

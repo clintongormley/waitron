@@ -11,8 +11,8 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -22,7 +22,7 @@ describe("drain chain ordering", () => {
   it("does not accept a Correcta duplicate whose stored fingerprint belongs to another record", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+      select * from verifactu_records where id = ${seeded.registroIds[0]}
     `);
     const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
@@ -45,7 +45,7 @@ describe("drain chain ordering", () => {
     expect(result.recordsAccepted).toBe(0);
     expect(result.recordsHalted).toBe(1);
     const stored = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(stored.rows[0]?.estado).toBe("rechazado");
     expect(aeat.stored()[0]?.huella).toBe("D".repeat(64));
@@ -54,7 +54,7 @@ describe("drain chain ordering", () => {
   it("refuses a mismatching fingerprint even when the lookup omits software identity", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+      select * from verifactu_records where id = ${seeded.registroIds[0]}
     `);
     const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
@@ -91,7 +91,7 @@ describe("drain chain ordering", () => {
 
     expect(result.recordsHalted).toBe(1);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]?.estado).toBe("rechazado");
   });
@@ -109,7 +109,7 @@ describe("drain chain ordering", () => {
     expect(first.recordsAccepted).toBe(1);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -118,7 +118,7 @@ describe("drain chain ordering", () => {
 
     expect(retry.recordsAccepted).toBe(1);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]?.estado).toBe("aceptado_con_errores");
     const incidents = await suite.db.execute<{ code: string }>(sql`
@@ -131,7 +131,7 @@ describe("drain chain ordering", () => {
   it("does not claim a matching fingerprint filed under another installation", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+      select * from verifactu_records where id = ${seeded.registroIds[0]}
     `);
     const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
@@ -159,7 +159,7 @@ describe("drain chain ordering", () => {
     expect(result.recordsAccepted).toBe(0);
     expect(result.recordsHalted).toBe(1);
     const stored = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(stored.rows[0]?.estado).toBe("rechazado");
   });
@@ -179,7 +179,7 @@ describe("drain chain ordering", () => {
     expect(first.recordsAccepted).toBe(1);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -202,7 +202,7 @@ describe("drain chain ordering", () => {
     expect(result.recordsAccepted).toBe(0);
     expect(result.recordsHalted).toBe(0);
     const stored = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(stored.rows[0]?.estado).toBe("pendiente");
   });
@@ -220,7 +220,7 @@ describe("drain chain ordering", () => {
     await drain(deps, NOW);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -274,7 +274,7 @@ describe("drain chain ordering", () => {
     await drain(deps, NOW);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -304,7 +304,7 @@ describe("drain chain ordering", () => {
     expect(retry.recordsHalted).toBe(0);
     expect(retry.recordsSubmitted).toBe(1);
     const state = await suite.db.execute<{ estado: string; incidencia: number }>(sql`
-      select estado, incidencia from envios where registro_id = ${seeded.registroIds[0]}
+      select estado, incidencia from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]).toEqual({ estado: "pendiente", incidencia: 1 });
   });
@@ -322,7 +322,7 @@ describe("drain chain ordering", () => {
     await drain(deps, NOW);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -356,7 +356,7 @@ describe("drain chain ordering", () => {
     expect(retry.recordsHalted).toBe(0);
     expect(retry.recordsSubmitted).toBe(1);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]?.estado).toBe("pendiente");
   });
@@ -374,7 +374,7 @@ describe("drain chain ordering", () => {
     await drain(deps, NOW);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -407,7 +407,7 @@ describe("drain chain ordering", () => {
     expect(retry.recordsAccepted).toBe(0);
     expect(retry.recordsHalted).toBe(0);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${seeded.registroIds[0]}
+      select estado from verifactu_submissions where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]?.estado).toBe("pendiente");
   });
@@ -416,7 +416,7 @@ describe("drain chain ordering", () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set proximo_intento_en = ${RETRY_AT.toISOString()}
+        update verifactu_submissions set proximo_intento_en = ${RETRY_AT.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -435,7 +435,7 @@ describe("drain chain ordering", () => {
     expect(first.nextDueAt).toEqual(RETRY_AT);
     expect(aeat.stored()).toHaveLength(0);
     const before = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id in ${seeded.registroIds}
+      select estado from verifactu_submissions where registro_id in ${seeded.registroIds}
       order by registro_id
     `);
     expect(before.rows.map((row) => row.estado)).toEqual(["pendiente", "pendiente"]);
@@ -451,7 +451,7 @@ describe("drain chain ordering", () => {
     const independent = await seedSecondChain(suite.db, blocked, 3);
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set proximo_intento_en = ${RETRY_AT.toISOString()}
+        update verifactu_submissions set proximo_intento_en = ${RETRY_AT.toISOString()}
         where registro_id = ${blocked.registroIds[0]}
       `),
     );
@@ -476,7 +476,7 @@ describe("drain chain ordering", () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${NOW.toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${NOW.toISOString()}
         where registro_id = ${seeded.registroIds[0]}
       `),
     );
@@ -509,11 +509,11 @@ describe("drain chain ordering", () => {
     };
     const initial = await drain(deps, NOW);
     expect(initial.recordsAccepted).toBe(2);
-    const records = await suite.db.select().from(registrosFacturacion);
+    const records = await suite.db.select().from(verifactuRecords);
     const original = records.find((row) => row.id === first.registroIds[0])!;
     const foreign = records.find((row) => row.id === other.registroId)!;
     const cancellationId = newId();
-    await suite.db.insert(registrosFacturacion).values({
+    await suite.db.insert(verifactuRecords).values({
       ...foreign,
       id: cancellationId,
       secuencia: foreign.secuencia + 1,
@@ -533,14 +533,14 @@ describe("drain chain ordering", () => {
       anteriorHuella: foreign.huella,
       huella: "C".repeat(64),
     });
-    await suite.db.insert(envios).values({ registroId: cancellationId, proximoIntentoEn: NOW });
+    await suite.db.insert(verifactuSubmissions).values({ registroId: cancellationId, proximoIntentoEn: NOW });
 
     const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
     expect(retry.recordsSubmitted).toBe(1);
     expect(retry.recordsAccepted).toBe(1);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${cancellationId}
+      select estado from verifactu_submissions where registro_id = ${cancellationId}
     `);
     expect(state.rows[0]?.estado).toBe("aceptado");
     expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Anulado");
@@ -549,7 +549,7 @@ describe("drain chain ordering", () => {
   it("sends a successor created after its predecessor was refused for a conflicting fingerprint", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+      select * from verifactu_records where id = ${seeded.registroIds[0]}
     `);
     const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
@@ -577,7 +577,7 @@ describe("drain chain ordering", () => {
       successor.facturaKey,
     ]);
     const state = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${successor.registroId}
+      select estado from verifactu_submissions where registro_id = ${successor.registroId}
     `);
     expect(state.rows[0]?.estado).toBe("aceptado");
   });

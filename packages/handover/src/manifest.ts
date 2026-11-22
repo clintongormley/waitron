@@ -142,7 +142,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
       "inside the copy; retains the originating node and recovery epoch; routing must not adopt these rows under another origin",
   },
   {
-    item: "fiscal_certificate_installs",
+    item: "verifactu_certificates",
     where: "venue.db",
     class: "transferred",
     treatment:

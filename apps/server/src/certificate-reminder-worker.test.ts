@@ -6,7 +6,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
-  fiscalCertificateInstalls,
+  verifactuCertificates,
   fiscalCertificateReminders,
 } from "@waitron/fiscal-verifactu/src/schema/index.js";
 import { persons } from "@waitron/identity";
@@ -77,7 +77,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
   });
   nodeId = await seedNode(suite.db);
-  await suite.db.insert(fiscalCertificateInstalls).values({
+  await suite.db.insert(verifactuCertificates).values({
     nodeId,
     installedAt: new Date("2026-01-02T09:00:00Z"),
     source: "setup",

@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { invoiceSeries, type Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import {
   readOperationAuthority,
   type ModuleOperationInput,
@@ -170,9 +170,9 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
     if (primary.nodeId !== held.context.sourceId || primary.nodeId === standby.nodeId)
       return refuse("node_mismatch");
     const [activeSif] = await tx
-      .select({ id: registroSif.id })
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, standby.nodeId), isNull(registroSif.revocadoEn)))
+      .select({ id: verifactuIdentities.id })
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)))
       .limit(1);
     const [activeSeries] = await tx
       .select({ id: invoiceSeries.id })

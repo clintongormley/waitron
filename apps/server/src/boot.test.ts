@@ -2856,7 +2856,7 @@ describe("startServer, against a migrated venue directory", () => {
   });
 
   // Pins which timing reaches the drain: a `timings.minTickMs` passed as `skipRetryMs` would pass
-  // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
+  // the typecheck and every unit test. A due `verifactu_submissions` row is seeded with no `fiscal.aeat` credential,
   // and the filing job's next due time is read back. The row would stay due in the shared directory,
   // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
   it("sleeps on the skip retry, not the minimum tick, for a taxpayer with due fiscal work and no fiscal.aeat credential", async () => {
@@ -2886,7 +2886,7 @@ describe("startServer, against a migrated venue directory", () => {
           {},
           { timings: { minTickMs: 1000, maxTickMs: 600000, skipRetryMs: 45678 } },
         );
-        const skippedEvent = await waitForEvent(lines, "drain.tenant_skipped");
+        const skippedEvent = await waitForEvent(lines, "drain.skipped");
         return [started, skippedEvent] as const;
       });
 
@@ -2904,8 +2904,8 @@ describe("startServer, against a migrated venue directory", () => {
         await server.close();
       }
     } finally {
-      // Only the `envios` row keeps the directory due.
-      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      // Only the `verifactu_submissions` row keeps the directory due.
+      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
 
@@ -2926,7 +2926,7 @@ describe("startServer, against a migrated venue directory", () => {
     const [registroId] = seeded.registroIds;
     const claimedAt = new Date(Date.now() - 1_000).toISOString();
     await sharedDb.execute(sql`
-      update envios set estado = 'enviando', intentos = 1, enviado_en = ${claimedAt}
+      update verifactu_submissions set estado = 'enviando', intentos = 1, enviado_en = ${claimedAt}
       where registro_id = ${registroId}
     `);
 
@@ -2943,14 +2943,14 @@ describe("startServer, against a migrated venue directory", () => {
           expect(server.health.readJobs?.()["fiscal.drain"]?.lastRunAt).toEqual(expect.any(String)),
         );
         const rows = await sharedDb.execute<{ estado: string; incidencia: number }>(
-          sql`select estado, incidencia from envios where registro_id = ${registroId}`,
+          sql`select estado, incidencia from verifactu_submissions where registro_id = ${registroId}`,
         );
         expect(rows.rows).toEqual([{ estado: "pendiente", incidencia: 1 }]);
       } finally {
         await server.close();
       }
     } finally {
-      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
 
@@ -3158,9 +3158,9 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       closeSpy.mockRestore();
-      // Only the `envios` row keeps the directory due. `incidents` is cleared too, so a change to how
+      // Only the `verifactu_submissions` row keeps the directory due. `incidents` is cleared too, so a change to how
       // a failed submission is handled cannot leave a row behind for a later test.
-      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
       await sharedDb.execute(sql`delete from incidents `);
     }
   }, 60_000);

@@ -58,7 +58,7 @@ it("a setup certificate row is not kept; a dashboard one is", async () => {
 });
 
 // The invoice count failing must not lose the kept count, or Start again deletes the row.
-it.each(["envios", "registros_facturacion"])(
+it.each(["verifactu_submissions", "verifactu_records"])(
   "a dashboard certificate row is still kept when another fiscal table is damaged (%s dropped)",
   async (table) => {
     const held = await heldSetup();
@@ -78,7 +78,7 @@ it("keeps a dashboard certificate row when the attempt's modules leave the fisca
 
 it("a certificate table missing is damage only when the attempt's modules name the fiscal module", async () => {
   const held = await heldSetup();
-  write(held, ["drop table fiscal_certificate_installs"]);
+  write(held, ["drop table verifactu_certificates"]);
   const modules = held.host.modules!.filter((module) => module.name !== MODULE);
   expect(await readDatabase(held, modules)).toMatchObject({ kind: "read" });
   expect(await readDatabase(held)).toMatchObject({ kind: "damaged", code: "no such table" });
@@ -87,8 +87,8 @@ it("a certificate table missing is damage only when the attempt's modules name t
 it("a module the attempt does not name still refuses a read error other than a missing table", async () => {
   const held = await heldSetup();
   write(held, [
-    "drop table fiscal_certificate_installs",
-    "create table fiscal_certificate_installs (id integer primary key)",
+    "drop table verifactu_certificates",
+    "create table verifactu_certificates (id integer primary key)",
   ]);
   const modules = held.host.modules!.filter((module) => module.name !== MODULE);
   await expect(read(held, modules)).rejects.toMatchObject({

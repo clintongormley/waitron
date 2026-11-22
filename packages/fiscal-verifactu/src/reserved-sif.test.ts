@@ -20,7 +20,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // These fixtures have no filed records; clear only their mutable identity rows.
   await suite.db.transaction(async (tx) => {
-    for (const table of ["cadenas", "registro_sif", "nodes", "taxpayer"]) {
+    for (const table of ["cadenas", "verifactu_identities", "nodes", "taxpayer"]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);
     }
   });
@@ -99,6 +99,6 @@ describe("reserved-sif primitives", () => {
           numeroInstalacion: numero,
         }),
       ),
-    ).rejects.toThrow(); // registro_sif_instalacion_uq
+    ).rejects.toThrow(); // verifactu_identities_instalacion_uq
   });
 });

@@ -1430,7 +1430,7 @@ describe("append-only triggers at boot", () => {
 
   it.each([
     ["sales", "sales_append_only_delete"],
-    ["registros_facturacion", "registros_facturacion_append_only_delete"],
+    ["verifactu_records", "verifactu_records_append_only_delete"],
   ])(
     "a %s trigger dropped while the box was off is put back and the start goes on",
     async (table, trigger) => {

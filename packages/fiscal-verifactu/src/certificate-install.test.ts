@@ -19,7 +19,7 @@ import {
   type AnsweringServer,
   type Candidate,
 } from "../test/certificate-fixtures.js";
-import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { RC2_CANDIDATE } from "../test/openssl-certificates.js";
 import { mtlsFetch } from "./aeat-transport.js";
@@ -32,7 +32,7 @@ import {
 } from "./certificate-install.js";
 import { latestInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
-import { fiscalCertificateInstalls } from "./schema/index.js";
+import { verifactuCertificates } from "./schema/index.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
 
@@ -92,10 +92,10 @@ interface Venue {
 
 /** The taxpayer, and `installed` sealed by setup at `installedAt`. */
 async function venue(installedAt = "2026-10-18T10:00:00.000Z"): Promise<Venue> {
-  await seedTenantNodeSif(suite.db);
+  await seedTaxpayerNodeSif(suite.db);
   const ring = testRing();
   await sealAeatSecret(
-    { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(installedAt) },
+    { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(installedAt) },
     { ...fileOf(installed), certKind: "sello" },
   );
   return { ring, revision: await revision() };
@@ -106,7 +106,7 @@ function revision(): Promise<string | null> {
 }
 
 function installRows() {
-  return suite.db.select().from(fiscalCertificateInstalls);
+  return suite.db.select().from(verifactuCertificates);
 }
 
 async function state() {
@@ -121,7 +121,7 @@ function depsFor(
   return {
     db: suite.db,
     ring: v.ring,
-    nodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId,
     environment: "preproduction",
     authorize: async () => ({ personId: "p-1" }),
     transport: transportTo(server),
@@ -288,7 +288,7 @@ describe("installCertificate's live check", () => {
       details: { checkedAt: NOW.toISOString() },
     });
     expect(server.requests()).toBe(1);
-    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
     expect(latest).toMatchObject({
       fingerprint: file.fingerprint,
       taxId: null,
@@ -370,10 +370,10 @@ describe("installCertificate's write", () => {
     expect(vault).toEqual({ ...fileOf(candidate), certKind: "representante" });
     const rows = await installRows();
     expect(rows).toHaveLength(2);
-    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
     expect(latest).toEqual({
       id: expect.any(String),
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       installedAt: NOW,
       source: "dashboard",
       personId: "p-1",
@@ -390,7 +390,7 @@ describe("installCertificate's write", () => {
   });
 
   it("installs on a box with no vault entry yet when the card read none", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     const v = { ring: testRing(), revision: null };
     const server = await serve();
     const answer = await installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW);
@@ -404,7 +404,7 @@ describe("installCertificate's write", () => {
 
     await installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW);
 
-    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
     expect(latest).toMatchObject({
       fingerprint: candidate.fingerprint,
       installedAt: new Date("2026-10-18T12:00:00.001Z"),
@@ -453,7 +453,7 @@ describe("installCertificate's write", () => {
       reason: "installed",
       details: { checkedAt: answered.toISOString() },
     });
-    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
     expect(latest).toMatchObject({
       fingerprint: candidate.fingerprint,
       installedAt: answered,
@@ -520,7 +520,7 @@ describe("installCertificate's write", () => {
     let calls = 0;
     const authorize = async () => ({ personId: (calls += 1) === 1 ? "p-1" : "p-2" });
     await installCertificate(depsFor(v, server, { authorize }), bodyFor(v, candidate), NOW);
-    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
     expect(latest?.personId).toBe("p-2");
     expect(
       (await readActivityForSubject(suite.db, { kind: "credential", id: "fiscal.aeat" })).at(-1),
@@ -638,7 +638,7 @@ describe("venueTimeZone", () => {
   it("reads the venue's zone, and UTC with no venue row or an unknown zone", async () => {
     const read = () => withTransaction(suite.db, (tx) => venueTimeZone(tx));
     expect(await read()).toBe("UTC");
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     expect(await read()).toBe("Europe/Madrid");
     await suite.db.execute(
       sql`update settings set doc = json_set(doc, '$.timeZone', 'Mars/Olympus') where module = 'business_day'`,

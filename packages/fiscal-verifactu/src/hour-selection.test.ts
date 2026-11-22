@@ -1052,7 +1052,7 @@ it("refuses an empty continuation key before recording a wait", async () => {
 
 const at = (iso: string) => Date.parse(iso);
 const activationRow = (identity: string, recordedAtMs: number | null) => ({
-  reference: `registro_sif/${identity}`,
+  reference: `verifactu_identities/${identity}`,
   kind: "activation",
   ...scope,
   softwareId: "W1",

@@ -31,9 +31,9 @@ import { FISCAL_PERMISSIONS } from "./permissions.js";
 import * as remedies from "./record-remedy.js";
 import { correctiveRemedy } from "./record-remedy-corrective.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
@@ -114,9 +114,9 @@ beforeEach(async () => {
       }),
     );
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "aceptado_con_errores", codigoError: "2000" })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     const filingCase = await openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: "fiscal.aceptado_con_errores",
@@ -184,8 +184,8 @@ async function snapshot() {
   return {
     records: await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia),
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
     tenders: await suite.db.select().from(tenders),
@@ -193,7 +193,7 @@ async function snapshot() {
     settlements: await suite.db.select().from(saleSettlements),
     series: await suite.db.select().from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
-    deliveries: await suite.db.select().from(envios),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
 }
@@ -243,9 +243,9 @@ async function anotherInvoice(
     );
     const codigo = cause === "fiscal.registro_rechazado" ? 1161 : cause === undefined ? 2000 : 3000;
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado, codigoError: String(codigo) })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     const filingCase =
       cause === undefined
         ? undefined
@@ -348,9 +348,9 @@ it("replays a reordered decision after the clock and delivery change without a s
   const first = await apply();
   instant = new Date("2026-03-01T15:00:00Z");
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado" })
-    .where(eq(envios.registroId, input.request.registroId));
+    .where(eq(verifactuSubmissions.registroId, input.request.registroId));
   const before = await snapshot();
   const reordered = JSON.parse(
     JSON.stringify(input.request, (_key, value: unknown) =>
@@ -385,9 +385,9 @@ it.each(["detenido", "pendiente", "enviando", "retenido", "aceptado"] as const)(
   "refuses ambiguous or nonmatching outcome %s",
   async (estado) => {
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado })
-      .where(eq(envios.registroId, input.request.registroId));
+      .where(eq(verifactuSubmissions.registroId, input.request.registroId));
     await refuses("fiscal.remedy_invalid");
   },
 );
@@ -417,9 +417,9 @@ it("refuses another record's case even with the same totals", async () => {
 // replacement is a sale row alone, which is all `correctionTargetFor` reads.
 it("refuses a case whose invoice was replaced, rather than crediting the replacement", async () => {
   const [registro] = await suite.db
-    .select({ saleId: registrosFacturacion.saleId })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, input.request.registroId));
+    .select({ saleId: verifactuRecords.saleId })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, input.request.registroId));
   const [original] = await suite.db.select().from(sales).where(eq(sales.id, registro!.saleId));
   await suite.db.insert(sales).values({
     ...original!,
@@ -490,16 +490,16 @@ it("refuses a missing case", async () => {
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses a missing delivery", async () => {
-  await suite.db.delete(envios).where(eq(envios.registroId, input.request.registroId));
+  await suite.db.delete(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, input.request.registroId));
   await refuses("fiscal.remedy_invalid");
 });
 it.each([null, "3000", "different-code"])(
   "refuses missing or conflicting stored error %s",
   async (codigoError) => {
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ codigoError })
-      .where(eq(envios.registroId, input.request.registroId));
+      .where(eq(verifactuSubmissions.registroId, input.request.registroId));
     await refuses("fiscal.remedy_invalid");
   },
 );
@@ -585,9 +585,9 @@ it("refuses a duplicate-conflict code even when the case evidence matches it", a
   input.request.registroId = other.registroId;
   input.request.caseId = other.caseId!;
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ codigoError: "3000" })
-    .where(eq(envios.registroId, other.registroId));
+    .where(eq(verifactuSubmissions.registroId, other.registroId));
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses a saved decision replayed by a different administrator", async () => {
@@ -643,8 +643,8 @@ it("a refused record of the box this one took over from can be remedied here", a
 
   const [appended] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, result.registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, result.registroId));
   expect(appended).toMatchObject({
     nodeId: successor.nodeId,
     sifId: successor.sifId,

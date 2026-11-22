@@ -197,7 +197,7 @@ async function readDisk() {
             .get() as { term: number }
         ).term,
         activations: count(venue, "handover_activations"),
-        ownSif: count(venue, `registro_sif where node_id = '${standby.nodeId}'`),
+        ownSif: count(venue, `verifactu_identities where node_id = '${standby.nodeId}'`),
         state: (
           node.prepare("select state from node_handover_operations").get() as { state: string }
         ).state,

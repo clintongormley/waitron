@@ -205,12 +205,12 @@ async function readPracticeSales() {
         order by s.invoice_number, t.method`,
   );
   const { rows: registroRows } = await db.execute(
-    sql`select ${columns("r", REGISTROS_COLUMNS)} from registros_facturacion r
+    sql`select ${columns("r", REGISTROS_COLUMNS)} from verifactu_records r
         order by r.secuencia`,
   );
   const { rows: envioRows } = await db.execute(
-    sql`select ${columns("e", ENVIOS_COLUMNS)} from envios e
-        join registros_facturacion r on r.id = e.registro_id
+    sql`select ${columns("e", ENVIOS_COLUMNS)} from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
         order by r.secuencia`,
   );
   return {

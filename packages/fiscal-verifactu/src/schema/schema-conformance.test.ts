@@ -1,4 +1,4 @@
-// The factory never reads a trigger, so `registros_facturacion`'s append-only `RAISE(ABORT)` pair
+// The factory never reads a trigger, so `verifactu_records`'s append-only `RAISE(ABORT)` pair
 // is outside this suite; its guards are `../inmutabilidad.test.ts` and
 // `scripts/append-only-triggers.test.ts`.
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -12,7 +12,7 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS],
   subject: FISCAL_MIGRATIONS,
   declarations: barrel,
-  // `registros_facturacion.source` and `filing_case_events.kind` are the closed vocabularies; every
+  // `verifactu_records.source` and `filing_case_events.kind` are the closed vocabularies; every
   // other closed list here is a plain `check(...)` constraint.
   declaresClosedVocabularies: true,
 });

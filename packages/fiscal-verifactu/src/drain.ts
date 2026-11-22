@@ -125,7 +125,7 @@ export interface DrainDeps {
   signal?: AbortSignal;
 }
 
-/** A due `envios` row joined to enough of its registro to rebuild and order it. `probe` marks a
+/** A due `verifactu_submissions` row joined to enough of its registro to rebuild and order it. `probe` marks a
  * brake-held record `claimProbes` sent while it stays `detenido`, with the code of the run that
  * holds it. */
 type DueRow = RegistroRow & {
@@ -150,7 +150,7 @@ type DueRow = RegistroRow & {
 async function workIsDue(db: Database, now: Date, environment: Entorno): Promise<boolean> {
   const rows = await db.execute<{ due: number }>(sql`
     select (exists (
-      select 1 from envios
+      select 1 from verifactu_submissions
       where (estado = 'pendiente' and ${retryDue(sql`proximo_intento_en`, now)})
          or (estado = 'enviando' and ${claimStale(sql`enviado_en`, now)})
     ) or exists (${dueProbes(now, environment)}) or exists (${releasableHeads()})) as due
@@ -175,7 +175,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   if (await workIsDue(deps.db, now, deps.environment)) {
     // Counted before `resolveClient`: a pass skipped for a missing certificate still had due work,
     // and the host's awaiting-certificate flag must tell that apart from a pass with none.
-    result.tenantsWithWork += 1;
+    result.passesWithWork += 1;
     try {
       await flushTechnicalFailure(deps.db, deps.environment);
       const client = await deps.resolveClient();
@@ -223,7 +223,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * AEAT's flow control: send when `TiempoEsperaEnvio` has elapsed since the last envío OR a full
  * envío has accumulated, whichever comes first.
  *
- *   - Gate (`envio_flujo.proximo_envio_en`) not yet elapsed AND fewer than `maxPorEnvio` rows due:
+ *   - Gate (`verifactu_sending_state.proximo_envio_en`) not yet elapsed AND fewer than `maxPorEnvio` rows due:
  *     nothing is sent; the backlog is deferred to the gate.
  *   - Otherwise the pass sends its first chunk, and keeps sending full chunks back to back while at
  *     least `maxPorEnvio` rows remain due. A sub-cap tail left after a chunk has gone is neither a
@@ -242,7 +242,7 @@ async function drainDue(
   skipRetryMs: number,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
+  // Commits before anything else in this pass reads `verifactu_submissions`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
   await countOnCommit(db, result, async (tx, counts) => {
     await recoverStaleClaims(tx, now, environment);
@@ -320,7 +320,7 @@ async function drainDue(
           const incidentToken = await technicalIncidentToken(tx);
           if (incidentToken !== null && sendable.length > 0) {
             await tx.execute(sql`
-              update envios set technical_incidence = true
+              update verifactu_submissions set technical_incidence = true
               where registro_id in ${sendable.map((row) => row.id)}
             `);
             for (const row of sendable) row.technical_incidence = 1;
@@ -444,7 +444,7 @@ async function readFlujo(
   tx: Transaction,
 ): Promise<{ proximoEnvioEn: Date | null; tiempoEsperaSeg: number }> {
   const rows = await tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(sql`
-    select proximo_envio_en, tiempo_espera_seg from envio_flujo
+    select proximo_envio_en, tiempo_espera_seg from verifactu_sending_state
   `);
   const row = rows.rows[0];
   return row
@@ -473,7 +473,7 @@ async function readGate(
 async function countDue(tx: Transaction, now: Date, environment: Entorno): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
     select (
-      select count(*) from envios
+      select count(*) from verifactu_submissions
       where estado = 'pendiente' and ${retryDue(sql`proximo_intento_en`, now)}
     ) + (select count(*) from (${dueProbes(now, environment)})) as count
   `);
@@ -490,7 +490,7 @@ async function nextClaimOpportunity(
       min(case when estado = 'pendiente' and not ${retryDue(sql`proximo_intento_en`, now)}
         then proximo_intento_en end) as next_retry,
       min(case when estado = 'enviando' then enviado_en end) as oldest_claim
-    from envios
+    from verifactu_submissions
   `);
   const row = rows.rows[0];
   const candidates = [
@@ -505,7 +505,7 @@ async function nextClaimOpportunity(
  * gate — persisted, never an in-memory timer. */
 async function upsertFlujo(tx: Transaction, proximoEnvioEn: Date, t: number): Promise<void> {
   await tx.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, ${proximoEnvioEn.toISOString()}, ${t})
     on conflict (id) do update set
       proximo_envio_en = excluded.proximo_envio_en, tiempo_espera_seg = excluded.tiempo_espera_seg
@@ -557,7 +557,7 @@ async function requeueClaims(
 ): Promise<void> {
   const stale = onlyStale ? sql` and ${claimStale(sql`enviado_en`, now)}` : sql.empty();
   const interrupted = await tx.execute<{ id: string; entorno: Entorno | null }>(sql`
-    select r.id, r.entorno from envios e join registros_facturacion r on r.id = e.registro_id
+    select r.id, r.entorno from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
     where e.estado = 'enviando'${stale}
   `);
   for (const env of new Set(interrupted.rows.map((row) => row.entorno))) {
@@ -570,7 +570,7 @@ async function requeueClaims(
     );
   }
   await tx.execute(sql`
-    update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
+    update verifactu_submissions set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
     where estado = 'enviando'${stale}
   `);
 }
@@ -594,7 +594,7 @@ async function requeueClaims(
  * `environment` before the stamp. A row that disagrees, or carries none, is left untouched and
  * `pendiente`, with an incident on this same transaction, and is never backed off: neither refusal
  * is a fact about AEAT's availability. `fiscal.environment_mismatch` releases when `WAITRON_ENV` is
- * corrected; `fiscal.environment_unknown` never does, because `registros_facturacion` is
+ * corrected; `fiscal.environment_unknown` never does, because `verifactu_records` is
  * append-only and a NULL `entorno` cannot be corrected in place — see `errors.ts`.
  *
  * `blockedSifIds` keeps chain order behind a refusal: a refused row's successors would otherwise
@@ -642,16 +642,16 @@ async function claimBatch(
       select r.id,
         min(r.nombre_razon_emisor) over chain = r.nombre_razon_emisor
           and max(r.nombre_razon_emisor) over chain = r.nombre_razon_emisor as leads_its_name
-      from envios e
-      join registros_facturacion r on r.id = e.registro_id
+      from verifactu_submissions e
+      join verifactu_records r on r.id = e.registro_id
       where e.estado in ('pendiente', 'enviando')
       window chain as (partition by r.sif_id order by r.secuencia)
     ),
     candidate as materialized (
       select r.id, r.sif_id, r.secuencia, r.nombre_razon_emisor, r.fecha_hora_huso_gen_registro,
         e.intentos, e.technical_incidence, w.leads_its_name
-      from envios e
-      join registros_facturacion r on r.id = e.registro_id
+      from verifactu_submissions e
+      join verifactu_records r on r.id = e.registro_id
       join waiting w on w.id = r.id
       where e.estado = 'pendiente' and ${retryDue(sql`e.proximo_intento_en`, now)}
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
@@ -659,8 +659,8 @@ async function claimBatch(
         -- duplicate reply reveals that the row belongs to someone else.
         and (r.tipo_registro != 'anulacion' or ${originalSettled("r", "original")})
         and not exists (
-          select 1 from envios earlier
-          join registros_facturacion prior on prior.id = earlier.registro_id
+          select 1 from verifactu_submissions earlier
+          join verifactu_records prior on prior.id = earlier.registro_id
           where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
             and (earlier.estado = 'enviando'
               or (earlier.estado = 'pendiente' and (
@@ -678,7 +678,7 @@ async function claimBatch(
       (c.leads_its_name and c.nombre_razon_emisor = (select nombre_razon_emisor from target))
         as claimable
     from candidate c
-    join registros_facturacion r on r.id = c.id
+    join verifactu_records r on r.id = c.id
     order by claimable desc, c.sif_id, c.secuencia
     limit ${maxPorEnvio}`)
   ).rows;
@@ -730,7 +730,7 @@ async function claimBatch(
     // drizzle expands an array parameter into an already-parenthesised list, so `in ${ids}` takes
     // no parentheses of its own.
     await tx.execute(sql`
-      update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
+      update verifactu_submissions set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
     `);
   }
@@ -813,7 +813,7 @@ async function pendingWasSendable(
  * `intentos` in this transaction, so a first claim reads 1 here. A row with `intentos` above 1
  * was claimed before, which includes an envío whose submit failed in transport; it may have
  * reached AEAT, so it is sent again rather than held, or its outcome there would stay unknown.
- * `secuencia` is unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so
+ * `secuencia` is unique per node (`verifactu_records_node_secuencia_uq`), not per chain, so
  * "immediately before" is the highest positions below this row's on its chain, set-aside records
  * skipped (`recordsBefore`, ./filing-cases.ts).
  *
@@ -834,7 +834,7 @@ async function haltOpenChainClaims(
   // Set aside first, whatever else applies: the run rule below must already read these as
   // `retenido`, or one claimed beside a later row would break the run that holds it.
   const setAsideFound = await tx.execute<{ id: string }>(sql`
-    select r.id from registros_facturacion r
+    select r.id from verifactu_records r
     where r.id in ${claimed.map((row) => row.id)} and ${cancelsRefusedOriginal("r")}
   `);
   const setAsideIds = new Set(setAsideFound.rows.map((row) => row.id));
@@ -846,15 +846,15 @@ async function haltOpenChainClaims(
   const rest = claimed.filter((row) => !setAsideIds.has(row.id));
   if (rest.length === 0) return rest;
   const blocked = await tx.execute<{ id: string }>(sql`
-    select r.id from registros_facturacion r
+    select r.id from verifactu_records r
     where r.id in ${rest.map((row) => row.id)}
       and (exists (
-        select 1 from envios held_envio
-        join registros_facturacion held on held.id = held_envio.registro_id
+        select 1 from verifactu_submissions held_envio
+        join verifactu_records held on held.id = held_envio.registro_id
         where held.sif_id = r.sif_id and held.secuencia < r.secuencia
           and held_envio.estado = 'detenido'
       ) or (exists (
-        select 1 from envios own where own.registro_id = r.id and own.intentos = 1
+        select 1 from verifactu_submissions own where own.registro_id = r.id and own.intentos = 1
       ) and ${holdingRunBefore("r")}))
   `);
   if (blocked.rows.length === 0) return rest;
@@ -873,7 +873,7 @@ async function haltOpenChainClaims(
     }
   }
   await tx.execute(sql`
-    update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
+    update verifactu_submissions set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
   `);
   for (const id of haltedIds) await writeAck(tx, id, now);
   result.recordsHalted += haltedIds.length;
@@ -890,14 +890,14 @@ function originalSettled(record: "r" | "prior", original: "original" | "prior_or
   const alta = sql.raw(original);
   const envio = sql.raw(`${original}_envio`);
   return sql`exists (
-    select 1 from registros_facturacion ${alta}
-    join envios ${envio} on ${envio}.registro_id = ${alta}.id
+    select 1 from verifactu_records ${alta}
+    join verifactu_submissions ${envio} on ${envio}.registro_id = ${alta}.id
     where ${alta}.tipo_registro = 'alta'
       and ${alta}.id_emisor_factura = ${cancellation}.id_emisor_factura
       and ${alta}.num_serie_factura = ${cancellation}.num_serie_factura
       and ${alta}.fecha_expedicion_factura = ${cancellation}.fecha_expedicion_factura
       and not exists (
-        select 1 from registros_facturacion replacement
+        select 1 from verifactu_records replacement
         where replacement.corrects_registro_id = ${alta}.id
       )
       and (${envio}.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
@@ -910,14 +910,14 @@ function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
   return sql`(${alias}.tipo_registro = 'anulacion'
     and ${alias}.sin_registro_previo is not 'S' and exists (
-    select 1 from registros_facturacion original
-    join envios original_envio on original_envio.registro_id = original.id
+    select 1 from verifactu_records original
+    join verifactu_submissions original_envio on original_envio.registro_id = original.id
     where original.tipo_registro = 'alta'
       and original.id_emisor_factura = ${alias}.id_emisor_factura
       and original.num_serie_factura = ${alias}.num_serie_factura
       and original.fecha_expedicion_factura = ${alias}.fecha_expedicion_factura
       and not exists (
-        select 1 from registros_facturacion replacement
+        select 1 from verifactu_records replacement
         where replacement.corrects_registro_id = original.id
       )
       and original_envio.estado = 'rechazado'
@@ -957,8 +957,8 @@ async function setAsideHeldCancellations(
   result: CommittedCounts,
 ): Promise<void> {
   const { rows } = await tx.execute<{ id: string; sale_id: string }>(sql`
-    select r.id, r.sale_id from envios e
-    join registros_facturacion r on r.id = e.registro_id
+    select r.id, r.sale_id from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     where e.estado = 'detenido' and ${cancelsRefusedOriginal("r")}
   `);
   for (const row of rows) await setAside(tx, row, now, result);
@@ -999,18 +999,18 @@ function holdingRunBefore(record: "r"): SQL {
  * has no case of its own.
  */
 const HELD_HEADS = sql`
-  from envios de
-  join registros_facturacion d on d.id = de.registro_id
-  join registros_facturacion p on p.id = (
+  from verifactu_submissions de
+  join verifactu_records d on d.id = de.registro_id
+  join verifactu_records p on p.id = (
     select preceding.id ${recordsBefore("d")}
     order by preceding.secuencia desc
     limit 1
   )
-  join envios p_envio on p_envio.registro_id = p.id
+  join verifactu_submissions p_envio on p_envio.registro_id = p.id
   where de.estado = 'detenido'
     and not exists (
-      select 1 from envios earlier_envio
-      join registros_facturacion earlier on earlier.id = earlier_envio.registro_id
+      select 1 from verifactu_submissions earlier_envio
+      join verifactu_records earlier on earlier.id = earlier_envio.registro_id
       where earlier.sif_id = d.sif_id and earlier.secuencia < d.secuencia
         and earlier_envio.estado = 'detenido'
     )
@@ -1032,8 +1032,8 @@ function brakeHeldHeads(environment: Entorno): SQL {
       and d.entorno = ${environment}
       and ${sameCodeRunBefore("d")}
       and not exists (
-        select 1 from envios awaited_envio
-        join registros_facturacion awaited on awaited.id = awaited_envio.registro_id
+        select 1 from verifactu_submissions awaited_envio
+        join verifactu_records awaited on awaited.id = awaited_envio.registro_id
         where awaited.sif_id = d.sif_id and awaited.secuencia < d.secuencia
           and awaited_envio.estado in ('pendiente', 'enviando')
       )
@@ -1049,10 +1049,10 @@ export async function releaseBrakeHold(
   now: Date,
 ): Promise<boolean> {
   const { rows } = await tx.execute<{ registro_id: string }>(sql`
-    update envios set estado = 'pendiente', proximo_intento_en = ${now.toISOString()}
+    update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${now.toISOString()}
     where registro_id in (
       select r.id from (${brakeHeldHeads(environment)}) heads
-      join registros_facturacion r on r.id = heads.id
+      join verifactu_records r on r.id = heads.id
       join filing_cases c on c.registro_id = (
         select preceding.id ${recordsBefore("r")}
         order by preceding.secuencia desc limit 1
@@ -1112,14 +1112,14 @@ async function claimProbes(
   const { rows } = await tx.execute<Record<string, unknown>>(sql`
     with due as materialized (${dueProbes(now, environment)}), target as (
       select r.nombre_razon_emisor from due
-      join registros_facturacion r on r.id = due.id
+      join verifactu_records r on r.id = due.id
       order by r.fecha_hora_huso_gen_registro, r.sif_id
       limit 1
     )
     select r.*, e.intentos, e.technical_incidence, due.run_code as probe_run_code
     from due
-    join registros_facturacion r on r.id = due.id
-    join envios e on e.registro_id = r.id
+    join verifactu_records r on r.id = due.id
+    join verifactu_submissions e on e.registro_id = r.id
     where r.nombre_razon_emisor = coalesce(${name}, (select nombre_razon_emisor from target))
     order by r.sif_id
     limit ${room}
@@ -1131,7 +1131,7 @@ async function claimProbes(
   }));
   const ids = probes.map((row) => row.id);
   await tx.execute(sql`
-    update envios set enviado_en = ${now.toISOString()}, intentos = intentos + 1
+    update verifactu_submissions set enviado_en = ${now.toISOString()}, intentos = intentos + 1
     where registro_id in ${ids}
   `);
   return probes.map((row) => ({ ...row, intentos: row.intentos + 1 }));
@@ -1174,15 +1174,15 @@ async function releaseSettledBrakeHolds(
   }>(releasableHeads());
   for (const head of heads.rows) {
     const released = await tx.execute<{ registro_id: string }>(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${now.toISOString()},
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${now.toISOString()},
         intentos = max(intentos - 1, 0)
       where estado = 'detenido' and registro_id in (
-        select r.id from registros_facturacion r
+        select r.id from verifactu_records r
         where r.node_id = ${head.node_id} and r.sif_id = ${head.sif_id}
           and r.secuencia >= ${head.secuencia}
           and not exists (
-            select 1 from registros_facturacion stop
-            join envios stop_envio on stop_envio.registro_id = stop.id
+            select 1 from verifactu_records stop
+            join verifactu_submissions stop_envio on stop_envio.registro_id = stop.id
             join filing_cases stop_case on stop_case.registro_id = stop.id
             where stop.node_id = r.node_id and stop.sif_id = r.sif_id
               and stop.secuencia > ${head.secuencia} and stop.secuencia <= r.secuencia
@@ -1211,7 +1211,7 @@ async function backoffBatch(
     if (row.probe !== undefined) continue;
     const next = new Date(now.getTime() + backoffMs(row.intentos));
     await tx.execute(sql`
-      update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
       where registro_id = ${row.id}
     `);
     bumpNextDue(result, next);
@@ -1220,7 +1220,7 @@ async function backoffBatch(
 
 async function technicalIncidentToken(tx: Transaction): Promise<string | null> {
   const { rows } = await tx.execute<{ technical_incident_token: string | null }>(sql`
-    select technical_incident_token from envio_flujo where id = 1
+    select technical_incident_token from verifactu_sending_state where id = 1
   `);
   return rows[0]?.technical_incident_token ?? null;
 }
@@ -1232,10 +1232,10 @@ async function markTechnicalCohort(
   attemptedIds: string[] = [],
 ): Promise<void> {
   await tx.execute(sql`
-    update envios set technical_incidence = true
+    update verifactu_submissions set technical_incidence = true
     where registro_id in (
-      select r.id from registros_facturacion r
-      join envios e on e.registro_id = r.id
+      select r.id from verifactu_records r
+      join verifactu_submissions e on e.registro_id = r.id
       where r.entorno = ${environment}
         and not ${cancelsRefusedOriginal("r")}
         and (e.estado in ('pendiente', 'enviando')
@@ -1252,7 +1252,7 @@ async function openTechnicalIncident(
   attemptedIds: string[],
 ): Promise<void> {
   await tx.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
     values (1, ${now.toISOString()}, 0, ${newId()})
     on conflict (id) do update set technical_incident_token = excluded.technical_incident_token
   `);
@@ -1269,7 +1269,7 @@ async function closeTechnicalIncident(
   await markTechnicalCohort(tx, environment, now);
   if (observedToken === null) return;
   await tx.execute(sql`
-    update envio_flujo set technical_incident_token = null
+    update verifactu_sending_state set technical_incident_token = null
     where id = 1 and technical_incident_token = ${observedToken}
   `);
 }
@@ -1679,7 +1679,7 @@ async function awaitReadableAnswer(
   if (row.probe === undefined) {
     const next = new Date(now.getTime() + backoffMs(row.intentos));
     await tx.execute(sql`
-      update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', incidencia = true, proximo_intento_en = ${next.toISOString()}
       where registro_id = ${row.id}
     `);
     bumpNextDue(result, next);
@@ -1715,7 +1715,7 @@ async function setEstado(
   const codigoError =
     opts.codigoError !== undefined && opts.codigoError !== null ? String(opts.codigoError) : null;
   await tx.execute(sql`
-    update envios set
+    update verifactu_submissions set
       estado = ${estado},
       csv = ${opts.csv},
       confirmado_en = ${opts.confirmadoEn ? opts.confirmadoEn.toISOString() : null},

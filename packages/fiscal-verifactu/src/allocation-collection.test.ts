@@ -8,7 +8,7 @@ import {
   type OperationOperator,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import * as allocation from "./allocation-operation.js";
 import type { AllocationOperationEvidence } from "./allocation-operation.js";
 import {
@@ -18,12 +18,12 @@ import {
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity } from "./allocation-envelope.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -146,7 +146,7 @@ function refusal(reason: string) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -155,7 +155,7 @@ beforeEach(async () => {
 
 async function snapshot() {
   return {
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     activations: await suite.db.select().from(fiscalAllocations),
   };

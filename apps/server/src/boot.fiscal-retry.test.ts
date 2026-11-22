@@ -299,13 +299,13 @@ describe("boot's Retry now wiring", () => {
             nif: "B12345678",
           },
         });
-        await suite.db.execute(sql`update envios set proximo_intento_en = ${future}`);
+        await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${future}`);
       },
     });
     const snapshot = async () => {
       const rows: unknown[][] = [];
       for (const query of [
-        sql`select * from envios order by registro_id`,
+        sql`select * from verifactu_submissions order by registro_id`,
         sql`select * from dashboard_sessions order by token_hash`,
         sql`select * from persons order by id`,
       ])

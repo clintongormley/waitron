@@ -22,7 +22,7 @@ import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { parseRecoveryKit } from "@waitron/stream";
-import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings } from "./archive-settings.js";
@@ -61,7 +61,7 @@ vi.mock("./backup-turns.js", async (importOriginal) => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -78,8 +78,8 @@ const BUCKET = {
 };
 
 async function seedVenueWithBackupSettings(): Promise<void> {
-  await seedTenants(suite.db);
-  await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
+  await seedTaxpayers(suite.db);
+  await suite.db.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
   await stampDeployment(suite.db, "preproduction");
   await seedFixtureSif(suite.db, {

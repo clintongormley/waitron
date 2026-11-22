@@ -83,14 +83,14 @@ of the protected list. No absent
 optional table is created by that repair.
 
 A box moved from fiscal-verifactu to fiscal-none still does not re-protect or watch the unselected
-fiscal set's retained tables (`registros_facturacion`, filing-case tables and other declarations).
+fiscal set's retained tables (`verifactu_records`, filing-case tables and other declarations).
 That fiscal protection decision remains outside A646's optional-module repair.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
 A1308 leaves these names with the slices that own their tables:
 
-- `registros_tenant_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
+- `verifactu_records_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
 - `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
   menu areas; no slice plan names their rename yet.
 
@@ -104,7 +104,7 @@ It is thrown for AEAT's certificate
   action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in one
   change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
 
-## `DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1
+## `DrainResult.passesWithWork` is named for a count that can now only be 0 or 1
 
 The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
   `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
@@ -925,10 +925,10 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 Include `menu_versions.created_by` when indexing the menu history. On a development Mac, the staff
 download's first write-lock turn took a median 25 ms with a seeded year and 216 ms with five years.
 
-- **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`verifactu_sending_state`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`verifactu_submissions`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
+- **`verifactu_identities`: decide the remaining DELETE restriction (A805 follow-up).**
 - **Finish the remaining person-id foreign keys.**
   Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
   (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
@@ -959,7 +959,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
+- **`DrainResult.passesWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
 - **Left open by #1261's review (W111):** the receipt editor's copied phone and email limits remain open.

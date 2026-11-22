@@ -11,21 +11,21 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
+import { TAXPAYER_A, seedTaxpayerNodeSif } from "../test/fixtures.js";
 
 /**
- * The four AEAT rectificativa columns on `registros_facturacion` and their two CHECK constraints.
+ * The four AEAT rectificativa columns on `verifactu_records` and their two CHECK constraints.
  *
  * The trigger case below is the only thing refusing an UPDATE of `tipo_rectificativa`.
  */
 const suite = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  setup: seedTenantNodeSif,
+  setup: seedTaxpayerNodeSif,
   resetPerTest: false,
 });
 
 // One shared database backs the whole file, so every insert must claim a fresh secuencia
-// (registros_tenant_node_secuencia_uq) and a fresh num_serie (registros_identidad_uq).
+// (verifactu_records_node_secuencia_uq) and a fresh num_serie (verifactu_records_identidad_uq).
 let secuenciaSeq = 0;
 function nextSecuencia(): number {
   secuenciaSeq += 1;
@@ -52,14 +52,14 @@ interface RegistroFields {
 async function insertRegistro(exec: Database, fields: RegistroFields = {}): Promise<void> {
   const secuencia = nextSecuencia();
   await exec.execute(sql`
-    insert into registros_facturacion (
+    insert into verifactu_records (
       id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, tipo_rectificativa, facturas_rectificadas, facturas_sustituidas,
       importe_rectificacion, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-    ) values (${newId()}, 'device', (select device_id from sales where id = ${TENANT_A.saleId}), ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${newId()}, 'device', (select device_id from sales where id = ${TAXPAYER_A.saleId}), ${TAXPAYER_A.nodeId}, ${TAXPAYER_A.sifId}, ${TAXPAYER_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "R5" : fields.tipoFactura},
@@ -74,7 +74,7 @@ async function insertRegistro(exec: Database, fields: RegistroFields = {}): Prom
   `);
 }
 
-describe("registros_tipo_rectificativa_ck — the value domain", () => {
+describe("verifactu_records_tipo_rectificativa_ck — the value domain", () => {
   it("accepts tipo_rectificativa 'I' on a rectificativa", async () => {
     await expect(
       insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "I" }),
@@ -102,7 +102,7 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
   });
 });
 
-describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () => {
+describe("verifactu_records_tipo_factura_rectificativa_ck — rule 1115 at the DB", () => {
   it("rejects a tipo_rectificativa sitting on a non-rectificativa tipo_factura", async () => {
     const error = await captureError(() =>
       insertRegistro(suite.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
@@ -145,7 +145,7 @@ describe("the rectificativa columns are JSON and round-trip", () => {
       facturasRectificadas,
     });
     const { rows } = await suite.db.execute<{ facturas_rectificadas: string }>(
-      sql`select facturas_rectificadas from registros_facturacion
+      sql`select facturas_rectificadas from verifactu_records
            where facturas_rectificadas is not null order by secuencia desc limit 1`,
     );
     // A raw read returns the column's TEXT; drizzle's `json` read mapping does not run.
@@ -160,7 +160,7 @@ describe("the rectificativa columns are JSON and round-trip", () => {
       importeRectificacion,
     });
     const { rows } = await suite.db.execute<{ importe_rectificacion: string }>(
-      sql`select importe_rectificacion from registros_facturacion
+      sql`select importe_rectificacion from verifactu_records
            where importe_rectificacion is not null order by secuencia desc limit 1`,
     );
     expect(JSON.parse(rows[0]!.importe_rectificacion)).toEqual(importeRectificacion);
@@ -171,10 +171,10 @@ describe("the new columns inherit the table's immutability", () => {
   it("refuses an UPDATE of tipo_rectificativa by the append-only trigger", async () => {
     await insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "I" });
     const error = await captureError(async () =>
-      suite.db.execute(sql`update registros_facturacion set tipo_rectificativa = 'S'`),
+      suite.db.execute(sql`update verifactu_records set tipo_rectificativa = 'S'`),
     );
     // `triggerRaised` matches the words too, so an `ON DELETE RESTRICT` refusal under the same
     // result code cannot satisfy it.
-    expect(triggerRaised(error, "registros_facturacion is append-only")).toBe(true);
+    expect(triggerRaised(error, "verifactu_records is append-only")).toBe(true);
   });
 });

@@ -96,7 +96,7 @@ it("a trading boot without a fiscal description field accepts a department's emp
     expect(suite.db.all(sql`select fiscal_backend, total from sales`)).toEqual([
       { fiscal_backend: "none", total: 300 },
     ]);
-    expect(suite.db.all(sql`select * from registros_facturacion`)).toEqual([]);
+    expect(suite.db.all(sql`select * from verifactu_records`)).toEqual([]);
   } finally {
     await server?.close();
     await rm(scratch, { recursive: true, force: true });

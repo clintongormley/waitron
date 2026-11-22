@@ -15,8 +15,8 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import type { RecoveryApproval } from "./allocation-types.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -26,9 +26,9 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 async function installationOf(sifId: string): Promise<string> {
   const [row] = await suite.db
-    .select({ name: registroSif.numeroInstalacion })
-    .from(registroSif)
-    .where(eq(registroSif.id, sifId));
+    .select({ name: verifactuIdentities.numeroInstalacion })
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.id, sifId));
   return row!.name;
 }
 
@@ -109,7 +109,7 @@ async function seriesConflict(seeded: SeededDrain, code: string, number: string,
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, seeded.nodeId), eq(invoiceSeries.code, code)));
-  await suite.db.insert(fiscalSeriesConflicts).values({
+  await suite.db.insert(verifactuSeriesConflicts).values({
     sifId: seeded.sifId,
     seriesId: series!.id,
     invoiceIdentity: number,
@@ -373,9 +373,9 @@ describe("readFilingOverview: possibly missing history", () => {
     const otherSifId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     await seedIndependentChain(suite.db, { sifId: otherSifId, secuencia: 5 });
     const [other] = await suite.db
-      .select({ nodeId: registroSif.nodeId, nif: registroSif.nif })
-      .from(registroSif)
-      .where(eq(registroSif.id, otherSifId));
+      .select({ nodeId: verifactuIdentities.nodeId, nif: verifactuIdentities.nif })
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.id, otherSifId));
     const otherTaxpayer = {
       ...seeded,
       ...other!,

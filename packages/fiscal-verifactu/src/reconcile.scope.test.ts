@@ -12,7 +12,7 @@ import {
   seedSecondChain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { reconcile } from "./reconcile.js";
 import { readActiveConflicts } from "./conflict-evidence.js";
@@ -23,11 +23,11 @@ const NOW = new Date("2026-07-21T00:01:00Z");
 
 async function snapshot() {
   return {
-    deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
+    deliveries: (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
     acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
-    records: (await suite.db.execute(sql`select * from registros_facturacion order by id`)).rows,
+    records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
     heads: (await suite.db.execute(sql`select * from cadenas order by node_id`)).rows,
   };
 }
@@ -51,10 +51,10 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
         nif,
       });
       excluded.push(row.registroId);
-      await suite.db.insert(envios).values({ registroId: row.registroId });
+      await suite.db.insert(verifactuSubmissions).values({ registroId: row.registroId });
     }
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'aceptado', csv = 'kept-csv'`),
+      tx.execute(sql`update verifactu_submissions set estado = 'aceptado', csv = 'kept-csv'`),
     );
     const before = await snapshot();
     const aeat = createFakeAeat({ serverNow: NOW });
@@ -144,7 +144,7 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
       NOW,
     );
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update envios set estado = 'pendiente'`);
+      await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
       await tx.execute(sql`delete from acks`);
     });
     const before = await snapshot();

@@ -13,7 +13,7 @@ import { makeCertificateDiagnosisChild } from "../src/certificate-diagnosis-chil
 import type { CertificateDiagnosisRequest } from "../src/certificate-diagnosis-contract.js";
 import { sealAeatSecret } from "../src/provisioning-secret.js";
 import { makeAuthority } from "./certificate-fixtures.js";
-import { seedTenantNodeSif, TENANT_A } from "./fixtures.js";
+import { seedTaxpayerNodeSif, TAXPAYER_A } from "./fixtures.js";
 
 export const NOW = new Date("2026-10-18T11:00:00.000Z");
 export const INSTALLED_AT = "2026-10-18T10:00:00.000Z";
@@ -31,14 +31,14 @@ export function revision(db: Database) {
 }
 
 export async function parentFixture(db: Database, seal = true) {
-  await seedTenantNodeSif(db);
+  await seedTaxpayerNodeSif(db);
   const ring = loadKeyRing({
     WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
   });
   if (seal) {
     await sealAeatSecret(
-      { db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(INSTALLED_AT) },
+      { db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(INSTALLED_AT) },
       material(),
     );
   }
@@ -54,7 +54,7 @@ export async function parentFixture(db: Database, seal = true) {
   const deps: FiscalCertificateDiagnosisDeps = {
     db,
     ring,
-    nodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId,
     environment: "preproduction",
     signal: controller.signal,
     clock: () => NOW,

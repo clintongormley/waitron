@@ -79,7 +79,7 @@ async function appendOriginal(
   existingSaleId?: ReturnType<typeof saleId>,
 ) {
   const [identity] = suite.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where id = ${node.sifId}`,
+    sql`select nif, numero_instalacion from verifactu_identities where id = ${node.sifId}`,
   );
   const saleId = existingSaleId ?? (await seedSale(suite.db, node, invoice));
   const pending = altaFor(node, saleId, invoice, invoice);
@@ -89,7 +89,7 @@ async function appendOriginal(
   await withTransaction(suite.db, (tx) => appendToChain(tx, node.nodeId, pending));
   await checkFixture();
   const [record] = suite.db.all<{ id: string }>(
-    sql`select id from registros_facturacion where sale_id = ${saleId}`,
+    sql`select id from verifactu_records where sale_id = ${saleId}`,
   );
   return {
     ...node,
@@ -173,7 +173,7 @@ it("re-enumerates late payment facts even when the original inventory has no new
 it("reads a later delivery verdict without changing the original bytes", async () => {
   const source = await original("Source", 1);
   const before = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
-  await suite.db.execute(sql`insert into envios
+  await suite.db.execute(sql`insert into verifactu_submissions
     (registro_id, estado, proximo_intento_en, csv, confirmado_en)
     values (${source.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z',
       'kept-csv', '2026-07-20T17:21:00.000Z')`);
@@ -208,9 +208,9 @@ it.each([false, true])(
     });
     await checkFixture();
     if (retained)
-      await suite.db.execute(sql`insert into envios (registro_id, estado, proximo_intento_en)
+      await suite.db.execute(sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en)
     select id, case when tipo_registro = 'alta' then 'rechazado' else 'retenido' end,
-      '2026-07-20T17:21:00.000Z' from registros_facturacion where node_id = ${source.nodeId}`);
+      '2026-07-20T17:21:00.000Z' from verifactu_records where node_id = ${source.nodeId}`);
 
     const returned = await withTransaction(suite.db, (tx) =>
       readReturnedOriginals(tx, source.nodeId),
@@ -350,7 +350,7 @@ it("includes a corrective sale's parent from another node and its payment facts"
   });
   await withTransaction(suite.db, async (tx) => {
     const [identity] = tx.all<{ nif: string; numero_instalacion: string }>(
-      sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+      sql`select nif, numero_instalacion from verifactu_identities where id = ${source.sifId}`,
     );
     const pending = altaFor(source, correctionId, 1, 35);
     pending.input.IDEmisorFactura = identity!.nif;
@@ -398,7 +398,7 @@ async function copyBase() {
       "device_profiles",
       "nodes",
       "invoice_series",
-      "registro_sif",
+      "verifactu_identities",
       "cadenas",
       "devices",
     ]) {
@@ -521,7 +521,7 @@ it("returns originals with named staff and a department added after the copy", a
       },
     ]);
     expect(
-      receiver.db.all(sql`select id, huella from registros_facturacion order by secuencia`),
+      receiver.db.all(sql`select id, huella from verifactu_records order by secuencia`),
     ).toEqual(originals.records.map(({ id, huella }) => ({ id, huella })));
     expect(receiver.db.all(sql`select voided_by from sale_voids`)).toEqual([
       { voided_by: voiderId },
@@ -543,7 +543,7 @@ it("returns originals with named staff and a department added after the copy", a
 
 it("receives original bytes and delivery evidence once, and advances only the source head", async () => {
   const source = await original("Source", 1, copyBase);
-  await suite.db.execute(sql`insert into envios
+  await suite.db.execute(sql`insert into verifactu_submissions
     (registro_id, estado, proximo_intento_en, csv, confirmado_en)
     values (${source.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z',
       'original-csv', '2026-07-20T17:21:00.000Z')`);
@@ -557,20 +557,20 @@ it("receives original bytes and delivery evidence once, and advances only the so
       receiveReturnedOriginals(tx, source.nodeId, returned, now),
     ),
   ).toEqual({ complete: true });
-  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
     returned.records,
   );
   expect(receiver.db.all<ReturnRow>(sql`select * from cadenas`)).toEqual(returned.heads);
-  expect(receiver.db.all<ReturnRow>(sql`select * from envios`)).toEqual(returned.deliveries);
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual(returned.deliveries);
   await receiver.db.execute(
-    sql`update envios set csv = 'receiver-csv' where registro_id = ${source.recordId}`,
+    sql`update verifactu_submissions set csv = 'receiver-csv' where registro_id = ${source.recordId}`,
   );
   expect(
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, returned, now),
     ),
   ).toEqual({ complete: true });
-  expect(receiver.db.all<{ csv: string }>(sql`select csv from envios`)).toEqual([
+  expect(receiver.db.all<{ csv: string }>(sql`select csv from verifactu_submissions`)).toEqual([
     { csv: "receiver-csv" },
   ]);
   expect(receiver.db.all<{ n: number }>(sql`select count(*) n from sales`)).toEqual([{ n: 1 }]);
@@ -971,12 +971,12 @@ it("preflights a different-id record clash before importing its orphan sale", as
     { id: "receiver-sale" },
   ]);
   expect(await inspectReturnedPayments(receiver.db, source.nodeId, suffix)).toEqual([]);
-  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
     existing.records,
   );
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
   expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual([]);
-  expect(receiver.db.all<ReturnRow>(sql`select * from envios`)).toEqual([
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual([
     expect.objectContaining({ registro_id: "receiver-original" }),
   ]);
 });
@@ -994,7 +994,7 @@ it("rolls back every imported fact when an original's hash does not verify", asy
     ),
   ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
   expect(receiver.db.all<{ n: number }>(sql`select count(*) n from sales`)).toEqual([{ n: 0 }]);
-  expect(receiver.db.all<{ n: number }>(sql`select count(*) n from registros_facturacion`)).toEqual(
+  expect(receiver.db.all<{ n: number }>(sql`select count(*) n from verifactu_records`)).toEqual(
     [{ n: 0 }],
   );
   expect(receiver.db.all<{ secuencia: number }>(sql`select secuencia from cadenas`)).toEqual([
@@ -1019,7 +1019,7 @@ it("withholds confirmation when a held id has different immutable bytes", async 
       receiveReturnedOriginals(tx, source.nodeId, different, now),
     ),
   ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
-  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
     returned.records,
   );
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
@@ -1030,7 +1030,7 @@ it.each([
   ["aceptado_con_errores", "fiscal.aceptado_con_errores"],
 ])("recreates the case for a newly returned %s record", async (state, cause) => {
   const source = await original("Source", 1, copyBase);
-  await suite.db.execute(sql`insert into envios (registro_id, estado, codigo_error, mensaje_error,
+  await suite.db.execute(sql`insert into verifactu_submissions (registro_id, estado, codigo_error, mensaje_error,
     proximo_intento_en) values (${source.recordId}, ${state}, '1161', 'Wrong detail',
       '2026-07-20T17:21:00.000Z')`);
   const returned = await withTransaction(suite.db, (tx) =>
@@ -1127,7 +1127,7 @@ it("batches real originals within the row and byte bounds without splitting paym
   await copyBase();
   for (let number = 1; number <= 51; number++) await appendOriginal(node, "Source", number);
   const [last] = suite.db.all<{ sale_id: string }>(
-    sql`select sale_id from registros_facturacion order by secuencia desc limit 1`,
+    sql`select sale_id from verifactu_records order by secuencia desc limit 1`,
   );
   await suite.db.insert(tenders).values({
     id: "batch-payment",
@@ -1163,7 +1163,7 @@ it("batches real originals within the row and byte bounds without splitting paym
   }
   expect(
     receiver.db
-      .all<{ id: string }>(sql`select id from registros_facturacion order by secuencia`)
+      .all<{ id: string }>(sql`select id from verifactu_records order by secuencia`)
       .map((row) => row.id),
   ).toEqual(returned.records.map((row) => row.id));
 });
@@ -1242,13 +1242,13 @@ it("stops when both boxes have corrected the same original", async () => {
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
-  const before = receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by id`);
+  const before = receiver.db.all<ReturnRow>(sql`select * from verifactu_records order by id`);
   expect(
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, returned, now),
     ),
   ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
-  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by id`)).toEqual(
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records order by id`)).toEqual(
     before,
   );
 });
@@ -1273,7 +1273,7 @@ it.each(["chain position", "invoice identity"])(
         receiveReturnedOriginals(tx, source.nodeId, conflicting, now),
       ),
     ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
-    expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+    expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
       returned.records,
     );
   },
@@ -1295,7 +1295,7 @@ it.each([60000, 60001])(
     if (lead === 60000) expect(await receive()).toEqual({ complete: true });
     else {
       await expect(receive()).rejects.toMatchObject({ code: "fiscal.return_clock_ahead" });
-      expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual([]);
+      expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual([]);
       expect(receiver.db.all<ReturnRow>(sql`select * from sales`)).toEqual([]);
     }
   },
@@ -1421,7 +1421,7 @@ it.each([
       .returning();
     const source = { ...sourceNode, saleId: sale!.id };
     const [identity] = suite.db.all<{ nif: string; numero_instalacion: string }>(
-      sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+      sql`select nif, numero_instalacion from verifactu_identities where id = ${source.sifId}`,
     );
     const pending = altaFor(source, saleId(sale!.id), 1, 1);
     pending.input.IDEmisorFactura = identity!.nif;

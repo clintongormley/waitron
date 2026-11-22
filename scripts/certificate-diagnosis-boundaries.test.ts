@@ -46,7 +46,7 @@ it("diagnosis stays out of protected writers, fiscal fixtures and migrations", (
   const source = [
     "packages/fiscal-verifactu/src/chain.ts",
     "packages/fiscal-verifactu/src/reserved-series.ts",
-    "packages/fiscal-verifactu/src/schema/registros.ts",
+    "packages/fiscal-verifactu/src/schema/verifactu-records.ts",
     ...files("packages").filter((file) => /\/drizzle\//.test(file)),
     ...files("packages/fiscal-verifactu/test").filter((file) => /(?:golden|huella)/.test(file)),
   ];

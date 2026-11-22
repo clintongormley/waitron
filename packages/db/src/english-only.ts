@@ -366,7 +366,7 @@ function blankGuillemets(source: string): string {
  * Blanks `` `…` `` backtick citations with equal-width whitespace. Applied ONLY to comment text: a
  * backticked term cites a specific identifier, wire-protocol field or owned term (a quotation of a
  * name), so it is exempt. It is NEVER applied to code — there a backtick opens a TEMPLATE LITERAL,
- * such as `` sql`… registros_facturacion` ``, which the guard exists to catch.
+ * such as `` sql`… verifactu_records` ``, which the guard exists to catch.
  */
 function blankBackticks(comment: string): string {
   return comment.replace(/`[^`]*`/g, (match) => match.replace(/[^\n]/g, " "));

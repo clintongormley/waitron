@@ -24,9 +24,9 @@ import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { ACCEPTED_WITH_ERRORS_CORRECTION, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 afterEach(() => {
@@ -86,7 +86,7 @@ beforeEach(async () => {
       altaFor(node, saleId, 1, 1, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,
@@ -156,8 +156,8 @@ function sendUnder(
 
 async function snapshot() {
   return {
-    records: await suite.db.select().from(registrosFacturacion),
-    deliveries: await suite.db.select().from(envios),
+    records: await suite.db.select().from(verifactuRecords),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
@@ -183,7 +183,7 @@ async function acceptedDescriptionDecision() {
       node.nodeId,
       altaFor(node, saleId, 2, 2, "preproduction"),
     );
-    await tx.insert(envios).values({
+    await tx.insert(verifactuSubmissions).values({
       registroId: original.id,
       estado: "aceptado_con_errores",
       codigoError: "2000",
@@ -315,9 +315,9 @@ it("replays an accepted-with-errors decision after a late outcome and clock chan
   const result = await first.json();
   instant = new Date(NOW.getTime() + 120_000);
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado" })
-    .where(eq(envios.registroId, decision.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, decision.registroId as string));
   const before = await snapshot();
   const replay = await send(decision);
   expect(replay.status).toBe(200);
@@ -372,9 +372,9 @@ it.each(["rechazado", "pendiente", "enviando", "detenido", "aceptado", "retenido
   async (estado) => {
     const decision = await acceptedDescriptionDecision();
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado })
-      .where(eq(envios.registroId, decision.registroId as string));
+      .where(eq(verifactuSubmissions.registroId, decision.registroId as string));
     const before = await snapshot();
     const res = await send(decision);
     expect(res.status).toBe(400);
@@ -385,9 +385,9 @@ it.each(["rechazado", "pendiente", "enviando", "detenido", "aceptado", "retenido
 
 it("refuses a claimed accepted-with-errors decision on a rejected case even when delivery now matches", async () => {
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado_con_errores" })
-    .where(eq(envios.registroId, body.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, body.registroId as string));
   const before = await snapshot();
   const res = await send({ ...body, priorOutcome: "accepted-with-errors" });
   expect(res.status).toBe(400);
@@ -398,9 +398,9 @@ it("refuses a claimed accepted-with-errors decision on a rejected case even when
 it("refuses a rejected decision on an accepted-with-errors case even when delivery now matches", async () => {
   const decision = await acceptedDescriptionDecision();
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado" })
-    .where(eq(envios.registroId, decision.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, decision.registroId as string));
   const before = await snapshot();
   const res = await send({ ...decision, priorOutcome: "rejected" });
   expect(res.status).toBe(400);
@@ -415,9 +415,9 @@ it("retains S/N and the same invoice identity across two accepted-with-errors co
   const saved = (await first.json()) as { registroId: string };
   const nextCase = await withTransaction(suite.db, async (tx) => {
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "aceptado_con_errores", codigoError: "2000", csv: "FIRST-CORRECTION-CSV" })
-      .where(eq(envios.registroId, saved.registroId));
+      .where(eq(verifactuSubmissions.registroId, saved.registroId));
     return openFilingCase(tx, {
       registroId: saved.registroId,
       cause: "fiscal.aceptado_con_errores",
@@ -518,7 +518,7 @@ it("names the case by its record when the body sends no caseId", async () => {
       altaFor(node, saleId, 2, 2, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: record.id, estado: "rechazado", codigoError: "1161" });
     return openFilingCase(tx, {
       registroId: record.id,
@@ -560,9 +560,9 @@ it("refuses a body with no caseId whose record has no case, writing nothing", as
   const first = await send();
   const saved = (await first.json()) as { registroId: string };
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: "1161" })
-    .where(eq(envios.registroId, saved.registroId));
+    .where(eq(verifactuSubmissions.registroId, saved.registroId));
   const before = await snapshot();
   const res = await send({
     ...body,
@@ -767,9 +767,9 @@ it.each(["aceptado_con_errores", "pendiente", "enviando", "detenido", "aceptado"
   "refuses outcome %s on the rejected-description adapter",
   async (estado) => {
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado })
-      .where(eq(envios.registroId, body.registroId as string));
+      .where(eq(verifactuSubmissions.registroId, body.registroId as string));
     const before = await snapshot();
     const res = await send();
     expect(res.status).toBe(400);
@@ -793,9 +793,9 @@ it("returns the saved result even if the original delivery outcome changes after
   expect(first.status).toBe(200);
   const result = await first.json();
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado", csv: "LATE-ORIGINAL-CSV" })
-    .where(eq(envios.registroId, body.registroId as string));
+    .where(eq(verifactuSubmissions.registroId, body.registroId as string));
   const before = await snapshot();
   const retry = await send();
   expect(retry.status).toBe(200);
@@ -808,9 +808,9 @@ it("corrects a second rejected version without changing the first two records or
   expect(first.status).toBe(200);
   const saved = (await first.json()) as { registroId: string };
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: "1161" })
-    .where(eq(envios.registroId, saved.registroId));
+    .where(eq(verifactuSubmissions.registroId, saved.registroId));
   const filingCase = await withTransaction(suite.db, (tx) =>
     openFilingCase(tx, {
       registroId: saved.registroId,
@@ -865,7 +865,7 @@ it.each(["R1", "F3"] as const)(
         input: { ...pending.input, ...fields, TipoFactura: kind, Destinatarios: recipient },
       });
       await tx
-        .insert(envios)
+        .insert(verifactuSubmissions)
         .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
       return openFilingCase(tx, {
         registroId: original.id,
@@ -921,7 +921,7 @@ async function refusedReplacementCase() {
       },
     });
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     return openFilingCase(tx, {
       registroId: original.id,
@@ -984,8 +984,8 @@ it("a refused record of the box this one took over from can be remedied here", a
   const { registroId } = (await res.json()) as { registroId: string };
   const [appended] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   expect(appended).toMatchObject({
     nodeId: successor.nodeId,
     sifId: successor.sifId,
@@ -1062,7 +1062,7 @@ it("refuses a production correction while no producer is set, writing nothing", 
       altaFor(node, saleId, 2, 2, "production"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,

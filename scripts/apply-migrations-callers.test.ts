@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  * Every product call to `applyMigrations` passes a `migrationOptionsFor(...)` result, because that
  * is what carries each set's `appendOnlyTables`: `applyMigrations` reads the field as `?? []`
  * (`packages/migrations/src/apply.ts`), so a caller handing over a plain `MigrationOptions[]` gets a
- * migrated database with no append-only triggers, `registros_facturacion`'s among them, and nothing
+ * migrated database with no append-only triggers, `verifactu_records`'s among them, and nothing
  * says so.
  *
  * It parses each file with the TypeScript compiler and accepts the options argument only as a

@@ -62,11 +62,11 @@ async function keptWithoutCertificates(f: Held) {
     try {
       const triggers = copy
         .prepare(
-          "select name from sqlite_schema where type = 'trigger' and tbl_name = 'fiscal_certificate_installs'",
+          "select name from sqlite_schema where type = 'trigger' and tbl_name = 'verifactu_certificates'",
         )
         .all() as { name: string }[];
       for (const { name } of triggers) copy.exec(`drop trigger "${name}"`);
-      copy.exec("delete from fiscal_certificate_installs");
+      copy.exec("delete from verifactu_certificates");
     } finally {
       copy.close();
     }

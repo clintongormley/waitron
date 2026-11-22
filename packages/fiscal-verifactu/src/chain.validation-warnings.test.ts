@@ -5,7 +5,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 
 // What `appendToChain` does with each warning `@waitron/verifactu` 0.2.1's `validate` can emit.
@@ -61,7 +61,7 @@ describe("a totals warning files the record and flags the totals", () => {
       injected.issues = [warning(code)];
       await append();
 
-      expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
+      expect(await suite.db.select().from(verifactuRecords)).toHaveLength(1);
       expect(await incidents()).toEqual([
         {
           code: "fiscal.record_totals_disagree",
@@ -81,7 +81,7 @@ describe("a malformed fingerprint warning refuses the record like an error", () 
       params: { fields: [`field-of-${code}`], codes: [code] },
     });
 
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
     expect(await incidents()).toEqual([]);
   });
 });
@@ -93,7 +93,7 @@ describe("any other warning files the record with its own incident, never as a t
       injected.issues = [warning(code)];
       await append();
 
-      expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
+      expect(await suite.db.select().from(verifactuRecords)).toHaveLength(1);
       expect(await incidents()).toEqual([
         {
           code: "fiscal.record_flagged",

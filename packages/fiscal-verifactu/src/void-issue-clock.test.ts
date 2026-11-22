@@ -22,7 +22,7 @@ import { withOperationAuthority } from "@waitron/module";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
 import { decodeRegistroRow } from "./registro-row.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif, type SeededNodeWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif, type SeededNodeWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -40,7 +40,7 @@ const source: TrustedClock = {
 const backend = (clock = source) =>
   fiscal.FISCAL_SLOT.makeBackend({ db: suite.db, clock, environment: "preproduction" });
 beforeEach(async () => {
-  seededNode = await seedTenantWithSif(suite.db);
+  seededNode = await seedTaxpayerWithSif(suite.db);
   await suite.db.run(
     sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
   );
@@ -62,7 +62,7 @@ const annul = (id: SaleId) =>
   );
 function snapshot() {
   return Object.fromEntries(
-    ["sales", "invoice_series", "registros_facturacion", "cadenas", "envios"].map((name) => [
+    ["sales", "invoice_series", "verifactu_records", "cadenas", "verifactu_submissions"].map((name) => [
       name,
       suite.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
     ]),
@@ -71,7 +71,7 @@ function snapshot() {
 function records(id: string) {
   return suite.db
     .all<fiscal.RegistroRow>(
-      sql`select * from registros_facturacion where sale_id = ${id} order by secuencia`,
+      sql`select * from verifactu_records where sale_id = ${id} order by secuencia`,
     )
     .map((r) => fiscal.fromRegistroRow(decodeRegistroRow(r)));
 }
@@ -113,7 +113,7 @@ describe("the venue's zone across a daylight-saving change", () => {
     expect(annulment!.FechaHoraHusoGenRegistro).toBe("2026-10-25T01:30:00+00:00");
     expect(annulment!.IDFactura).toMatchObject({ FechaExpedicionFacturaAnulada: "25-10-2026" });
     const storedRows = suite.db.all<fiscal.RegistroRow>(
-      sql`select * from registros_facturacion order by secuencia`,
+      sql`select * from verifactu_records order by secuencia`,
     );
     expect(storedRows).toHaveLength(3);
     for (const raw of storedRows)
@@ -165,7 +165,7 @@ describe("the void caller's original writing venue", () => {
     expect(snapshot()).toEqual(before);
   });
   it("refuses disagreement between the saved sale node and the original alta", async () => {
-    const other = await seedTenantWithSif(suite.db);
+    const other = await seedTaxpayerWithSif(suite.db);
     const old = await withTransaction(suite.db, async (tx) => {
       const [row] = await tx
         .insert(sales)

@@ -68,7 +68,7 @@ async function envioFor(
 ): Promise<{ estado: string; csv: string | null; enviado_en: string | null }> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ estado: string; csv: string | null; enviado_en: string | null }>(
-      sql`select estado, csv, enviado_en from envios where registro_id = ${registroId}`,
+      sql`select estado, csv, enviado_en from verifactu_submissions where registro_id = ${registroId}`,
     ),
   );
   return rows[0]!;
@@ -88,7 +88,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const acks = await acksFor();
     expect(acks).toHaveLength(1);
     expect(acks[0]!.registro_id).toBe(seeded.registroIds[0]);
-    // The ack agrees with the committed envios row it reflects.
+    // The ack agrees with the committed verifactu_submissions row it reflects.
     expect(acks[0]!.state).toBe("accepted");
     expect(acks[0]!.csv).toBe(env.csv);
     expect(acks[0]!.csv).not.toBeNull();
@@ -107,7 +107,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
     await withTransaction(suite.db, (tx) =>
       tx.execute(
-        sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null `,
+        sql`update verifactu_submissions set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null `,
       ),
     );
     // No append-only trigger on `acks` refuses the delete.
@@ -135,7 +135,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     expect(new Date(acks[0]!.submitted_at).getTime()).toBe(CLOCK_INSTANT.getTime());
   });
 
-  it("INVARIANT: every ack agrees with the committed envios.estado it reflects (drain + reconcile)", async () => {
+  it("INVARIANT: every ack agrees with the committed verifactu_submissions.estado it reflects (drain + reconcile)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const resolveClient = staticResolver(aeat.client());
@@ -146,17 +146,17 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     // Producer 2 — force record 0 into a lost-ack state and let reconcile correct + re-ack it.
     await withTransaction(suite.db, (tx) =>
       tx.execute(
-        sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where registro_id = ${seeded.registroIds[0]}`,
+        sql`update verifactu_submissions set estado = 'pendiente', confirmado_en = null, csv = null where registro_id = ${seeded.registroIds[0]}`,
       ),
     );
     await suite.db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
     await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
-    // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(envios.estado).
+    // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(verifactu_submissions.estado).
     const { rows } = await withTransaction(suite.db, (tx) =>
       tx.execute<{ state: string; estado: string }>(sql`
         select a.state, e.estado
-        from acks a join envios e on e.registro_id = a.registro_id
+        from acks a join verifactu_submissions e on e.registro_id = a.registro_id
       `),
     );
     expect(rows).toHaveLength(2); // record 0 (reconcile ack) + record 1 (drainer ack)
@@ -171,7 +171,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT);
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null `),
+      tx.execute(sql`update verifactu_submissions set estado = 'pendiente', confirmado_en = null, csv = null `),
     );
     // No append-only trigger on `acks` refuses the delete.
     await suite.db.execute(sql`delete from acks`);
@@ -203,11 +203,11 @@ describe("acks — submitted_at, both arms of the coalesce", () => {
     // One row was claimed before its response arrived; the other never was — the lost-ack shape
     // reconcile corrects, where `enviado_en` is null and the column is still NOT NULL.
     await suite.db.execute(sql`
-      update envios set estado = 'aceptado', enviado_en = ${claimedAt.toISOString()}
+      update verifactu_submissions set estado = 'aceptado', enviado_en = ${claimedAt.toISOString()}
       where registro_id = ${claimed}
     `);
     await suite.db.execute(sql`
-      update envios set estado = 'aceptado', enviado_en = null where registro_id = ${neverClaimed}
+      update verifactu_submissions set estado = 'aceptado', enviado_en = null where registro_id = ${neverClaimed}
     `);
 
     await withTransaction(suite.db, async (tx) => {

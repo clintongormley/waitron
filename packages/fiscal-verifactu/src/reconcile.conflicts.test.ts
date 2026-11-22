@@ -44,13 +44,13 @@ async function fixture(sent = true) {
 
 async function immutableSnapshot() {
   const tables = [
-    "registros_facturacion",
+    "verifactu_records",
     "cadenas",
-    "registro_sif",
+    "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
     "fiscal_reservations",
-    "envios",
+    "verifactu_submissions",
     "acks",
   ];
   const result: Record<string, unknown> = {};
@@ -197,10 +197,10 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     const f = await fixture();
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`update registro_sif set revocado_en = ${NOW.toISOString()} where id = ${f.seeded.sifId}`,
+        sql`update verifactu_identities set revocado_en = ${NOW.toISOString()} where id = ${f.seeded.sifId}`,
       );
       await tx.execute(
-        sql`insert into registro_sif (id,node_id,nif,id_sistema_informatico,numero_instalacion,registrado_en) select 'new-sif',node_id,nif,id_sistema_informatico,'new-installation',registrado_en from registro_sif where id=${f.seeded.sifId}`,
+        sql`insert into verifactu_identities (id,node_id,nif,id_sistema_informatico,numero_instalacion,registrado_en) select 'new-sif',node_id,nif,id_sistema_informatico,'new-installation',registrado_en from verifactu_identities where id=${f.seeded.sifId}`,
       );
     });
     const before = await immutableSnapshot();
@@ -263,7 +263,7 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     async (missing) => {
       const f = await fixture();
       await withTransaction(suite.db, async (tx) => {
-        await tx.execute(sql`update envios set estado = 'pendiente'`);
+        await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
         await tx.execute(sql`delete from acks`);
       });
       const before = await immutableSnapshot();
@@ -319,7 +319,7 @@ describe("runtime lookup conflicts use the administrator stop without changing f
       }),
     ]);
     expect(await immutableSnapshot()).toEqual(before);
-    expect((await suite.db.execute(sql`select intentos from envios`)).rows).toEqual([
+    expect((await suite.db.execute(sql`select intentos from verifactu_submissions`)).rows).toEqual([
       { intentos: 0 },
     ]);
     expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);
@@ -505,7 +505,7 @@ it.each(["original", "cancellation"] as const)(
     );
     const records = (
       await suite.db.execute<{ tipo_registro: string; huella: string }>(
-        sql`select tipo_registro, huella from registros_facturacion order by secuencia`,
+        sql`select tipo_registro, huella from verifactu_records order by secuencia`,
       )
     ).rows;
     const fingerprint = records.find(

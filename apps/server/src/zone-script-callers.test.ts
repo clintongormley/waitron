@@ -118,7 +118,7 @@ describe("saved-zone script callers", () => {
         expect(row.offset).toBe(summer ? 120 : 60);
       }
       const generation = suite.db
-        .all<RegistroRow>(sql`select * from registros_facturacion`)
+        .all<RegistroRow>(sql`select * from verifactu_records`)
         .map((row) => fromRegistroRow(decodeRegistroRow(row)));
       expect(generation).toHaveLength(rows.length);
       for (const record of generation) {
@@ -180,7 +180,7 @@ describe("saved-zone script callers", () => {
           issued_offset_minutes: 120,
         });
       const records = suite.db
-        .all<RegistroRow>(sql`select * from registros_facturacion`)
+        .all<RegistroRow>(sql`select * from verifactu_records`)
         .map((row) => fromRegistroRow(decodeRegistroRow(row)));
       expect(records).toHaveLength(rows.length);
       for (const row of records) {

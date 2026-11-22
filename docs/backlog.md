@@ -1572,7 +1572,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index names that still
   read `tenant`, and `server.credential_unusable`'s prefix (fiscal: one index is on
-  `registros_facturacion`; its own slice, not a tidy-up, because three `persons_*` names are
+  `verifactu_records`; its own slice, not a tidy-up, because three `persons_*` names are
   matched by name in error translation).
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
 

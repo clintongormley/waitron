@@ -19,7 +19,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
   paperCustodianFingerprint,
@@ -189,7 +189,7 @@ async function rows() {
   const store = await openVenueDatabase(venueDir);
   try {
     return {
-      sifs: await store.venue.select().from(registroSif),
+      sifs: await store.venue.select().from(verifactuIdentities),
       series: await store.venue.select().from(invoiceSeries).orderBy(invoiceSeries.code),
       allocations: await store.venue.select().from(fiscalAllocations),
     };

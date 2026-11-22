@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
@@ -249,9 +249,9 @@ describe("synthetic signed Cloud first-setup admission", () => {
 describe("synthetic Cloud receipt through initial setup and the actual activation", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
   const directories: string[] = [];
-  const scope = { ...context, binding: { ...context.binding, targetNodeId: TENANT_A.nodeId } };
+  const scope = { ...context, binding: { ...context.binding, targetNodeId: TAXPAYER_A.nodeId } };
   beforeEach(async () => {
-    await seedTenants(suite.db);
+    await seedTaxpayers(suite.db);
     await suite.db.insert(deployment).values({ id: 1, environment: "production" });
   });
   afterEach(async () => {
@@ -396,7 +396,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const result = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
       configured.prepare({ binding: scope.binding, authority, input: f.input }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
+          activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, ready),
         ),
       ),
     );
@@ -410,7 +410,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const replay = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
       configured.prepare({ binding: scope.binding, authority, input: f.input }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
+          activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, ready),
         ),
       ),
     );
@@ -431,7 +431,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     expect(retained.receipt).toEqual(f.receipt);
     const report = await readCloudAllocationReport(
       suite.db,
-      { nodeId: TENANT_A.nodeId },
+      { nodeId: TAXPAYER_A.nodeId },
       {
         receiptPath: join(
           f.root,
@@ -572,7 +572,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const continued = await withOperationAuthority(paperBinding, operator, (authority) =>
       offline.prepare({ binding: paperBinding, authority, input: paperInput }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
+          activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, ready),
         ),
       ),
     );
@@ -670,7 +670,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
           { binding: scope.binding, authority, input: f.input },
           (ready) =>
             withTransaction(suite.db, (tx) =>
-              activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
+              activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, ready),
             ),
         ),
       ),

@@ -9,9 +9,9 @@ import { AppError, saleId, type NodeId, type SaleId } from "@waitron/shared";
 import type { VerifactuBackend } from "./backend.js";
 import { recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export interface InvoiceRemedyRequest {
   caseId: string;
@@ -29,14 +29,14 @@ export interface InvoiceRemedy {
   /** This remedy's own checks of the case, its latest delivery and its record. */
   admits?: (facts: {
     filingCase: typeof filingCases.$inferSelect;
-    delivery: typeof envios.$inferSelect;
-    target: typeof registrosFacturacion.$inferSelect;
+    delivery: typeof verifactuSubmissions.$inferSelect;
+    target: typeof verifactuRecords.$inferSelect;
   }) => boolean;
   issue: (
     tx: Transaction,
     facts: {
       correctsSaleId: SaleId;
-      target: typeof registrosFacturacion.$inferSelect;
+      target: typeof verifactuRecords.$inferSelect;
       clock: TrustedClock;
     },
   ) => Promise<{ saleId: string; fiscal: FiscalRecordRef }>;
@@ -91,8 +91,8 @@ export async function applyCorrectiveInvoice(
   generation.requireWritable();
   const [target] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, request.registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, request.registroId));
   if (
     target === undefined ||
     !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
@@ -120,9 +120,9 @@ export async function applyCorrectiveInvoice(
         actionKey: request.actionKey,
       });
     const [remedyRecord] = await tx
-      .select({ saleId: registrosFacturacion.saleId })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, stored.remedyRegistroId));
+      .select({ saleId: verifactuRecords.saleId })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, stored.remedyRegistroId));
     if (remedyRecord === undefined)
       throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
     return { saleId: remedyRecord.saleId, registroId: stored.remedyRegistroId, eventId: stored.id };
@@ -133,21 +133,21 @@ export async function applyCorrectiveInvoice(
     .where(eq(filingCases.id, request.caseId));
   const [delivery] = await tx
     .select()
-    .from(envios)
-    .where(eq(envios.registroId, request.registroId));
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, request.registroId));
   const [replacement] = await tx
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.correctsRegistroId, request.registroId));
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.correctsRegistroId, request.registroId));
   const [cancellation] = await tx
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
     .where(
       and(
-        eq(registrosFacturacion.tipoRegistro, "anulacion"),
-        eq(registrosFacturacion.idEmisorFactura, target.idEmisorFactura),
-        eq(registrosFacturacion.numSerieFactura, target.numSerieFactura),
-        eq(registrosFacturacion.fechaExpedicionFactura, target.fechaExpedicionFactura),
+        eq(verifactuRecords.tipoRegistro, "anulacion"),
+        eq(verifactuRecords.idEmisorFactura, target.idEmisorFactura),
+        eq(verifactuRecords.numSerieFactura, target.numSerieFactura),
+        eq(verifactuRecords.fechaExpedicionFactura, target.fechaExpedicionFactura),
       ),
     );
   if (
@@ -173,8 +173,8 @@ export async function applyCorrectiveInvoice(
   const result = await remedy.issue(tx, { correctsSaleId, target, clock });
   const [appended] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, result.fiscal.recordId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, result.fiscal.recordId));
   if (
     appended === undefined ||
     appended.entorno !== generation.environment ||

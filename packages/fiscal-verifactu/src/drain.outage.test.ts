@@ -14,7 +14,7 @@ describe("A942 technical-outage submission header", () => {
     "reports a preceding technical outage=%s without changing the record",
     async (outage) => {
       await seedPendingEnvios(suite.db, { count: 1 });
-      const before = (await suite.db.execute(sql`select * from registros_facturacion order by id`))
+      const before = (await suite.db.execute(sql`select * from verifactu_records order by id`))
         .rows;
       const authority = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
       const xml: string[] = [];
@@ -50,7 +50,7 @@ describe("A942 technical-outage submission header", () => {
         expect(xml).toHaveLength(1);
       }
       expect(
-        (await suite.db.execute(sql`select * from registros_facturacion order by id`)).rows,
+        (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
       ).toEqual(before);
       if (outage) expect(xml.at(-1)).toContain("<sf:Incidencia>S</sf:Incidencia>");
       else expect(xml.at(-1)).not.toContain("<sf:Incidencia>S</sf:Incidencia>");
@@ -79,7 +79,7 @@ describe("A942 technical-outage submission header", () => {
     const stopped = await drain(deps, new Date("2026-07-21T00:02:00Z"));
     expect(stopped.batchesSent).toBe(0);
     const row = await suite.db.execute<{ estado: string; incidencia: number }>(sql`
-      select estado, incidencia from envios where registro_id = ${held.registroId}
+      select estado, incidencia from verifactu_submissions where registro_id = ${held.registroId}
     `);
     expect(row.rows).toEqual([{ estado: "detenido", incidencia: 1 }]);
     xml.length = 0;

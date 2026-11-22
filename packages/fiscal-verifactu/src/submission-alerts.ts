@@ -2,9 +2,9 @@ import { count, eq, inArray, min, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import { SAME_CODE_REFUSAL_LIMIT } from "./drain.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { openFilingCasesSummary, recordsBefore } from "./filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import "./errors.js";
 
 // A fiscal record's clock starts when it is generated; the count and the age come from the oldest
@@ -22,10 +22,10 @@ export const fiscalSubmissionDelayedSource: AlertSource = {
   filingOnly: true,
   async read({ tx, now }): Promise<readonly OngoingAlert[]> {
     const [waiting] = await tx
-      .select({ oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro), n: count() })
-      .from(envios)
-      .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
-      .where(inArray(envios.estado, ["pendiente", "enviando"]));
+      .select({ oldest: min(verifactuRecords.fechaHoraHusoGenRegistro), n: count() })
+      .from(verifactuSubmissions)
+      .innerJoin(verifactuRecords, eq(verifactuRecords.id, verifactuSubmissions.registroId))
+      .where(inArray(verifactuSubmissions.estado, ["pendiente", "enviando"]));
     if (!waiting?.oldest) return [];
     const ageMs = now.getTime() - new Date(waiting.oldest).getTime();
     if (ageMs < SUBMISSION_DELAYED_WARN_MS) return [];
@@ -55,10 +55,10 @@ export const fiscalSubmissionSource: AlertSource = {
     const alerts: OngoingAlert[] = [];
 
     const [stopped] = await tx
-      .select({ n: count(), oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro) })
-      .from(envios)
-      .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
-      .where(eq(envios.estado, "detenido"));
+      .select({ n: count(), oldest: min(verifactuRecords.fechaHoraHusoGenRegistro) })
+      .from(verifactuSubmissions)
+      .innerJoin(verifactuRecords, eq(verifactuRecords.id, verifactuSubmissions.registroId))
+      .where(eq(verifactuSubmissions.estado, "detenido"));
     if (stopped && Number(stopped.n) > 0) {
       // count > 0 means the join matched a registro, whose `fechaHoraHusoGenRegistro` is not null.
       alerts.push({
@@ -94,9 +94,9 @@ export const fiscalSubmissionSource: AlertSource = {
  * longer than the limit. Every walk back skips set-aside records (`recordsBefore`), as the hold
  * does.
  *
- * Each walk back names the chain's node, so `registros_node_secuencia_idx` serves it, and the
+ * Each walk back names the chain's node, so `verifactu_records_node_secuencia_idx` serves it, and the
  * `materialized` steps compute each chain's walks once rather than once per reference. A run with
- * nothing before it is counted from 0: `registros_secuencia_ck` keeps every position above it.
+ * nothing before it is counted from 0: `verifactu_records_secuencia_ck` keeps every position above it.
  */
 async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
   const { rows } = await tx.execute<{
@@ -108,8 +108,8 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
     with detenidos as (
       select r.id, r.node_id, r.sif_id, r.secuencia,
         row_number() over (partition by r.sif_id order by r.secuencia) as position
-      from envios e
-      join registros_facturacion r on r.id = e.registro_id
+      from verifactu_submissions e
+      join verifactu_records r on r.id = e.registro_id
       where e.estado = 'detenido'
     ),
     held as materialized (
@@ -132,7 +132,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
           limit 1
         ) as break_secuencia
       from held
-      join envios last_envio on last_envio.registro_id = held.last_id
+      join verifactu_submissions last_envio on last_envio.registro_id = held.last_id
       join filing_cases last_case on last_case.registro_id = held.last_id
       where last_envio.estado = 'rechazado' and last_envio.codigo_error is not null
     )

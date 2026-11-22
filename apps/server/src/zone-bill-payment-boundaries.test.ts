@@ -45,7 +45,7 @@ async function guardedTransaction<T>(body: Parameters<typeof withTransaction<T>>
 function recordFacts(id: string) {
   return v.db
     .all<RegistroRow>(
-      sql`select r.* from registros_facturacion r join sales s on s.id = r.sale_id where s.working_order_id = ${id}`,
+      sql`select r.* from verifactu_records r join sales s on s.id = r.sale_id where s.working_order_id = ${id}`,
     )
     .map((row) => {
       const record = fromRegistroRow(row);

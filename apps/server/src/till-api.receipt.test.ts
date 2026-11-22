@@ -53,7 +53,7 @@ import {
   previewMenu,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -387,7 +387,7 @@ async function drawerOpensFor(): Promise<
 
 async function fiscalRecordCount(): Promise<number> {
   return withTransaction(suite.db, async (tx) => {
-    return (await tx.select().from(registrosFacturacion)).length;
+    return (await tx.select().from(verifactuRecords)).length;
   });
 }
 
@@ -599,7 +599,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
         lines: await tx.select().from(saleLines),
         settlements: await tx.select().from(saleSettlements),
         tenders: await tx.select().from(tenders),
-        records: await tx.select().from(registrosFacturacion),
+        records: await tx.select().from(verifactuRecords),
         series: await tx.select().from(invoiceSeries),
         jobs: await tx.select().from(printJobs),
         drawers: await tx.select().from(drawerOpens),
@@ -773,7 +773,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
     await suite.db.update(printJobs).set({ status: "done" });
     const jobsBefore = await suite.db.select().from(printJobs);
     const salesBefore = await suite.db.select().from(sales);
-    const fiscalBefore = await suite.db.select().from(registrosFacturacion);
+    const fiscalBefore = await suite.db.select().from(verifactuRecords);
     const statusBefore = await app.request(`/api/sales/${orderId}/receipt`, {
       headers: { cookie },
     });
@@ -825,7 +825,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       },
     ]);
     expect(await suite.db.select().from(sales)).toEqual(salesBefore);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscalBefore);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscalBefore);
   });
 
   it("refuses unprinted originals even when a duplicate has completed", async () => {
@@ -1189,7 +1189,7 @@ describe("an original receipt whose printer was deleted", () => {
       reprints: await suite.db.select().from(receiptReprints),
       drawers: await suite.db.select().from(drawerOpens),
       sales: await suite.db.select().from(sales),
-      fiscalRecords: await suite.db.select().from(registrosFacturacion),
+      fiscalRecords: await suite.db.select().from(verifactuRecords),
     };
   }
 
@@ -1356,7 +1356,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const retained = () => ({
       sales: suite.db.all(sql`select * from sales order by id`),
       lines: suite.db.all(sql`select * from sale_lines order by id`),
-      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      fiscal: suite.db.all(sql`select * from verifactu_records order by id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       versions: suite.db.all(sql`select * from menu_versions order by id`),
       publications: suite.db.all(sql`select * from menu_releases order by menu_id`),
@@ -1465,7 +1465,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(beforeText).not.toContain("Sala principal");
     const retained = () => ({
       sales: suite.db.all(sql`select * from sales order by id`),
-      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      fiscal: suite.db.all(sql`select * from verifactu_records order by id`),
       drawer: suite.db.all(sql`select * from drawer_opens order by id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       departments: suite.db.all(sql`select * from departments order by id`),
@@ -3461,7 +3461,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
   it("enrolls the explicit original once with the requesting staff member, preserving invoice and drawer", async () => {
     const { printerId, sale, post, supervisorId } = await issued();
     const invoices = await suite.db.select().from(sales);
-    const fiscal = await suite.db.select().from(registrosFacturacion);
+    const fiscal = await suite.db.select().from(verifactuRecords);
     const responses = await Promise.all([post("receipt"), post("receipt")]);
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     const jobs = await suite.db.select().from(printJobs);
@@ -3485,7 +3485,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     });
     expect(decodeTicket(jobs[0]!.payload)).not.toContain("DUPLICADO");
     expect(await suite.db.select().from(sales)).toEqual(invoices);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual(fiscal);
     expect(await drawerOpensFor()).toEqual([]);
   });
 

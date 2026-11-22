@@ -37,7 +37,7 @@ async function held() {
   const first = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
   await drain(deps(aeat.client()), new Date("2026-07-21T00:02:00Z"));
   await suite.db.execute(
-    sql`update envio_flujo set proximo_envio_en = ${GATE.toISOString()}, tiempo_espera_seg = 3600`,
+    sql`update verifactu_sending_state set proximo_envio_en = ${GATE.toISOString()}, tiempo_espera_seg = 3600`,
   );
   const sent: string[][] = [];
   const client: VerifactuClient = {
@@ -64,7 +64,7 @@ async function attempts(ids: string[]) {
       sent: string | null;
     }>(sql`
     select registro_id as id, estado as state, intentos as attempts, enviado_en as sent
-    from envios where registro_id in ${ids} order by registro_id
+    from verifactu_submissions where registro_id in ${ids} order by registro_id
   `)
   ).rows;
 }

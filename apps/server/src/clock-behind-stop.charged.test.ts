@@ -76,7 +76,7 @@ const MINUTE = 60_000;
 function latest(): { at: Date; offsetMinutes: number } {
   const [row] = venue.db.all<{ at: string; offsetMinutes: number }>(sql`
     select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
-    from registros_facturacion
+    from verifactu_records
     order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);
@@ -162,7 +162,7 @@ async function heldAtReader<T>(request: () => Promise<T>) {
 }
 
 function allRecords(): number {
-  const [row] = venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`);
+  const [row] = venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_records`);
   return row!.n;
 }
 

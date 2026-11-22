@@ -9,7 +9,7 @@ import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
   return (
@@ -100,7 +100,7 @@ export function hourHistorySource(
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
-      reference: `registro_sif/${row.id}`,
+      reference: `verifactu_identities/${row.id}`,
       kind: "activation",
       taxpayerNif: row.nif,
       environment,
@@ -214,15 +214,15 @@ export async function readHourHistory(
     .from(invoiceSeries);
   const sifs = await tx
     .select({
-      id: registroSif.id,
-      nodeId: registroSif.nodeId,
-      nif: registroSif.nif,
-      idSistemaInformatico: registroSif.idSistemaInformatico,
-      numeroInstalacion: registroSif.numeroInstalacion,
-      registradoEn: registroSif.registradoEn,
-      revocadoEn: registroSif.revocadoEn,
+      id: verifactuIdentities.id,
+      nodeId: verifactuIdentities.nodeId,
+      nif: verifactuIdentities.nif,
+      idSistemaInformatico: verifactuIdentities.idSistemaInformatico,
+      numeroInstalacion: verifactuIdentities.numeroInstalacion,
+      registradoEn: verifactuIdentities.registradoEn,
+      revocadoEn: verifactuIdentities.revocadoEn,
     })
-    .from(registroSif);
+    .from(verifactuIdentities);
   const allocations = await tx
     .select({
       eventKey: fiscalAllocations.eventKey,

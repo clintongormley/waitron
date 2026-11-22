@@ -24,7 +24,7 @@ export interface DutyOutcome {
  * fiscal code.
  *
  * `drain` must not become a `PeriodDuty`: it keeps its own persisted schedule
- * (`envio_flujo.proximo_envio_en`, and `envios.proximo_intento_en` per record), which a ledger row
+ * (`verifactu_sending_state.proximo_envio_en`, and `verifactu_submissions.proximo_intento_en` per record), which a ledger row
  * would duplicate. There is no second duty kind for `nextDueAt`-shaped duties: one was
  * ruled out for `drain` and deferred for `forward`.
  */

@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { fromRegistroRow, registrosFacturacion, type RegistroRow } from "@waitron/fiscal-verifactu";
+import { fromRegistroRow, verifactuRecords, type RegistroRow } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
@@ -102,7 +102,7 @@ describe("saved-zone payment transactions", () => {
         "sales",
         "tenders",
         "payments",
-        "registros_facturacion",
+        "verifactu_records",
         "invoice_series",
         "sale_settlements",
       ].map((table) => [
@@ -116,10 +116,10 @@ describe("saved-zone payment transactions", () => {
       .select({
         issued_at: sales.issuedAt,
         issued_offset_minutes: sales.issuedOffsetMinutes,
-        record: registrosFacturacion,
+        record: verifactuRecords,
       })
       .from(sales)
-      .innerJoin(registrosFacturacion, eq(registrosFacturacion.saleId, sales.id))
+      .innerJoin(verifactuRecords, eq(verifactuRecords.saleId, sales.id))
       .where(eq(sales.workingOrderId, id));
     return rows.map((row) => ({
       issued_at: row.issued_at,
@@ -127,7 +127,7 @@ describe("saved-zone payment transactions", () => {
       fecha_expedicion_factura: row.record.fechaExpedicionFactura,
       fecha_hora_huso_gen_registro: fromRegistroRow(
         Object.fromEntries(
-          Object.entries(getTableColumns(registrosFacturacion)).map(([key, column]) => [
+          Object.entries(getTableColumns(verifactuRecords)).map(([key, column]) => [
             column.name,
             row.record[key as keyof typeof row.record],
           ]),

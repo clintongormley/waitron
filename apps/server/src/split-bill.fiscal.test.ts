@@ -7,7 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -216,8 +216,8 @@ describe("split-bill: pay each check files its own registro", () => {
       admission: testTradingAdmission(),
     });
 
-    // (1) EXACTLY THREE registros_facturacion for this taxpayer — one per check, none from the origin.
-    const rows = await asApp((tx) => tx.select().from(registrosFacturacion));
+    // (1) EXACTLY THREE verifactu_records for this taxpayer — one per check, none from the origin.
+    const rows = await asApp((tx) => tx.select().from(verifactuRecords));
     expect(rows.length).toBe(3);
 
     // (2) Contiguous invoice numbers from the tab's series (fresh series ⇒ 1,2,3 in pay order).
@@ -281,7 +281,7 @@ describe("split-bill: pay each check files its own registro", () => {
     const rB = await paySavedBillInCash(deps, cfg, operator, b, "5.00");
 
     const { records, originLines, filed } = await asApp(async (tx) => ({
-      records: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
+      records: await tx.select({ id: verifactuRecords.id }).from(verifactuRecords),
       originLines: await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
@@ -403,9 +403,9 @@ describe("split-bill: pay each check files its own registro", () => {
 
     const forCheck = await asApp((tx) =>
       tx
-        .select({ id: registrosFacturacion.id })
-        .from(registrosFacturacion)
-        .innerJoin(sales, eq(sales.id, registrosFacturacion.saleId))
+        .select({ id: verifactuRecords.id })
+        .from(verifactuRecords)
+        .innerJoin(sales, eq(sales.id, verifactuRecords.saleId))
         .where(eq(sales.workingOrderId, checkId)),
     );
     expect(forCheck.length).toBe(1);

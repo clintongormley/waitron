@@ -163,7 +163,7 @@ declare module "@waitron/shared" {
     /**
      * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —
      * only built to hand its `.code`/`.params` to `recordIncident`. `registroId` is there because
-     * `incidents` has no foreign key back to `registros_facturacion`; it is the only traceback from
+     * `incidents` has no foreign key back to `verifactu_records`; it is the only traceback from
      * an incident row to its record, and every code below that carries one uses the same name.
      */
     "fiscal.registro_rechazado": {
@@ -359,7 +359,7 @@ declare module "@waitron/shared" {
 
     /**
      * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records have stopped
-     * submitting (`envios.estado = detenido`).
+     * submitting (`verifactu_submissions.estado = detenido`).
      */
     "fiscal.submission_stopped": { count: number };
 

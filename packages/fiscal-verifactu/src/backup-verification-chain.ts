@@ -3,7 +3,7 @@ import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { validate, verifyHuella } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 
-export const FISCAL_CHAIN_TABLES = ["registros_facturacion", "registro_sif", "cadenas"];
+export const FISCAL_CHAIN_TABLES = ["verifactu_records", "verifactu_identities", "cadenas"];
 
 function integer(value: BackupValue | undefined): number | null {
   const number = typeof value === "bigint" ? Number(value) : value;
@@ -66,7 +66,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
   if (tables.length !== FISCAL_CHAIN_TABLES.length) return false;
 
   for await (const node of query.rows(
-    "select node_id from registros_facturacion union select node_id from registro_sif union select node_id from cadenas order by node_id",
+    "select node_id from verifactu_records union select node_id from verifactu_identities union select node_id from cadenas order by node_id",
   )) {
     if (typeof node.node_id !== "string") return false;
     const nodes = [];
@@ -75,7 +75,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
     if (nodes.length !== 1) return false;
     const identities = new Map<string, BackupRow>();
     let current: string | null = null;
-    for await (const sif of query.rows("select * from registro_sif where node_id = ?", [
+    for await (const sif of query.rows("select * from verifactu_identities where node_id = ?", [
       node.node_id,
     ])) {
       if (
@@ -101,7 +101,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
     let previous: RegistroRow | null = null;
     const visited = new Set<string>();
     for await (const raw of query.rows(
-      "select * from registros_facturacion where node_id = ? order by secuencia",
+      "select * from verifactu_records where node_id = ? order by secuencia",
       [node.node_id],
     )) {
       sequence++;

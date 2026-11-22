@@ -163,7 +163,7 @@ describe("detectTrustDevice — absent, empty and unrecognised input", () => {
     ]);
     const hostile = [
       "<script>alert(1)</script>",
-      '"macOS"; drop table registros_facturacion',
+      '"macOS"; drop table verifactu_records',
       "Debian GNU/Linux trixie",
       " ",
       "macos",

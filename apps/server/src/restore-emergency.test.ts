@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 import { observeTimeServiceHourClock } from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
 import { timeServiceReader } from "./clock-service-reading.js";
@@ -25,7 +25,7 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const before = f.journal();
-    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TAXPAYER_A.nodeId);
     const log = vi.fn();
     await expect(f.run(log)).resolves.toBe(true);
     const rows = await f.snapshot();
@@ -33,7 +33,7 @@ it.each(["archive", "stream"] as const)(
     expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNY", "0CNQT"]);
     expect(rows.allocations[1]?.approval.operatorId).toEqual({
       kind: "recovery-key",
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       eventId: "emergency-offline-restore",
     });
     expect(
@@ -101,7 +101,7 @@ async function withRealObserver<T>(run: () => Promise<T>): Promise<T> {
 }
 it("asks the time-service reader its caller hands it, never the host's own", async () => {
   f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TAXPAYER_A.nodeId);
   const supplied = vi.fn(async () => true);
   const hostAsked = vi.mocked(timeServiceReader).mock.results.length;
   await expect(
@@ -112,7 +112,7 @@ it("asks the time-service reader its caller hands it, never the host's own", asy
 });
 it("asks the box's host service when its caller hands it no reader", async () => {
   f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TAXPAYER_A.nodeId);
   const host = vi.fn(async () => true);
   vi.mocked(timeServiceReader).mockImplementationOnce(() => host);
   await expect(withRealObserver(() => f!.run())).resolves.toBe(true);

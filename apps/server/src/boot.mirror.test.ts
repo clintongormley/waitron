@@ -592,7 +592,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     expect(health.duties["fiscal.drain"]?.consecutiveFailures).toBe(0);
 
     const afterMirror = await db.mirror.execute<{ estado: string }>(
-      sql`select estado from envios where registro_id = ${seeded.registroId}`,
+      sql`select estado from verifactu_submissions where registro_id = ${seeded.registroId}`,
     );
     expect(afterMirror.rows[0]?.estado).toBe("pendiente");
 
@@ -605,7 +605,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
 
     // The tripwire proves drain was reached, not that anything was filed.
     const afterPrimary = await db.mirror.execute<{ estado: string }>(
-      sql`select estado from envios where registro_id = ${seeded.registroId}`,
+      sql`select estado from verifactu_submissions where registro_id = ${seeded.registroId}`,
     );
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
   }, 60_000);

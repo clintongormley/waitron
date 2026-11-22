@@ -15,11 +15,11 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
 import { restoreDatabase } from "./restore.js";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
-const LEDGER_TABLE = "registros_facturacion";
+const LEDGER_TABLE = "verifactu_records";
 
 /** SQLite's `SQLITE_CONSTRAINT_TRIGGER`, which `node:sqlite` puts on the thrown error's `errcode`. */
 const SQLITE_CONSTRAINT_TRIGGER = 1811;
@@ -34,7 +34,7 @@ const F = {
 /** The 64 hex characters whose survival is the point: a huella is the chain, byte for byte. */
 const HUELLA = "F".repeat(64);
 
-/** Exactly the foreign-key closure `registros_facturacion` needs, plus the record itself. */
+/** Exactly the foreign-key closure `verifactu_records` needs, plus the record itself. */
 async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
@@ -63,14 +63,14 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     fiscalBackend: "verifactu",
     fiscalState: "recorded",
   });
-  await db.insert(registroSif).values({
+  await db.insert(verifactuIdentities).values({
     id: F.sifId,
     nodeId: F.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WT",
     numeroInstalacion: "1",
   });
-  await db.insert(registrosFacturacion).values({
+  await db.insert(verifactuRecords).values({
     source: "device",
     deviceId: sql`(select id from devices)`,
     nodeId: F.nodeId,
@@ -141,7 +141,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
       try {
         // 3. The fiscal record landed, and it is the one that was seeded.
         const rows = restored.venue
-          .all<{ huella: string }>(sql`select huella from registros_facturacion`)
+          .all<{ huella: string }>(sql`select huella from verifactu_records`)
           .map((row) => row.huella);
         expect(rows).toEqual([HUELLA]);
 
@@ -154,7 +154,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
         const refusal = (() => {
           try {
             restored.venue.run(
-              sql`update registros_facturacion set huella = ${"E".repeat(64)} where sale_id = ${F.saleId}`,
+              sql`update verifactu_records set huella = ${"E".repeat(64)} where sale_id = ${F.saleId}`,
             );
             return undefined;
           } catch (error) {
@@ -181,7 +181,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
         // The fiscal record is untouched by the refused attempt.
         expect(
           restored.venue
-            .all<{ huella: string }>(sql`select huella from registros_facturacion`)
+            .all<{ huella: string }>(sql`select huella from verifactu_records`)
             .map((row) => row.huella),
         ).toEqual([HUELLA]);
       } finally {

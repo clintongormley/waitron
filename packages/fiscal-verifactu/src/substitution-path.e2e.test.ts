@@ -12,8 +12,8 @@ import {
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -162,7 +162,7 @@ async function substitute(
  * unambiguous. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
@@ -177,8 +177,8 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 async function registro(saleId: string) {
   const [row] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.saleId, saleId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.saleId, saleId));
   if (row === undefined) throw new Error(`registro: no row for sale ${saleId}`);
   // The AEAT shapes, restated here because `./schema/registros.ts` declares these columns as a
   // bare `json(...)` with no `$type`, so drizzle types them `{}` and a property access on one is a
@@ -207,8 +207,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
 
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, substitutionId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, substitutionId));
     expect(row?.tipoRegistro).toBe("alta");
     expect(row?.tipoFactura).toBe("F3");
     expect(row?.numSerieFactura).toBe("F3/1");
@@ -295,8 +295,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     // Nothing chained: the node carries only the ticket's own F2 alta; the F3 was never appended.
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, node.nodeId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, node.nodeId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.tipoFactura).toBe("F2");
   });
@@ -321,8 +321,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, node.nodeId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, node.nodeId));
     // Every registro on this node is an alta — the two F2 tickets and the one F3 — and not one of
     // them is an anulación.
     expect(rows.map((r) => r.tipoRegistro).sort()).toEqual(["alta", "alta", "alta"]);
@@ -342,8 +342,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
 
     const [sidecar] = await suite.db
       .select()
-      .from(envios)
-      .where(eq(envios.registroId, registro.id));
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, registro.id));
     expect(sidecar?.estado).toBe("pendiente");
     expect(sidecar?.intentos).toBe(0);
     expect(sidecar?.csv).toBeNull();
@@ -404,9 +404,9 @@ describe("recordSubstitution from five callers started together", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, node.nodeId))
-      .orderBy(asc(registrosFacturacion.secuencia));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.nodeId, node.nodeId))
+      .orderBy(asc(verifactuRecords.secuencia));
 
     // Ticket at 1, the five F3s at 2..6 — distinct, contiguous, no gaps.
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4, 5, 6]);

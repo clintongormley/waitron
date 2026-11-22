@@ -6,10 +6,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -24,7 +24,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -48,13 +48,13 @@ function sell(ms: number) {
 function chain() {
   return suite.db
     .select({
-      n: registrosFacturacion.numSerieFactura,
-      s: registrosFacturacion.secuencia,
-      at: registrosFacturacion.fechaHoraHusoGenRegistro,
+      n: verifactuRecords.numSerieFactura,
+      s: verifactuRecords.secuencia,
+      at: verifactuRecords.fechaHoraHusoGenRegistro,
     })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.nodeId, nodeId))
-    .orderBy(asc(registrosFacturacion.secuencia))
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.nodeId, nodeId))
+    .orderBy(asc(verifactuRecords.secuencia))
     .all()
     .map((row) => ({ ...row, at: row.at.toISOString() }));
 }

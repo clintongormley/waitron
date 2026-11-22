@@ -131,7 +131,7 @@ it.each([
 });
 
 it("refuses clock.unconfirmed before writing while the start's time check holds", async () => {
-  const records = () => suite.db.all(sql`select id from registros_facturacion`).length;
+  const records = () => suite.db.all(sql`select id from verifactu_records`).length;
   const before = records();
   const sendUnder = (confirmed: boolean) => {
     const app = new Hono();

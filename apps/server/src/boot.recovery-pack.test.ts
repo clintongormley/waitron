@@ -11,7 +11,7 @@ import { invoiceSeries, nodes, stampDeployment, withTransaction } from "@waitron
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
-import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import {
@@ -32,7 +32,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "corrective" },
@@ -40,8 +40,8 @@ const bases = [
 ];
 
 it("the actual trading listener makes a recovery pack from the first-setup source, without bucket or subscription", async () => {
-  await seedTenants(suite.db);
-  await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
+  await seedTaxpayers(suite.db);
+  await suite.db.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
   await stampDeployment(suite.db, "preproduction");
   await seedFixtureSif(suite.db, {
