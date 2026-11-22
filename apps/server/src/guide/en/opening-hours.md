@@ -57,6 +57,8 @@ In **Calendar** → **Staffing**, select a date to see how many people each area
 
 To plan staffing for a season, open the season from the month you want to plan. Check any dated change to the business-day start above the grid.
 
+Open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
+
 ## Edit periods and check their hours {#periods}
 
 Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
