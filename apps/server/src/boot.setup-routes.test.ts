@@ -104,7 +104,7 @@ import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clo
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import * as bootHarness from "./testing/boot-harness.js";
-import { joinThenFinish, stubMainBox, type SetupPageSend } from "./testing/setup-join.js";
+import { joinThenFinish, mainBoxJoinRoutes, type SetupPageSend } from "./testing/setup-join.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
@@ -2140,57 +2140,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("an adopt in the setup start restarts through the seam, not by signalling the process", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const primaryKeys = generateNodeKeyPair();
-    const primary = createHttpServer(
-      stubMainBox({
-        nodeId: MAIN_NODE_ID,
-        keys: primaryKeys,
-        bundleFor: (standby) =>
-          bundleFor({
-            boxCaPem: MAIN_AUTHORITY.caCertPem,
-            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-            endorsement: endorseKey(
-              standby.nodeId,
-              standby.publicKey,
-              MAIN_NODE_ID,
-              primaryKeys.privateKey,
-            ),
-            moduleOverrides: { "fiscal-verifactu": false },
-            primaryPublicKey: primaryKeys.publicKey,
-          }) as MirrorBundle,
-      }),
-    );
-    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
-    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
-    let restarts = 0;
-    try {
-      await withSetupBoot(
-        venue.directory,
-        {},
-        async ({ post, kills }) => {
-          const response = await joinThenFinish(joinOn(post), primaryUrl);
-          expect(response.status).toBe(200);
-          await poll(() => (restarts > 0 ? restarts : undefined));
-          expect(restarts).toBe(1);
-          expect(kills).toEqual([]);
-        },
-        { seams: { restart: () => (restarts += 1) } },
-      );
-    } finally {
-      await new Promise((resolve) => primary.close(resolve));
-      await venue.store.close();
-      await rm(venue.directory, { recursive: true, force: true });
-    }
-  }, 60_000);
-
-  // The setup page has words for neither code on Finish joining.
-  it("Finish joining asks the main box nothing, so neither its clock check nor its name check can refuse it", async () => {
-    beforeServerStarts();
-    const venue = await freshVenue();
-    const primaryKeys = generateNodeKeyPair();
-    const stub = stubMainBox({
+    const main = await mainBoxJoinRoutes({
       nodeId: MAIN_NODE_ID,
-      keys: primaryKeys,
       bundleFor: (standby) =>
         bundleFor({
           boxCaPem: MAIN_AUTHORITY.caCertPem,
@@ -2205,11 +2156,60 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           primaryPublicKey: primaryKeys.publicKey,
         }) as MirrorBundle,
     });
+    const primaryKeys = main.keys;
+    const primary = createHttpServer(main.listener);
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    let restarts = 0;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const response = await joinThenFinish(joinOn(post), primaryUrl, {
+            approve: main.approve,
+          });
+          expect(response.status).toBe(200);
+          await poll(() => (restarts > 0 ? restarts : undefined));
+          expect(restarts).toBe(1);
+          expect(kills).toEqual([]);
+        },
+        { seams: { restart: () => (restarts += 1) } },
+      );
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
+      await main.close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // The setup page has words for neither code on Finish joining.
+  it("Finish joining asks the main box nothing, so neither its clock check nor its name check can refuse it", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const main = await mainBoxJoinRoutes({
+      nodeId: MAIN_NODE_ID,
+      bundleFor: (standby) =>
+        bundleFor({
+          boxCaPem: MAIN_AUTHORITY.caCertPem,
+          boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+          endorsement: endorseKey(
+            standby.nodeId,
+            standby.publicKey,
+            MAIN_NODE_ID,
+            primaryKeys.privateKey,
+          ),
+          moduleOverrides: { "fiscal-verifactu": false },
+          primaryPublicKey: primaryKeys.publicKey,
+        }) as MirrorBundle,
+    });
+    const primaryKeys = main.keys;
     // Once the join is approved, the main box refuses every request as its hello would.
     let refusing = false;
     const refused: string[] = [];
     const primary = createHttpServer((req, res) => {
-      if (!refusing) return stub(req, res);
+      if (!refusing) return main.listener(req, res);
       refused.push(req.url ?? "");
       const code =
         req.url === "/api/node/join/hello" ? "mirror.standby_name_taken" : "mirror.clocks_apart";
@@ -2224,10 +2224,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         {},
         async ({ post }) => {
           const send = joinOn(post);
-          const response = await joinThenFinish((path, init) => {
-            if (path === "/setup-api/adopt") refusing = true;
-            return send(path, init);
-          }, primaryUrl);
+          const response = await joinThenFinish(
+            (path, init) => {
+              if (path === "/setup-api/adopt") refusing = true;
+              return send(path, init);
+            },
+            primaryUrl,
+            { approve: main.approve },
+          );
           expect(response.status, await response.clone().text()).toBe(200);
           expect(refused).toEqual([]);
         },
@@ -2235,6 +2239,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
     } finally {
       await new Promise((resolve) => primary.close(resolve));
+      await main.close();
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }
@@ -2243,26 +2248,24 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("refuses a join with mirror.vault_key_differs when the real environment sets a vault key the main box's ring does not hold", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const primaryKeys = generateNodeKeyPair();
-    const primary = createHttpServer(
-      stubMainBox({
-        nodeId: MAIN_NODE_ID,
-        keys: primaryKeys,
-        bundleFor: (standby) =>
-          bundleFor({
-            boxCaPem: MAIN_AUTHORITY.caCertPem,
-            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-            endorsement: endorseKey(
-              standby.nodeId,
-              standby.publicKey,
-              MAIN_NODE_ID,
-              primaryKeys.privateKey,
-            ),
-            moduleOverrides: { "fiscal-verifactu": false },
-            primaryPublicKey: primaryKeys.publicKey,
-          }) as MirrorBundle,
-      }),
-    );
+    const main = await mainBoxJoinRoutes({
+      nodeId: MAIN_NODE_ID,
+      bundleFor: (standby) =>
+        bundleFor({
+          boxCaPem: MAIN_AUTHORITY.caCertPem,
+          boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+          endorsement: endorseKey(
+            standby.nodeId,
+            standby.publicKey,
+            MAIN_NODE_ID,
+            primaryKeys.privateKey,
+          ),
+          moduleOverrides: { "fiscal-verifactu": false },
+          primaryPublicKey: primaryKeys.publicKey,
+        }) as MirrorBundle,
+    });
+    const primaryKeys = main.keys;
+    const primary = createHttpServer(main.listener);
     await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
     const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
     let restarts = 0;
@@ -2278,7 +2281,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             secrets: await readFile(join(stateDir, "secrets.env"), "utf8"),
           });
           const before = await written();
-          const response = await joinThenFinish(joinOn(post), primaryUrl);
+          const response = await joinThenFinish(joinOn(post), primaryUrl, {
+            approve: main.approve,
+          });
           expect(response.status).toBe(409);
           expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
             "mirror.vault_key_differs",
@@ -2295,6 +2300,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
     } finally {
       await new Promise((resolve) => primary.close(resolve));
+      await main.close();
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }
@@ -2371,26 +2377,24 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const primaryKeys = generateNodeKeyPair();
-    const primary = createHttpServer(
-      stubMainBox({
-        nodeId: MAIN_NODE_ID,
-        keys: primaryKeys,
-        bundleFor: (standby) =>
-          bundleFor({
-            boxCaPem: MAIN_AUTHORITY.caCertPem,
-            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-            endorsement: endorseKey(
-              standby.nodeId,
-              standby.publicKey,
-              MAIN_NODE_ID,
-              primaryKeys.privateKey,
-            ),
-            moduleOverrides: {},
-            primaryPublicKey: primaryKeys.publicKey,
-          }) as MirrorBundle,
-      }),
-    );
+    const main = await mainBoxJoinRoutes({
+      nodeId: MAIN_NODE_ID,
+      bundleFor: (standby) =>
+        bundleFor({
+          boxCaPem: MAIN_AUTHORITY.caCertPem,
+          boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+          endorsement: endorseKey(
+            standby.nodeId,
+            standby.publicKey,
+            MAIN_NODE_ID,
+            primaryKeys.privateKey,
+          ),
+          moduleOverrides: {},
+          primaryPublicKey: primaryKeys.publicKey,
+        }) as MirrorBundle,
+    });
+    const primaryKeys = main.keys;
+    const primary = createHttpServer(main.listener);
     await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
     const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
     try {
@@ -2405,10 +2409,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         };
         const send = joinOn(post);
         let handle: string | undefined;
-        const first = await joinThenFinish((path, init) => {
-          if (path === "/setup-api/adopt") handle = init.handle;
-          return send(path, init);
-        }, primaryUrl);
+        const first = await joinThenFinish(
+          (path, init) => {
+            if (path === "/setup-api/adopt") handle = init.handle;
+            return send(path, init);
+          },
+          primaryUrl,
+          { approve: main.approve },
+        );
         const again = await send("/setup-api/adopt", { body: {}, handle });
         for (const response of [first, again]) {
           expect(response.status).toBe(409);
@@ -2418,6 +2426,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       });
     } finally {
       await new Promise((resolve) => primary.close(resolve));
+      await main.close();
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }

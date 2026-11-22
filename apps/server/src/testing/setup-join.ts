@@ -1,17 +1,15 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import type { Hono } from "hono";
+import { Hono } from "hono";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
+import { nodes } from "@waitron/db";
+import { mountBoxJoinApi } from "../box-join-api.js";
 import type { BoxJoinAttempt, JoinAttemptState, JoinedBox } from "../box-join-attempt.js";
-import {
-  JOIN_REVEAL_LABEL,
-  commitmentFor,
-  revealAnswerFields,
-  signJoinMessage,
-  type JoinHello,
-} from "../box-join-code.js";
 import { lockJoinBundle } from "../box-join-seal.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
+import { freshVenue } from "./boot-harness.js";
 import { waitUntil } from "./scenario-stages.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
 
@@ -119,82 +117,76 @@ export async function finishJoining(
 }
 
 /**
- * A main box that answers a new box's hello, reveal and polls as the real routes do, signed with
- * `keys`, and approves at once with the bundle `bundleFor` builds for the asking box. It checks
- * none of the new box's signatures or addresses: those are the real routes' to check.
+ * A main box's real box-to-box join routes, on a database of its own whose node `nodeId` holds
+ * `keys`, as a listener for the new box's real requests. A network delivers the new box's requests
+ * from an address it holds, so each arrives from the first address its hello listed. `approve`
+ * stands in for the person's tap on the code the new box shows, approving with the bundle
+ * `bundleFor` builds for the asking box, locked as the person's approve locks it.
  */
-export function stubMainBox(main: {
+export async function mainBoxJoinRoutes(main: {
   nodeId: string;
-  keys: { publicKey: string; privateKey: string };
   bundleFor: (standby: { nodeId: string; publicKey: string }) => MirrorBundle;
-}): (req: IncomingMessage, res: ServerResponse) => void {
-  const requests = new Map<string, { hello: JoinHello; mainNonce: Buffer }>();
-  const answer = (res: ServerResponse, status: number, body: unknown) => {
-    res.writeHead(status, { "content-type": "application/json" });
-    res.end(JSON.stringify(body));
-  };
-  return (req, res) => {
+}) {
+  const box = await freshVenue();
+  const { venue, node } = box.store;
+  await venue.insert(nodes).values({ id: main.nodeId, name: "Main box" });
+  await establishNodeIdentity({ ownerDb: venue, node, ring: MAIN_RING }, main.nodeId);
+  const privateKey = await readNodeIdentityKey(node, MAIN_RING, main.nodeId);
+  const app = new Hono();
+  const requests = mountBoxJoinApi(app, {
+    appDb: venue,
+    node,
+    ring: MAIN_RING,
+    designated: { nodeId: main.nodeId },
+  });
+  let from: string | undefined;
+  const listener = (req: IncomingMessage, res: ServerResponse): void => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<
-        string,
-        never
-      >;
-      if (req.url === "/api/node/join/hello") {
-        const requestId = randomUUID();
-        const mainNonce = randomBytes(32);
-        const { newNodeId, newPublicKey, encryptionKey, contactUrl, storeUrl, addresses } = body;
-        requests.set(requestId, {
-          hello: { newNodeId, newPublicKey, encryptionKey, contactUrl, storeUrl, addresses },
-          mainNonce,
-        });
-        answer(res, 200, {
-          requestId,
-          mainNodeId: main.nodeId,
-          mainPublicKey: main.keys.publicKey,
-          commitment: commitmentFor(requestId, mainNonce).toString("base64"),
-          expiresAt: new Date(Date.now() + 900_000).toISOString(),
-        });
-        return;
-      }
-      const held = requests.get(body.requestId);
-      if (held === undefined) {
-        answer(res, 404, { error: { code: "mirror.join_not_found", params: {} } });
-        return;
-      }
-      if (req.url === "/api/node/join/reveal") {
-        const newNonce = Buffer.from(body.newNonce as string, "base64");
-        answer(res, 200, {
-          mainNonce: held.mainNonce.toString("base64"),
-          signature: signJoinMessage(
-            JOIN_REVEAL_LABEL,
-            body.requestId,
-            body.seq,
-            revealAnswerFields(held.hello, newNonce, held.mainNonce),
-            main.keys.privateKey,
-          ),
-        });
-        return;
-      }
-      if (req.url === "/api/node/join/poll") {
-        const bundle = main.bundleFor({
-          nodeId: held.hello.newNodeId,
-          publicKey: held.hello.newPublicKey,
-        });
-        answer(res, 200, {
-          state: "approved",
-          locked: lockJoinBundle({
-            requestId: body.requestId,
-            encryptionKey: held.hello.encryptionKey,
-            bundle: Buffer.from(JSON.stringify(bundle)),
-            mainPrivateKey: main.keys.privateKey,
-          }),
-        });
-        return;
-      }
-      requests.delete(body.requestId);
-      answer(res, 200, { state: "ended", reason: "cancelled" });
+      const body = Buffer.concat(chunks).toString("utf8");
+      if (req.url === "/api/node/join/hello")
+        from = (JSON.parse(body) as { addresses?: string[] }).addresses?.[0];
+      void Promise.resolve(
+        app.request(
+          `https://main.test${req.url}`,
+          { method: req.method, headers: { "content-type": "application/json" }, body },
+          { incoming: { socket: { remoteAddress: from } } },
+        ),
+      ).then(async (response) => {
+        res.writeHead(response.status, { "content-type": "application/json" });
+        res.end(await response.text());
+      });
     });
   };
+  return {
+    keys: { privateKey, publicKey: nodeSigningPublicKey(privateKey) },
+    listener,
+    approve: async ({ code }: { code: string }): Promise<undefined> => {
+      const [listed] = requests.listed();
+      const checked = listed === undefined ? undefined : requests.check(listed.id);
+      if (checked === undefined || "refused" in checked) throw new Error("no join is listed");
+      const begun = requests.approve.begin(listed!.id, code);
+      if (!("encryptionKey" in begun)) throw new Error(`approve refused: ${begun.refused}`);
+      const { newNodeId, newPublicKey } = checked.hello;
+      const bundle = main.bundleFor({ nodeId: newNodeId, publicKey: newPublicKey });
+      const locked = lockJoinBundle({
+        requestId: listed!.id,
+        encryptionKey: begun.encryptionKey,
+        bundle: Buffer.from(JSON.stringify(bundle)),
+        mainPrivateKey: privateKey,
+      });
+      if (!requests.approve.finish(listed!.id, locked)) throw new Error("approve not finished");
+      return undefined;
+    },
+    close: async () => {
+      await box.store.close();
+      await rm(box.directory, { recursive: true, force: true });
+    },
+  };
 }
+
+const MAIN_RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x4d).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
