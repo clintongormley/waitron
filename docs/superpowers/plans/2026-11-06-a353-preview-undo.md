@@ -1,5 +1,8 @@
 # A353 — Undo on the Preview's change list: implementation plan
 
+> **22 November 2026.** The owner withdrew Preview Undo. The removal keeps the Edit links and
+> the price change attribution. [Removal plan](2026-11-22-d-remove-menu-preview-undo.md).
+
 > **For implementers:** dispatch each task as `subagent_type: "implementer"`. Read
 > `superpowers:test-driven-development` first: every task starts with a failing test you watch
 > fail for the reason it names, then the smallest change that passes it. One task per dispatch.

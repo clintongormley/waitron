@@ -26,8 +26,8 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
  * `deploy/` alone, so nothing catches that case on such a pull request. A `from "@waitron/db"`
  * inside a comment counts, and a dynamic `import("…")` does not. The type-only check finds
  * comments with `mapComments`, whose guesses about `/` are listed on it. The list also holds files
- * the dashboard imports from outside a `dashboard` directory (`packages/menu/src/menu-undo.ts`
- * and venue-service's `routing.ts`, `hours-occurrences.ts` and `hours-types.ts`); for these the
+ * the dashboard imports from outside a `dashboard` directory (venue-service's `routing.ts`,
+ * `hours-occurrences.ts` and `hours-types.ts`); for these the
  * server-entry check reads `../index.js`, which is not their package's entry (`./index.js`), so only
  * the reachable scan would catch an import of that entry. Venue-service's plain `./dashboard` entry
  * (`src/dashboard/index.ts`), which `@waitron/dashboard-modules` bundles, is not listed: its
@@ -55,7 +55,6 @@ const SUBPATHS: string[] = [
   "packages/venue-service/src/routing.ts",
   "packages/venue-service/src/hours-occurrences.ts",
   "packages/venue-service/src/hours-types.ts",
-  "packages/menu/src/menu-undo.ts",
 ];
 
 function tsFiles(path: string): string[] {

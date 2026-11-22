@@ -1,5 +1,8 @@
 # Undo how an included menu appears in Preview
 
+> **22 November 2026.** The owner withdrew this work. See the dated note in the
+> [A353 plan](2026-11-06-a353-preview-undo.md).
+
 In Preview, a manager can put an included menu back to the way the published version showed it, either as a folder or directly, with the published folder's fixed names, photo and colour. Follow [A353 PR 2](2026-11-06-a353-preview-undo.md#pr-2--an-includes-own-presentation). An edit made in the included menu itself still opens that menu. Adding and removing inclusions, placement, order and shortcuts stay with the later A353 pull requests. The watcher queued this slice on 22 November at 04:29 in Lane D questions.md.
 
 ## Plan the write

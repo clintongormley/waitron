@@ -3913,26 +3913,7 @@ export const en = {
   "menu_preview.group_order": "Order",
   "menu_preview.group_home": "Home page",
   "menu_preview.hide_change": "Hide",
-  "menu_preview.undo": "Undo",
-  "menu_preview.undoing": "Undoing…",
-  "menu_preview.undone": "Undone: {change}.",
-  "menu_preview.undo_refused": "Not undone. {reason}",
-  "menu_preview.undo_refused_change": "Not undone on {menu}: {change}. {reason}",
   "menu_preview.edit_menu": "Edit {menu}",
-  "menu_preview.undo_name_taken": "Another menu called {name} already exists.",
-  "menu_preview.undo_menu_gone": "This menu has been deleted, so there is nothing to undo.",
-  "menu_preview.undo_item_gone": "{name} is no longer on this menu.",
-  "menu_preview.undo_product_list_gone": "The list {name} was in has been deleted.",
-  "menu_preview.undo_product_placement_gone": "The section is gone or {name} is no longer in it.",
-  "menu_preview.undo_product_already_in_list": "That list already contains {name}.",
-  "menu_preview.undo_include_gone":
-    "{name} is no longer included in this menu, so how it showed cannot be restored.",
-  "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be restored.",
-  "menu_preview.undo_section_invalid": "{name}'s published photo or colour can no longer be used.",
-  "menu_preview.undo_language_off":
-    "A language {name} was published in has been disabled since, so its name cannot be restored.",
-  "menu_preview.undo_display_invalid":
-    "The published {device} display setting is no longer offered.",
   "menu_preview.show_all_changes": "Show all changes",
   "menu_preview.hidden_count_one": "{count} hidden",
   "menu_preview.hidden_count": "{count} hidden",
@@ -8681,29 +8662,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.group_order": "Orden",
   "menu_preview.group_home": "Página de inicio",
   "menu_preview.hide_change": "Ocultar",
-  "menu_preview.undo": "Deshacer",
-  "menu_preview.undoing": "Deshaciendo…",
-  "menu_preview.undone": "Cambio deshecho: {change}.",
-  "menu_preview.undo_refused": "No se ha deshecho. {reason}",
-  "menu_preview.undo_refused_change": "No se ha deshecho en {menu}: {change}. {reason}",
   "menu_preview.edit_menu": "Editar {menu}",
-  "menu_preview.undo_name_taken": "Ya existe otra carta llamada {name}.",
-  "menu_preview.undo_menu_gone": "Esta carta se ha eliminado, así que no hay nada que deshacer.",
-  "menu_preview.undo_item_gone": "{name} ya no está en esta carta.",
-  "menu_preview.undo_product_list_gone": "Se ha eliminado la lista en la que estaba {name}.",
-  "menu_preview.undo_product_placement_gone":
-    "La sección ya no existe o {name} ya no está en ella.",
-  "menu_preview.undo_product_already_in_list": "Esa lista ya contiene {name}.",
-  "menu_preview.undo_include_gone":
-    "{name} ya no se incluye en esta carta, así que no se puede mostrar como antes.",
-  "menu_preview.undo_section_gone":
-    "La sección {name} se ha eliminado, así que no se puede restaurar.",
-  "menu_preview.undo_section_invalid":
-    "La foto o el color publicados de {name} ya no se pueden usar.",
-  "menu_preview.undo_language_off":
-    "Se ha desactivado un idioma en el que se publicó {name}, así que no se puede restaurar su nombre.",
-  "menu_preview.undo_display_invalid":
-    "El ajuste de pantalla publicado para {device} ya no se ofrece.",
   "menu_preview.show_all_changes": "Mostrar todos los cambios",
   "menu_preview.hidden_count_one": "{count} oculto",
   "menu_preview.hidden_count": "{count} ocultos",

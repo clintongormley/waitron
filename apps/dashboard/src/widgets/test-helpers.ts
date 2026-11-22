@@ -4,14 +4,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type {
-  DashboardApi,
-  DocumentMember,
-  FrozenOffer,
-  MenuChange,
-  MenuDocument,
-  MenuStructure,
-} from "../api/client.js";
+import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 declare module "vitest/browser" {
@@ -457,38 +450,6 @@ export function menuDocument(
       till: HOME_DISPLAY_DEFAULTS.till,
     },
   };
-}
-
-export const includeDisplayChange: MenuChange = {
-  id: "drinks-display",
-  kind: "section_changed",
-  sectionId: "s-drinks",
-  name: "Drinks",
-  fields: ["direct"],
-  source: "this_menu",
-  targets: { before: [], after: [] },
-};
-
-export const directInclude: MenuStructure["nodes"][number] = {
-  memberId: "include-drinks",
-  ref: { kind: "section", sectionId: "s-drinks" },
-  includedMenuId: "m-drinks",
-  folder: { showAsFolder: false, overrides: {} },
-};
-
-export function includedDrinks(direct: boolean): MenuDocument {
-  const section: DocumentMember = {
-    kind: "section",
-    sectionId: "s-drinks",
-    internalName: "Drinks",
-    includedMenu: { id: "m-drinks", name: "Drinks" },
-    names: {},
-    color: null,
-    image: null,
-    members: [],
-    ...(direct ? { direct: true } : {}),
-  };
-  return menuDocument([section], {});
 }
 
 function frozenOffer(

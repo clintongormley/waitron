@@ -82,8 +82,6 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
-import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
-import { menuChangeAction } from "@waitron/menu/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import {
   HOME_COLUMN_RANGE,
@@ -725,11 +723,6 @@ export class MenusScreen extends LitElement {
    * between, where the link sits under the status. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
-  /** The Undo that is out, and the menu it was sent from. */
-  @state() private undoOut: { menuId: string; changeId: string } | null = null;
-  @state() private undoRefusals: Readonly<Record<string, string>> = {};
-  /** The bullet text of the last change undone. */
-  @state() private undoResult: string | null = null;
   @state() private patching = false;
 
   @state() private choosingMenuKind = false;
@@ -920,10 +913,7 @@ export class MenusScreen extends LitElement {
 
   constructor() {
     super();
-    new ChangeObserver(this, subscribeContentLanguages, () => {
-      this.#forgetStaleRefusals();
-      this.requestUpdate();
-    });
+    new ChangeObserver(this, subscribeContentLanguages, () => this.requestUpdate());
   }
 
   protected override willUpdate(changed: PropertyValues): void {
@@ -1156,7 +1146,6 @@ export class MenusScreen extends LitElement {
       }
       if (part === "preview") {
         this.preview = response.body as MenuReadModels["preview"];
-        this.#forgetStaleRefusals();
         this.previewError = false;
         this.previewResetRequired = false;
         this.status = this.preview.status;
@@ -1310,10 +1299,6 @@ export class MenusScreen extends LitElement {
   #showView(view: Tab): void {
     this.view = view;
     this.#followStatus();
-    if (view !== "preview") {
-      this.undoRefusals = {};
-      this.undoResult = null;
-    }
     if (view !== "preview" && view !== "home") this.#releasePreview();
     if (view !== "home") this.#releaseHome();
     if (view !== "prices") {
@@ -1373,9 +1358,6 @@ export class MenusScreen extends LitElement {
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
-    // `undoOut` is kept: it outlives the menu left, so that menu's Publish waits for its Undo.
-    this.undoRefusals = {};
-    this.undoResult = null;
     this.patching = false;
     this.#releasePrices();
     this.#releasePreview();
@@ -1515,101 +1497,6 @@ export class MenusScreen extends LitElement {
     this.#followStatus(true);
   }
 
-  /** A refusal is kept only while its change offers Undo: one that offers it again later, say once
-   * a language is switched back on, would otherwise show a sentence that is no longer true. A
-   * change the person hid still offers Undo, so its refusal stays. */
-  #forgetStaleRefusals(): void {
-    const preview = this.preview;
-    const ids = Object.keys(this.undoRefusals);
-    if (preview === null || ids.length === 0) return;
-    const input = this.#undoInput(preview);
-    const stale = ids.filter((id) => menuChangeAction(input, id).kind !== "undo");
-    if (stale.length > 0) this.undoRefusals = without(this.undoRefusals, stale);
-  }
-
-  #undoInput(preview: MenuPreview) {
-    return {
-      preview,
-      languages: currentContentLanguages().languages,
-      structure: this.structureError ? null : this.structure,
-    };
-  }
-
-  #undoBlocked(menuId: string): boolean {
-    return (
-      this.busy || this.undoOut !== null || this.homePending !== null || this.publishing.has(menuId)
-    );
-  }
-
-  /** Puts one Preview change back with the write its own form would make. A refusal shows beside
-   * the change while the Preview draws it with its Undo; otherwise it is named beside the list. */
-  #undo(changeId: string, change: string): void {
-    const menuId = this.menuId;
-    const preview = this.preview;
-    if (menuId === null || preview === null || this.previewError) return;
-    if (this.#undoBlocked(menuId)) return;
-    const input = this.#undoInput(preview);
-    const action = menuChangeAction(input, changeId);
-    if (action.kind !== "undo") return;
-    const command = action.command;
-    const sentFrom = this.#menuName();
-    this.busy = true;
-    this.undoOut = { menuId, changeId };
-    this.undoRefusals = without(this.undoRefusals, [changeId]);
-    this.undoResult = null;
-    const shown = () => this.menuId === menuId && this.view === "preview";
-    const task = async () => {
-      try {
-        // A queued Structure reorder can move the sibling that gives Undo its insertion position.
-        const current =
-          (command.method === "addSectionMember" || command.method === "moveSectionMembersInto") &&
-          this.menuId === menuId
-            ? this.#undoInput(preview)
-            : input;
-        const latest =
-          current.structure === input.structure ? action : menuChangeAction(current, changeId);
-        const reason =
-          latest.kind === "undo"
-            ? await sendMenuUndo(this.api, latest.command).then(
-                () => null,
-                (error: unknown) => undoRefusalText(error, latest.command),
-              )
-            : t(current.structure === null ? "menus.structure_error" : "menu_preview.error");
-        if (reason !== null) {
-          // `drawsUndo` answers from what the Preview last drew, so ask it only once neither the
-          // screen nor the Preview has a redraw pending, and place the refusal in the same turn as
-          // that answer.
-          let panel = this.renderRoot.querySelector("dashboard-menu-preview");
-          while (this.isUpdatePending || panel?.isUpdatePending) {
-            await this.updateComplete;
-            await panel?.updateComplete;
-            panel = this.renderRoot.querySelector("dashboard-menu-preview");
-          }
-          if (shown() && panel?.drawsUndo(changeId) === true)
-            this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
-          else {
-            const menu = this.menus.find(({ id }) => id === menuId)?.name ?? sentFrom;
-            this.memberError = fill("menu_preview.undo_refused_change", { menu, change, reason });
-          }
-          return;
-        }
-        if (shown()) this.undoResult = change;
-        if (command.method === "renameMenu") await this.#watchMenus().catch(() => undefined);
-        await this.#refresh();
-      } finally {
-        this.busy = false;
-        this.undoOut = null;
-      }
-    };
-    if (command.method === "updateMenuItem" || command.method === "setMenuVariantPrice") {
-      const row =
-        command.method === "updateMenuItem"
-          ? command.menuItemId
-          : `${command.menuItemId}:${command.variantId}`;
-      this.#priceWrites.run(`undo:${row}`, task);
-    } else this.#writes.run(`undo:${menuId}`, task);
-  }
-
   // ── Publishing ───────────────────────────────────────────────────────────────────────────────
 
   /**
@@ -1619,13 +1506,12 @@ export class MenusScreen extends LitElement {
    */
   async #publish(hash: string): Promise<void> {
     const menuId = this.menuId!;
-    if (this.publishing.has(menuId) || this.undoOut?.menuId === menuId) return;
+    if (this.publishing.has(menuId)) return;
     const name = this.#menuName();
     const live = this.status;
     const warnings = this.preview?.warnings ?? [];
     this.publishing = new Set([...this.publishing, menuId]);
     this.publishResult = null;
-    this.undoResult = null;
     let result: PublishResult;
     try {
       result = {
@@ -3350,12 +3236,6 @@ export class MenusScreen extends LitElement {
       }`;
   }
 
-  /** The change whose Undo is out, when it was sent from the menu open now. */
-  #undoingHere(): string | null {
-    const out = this.undoOut;
-    return out !== null && out.menuId === this.menuId ? out.changeId : null;
-  }
-
   readonly #lateScheduleRefusalFor = (name: string): (() => void) => {
     const reportLateSave = this.reportLateSave;
     return () => {
@@ -3373,19 +3253,10 @@ export class MenusScreen extends LitElement {
       .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
       .preview=${this.preview}
-      .structure=${this.structureError ? null : this.structure}
       .failed=${this.previewError}
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
-      .undoing=${this.#undoingHere()}
-      .undoBlocked=${this.#undoBlocked(this.menuId!)}
-      .undoRefusals=${this.undoRefusals}
-      .undoResult=${this.undoResult}
-      @wt-menu-undo=${(event: CustomEvent<{ changeId: string; change: string }>) => {
-        event.stopPropagation();
-        this.#undo(event.detail.changeId, event.detail.change);
-      }}
       @wt-preview-clashes=${(event: Event) => {
         event.stopPropagation();
         this.#open(this.menuId!, "prices", "clashes");

@@ -546,15 +546,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   from a field within its 5 seconds (decided as built, not tested with a user).
   [Detail](backlog/menu.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
 
-- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
-  owner, 2026-10-07. The remaining work (PRs 4 and 5) covers includes, sections, order and
-  shortcuts.
-  [Detail](backlog/menu.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
-
-- **A1377 — A353's Undo: two wordings for the owner** — a deleted menu's price Undo, and a
-  success line with two colons.
-  [Detail](backlog/menu.md#a1377--a353s-undo-two-wordings-for-the-owner)
-
 - **A1373 — The Preview credits a product's own price change seen through an include to the
   included menu**, not the shared product, when no menu sets a price of its own; telling it apart
   from an included menu clearing its price needs the published menu document to record where each

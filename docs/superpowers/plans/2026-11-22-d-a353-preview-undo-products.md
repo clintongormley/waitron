@@ -1,5 +1,8 @@
 # A353 PR 3. Undo product placement changes from Preview
 
+> **22 November 2026.** The owner withdrew this work. See the dated note in the
+> [A353 plan](2026-11-06-a353-preview-undo.md).
+
 The 09:02 Lane D queue assignment takes up PR 3 of the [parent plan](2026-11-06-a353-preview-undo.md#pr-3--products-in-this-menus-own-lists). The owner's ask for Preview Undo is recorded in [the menu backlog](../../backlog/menu.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version). PR 2 landed in #4021. Claude reviewed the original slice plan. The watcher cleared the revised plan and refusal wording at 09:16 on 22 November 2026, with the changes below.
 
 When you add, move or remove a product in a menu's own lists, use **Undo** on Preview to restore its published placement where one write can do it. Preview reads again after the write. Changes from included menus keep their existing Edit action. Section, include, order and shortcut changes belong to later PRs.
