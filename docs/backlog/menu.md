@@ -355,11 +355,7 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 - **Translate all: open points from the review of A689's second PR.** (3) A variant whose
   product's staff name is over 500 characters is sent with no product as
-  context, because that product is left out of the job (plan Decisions 9 and 10). (4) The fake
-  Cloud refuses a language tag outside `^[a-z]{2,3}(-[A-Z]{2})?$`
-  (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
-  enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
-  `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
+  context, because that product is left out of the job (plan Decisions 9 and 10).
 
 ## A dish in a measure unit is still rung up one unit per tap
 

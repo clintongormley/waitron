@@ -28,8 +28,7 @@ their full text.
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: `ReaderOption.online` is never set
   outside tests; the table screen still needs its redundant exit
-  configuration audited; the tab shell and the supervisor dialog emit
-  events not named `wt-*` (CLAUDE.md §3; not checked whether the rule reaches till widgets).
+  configuration audited.
 
 ## The table-order screen's `#lineGross` comment was not restored
 

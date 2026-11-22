@@ -27,11 +27,9 @@ separate follow-ups.
   the till and dashboard chrome, and a GitHub-ready markdown serialiser.
 - **Slice 3 — triage and forwarding.** A dashboard _Problem reports_ screen and automated GitHub-issue
   creation (through Waitron Cloud — see below).
-- **Hardening carried out of Slice 1, for Slice 2:** a key-name allowlist on the client trail's
-  redaction (it filters by value TYPE only, so a secret string under any key passes) and scrub
-  `message`/`stack` from rejected Errors; `maskPath` masks UUID and all-numeric segments only — mask
-  slugs and emails too; route the dashboard's boot-probe-fail, post-login and logout transitions
-  through the nav trail; add setup route vocabulary and resolved transitions.
+- **Hardening carried out of Slice 1, for Slice 2:** route the dashboard's boot-probe-fail,
+  post-login and logout transitions through the nav trail (today only a history move records one);
+  add setup route vocabulary and resolved transitions (setup records no nav event).
 - **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
   Slices 2 and 3 and replace one part of Slice 3; design them together before building:
   - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub
