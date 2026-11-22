@@ -182,7 +182,7 @@ describe("the unfinished-correction alert", () => {
     expect(await alertsFor(saleId)).toEqual([]);
   });
 
-  it("raises the alert when another refund in the same pass throws, and still reports that failure", async () => {
+  it("logs a failed refund without failing the pass or losing another refund’s alert", async () => {
     const { saleId } = await fifteenBack();
     const other = await v.bill();
     await takeReaderBillPayment(
@@ -220,19 +220,19 @@ describe("the unfinished-correction alert", () => {
       when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
 
     at(61);
+    const log = vi.fn<Logger>();
     try {
-      await expect(recoverTenderRefunds(v.deps)).rejects.toMatchObject({
-        message: "Card refund recovery failed",
-        errors: [
-          expect.objectContaining({
-            code: "ERR_SQLITE_ERROR",
-            message: "refund storage unavailable",
-          }),
-        ],
+      await expect(recoverTenderRefunds({ ...v.deps, log })).resolves.toMatchObject({
+        pending: 1,
+        nextDueAt: expect.any(Date),
       });
     } finally {
       v.db.run(sql`drop trigger fail_recovered_refund`);
     }
+    expect(log).toHaveBeenCalledWith("error", "tender_refund.recovery_failed", {
+      refundId: refund.id,
+      errorCode: "unknown",
+    });
     expect(await alertsFor(saleId)).toHaveLength(1);
   });
 

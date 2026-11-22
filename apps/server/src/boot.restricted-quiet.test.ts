@@ -89,19 +89,19 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
   };
 });
 
-vi.mock("./bill-payments-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
+vi.mock("./card-follow-up.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./card-follow-up.js")>();
   return {
     ...actual,
-    runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {
-      const [deps] = args;
-      return actual.runPendingCardLoop({
-        ...deps,
-        pass: (now) => {
+    cardFollowUpJob: (...args: Parameters<typeof actual.cardFollowUpJob>) => {
+      const job = actual.cardFollowUpJob(...args);
+      return {
+        ...job,
+        pass: (ctx: Parameters<typeof job.pass>[0]) => {
           calls.sweep += 1;
-          return deps.pass(now);
+          return job.pass(ctx);
         },
-      });
+      };
     },
   };
 });

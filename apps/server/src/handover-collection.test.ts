@@ -17,7 +17,8 @@ import {
 } from "@waitron/payments";
 import { freshNif, seedWorkingOrder, type Seeded } from "@waitron/payments/test/seed.js";
 import { decimal, deviceOrigin, type NodeId } from "@waitron/shared";
-import { sweepOwners, withPendingSweep } from "./boot.js";
+import { sweepOwners } from "./boot.js";
+import { testCardFollowUp } from "./testing/card-follow-up.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -89,14 +90,16 @@ async function activation(
 async function sweepTwice(box: NodeId, provider: CountingProvider): Promise<void> {
   const takenOverFrom = await readTakenOverFrom(suite.db, box);
   const log = vi.fn();
-  const pass = withPendingSweep(
-    async () => ({ duties: [], nextDueAt: null }),
-    async () => [provider as unknown as PaymentProvider],
-    () => sweepOwners(box, "primary", takenOverFrom),
-    log,
+  const job = testCardFollowUp(
+    {
+      sweepProviders: async () => [provider as unknown as PaymentProvider],
+      owners: () => sweepOwners(box, "primary", takenOverFrom),
+    },
+    { log },
   );
-  await pass(new Date());
-  await pass(new Date());
+  const signal = new AbortController().signal;
+  await job.pass({ now: new Date(), signal });
+  await job.pass({ now: new Date(), signal });
   expect(log.mock.calls.filter(([level]) => level === "warn")).toEqual([]);
 }
 

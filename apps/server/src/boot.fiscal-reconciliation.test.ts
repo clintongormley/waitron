@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { stampDeployment } from "@waitron/db";
 import { setSingletonRole } from "@waitron/node-db";
-import { runPendingCardLoop } from "./bill-payments-loop.js";
+import { cardFollowUpJob } from "./card-follow-up.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu/src/slot.js";
 import { freePort } from "./testing/free-ports.js";
@@ -21,11 +21,9 @@ vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
 });
-vi.mock("./bill-payments-loop.js", async (original) => ({
-  ...(await original<typeof import("./bill-payments-loop.js")>()),
-  runPendingCardLoop: vi.fn(
-    (await original<typeof import("./bill-payments-loop.js")>()).runPendingCardLoop,
-  ),
+vi.mock("./card-follow-up.js", async (original) => ({
+  ...(await original<typeof import("./card-follow-up.js")>()),
+  cardFollowUpJob: vi.fn((await original<typeof import("./card-follow-up.js")>()).cardFollowUpJob),
 }));
 const { startServer, httpPort } = ephemeralServerFixture();
 afterAll(async () => {
@@ -168,7 +166,7 @@ describe("boot's fiscal reconciliation duty", () => {
         await held.promise;
         return { nextDueAt: new Date(at.getTime() + 86_400_000) };
       });
-    vi.mocked(runPendingCardLoop).mockImplementationOnce(() => {
+    vi.mocked(cardFollowUpJob).mockImplementationOnce(() => {
       throw failure;
     });
     let pending: Promise<unknown> | undefined;

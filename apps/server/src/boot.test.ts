@@ -1,4 +1,3 @@
-import { enableDebugForNextBoot } from "./testing/boot-debug.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import * as cloudWorkerModule from "./cloud-worker.js";
 import * as cloudClientModule from "./cloud-client.js";
@@ -281,12 +280,8 @@ vi.mock("./box-secrets.js", async (importOriginal) => {
 
 /**
  * `startServer` end to end: the field mapping in `boot.ts` — `timings.scheduler.*` into
- * `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into `recordPass`, the `settlementLagMs`
- * conditional spread, the migrations-root default — and the whole `close()` sequence.
- *
- * A passing pass alone does not pin `minTickMs`/`maxTickMs`: `loop.ts` runs the first pass before
- * any sleep. The first test therefore captures boot's stdout and asserts the logged `loop.sleeping`
- * line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone when nothing is due.
+ * `SchedulerDeps`, the `settlementLagMs` conditional spread, the migrations-root default,
+ * and the whole `close()` sequence.
  *
  * The suite owns a venue DIRECTORY, because boot needs one and `useVenueDb` does not expose its own.
  * The suite's handle stays open across the file; reads beside a running server are safe in
@@ -2936,19 +2931,17 @@ describe("startServer, against a migrated venue directory", () => {
     `);
 
     try {
-      const server = await withCapturedStdout(async (lines) => {
-        enableDebugForNextBoot();
-        const started = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "production",
-        });
-        await waitForEvent(lines, "loop.sleeping");
-        return started;
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
       });
       try {
+        await vi.waitFor(() =>
+          expect(server.health.readJobs?.()["fiscal.drain"]?.lastRunAt).toEqual(expect.any(String)),
+        );
         const rows = await sharedDb.execute<{ estado: string; incidencia: number }>(
           sql`select estado, incidencia from envios where registro_id = ${registroId}`,
         );
@@ -3081,23 +3074,23 @@ describe("startServer, against a migrated venue directory", () => {
       .returning({ id: billPayments.id });
 
     try {
-      const server = await withCapturedStdout(async (lines) => {
-        enableDebugForNextBoot();
-        const started = await startServer(
-          {
-            ...KEY_ENV,
-            WAITRON_VENUE_DIR: sharedVenueDir,
-            WAITRON_HTTP_PORT: String(port),
-            WAITRON_MIGRATIONS_DIR: migrationsRoot,
-            WAITRON_ENV: "production",
-          },
-          {},
-          { boxHost: synchronisedBoxHost() },
-        );
-        await waitForEvent(lines, "loop.sleeping");
-        return started;
-      });
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+        },
+        {},
+        { boxHost: synchronisedBoxHost() },
+      );
       try {
+        await vi.waitFor(() =>
+          expect(server.health.readJobs?.()["card.follow_up"]?.lastRunAt).toEqual(
+            expect.any(String),
+          ),
+        );
         const [row] = await sharedDb
           .select({ state: billPayments.state })
           .from(billPayments)

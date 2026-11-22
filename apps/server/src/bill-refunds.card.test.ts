@@ -1615,6 +1615,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       sql`update refunds set state = 'failed', failed_at = ${new Date().toISOString()}
           where state = 'pending' and id <> ${refundId}`,
     );
+    const log = vi.fn();
     const pass = async (ms: number) => {
       venue.db.run(sql`create trigger fail_recovered_bill_refund before update of state on refunds
         when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
@@ -1636,6 +1637,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
               clock: clockPlus(ms),
               cfg: venue.cfg,
               refundProviderFor: (name) => venue.pool.get(name),
+              log,
             }),
         );
       } finally {
@@ -1647,10 +1649,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         tx.select().from(incidents).where(eq(incidents.code, "payment.refund_unresolved")),
       );
 
-    const failure = {
-      errors: [expect.objectContaining({ message: "refund storage unavailable" })],
-    };
-    await expect(pass(HOUR + 60_000)).rejects.toMatchObject(failure);
+    await expect(pass(HOUR + 60_000)).resolves.toMatchObject({ pending: 1 });
     const raised = await alerts();
     expect(raised).toMatchObject([
       {
@@ -1665,7 +1664,11 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         },
       },
     ]);
-    await expect(pass(HOUR + 31 * 60_000)).rejects.toMatchObject(failure);
+    await expect(pass(HOUR + 31 * 60_000)).resolves.toMatchObject({ pending: 1 });
+    expect(log.mock.calls).toEqual([
+      ["error", "tender_refund.recovery_failed", { refundId, errorCode: "unknown" }],
+      ["error", "tender_refund.recovery_failed", { refundId, errorCode: "unknown" }],
+    ]);
     expect(await alerts()).toHaveLength(1);
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending" });
   });
@@ -1934,6 +1937,7 @@ describe("a refund the provider here cannot answer for", () => {
   it("records the loop's failure to reach a provider against the refund, and carries on", async () => {
     const { paymentId, refundId } = await pendingRefund();
 
+    const log = vi.fn();
     await expect(
       recoverTenderRefunds({
         admission: testTradingAdmission(),
@@ -1942,9 +1946,12 @@ describe("a refund the provider here cannot answer for", () => {
         clock: systemClock(),
         cfg: venue.cfg,
         refundProviderFor: () => Promise.reject(new Error("pool down")),
+        log,
       }),
-    ).rejects.toMatchObject({
-      errors: expect.arrayContaining([expect.objectContaining({ message: "pool down" })]),
+    ).resolves.toMatchObject({ nextDueAt: expect.any(Date) });
+    expect(log).toHaveBeenCalledWith("error", "tender_refund.recovery_failed", {
+      refundId,
+      errorCode: "unknown",
     });
 
     expect(await onlyRefundOf(paymentId)).toMatchObject({

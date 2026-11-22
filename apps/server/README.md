@@ -837,16 +837,16 @@ The ones worth grepping for:
 - **`reconcile.complete`** (`info`) — the reconcile equivalent. `ran` is broken down by outcome —
   `{ succeeded, failed, parked }` — rather than a bare total, plus `deferred`, `beyondHorizon`,
   `skipped` (matching the body above) and the duty's own `nextDueAt`.
-- **`resolve_pending.failed`** (`warn`) — `{ error }`, plus `provider` when one provider's pass
-  threw. This node's card sweep failed: listing the card providers threw, working out whose
-  payments this box's sweep may resolve threw, or one provider's `resolvePending` threw. The sweep
-  is deliberately NOT health-tracked (`withPendingSweep`, `src/boot.ts`), so this line is the SOLE
-  operator signal of a stuck card sweep — grep it. A card-settlement backstop, not a fiscal-legal or
-  process-liveness signal; it does not flip `/health`.
+- **`resolve_pending.failed`** (`warn`) — `{ error }`, plus `provider` when one provider's check
+  threw. These entries cover failures to list the providers, identify this box's payments or check a
+  provider's pending payments. The card follow-up job reports a failed pass as `job.failed`. A
+  lasting failure raises a `job.failing` box alert. This job does not change the `/health` result.
 - **`resolve_pending.complete`** carries `{ captured, failed, incidentsRaised, nextDueAt }`.
   This box logs an empty card sweep at `debug`. Pending work, captures, failures and incidents
   appear at `info`. The incidents are `payment.pending_outcome_unactionable` and
   `payment.capture_mismatch`.
+- **`tender_refund.recovery_failed`** (`error`) carries `errorCode`. A `refundId` identifies
+  a failed refund row. The other card checks keep their schedule in that case.
 - **`bill_request.clear_failed`** (`warn`) — `{ billId, partyId, error }`. A payment left nothing of
   the party's family to pay, but taking away the party's bill request was refused
   (`clearBillRequestIfPaid`, `src/bill-request.ts`). The payment went through; the bill request
@@ -867,11 +867,6 @@ The ones worth grepping for:
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
-- **`loop.sleeping`** (`debug`) carries `sleepMs` for the card recovery loop.
-- **`pass.threw`** (`error`) carries the structured `errorCode` when a card recovery pass
-  throws. The loop retries on its minimum interval.
-- **`sleep.threw`** (`error`) carries the `errorCode` of a rejected card-loop timer. The
-  loop logs the failure and starts its next turn.
 - **`server.listening`** (`info`) — `{ port, environment }`, logged once the HTTP listener has
   actually bound (not merely been asked to). A spare's store listener logs
   `{ listener: spare_store, port }` instead.
@@ -887,7 +882,7 @@ The ones worth grepping for:
   opening, paused, refused or off. The warning can also describe a slow wait on a box with no
   bucket copy configured. Remaining cleanup is still awaited. Requests or late duties committing
   after this point can miss the final upload.
-- **`server.stopped`** / **`loop.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
+- **`server.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
 
 Never prose, and never a secret: every credential-adjacent error reports a structured code and — at
 most — a purpose and a field NAME, never decrypted material, a Stripe secret, or a PFX passphrase.

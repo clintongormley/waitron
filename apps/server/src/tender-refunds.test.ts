@@ -55,7 +55,8 @@ import {
   startTenderRefundResolvers,
   stopTenderRefundResolvers,
 } from "./tender-refund-sends.js";
-import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
+import { runRefundFollowUp } from "./testing/card-follow-up.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
@@ -1645,7 +1646,7 @@ it("does not raise an unresolved incident for an old refund settled by this reco
   expect(await store.db.select().from(incidents)).toEqual([]);
 });
 
-describe("settled-tender refund recovery loop lifetime", () => {
+describe("settled-tender refund follow-up lifetime", () => {
   async function pending() {
     const { t, provider } = await connected();
     provider.scriptNextRefund({ made: false, answer: LOST });
@@ -1663,12 +1664,12 @@ describe("settled-tender refund recovery loop lifetime", () => {
       wallClock: () => Date.parse(AT) + offset,
       degradedAfterSeconds: 300,
     });
-    await runTenderRefundRecoveryLoop({
+    await runRefundFollowUp({
       ...deps,
       signal: control.signal,
       isPrimary: () => true,
-      onError: (error) => {
-        throw error;
+      log: (level, event) => {
+        if (level === "error") throw Error(event);
       },
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -1688,12 +1689,12 @@ describe("settled-tender refund recovery loop lifetime", () => {
     const { provider, refund } = await pending();
     const control = new AbortController();
     const sleeps: number[] = [];
-    await runTenderRefundRecoveryLoop({
+    await runRefundFollowUp({
       ...deps,
       signal: control.signal,
       isPrimary: () => false,
-      onError: (error) => {
-        throw error;
+      log: (level, event) => {
+        if (level === "error") throw Error(event);
       },
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -1727,12 +1728,12 @@ describe("settled-tender refund recovery loop lifetime", () => {
       };
     });
     let stopped = false;
-    const work = runTenderRefundRecoveryLoop({
+    const work = runRefundFollowUp({
       ...deps,
       signal: control.signal,
       isPrimary: () => true,
-      onError: (error) => {
-        throw error;
+      log: (level, event) => {
+        if (level === "error") throw Error(event);
       },
     }).then(() => {
       stopped = true;
@@ -1758,34 +1759,18 @@ describe("settled-tender refund recovery loop lifetime", () => {
   });
 });
 
-it("contains a failed recovery sleep and does not run a pass after an already-aborted start", async () => {
-  const control = new AbortController();
-  const error = new Error("sleep failed");
-  const errors: unknown[] = [];
-  let sleeps = 0;
-  await runTenderRefundRecoveryLoop({
-    ...deps,
-    signal: control.signal,
-    isPrimary: () => true,
-    onError: (failure) => errors.push(failure),
-    sleep: async () => {
-      sleeps++;
-      if (sleeps === 1) throw error;
-      control.abort();
-    },
-  });
-  expect(sleeps).toBe(2);
-  expect(errors).toEqual([error]);
+it("does not run a pass after an already-aborted start", async () => {
+  const control = AbortSignal.abort();
   const t = await target("card", "fake");
   const provider = new FakePaymentProvider(store.db);
   deps.refundProviderFor = async () => provider;
   const pending = await run(t);
-  await runTenderRefundRecoveryLoop({
+  await runRefundFollowUp({
     ...deps,
-    signal: control.signal,
+    signal: control,
     isPrimary: () => true,
-    onError: (failure) => {
-      throw failure;
+    log: (level, event) => {
+      if (level === "error") throw Error(event);
     },
   });
   expect(await row(pending.id)).toMatchObject({ state: "pending", nextRetryAt: null });
@@ -1857,12 +1842,15 @@ describe("settled-tender refund bounded shutdown", () => {
       const timeouts: string[][] = [];
       const errors: unknown[] = [];
       let stopped = false;
-      const work = runTenderRefundRecoveryLoop({
+      const work = runRefundFollowUp({
         ...deps,
         signal: control.signal,
         isPrimary: () => true,
-        onError: (error) => errors.push(error),
-        onShutdownTimeout: (ids: string[]) => timeouts.push(ids),
+        log: (level, event, data) => {
+          if (level === "error") errors.push({ event, data });
+          if (event === "tender_refund.shutdown_pending")
+            timeouts.push(data!.refundIds as string[]);
+        },
       }).then(() => {
         stopped = true;
       });
@@ -1905,11 +1893,13 @@ describe("settled-tender refund bounded shutdown", () => {
           wallClock: () => Date.parse(AT) + 60_000,
           degradedAfterSeconds: 300,
         });
-        await runTenderRefundRecoveryLoop({
+        await runRefundFollowUp({
           ...deps,
           signal: restart.signal,
           isPrimary: () => true,
-          onError: (error) => errors.push(error),
+          log: (level, event, data) => {
+            if (level === "error") errors.push({ event, data });
+          },
           sleep: async () => {
             restart.abort();
           },

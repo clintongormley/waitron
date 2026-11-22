@@ -5,23 +5,20 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import {
-  connectedCardProviderSweep,
-  sweepOwners,
-  pendingCardPass,
-  withPendingSweep,
-} from "./boot.js";
+import { connectedCardProviderSweep, sweepOwners } from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
-import type { PassReport } from "./pass.js";
+import type { JobPassResult } from "./job-runner.js";
+import type { Logger } from "./logger.js";
+import { testCardFollowUp } from "./testing/card-follow-up.js";
 
-const REPORT: PassReport = { duties: [], nextDueAt: null };
+const REPORT: JobPassResult = { nextDueAt: null };
 const OWNERS: CollectionOwners = {
   nodeId: nodeId("11111111-1111-4111-8111-111111111111"),
   takenOverFrom: [],
   unowned: true,
 };
 
-describe("pendingCardPass", () => {
+describe("card follow-up order", () => {
   it.each([true, false])(
     "a signal raised during the sweep runs none of the later steps (signalled: %s)",
     async (signalled) => {
@@ -43,7 +40,7 @@ describe("pendingCardPass", () => {
         ran.push("details");
         return null;
       };
-      const pass = pendingCardPass(
+      const job = testCardFollowUp(
         {
           sweepProviders: async () => [provider],
           owners: () => OWNERS,
@@ -57,13 +54,15 @@ describe("pendingCardPass", () => {
               errors: [],
             };
           },
-          getRole: () => "primary",
-          log: vi.fn(),
+          recoverRefunds: async () => {
+            ran.push("refunds");
+            return { pending: 0, nextDueAt: null };
+          },
         },
-        controller.signal,
+        { log: vi.fn() },
       );
-      expect(await pass(new Date())).toEqual(REPORT);
-      expect(ran).toEqual(signalled ? ["sweep"] : ["sweep", "settle", "details"]);
+      expect(await job.pass({ now: new Date(), signal: controller.signal })).toEqual(REPORT);
+      expect(ran).toEqual(signalled ? ["sweep"] : ["sweep", "settle", "details", "refunds"]);
       if (!signalled) expect(settledWith).toBe(controller.signal);
     },
   );
@@ -96,7 +95,25 @@ describe("sweepOwners", () => {
   });
 });
 
-describe("withPendingSweep", () => {
+function sweepPass(
+  afterDetails: (now: Date) => Promise<JobPassResult>,
+  sweepProviders: () => Promise<readonly PaymentProvider[]>,
+  owners: () => CollectionOwners,
+  log: Logger,
+  signal: AbortSignal = new AbortController().signal,
+) {
+  return (now: Date) =>
+    testCardFollowUp(
+      {
+        sweepProviders,
+        owners,
+        recoverRefunds: async () => ({ pending: 0, ...(await afterDetails(now)) }),
+      },
+      { log },
+    ).pass({ now, signal });
+}
+
+describe("sweepPass", () => {
   it.each([null, 10, 40])("keeps the earlier due time (%s)", async (innerSeconds) => {
     const now = new Date("2026-11-21T11:00:00Z");
     const controller = new AbortController();
@@ -115,7 +132,7 @@ describe("withPendingSweep", () => {
       report({ outcome: "filled", ...detail });
       return due;
     };
-    const report = await withPendingSweep(
+    const report = await sweepPass(
       async () => ({
         ...REPORT,
         nextDueAt: innerSeconds === null ? null : new Date(now.getTime() + innerSeconds * 1_000),
@@ -143,33 +160,33 @@ describe("withPendingSweep", () => {
     provider.fillMissingCardDetails = async () => {
       throw new Error("SQL bind parameters: 0421, A123");
     };
-    const report = await withPendingSweep(
+    const report = await sweepPass(
       async () => REPORT,
       async () => [provider],
       () => OWNERS,
       log,
     )(new Date());
-    expect(report).toBe(REPORT);
+    expect(report).toEqual(REPORT);
     expect(log).toHaveBeenCalledWith("warn", "payment.card_details_failed", {
       provider: "sumup",
       errorCode: "unknown",
     });
   });
 
-  it("is a no-op (returns the inner report, logs nothing) when the enumerator yields no providers", async () => {
+  it("reports no due work and logs nothing when the enumerator yields no providers", async () => {
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
-    const wrapped = withPendingSweep(
+    const wrapped = sweepPass(
       inner,
       async () => [],
       () => OWNERS,
       log,
     );
-    expect(await wrapped(new Date())).toBe(REPORT);
+    expect(await wrapped(new Date())).toEqual(REPORT);
     expect(log).not.toHaveBeenCalled();
   });
 
-  it("calls resolvePending once per provider, logs resolve_pending.complete, and returns the inner report verbatim", async () => {
+  it("calls resolvePending once per provider, logs resolve_pending.complete, and schedules the provider retry", async () => {
     const now = new Date("2026-09-10T12:00:00.000Z");
     const nextDueAt = new Date("2026-09-10T12:01:00.000Z");
     const result: ForwardResult = { nextDueAt, forwarded: 2, declined: 1, incidentsRaised: 0 };
@@ -177,16 +194,16 @@ describe("withPendingSweep", () => {
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
 
-    const report = await withPendingSweep(
+    const report = await sweepPass(
       inner,
       async () => [fakeProvider("sumup", resolvePending)],
       () => OWNERS,
       log,
     )(now);
 
-    expect(report).toBe(REPORT);
+    expect(report.nextDueAt).toEqual(nextDueAt);
     expect(resolvePending).toHaveBeenCalledTimes(1);
-    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS, undefined);
+    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS, expect.any(AbortSignal));
     expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
       provider: "sumup",
       captured: 2,
@@ -201,7 +218,7 @@ describe("withPendingSweep", () => {
     const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     const resolvePending = vi.fn(async () => empty);
     const signal = new AbortController().signal;
-    await withPendingSweep(
+    await sweepPass(
       async () => REPORT,
       async () => [fakeProvider("stripe", resolvePending)],
       () => OWNERS,
@@ -216,7 +233,7 @@ describe("withPendingSweep", () => {
     const sim = vi.fn(async () => empty);
     const stripe = vi.fn(async () => empty);
     const log = vi.fn();
-    await withPendingSweep(
+    await sweepPass(
       async () => REPORT,
       async () => [fakeProvider("simulator", sim), fakeProvider("stripe", stripe)],
       () => OWNERS,
@@ -234,14 +251,14 @@ describe("withPendingSweep", () => {
     const bSweeps = vi.fn(async () => empty);
     const log = vi.fn();
 
-    const report = await withPendingSweep(
+    const pass = sweepPass(
       async () => REPORT,
       async () => [fakeProvider("providerA", aThrows), fakeProvider("providerB", bSweeps)],
       () => OWNERS,
       log,
     )(new Date());
 
-    expect(report).toBe(REPORT);
+    await expect(pass).rejects.toBeInstanceOf(AggregateError);
     expect(aThrows).toHaveBeenCalledTimes(1);
     expect(bSweeps).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
@@ -269,7 +286,7 @@ describe("withPendingSweep", () => {
     async ({ nextDueAt, level, loggedDueAt }) => {
       const result: ForwardResult = { nextDueAt, forwarded: 0, declined: 0, incidentsRaised: 0 };
       const log = vi.fn();
-      await withPendingSweep(
+      await sweepPass(
         async () => REPORT,
         async () => [fakeProvider("stripe", async () => result)],
         () => OWNERS,
@@ -285,31 +302,31 @@ describe("withPendingSweep", () => {
     },
   );
 
-  it("logs resolve_pending.failed and still returns the inner report when a resolvePending rejects", async () => {
+  it("logs and reports a rejected resolvePending after the later work", async () => {
     const resolvePending = vi.fn(async () => {
       throw new Error("sweep boom");
     });
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
 
-    const report = await withPendingSweep(
+    const pass = sweepPass(
       inner,
       async () => [fakeProvider("sumup", resolvePending)],
       () => OWNERS,
       log,
     )(new Date());
 
-    expect(report).toBe(REPORT);
+    await expect(pass).rejects.toBeInstanceOf(AggregateError);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       provider: "sumup",
       error: "Error: sweep boom",
     });
   });
 
-  it("logs resolve_pending.failed and returns the inner report when the ENUMERATOR itself throws", async () => {
+  it("logs and reports a failed provider enumeration after the later work", async () => {
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
-    const report = await withPendingSweep(
+    const pass = sweepPass(
       inner,
       async () => {
         throw new Error("enumerate boom");
@@ -317,7 +334,7 @@ describe("withPendingSweep", () => {
       () => OWNERS,
       log,
     )(new Date());
-    expect(report).toBe(REPORT);
+    await expect(pass).rejects.toBeInstanceOf(AggregateError);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       error: "Error: enumerate boom",
     });
@@ -327,7 +344,7 @@ describe("withPendingSweep", () => {
     // Thrown when the enumerator is CALLED, not on a returned promise: a bare `.catch()` misses it.
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
-    const report = await withPendingSweep(
+    const pass = sweepPass(
       inner,
       (() => {
         throw new Error("sync boom");
@@ -335,7 +352,7 @@ describe("withPendingSweep", () => {
       () => OWNERS,
       log,
     )(new Date());
-    expect(report).toBe(REPORT);
+    await expect(pass).rejects.toBeInstanceOf(AggregateError);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       error: "Error: sync boom",
     });
@@ -350,7 +367,7 @@ describe("withPendingSweep", () => {
       declined: 0,
       incidentsRaised: 0,
     }));
-    const pass = withPendingSweep(
+    const pass = sweepPass(
       async () => REPORT,
       async () => [fakeProvider("sumup", resolvePending)],
       () => sweepOwners(box, role, []),
@@ -361,12 +378,12 @@ describe("withPendingSweep", () => {
     role = "primary";
     await pass(now);
     expect(resolvePending.mock.calls).toEqual([
-      [now, sweepOwners(box, "secondary", []), undefined],
-      [now, sweepOwners(box, "primary", []), undefined],
+      [now, sweepOwners(box, "secondary", []), expect.any(AbortSignal)],
+      [now, sweepOwners(box, "primary", []), expect.any(AbortSignal)],
     ]);
   });
 
-  it("contains a throwing owners reader: no provider is swept and the inner report is returned", async () => {
+  it("reports a throwing owners reader without sweeping a provider", async () => {
     const resolvePending = vi.fn(async () => ({
       nextDueAt: null,
       forwarded: 0,
@@ -374,7 +391,7 @@ describe("withPendingSweep", () => {
       incidentsRaised: 0,
     }));
     const log = vi.fn();
-    const report = await withPendingSweep(
+    const pass = sweepPass(
       async () => REPORT,
       async () => [fakeProvider("sumup", resolvePending)],
       () => {
@@ -382,7 +399,7 @@ describe("withPendingSweep", () => {
       },
       log,
     )(new Date());
-    expect(report).toBe(REPORT);
+    await expect(pass).rejects.toBeInstanceOf(AggregateError);
     expect(resolvePending).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       error: "Error: owners boom",

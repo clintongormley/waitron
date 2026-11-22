@@ -36,20 +36,22 @@ vi.mock("@hono/node-server", async () => {
 const loop = vi.hoisted(() => ({ passesFinished: 0 }));
 
 // A sweep that must not happen has no call to wait for, so every case waits for a whole pass of the
-// pending-card loop, which holds the sweep, to finish.
-vi.mock("./bill-payments-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
+// card follow-up job, which holds the sweep, to finish.
+vi.mock("./card-follow-up.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./card-follow-up.js")>();
   return {
     ...actual,
-    runPendingCardLoop: (...[deps]: Parameters<typeof actual.runPendingCardLoop>) =>
-      actual.runPendingCardLoop({
-        ...deps,
-        pass: async (now) => {
-          const report = await deps.pass(now);
+    cardFollowUpJob: (...args: Parameters<typeof actual.cardFollowUpJob>) => {
+      const job = actual.cardFollowUpJob(...args);
+      return {
+        ...job,
+        pass: async (ctx: Parameters<typeof job.pass>[0]) => {
+          const report = await job.pass(ctx);
           loop.passesFinished += 1;
           return report;
         },
-      }),
+      };
+    },
   };
 });
 
@@ -86,7 +88,7 @@ interface StartCase {
 /**
  * Registers, in the calling `describe`, one real start of a folder holding an open card payment for
  * this box, for two earlier boxes and for a bystander. A sweep reaches a stand-in provider through
- * the held Stripe credential, and the start runs until a pass of the pending-card loop has finished.
+ * the held Stripe credential, and the start runs until a pass of the card follow-up job has finished.
  */
 function observeStart(options: StartCase): () => Observed {
   const suite = useVenueDb({ migrations, resetPerTest: false });

@@ -1,5 +1,3 @@
-import { realSleep, runLoop, type LoopDeps } from "./loop.js";
-import type { TradingAdmission } from "./trading-admission.js";
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { eq, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -189,23 +187,5 @@ async function raiseSettleFailed(
       severity: "error",
       detectedAt: now,
     });
-  });
-}
-
-export function runPendingCardLoop(
-  deps: Pick<LoopDeps, "pass" | "now" | "signal" | "log"> & {
-    admission: TradingAdmission;
-    sleep?: LoopDeps["sleep"];
-  },
-): Promise<void> {
-  return runLoop({
-    ...deps,
-    pass: async (now) => {
-      deps.admission.require();
-      return deps.pass(now);
-    },
-    sleep: deps.sleep ?? realSleep,
-    minTickMs: 5000,
-    maxTickMs: 60_000,
   });
 }

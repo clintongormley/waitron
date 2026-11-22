@@ -140,15 +140,13 @@ const DUTIES = wrapper(
   `export function backgroundDuties(handles) {
   const duties = actual.backgroundDuties(handles);
   if (t.at !== "quiesce") return duties;
-  let told = 0;
   return {
     ...duties,
     aborts: duties.aborts.map((duty) => ({
       ...duty,
       abort() {
-        told += 1;
-        if (told === 2) t.die("quiesce");
         duty.abort();
+        if (duty.name === "jobRunner") t.die("quiesce");
       },
     })),
   };

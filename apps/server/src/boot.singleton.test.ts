@@ -1,4 +1,3 @@
-import { enableDebugForNextBoot } from "./testing/boot-debug.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { writeArchiveSettings } from "./archive-settings.js";
@@ -23,7 +22,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
-import { poll, waitForEvent, withCapturedStdout, type LogLine } from "./testing/boot-harness.js";
+import { poll, withCapturedStdout, type LogLine } from "./testing/boot-harness.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -186,10 +185,6 @@ function dutyEnv(port: number) {
 
 // Passed as `startServer`'s RAW `base`, not the merged `env`: the supervisor re-reads its config off
 // `loadBoxEnv(base, stateDir)` on each reload.
-//
-// Weaker than it looks: the primary case asserts only that it does NOT take the non-primary branch,
-// not that its backup duty ran — the suite has no way to fail the supervisor's open of the venue
-// without breaking the boot.
 function backupBase() {
   return {
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
@@ -200,7 +195,6 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
   it("a sell-only local secondary (primary, secondary) runs no scheduled backup, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
-      enableDebugForNextBoot();
       const started = await startServer(
         {
           ...dutyEnv(port),
@@ -208,11 +202,10 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
         },
         backupBase(),
       );
-      // Logged only after boot has decided every duty gate, so the absences below are not "not yet".
-      await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
+      expect(server.health.readJobs?.()["backups.scheduled"]?.state).toBe("not_applicable");
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
       expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
@@ -230,7 +223,6 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
   it("the singleton primary (primary, primary) of the same identity runs its singleton duties (control: the secondary's absence is real)", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
-      enableDebugForNextBoot();
       const started = await startServer(
         {
           ...dutyEnv(port),
@@ -238,11 +230,14 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
         },
         backupBase(),
       );
-      await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
-      // See `backupBase` for why this is the only backup assertion.
+      await vi.waitFor(() =>
+        expect(server.health.readJobs?.()["backups.scheduled"]?.lastRunAt).toEqual(
+          expect.any(String),
+        ),
+      );
       expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
       expect(createCloudArchiveTarget).toHaveBeenCalledTimes(1);

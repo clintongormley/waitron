@@ -49,6 +49,7 @@ async function prohibitOperationalCalls() {
     paper,
     drain,
     host,
+    cardFollowUp,
     first,
     crypto,
   ] = await Promise.all([
@@ -64,6 +65,7 @@ async function prohibitOperationalCalls() {
     import("@waitron/fiscal-verifactu/src/paper-evidence.js"),
     import("@waitron/fiscal-verifactu/src/drain.js"),
     import("./boot.js"),
+    import("./card-follow-up.js"),
     import("./first-fiscal-activation.js"),
     import("node:crypto"),
   ]);
@@ -92,9 +94,7 @@ async function prohibitOperationalCalls() {
     vi.spyOn(drain, "drain").mockImplementation(forbidden),
     vi.spyOn(host, "startServer").mockImplementation(forbidden),
     vi.spyOn(host, "startLandingListener").mockImplementation(forbidden),
-    vi.spyOn(host, "withPendingBillPayments").mockImplementation(forbidden),
-    vi.spyOn(host, "withPendingSweep").mockImplementation(forbidden),
-    vi.spyOn(host, "withPendingBillPayments").mockImplementation(forbidden),
+    vi.spyOn(cardFollowUp, "cardFollowUpJob").mockImplementation(forbidden),
     vi.spyOn(first, "activateFirstFiscal").mockImplementation(forbidden),
     vi.spyOn(crypto, "sign").mockImplementation(forbidden),
     vi.spyOn(globalThis, "fetch").mockImplementation(forbidden),

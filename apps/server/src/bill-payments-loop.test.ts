@@ -27,14 +27,14 @@ import {
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
-import { withPendingBillPayments } from "./boot.js";
+import { testCardFollowUp } from "./testing/card-follow-up.js";
 import { clockStopsRefund } from "./tender-refund-sends.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { printSaleReceipt } from "./till-sale.js";
 import type { Logger } from "./logger.js";
-import type { PassReport } from "./pass.js";
+
 import {
   inTx,
   paymentRows,
@@ -788,66 +788,9 @@ describe("rows written within one millisecond", () => {
   });
 });
 
-describe("withPendingBillPayments", () => {
-  const report = { ran: [] } as unknown as PassReport;
-  const primary = () => "primary" as const;
-
-  it("settles nothing on a node that is not the singleton primary, reading the role each pass", async () => {
-    const billId = await tabWith(venue, "Paella");
-    const id = await strandedPending(billId, 2000);
-    let role: SingletonRole = "secondary";
-    const pass = withPendingBillPayments(
-      () => Promise.resolve(report),
-      settle,
-      () => role,
-      () => {},
-    );
-
-    expect(await pass(new Date())).toBe(report);
-    const onSecondary = await stateOf(id);
-    role = "primary";
-    await pass(new Date());
-
-    expect(onSecondary).toBe("pending");
-    expect(await stateOf(id)).toBe("failed");
-  });
-
-  it("runs the settle after the pass and answers the pass's own report", async () => {
-    const order: string[] = [];
-    const lines: unknown[][] = [];
-    const log: Logger = (...args) => void lines.push(args);
-    const pass = withPendingBillPayments(
-      () => {
-        order.push("pass");
-        return Promise.resolve(report);
-      },
-      () => {
-        order.push("settle");
-        return Promise.resolve({
-          received: 1,
-          failed: 2,
-          pending: 0,
-          errors: [],
-        });
-      },
-      primary,
-      log,
-    );
-
-    expect(await pass(new Date())).toBe(report);
-    expect(order).toEqual(["pass", "settle"]);
-    expect(lines).toEqual([
-      [
-        "info",
-        "bill_payment.settled",
-        {
-          received: 1,
-          failed: 2,
-        },
-      ],
-    ]);
-  });
-
+describe("bill settlement in card follow-up", () => {
+  const now = new Date("2026-09-27T12:00:00Z");
+  const ctx = { now, signal: new AbortController().signal };
   const passOf = (counts: Partial<BillPaymentsPass>): BillPaymentsPass => ({
     received: 0,
     failed: 0,
@@ -856,67 +799,64 @@ describe("withPendingBillPayments", () => {
     ...counts,
   });
 
-  it("logs nothing for a pass that only finds a pending payment", async () => {
-    const lines: unknown[][] = [];
-    const log: Logger = (...args) => void lines.push(args);
-    const pass = withPendingBillPayments(
-      () => Promise.resolve(report),
-      () => Promise.resolve(passOf({ pending: 1 })),
-      primary,
-      log,
-    );
-
-    await pass(new Date());
-
-    expect(lines).toEqual([]);
+  it("settles only on the primary, reading the role each pass", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await strandedPending(billId, 2000);
+    let role: SingletonRole = "secondary";
+    const job = testCardFollowUp({ settle }, { getRole: () => role });
+    await job.pass(ctx);
+    expect(await stateOf(id)).toBe("pending");
+    role = "primary";
+    await job.pass(ctx);
+    expect(await stateOf(id)).toBe("failed");
   });
 
-  it("comes back within a minute while a payment is pending, and never later than the pass asked", async () => {
-    const now = new Date("2026-09-27T12:00:00.000Z");
-    const inHour = { ran: [], nextDueAt: new Date("2026-09-27T13:00:00.000Z") };
-    const inTenSeconds = { ran: [], nextDueAt: new Date("2026-09-27T12:00:10.000Z") };
-    const idle = { ran: [], nextDueAt: null };
-    const wrap = (inner: object, pending: number) =>
-      withPendingBillPayments(
-        () => Promise.resolve(inner as unknown as PassReport),
-        () => Promise.resolve(passOf({ pending })),
-        primary,
-        () => {},
-      )(now);
+  it.each([
+    [null, 0, null],
+    [null, 1, "2026-09-27T12:01:00.000Z"],
+    ["2026-09-27T13:00:00.000Z", 0, "2026-09-27T13:00:00.000Z"],
+    ["2026-09-27T13:00:00.000Z", 1, "2026-09-27T12:01:00.000Z"],
+    ["2026-09-27T12:00:10.000Z", 1, "2026-09-27T12:00:10.000Z"],
+  ])(
+    "a previous due time of %s with %s pending comes back at %s",
+    async (previous, pending, expected) => {
+      const log = vi.fn<Logger>();
+      const job = testCardFollowUp(
+        {
+          settle: async () => passOf({ pending }),
+          recoverRefunds: async () => ({
+            pending: 0,
+            nextDueAt: previous ? new Date(previous) : null,
+          }),
+        },
+        { log },
+      );
+      const report = await job.pass(ctx);
+      expect(report.nextDueAt?.toISOString() ?? null).toBe(expected);
+      expect(log).not.toHaveBeenCalled();
+    },
+  );
 
-    expect((await wrap(inHour, 1)).nextDueAt).toEqual(new Date("2026-09-27T12:01:00.000Z"));
-    expect((await wrap(idle, 2)).nextDueAt).toEqual(new Date("2026-09-27T12:01:00.000Z"));
-    expect((await wrap(inTenSeconds, 1)).nextDueAt).toEqual(inTenSeconds.nextDueAt);
-    expect(await wrap(inHour, 0)).toBe(inHour);
-    expect(await wrap(idle, 0)).toBe(idle);
-  });
-
-  it("logs a settle that throws, or a payment it could not settle, and never changes the report", async () => {
-    const lines: unknown[][] = [];
-    const log: Logger = (...args) => void lines.push(args);
-    const throwing = withPendingBillPayments(
-      () => Promise.resolve(report),
-      () => Promise.reject(new Error("boom")),
-      primary,
-      log,
-    );
-    const partial = withPendingBillPayments(
-      () => Promise.resolve(report),
-      () =>
-        Promise.resolve({
-          received: 0,
-          failed: 0,
-          pending: 0,
+  it("reports a thrown settlement and contains a refusal for a single payment", async () => {
+    const log = vi.fn<Logger>();
+    const boom = new Error("boom");
+    const settle = vi
+      .fn<() => Promise<BillPaymentsPass>>()
+      .mockRejectedValueOnce(boom)
+      .mockResolvedValueOnce(
+        passOf({
+          received: 1,
+          failed: 2,
           errors: [{ billPaymentId: "bp-1", error: "Error: nope" }],
         }),
-      primary,
-      log,
-    );
+      );
+    const job = testCardFollowUp({ settle }, { log });
 
-    expect(await throwing(new Date())).toBe(report);
-    expect(await partial(new Date())).toBe(report);
-    expect(lines).toEqual([
+    await expect(job.pass(ctx)).rejects.toMatchObject({ errors: [boom] });
+    await expect(job.pass(ctx)).resolves.toEqual({ nextDueAt: null });
+    expect(log.mock.calls).toEqual([
       ["warn", "bill_payment.settle_failed", { error: "Error: boom" }],
+      ["info", "bill_payment.settled", { received: 1, failed: 2 }],
       ["warn", "bill_payment.settle_failed", { billPaymentId: "bp-1", error: "Error: nope" }],
     ]);
   });

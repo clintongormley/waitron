@@ -27,7 +27,7 @@ import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { TRADING_STATE_DIR, withMockedKill } from "./testing/boot-harness.js";
-import { runPendingCardLoop } from "./bill-payments-loop.js";
+import { cardFollowUpJob } from "./card-follow-up.js";
 import { attendanceJob } from "./attendance-loop.js";
 import type { StartedServer } from "./boot.js";
 
@@ -44,9 +44,9 @@ vi.mock("@hono/node-server", async (load) => {
     }),
   };
 });
-vi.mock("./bill-payments-loop.js", async (load) => {
-  const a = await load<typeof import("./bill-payments-loop.js")>();
-  return { ...a, runPendingCardLoop: vi.fn(a.runPendingCardLoop) };
+vi.mock("./card-follow-up.js", async (load) => {
+  const a = await load<typeof import("./card-follow-up.js")>();
+  return { ...a, cardFollowUpJob: vi.fn(a.cardFollowUpJob) };
 });
 vi.mock("./attendance-loop.js", async (load) => {
   const a = await load<typeof import("./attendance-loop.js")>();
@@ -139,7 +139,7 @@ it.each(["archive", "bucket"] as const)(
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       } as RequestInit);
     try {
-      vi.mocked(runPendingCardLoop).mockClear();
+      vi.mocked(cardFollowUpJob).mockClear();
       vi.mocked(attendanceJob).mockClear();
       await entry();
       const login = await request("/management-api/session", "POST", {
@@ -157,7 +157,7 @@ it.each(["archive", "bucket"] as const)(
       const path = "/management-api/venue-details/time-zone-repair";
       const view = await (await request(path)).json();
       expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: node.nodeId });
-      expect(runPendingCardLoop).not.toHaveBeenCalled();
+      expect(cardFollowUpJob).not.toHaveBeenCalled();
       expect(attendanceJob).not.toHaveBeenCalled();
       await withMockedKill(async (kills) => {
         const response = await request(path, "POST", {
@@ -195,7 +195,7 @@ it.each(["archive", "bucket"] as const)(
       }
       await entry();
       expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
-      expect(runPendingCardLoop).toHaveBeenCalledOnce();
+      expect(cardFollowUpJob).toHaveBeenCalledOnce();
       expect(attendanceJob).toHaveBeenCalledOnce();
     } finally {
       await server?.close();

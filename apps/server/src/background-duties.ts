@@ -18,20 +18,12 @@ export interface BackgroundDuties {
   closers: readonly BackgroundCloser[];
 }
 
-interface Aborter {
-  abort(): void;
-}
-
 interface Stopper {
   stop(): unknown;
 }
 
 /** What `bootServer` has started by the time it returns; a duty a box did not start is undefined. */
 export interface BackgroundDutyHandles {
-  pendingCardController: Aborter;
-  tenderRefundController: Aborter;
-  pendingCardLoop: unknown;
-  tenderRefundLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
@@ -61,9 +53,6 @@ function once(close: () => unknown): () => unknown {
   };
 }
 
-const SIGNALLED_LOOP_WAIT =
-  "waits for a loop the aborts already signalled; its running pass stops at its next check of the signal";
-
 export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
   const closers: BackgroundCloser[] = [
     {
@@ -73,16 +62,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
         "stops every job on the runner together; each job's own stepdown mark is in job-catalogue.ts",
     },
 
-    {
-      name: "pendingCardLoop",
-      close: () => h.pendingCardLoop,
-      reason: SIGNALLED_LOOP_WAIT,
-    },
-    {
-      name: "tenderRefundLoop",
-      close: () => h.tenderRefundLoop,
-      reason: SIGNALLED_LOOP_WAIT,
-    },
     { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop(), atStepdown: true },
     {
       name: "unsubscribeFromChanges",
@@ -134,11 +113,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     },
   ];
   return {
-    aborts: [
-      { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
-      { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
-      { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },
-    ],
+    aborts: [{ name: "jobRunner", abort: () => h.jobRunner.signalStepdown() }],
     closers: closers.map((closer) => ({ ...closer, close: once(closer.close) })),
   };
 }

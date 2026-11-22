@@ -3806,8 +3806,10 @@ promotion tests. A real `node:http` listener on Node v26.11.1, closed immediatel
 turn. `closeListener` now accepts that result; its real-listener regression failed before the
 change, and its other-error checks remain. Boot retains an actual bind failure and reports it
 from shutdown; the existing address-in-use and unknown-host shutdown checks remain unchanged.
-The pending-card failed-start test also holds the loop
-after abort: removing its specific `await pendingCardLoop` now fails. This does not establish that
+The pending-card failed-start test also held the old loop
+after abort: removing its specific `await pendingCardLoop` failed. The card follow-up job now
+runs on the runner. The failed-start and close cases hold its pass after abort and check that the
+server still holds the venue folder. This does not establish that
 the suite catches a missing wait for every other duty.
 
 The landing listener, started last, is the one step not on the list.
@@ -4753,11 +4755,11 @@ and its four writers (`recordSale`, `recordVoid`, `recordCorrection`, `recordSub
 the same, so no path through the seat writes a record. Both wrappers are needed: the plan's R6 run
 showed that wrapping the writers alone charged a card and then answered `507`. A card already
 charged when a writer refuses is answered `507 sale.charged_not_recorded` with reason
-`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the shared refund recovery loop leaves
+`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the refund recovery step of `card-follow-up.ts` leaves
 pending refunds alone, a card refund on the till or the dashboard whose provider wait ends once the
 gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` to both route
 mounts, which `boot.start-clock-gate.test.ts` checks; the refund-wait rows in
-`clock-unconfirmed-gate.test.ts` pass it themselves), and the bill payments loop leaves a card payment charged before the start
+`clock-unconfirmed-gate.test.ts` pass it themselves), and the bill settlement step leaves a card payment charged before the start
 pending and raises no `payment.bill_settle_failed` for it, also when the gate starts holding
 partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). While paused, `recoverTenderRefunds` still runs
 `sweepInvoiceCorrections` (`apps/server/src/invoice-correction-alerts.ts`) with `fileSettled: false`,
