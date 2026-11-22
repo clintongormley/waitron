@@ -28,9 +28,6 @@ Left open:
   by line, because nothing records a unit's kind (a unit field would need a migration).
 - Each new group Ready command moves the party's revision, so a waiter's open table screen meets
   `party.out_of_date` after it and reads again.
-- Setting up a venue from an imported configuration deletes every kitchen station, and the
-  `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold
-  link rows at that point was not tested (read, not run).
 - The pass's Ready records no `order_events` row, so who pressed them is
   recorded nowhere readable; a new kind changes that append-only table's check, which is a
   core migration.

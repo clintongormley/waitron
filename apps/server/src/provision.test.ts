@@ -1,4 +1,4 @@
-import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -10,6 +10,9 @@ import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
+  kitchenPrintJobs,
+  printJobs,
+  printers,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   withTransaction,
@@ -350,6 +353,61 @@ describe("provisionVenue", () => {
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
     await recoverProvisionedVenue(db, request);
     expect(await counts()).toEqual({ default_stations: 1, stations: 1, cells: 0 });
+  });
+
+  it("never runs first setup's import over a venue that holds a kitchen print link: setup is refused as already done and the link and its station stay", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+    const [station] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.isDefault, true));
+    const linkId = await withTransaction(db, async (tx) => {
+      const order = await seedWorkingOrder(tx, { label: "Table 8", status: "open" });
+      const [printer] = await tx
+        .insert(printers)
+        .values({ name: "Kitchen", transport: "cloud_poll", pollId: randomUUID() })
+        .returning();
+      const [job] = await tx
+        .insert(printJobs)
+        .values({ printerId: printer!.id, payload: new Uint8Array([1, 2, 3]), status: "queued" })
+        .returning();
+      const [link] = await tx
+        .insert(kitchenPrintJobs)
+        .values({
+          printJobId: job!.id,
+          workingOrderId: order.id,
+          stationId: station!.id,
+          reprint: false,
+        })
+        .returning();
+      return link!.id;
+    });
+    const beforeCommit = vi.fn(async () => {});
+
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir, beforeCommit },
+      request,
+    ).catch((e: unknown) => e);
+
+    expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
+    expect(beforeCommit).not.toHaveBeenCalled();
+    expect(
+      await db
+        .select({ id: kitchenPrintJobs.id, stationId: kitchenPrintJobs.stationId })
+        .from(kitchenPrintJobs)
+        .where(eq(kitchenPrintJobs.id, linkId)),
+    ).toEqual([{ id: linkId, stationId: station!.id }]);
+    expect(
+      await db
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, station!.id)),
+    ).toEqual([{ id: station!.id }]);
   });
 
   it("recovers the exact committed venue by venue, node and series after a process dies before file publication", async () => {
