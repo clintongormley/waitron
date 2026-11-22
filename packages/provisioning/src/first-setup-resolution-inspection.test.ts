@@ -502,19 +502,6 @@ it("sees an attempt's modules whose tables live in the core set as an empty core
   });
 });
 
-it("rechecks a real empty database against the caller's required migration sets", async () => {
-  const f = await fixture("active");
-  await expect(f.service.recheckEmptyDatabase(f, ["core"])).resolves.toBe(true);
-  await expect(f.service.recheckEmptyDatabase(f, ["bookings"])).resolves.toBe(false);
-  await expect(
-    createFirstSetupResolutionInspection({
-      modules: ALL_MODULES,
-      ...f,
-      expectedMigrationSets: ["bookings"],
-    }).recheckEmptyDatabase(f, []),
-  ).resolves.toBe(false);
-});
-
 it.each(["file", "symlink"] as const)(
   "never reads a %s state root as an ownership directory",
   async (kind) => {

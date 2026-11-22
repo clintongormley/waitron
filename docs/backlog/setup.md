@@ -234,9 +234,8 @@ whole-file reads are separate work:
 
 - `packages/provisioning/src/first-setup-resolution-inspection.ts` fingerprints `venue.db` and its
   WAL for the repair inspection and captures originals with `readFile`. Each database artifact is
-  capped at 128 MiB. The unused `recheckEmptyDatabase` reader also retains its whole-file
-  128 MiB check. Keep content-change detection when replacing those buffers. A1159's Start again
-  work remains open.
+  capped at 128 MiB. Keep content-change detection when replacing those buffers. A1159's Start
+  again work remains open.
 - The unused archive branch of `/recovery/preparation` and emergency handover still buffer archives
   within 256 MiB.
   Configuration transfer retains its separate buffer.
