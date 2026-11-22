@@ -15,7 +15,14 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
-import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
+import {
+  AppError,
+  isAppError,
+  MAX_CAUSE_DEPTH,
+  PRINT_AGENT_ONLY_NAMES,
+  unknownVariables,
+  type BoxFile,
+} from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import {
   isVenueHolderFresh,
@@ -424,7 +431,16 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       },
     ));
   await finishTlsInstall(admission.roots.stateDir);
-  const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
+  const ignoredInBoxFiles: Partial<Record<BoxFile, string[]>> = {};
+  const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir, (file, names) => {
+    ignoredInBoxFiles[file] = names;
+  });
+  const unknown = unknownVariables(deps.baseEnv, PRINT_AGENT_ONLY_NAMES);
+  if (Object.keys(ignoredInBoxFiles).length > 0) {
+    deps.log("warn", "config.unknown_variables", { unknown, ignoredInBoxFiles });
+  } else if (unknown.length > 0) {
+    deps.log("warn", "config.unknown_variables", { unknown });
+  }
   const transportPort = httpPortFrom(transportEnv);
   const transport: RecoveryServeOptions = {
     stateDir: admission.roots.stateDir,
