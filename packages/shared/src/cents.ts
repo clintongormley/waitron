@@ -29,7 +29,7 @@ export function stringToCents(value: string): number {
  * hashes — "0" and "0.00" are one amount and two different byte strings.
  */
 export function centsToDecimal(cents: number): Decimal {
-  if (!Number.isInteger(cents)) {
+  if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value: String(cents) });
   }
   return scaledLiteral(cents, MONEY_SCALE);
@@ -49,8 +49,8 @@ export function rawCentsToDecimal(value: string): Decimal {
     throw new AppError("shared.invalid_cents", { value: String(value) });
   }
   const cents = Number(value);
-  // Not the money bound: a total can be wider than any one amount. A count past what a number
-  // holds exactly would drop digits without saying so.
+  // Not the money bound: a total can be wider than any one amount. Checked here so the refusal
+  // names the text as read: `Number()` has already rounded a count past a safe integer.
   if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value });
   }

@@ -45,6 +45,21 @@ describe("centsToDecimal", () => {
       params: { value: "NaN" },
     });
   });
+
+  it("refuses a magnitude beyond what a number counts exactly", () => {
+    expect(refusalOf(() => centsToDecimal(2 ** 53))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "9007199254740992" },
+    });
+    expect(refusalOf(() => centsToDecimal(-(2 ** 53)))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "-9007199254740992" },
+    });
+  });
+
+  it("renders the largest whole number held exactly", () => {
+    expect(centsToDecimal(Number.MAX_SAFE_INTEGER)).toBe("90071992547409.91");
+  });
 });
 
 describe("decimalToCents", () => {

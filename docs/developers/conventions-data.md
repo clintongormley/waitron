@@ -1181,8 +1181,8 @@ whatever the declared type says (`packages/db/src/schema/columns.ts` states it a
 `smallCount`/`bigCount`), so nothing below the converters bounds a money value at all. The bound the
 system states is twelve integer digits — 99999999999999 cents, `MAX_MONEY_INTEGER_DIGITS`, enforced
 by `decimalToCents` on the amount after rounding it to cents, and by `packages/menu`'s price
-validators — and it is now the only thing
-enforcing anything. That figure is well inside the 9007199254740991 a JavaScript number counts
+validators — and it is the only money bound; `centsToDecimal` and `rawCentsToDecimal` refuse only
+a count past a safe integer. That figure is well inside the 9007199254740991 a JavaScript number counts
 exactly, so nothing in range loses a cent to the number type.
 
 Drizzle's typed `.select()` needs no cast at all: the column maps the value, and the read mapping is
