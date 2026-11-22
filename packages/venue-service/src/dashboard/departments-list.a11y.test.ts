@@ -59,6 +59,7 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
         courseSettingsByDepartment: {},
         needsClearingDepartmentIds: [],
         lateSendManagerDepartmentIds: [],
+        estimatedMarginByDepartment: {},
         serviceSteps: [],
         courses: [],
       };

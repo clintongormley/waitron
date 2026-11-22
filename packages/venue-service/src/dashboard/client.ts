@@ -49,6 +49,8 @@ export interface DepartmentSettingsInput extends Pick<
   tradingName: string;
   needsClearing?: boolean;
   lateSendNeedsManager?: boolean;
+  /** A dot-decimal percent from 0 to 100 with at most two places; `null` clears it. */
+  estimatedMargin?: string | null;
   courseSettings?: DepartmentCourseSetting[];
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
@@ -101,6 +103,8 @@ export interface VenueServiceModel {
   /** The active departments where a dish sent after its period ended needs someone holding
    * `venue.configure`: the sender, or a manager's PIN. */
   lateSendManagerDepartmentIds: string[];
+  /** Each active department that has an estimated margin, as a two-place percent ("30.00"). */
+  estimatedMarginByDepartment: Record<string, string>;
   serviceSteps: ServiceStep[];
   courses: { id: string; name: string }[];
   /** Whether the venue's region charges a different VAT class on food taken away. */

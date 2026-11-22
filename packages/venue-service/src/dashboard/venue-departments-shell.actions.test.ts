@@ -38,6 +38,7 @@ function view(): VenueServiceView {
     courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
+    estimatedMarginByDepartment: {},
     serviceSteps: [],
     courses: [],
   };

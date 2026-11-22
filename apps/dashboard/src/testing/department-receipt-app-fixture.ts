@@ -53,6 +53,7 @@ export function venueServiceModel(
     courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
+    estimatedMarginByDepartment: {},
     serviceSteps: [],
     courses: [],
   };

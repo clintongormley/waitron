@@ -87,6 +87,7 @@ import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
 import { listLateSendManagerDepartmentIds } from "./late-send.js";
+import { listEstimatedMarginByDepartment, requireEstimatedMargin } from "./estimated-margin.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
 import { venueChargesTakeawayVat } from "./dining.js";
 
@@ -537,6 +538,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       courseSettingsByDepartment: await listDepartmentCourseSettings(tx),
       needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx),
       lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
+      estimatedMarginByDepartment: await listEstimatedMarginByDepartment(tx),
       serviceSteps: await listServiceSteps(tx),
       courses: await listStepCourses(tx),
       takeawayVat: await venueChargesTakeawayVat(tx),
@@ -796,6 +798,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "transfers",
           "needsClearing",
           "lateSendNeedsManager",
+          "estimatedMargin",
           "serviceSteps",
           "courseSettings",
         ]);
@@ -843,6 +846,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.lateSendNeedsManager === undefined
             ? {}
             : { lateSendNeedsManager: body.lateSendNeedsManager }),
+          ...(body.estimatedMargin === undefined
+            ? {}
+            : { estimatedMarginBp: requireEstimatedMargin(body.estimatedMargin) }),
           ...(body.courseSettings === undefined
             ? {}
             : { courseSettings: requireCourseSettings(body.courseSettings) }),

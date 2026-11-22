@@ -50,6 +50,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       readiness: [],
       needsClearingDepartmentIds: [],
       lateSendManagerDepartmentIds: [],
+      estimatedMarginByDepartment: {},
       serviceSteps: [],
       courses: [],
     };
@@ -100,6 +101,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       courseSettingsByDepartment: {},
       needsClearingDepartmentIds: [],
       lateSendManagerDepartmentIds: [],
+      estimatedMarginByDepartment: {},
       serviceSteps: [],
       courses: [],
     };

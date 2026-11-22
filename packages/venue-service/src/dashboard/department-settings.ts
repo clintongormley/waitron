@@ -86,6 +86,7 @@ type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartme
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
+  estimatedMargin: "details",
   operationDescription: "details",
   orderStart: "service",
   paidWhen: "service",
