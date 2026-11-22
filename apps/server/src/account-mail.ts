@@ -6,6 +6,7 @@ import {
   type IssuedAccountAction,
 } from "@waitron/identity";
 import { composeAccountEmail, type AccountEmail } from "./account-email.js";
+import { cloudEmailLocale } from "./cloud-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
 
 export function accountActionMail(deps: {
@@ -59,7 +60,7 @@ export function accountActionMail(deps: {
           class: issued.purpose,
           recipient: issued.email,
           displayName: issued.displayName,
-          locale: (issued.locale ?? deps.venueLocale).startsWith("es") ? "es-ES" : "en-GB",
+          locale: cloudEmailLocale(issued.locale ?? deps.venueLocale),
           timeZone,
           expiresAt: issued.expiresAt,
           ...(issued.purpose === "email_change"

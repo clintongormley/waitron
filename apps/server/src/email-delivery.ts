@@ -5,7 +5,12 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { validatePayload, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import {
+  listCredentials,
+  validatePayload,
+  tryGetCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { credentialField } from "./credentials.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { MAIL_SETTINGS } from "./mail-settings.js";
@@ -87,6 +92,10 @@ export async function resolveMailDeliveryIn(
   if (config.devMode && rule !== "venue_smtp")
     return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };
+}
+
+export async function hasSavedSmtp(tx: Transaction): Promise<boolean> {
+  return (await listCredentials(tx)).some(({ purpose }) => purpose === "email.smtp");
 }
 
 export async function readSavedSmtp(

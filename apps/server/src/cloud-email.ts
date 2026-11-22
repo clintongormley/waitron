@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { BuiltInRoleKey } from "@waitron/identity";
+import type { SECURITY_CHANGE_EMAIL_WORDS } from "./i18n/security-change-email.js";
 import type { OnRefusal } from "./cloud-translation.js";
 import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import { machinePayload, readCloudInstallationView } from "./cloud-installation.js";
@@ -44,13 +46,13 @@ async function emailExchange(
   endpoint = action === "configuration"
     ? "/api/installations/configuration"
     : "/v1/installations/email/" + action.slice(6),
+  issuedAt?: number,
 ) {
-  const bytes = machinePayload(state, {
-    action,
-    operationId,
-    lease: JSON.stringify(state.lifecycle!.lease),
-    body,
-  });
+  const bytes = machinePayload(
+    state,
+    { action, operationId, lease: JSON.stringify(state.lifecycle!.lease), body },
+    issuedAt,
+  );
   const response = await fetch(state.origin + endpoint, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -134,17 +136,45 @@ export async function requestSetupCloudEmailGrant(
   }
 }
 
-export interface CloudAccountEmail {
-  class: "invitation" | "password_reset" | "email_change";
-  recipient: string;
+interface CloudEmailDetails {
   displayName: string;
   locale: string;
   timeZone: string;
   expiresAt: string;
+}
+
+export interface CloudAccountEmail extends CloudEmailDetails {
+  class: "invitation" | "password_reset" | "email_change";
+  recipient: string;
   token?: string;
   code?: string;
   codeExpiresAt?: string;
 }
+export const cloudEmailLocale = (locale: string) => (locale.startsWith("es") ? "es-ES" : "en-GB");
+
+export function cloudNoticeLabel(value: string): string {
+  return Array.from(value.trim()).slice(0, 80).join("").trimEnd();
+}
+
+type EditorFacts = { editorName: string; at: string };
+
+export type CloudStaffNotice = CloudEmailDetails &
+  (
+    | { class: "email_changed"; facts: EditorFacts }
+    | {
+        class: "security_change";
+        facts: { change: keyof typeof SECURITY_CHANGE_EMAIL_WORDS.en.changes; at: string };
+      }
+    | {
+        class: "role_membership_changed";
+        facts: EditorFacts & { change: "added" | "removed" } & (
+            | { builtInKey: BuiltInRoleKey; roleName?: never }
+            | { roleName: string; builtInKey?: never }
+          );
+      }
+  );
+export type CloudEmail = CloudAccountEmail | (CloudStaffNotice & { recipient: string });
+
 export type CloudEmailOutcome =
   | { status: "sent" }
   | { status: "rejected"; failureCode: "mail.relay_refused"; serverRefused: true }
@@ -167,7 +197,7 @@ export async function sendCloudEmail(
   state: SavedCloudState,
   grant: CloudEmailGrant,
   messageId: string,
-  message: CloudAccountEmail,
+  message: CloudEmail,
   signal?: AbortSignal,
 ): Promise<CloudEmailOutcome> {
   if (
@@ -182,14 +212,21 @@ export async function sendCloudEmail(
   let revision = 0;
   for (let submit = true; ; submit = false) {
     try {
+      const issuedAt = Date.now();
+      const notice = "facts" in message;
       const body = JSON.stringify(
         submit
           ? {
-              version: 1,
+              version: notice ? 2 : 1,
               messageId,
               grantId: grant.id,
               grantRevision: grant.revision,
               ...message,
+              ...(notice && {
+                expiresAt: new Date(
+                  Math.min(Date.parse(message.expiresAt), issuedAt + 86400000),
+                ).toISOString(),
+              }),
             }
           : { version: 1, messageId },
       );
@@ -200,6 +237,8 @@ export async function sendCloudEmail(
         submit ? messageId : randomUUID(),
         body,
         stop,
+        undefined,
+        issuedAt,
       );
       if (!response.ok)
         return submit && record(value) && REFUSALS[response.status]?.includes(String(value.error))

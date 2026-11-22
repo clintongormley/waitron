@@ -6,6 +6,7 @@ import {
   withTransaction,
   withFoldedPersonChanges,
 } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
@@ -16,6 +17,8 @@ import { runMailPass } from "./mail-sender.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const now = new Date("2026-11-13T12:00:00Z");
+const cloudRole = "Night service ".repeat(5) + "Late crew\u{1F37D}";
+const fullRole = cloudRole + "2 and close";
 it.each([
   {
     locale: "en-GB",
@@ -46,14 +49,16 @@ it.each([
     venueLocale: "es-ES",
     change: "added",
     builtInKey: null,
-    roleName: "Night service",
-    subject: () => ROLE_MEMBERSHIP_EMAIL_WORDS.es.added.subject("Night service"),
-    text: () =>
-      ROLE_MEMBERSHIP_EMAIL_WORDS.es.added.text("Editor", "Night service", "13 nov 2026, 13:00"),
+    roleName: fullRole,
+    subject: () => ROLE_MEMBERSHIP_EMAIL_WORDS.es.added.subject(fullRole),
+    text: () => ROLE_MEMBERSHIP_EMAIL_WORDS.es.added.text("Editor", fullRole, "13 nov 2026, 13:00"),
   },
 ])(
   "sends $change to the current address using $locale before $venueLocale",
   async ({ locale, venueLocale, change, builtInKey, roleName, subject, text }) => {
+    await seedVenue(suite.db, { name: "Corner Bistro" });
+    const editor = builtInKey === null ? "E".repeat(79) + "\u{1F37D}" : "Editor";
+    const fullEditor = builtInKey === null ? editor + "2 long name" : editor;
     const [person] = await seedPersons(suite.db, {
       displayName: "Waiter",
       email: "old@example.test",
@@ -64,7 +69,7 @@ it.each([
         kind: "role_membership_changed",
         dedupeKey: "membership",
         personId: person!.id,
-        params: { change, builtInKey, roleName, editorName: "Editor", at: now.toISOString() },
+        params: { change, builtInKey, roleName, editorName: fullEditor, at: now.toISOString() },
         now,
         notAfter: new Date(now.getTime() + 86400000),
       }),
@@ -74,9 +79,11 @@ it.each([
       .set(withFoldedPersonChanges({ email: "current@example.test" }))
       .where(eq(persons.id, person!.id));
     const send = vi.fn(async () => ({ status: "sent" as const }));
+    const owner = roleMembershipMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" });
+    const compose = vi.spyOn(owner, "compose");
     await runMailPass({
       db: suite.db,
-      owners: [roleMembershipMail({ venueLocale, readTimeZone: async () => "Europe/Madrid" })],
+      owners: [owner],
       now: () => now,
       isPrimary: () => true,
       signal: new AbortController().signal,
@@ -90,7 +97,20 @@ it.each([
     expect(send).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
       to: "current@example.test",
       subject: typeof subject === "function" ? subject() : subject,
-      text: typeof text === "function" ? text() : text,
+      text: (typeof text === "function" ? text() : text).replace("Editor", fullEditor),
+    });
+    expect((await compose.mock.results[0]!.value).staffNotice).toEqual({
+      class: "role_membership_changed",
+      displayName: "Corner Bistro",
+      locale: locale ?? venueLocale,
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-14T12:00:00.000Z",
+      facts: {
+        change,
+        editorName: editor,
+        at: "2026-11-13T12:00:00.000Z",
+        ...(builtInKey === null ? { roleName: cloudRole } : { builtInKey }),
+      },
     });
     expect((await suite.db.select().from(outgoingMail))[0]).toMatchObject({
       status: "sent",

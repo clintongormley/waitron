@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { requestSetupCloudEmailGrant, sendCloudEmail } from "./cloud-email.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
@@ -236,6 +236,98 @@ it("submits one signed structured message and waits for acceptance with a separa
     expect(f.requests.filter((v) => String(v[2]).startsWith("email-")).map((v) => v[2])).toEqual([
       "email-submit",
       "email-status",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+const securityNotice = {
+  class: "security_change" as const,
+  recipient: "person@example.test",
+  displayName: "Corner Bistro",
+  locale: "en-GB",
+  timeZone: "Europe/Madrid",
+  facts: { change: "password_changed" as const, at: "2026-11-13T12:00:00.000Z" },
+};
+
+it.each([false, true])(
+  "signs a v2 notice and reads v1 replies after a backward clock step: %s",
+  async (clockWentBack) => {
+    const id = randomUUID();
+    const authority = grant();
+    const queuedAt = Date.now();
+    const notice = {
+      ...securityNotice,
+      expiresAt: new Date(queuedAt + (clockWentBack ? 24 : 1) * 3600000).toISOString(),
+    };
+    const f = await installationFixture(undefined, {
+      emailConfiguration: true,
+      email: async (v, _saved, _req, res) => {
+        const submitting = v[2] === "email-submit";
+        const body = JSON.parse(String(v[7]));
+        res.end(
+          JSON.stringify({
+            version: 1,
+            messageId: id,
+            state: submitting ? "queued" : "accepted",
+            statusRevision: submitting ? 1 : 2,
+            expiresAt: submitting ? body.expiresAt : notice.expiresAt,
+            reason: null,
+          }),
+        );
+      },
+    });
+    try {
+      await f.client.refresh();
+      const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
+      const clock = clockWentBack
+        ? vi.spyOn(Date, "now").mockReturnValueOnce(queuedAt - 3600000)
+        : null;
+      try {
+        expect(await sendCloudEmail(saved, authority, id, notice)).toEqual({ status: "sent" });
+      } finally {
+        clock?.mockRestore();
+      }
+      const [submit, status] = f.requests.filter((v) => String(v[2]).startsWith("email-"));
+      expect(submit![4]).toBe(id);
+      if (clockWentBack) expect(Number(submit![5])).toBe(queuedAt - 3600000);
+      expect(JSON.parse(String(submit![7]))).toEqual({
+        version: 2,
+        messageId: id,
+        grantId: authority.id,
+        grantRevision: 1,
+        ...notice,
+        expiresAt: clockWentBack
+          ? new Date(queuedAt + 23 * 3600000).toISOString()
+          : notice.expiresAt,
+      });
+      expect(status![4]).not.toBe(id);
+      expect(JSON.parse(String(status![7]))).toEqual({ version: 1, messageId: id });
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("records an explicit refusal when older Cloud refuses the v2 submission", async () => {
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    email: async (v, _saved, _req, res) => {
+      const { version } = JSON.parse(String(v[7]));
+      res.writeHead(version === 2 ? 400 : 500);
+      res.end('{"error":"invalid_message"}');
+    },
+  });
+  try {
+    const notice = { ...securityNotice, expiresAt: message().expiresAt };
+    expect(await f.client.sendEmail(grant(), randomUUID(), notice)).toEqual({
+      status: "rejected",
+      failureCode: "mail.relay_refused",
+      serverRefused: true,
+    });
+    expect(f.requests.filter((v) => String(v[2]).startsWith("email-")).map((v) => v[2])).toEqual([
+      "email-submit",
     ]);
   } finally {
     await f.close();

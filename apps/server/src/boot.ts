@@ -334,6 +334,7 @@ import {
   resolveEmailDelivery,
   resolveInvoiceEmailDelivery,
   resolveMailDeliveryIn,
+  hasSavedSmtp,
 } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { SERVER_SETTINGS_KEYS } from "./mail-settings.js";
@@ -2648,6 +2649,10 @@ async function bootServer(
     resolveAccountRelay: (signal: AbortSignal) =>
       cloudConnection?.emailRelay(signal) ?? Promise.resolve(null),
     sendCloudEmail: cloudConnection?.sendEmail,
+    ...(cloudConnection &&
+      !captureAccountEmail && {
+        noticeRelayAllowed: async (tx: Transaction) => !(await hasSavedSmtp(tx)),
+      }),
   };
   const assertAccountMailPrimary = async () => {
     if (holders.singletonRole.current !== "primary") throw new AppError("node.read_only", {});

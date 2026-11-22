@@ -1,11 +1,13 @@
+import { cloudEmailLocale, cloudNoticeLabel } from "./cloud-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
-import { persons } from "@waitron/db";
+import { persons, readVenue } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import { ROLE_MEMBERSHIP_EMAIL_WORDS } from "./i18n/role-membership-email.js";
 
 interface RoleMembershipWords {
   locale: string;
+  venue: string;
   change: "added" | "removed";
   builtInKey: BuiltInRoleKey | null;
   roleName: string | null;
@@ -32,6 +34,7 @@ export function roleMembershipMail(deps: {
         recipient: person.email,
         prepared: {
           locale: person.locale ?? deps.venueLocale,
+          venue: (await readVenue(tx)).name,
           change: mail.params.change as RoleMembershipWords["change"],
           builtInKey: mail.params.builtInKey as BuiltInRoleKey | null,
           roleName: mail.params.roleName as string | null,
@@ -40,17 +43,33 @@ export function roleMembershipMail(deps: {
         },
       };
     },
-    async compose(words) {
+    async compose(words, mail) {
+      const timeZone = await deps.readTimeZone();
       const copy = ROLE_MEMBERSHIP_EMAIL_WORDS[words.locale === "es-ES" ? "es" : "en"];
       const role = words.builtInKey === null ? words.roleName! : copy.roles[words.builtInKey];
       const when = new Intl.DateTimeFormat(words.locale, {
         dateStyle: "medium",
         timeStyle: "short",
-        timeZone: await deps.readTimeZone(),
+        timeZone,
       }).format(new Date(words.at));
       return {
         subject: copy[words.change].subject(role),
         text: copy[words.change].text(words.editorName, role, when),
+        staffNotice: {
+          class: "role_membership_changed",
+          displayName: words.venue,
+          locale: cloudEmailLocale(words.locale),
+          timeZone,
+          expiresAt: mail.notAfter,
+          facts: {
+            change: words.change,
+            editorName: cloudNoticeLabel(words.editorName),
+            at: words.at,
+            ...(words.builtInKey === null
+              ? { roleName: cloudNoticeLabel(role) }
+              : { builtInKey: words.builtInKey }),
+          },
+        },
       };
     },
     async settle() {},

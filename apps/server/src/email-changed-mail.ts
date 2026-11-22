@@ -1,5 +1,6 @@
 import { persons, readVenue } from "@waitron/db";
 import { eq } from "drizzle-orm";
+import { cloudEmailLocale, cloudNoticeLabel } from "./cloud-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
 import { EMAIL_CHANGED_WORDS } from "./i18n/email-changed-email.js";
 
@@ -33,14 +34,26 @@ export function emailChangedMail(deps: {
         },
       };
     },
-    async compose(words) {
+    async compose(words, mail) {
+      const timeZone = await deps.readTimeZone();
       const copy = EMAIL_CHANGED_WORDS[words.locale === "es-ES" ? "es" : "en"];
       const when = new Intl.DateTimeFormat(words.locale, {
         dateStyle: "medium",
         timeStyle: "short",
-        timeZone: await deps.readTimeZone(),
+        timeZone,
       }).format(new Date(words.at));
-      return { subject: copy.subject, text: copy.text(words.editorName, words.venue, when) };
+      return {
+        subject: copy.subject,
+        text: copy.text(words.editorName, words.venue, when),
+        staffNotice: {
+          class: "email_changed",
+          displayName: words.venue,
+          locale: cloudEmailLocale(words.locale),
+          timeZone,
+          expiresAt: mail.notAfter,
+          facts: { editorName: cloudNoticeLabel(words.editorName), at: words.at },
+        },
+      };
     },
     async settle() {},
   };
