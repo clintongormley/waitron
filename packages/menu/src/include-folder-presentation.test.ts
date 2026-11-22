@@ -102,6 +102,18 @@ describe("folderOverridesFrom", () => {
     ).toEqual({ names: { es: "Barra" }, image: null, color: "#445566" });
   });
 
+  it("keeps following a menu with no photo or colour when another name changes", () => {
+    const menuWithoutPhotoOrColour = { ...own, image: null, color: null };
+    expect(
+      folderOverridesFrom(
+        menuWithoutPhotoOrColour,
+        { ...menuWithoutPhotoOrColour, names: { en: "Drinks", es: "Barra" } },
+        languages,
+        {},
+      ),
+    ).toEqual({ names: { es: "Barra" } });
+  });
+
   it("a language neither side names follows, and one only the dialog names is fixed", () => {
     expect(folderOverridesFrom(own, own, ["en", "es", "fr"], {})).toEqual({});
     expect(

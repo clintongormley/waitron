@@ -22,8 +22,8 @@ export function folderPresentation(own: Presentation, folder: IncludeFolder): Pr
   };
 }
 
-/** Keep a stored override when its unchanged value happens to match the included menu.
- * The caller did not show fixed names outside `languages`, so keep those too. */
+/** Keep matching fixed values so later menu edits leave them fixed.
+ * The editor shows only `languages`, so keep fixed names outside that list too. */
 export function folderOverridesFrom(
   own: Presentation,
   shown: Presentation,
@@ -35,7 +35,7 @@ export function folderOverridesFrom(
   );
   for (const language of languages) {
     const text = (shown.names[language] ?? "").trim();
-    const fixedName = stored.names?.[language]?.trim();
+    const fixedName = stored.names?.[language];
     if (text !== (own.names[language] ?? "").trim() || text === fixedName) names[language] = text;
   }
   return {
