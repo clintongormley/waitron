@@ -926,7 +926,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
-  same moment (an accepted race); Stripe's reader list is one page.
+  same moment (an accepted race).
 
 - **The SumUp reconciler** — other-provider and cash-only qualification. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
