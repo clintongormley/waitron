@@ -33,9 +33,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1167.0",
-    "@fastify/busboy": "3.2.5",
-    "@hono/node-server": "^2.1.8",
+    "@aws-sdk/client-s3": "3.1172.0",
+    "@fastify/busboy": "3.2.6",
+    "@hono/node-server": "^2.1.9",
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/composition": "workspace:*",
@@ -77,15 +77,15 @@
     "drizzle-orm": "^0.45.4",
     "fflate": "^0.8.3",
     "fontkit": "2.0.4",
-    "hono": "^4.13.18",
-    "jose": "^6.2.17",
+    "hono": "^4.13.19",
+    "jose": "^6.2.18",
     "multicast-dns": "^7.2.5",
     "node-forge": "^1.4.3",
-    "nodemailer": "^10.5.0",
+    "nodemailer": "^10.6.0",
     "pdfkit": "0.20.2",
     "qrcode": "^1.5.4",
     "sharp": "0.35.5",
-    "stripe": "^23.1.0",
+    "stripe": "^23.2.0",
     "undici": "^8.12.4"
   },
   "devDependencies": {
@@ -108,7 +108,7 @@
     "otplib": "^13.6.0",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "^6.5.438",
-    "playwright": "^1.65.0",
+    "playwright": "^1.65.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
