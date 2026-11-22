@@ -1012,8 +1012,9 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   stored capture needs its own plan. Cloud forwarding and automatic crash/freeze reporting are separate.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
-- **A1047. Send an administrator-approved problem description to Waitron Cloud (owner, 2026-10-24).**
-  Staff descriptions wait on the box for an administrator to send or discard.
+- **A1047. Send an administrator-approved problem description to Waitron Cloud.**
+  The owner made sending an administrator decision on 2026-10-24. The watcher confirmed on
+  2026-11-22 that staff descriptions wait on the box for an administrator to send or discard.
   [Detail](backlog/alerts.md#a1047-send-a-problem-report-to-waitron-cloud).
 
 ### Working time and staff

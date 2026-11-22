@@ -70,10 +70,10 @@ separate follow-ups.
 
 ## A1047. Send a problem report to Waitron Cloud
 
-(Owner, 2026-10-24.) The structural report is sent from the till or dashboard. Keep staff
-descriptions on the box for an administrator to read and send or discard. Administrators can
-send their own descriptions directly. The owner’s decision was “make it an admin decision to
-send.” See [Cloud’s monitoring design §11](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md).
+On 2026-10-24 the owner said to “make it an admin decision to send”. The watcher confirmed
+on 2026-11-22 at 21:11 that staff descriptions wait on the box for an administrator to read and
+send or discard. Administrators can send their own descriptions directly. See
+[Cloud’s monitoring design §11](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md).
 Update both guides and the privacy-notice checklist before sending descriptions.
 
 ## Decisions and deliberate limits
