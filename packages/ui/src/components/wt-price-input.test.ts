@@ -19,7 +19,9 @@ test("a price uses the shared decimal control and supplies its unit in the end s
   expect(input.type).toBe("text");
   expect(input.inputMode).toBe("decimal");
   expect(input.readOnly).toBe(true);
-  expect(root.querySelector('slot[name="end"] button.unit')?.textContent?.trim()).toBe("kg");
+  const unit = root.querySelector<HTMLButtonElement>('slot[name="end"] button.unit')!;
+  expect(unit.textContent?.trim()).toBe("kg");
+  expect(unit.disabled).toBe(false);
 });
 
 test("associates the label with the field so it has an accessible name", async () => {
