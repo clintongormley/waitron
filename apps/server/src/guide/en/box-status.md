@@ -14,11 +14,12 @@ During setup, choose **Report a problem** in the page header. You can keep a rep
 the box cannot answer or this already-open page loses its connection.
 If you see **Send to Waitron Cloud**, review the Cloud attachment before sending it. It contains
 error codes, the Waitron version and basic installation details. The box tells you whether Cloud
-received it or the box will try again.
+received it or the box will try again. If you add a description, it waits on the box for an
+administrator to review. As an administrator, you can send your own description directly.
 
 To keep a file, describe what happened, check the download preview and choose **Download report**.
-Your description and this browser's recent activity go into the downloaded file only. Keep
-passwords, payment details and personal information out of your description.
+The download includes your description and this browser’s recent activity. Keep passwords,
+payment details and personal information out of your description.
 
 Open **System → Box status**, just above **Diagnostics**. Only people who can manage the system
 see it.
@@ -34,6 +35,10 @@ and the page says why under **Disk space**.
 Open **System → Diagnostics**. The list starts with warnings and errors and shows times in the
 venue’s time zone. Search by event, detail or request ID. To reproduce a problem, choose **Turn on
 detailed logging**. Right after reproducing the problem, choose **All levels (last 5 minutes)**.
+
+As an administrator, read staff descriptions under **Problem descriptions awaiting review**.
+Choose **Send description** to share one with Waitron Cloud or **Discard description** to delete
+it from the box. Use **Refresh descriptions** to check for new submissions.
 
 ## Read the rows {#rows}
 

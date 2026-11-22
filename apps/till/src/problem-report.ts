@@ -180,7 +180,10 @@ export class TillProblemReport extends LitElement {
           download: t("problem_report.download"),
           cloud: {
             scope: t("problem_report.cloud_scope"),
-            localDescription: t("problem_report.local_description"),
+            descriptionReview: t("problem_report.description_review"),
+            descriptionDirect: t("problem_report.description_direct"),
+            waiting: t("problem_report.description_waiting"),
+            descriptionQueued: t("problem_report.description_queued"),
             preview: t("problem_report.cloud_preview"),
             send: t("problem_report.send"),
             sent: t("problem_report.sent"),
@@ -189,6 +192,10 @@ export class TillProblemReport extends LitElement {
           },
         }}
         @wt-description-change=${this.edited}
+        @wt-description-saved=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.scope?.commit(event.detail.value);
+        }}
         @wt-report-download=${this.download}
         @wt-close=${(event: Event) => {
           event.stopPropagation();

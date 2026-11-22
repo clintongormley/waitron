@@ -20,7 +20,7 @@ export function sentFromThisOrigin(c: Context): boolean {
 
 /** A trusted page on another origin is taken whatever its `Sec-Fetch-Site`, which a browser
  * rightly calls `same-site` or `cross-site`. Rejects when `trusted` rejects. */
-async function sentFromOwnPage(c: Context, trusted: OriginAllowlist): Promise<boolean> {
+export async function sentFromOwnPage(c: Context, trusted: OriginAllowlist): Promise<boolean> {
   if (sentFromThisOrigin(c)) return true;
   const origin = c.req.header("Origin");
   if (

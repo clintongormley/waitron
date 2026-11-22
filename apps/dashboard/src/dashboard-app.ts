@@ -3616,7 +3616,10 @@ export class DashboardApp extends LitElement {
           }}
         ></dashboard-box-status-screen>`;
       case "diagnostics":
-        return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
+        return html`<dashboard-diagnostics-screen
+          .api=${this.api}
+          .canReviewDescriptions=${this.#sessionPermissions.includes("person.admin")}
+        ></dashboard-diagnostics-screen>`;
       case "cloud":
         return html`<dashboard-cloud-services-screen
           .api=${this.api}

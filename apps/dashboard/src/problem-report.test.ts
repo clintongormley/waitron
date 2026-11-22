@@ -241,29 +241,46 @@ it("retains the editable description after a failed download and retries without
   await expect.poll(() => dialog.open).toBe(false);
 });
 
-it("uses its signed-in API to preview and send only the Cloud attachment", async () => {
-  const urls: string[] = [];
-  const api = new DashboardApi("", async (url, init) => {
-    urls.push(`${init.method} ${url}`);
-    if (init.method === "GET")
-      return Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' });
-    expect(init.body).toBeUndefined();
-    return Response.json({ delivery: "sent" });
-  });
-  const { dialog } = await fixture(api);
-  await describeProblem(dialog, "Private staff note");
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
-    .toBe('{"version":"1.2.3"}');
-  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
-    .toBe("Sent to Waitron Cloud.");
-  expect(urls).toEqual([
-    "GET /management-api/problem-reports/preview",
-    "POST /management-api/problem-reports/preview/send",
-  ]);
-});
+it.each([
+  ["", undefined, undefined, "Sent to Waitron Cloud."],
+  [
+    "Private staff note",
+    "waiting",
+    undefined,
+    "Sent to Waitron Cloud. Your description is waiting for a manager to send it.",
+  ],
+  ["Printer jammed", "queued", true, "Sent to Waitron Cloud. Your description is queued to send."],
+] as const)(
+  "sends the Cloud attachment with the requested description handling (%s)",
+  async (text, result, admin, status) => {
+    const urls: string[] = [];
+    const api = new DashboardApi("", async (url, init) => {
+      urls.push(`${init.method} ${url}`);
+      if (init.method === "GET")
+        return Response.json({
+          available: true,
+          id: "preview",
+          attachment: '{"version":"1.2.3"}',
+          admin,
+        });
+      expect(init.body).toBe(text ? JSON.stringify({ description: text }) : undefined);
+      return Response.json({ delivery: "sent", description: result });
+    });
+    const { dialog } = await fixture(api);
+    if (text) await describeProblem(dialog, text);
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
+      .toBe('{"version":"1.2.3"}');
+    await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+      .toBe(status);
+    expect(urls).toEqual([
+      "GET /management-api/problem-reports/preview",
+      "POST /management-api/problem-reports/preview/send",
+    ]);
+  },
+);
 
 it("offers a download when Cloud delivery is refused", async () => {
   const api = new DashboardApi("", async (_, init) =>

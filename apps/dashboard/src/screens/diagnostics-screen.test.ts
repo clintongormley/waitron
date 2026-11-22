@@ -1,5 +1,6 @@
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -377,3 +378,27 @@ beforeEach(() => {
   setLocale("es-ES");
 });
 afterEach(() => setLocale(previousLocale));
+
+it.each(["send", "discard"] as const)(
+  "shows a draft for the administrator to %s",
+  async (decision) => {
+    const decideProblemDescription = vi.fn(async () => {});
+    const api = stubApi({
+      getProblemDescriptions: async () => [
+        { reportId: "report", description: "Printer jammed", time: 1767225600000 },
+      ],
+      decideProblemDescription,
+    });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+      api,
+      canReviewDescriptions: true,
+    });
+    await expect
+      .poll(() => q(el, "[data-problem-description]")?.textContent ?? "")
+      .toContain("Printer jammed");
+    await userEvent.click(q(el, `[data-description-decision="${decision}"]`)!);
+    expect(decideProblemDescription).toHaveBeenCalledExactlyOnceWith("report", decision);
+    await expect.poll(() => q(el, "[data-problem-description]")).toBeNull();
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(q(el, "[data-description-heading]"));
+  },
+);

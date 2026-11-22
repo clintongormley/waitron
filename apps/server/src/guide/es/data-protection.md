@@ -170,8 +170,9 @@ y los que tienen alergias. Para cada grupo, la ley pide que el aviso diga:
   de seguridad. Si tu personal puede enviar informes sobre problemas, incluye a Waitron como
   destinatario a través de Waitron Cloud. Recibe los códigos de error, sus orígenes, la versión de
   Waitron, la fecha del informe y datos básicos de la instalación vinculados al registro de tu
-  servidor en Cloud. Si activas los informes automáticos de errores, incluye a Waitron como
-  destinatario de los códigos de error, orígenes, versiones, fechas y recuentos de incidencias.
+  servidor en Cloud, además de las descripciones que envíe un administrador. Si activas los
+  informes automáticos de errores, incluye a Waitron como destinatario de los códigos de error,
+  orígenes, versiones, fechas y recuentos de incidencias.
   [Informes automáticos de errores](servers.md#error-reports).
 - en su caso, que tienes intención de transferir los datos a un tercer país o a una organización
   internacional, como los llama la ley, y si la Comisión Europea ha decidido que la protección de

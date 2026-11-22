@@ -1369,10 +1369,9 @@ async function bootServer(
     boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });
   const buildMetadata = buildHeaderMiddleware(build);
   app.use("*", buildMetadata);
-  const ownPageCheck = requireManagementChangeFromOwnPage(
-    async (origin) => origin === config.managementOrigin || (await allowOrigin(origin)),
-    log,
-  );
+  const isOwnPageOrigin = async (origin: string) =>
+    origin === config.managementOrigin || (await allowOrigin(origin));
+  const ownPageCheck = requireManagementChangeFromOwnPage(isOwnPageOrigin, log);
   // Must stay ahead of every route, so a route added later is covered without being named.
   app.use("*", ownPageCheck);
   app.use("*", venueDiskFullMiddleware(config.venueDir, seams.freeSpaceWatch?.statfs));
@@ -4170,7 +4169,13 @@ async function bootServer(
     : undefined;
   mountProblemReportApi(
     app,
-    { db, devMode: config.devMode, deviceChooserEnabled, reports: problemReports },
+    {
+      db,
+      devMode: config.devMode,
+      deviceChooserEnabled,
+      reports: problemReports,
+      allowOrigin: isOwnPageOrigin,
+    },
     log,
   );
   mountCloudApi(

@@ -3041,12 +3041,29 @@ export class DashboardApi {
   sendProblemReport(
     id: string,
     signal: AbortSignal,
+    description?: string,
   ): ReturnType<ReportDialogCloud["sendProblemReport"]> {
     return this.#request(
       `/management-api/problem-reports/${encodeURIComponent(id)}/send`,
       "POST",
-      undefined,
+      description === undefined ? undefined : { description },
       { signal },
+    );
+  }
+
+  getProblemDescriptions(
+    signal?: AbortSignal,
+  ): Promise<{ reportId: string; description: string; time: number }[]> {
+    return this.#request("/management-api/problem-reports/descriptions", "GET", undefined, {
+      passive: true,
+      signal,
+    });
+  }
+
+  decideProblemDescription(id: string, decision: "send" | "discard"): Promise<void> {
+    return this.#request(
+      `/management-api/problem-reports/descriptions/${encodeURIComponent(id)}/${decision}`,
+      "POST",
     );
   }
 

@@ -57,3 +57,45 @@ it("signs the exact attachment and distinguishes acceptance, retry and stop", as
     await cloud.close();
   }
 });
+
+it("signs a separate description and retries while Cloud is missing its report", async () => {
+  const description = JSON.stringify({ reportId: id, description: "Printer jammed", time });
+  const operation = "e9b6d89f-625b-4dac-b81e-68513c0f69f4";
+  const received: unknown[] = [];
+  const cloud = await installationFixture(undefined, {
+    staffReport: async (claims, _saved, request, response, envelope) => {
+      received.push([request.url, claims[4], JSON.parse(String(claims[7])), envelope.body]);
+      response.writeHead(received.length === 1 ? 404 : 200);
+      response.end(
+        JSON.stringify(received.length === 1 ? { error: "report_not_found" } : { received: true }),
+      );
+    },
+  });
+  try {
+    const registration = (await cloud.client.errorReportRegistration())!;
+    const send = () =>
+      cloud.client.sendStaffReport(
+        registration,
+        operation,
+        description,
+        undefined,
+        "staff-description",
+      );
+    await expect(send()).resolves.toBe("retry");
+    await expect(send()).resolves.toBe("sent");
+    expect(received).toEqual(
+      Array.from({ length: 2 }, () => [
+        "/api/installations/staff-description",
+        operation,
+        {
+          version: 1,
+          bodySha256: createHash("sha256").update(description).digest("hex"),
+          bodyBytes: Buffer.byteLength(description),
+        },
+        description,
+      ]),
+    );
+  } finally {
+    await cloud.close();
+  }
+});

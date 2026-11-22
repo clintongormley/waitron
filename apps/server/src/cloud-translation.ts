@@ -15,6 +15,7 @@ export type MachineServiceAction =
   | "address-lookup"
   | "error-report"
   | "staff-report"
+  | "staff-description"
   | "staff-certificate-submit"
   | "staff-certificate-status"
   | "guest-menu-status"
@@ -98,6 +99,7 @@ const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
   "address-lookup": { reply: 16384, ms: 8000 },
   "error-report": { reply: 4096, ms: 8000 },
   "staff-report": { reply: 4096, ms: 8000 },
+  "staff-description": { reply: 4096, ms: 8000 },
   "owner-recovery-read": { reply: 65536, ms: 8000 },
   "owner-recovery-approve": { reply: 65536, ms: 8000 },
   "owner-recovery-refuse": { reply: 65536, ms: 8000 },

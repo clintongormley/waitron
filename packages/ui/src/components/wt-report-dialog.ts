@@ -2,17 +2,22 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
 import { baseStyles } from "../base-styles.js";
+import { FormFeedback } from "../form-feedback.js";
 import type { WtModal } from "./wt-modal.js";
 import "./wt-modal.js";
 import "./wt-textarea.js";
 import "./wt-button.js";
 import "./wt-form-actions.js";
 
-type CloudAttachment = { available: true; id: string; attachment: string };
+type CloudAttachment = { available: true; id: string; attachment: string; admin?: true };
 
 export interface ReportDialogCloud {
   previewProblemReport(signal: AbortSignal): Promise<CloudAttachment | { available: false }>;
-  sendProblemReport(id: string, signal: AbortSignal): Promise<{ delivery: "queued" | "sent" }>;
+  sendProblemReport(
+    id: string,
+    signal: AbortSignal,
+    description?: string,
+  ): Promise<{ delivery: "queued" | "sent"; description?: "waiting" | "queued" }>;
 }
 
 export interface ReportDialogCopy {
@@ -26,7 +31,10 @@ export interface ReportDialogCopy {
   download: string;
   cloud?: {
     scope: string;
-    localDescription: string;
+    descriptionReview: string;
+    descriptionDirect: string;
+    waiting: string;
+    descriptionQueued: string;
     preview: string;
     send: string;
     sent: string;
@@ -69,6 +77,8 @@ export class WtReportDialog extends LitElement {
   @property({ attribute: false }) cloud?: ReportDialogCloud;
   @state() private cloudPreview?: CloudAttachment;
   @state() private delivery?: "sending" | "sent" | "queued" | "refused";
+  @state() private descriptionDelivery?: "waiting" | "queued";
+  private readonly feedback = new FormFeedback(this);
   @query("wt-modal") private modal!: WtModal;
   private cloudRequest?: AbortController;
 
@@ -77,6 +87,7 @@ export class WtReportDialog extends LitElement {
     this.cloudRequest?.abort();
     this.cloudPreview = undefined;
     this.delivery = undefined;
+    this.descriptionDelivery = undefined;
     if (this.open && this.cloud) {
       this.cloudRequest = new AbortController();
       void this.loadCloudPreview(this.cloud, this.cloudRequest.signal);
@@ -105,16 +116,31 @@ export class WtReportDialog extends LitElement {
     if (!cloud || !preview || !signal || signal.aborted || !this.canSend) return;
     this.delivery = "sending";
     try {
-      const { delivery } = await cloud.sendProblemReport(preview.id, signal);
-      if (!signal.aborted)
-        this.delivery = delivery === "sent" || delivery === "queued" ? delivery : "refused";
+      const text = this.description.trim() ? this.description : undefined;
+      const result =
+        text === undefined
+          ? await cloud.sendProblemReport(preview.id, signal)
+          : await cloud.sendProblemReport(preview.id, signal, text);
+      if (signal.aborted) return;
+      this.delivery =
+        result.delivery === "sent" || result.delivery === "queued" ? result.delivery : "refused";
+      this.descriptionDelivery = result.description;
+      if (text !== undefined && this.delivery !== "refused" && result.description) {
+        this.dispatchEvent(
+          new CustomEvent("wt-description-saved", {
+            detail: { value: text },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }
     } catch {
       if (!signal.aborted) this.delivery = "refused";
     }
   }
 
   private get canSend(): boolean {
-    return this.delivery === undefined || this.delivery === "refused";
+    return !this.validationError && (this.delivery === undefined || this.delivery === "refused");
   }
 
   private edited(event: CustomEvent<{ value: string }>): void {
@@ -154,6 +180,8 @@ export class WtReportDialog extends LitElement {
     const invalid = this.validationError !== "",
       ready = !invalid && this.preview !== "";
     const cloudCopy = this.cloudPreview && c.cloud;
+    const feedback = this.delivery === "refused" ? cloudCopy?.refused : this.downloadError;
+    const fields = new Set(invalid && this.delivery !== "refused" ? ["description"] : []);
     return html`<wt-modal
       size="standard"
       .open=${this.open}
@@ -171,9 +199,10 @@ ${this.cloudPreview.attachment}</pre>`
           : nothing
       }
       <p>${c.warning}</p>
+      ${cloudCopy ? html`<p>${this.cloudPreview?.admin ? cloudCopy.descriptionDirect : cloudCopy.descriptionReview}</p>` : nothing}
       <wt-textarea
         name="problemDescription"
-        .label=${cloudCopy ? cloudCopy.localDescription : c.description}
+        .label=${c.description}
         .value=${this.description}
         .error=${this.validationError}
         @wt-change=${this.edited}
@@ -182,13 +211,7 @@ ${this.cloudPreview.attachment}</pre>`
       <pre role="region" tabindex="0" aria-label=${c.preview}>${this.preview}</pre>
       <wt-form-actions
         slot="footer"
-        .error=${
-          this.delivery === "refused" && cloudCopy
-            ? cloudCopy.refused
-            : invalid
-              ? c.invalid
-              : this.downloadError
-        }
+        .error=${this.feedback.message({ report: fields.size ? undefined : feedback }, fields, c.invalid)}
       >
         <wt-button slot="cancel" variant="secondary" @click=${this.cancel}>${c.cancel}</wt-button>
         ${
@@ -196,7 +219,16 @@ ${this.cloudPreview.attachment}</pre>`
             ? html`<div class="cloud-status" slot="secondary" role="status">
                   ${
                     this.delivery === "sent" || this.delivery === "queued"
-                      ? cloudCopy[this.delivery]
+                      ? [
+                          cloudCopy[this.delivery],
+                          this.descriptionDelivery === "waiting"
+                            ? cloudCopy.waiting
+                            : this.descriptionDelivery === "queued"
+                              ? cloudCopy.descriptionQueued
+                              : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")
                       : ""
                   }
                 </div>

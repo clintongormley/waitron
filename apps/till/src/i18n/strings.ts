@@ -16,7 +16,12 @@ export const en = {
   "problem_report.download_failed": "Could not create the download. Try again.",
   "problem_report.cloud_scope":
     "Review the Cloud attachment before sending. The download keeps this browser's activity and your description in a file.",
-  "problem_report.local_description": "What happened? (download only)",
+  "problem_report.description_review":
+    "A manager can review your description on this box and choose whether to send it.",
+  "problem_report.description_direct":
+    "Sending this report also sends your description to Waitron Cloud.",
+  "problem_report.description_waiting": "Your description is waiting for a manager to send it.",
+  "problem_report.description_queued": "Your description is queued to send.",
   "problem_report.cloud_preview": "Cloud attachment",
   "problem_report.send": "Send to Waitron Cloud",
   "problem_report.sent": "Sent to Waitron Cloud.",
@@ -2333,7 +2338,13 @@ export const es: Record<StringKey, string> = {
   "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
   "problem_report.cloud_scope":
     "Revisa el informe adjunto antes de enviarlo a Cloud. La descarga guarda la actividad de este navegador y tu descripción en un archivo.",
-  "problem_report.local_description": "¿Qué ha pasado? (solo para la descarga)",
+  "problem_report.description_review":
+    "Un administrador puede revisar tu descripción en este servidor y decidir si la envía.",
+  "problem_report.description_direct":
+    "Al enviar este informe, también envías tu descripción a Waitron Cloud.",
+  "problem_report.description_waiting":
+    "Tu descripción está pendiente de que un administrador la envíe.",
+  "problem_report.description_queued": "Tu descripción está en cola para enviarse.",
   "problem_report.cloud_preview": "Informe adjunto para Cloud",
   "problem_report.send": "Enviar a Waitron Cloud",
   "problem_report.sent": "Enviado a Waitron Cloud.",
