@@ -5635,14 +5635,16 @@ export class TillApp extends LitElement {
         (r, signal) => this.api.reportBattery(r, { signal }),
         nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
       );
-      this.#holdIdentity(identity);
-      this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       if (
         this.kitchenOperator !== "" &&
-        (kind !== "kds_station" || previousDeviceId !== identity.deviceId)
+        (kind !== "kds_station" ||
+          previousDeviceId !== identity.deviceId ||
+          this.activeProfileId !== (identity.profileId ?? ""))
       )
         this.#onKitchenLogout(false);
+      this.#holdIdentity(identity);
+      this.#restoreMakeNow();
       this.#deviceKind = kind ?? "till";
       if (kind !== undefined && LIVE_STREAM_KINDS.includes(kind)) {
         if (
@@ -24633,7 +24635,7 @@ export class TillApp extends LitElement {
     return html`
       ${this.kitchenScreenSwitched === undefined ? nothing : html`<p class="switched" role="status" data-screen-switched>${kitchenScreenSwitchedText(this.kitchenScreenSwitched)}</p>`}
       ${
-        this.deviceMode && this.kitchenScreenNotice === undefined && !this.initialDevicePassMonitor
+        this.deviceMode && this.initialDeviceStation !== undefined
           ? html`<till-lock-screen
               compact
               .api=${this.api}

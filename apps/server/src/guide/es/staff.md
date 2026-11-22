@@ -209,7 +209,7 @@ iniciar sesión. Un perfil nuevo empieza con todos los puestos actuales seleccio
 un perfil se conservan sus selecciones. Si añades un puesto después, selecciónalo en los perfiles
 donde sus titulares necesiten iniciar sesión.
 
-En un perfil de pantalla de cocina, selecciona los puestos de cocina y recarga la pantalla de estación o de pase para ver **Entrar**.
+En un perfil de pantalla de cocina, selecciona los puestos de cocina y recarga la pantalla de estación para ver **Entrar**.
 
 Si cambias el tiempo de inactividad, el fichaje o las pantallas disponibles en
 un perfil de dispositivo, el TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV

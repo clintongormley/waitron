@@ -181,12 +181,12 @@ sin ningún extra que fuera a una estación propia, se puede cambiar sea cual se
 
 ## Inicia sesión en una pantalla de cocina {#kitchen-sign-in}
 
-En la pantalla de estación o de pase, pulsa **Entrar**, elige tu nombre e introduce tu PIN.
+En la pantalla de estación, pulsa **Entrar**, elige tu nombre e introduce tu PIN.
 La cola sigue visible. Cuando usas **Cambiar de estación…**, la estación de destino ve tu nombre
 en la tarjeta del plato.
 
-Pulsa **Cerrar sesión** cuando dejes la pantalla a otra persona. Si dejas la sesión abierta,
-los siguientes traslados llevarán tu nombre hasta que alguien la cierre.
+Pulsa **Cerrar sesión** cuando dejes la pantalla a otra persona. Si dejas tu sesión abierta,
+los traslados de la siguiente persona llevarán tu nombre.
 La pantalla ofrece **Entrar** cuando su [perfil admite a alguien](staff.md#device-profile-sign-in).
 
 ## Trabaja con la pantalla de estación {#kitchen-screen}

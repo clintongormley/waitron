@@ -161,11 +161,11 @@ that went to a station of its own, can be changed whatever the stations allow.
 
 ## Sign in on a kitchen display {#kitchen-sign-in}
 
-On a station or pass screen, choose **Log in**, select your name and enter your PIN.
+On a station screen, choose **Log in**, select your name and enter your PIN.
 The queue stays in view. When you use **Move to station…**, the receiving station sees your name on the dish card.
 
-Choose **Log out** when you hand the display to another cook. If you leave signed in,
-the next cook’s moves carry your name until someone logs out.
+Choose **Log out** when you hand the display to another cook. If you leave your session open,
+the next cook’s moves carry your name.
 The display offers **Log in** when its [profile admits staff](staff.md#device-profile-sign-in).
 
 ## Work the station screen {#kitchen-screen}

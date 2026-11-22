@@ -719,7 +719,7 @@ the server checks each at the route, never trusting the till's copy:
   registrations and does not walk other APIs, including theme, node, box and backup routes.
   The independent zone map remains a comment.
 - **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
-  on a station or pass screen. `profileAllows` (`packages/layouts/src/device-profile.ts`)
+  on a station screen. `profileAllows` (`packages/layouts/src/device-profile.ts`)
   allows only `prepare-orders`, `take-orders` and `hand-over-orders`. The shared till session
   check answers `session.required` for a kitchen display based on its current profile type.
   A kitchen sign-in carries no separate type field. Its pass screen's bill
@@ -1207,8 +1207,8 @@ session" and "a sign-in that Delete and then Add both overtook is refused, and o
 session"). The same check hands back the device as it stands at that moment, and the sign-in
 refuses it `device.forbidden_action` (`action: "sign_in"`) if a reassignment between an ordering
 and a kitchen profile overtook the PIN check (`apps/server/src/till-api.ts`). A move onto a
-kitchen profile during the check opens no session (`apps/server/src/join-e2e.test.ts`, "a sign-in
-overtaken by a move onto a kitchen-screen profile is refused, and opens no session"). A bill payment checks again inside the transaction that writes it, before anything is written: the
+kitchen profile during the check opens no session (`apps/server/src/join-e2e.test.ts`,
+"refuses a PIN sign-in overtaken by reassignment"). A bill payment checks again inside the transaction that writes it, before anything is written: the
 operator's session is still open on that device, then the device is still active and not deleted,
 or it is refused `session.required` or `device.unauthorized` (`assertStillSignedIn`,
 `apps/server/src/till-session.ts`, called first in `beginBillPayment`,
