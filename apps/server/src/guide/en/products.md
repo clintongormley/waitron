@@ -22,9 +22,11 @@ To correct the class on the live menu without publishing your other changes to t
 [Patch the live menu in an emergency](products.md#patch-live-menu).
 A line already on an order keeps the class it was added with.
 
-Where your region taxes takeaway food differently, **VAT when taken away** holds this product's
-class for an order sold as **Take away** on the till. Left empty, such an order is charged the class
-the empty field shows.
+Where your region taxes takeaway food differently, **VAT when taken away** holds the rate this
+product is charged when it is taken away. Pick it from the list. A new product starts at **New
+products start at** in the venue's defaults. A variant can keep its product's rate. A change
+applies to every takeaway ticket from then on, including orders already open; you do not need to
+publish the menu.
 
 ## Set how a product is sold {#selling}
 
@@ -356,10 +358,6 @@ change:
 - A variant or an extra: the same, without a description.
 - An options list's choice, and the name of an extras list or an options list: its three names.
 - A section: its internal name, customer-facing name and image.
-
-Where your region taxes takeaway food differently, a dish, a variant and an extra also show **VAT
-when taken away**, with the class the live menu holds for when it is taken away. Correct each class
-on its own: changing one never changes the other.
 
 Customer-facing names and descriptions show a field for each content language. Choose or remove an
 image as you would in the product editor. A dish with variants is charged at each variant's own

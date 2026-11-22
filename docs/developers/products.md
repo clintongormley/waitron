@@ -119,9 +119,10 @@ Rescheduling records the old and new activation times and the acting person in
 
 ## What a sold line freezes
 
-A line freezes its names, its gross price and its two VAT classes (eaten here and taken away) when
-it is added and never reads them from the menu again, so editing a product does not rewrite yesterday's receipt; the VAT classes
-come from the published menu, the order's way of selling picks one, and the rate comes from the day the invoice is issued, below. `working_order_lines` and `sale_lines` each carry:
+A line freezes its names, its gross price and its eat-in VAT class when it is added and never reads
+them from the menu again, so editing a product does not rewrite yesterday's receipt; the class comes
+from the published menu and its rate from the day the invoice is issued, below. A line taken away
+freezes no rate: it files at its product's takeaway rate, read when the invoice is issued. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -167,29 +168,35 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
 line. Neither table has a `variant_id` column.
 
-**A line's VAT classes are the ones its published menu froze, fixed when its price is; the rate of
-the one its order's way picks is the one in force on the day the invoice is issued.** Each published
-menu version records the two VAT classes of each dish, variant and extras item, and no rate (`buildMenuDocument`,
+**Eaten here, a line files at the class its published menu froze, fixed when its price is, at the
+rate in force on the day the invoice is issued. Taken away, a line files at its product's own
+takeaway rate on that day, read when the line is rated.** Each published menu version records the
+eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
-product's current ones. A line added to a held order or a tab stores that
-class (`working_order_lines.vat_class`) and its takeaway class (`takeaway_vat_class`, the served
-class again where the product has none) with its gross price, which is the same either way. The
-order's `working_orders.dining` picks which class a bill, payment or filing rates the line at; it is
-fixed once the kitchen has any of the order, a payment has started or the order is no longer open
-(`working_orders_dining_fixed`); a walk-up sale is priced at payment,
-from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). The class is
-picked in two places only: `priceOrderLines`, for lines being priced, and `readLockedLines`'s
-stored-line columns, for stored lines a bill, payment or filing reads (both in that file). A variant
-with no class of its own was frozen at its parent's class, and an extras line takes the classes frozen for
-its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
-an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
-a till only when a menu including it is published again, and until then that menu shows
-Unpublished changes. Patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
-changes a class in that menu's live version alone; the product keeps its own.
+product's current ones. A line added to a held order or a tab stores that class
+(`working_order_lines.vat_class`) with its gross price, which is the same either way; its
+`takeaway_vat_class` is read only for a set-menu line. The order's `working_orders.dining` picks
+which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
+order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
+walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
+`apps/server/src/working-order.ts`). Both pricing a line and reading stored lines for a bill,
+payment or filing take each line's rate list from `readLineVatRates`
+(`apps/server/src/line-vat-rates.ts`): eaten here, its class's list in `VAT_RATE_TABLE`; taken
+away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
+`product_takeaway_vat_rates`, or its parent's when a variant has none
+(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A variant with no class
+of its own was frozen at its parent's class, and an extras line takes the class frozen for its
+picked product. Raising the quantity of an unsent line in place keeps that row's class; a line an
+edit adds takes the class of the version live then. So a change to a product's eat-in VAT class
+reaches a till only when a menu including it is published again, and until then that menu shows
+Unpublished changes; a change to its takeaway rate reaches every takeaway line rated from then on,
+open orders included, with no publish. Patching a live menu (`patchLiveMenu`,
+`packages/menu/src/menu-publication.ts`) changes an eat-in class in that menu's live version alone;
+the product keeps its own, and a patch cannot change a takeaway rate.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
 `packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it
-takes effect. Issuing the invoice takes one clock reading, prices every line's class at the rate in
+takes effect. Issuing the invoice takes one clock reading, prices every line at the rate in
 force on that reading's local calendar date, and dates the invoice with the same reading
 (`issueMoment`, `apps/server/src/issue-moment.ts`). When the meal ended on an earlier calendar day
 than that date (`issueOrderMoment`, `apps/server/src/sale-day.ts`), the lines take that day's rates
@@ -570,10 +577,9 @@ may have any number of variants, one included.
 
 ### What a variant reads from its parent
 
-**Every field a variant leaves blank reads its parent's, except its three names and its takeaway
-VAT class.** A blank takeaway VAT class reads the variant's own VAT class when it sets one, and
-otherwise its parent's takeaway class, or failing that its parent's VAT class
-(`effectiveProductColumns.takeawayVatClass`). Among the others its VAT class, course, description, image and allergen and dietary declarations
+**Every field a variant leaves blank reads its parent's, except its three names.** A variant
+with no takeaway rate rows of its own takes its parent's (`readTakeawayVatSchedules`,
+`packages/menu/src/takeaway-vat-rates.ts`). Among the others its VAT class, course, description, image and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/menu/src/variant-fallback.ts`). Its main reporting category is always its parent's,
