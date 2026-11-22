@@ -361,7 +361,7 @@ describe("A803 move dishes panel", () => {
     expect(pressed(el)).toEqual(["wo-4"]);
     expect(confirm(el).disabled).toBe(false);
     await userEvent.click(confirm(el));
-    expect(sent).toEqual([{ lineIds: ["h1"], toBillId: "wo-4" }]);
+    expect(sent).toEqual([{ lineIds: ["h1"], toBillId: "wo-4", review: expect.any(Function) }]);
   });
 
   it("Move is quiet until a dish and a destination are chosen", async () => {
@@ -391,7 +391,9 @@ describe("A803 move dishes panel", () => {
     await el.updateComplete;
     await userEvent.click(confirm(el));
     await el.updateComplete;
-    expect(sent).toEqual([{ lineIds: ["c1", "c2"], toBillId: "wo-4" }]);
+    expect(sent).toEqual([
+      { lineIds: ["c1", "c2"], toBillId: "wo-4", review: expect.any(Function) },
+    ]);
     expect(panel(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
   });
@@ -404,7 +406,7 @@ describe("A803 move dishes panel", () => {
     await userEvent.click(destinations(el).at(-1)!);
     await el.updateComplete;
     await userEvent.click(confirm(el));
-    expect(sent).toEqual([{ lineIds: ["h1"], toBillId: null }]);
+    expect(sent).toEqual([{ lineIds: ["h1"], toBillId: null, review: expect.any(Function) }]);
   });
 
   it("the picker reads the bill on screen's balance: the floor greys what would break it", async () => {
@@ -613,7 +615,9 @@ describe("A803 move dishes refresh:", () => {
     await el.updateComplete;
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
-    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
+    expect(await moveTo(el)).toEqual([
+      { lineIds: ["c2", "c3"], toBillId: null, review: expect.any(Function) },
+    ]);
   });
 
   it("a re-read in which identical dishes join a ticked row keeps its count from the row's first members, and Move sends exactly those", async () => {
@@ -634,7 +638,9 @@ describe("A803 move dishes refresh:", () => {
       "c4",
     ]);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
-    expect(await moveTo(el)).toEqual([{ lineIds: ["c1", "c2"], toBillId: null }]);
+    expect(await moveTo(el)).toEqual([
+      { lineIds: ["c1", "c2"], toBillId: null, review: expect.any(Function) },
+    ]);
   });
 
   it("an update that changes nothing the rows are drawn from does not group the bill's dishes again", async () => {
@@ -826,7 +832,9 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     await tick(el, "c1");
-    expect(await send(el)).toEqual([{ lineIds: ["c1", "c2", "c3", "c4"], toBillId: null }]);
+    expect(await send(el)).toEqual([
+      { lineIds: ["c1", "c2", "c3", "c4"], toBillId: null, review: expect.any(Function) },
+    ]);
   });
 
   it("unticking a grouped row leaves none of its members", async () => {
@@ -845,7 +853,9 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     await step(el, "dec", "c1");
     await step(el, "dec", "c1");
     await step(el, "inc", "c1");
-    expect(await send(el)).toEqual([{ lineIds: ["c1", "c2", "c3"], toBillId: null }]);
+    expect(await send(el)).toEqual([
+      { lineIds: ["c1", "c2", "c3"], toBillId: null, review: expect.any(Function) },
+    ]);
   });
 
   it("a picked dish that joins a group on a refresh keeps its count, taken from the group's first dishes", async () => {
@@ -857,7 +867,9 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     await el.updateComplete;
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set(["c1"]));
-    expect(await send(el)).toEqual([{ lineIds: ["c1"], toBillId: null }]);
+    expect(await send(el)).toEqual([
+      { lineIds: ["c1"], toBillId: null, review: expect.any(Function) },
+    ]);
   });
 
   it("heads the panel from a bill named after a slot with the name as typed", async () => {
