@@ -458,15 +458,17 @@ describe("recordIncidentOnce", () => {
         severity: "error",
         detectedAt: BASE,
       };
+      const raise = (incident: RecordIncidentInput) =>
+        withTransaction(suite.db, async (tx) => {
+          await record(tx, incident);
+        });
       try {
         vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.10.0" });
-        await withTransaction(suite.db, (tx) => record(tx, input));
+        await raise(input);
         vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.11.0" });
-        await withTransaction(suite.db, (tx) => record(tx, input));
+        await raise(input);
         vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.12.0-rc.1" });
-        await withTransaction(suite.db, (tx) =>
-          record(tx, { ...input, origin: jobOrigin("fiscal_filing") }),
-        );
+        await raise({ ...input, origin: jobOrigin("fiscal_filing") });
         const { rows } = await suite.db.execute(sql`select * from incidents order by source`);
         expect(rows.map((row) => [row.source, row.release_version])).toEqual([
           ["fiscal_filing", null],
