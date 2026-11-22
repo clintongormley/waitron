@@ -172,6 +172,9 @@ it("lists pending and finished drawer counts in the selected Sales dates, includ
       { id: overnight.id, finished: null },
     ],
   });
+  expect(await (await get("?from=2026-11-21&to=2026-11-21")).json()).toMatchObject({
+    closes: [{ id: pending.id }, { id: overnight.id }],
+  });
 });
 
 it("queues only a document on the selected active receipt printer for a deleted drawer", async () => {

@@ -64,6 +64,7 @@ export class DrawerCloseHistory extends LitElement {
   @state() private printing = "";
   @state() private printError = "";
   @state() private sentTo = "";
+  #rangeVersion = 0;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -79,6 +80,7 @@ export class DrawerCloseHistory extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("from") && !changed.has("to") && !changed.has("api")) return;
+    this.#rangeVersion += 1;
     this.report = null;
     this.readingError = "";
     this.sentTo = "";
@@ -107,14 +109,15 @@ export class DrawerCloseHistory extends LitElement {
   async #print(closeId: string) {
     const printer = this.printer;
     if (printer === undefined || this.printing !== "") return;
+    const version = this.#rangeVersion;
     this.printing = closeId;
     this.sentTo = "";
     this.printError = "";
     try {
       await this.api.printDrawerClose(closeId, printer.id);
-      this.sentTo = printer.name;
+      if (version === this.#rangeVersion) this.sentTo = printer.name;
     } catch (error) {
-      this.printError = codeOf(error);
+      if (version === this.#rangeVersion) this.printError = codeOf(error);
     } finally {
       this.printing = "";
     }
@@ -185,14 +188,16 @@ export class DrawerCloseHistory extends LitElement {
       timeStyle: "short",
     });
     const money = (amount: string) => formatMoney(amount, locale);
-    const countLine = (count: Close["first"]) =>
-      fill("sales.drawer_count_detail", {
+    const countLine = (count: Close["first"]) => html`
+      ${fill("sales.drawer_count_detail", {
         person: count.person,
         date: date.format(new Date(count.at)),
         counted: money(count.counted),
         expected: money(count.expected),
         difference: money(count.difference),
-      });
+      })}
+      ${count.cashMoved ? html`<div>${t("sales.drawer_moved")}</div>` : nothing}
+    `;
     return html`
       <details>
         <summary>
@@ -232,7 +237,6 @@ export class DrawerCloseHistory extends LitElement {
               </p>`
             : nothing
         }
-        ${first.cashMoved || recount?.cashMoved ? html`<p>${t("sales.drawer_moved")}</p>` : nothing}
         ${
           !deleted && (assigned || finished !== null)
             ? nothing

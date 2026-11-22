@@ -103,10 +103,17 @@ it("uses the Sales dates and preserves the drawer filter on a passive refresh", 
 });
 
 it("shows the new date range when it has no counts for the previously selected drawer", async () => {
-  const { api, getDrawerCloses } = fixture();
+  const { api, getDrawerCloses, printDrawerClose } = fixture();
+  let finishPrint!: (value: { jobId: string }) => void;
+  const pendingPrint = new Promise<{ jobId: string }>((resolve) => (finishPrint = resolve));
+  printDrawerClose.mockReturnValue(pendingPrint);
   const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
   await vi.waitFor(() => expect(text(el)).toContain("Kitchen drawer"));
   await chooseOption(body(el)!.querySelector('wt-combobox[name="drawerId"]')!, "kitchen");
+  const row = body(el)!.querySelector("details")!;
+  row.open = true;
+  row.querySelector<HTMLElement>("wt-button")!.click();
+  expect(printDrawerClose).toHaveBeenCalledWith("close", "p1");
   getDrawerCloses.mockResolvedValue({ ...history, closes: [history.closes[0]!] });
   el.shadowRoot!.querySelector('[data-test="to-picker"]')!.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -119,6 +126,10 @@ it("shows the new date range when it has no counts for the previously selected d
     expect(body(el)!.querySelector("summary")?.textContent ?? "").toContain("Bar drawer"),
   );
   expect(getDrawerCloses).toHaveBeenLastCalledWith("2026-11-20", "2026-11-21");
+  finishPrint({ jobId: "old-view" });
+  await pendingPrint;
+  await new Promise(requestAnimationFrame);
+  expect(body(el)!.querySelector('[role="status"]')!.textContent?.trim()).toBe("");
 });
 
 it.each(["light", "dark"] as const)(
@@ -137,7 +148,10 @@ it.each(["light", "dark"] as const)(
     expect(pending!.querySelector("wt-button")).toBeNull();
     expect(finished!.textContent).toContain("Robin");
     expect(finished!.textContent).not.toContain("Assign a till");
-    expect(finished!.textContent).toContain("Cash moved after the count");
+    expect(finished!.textContent).toContain("Cash moved after the count +€2.00");
+    const [firstCount, recount] = finished!.querySelectorAll("dd");
+    expect(firstCount!.textContent).toContain("Cash moved while counting.");
+    expect(recount!.textContent).not.toContain("Cash moved while counting.");
     expect(text(el)).toContain("Pending counts show for any date.");
     await chooseOption(el.shadowRoot!.querySelector('[data-test="print-printer"]')!, "p2");
 
