@@ -20,7 +20,9 @@ import {
   resolveInstalledCountryLocale,
   resolveInstalledReceiptLanguageRules,
   resolveInstalledStartingContentLanguages,
+  vatRatesFor,
 } from "./registry.js";
+import { basisPointsToDecimal, stringToBasisPoints } from "@waitron/shared";
 
 describe("installed country packs", () => {
   it("has one pack per unique country code", () => {
@@ -54,6 +56,59 @@ describe("installed country packs", () => {
     expect(chargesTakeawayVat("GB", "GB-vat")).toBe(false);
     expect(chargesTakeawayVat("XX", "ES-common")).toBe(false);
     expect(chargesTakeawayVat("ES", "missing")).toBe(false);
+  });
+
+  it("gives each supported area's dated dine-in rates, accepted and pickable rates and takeaway default", () => {
+    expect(vatRatesFor("ES", "ES-common")).toEqual({
+      dineIn: [{ from: null, rate: "10.00" }],
+      accepted: ["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"],
+      pickable: ["0.00", "4.00", "10.00", "21.00"],
+      defaultTakeaway: "10.00",
+    });
+    expect(vatRatesFor("GB", "GB-vat")).toEqual({
+      dineIn: [{ from: null, rate: "0.00" }],
+      accepted: ["0.00"],
+      pickable: ["0.00"],
+      defaultTakeaway: "0.00",
+    });
+    expect(vatRatesFor("ES", "ES-canary")).toBeUndefined();
+    expect(vatRatesFor("XX", "ES-common")).toBeUndefined();
+    expect(vatRatesFor("ES", "missing")).toBeUndefined();
+  });
+
+  it("gives every supported area with modules complete, consistent rate lists in one spelling", () => {
+    const supported = COUNTRY_PACKS.flatMap((pack) =>
+      pack.fiscalJurisdictions
+        .filter(({ supported, modules }) => supported && modules !== undefined)
+        .map(({ id }) => [pack.countryCode, id] as const),
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    const oneSpelling = (rate: string) => basisPointsToDecimal(stringToBasisPoints(rate));
+    for (const [country, territory] of supported) {
+      const rates = vatRatesFor(country, territory);
+      expect(rates, territory).toBeDefined();
+      const { dineIn, accepted, pickable, defaultTakeaway } = rates!;
+      expect(dineIn.length, territory).toBeGreaterThan(0);
+      expect(dineIn[0]!.from, territory).toBeNull();
+      for (let i = 1; i < dineIn.length; i += 1) {
+        const from = dineIn[i]!.from;
+        const previous = dineIn[i - 1]!.from;
+        expect(from, territory).not.toBeNull();
+        if (previous !== null) expect(from! > previous, territory).toBe(true);
+      }
+      expect(accepted.length, territory).toBeGreaterThan(0);
+      for (const rate of pickable) expect(accepted, territory).toContain(rate);
+      for (const { rate } of dineIn) expect(pickable, territory).toContain(rate);
+      expect(pickable, territory).toContain(defaultTakeaway);
+      for (const rate of [
+        ...dineIn.map(({ rate }) => rate),
+        ...accepted,
+        ...pickable,
+        defaultTakeaway,
+      ]) {
+        expect(rate, territory).toBe(oneSpelling(rate));
+      }
+    }
   });
 
   it("resolves venue locales through installed country and area preferences", () => {

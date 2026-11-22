@@ -907,6 +907,18 @@ reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-
 copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
 a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
 
+## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
+
+Spain's pack accepts seven VAT rates (0, 2, 4, 5, 7.5, 10 and 21) but lets a person pick only 0,
+4, 10 and 21 for a product taken away (`pickableVatRates` in `packages/country-es/src/spain.ts`),
+because `mapModelo303` (`packages/reporting/src/modelo-303.ts`) has a box for only those four and
+refuses any other rate, so one sale at 5% would make that period's modelo 303 download fail.
+Widening the pick list needs those boxes first: read the committed AEAT record design
+(`packages/reporting/reference/DR303e26.xlsx`) for rows at 2, 5 and 7.5, then map them.
+`apps/server/src/vat-rates-reportable.test.ts` fails if the list is widened without the mapping.
+Decision D18 of [the piece A plan](../superpowers/plans/2026-11-22-vat-rates-a.md) is the owner's
+to answer.
+
 ## Correcting a paid invoice: what A802 left open
 
 Staff correct part of a paid invoice from **Correct invoice** on a past receipt (A802, the

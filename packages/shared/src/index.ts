@@ -487,6 +487,7 @@ export type {
   SetMenuTerms,
 } from "./menu-document/set-menu-types.js";
 export {
+  rateOn,
   vatRateOn,
   vatRatesOn,
   isCalendarDate,

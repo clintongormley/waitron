@@ -148,6 +148,22 @@ describe("Spanish postcodes and provinces", () => {
         .map(({ id }) => id),
     ).toEqual(["ES-common"]);
   });
+
+  it("lists the common territory's VAT rates, and only the ones the VAT return reports as pickable", () => {
+    const common = SPAIN.fiscalJurisdictions.find(({ id }) => id === "ES-common");
+    expect(common).toMatchObject({
+      dineInVatRates: [{ from: null, rate: "10.00" }],
+      vatRates: ["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"],
+      pickableVatRates: ["0.00", "4.00", "10.00", "21.00"],
+      defaultTakeawayVatRate: "10.00",
+    });
+    for (const jurisdiction of SPAIN.fiscalJurisdictions.filter(({ supported }) => !supported)) {
+      expect(jurisdiction.dineInVatRates, jurisdiction.id).toBeUndefined();
+      expect(jurisdiction.vatRates, jurisdiction.id).toBeUndefined();
+      expect(jurisdiction.pickableVatRates, jurisdiction.id).toBeUndefined();
+      expect(jurisdiction.defaultTakeawayVatRate, jurisdiction.id).toBeUndefined();
+    }
+  });
 });
 
 describe("regional content languages", () => {

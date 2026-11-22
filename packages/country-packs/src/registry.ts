@@ -1,6 +1,7 @@
 import { normalizeRecipientCountryCode } from "./recipient-countries.js";
 import type {
   CountryPack,
+  DatedVatRate,
   FiscalModules,
   ReceiptLabels,
   ReceiptLanguageRules,
@@ -32,7 +33,7 @@ import {
 } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
-export type { FiscalModules } from "@waitron/country";
+export type { DatedVatRate, FiscalModules } from "@waitron/country";
 export type {
   RecipientIdentifier,
   RecipientIdentifierType,
@@ -109,6 +110,34 @@ export function chargesTakeawayVat(country: string, territory: string): boolean 
     getCountryPack(country)?.fiscalJurisdictions.find(({ id }) => id === territory)?.takeawayVat ===
     true
   );
+}
+
+export interface AreaVatRates {
+  readonly dineIn: readonly DatedVatRate[];
+  readonly accepted: readonly string[];
+  readonly pickable: readonly string[];
+  readonly defaultTakeaway: string;
+}
+
+/** The area's VAT rates, or `undefined` when the area is unknown or its pack lists none. */
+export function vatRatesFor(country: string, territory: string): AreaVatRates | undefined {
+  const jurisdiction = getCountryPack(country)?.fiscalJurisdictions.find(
+    ({ id }) => id === territory,
+  );
+  if (
+    jurisdiction?.dineInVatRates === undefined ||
+    jurisdiction.vatRates === undefined ||
+    jurisdiction.pickableVatRates === undefined ||
+    jurisdiction.defaultTakeawayVatRate === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    dineIn: jurisdiction.dineInVatRates,
+    accepted: jurisdiction.vatRates,
+    pickable: jurisdiction.pickableVatRates,
+    defaultTakeaway: jurisdiction.defaultTakeawayVatRate,
+  };
 }
 
 export function resolveInstalledCountryLocale<Locale extends string>(

@@ -15,6 +15,10 @@ describe("UNITED_KINGDOM", () => {
       areaCodes: [],
       supported: true,
       modules: { filing: "none", tax: "none" },
+      dineInVatRates: [{ from: null, rate: "0.00" }],
+      vatRates: ["0.00"],
+      pickableVatRates: ["0.00"],
+      defaultTakeawayVatRate: "0.00",
     });
   });
 });

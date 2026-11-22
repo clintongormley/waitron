@@ -346,6 +346,12 @@ export const SPAIN: CountryPack = {
       supported: true,
       modules: { filing: "verifactu", tax: "vat" },
       takeawayVat: true,
+      dineInVatRates: [{ from: null, rate: "10.00" }],
+      vatRates: ["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"],
+      // Only the rates modelo 303 can report today:
+      // docs/backlog/fiscal.md#offer-2-5-and-75-taken-away-once-modelo-303-can-report-them
+      pickableVatRates: ["0.00", "4.00", "10.00", "21.00"],
+      defaultTakeawayVatRate: "10.00",
     },
     ...unsupportedFiscalJurisdictions,
   ],
