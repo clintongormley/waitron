@@ -205,7 +205,9 @@ waitron.local reaches that box instead. Use this box's own address:". Use one wh
 resolve, or when the venue already has a Waitron box. To join or recover, you do not need to install this box's certificate:
 open its `https://` address (the guide's **Continue to Waitron** link), accept the browser's warning
 once and choose **Join or recover**. When another box answers waitron.local, the guide leads with
-this box's own address. The
+this box's own address. Otherwise, on a box not yet set up, it says in English and Spanish not to
+install this box's certificate if the venue already has a Waitron server, and to switch to the spare
+instead. The
 box's own addresses are the addresses of the network
 connection carrying the box's default route; when there is no default route, or that connection
 has no address, they are every address except loopback and those on connections whose names start

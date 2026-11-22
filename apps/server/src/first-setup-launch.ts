@@ -119,6 +119,7 @@ export async function startServerOrFirstSetupResolution(
       onRepaired,
       operatorTls:
         !isUnset(effectiveEnv.WAITRON_TLS_CERT_FILE) || !isUnset(effectiveEnv.WAITRON_TLS_KEY_FILE),
+      notSetUp: isUnset(effectiveEnv.WAITRON_NODE_ID),
     };
     lastOptions = options;
     if (await needsConnectionBootstrap(options, effectiveEnv))

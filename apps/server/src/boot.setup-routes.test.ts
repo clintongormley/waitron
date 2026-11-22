@@ -40,6 +40,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { readStagedConfigurationImport } from "./configuration-import.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
   assignMenuToVenue,
@@ -331,7 +332,9 @@ describe("startServer — background listeners and sinks that fail or close", ()
       const page = await fetch(`http://127.0.0.1:${landingPort}/`);
       expect(page.status).toBe(200);
       expect(page.headers.get("content-type")).toMatch(/^text\/html/);
-      expect(await page.text()).toContain("/ca.crt");
+      const pageHtml = await page.text();
+      expect(pageHtml).toContain("/ca.crt");
+      expect(pageHtml).not.toContain(NOT_SET_UP_WORDS.en);
       // The listener reads the boot's own state directory: it hands out the CA minted above.
       const ca = await fetch(`http://127.0.0.1:${landingPort}/ca.crt`);
       expect(ca.status).toBe(200);
@@ -607,6 +610,38 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(stateDir, { recursive: true, force: true });
     }
   }
+
+  it("warns on the plain-HTTP landing and connection pages that the box is not set up yet", async () => {
+    const venue = await freshVenue();
+    const directory = venue.directory;
+    await venue.store.close();
+    const landing = await retainHttpListener();
+    const adoption = adoptRetainedListeners([landing]);
+    try {
+      await withSetupBoot(
+        directory,
+        { WAITRON_HTTP_HOST: "127.0.0.1", WAITRON_HTTP_LANDING_PORT: String(landing.port) },
+        async () => {
+          await adoption.bound;
+          await awaitListening(landing.port);
+          const page = await fetch(`http://127.0.0.1:${landing.port}/`);
+          expect(page.status).toBe(200);
+          expect(await page.text()).toContain(NOT_SET_UP_WORDS.en);
+          const connection = await fetch(
+            `http://127.0.0.1:${landing.port}/setup/connection?lang=es&app=till`,
+          );
+          expect(connection.status).toBe(200);
+          expect(await connection.text()).toContain(NOT_SET_UP_WORDS.es);
+        },
+        // A configured start keeps the landing port rather than drawing an ephemeral one.
+        { extraPortCount: 1 },
+      );
+    } finally {
+      adoption.restore();
+      if (landing.server.listening) await landing.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it("while setup mode runs, another process cannot take the venue lock", async () => {
     const venue = await freshVenue();

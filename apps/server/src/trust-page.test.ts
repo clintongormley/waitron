@@ -8,6 +8,7 @@ import {
 } from "./trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 
 const base: TrustPageInput = {
@@ -168,6 +169,7 @@ it("shows a QR only when one was rendered, and says nothing when there is none",
 it.each([
   ["plain", {}],
   ["with the spare's lead line", { ownAddress: "https://192.168.1.50" }],
+  ["in setup mode", { notSetUp: true }],
 ])("calls it a server, never a box (%s)", (_name, extra) => {
   const html = renderTrustPage({ ...base, ...extra });
   expect(html).not.toMatch(/\bbox(es)?\b/i);
@@ -299,4 +301,35 @@ describe("ownAddressFor", () => {
       expect(ownAddressFor(state, ips, "10.0.0.7")).toBeUndefined();
     },
   );
+});
+
+describe("a box that is not set up yet", () => {
+  it("warns in English and Spanish before the first certificate step", () => {
+    const html = renderTrustPage({ ...base, notSetUp: true });
+    const en = `<p class="warning-words">${NOT_SET_UP_WORDS.en}</p>`;
+    const es = `<p class="warning-words" lang="es">${NOT_SET_UP_WORDS.es}</p>`;
+    expect(html).toContain(`${en}${es}`);
+    const stepOne = heading("Remove any old Waitron certificate").exec(html)?.[0];
+    expect(stepOne).toBeDefined();
+    expect(html.indexOf(es)).toBeLessThan(html.indexOf(stepOne!));
+  });
+
+  it.each([undefined, false])("says nothing of it when notSetUp is %s", (notSetUp) => {
+    const html = renderTrustPage({ ...base, notSetUp });
+    expect(html).not.toContain(NOT_SET_UP_WORDS.en);
+    expect(html).not.toContain(NOT_SET_UP_WORDS.es);
+  });
+
+  it("says nothing of it when there is no certificate to install", () => {
+    const html = renderTrustPage({ ...base, notSetUp: true, caAvailable: false });
+    expect(html).not.toContain(NOT_SET_UP_WORDS.en);
+    expect(html).not.toContain(NOT_SET_UP_WORDS.es);
+  });
+
+  it("says nothing of it when another server answers the venue's name", () => {
+    const html = renderTrustPage({ ...base, notSetUp: true, ownAddress: "https://192.168.1.50" });
+    expect(html).toContain("Adding a spare?");
+    expect(html).not.toContain(NOT_SET_UP_WORDS.en);
+    expect(html).not.toContain(NOT_SET_UP_WORDS.es);
+  });
 });

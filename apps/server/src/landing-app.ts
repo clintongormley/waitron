@@ -25,6 +25,7 @@ export interface LandingDeps {
   log: Logger;
   /** Read on each page view; absent where no venue-name watch runs. */
   venueNameState?: () => VenueNameState;
+  notSetUp?: boolean;
   connection?: ConnectionBootstrapDeps;
   declarationPages?: DeclarationPagesDeps;
 }
@@ -60,6 +61,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       reachUrls: known,
       onRepaired: async () => {},
       log: deps.log,
+      notSetUp: deps.notSetUp,
     },
     false,
   );
@@ -83,6 +85,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
         c.req.query("app") === "till" ? new URL("/till/", deps.httpsUrl).href : deps.httpsUrl,
       device: trustDeviceForRequest(c.req),
       ownAddress: ownAddressFor(deps.venueNameState?.(), ipUrls, new URL(c.req.url).hostname),
+      notSetUp: deps.notSetUp,
     });
     // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.
     return c.html(html, 200, { "Cache-Control": "no-cache" });

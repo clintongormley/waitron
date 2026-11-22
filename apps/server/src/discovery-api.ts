@@ -26,6 +26,7 @@ export interface DiscoveryDeps {
   repairAllowed?: (c: Context) => boolean;
   /** Read on each page view; absent where no venue-name watch runs. */
   venueNameState?: () => VenueNameState;
+  notSetUp?: boolean;
   /** Injected for tests. */
   listIpv4?: () => string[];
   /** Injected for tests; default `QRCode.toString(text, { type: "svg", margin: 1 })`. */
@@ -72,6 +73,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       onRepaired: deps.onConnectionRepaired ?? (async () => {}),
       log,
       repairAllowed: deps.serveBoxCa === false ? false : (deps.repairAllowed ?? true),
+      notSetUp: deps.notSetUp,
     },
     false,
   );
@@ -146,6 +148,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       httpsUrl: reach.hostnameUrl,
       device: trustDeviceForRequest(c.req),
       ownAddress: ownAddressFor(deps.venueNameState?.(), reach.ipUrls, new URL(c.req.url).hostname),
+      notSetUp: deps.notSetUp,
     });
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });

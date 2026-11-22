@@ -6,6 +6,7 @@ import { connectionLocale } from "./connection-bootstrap-page.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 
 let browser: Browser | undefined;
 beforeAll(async () => {
@@ -53,6 +54,26 @@ it.each(["en", "es"] as const)("links the declaration at the foot of the %s page
     `<p class="note"><a href="/legal/declaration" lang="es">${DECLARATION_LINK_WORDS.title}</a></p>\n</main>`,
   );
 });
+
+it.each(["en", "es"] as const)(
+  "warns a box not set up yet in the %s page's language, before its download button",
+  (locale) => {
+    const other = locale === "en" ? "es" : "en";
+    const html = renderTrustPage({ ...base, connection: retained, locale, notSetUp: true });
+    const download = html.slice(
+      html.indexOf('<div id="connection-download"'),
+      html.indexOf('<div id="connection-help"'),
+    );
+    const warning = `<p class="warning-words">${NOT_SET_UP_WORDS[locale]}</p>`;
+    expect(download).toContain(warning);
+    expect(download.indexOf(warning)).toBeLessThan(download.indexOf('id="connection-certificate"'));
+    expect(html).not.toContain(NOT_SET_UP_WORDS[other]);
+    for (const notSetUp of [undefined, false]) {
+      const plain = renderTrustPage({ ...base, connection: retained, locale, notSetUp });
+      expect(plain).not.toContain(NOT_SET_UP_WORDS[locale]);
+    }
+  },
+);
 
 it("repairs by a credential-free empty request and keeps the retained certificate instructions", async () => {
   const page = await browser!.newPage();

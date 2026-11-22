@@ -670,6 +670,22 @@ Slice 3.
 
 ## Decisions and deliberate limits
 
+**A box in setup mode can be trusted by mistake while it answers the venue's name; accepted, with
+a warning (owner, 2026-11-21).** Such a box answers `waitron.local` once its ask hears no other box
+(3b-2). A till refuses it by default, because each box makes its own certificate authority
+(`apps/server/src/box-secrets.venue-name.test.ts`, "refuses a second box's certificate for
+waitron.local"). Three ways round that stay open: a person installs the authority its plain-HTTP
+page offers for download (#330); a person clicks past the browser's certificate warning, since
+nothing in `apps/server` sets a `Strict-Transport-Security` header (`landing-listener.test.ts`
+pins its absence on the plain-HTTP page only, #290); or an operator gives the box a `WAITRON_TLS_*`
+pair from an authority the tills already trust (#141). Each matters only while the box answers
+`waitron.local` (`watchVenueNameInSetup` in `apps/server/src/mdns.ts`). The owner answered "y" to the watcher's "D plus B": accept the three ways as a deliberate
+limit (D), and warn on the new box's certificate page (B). Since A947-SETUP-MODE-WARNING, a box with no node identity
+says not to install its certificate where the venue already has a Waitron server, and to switch to
+the spare instead. It says so over plain HTTP and HTTPS, on its certificate guide (in English and
+Spanish, before the first step) and on its connection page (in the page's language, beside the
+download). On a box in setup mode, the guide leaves it out while the box's latest ask heard another box answer `waitron.local`, since the guide then tells a person adding a spare that they do not need this certificate; a box showing its recovery page does not ask, so its guide always shows it (`apps/server/src/trust-page.ts`, `apps/server/src/connection-bootstrap-page.ts`).
+
 **`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice, not the owner's): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
 
 **A spare's server key is shown ungrouped, unlike fresh setup's (A1558 PR 8, lane B's choice,
@@ -916,21 +932,6 @@ switch (§6.6); the returning box hands over and becomes the spare by itself aft
 (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
 the membership chart, so a till's router sees one server (§2); 3b-2 gives each box its own name in
 the chart, and the till hides a line for its page's own box.
-
-- **A second box in setup mode, while the main box is silent, can be trusted by mistake in three
-  ways.** It answers `waitron.local` once its ask hears no other box (3b-2). By default a till
-  refuses it: each box makes its own certificate authority, and a connection trusting only the
-  venue's refuses a second box's certificate (`apps/server/src/box-secrets.venue-name.test.ts`,
-  "refuses a second box's certificate for waitron.local"). The three ways round that:
-  - a person opens `http://waitron.local`, reaches the setup box's plain-HTTP page and installs the
-    authority it offers for download (#330), without meaning any harm;
-  - a person clicks past the browser's certificate warning: the server sends no
-    `Strict-Transport-Security` header, and `landing-listener.test.ts` asserts it is absent (#290);
-  - an operator gives the second box a `WAITRON_TLS_*` pair from an authority the tills already
-    trust, which setup mode serves (#141).
-
-  Settle it before two-box failover goes live: it can only happen once a venue has a second box,
-  which is what A947 builds.
 
 - **Three limits 3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)) left in a
   box's certificate check.** A box in the waiting start (waiting for its peers) or a restricted

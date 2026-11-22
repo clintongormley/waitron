@@ -3,6 +3,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import type { TrustPageInput } from "./trust-page.js";
@@ -55,6 +56,7 @@ li { margin-block: var(--wt-space-2); }
 #connection-choices { display: flex; flex-wrap: wrap; gap: var(--wt-space-3); }
 .secondary { background: var(--wt-color-border); color: var(--wt-color-text); }
 #connection-error { color: var(--wt-color-danger); }
+.warning-words { color: var(--wt-color-danger); font-weight: 600; }
 #connection-fingerprint { overflow-wrap: anywhere; font-family: var(--wt-font-family); }
 :focus-visible { outline: 2px solid var(--wt-color-focus); outline-offset: var(--wt-space-1); }
 [hidden] { display: none !important; }
@@ -181,7 +183,7 @@ button?.addEventListener("click", async () => {
 ${repairOffered ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
-<div id="connection-download"${hidden(status.caAvailable)}><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
+<div id="connection-download"${hidden(status.caAvailable)}>${input.notSetUp ? `<p class="warning-words">${escape(NOT_SET_UP_WORDS[locale])}</p>` : ""}<p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
 <div id="connection-help"${hidden(status.caAvailable)}><h2>${words.install}</h2><p class="note">${words.managed}</p>${details}</div></section>
 <section id="connection-actions">${ready && retry && !operator && !elsewhere ? `<button id="connection-reconnect" type="button" hidden>${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
 </div>
