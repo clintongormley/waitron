@@ -1,0 +1,10 @@
+# Device Profiles section split implementation plan
+
+Move “Where it serves” and “Who can sign in” into separate dashboard widgets. Staff can make the same department, zone and sign-in choices. This finishes the screen-size point under W97 in [the backlog](../../backlog.md).
+
+1. Add `apps/dashboard/src/widgets/device-profile-where.ts` and `device-profile-who.ts`, following the Lit template-function pattern in `top-sellers-table.ts`. Export `renderDeviceProfileWhere` and `renderDeviceProfileWho`. The first takes the department choices and selection, live department and allowed zones, every-zone and selected-zone values, starting zone, field messages and the four existing change callbacks. The second takes the roles, selected role IDs, read state, role message and existing role change callback. Reuse the dashboard's existing scope choice and role types.
+2. Move the existing group and error markup into `apps/dashboard/src/widgets/device-profile-switch-group.ts` for the widgets and screen to share. Keep the rendered sections, controls, labels, error IDs and CSS in the screen's current DOM tree. The screen keeps the tab slots and styles and owns reads, draft updates, validation, focus and saves. Keep the kitchen-only layout and existing API and permission rules.
+3. Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/device-profiles-screen` before and after the move, with the same assertions. The screen cases check zone defaults, saved zone and role choices, tab changes and field refusals. The save-state and unsaved suites check edits and reverts. The accessibility suite exercises both sections and field errors at 390 and 1280 px. Run the dashboard typecheck and look at both tabs in English and Spanish, light and dark, at phone and desktop widths.
+4. Remove the screen-size bullet from `docs/backlog.md` and keep the other W97 points. Sign off the commit and use the campaign's finish and land workflow.
+
+Expected diff is about 235 added and 170 removed production lines, mostly moved markup, and zero lines of changed tests. It covers these two sections.
