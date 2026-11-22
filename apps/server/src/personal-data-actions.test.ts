@@ -172,6 +172,7 @@ async function seedBillPayment(
     attestedBy?: string;
     state?: "received" | "declined" | "failed";
     createdAt?: string;
+    receivedAt?: string;
   },
 ): Promise<{ workingOrderId: string; billPaymentId: string }> {
   orderNumber += 1;
@@ -195,7 +196,7 @@ async function seedBillPayment(
       createdAt: bill.createdAt ?? "2026-10-20T07:00:00.000Z",
       ...(bill.state === "failed"
         ? { failedAt: "2026-10-20T08:05:00.000Z" }
-        : { receivedAt: "2026-10-20T08:00:00.000Z" }),
+        : { receivedAt: bill.receivedAt ?? "2026-10-20T08:00:00.000Z" }),
       requestedBy: bill.requestedBy ?? MARTHA,
       ...(bill.attestedBy === undefined
         ? {}
@@ -447,6 +448,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     attestedBy: ADA,
     state: "declined",
     createdAt: "2026-10-20T07:01:00.000Z",
+    receivedAt: "2026-10-20T06:53:00.000Z",
   });
   await seedBillPayment(db, at, {
     method: "card",
@@ -793,7 +795,7 @@ describe("actionsPersonalData", () => {
           state: "received",
           at: "2026-10-20T07:00:00.000Z",
           yourPart: ["requested"],
-          attestedAt: null,
+          outcomeAt: null,
         },
         {
           sale: null,
@@ -803,7 +805,7 @@ describe("actionsPersonalData", () => {
           state: "received",
           at: "2026-10-20T07:01:00.000Z",
           yourPart: ["requested"],
-          attestedAt: null,
+          outcomeAt: null,
         },
         {
           sale: "TA/44",
@@ -813,7 +815,7 @@ describe("actionsPersonalData", () => {
           state: "received",
           at: "2026-10-20T07:02:00.000Z",
           yourPart: ["requested"],
-          attestedAt: null,
+          outcomeAt: null,
         },
       ],
       receiptReprints: [],
@@ -849,7 +851,7 @@ describe("actionsPersonalData", () => {
           state: "declined",
           at: "2026-10-20T07:01:00.000Z",
           yourPart: ["requested", "attested"],
-          attestedAt: "2026-10-20T08:00:00.000Z",
+          outcomeAt: "2026-10-20T06:53:00.000Z",
         },
         {
           sale: null,
@@ -859,7 +861,7 @@ describe("actionsPersonalData", () => {
           state: "failed",
           at: "2026-10-20T07:02:00.000Z",
           yourPart: ["attested"],
-          attestedAt: "2026-10-20T08:05:00.000Z",
+          outcomeAt: "2026-10-20T08:05:00.000Z",
         },
       ],
       receiptReprints: [{ sale: formatInvoiceNumber("TA", 7), at: "2026-10-20T12:00:00.000Z" }],

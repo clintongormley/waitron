@@ -26,8 +26,8 @@ the same readers. Scope comes from Lane F's A980-DOWNLOAD-DRAWER-PAYMENTS queue 
   payment and refund sections. State that reason at the filter and in the column inventory.
 - For `bill_payments.requested_by` and `attested_by`, include method, applied amount, tip, state,
   request time, the filed bill's invoice number if available and the subject's roles on one row. For the attester
-  include `received_at` or `failed_at` as the attestation time. A later decline keeps the
-  original receipt time. For `receipt_reprints.person_id`, include request time and invoice
+  include `received_at` or `failed_at` as `outcomeAt`. This is the recorded receipt or failure
+  time. A later decline keeps the original receipt time. For `receipt_reprints.person_id`, include request time and invoice
   number. Exclude person identifiers, typed notes, drawer facts, card and provider data.
 - Start with failing real-database cases in `personal-data-actions.test.ts` for the exact new
   entries, colleague exclusion, a payment with both roles, a payment without an invoice and

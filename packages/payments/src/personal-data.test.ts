@@ -1,25 +1,26 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
-import { seedWorkingOrder } from "../test/seed.js";
 import * as paymentsModule from "./index.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { payments } from "./schema/payments.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const AT = "2026-11-02T10:00:00.000Z";
+const EARLIER = "2026-11-02T09:30:00.000Z";
 
 describe("payment hold decisions in a personal-data download", () => {
   it("exports only decisions made by the subject, without notes or internal references", async () => {
     const db = suite.db;
     const manager = await seedPerson(db, { displayName: "Manager" });
     const colleague = await seedPerson(db, { displayName: "Colleague" });
-    const { workingOrderId, deviceId } = await seedWorkingOrder(db);
-    const orders = await db.query.workingOrders.findMany();
-    expect(orders.map((order) => order.id)).toEqual([workingOrderId]);
+    await seedVenue(db);
+    const { deviceId } = await seedDevice(db);
+    const first = await seedWorkingOrder(db, { orderNumber: 41 });
+    const second = await seedWorkingOrder(db, { orderNumber: 42 });
     const hold = {
-      workingOrderId,
+      workingOrderId: first.id,
       deviceId,
       source: "device",
       provider: "stripe",
@@ -47,6 +48,14 @@ describe("payment hold decisions in a personal-data download", () => {
           holdNote: "Colleague's private note",
         },
         { ...hold, paymentRef: "private-3", requestedBy: manager },
+        {
+          ...hold,
+          workingOrderId: second.id,
+          paymentRef: "private-4",
+          holdDecidedBy: manager,
+          holdDecidedAt: EARLIER,
+          holdOutcome: "refunded_at_provider",
+        },
       ]);
     });
     const part = paymentsModule.PAYMENTS_PERSONAL_DATA;
@@ -57,16 +66,19 @@ describe("payment hold decisions in a personal-data download", () => {
       );
       return build();
     };
-    for (const [person, decision] of [
-      [manager, "kept"],
-      [colleague, "refunded_at_provider"],
-    ] as const) {
-      const files = await download(person);
-      expect(files.map((file) => file.name)).toEqual(["payment-holds.json"]);
-      expect(JSON.parse(files[0]!.content as string)).toEqual({
-        entries: [{ order: orders[0]!.orderNumber, decision, at: AT }],
-      });
-    }
+    const managerFiles = await download(manager);
+    expect(managerFiles.map((file) => file.name)).toEqual(["payment-holds.json"]);
+    expect(JSON.parse(managerFiles[0]!.content as string)).toEqual({
+      entries: [
+        { order: 42, decision: "refunded_at_provider", at: EARLIER },
+        { order: 41, decision: "kept", at: AT },
+      ],
+    });
+    const colleagueFiles = await download(colleague);
+    expect(colleagueFiles.map((file) => file.name)).toEqual(["payment-holds.json"]);
+    expect(JSON.parse(colleagueFiles[0]!.content as string)).toEqual({
+      entries: [{ order: 41, decision: "refunded_at_provider", at: AT }],
+    });
     expect(await download("nobody")).toEqual([]);
   });
 });

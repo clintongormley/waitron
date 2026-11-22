@@ -107,10 +107,10 @@ describe("the personal-data downloads in a real start", () => {
         WAITRON_ENV: "preproduction",
       });
       await awaitListening(httpPort());
-      const response = await fetch(
-        `http://127.0.0.1:${httpPort()}/management-api/me/personal-data/export`,
-        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
-      );
+      const ownUrl = `http://127.0.0.1:${httpPort()}/management-api/me/personal-data/export`;
+      const response = await fetch(ownUrl, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/zip");
       const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
@@ -148,6 +148,14 @@ describe("the personal-data downloads in a real start", () => {
       >;
       expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Anna"]);
       expect(otherFiles["payment-holds.json"]).toEqual(files["payment-holds.json"]);
+
+      const colleague = await fetch(ownUrl, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
+      });
+      expect(colleague.status).toBe(200);
+      const colleagueFiles = unzipSync(new Uint8Array(await colleague.arrayBuffer()));
+      expect(Object.keys(colleagueFiles)).not.toContain("payment-holds.json");
+      expect(Object.keys(colleagueFiles)).not.toContain("actions.json");
 
       const refused = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },

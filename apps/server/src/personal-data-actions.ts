@@ -346,8 +346,8 @@ export function actionsPersonalData(
                 state: row.state,
                 at: row.at,
                 yourPart,
-                // A declined receipt preserves when it was originally confirmed.
-                attestedAt: row.attestedBy === person ? (row.receivedAt ?? row.failedAt) : null,
+                // Declining a received payment keeps its original receipt time.
+                outcomeAt: row.attestedBy === person ? (row.receivedAt ?? row.failedAt) : null,
               };
             });
             const receiptCopies = reprints.map((row) => ({
