@@ -4,6 +4,8 @@ import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  departmentTransferRequests,
+  orderEvents,
   invoiceSeries,
   nodes,
   sales,
@@ -18,6 +20,7 @@ import { adjustments, recordAdjustment } from "@waitron/adjustments";
 import { decimal, jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
+import { createDepartment } from "@waitron/venue-service";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULES } from "./modules.js";
@@ -175,6 +178,45 @@ describe("the own personal-data download", () => {
     expect(strFromU8(files["README.txt"]!)).toContain(
       `- actions.json: ${words.holds} ${words.use}`,
     );
+  });
+
+  it("includes service actions and resolved transfers in the ZIP and README", async () => {
+    const at = "2026-11-21T19:00:00.000Z";
+    const files = await download(["core", "identity", "venue-service"], {}, (personId) =>
+      withTransaction(suite.db, async (tx) => {
+        const source = await createDepartment(tx, { name: "Counter", orderStart: "table" });
+        const destination = await createDepartment(tx, {
+          name: "Dining room",
+          orderStart: "table",
+        });
+        const order = await seedWorkingOrder(tx, { orderNumber: 21 });
+        await tx.insert(orderEvents).values({
+          kind: "dish.cancelled",
+          actorId: personId,
+          at,
+          lineId: "discarded-line",
+          fromOrderId: order.id,
+        });
+        await tx.insert(departmentTransferRequests).values({
+          tabId: order.id,
+          sourceDepartmentId: source.id,
+          destinationDepartmentId: destination.id,
+          senderId: personId,
+          resolvedBy: personId,
+          status: "withdrawn",
+          resolvedAt: at,
+        });
+      }),
+    );
+    expect(JSON.parse(files["service-actions.json"] ?? "{}")).toHaveProperty(
+      "orderEvents.0.kind",
+      "dish.cancelled",
+    );
+    expect(JSON.parse(files["department-transfers.json"] ?? "[]")).toMatchObject([
+      { order: 21, status: "withdrawn" },
+    ]);
+    expect(files["README.txt"]).toContain("- service-actions.json:");
+    expect(files["README.txt"]).toContain("- department-transfers.json:");
   });
 
   it("passes the venue's language and the privacy notice's address to the README", async () => {

@@ -23,6 +23,7 @@ import { archiveFileName, zipArchive } from "./download-archive.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
+import { serviceActionsPersonalData } from "./personal-data-service-actions.js";
 import { personalDataReadme } from "./personal-data-readme.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { knownZone } from "./venue-time-zone.js";
@@ -39,7 +40,11 @@ export function personalDataServerParts(
   modules: readonly WaitronModule[],
   db: Database,
 ): PersonalDataPart[] {
-  return [...timeRecordPersonalData(modules), ...actionsPersonalData(db)];
+  return [
+    ...timeRecordPersonalData(modules),
+    ...actionsPersonalData(db),
+    ...serviceActionsPersonalData(db),
+  ];
 }
 
 export type PersonalDataAuthorize = (

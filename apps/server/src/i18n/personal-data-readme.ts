@@ -129,6 +129,16 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         use: "Kept to account for the money the venue takes and gives back.",
         kept: ["Nothing in the box deletes a voided sale, a refund or a cash-drawer opening."],
       },
+      "service-actions.json": {
+        holds:
+          "your order events (including draft take-overs), group submissions and firings, party openings and closings, when you answered a party’s allergy question, dish moves (with station IDs), order amendments, the last recorded cancellation of each dish and late-dish confirmations. A group action can appear twice. A move or split can carry a cancellation or confirmation to another line, and a dish and its extras can share a confirmation. For a late dish, the time shown is when it was sent, if recorded.",
+        use: "Used to track how orders were handled and who took each action.",
+      },
+      "department-transfers.json": {
+        holds:
+          "the department transfers you resolved, including those you withdrew, with the order number, department IDs, outcome and when you resolved each one.",
+        use: "Used to track how orders move between departments.",
+      },
       "adjustments.json": {
         holds:
           "the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the list value of what it applied to (the item, or the whole bill), the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it.",
@@ -259,6 +269,16 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         kept: [
           "Nada en el servidor Waitron del local borra una venta anulada, una devolución ni una apertura del cajón de efectivo.",
         ],
+      },
+      "service-actions.json": {
+        holds:
+          "tus acciones en pedidos (incluidas las tomas de control de borradores), los grupos que enviaste o mandaste preparar, las mesas que abriste o cerraste, cuándo respondiste a una pregunta sobre alergias, los cambios de estación de platos (con los identificadores de las estaciones), las modificaciones de pedidos, la última cancelación registrada de cada plato y las confirmaciones de platos tardíos. Una acción de grupo puede aparecer dos veces. Al mover o dividir un plato, otra línea puede conservar su cancelación o confirmación, y un plato y sus extras pueden compartir una confirmación. La hora de un plato tardío indica cuándo se envió, si consta.",
+        use: "Se usa para saber cómo se gestionaron los pedidos y quién realizó cada acción.",
+      },
+      "department-transfers.json": {
+        holds:
+          "los traspasos entre departamentos que resolviste, incluidos los que retiraste, con el número de pedido, los identificadores de los departamentos, el resultado y la fecha y hora de la resolución.",
+        use: "Se usa para seguir los pedidos que pasan de un departamento a otro.",
       },
       "adjustments.json": {
         holds:

@@ -289,6 +289,35 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
       expect(es[name]?.kept?.length ?? 0, `${name} kept`).toBe(en[name]?.kept?.length ?? 0);
     }
   });
+  it.each([
+    ["en", "draft take-overs", "station IDs", "you resolved", "department IDs"],
+    [
+      "es",
+      "tomas de control de borradores",
+      "identificadores de las estaciones",
+      "resolviste",
+      "identificadores de los departamentos",
+    ],
+  ] as const)(
+    "describes service actions and resolved transfers in %s",
+    (language, drafts, stationIds, resolved, departmentIds) => {
+      const readme = personalDataReadme({
+        language,
+        venue: "Venue",
+        person: "Staff",
+        date: "2026-11-21",
+        files: ["service-actions.json", "department-transfers.json"],
+      });
+      const lines = readme.split("\n");
+      const service = lines.find((line) => line.startsWith("- service-actions.json:")) ?? "";
+      const transfers = lines.find((line) => line.startsWith("- department-transfers.json:")) ?? "";
+      expect(service).toContain(drafts);
+      expect(service).toContain(stationIds);
+      expect(transfers).toContain(resolved);
+      expect(transfers).toContain(departmentIds);
+    },
+  );
+
   it("has words in both languages for every file the server adds itself", () => {
     const stubDb = {} as Database;
     const names = personalDataServerParts(ALL_MODULES, stubDb).flatMap((p) => p.part.files);
