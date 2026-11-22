@@ -657,6 +657,10 @@ and the sizes particular to one view: the dashboard's
 `--wt-approvals-…`, `--wt-overview-…`, `--wt-menu-list-…`, `--wt-authenticator-…` and
 `--wt-image-preview-…` tokens and the till's `--wt-till-…` tokens
 
+**Shadows may lift more than they do today** (owner, 2026-11-22, choosing "Allow more depth" for
+`DESIGN.md`): new work may use shadows to lift cards and buttons, starting from `--wt-shadow-1|2`
+and adding a token for any new step, never an inline value.
+
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which
 `packages/ui-core/src/tokens/structure.test.ts` holds; `--wt-field-line-width` (1px) is the bottom
