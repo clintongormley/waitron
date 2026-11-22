@@ -8,6 +8,12 @@ Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana
 
 Para cambiar el horario habitual, sigue el enlace **Horario habitual** de la temporada, arriba de la ventana. Para una excepción, elige **Crear un día especial** abajo.
 
+## Resuelve un conflicto con el inicio del día de trabajo {#business-day-start}
+
+Busca el tramo por el departamento, el día y las horas que se indican en el conflicto. Si estás en la vista previa del inicio, elige **Revisar horarios**. Abre la temporada o el día especial indicado y comprueba la zona o el periodo si aparecen. Ajusta el horario o elige otra hora de inicio.
+
+Si cambia el inicio del día de trabajo mientras editas la hora de inicio, cierra y vuelve a abrir el editor. Comprueba la hora actual y la vista previa antes de guardar.
+
 ## Cerrar un departamento en un día especial {#department-closed}
 
 En el editor del día especial, elige el departamento y marca **Cerrado** bajo la fecha. Se cierra ese departamento todo el día y los demás conservan su propio horario. Pintar todo el día como Cerrado también marca esta casilla. Desmárcala antes de pintar un horario nuevo.

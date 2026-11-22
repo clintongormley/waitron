@@ -16,6 +16,7 @@ import {
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -99,15 +100,16 @@ export class BusinessDayStartEditor extends LitElement {
   @state() private draft?: Draft;
   @state() private preview?: BusinessDayStartPreview;
   @state() private busy = false;
-  @state() private attempted = false;
   @state() private errors: Partial<Record<keyof Draft, string>> = {};
   @state() private actionError = "";
   @state() private previewError = "";
+  @state() private previewFieldError = "";
+  readonly #feedback = new FormFeedback(this);
   #baseline?: Draft;
   #revision = 0;
   #clockIdentity = "";
   #previewIdentity = "";
-  #previewRefusal = "";
+  #clockChangeRefusal = "";
   #sequence = 0;
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -135,12 +137,8 @@ export class BusinessDayStartEditor extends LitElement {
     if (changes.has("model") && this.draft && this.#clockIdentity !== this.#identity()) {
       this.#sequence++;
       this.preview = undefined;
-      if (!this.actionError || this.actionError === this.#previewRefusal) {
-        if (this.#previewRefusal && this.errors.dayCutover === this.#previewRefusal)
-          this.errors = {};
-        this.#previewRefusal = "";
-        this.actionError = t("business_day.changed");
-      }
+      this.previewError = "";
+      this.previewFieldError = "";
     }
     if (changes.has("readOnly") && this.readOnly) {
       this.#sequence++;
@@ -216,7 +214,7 @@ export class BusinessDayStartEditor extends LitElement {
         this.draft = value;
         this.errors = {};
         this.actionError = "";
-        this.attempted = false;
+        this.#feedback.reset();
         this.#refreshPreview();
       },
     });
@@ -233,7 +231,7 @@ export class BusinessDayStartEditor extends LitElement {
     this.draft = { ...this.#baseline };
     this.actionError = "";
     this.errors = {};
-    this.attempted = false;
+    this.#feedback.reset();
     this.#register();
     this.#refreshPreview();
   }
@@ -290,13 +288,13 @@ export class BusinessDayStartEditor extends LitElement {
     const sequence = ++this.#sequence;
     this.preview = undefined;
     this.previewError = "";
-    if (this.#previewRefusal && this.actionError === this.#previewRefusal) this.actionError = "";
-    this.#previewRefusal = "";
+    this.previewFieldError = "";
     if (
       !this.draft ||
       this.readOnly ||
       Object.keys(this.#problems()).length ||
       this.draft.dayCutover === this.#baseline?.dayCutover ||
+      (this.actionError !== "" && this.actionError === this.#clockChangeRefusal) ||
       this.#clockIdentity !== this.#identity()
     )
       return;
@@ -318,9 +316,7 @@ export class BusinessDayStartEditor extends LitElement {
           this.previewError = message;
           return;
         }
-        this.#previewRefusal = message;
-        this.errors = { dayCutover: message };
-        this.actionError = message;
+        this.previewFieldError = message;
       });
   }
   #change(field: keyof Draft, event: CustomEvent<{ value: string }>): void {
@@ -328,19 +324,15 @@ export class BusinessDayStartEditor extends LitElement {
     if (!this.draft || this.busy || this.readOnly) return;
     this.draft = { ...this.draft, [field]: event.detail.value };
     this.#scope?.changed();
-    this.errors = this.attempted ? this.#problems() : {};
-    if (this.actionError === t("form.fix_fields") && !Object.keys(this.errors).length)
-      this.actionError = "";
+    this.errors = this.#feedback.attempted ? this.#problems() : {};
+    if (this.actionError !== this.#clockChangeRefusal) this.actionError = "";
     this.#refreshPreview();
   }
   async #save(): Promise<void> {
     if (!this.draft || this.busy || this.readOnly || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.errors = this.#problems();
-    if (Object.keys(this.errors).length) {
-      this.actionError = t("form.fix_fields");
-      return;
-    }
+    if (Object.keys(this.errors).length) return;
     if (!this.#ready()) return;
     const generation = this.#generation;
     this.busy = true;
@@ -362,7 +354,8 @@ export class BusinessDayStartEditor extends LitElement {
       const params = this.#params(error);
       const message = this.#refusal(error);
       if (params?.field === "dayCutover") this.errors = { dayCutover: message };
-      this.actionError = message;
+      else this.actionError = message;
+      this.#clockChangeRefusal = code === "venue.business_day_changed" ? message : "";
       if (code === "venue.business_day_changed" || code === "venue.business_day_locked") {
         this.preview = undefined;
       }
@@ -485,6 +478,14 @@ export class BusinessDayStartEditor extends LitElement {
     const model = this.model;
     if (!model) return nothing;
     const draft = this.draft;
+    const stale = draft && this.#clockIdentity !== this.#identity();
+    const reopenMessage = stale ? t("business_day.changed") : "";
+    const fieldError = this.errors.dayCutover ?? this.previewFieldError;
+    const footerError = this.#feedback.message(
+      { action: this.actionError || reopenMessage, dayCutover: fieldError },
+      new Set(fieldError ? ["dayCutover"] : []),
+      t("form.fix_fields"),
+    );
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
@@ -547,7 +548,7 @@ export class BusinessDayStartEditor extends LitElement {
                     placeholder="HH:MM"
                     required
                     .value=${draft.dayCutover}
-                    .error=${this.errors.dayCutover ?? ""}
+                    .error=${fieldError}
                     ?disabled=${this.busy || this.readOnly}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       if (active()) this.#change("dayCutover", event);
@@ -556,7 +557,7 @@ export class BusinessDayStartEditor extends LitElement {
                       slot="help"
                       mode="help-mode"
                       aria-label=${fill("help.badge_label", { part: t("venue_details.dayCutover") })}
-                      guide-href=${guideHref("table-service.bill-switcher")}
+                      guide-href=${guideHref("opening-hours.business-day-start")}
                       guide-label=${t("help.guide_link")}
                       >${t("business_day.starts_at_help")}</wt-help-tooltip
                     ></wt-input
@@ -602,7 +603,16 @@ export class BusinessDayStartEditor extends LitElement {
                       : nothing
                   }
                 </form>
-                <wt-form-actions slot="footer" .error=${this.actionError}
+                <div role="status">
+                  ${
+                    reopenMessage &&
+                    this.actionError &&
+                    this.actionError !== this.#clockChangeRefusal
+                      ? html`<p class="error">${reopenMessage}</p>`
+                      : nothing
+                  }
+                </div>
+                <wt-form-actions slot="footer" .error=${footerError}
                   ><wt-button
                     slot="cancel"
                     data-test="cancel"
@@ -614,7 +624,7 @@ export class BusinessDayStartEditor extends LitElement {
                   ><wt-button
                     data-test="save"
                     variant=${ready ? saveAction.variant : "secondary"}
-                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.attempted && Object.keys(this.#problems()).length > 0)}
+                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.#feedback.attempted && Object.keys(this.#problems()).length > 0)}
                     @click=${() => {
                       if (active()) void this.#save();
                     }}

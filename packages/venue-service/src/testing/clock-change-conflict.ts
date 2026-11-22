@@ -8,6 +8,8 @@ export const clockChangeConflict = {
     conflicts: [
       {
         departmentId: "d1",
+        departmentName: "Restaurant",
+        weekday: 5,
         periodName: "Dinner",
         startsAt: "21:00",
         endsAt: "02:45",
@@ -21,4 +23,4 @@ export const clockChangeConflict = {
 };
 
 export const clockChangeConflictSentence =
-  "Dinner 21:00–02:45 clashes with the new business-day start, 03:00 from Wed 21 Oct, 03:00: Hours overlap the changed start.";
+  "Restaurant · Friday · Dinner · 21:00–02:45 clashes with the new business-day start, 03:00 from Wed 21 Oct, 03:00: Hours overlap the changed start.";
