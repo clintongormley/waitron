@@ -5,7 +5,7 @@ import type { DeviceZoneSelectionInput } from "@waitron/module";
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { AppError, compareStationNames } from "@waitron/shared";
+import { AppError, compareStationNames, PERSON_HEADER } from "@waitron/shared";
 import {
   deviceNotDeleted,
   deviceProfiles,
@@ -37,6 +37,7 @@ import {
   assertDeviceStillProven,
   assertProfileAction,
   DEVICE_CLOCK_HEADER,
+  deviceProfileJoin,
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
@@ -504,7 +505,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // A signed-in person is required, so a shared display with nobody signed in cannot switch.
+  // Profile switching needs an ordinary till session.
   app.post("/api/device/active-profile", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -728,7 +729,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const answer = await withTransaction(deps.db, async (tx) => {
         const { screen, personId } = await kitchenScreenOf(tx, c, device, "station");
-        return moveDishesToStation(
+        const moved = await moveDishesToStation(
           tx,
           cfg,
           id,
@@ -741,6 +742,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             },
           },
         );
+        return personId === null && c.req.header(PERSON_HEADER) !== undefined
+          ? { ...moved, personNotSignedIn: true }
+          : moved;
       });
       return c.json(answer);
     }),
@@ -850,6 +854,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const [device] = await tx
           .select({
             active: devices.active,
+            formFactor: deviceProfiles.formFactor,
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
@@ -858,6 +863,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             cardReaderId: devices.cardReaderId,
           })
           .from(devices)
+          .innerJoin(deviceProfiles, deviceProfileJoin)
           .where(ownDeviceById(id));
         if (device === undefined || !device.active) {
           throw new AppError("device.not_found", { deviceId: id });
@@ -967,7 +973,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         if (stationRefusal) throw stationRefusal;
         await keepApprovedAfterSwitch(tx, id, device.deviceProfileId, profileId);
         if (approvedIds !== undefined) await approveDeviceProfiles(tx, id, approvedIds as string[]);
-        if (switching) await endSessionsNotAdmitted(tx, id, profileId);
+        if (switching) await endSessionsNotAdmitted(tx, id, profileId, device.formFactor);
       });
       return c.body(null, 204);
     }),

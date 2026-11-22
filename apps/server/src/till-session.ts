@@ -19,7 +19,7 @@ import {
   sightingDue,
   type Permission,
 } from "@waitron/identity";
-import type { ProfileAction } from "@waitron/layouts";
+import { isSharedDisplay, type ProfileAction } from "@waitron/layouts";
 import {
   DEV_DEVICE_HEADER,
   type DeviceAuthDeps,
@@ -167,6 +167,8 @@ async function readSessionRow(tx: Database | Transaction, token: string, c: Cont
     .where(and(eq(tillSessions.tokenHash, hashSessionToken(token)), isNull(tillSessions.endedAt)));
   if (found === undefined) throw new AppError("session.required", {});
   if (!found.active) throw new AppError("device.unauthorized", {});
+  // Kitchen attribution reads the session through signedInPersonOn with device proof.
+  if (isSharedDisplay(found.formFactor)) throw new AppError("session.required", {});
   const refusal = personRefusal(c, found.personId);
   if (refusal !== null) throw refusal;
   return found;

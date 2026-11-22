@@ -234,15 +234,20 @@ export async function assertNoPaymentInProgress(tx: Transaction, deviceId: strin
 
 /**
  * Ends each open session on the device whose person `profileId` does not admit; every one when
- * `profileId` is a shared display, which nobody signs in on whatever its admission list says.
+ * the device is entering or leaving a shared display profile. Kitchen and till sessions have
+ * different authority, so neither may carry across the change.
  */
 export async function endSessionsNotAdmitted(
   tx: Transaction,
   deviceId: string,
   profileId: string,
+  previousFormFactor?: FormFactor,
 ): Promise<void> {
   const profile = await getDeviceProfile(tx, profileId);
-  if (profile !== undefined && isSharedDisplay(profile.formFactor)) {
+  if (
+    previousFormFactor === "kds" ||
+    (profile !== undefined && isSharedDisplay(profile.formFactor))
+  ) {
     await endDeviceSessions(tx, deviceId);
     return;
   }

@@ -1140,45 +1140,25 @@ describe("the person's permission and the profile's action are both needed", () 
 });
 
 describe("a shared kitchen display", () => {
-  it("may take orders when its stored list names them, and is refused payment and the drawer even when named", async () => {
+  it("confines an admin session on a display to kitchen routes, even with ordering capabilities", async () => {
     const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
     const kds = await profile(CAPABILITY_FLAGS, "kds");
     await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
-    const park = await send(cookie, "POST", "/api/working-orders", {
-      dining: "eat_in",
-      id: randomUUID(),
-      lines: [],
-    });
-    expect(park.body.error?.code).toBe("sale.empty_basket");
     const order = await counterOrder(v, "Caña");
-    const paymentPath = `/api/working-orders/${order}/payments`;
-    const collect = await send(cookie, "POST", paymentPath, billPayment("cash"));
-    expect(collect.body.error?.code).toBe("device.cash_not_allowed");
-    const pay = await send(cookie, "POST", paymentPath, billPayment("card", "reader"));
-    expect(pay.body.error).toEqual(forbidden("pay").error);
-    const open = await send(cookie, "POST", "/api/drawer/open", {});
-    expect(open.body.error).toEqual(forbidden("drawer_open").error);
-    const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
-      to: "preparing",
-      stationId,
-    });
-    expect(advance.status).toBe(404);
-    expect(advance.body.error?.code).toBe("ticket_item.not_found");
-  });
-
-  it("is refused taking orders when its stored list lacks them", async () => {
-    const { cookie, deviceId } = await signIn(CAPABILITY_FLAGS);
-    const kds = await profile(
-      CAPABILITY_FLAGS.filter((flag) => flag !== "take-orders"),
-      "kds",
-    );
-    await suite.db.update(devices).set({ deviceProfileId: kds }).where(eq(devices.id, deviceId));
-    const park = await send(cookie, "POST", "/api/working-orders", {
-      dining: "eat_in",
-      id: randomUUID(),
-      lines: [],
-    });
-    expect(park.body.error).toEqual(forbidden("take-orders").error);
+    for (const [path, body] of [
+      ["/api/working-orders", { dining: "eat_in", id: randomUUID(), lines: [] }],
+      [`/api/working-orders/${order}/payments`, billPayment("cash")],
+      [`/api/working-orders/${order}/payments`, billPayment("card", "reader")],
+      ["/api/drawer/open", {}],
+      ["/api/device/active-profile", { profileId: kds }],
+    ] as const) {
+      const answer = await send(cookie, "POST", path, body);
+      expect.soft({ path, status: answer.status, code: answer.body.error?.code }).toEqual({
+        path,
+        status: 401,
+        code: "session.required",
+      });
+    }
   });
 
   it("reaches no ordering, payment or drawer route on its own cookie, with nobody signed in", async () => {

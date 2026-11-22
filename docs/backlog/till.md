@@ -181,29 +181,13 @@ To decide before building:
   displays can have a login, but i would not expect them to log off automatically, or at least
   only after an extended logout time (eg 30 minutes)". With nobody signed in, the device is the one
   acting; with someone signed in, that person is recorded.
-- **Why it is not small.** A kitchen display is built today as a screen nobody signs in on: the
-  server refuses its sign-in (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`); the profile
-  stores no idle logout for it (`validateInactivityTimeout` returns none for `kds`,
-  `packages/layouts/src/device-profile.ts`) and the profile editor hides the setting
-  (`#shownFields`, `apps/dashboard/src/screens/device-profiles-screen.ts`); the till boots it
-  straight into its screen with no lock screen and never runs the idle timer on it
-  (`apps/till/src/till-app.ts`, `apps/till/src/session-activity.ts`); and a kitchen display
-  profile has no list of who may sign in, and only the actions a shared screen may hold
-  (`SHARED_DISPLAY_ACTIONS`, `packages/layouts/src/device-profile.ts`).
-- **What it needs:** a way to sign in on the kitchen display's screen without hiding the queue;
-  the sign-in route allowing it; who may sign in (the profile's admission list); the existing
-  "Auto-logout after (minutes)" setting offered for a kitchen display profile, with "never"
-  allowed; and, with someone signed in, which actions the person's permissions add.
-- **What slice 5 leaves ready.** Its Done route records the signed-in person when there is one
-  (`signedInPersonOn`), so a kitchen display's Done marks name the person once one can sign in.
-  Its Fire records the device; with someone signed in it should record the person instead. Slice
-  3's plan makes a kitchen display's "Close for today" take a manager's PIN because nobody is
-  signed in; a signed-in manager could skip it.
-
-**2026-10-20, A773-2:** the pass's Done/Undo HTTP route is retired. The sign-in work must use
-the remaining preparation actions and planned pass release rather than extend those former marks.
-
-**2026-11-04, A773-2 PR D:** the marks' table was dropped (core 0205).
+- **Sign-in.** A cook admitted by the display’s profile can sign in without hiding the queue.
+  **Move to station** shows their name on the receiving station’s card. The device still
+  handles preparation with nobody signed in.
+- **Still open.** Offer the existing **Auto-logout after (minutes)** field on kitchen display
+  profiles. Keep **Never** available and use 30 minutes in the help example. The
+  [second slice](../superpowers/plans/2026-11-22-a436-kitchen-display-sign-in.md#pr-2--configure-the-idle-wait)
+  applies a saved timeout while the queue stays open.
 
 ## Task 11 (#916, cancellations, comps and discounts; B11a–B11g)
 

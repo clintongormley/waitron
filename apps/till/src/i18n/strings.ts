@@ -676,6 +676,7 @@ export const en = {
   "login.loading": "Loading…",
   "login.no_staff": "No staff available",
   "login.load_failed": "Could not load staff, try again",
+  "login.kitchen_unavailable": "Could not load the kitchen screen.",
   "login.error": "Could not log in, try again",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "login.throttled": "Try again in {n}s",
@@ -3012,6 +3013,7 @@ export const es: Record<StringKey, string> = {
   "login.loading": "Cargando…",
   "login.no_staff": "No hay personal disponible",
   "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
+  "login.kitchen_unavailable": "No se pudo cargar la pantalla de cocina.",
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
   "login.throttled": "Inténtalo de nuevo en {n}s",
   "login.powered_by": "Con la tecnología de",

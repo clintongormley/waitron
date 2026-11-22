@@ -75,6 +75,33 @@ export class TillLockScreen extends LitElement {
         margin-inline: auto;
       }
 
+      .compact {
+        max-block-size: 45dvh;
+        overflow: auto;
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
+
+      .compact-controls {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      .compact .actions {
+        position: sticky;
+        inset-block-end: 0;
+        background: var(--wt-color-bg);
+      }
+
+      .compact .roster {
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(100%, var(--wt-till-roster-card-min-width)), 1fr)
+        );
+      }
+
       .logo-place {
         display: flex;
         justify-content: center;
@@ -202,6 +229,14 @@ export class TillLockScreen extends LitElement {
 
   @property({ attribute: false }) live?: TillLiveConnection;
 
+  @property({ type: Boolean }) compact = false;
+
+  @property() compactOperator = "";
+
+  @property({ type: Boolean }) kitchenUnavailable = false;
+
+  @state() private compactOpen = false;
+
   @property() deviceName?: string;
 
   /** Names the venue's logo for a screen reader. */
@@ -255,6 +290,10 @@ export class TillLockScreen extends LitElement {
       this.#staffLive?.stop();
       this.#staffLive = undefined;
     }
+    if (this.compact && changed.has("compactOperator"))
+      this.#button(
+        this.compactOperator === "" ? "[data-kitchen-sign-in]" : "[data-kitchen-sign-out]",
+      )?.focus();
     if (this.isConnected && this.live && !this.#staffLive)
       this.#staffLive = queuedLiveRefresh(this.live, {
         types: TILL_LIVE_TYPES.signIn!,
@@ -270,6 +309,7 @@ export class TillLockScreen extends LitElement {
     super.disconnectedCallback();
     this.#connection++;
     this.#submission++;
+    this.compactOpen = false;
     this.pin = "";
     this.selected = undefined;
     this.staff = undefined;
@@ -357,6 +397,10 @@ export class TillLockScreen extends LitElement {
           composed: true,
         }),
       );
+      if (this.compact) {
+        this.compactOpen = false;
+        this.#cancel();
+      }
     } catch (error) {
       if (!this.isConnected || connection !== this.#connection) return;
       this.signingIn = false;
@@ -393,6 +437,7 @@ export class TillLockScreen extends LitElement {
   }
 
   override render() {
+    if (this.compact) return this.#renderCompact();
     if (this.mainServerSilent) return this.#renderMainServer();
     return html`
       <div class="language-corner">
@@ -404,7 +449,20 @@ export class TillLockScreen extends LitElement {
         ></wt-language-chooser>
       </div>
       <div class="screen">
-        ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+        ${this.#renderLogo()}
+        ${
+          this.kitchenUnavailable
+            ? html`<p class="status" role="status">${t("login.kitchen_unavailable")}</p>
+                <wt-button
+                  data-kitchen-retry
+                  variant="secondary"
+                  @click=${() => this.dispatchEvent(new Event("kitchen-retry"))}
+                  >${t("find_page.retry")}</wt-button
+                >`
+            : this.selected
+              ? this.#renderPin(this.selected)
+              : this.#renderList()
+        }
         ${this.notices.map(
           (notice) =>
             html`<div
@@ -446,6 +504,49 @@ export class TillLockScreen extends LitElement {
       </div>
       ${this.#renderServers()}
     `;
+  }
+
+  async #showCompact(open: boolean): Promise<void> {
+    if (this.signingIn) return;
+    this.compactOpen = open;
+    if (!open) this.#cancel();
+    await this.updateComplete;
+    this.#button(open ? ".operator-button" : "[data-kitchen-sign-in]")?.focus();
+  }
+
+  #renderCompact() {
+    if (this.compactOperator !== "")
+      return html`<div class="compact compact-controls">
+        <span data-kitchen-operator>${this.compactOperator}</span>
+        <wt-button
+          data-kitchen-sign-out
+          variant="secondary"
+          @click=${() => this.dispatchEvent(new Event("kitchen-sign-out"))}
+          >${t("action.logout")}</wt-button
+        >
+      </div>`;
+    if (!this.compactOpen && (this.staff?.length ?? 0) === 0) return nothing;
+    return html`<div class="compact">
+      ${
+        this.selected === undefined
+          ? html`<div class="compact-controls">
+              <wt-button
+                data-kitchen-sign-in
+                variant="secondary"
+                @click=${() => void this.#showCompact(!this.compactOpen)}
+                >${t(this.compactOpen ? "action.cancel" : "action.login")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
+      ${
+        this.compactOpen
+          ? html`<div class="screen">
+              ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+            </div>`
+          : nothing
+      }
+    </div>`;
   }
 
   #renderLogo() {
@@ -576,7 +677,12 @@ export class TillLockScreen extends LitElement {
         ></till-numeric-pad>
       </div>
       <div class="actions">
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+        <wt-button
+          class="cancel"
+          variant="secondary"
+          ?disabled=${this.compact && this.signingIn}
+          @click=${() => this.#cancel()}
+        >
           ${t("action.cancel")}
         </wt-button>
         <wt-button

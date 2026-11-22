@@ -73,6 +73,7 @@ describe("the user guides", () => {
         "group-headings",
         "reprints",
         "service-lifetime",
+        "kitchen-sign-in",
         "kitchen-screen",
         "pass-screen",
         "kitchen-help",

@@ -245,7 +245,7 @@ describe("device profile editor tabs", () => {
       expect(tabs!.items.map((item) => item.key)).toEqual(
         formFactor === "till"
           ? ["general", "where", "who", "capabilities", "equipment"]
-          : ["general", "kitchen", "capabilities"],
+          : ["general", "kitchen", "who", "capabilities"],
       );
       expect(tabs!.value).toBe("general");
       const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -262,6 +262,7 @@ describe("device profile editor tabs", () => {
             ]
           : [
               ["profile-kitchen-screens", "kitchen"],
+              ["profile-roles", "who"],
               ["profile-actions", "capabilities"],
             ];
       for (const [field, tab] of placements) {
@@ -2416,6 +2417,17 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(extras(api)).toEqual({ admittedStaffRoleIds: ["job-chef", "job-waiter"] });
   });
 
+  it("saves the roles allowed to sign in on a kitchen display", async () => {
+    const { api, el } = await openEdit({ ...profiles[1]!, admittedStaffRoleIds: [] });
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.items.map(({ key }) => key)).toContain("who");
+    await selectProfileTab(el, "who");
+    expect(q(el, "profile-role-job-chef")?.checked).toBe(false);
+    toggle(el, "profile-role-job-chef", true);
+    await flush(el);
+    await save(el);
+    expect(extras(api)).toEqual({ admittedStaffRoleIds: ["job-chef"] });
+  });
+
   it("an empty job selection saves and says nobody can sign in", async () => {
     const { api, el } = await openEdit(
       { ...profiles[0]!, admittedStaffRoleIds: ["job-waiter"] },
@@ -2471,7 +2483,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(flags("profile-screens")).toContain("cap-run-the-pass");
     expect(text(el, "actions-hint")).toBe(t("device_profiles.shared_display_actions_hint"));
     expect(q(el, "profile-department")).toBeNull();
-    expect(q(el, "profile-roles")).toBeNull();
+    expect(q(el, "profile-roles")).not.toBeNull();
     expect(q(el, "profile-starting-screen")).toBeNull();
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![2]).toEqual([

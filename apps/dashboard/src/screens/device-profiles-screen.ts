@@ -431,7 +431,7 @@ export const profileSettingFields: readonly ProfileSetting[] = [
     FIELD_TAB.startingZone,
     orderingProfile,
   ),
-  profileField("admittedStaffRoleIds", "device_profiles.roles", FIELD_TAB.roles, orderingProfile),
+  profileField("admittedStaffRoleIds", "device_profiles.roles", FIELD_TAB.roles),
   ...CAPABILITY_FLAGS.map((flag): ProfileSetting => ({
     ...profileField(
       "capabilities",
@@ -867,7 +867,7 @@ export class DeviceProfilesScreen extends LitElement {
       everyZone: ordering ? this.draftEveryZone : true,
       zoneIds: ordering && !this.draftEveryZone ? [...this.draftZoneIds].sort() : [],
       startingZoneId: ordering ? this.draftStartingZoneId : "",
-      roles: ordering ? [...this.draftRoles].sort() : [],
+      roles: [...this.draftRoles].sort(),
       startingScreen: ordering ? this.draftStartingScreen : null,
     };
   }
@@ -1094,8 +1094,7 @@ export class DeviceProfilesScreen extends LitElement {
       if (kds && FIELD_TAB[field] === "equipment") return false;
       if (field === "inactivity") return !kds;
       if (KITCHEN_LIST_FIELDS.includes(field)) return listsShown.includes(field);
-      if (["department", "zones", "startingZone", "roles", "startingScreen"].includes(field))
-        return !kds;
+      if (["department", "zones", "startingZone", "startingScreen"].includes(field)) return !kds;
       if (field === "readerDefault") return !kds && this.#readersShown();
       return true;
     });
@@ -1168,11 +1167,9 @@ export class DeviceProfilesScreen extends LitElement {
     const tabs: { key: EditorTab; label: StringKey }[] = [
       { key: "general", label: "device_profiles.tab.general" },
       ...(this.#ordering()
-        ? [
-            { key: "where" as const, label: "device_profiles.where_heading" as const },
-            { key: "who" as const, label: "device_profiles.who_heading" as const },
-          ]
+        ? [{ key: "where" as const, label: "device_profiles.where_heading" as const }]
         : [{ key: "kitchen" as const, label: "device_profiles.tab.kitchen" as const }]),
+      { key: "who", label: "device_profiles.who_heading" },
       { key: "capabilities", label: "device_profiles.tab.capabilities" },
       ...(this.#ordering()
         ? [{ key: "equipment" as const, label: "device_profiles.tab.equipment" as const }]
@@ -1755,18 +1752,18 @@ export class DeviceProfilesScreen extends LitElement {
       };
       if (this.#decidesScope() && (loaded === null || !sameScope(scope, loaded)))
         Object.assign(extras, scope);
-      const roles = this.draftRoles;
-      if (
-        !sameIds(
-          roles,
-          loaded === null ? this.jobRoles.map((role) => role.id) : loaded.admittedStaffRoleIds,
-        )
-      )
-        extras.admittedStaffRoleIds = [...roles];
       const screen = this.draftStartingScreen;
       if (loaded === null ? screen !== null : screen !== loaded.startingScreen)
         extras.startingScreen = screen;
     }
+    const roles = this.draftRoles;
+    if (
+      !sameIds(
+        roles,
+        loaded === null ? this.jobRoles.map((role) => role.id) : loaded.admittedStaffRoleIds,
+      )
+    )
+      extras.admittedStaffRoleIds = [...roles];
     return Object.keys(extras).length === 0 ? undefined : extras;
   }
 
@@ -2474,10 +2471,10 @@ export class DeviceProfilesScreen extends LitElement {
           </section>
           ${
             ordering
-              ? html`<section slot="where">${this.#renderWhere(errors)}</section>
-                  <section slot="who">${this.#renderWho(errors)}</section>`
+              ? html`<section slot="where">${this.#renderWhere(errors)}</section>`
               : html`<section slot="kitchen">${this.#renderKitchenScreens(errors)}</section>`
           }
+          <section slot="who">${this.#renderWho(errors)}</section>
           <section slot="capabilities">${this.#renderCapabilities(errors)}</section>
           ${
             ordering

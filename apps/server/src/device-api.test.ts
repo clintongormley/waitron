@@ -4144,7 +4144,7 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await switchTo(app, me.cookie, s.to)).status).toBe(200);
     });
 
-    it("a screen moved onto a kitchen profile keeps no session to switch with, and one written there anyway switches to a profile not offering its station, which it then reads as no longer available", async () => {
+    it("only a manager can move a kitchen display to another profile and its stations", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
@@ -4175,13 +4175,18 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(ended.status).toBe(401);
       expect(await ended.json()).toMatchObject({ error: { code: "session.required" } });
 
-      // Written straight through identity, past the sign-in route that refuses a kitchen screen.
       const me = await signIn(t);
       const res = await switchTo(app, me.cookie, other);
-      expect({ status: res.status, body: await res.json() }).toEqual({
-        status: 200,
-        body: { activeProfileId: other },
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+      expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(listing);
+
+      const reassigned = await manage(app, venue, t.deviceId, {
+        profileId: other,
+        kitchenScreens: [stationScreen(grill.id)],
       });
+      expect(reassigned.status).toBe(204);
+      expect(await openSessionsOn(t.deviceId)).toEqual([]);
       expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(other);
       expect(
         await withTransaction(suite.db, (tx) =>

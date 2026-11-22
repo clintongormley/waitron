@@ -1610,6 +1610,7 @@ export interface StationMoveAnswer {
   revision: number;
   stationId: string;
   moved: { workingOrderLineId: string; fromStationId: string }[];
+  personNotSignedIn?: true;
 }
 
 export interface KeepOpenZone {
@@ -4021,23 +4022,26 @@ export class TillApi {
     );
   }
 
-  /** {@link listStations} for a kitchen display, which has no session → `GET /api/device/stations`. */
+  /** {@link listStations} for a kitchen display using its device proof → `GET /api/device/stations`. */
   deviceStations(options: ReadOptions = {}): Promise<Station[]> {
     return this.#request<Station[]>("/api/device/stations", "GET", undefined, options.signal);
   }
 
   /** {@link moveDishStation} for a kitchen display's station screen → its device route. */
-  deviceMoveDishStation(
+  async deviceMoveDishStation(
     orderId: string,
     body: StationMoveBody,
     options: ReadOptions = {},
   ): Promise<StationMoveAnswer> {
-    return this.#request(
+    const person = this.#personSource?.() ?? null;
+    const answer = await this.#request<StationMoveAnswer>(
       `/api/device/working-orders/${orderId}/lines/move-station`,
       "POST",
       body,
       options.signal,
     );
+    if (answer.personNotSignedIn === true) this.#noticeRefusal(SESSION_PERSON_REFUSAL, person);
+    return answer;
   }
 
   /**

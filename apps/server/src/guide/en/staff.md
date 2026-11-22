@@ -194,6 +194,10 @@ Leave every job unticked to let nobody sign in. When you add a profile, it start
 job selected. Copying a profile keeps its selections. When you add a job later, select it on the
 profiles where its holders need to sign in.
 
+A new kitchen profile offers **Log in** on its station screen to people in the selected jobs.
+To limit sign-in to cooks, untick the other jobs. To hide **Log in**, untick them all. Save
+and reload the station screen to apply your choice.
+
 After you change the idle timeout, clocking or the available screens in a device
 profile, an open till picks up the change when it has no order open. After the till picks up a new
 starting screen, sign out and sign in again to open it.

@@ -2,7 +2,8 @@ import { addFixtureExtra } from "./testing/portion-bill.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { PERSON_HEADER } from "@waitron/shared";
+import type { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -53,7 +54,7 @@ useVenueDb({
       off = (await createStation(tx, { name: "Fryer" })).id;
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off));
     });
-    app = new Hono();
+    app = venue.app;
     mountDeviceApi(
       app,
       { db, cfg: venue.cfg, secureCookies: false, pairingMode: createPairingMode() },
@@ -233,34 +234,62 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     });
   });
 
-  it("the receiving kitchen display reads the move's device when nobody was signed in", async () => {
-    const source = await display(stationScreen(bar));
-    const receiving = await display(stationScreen(grill));
-    const { tabId, item } = await sentDish();
-    const answer = await move(source.cookie, tabId, {
-      lineIds: [item.workingOrderLineId],
-      stationId: grill,
-    });
-    expect(answer.status).toBe(200);
-    await inTx(venue, (tx) =>
-      tx.update(devices).set({ label: "Kitchen display" }).where(eq(devices.id, source.id)),
-    );
-    const [record] = await movesOf(item.workingOrderLineId);
-    const screen = await send(app, receiving.cookie, "GET", "/api/device/station-screen");
-    expect(screen.status).toBe(200);
-    const station = (
-      screen.json.stations as { id: string; queue: { orderId: string; items: unknown[] }[] }[]
-    ).find((row) => row.id === grill)!;
-    expect(station.queue.find((row) => row.orderId === tabId)!.items[0]).toHaveProperty(
-      "lastMove",
-      {
-        fromStationName: "Bar",
-        personName: null,
-        deviceName: "Kitchen display",
-        movedAt: record!.movedAt,
-      },
-    );
-  });
+  it.each(["signed-out", "signed-in", "ended"] as const)(
+    "attributes a move to the display and a signed-in cook when present (%s)",
+    async (session) => {
+      const source = await display(stationScreen(bar));
+      const receiving = await display(stationScreen(grill));
+      const { tabId, item } = await sentDish();
+      let cookie = source.cookie;
+      if (session !== "signed-out") {
+        const login = await app.request("/api/session", {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ personId: venue.operatorId, pin: "5555" }),
+        });
+        expect(login.status).toBe(200);
+        cookie += `; ${login.headers.get("set-cookie")!.split(";")[0]}`;
+      }
+      if (session === "ended") {
+        const logout = await app.request("/api/session", {
+          method: "DELETE",
+          headers: { cookie, [PERSON_HEADER]: venue.operatorId },
+        });
+        expect(logout.status).toBe(200);
+      }
+      const answer = await send(
+        app,
+        cookie,
+        "POST",
+        `/api/device/working-orders/${tabId}/lines/move-station`,
+        { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill },
+        session !== "signed-out" ? { [PERSON_HEADER]: venue.operatorId } : {},
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json.personNotSignedIn).toBe(session === "ended" ? true : undefined);
+      const label = `${session} display`;
+      await inTx(venue, (tx) => tx.update(devices).set({ label }).where(eq(devices.id, source.id)));
+      const [record] = await movesOf(item.workingOrderLineId);
+      expect(record).toMatchObject({
+        movedByDeviceId: source.id,
+        movedByPersonId: session === "signed-in" ? venue.operatorId : null,
+      });
+      const screen = await send(app, receiving.cookie, "GET", "/api/device/station-screen");
+      expect(screen.status).toBe(200);
+      const station = (
+        screen.json.stations as { id: string; queue: { orderId: string; items: unknown[] }[] }[]
+      ).find((row) => row.id === grill)!;
+      expect(station.queue.find((row) => row.orderId === tabId)!.items[0]).toHaveProperty(
+        "lastMove",
+        {
+          fromStationName: "Bar",
+          personName: session === "signed-in" ? "Anna" : null,
+          deviceName: label,
+          movedAt: record!.movedAt,
+        },
+      );
+    },
+  );
 
   it("refuses a dish at a station the screen does not work, and moves nothing", async () => {
     const screen = await display(stationScreen(grill));

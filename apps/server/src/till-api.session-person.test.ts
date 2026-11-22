@@ -79,22 +79,22 @@ const BLIND: readonly { route: string; class: Class; reason: string }[] = [
   {
     route: "GET /api/device/stations",
     class: "device only",
-    reason: "kitchen displays only, where nobody can sign in",
+    reason: "kitchen displays use device proof",
   },
   {
     route: "POST /api/device/working-orders/:id/lines/move-station",
     class: "device only",
-    reason: "kitchen displays only, where nobody can sign in",
+    reason: "the device may move a dish with nobody signed in",
   },
   {
     route: "POST /api/device/orders/:id/ready",
     class: "device only",
-    reason: "kitchen displays only, where nobody can sign in",
+    reason: "kitchen displays use device proof",
   },
   {
     route: "POST /api/device/parties/:id/groups/:gid/ready",
     class: "device only",
-    reason: "kitchen displays only, where nobody can sign in",
+    reason: "kitchen displays use device proof",
   },
 ];
 

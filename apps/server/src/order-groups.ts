@@ -162,7 +162,7 @@ export interface PartyFireArgs extends PartyCommandArgs {
   lateSend?: LateSendConfirmation;
 }
 
-/** Who fires a group: a person, or a kitchen display nobody is signed in on. */
+/** Who fires a group: a person or a kitchen display. */
 export type Firer = { personId: string } | { deviceId: string };
 
 export interface OrderGroup {

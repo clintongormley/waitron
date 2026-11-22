@@ -944,7 +944,7 @@ describe("the kitchen display's station day", () => {
     expect(revoked.json).toMatchObject({ code: "device.unauthorized" });
     expect(await rows()).toEqual([]);
   });
-  it("shares the device's override PIN limit with a signed-in till", async () => {
+  it("keeps the device's override PIN limit after reassignment to a till profile", async () => {
     for (let i = 0; i < 4; i++) {
       const answer = await deviceCall("PUT", path(), {
         ...close(),
@@ -956,6 +956,14 @@ describe("the kitchen display's station day", () => {
     const blocked = await deviceCall("PUT", path(), authorizedClose());
     expect(blocked.status).toBe(429);
     expect(blocked.json).toMatchObject({ code: "pin.throttled" });
+    const [tillProfile] = await suite.db
+      .select({ id: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, staffDevice));
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: tillProfile!.id })
+      .where(eq(devices.id, deviceId));
     const login = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, {
         deviceId,

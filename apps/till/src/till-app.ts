@@ -2503,7 +2503,7 @@ export class TillApp extends LitElement {
         min-height: 0;
       }
 
-      till-lock-screen,
+      till-lock-screen:not([compact]),
       till-enrol-screen {
         flex: 1 0 auto;
       }
@@ -2947,6 +2947,7 @@ export class TillApp extends LitElement {
     this.#closeCloudEmergency();
     this.operatorPersonId = "";
     this.#tabPerson = null;
+    this.kitchenOperator = "";
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
@@ -3344,7 +3345,7 @@ export class TillApp extends LitElement {
       : this.#venueLocale;
   }
 
-  /** A kitchen display has no session to save a language to, so it keeps its pick itself. */
+  /** A kitchen display keeps its own language across staff changes. */
   #displayLanguageKey(): string | null {
     return this.deviceId === undefined ? null : `waitron.kitchenDisplayLanguage.${this.deviceId}`;
   }
@@ -5634,9 +5635,16 @@ export class TillApp extends LitElement {
         (r, signal) => this.api.reportBattery(r, { signal }),
         nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
       );
+      const kind = kindOfFormFactor(identity.formFactor);
+      if (
+        this.kitchenOperator !== "" &&
+        (kind !== "kds_station" ||
+          previousDeviceId !== identity.deviceId ||
+          this.activeProfileId !== (identity.profileId ?? ""))
+      )
+        this.#onKitchenLogout(false);
       this.#holdIdentity(identity);
       this.#restoreMakeNow();
-      const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
       if (kind !== undefined && LIVE_STREAM_KINDS.includes(kind)) {
         if (
@@ -5715,6 +5723,8 @@ export class TillApp extends LitElement {
         }
         if (overtaken()) return;
         show();
+        if (this.initialDeviceStation === undefined && this.kitchenOperator !== "")
+          this.#onKitchenLogout();
         this.#sayIfSwitched(from);
         this.deviceMode = true;
         this.#kitchenSetupPoll.start();
@@ -6512,6 +6522,30 @@ export class TillApp extends LitElement {
     await this.#continueAfterClockIn();
   }
 
+  @state() private kitchenOperator = "";
+
+  #onKitchenLogin(event: CustomEvent<LoggedInDetail>): void {
+    event.stopPropagation();
+    this.#tabPerson = { personId: event.detail.personId };
+    this.kitchenOperator = event.detail.displayName;
+  }
+
+  #onKitchenLogout(endServerSession = true): void {
+    if (endServerSession) {
+      // logout captures the tab's person header as it starts the request.
+      const sent = settledWithin(
+        this.api.logout().catch(() => undefined),
+        SIGN_OUT_ANSWER_WAIT_MS,
+      );
+      this.#serverSignOut = sent;
+      void sent.then(() => {
+        if (this.#serverSignOut === sent) this.#serverSignOut = undefined;
+      });
+    }
+    this.#tabPerson = null;
+    this.kitchenOperator = "";
+  }
+
   async #onLoggedIn(event: Event): Promise<void> {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#preLoginChoice ?? this.#unchosenLocale()));
@@ -6522,7 +6556,12 @@ export class TillApp extends LitElement {
 
   /** The device's session belongs to someone else now, so this person has none to end. */
   #onPersonRefused(person: SessionPerson): void {
-    if (person !== this.#tabPerson || (this.operatorName === "" && !this.#loginPending)) return;
+    if (person !== this.#tabPerson) return;
+    if (this.kitchenOperator !== "") {
+      this.#onKitchenLogout(false);
+      return;
+    }
+    if (this.operatorName === "" && !this.#loginPending) return;
     this.#refusedPerson = person;
     void this.#onLogout(false);
   }
@@ -24595,7 +24634,23 @@ export class TillApp extends LitElement {
 
   #kitchenBody(): TemplateResult | typeof nothing {
     if (!this.capabilities.includes("act-as-kds")) return nothing;
-    return html`${this.kitchenScreenSwitched === undefined ? nothing : html`<p class="switched" role="status" data-screen-switched>${kitchenScreenSwitchedText(this.kitchenScreenSwitched)}</p>`}${this.#kitchenBoard()}`;
+    return html`
+      ${this.kitchenScreenSwitched === undefined ? nothing : html`<p class="switched" role="status" data-screen-switched>${kitchenScreenSwitchedText(this.kitchenScreenSwitched)}</p>`}
+      ${
+        this.deviceMode && this.initialDeviceStation !== undefined
+          ? html`<till-lock-screen
+              compact
+              .api=${this.api}
+              .live=${this.#live}
+              .untilSignedOut=${this.#untilSignedOut}
+              .compactOperator=${this.kitchenOperator}
+              @logged-in=${(event: CustomEvent<LoggedInDetail>) => this.#onKitchenLogin(event)}
+              @kitchen-sign-out=${() => this.#onKitchenLogout()}
+            ></till-lock-screen>`
+          : nothing
+      }
+      ${this.#kitchenBoard()}
+    `;
   }
 
   #kitchenBoard(): TemplateResult {
@@ -25872,6 +25927,8 @@ export class TillApp extends LitElement {
                           .untilSignedOut=${this.#untilSignedOut}
                           .live=${this.#live}
                           .deviceName=${this.deviceName}
+                          .kitchenUnavailable=${this.formFactor === "kds"}
+                          @kitchen-retry=${() => void this.#boot()}
                           .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}
                           .canChooseDevice=${this.devTab || this.devDevices !== undefined}

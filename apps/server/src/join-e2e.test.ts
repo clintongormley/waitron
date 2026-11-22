@@ -859,16 +859,18 @@ describe("a deleted device comes back as the same device", () => {
     expect((await sessionRead(app, `${enabledJar}; ${deviceCookieFrom(fresh)}`)).status).toBe(200);
   });
 
-  it("a sign-in overtaken by a move onto a kitchen-screen profile is refused, and opens no session", async () => {
+  it.each([
+    ["till", "kds"],
+    ["kds", "till"],
+  ] as const)("refuses a PIN sign-in overtaken by reassignment from %s to %s", async (from, to) => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
-    const profileId = await seedProfile("till");
-    const kitchenId = await seedProfile("kds");
+    const profiles = { till: await seedProfile("till"), kds: await seedProfile("kds") };
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, kitchenId, stationScreen(venue.defaultStationId)),
+      offerOnProfile(tx, profiles.kds, stationScreen(venue.defaultStationId)),
     );
     const holdId = await openWindow(app, venue);
-    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profiles[from]);
     const [person] = await seedPersons(suite.db, {
       displayName: "Server",
       pinHash: fixturePinHash("4321"),
@@ -876,7 +878,13 @@ describe("a deleted device comes back as the same device", () => {
     });
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
-      await moveOnto(app, venue, deviceId, kitchenId, venue.defaultStationId);
+      await moveOnto(
+        app,
+        venue,
+        deviceId,
+        profiles[to],
+        to === "kds" ? venue.defaultStationId : null,
+      );
     };
 
     const late = await signIn(app, jar, person!.id);
@@ -889,7 +897,7 @@ describe("a deleted device comes back as the same device", () => {
     expect(await openSessionsOn(deviceId)).toBe(0);
   });
 
-  it("a kitchen screen's sign-in is refused before its PIN is checked", async () => {
+  it("admits a cook to the kitchen display and refuses a cook excluded by its profile", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
     const kitchenId = await seedProfile("kds");
@@ -909,20 +917,55 @@ describe("a deleted device comes back as the same device", () => {
       pinHash: fixturePinHash("4321"),
       role: "staff",
     });
-    let pinChecked = false;
-    between.pinCheckAndSignIn = async () => {
-      pinChecked = true;
-    };
+    const opened = await signIn(app, joined.jar, person!.id);
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get("set-cookie")).toContain("waitron_till_session=");
+    expect(await openSessionsOn(joined.joinId)).toBe(1);
 
+    await suite.db
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, kitchenId));
     const refused = await signIn(app, joined.jar, person!.id);
-    expect(refused.status).toBe(403);
-    expect(await errorOf(refused)).toMatchObject({
-      code: "device.forbidden_action",
-      params: { action: "sign_in" },
-    });
+    expect(refused.status).toBe(401);
+    expect((await errorOf(refused)).code).toBe("pin.invalid");
     expect(refused.headers.get("set-cookie")).toBeNull();
-    expect(pinChecked).toBe(false);
+    expect(await openSessionsOn(joined.joinId)).toBe(1);
+
+    const signedOut = await send(app, "DELETE", "/api/session", {
+      cookie: `${joined.jar}; ${deviceCookieFrom(opened)}`,
+    });
+    expect(signedOut.status).toBe(200);
     expect(await openSessionsOn(joined.joinId)).toBe(0);
+  });
+
+  it("ends a kitchen session when a manager reassigns the device to an ordering profile", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const kitchenId = await seedProfile("kds");
+    const tillId = await seedProfile("till");
+    await withTransaction(suite.db, (tx) =>
+      offerOnProfile(tx, kitchenId, stationScreen(venue.defaultStationId)),
+    );
+    const holdId = await openWindow(app, venue);
+    const joined = await knock(app, "Kitchen");
+    expect(
+      (
+        await pair(app, venue, holdId, joined, {
+          name: "Kitchen",
+          profileId: kitchenId,
+          kitchenScreens: [stationScreen(venue.defaultStationId)],
+        })
+      ).status,
+    ).toBe(200);
+    const [cookie] = await signedInOn([{ deviceId: joined.joinId, jar: joined.jar }]);
+    expect(await openSessionsOn(joined.joinId)).toBe(1);
+
+    await moveOnto(app, venue, joined.joinId, tillId, null);
+
+    expect(await openSessionsOn(joined.joinId)).toBe(0);
+    const refused = await sessionRead(app, cookie!);
+    expect(refused.status).toBe(401);
+    expect((await errorOf(refused)).code).toBe("session.required");
   });
 
   it("a sign-in overtaken by a move onto another till profile still signs in", async () => {
