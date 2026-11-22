@@ -290,12 +290,12 @@ describe("createSetupApp — rendering", () => {
       )
     ).text();
     expect(html).toContain("This agent was denied or disabled.");
-    expect(html).toContain("Save the server address");
+    expect(html).toContain("Save the box address");
     expect(html).toContain("approve the new join");
     expect(html).not.toContain("restart");
   });
 
-  it("escapes an unreachable error and chooses the current, saved, or generic server label", async () => {
+  it("escapes an unreachable error and chooses the current, saved, or generic box label", async () => {
     const render = async (status: AgentStatus): Promise<string> =>
       (
         await request(
@@ -317,7 +317,7 @@ describe("createSetupApp — rendering", () => {
       await render({ phase: "unreachable", serverUrl: "https://saved.test", current: null }),
     ).toContain("Can't reach https://saved.test right now");
     const generic = await render({ phase: "unreachable", serverUrl: null, current: null });
-    expect(generic).toContain("Can't reach the server right now");
+    expect(generic).toContain("Can't reach the box right now");
     expect(generic).not.toContain('class="muted"');
     const escaped = await render({
       phase: "unreachable",

@@ -49,10 +49,10 @@ const READY_ES = es["tax_office.notice_ready"]
 const FAILED_EN =
   "The invoices for March 2026 could not be prepared. Choose Download March 2026 on Invoices to try again.";
 const RESTARTED_EN =
-  "The server restarted before the invoices for March 2026 were ready. Choose Download March 2026 on Invoices to prepare them again.";
-const MISSING_EN = "This file is no longer on the server. Choose Download again to prepare it.";
+  "The box restarted before the invoices for March 2026 were ready. Choose Download March 2026 on Invoices to prepare them again.";
+const MISSING_EN = "This file is no longer on the box. Choose Download again to prepare it.";
 const RAN_OUT_EN =
-  "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.";
+  "The box ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the box, for example by keeping fewer backups under Backups, then try again.";
 
 function me(permissions: string[], locale: string) {
   return {
@@ -319,7 +319,7 @@ describe("the shell's notice for the tax office's month file", () => {
     expect(saveButton(el)).toBeNull();
   });
 
-  it("tells the person the server restarted when a build gives way to nothing, past a refused read", async () => {
+  it("tells the person the box restarted when a build gives way to nothing, past a refused read", async () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())
@@ -476,7 +476,7 @@ describe("the shell's notice for the tax office's month file", () => {
     await expect.poll(() => monthLine(el)).toBeNull();
   });
 
-  it("says how far the file had got when the server ran short of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
+  it("says how far the file had got when the box ran short of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())

@@ -48,7 +48,7 @@ Cada parte tiene una fila con un punto de color:
   confirme la hora del servidor. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
-filas **Copia en el bucket**, **Equipo de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
+filas **Copia en el bucket**, **Servidor de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
 como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
 tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila
 se cuentan bajo las filas, junto a **Ver todos los avisos**.
@@ -62,13 +62,13 @@ Cuando no pasa nada, cada fila dice:
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
-- **Equipo de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
+- **Servidor de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
   a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
   última copia. Deja ambos equipos encendidos cuando veas **Actualización pendiente** o
   **Reconstruyendo la copia**.
   **Actualización desconocida** significa que la principal no puede confirmar su progreso.
   Abre **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
-  equipo de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el equipo de reserva durante dos minutos.
+  servidor de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el servidor de reserva durante dos minutos.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
   lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin

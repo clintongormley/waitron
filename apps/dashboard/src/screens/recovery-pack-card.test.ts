@@ -33,7 +33,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
 }
 
 it.each([
-  ["en-GB", "Backup encryption key", "Server key"],
+  ["en-GB", "Backup encryption key", "Box key"],
   ["es-ES", "Clave de cifrado de copias", "Clave del servidor"],
 ] as const)("names the two keys separately on the pack in %s", async (locale, backup, server) => {
   setLocale(locale);
@@ -204,7 +204,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(row(el, "last")).toBe(t("recovery_pack.last_none"));
   });
 
-  it("says the last pack is up to date, naming who made it and when, and the pack holding the server key", async () => {
+  it("says the last pack is up to date, naming who made it and when, and the pack holding the box key", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES["up to date"]));
     expect(line(el)).toBe(
@@ -272,7 +272,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     { part: "server-key", state: "not-set-up" },
   ];
 
-  it("says the box has no server key yet, not that the pack is incomplete", async () => {
+  it("says the box has no key yet, not that the pack is incomplete", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(
@@ -288,7 +288,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
-  it("says the server key is on no pack once one was made after a pack that had none", async () => {
+  it("says the box key is on no pack once one was made after a pack that had none", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(
@@ -310,7 +310,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     ["set", "included", "recovery_pack.server_key_elsewhere"],
     ["set", "absent", "recovery_pack.server_key_elsewhere"],
   ] as const)(
-    "words the server key row from the box's key now (%s), whatever the last pack's part was (%s), when no pack holds it",
+    "words the box key row from the box's key now (%s), whatever the last pack's part was (%s), when no pack holds it",
     async (serverKey, state, words) => {
       setLocale(locale);
       const parts = [...noKeyParts.slice(0, 2), { part: "server-key", state } as const];
@@ -350,7 +350,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(offered?.classList.contains("warn")).toBe(false);
     expect(offered?.textContent?.trim()).toBe(
       locale === "en-GB"
-        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new server key."
+        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new box key."
         : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
     );
     expect(row(el, "server-key")).toContain("1");
@@ -379,7 +379,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(offered?.classList.contains("warn")).toBe(false);
   });
 
-  it("names a pack holding the server key no browser confirmed receiving, in decision 10's words", async () => {
+  it("names a pack holding the box key no browser confirmed receiving, in decision 10's words", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.unreceived));
     expect(line(el)).toBe(
@@ -390,7 +390,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
-  it("names a newest pack no browser confirmed receiving and holds no server key", async () => {
+  it("names a newest pack no browser confirmed receiving and holds no box key", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(
@@ -473,7 +473,7 @@ describe("an unreceived pack", () => {
   });
 });
 
-describe("which pack holds the server key", () => {
+describe("which pack holds the box key", () => {
   it("is the same pack on the card and in the dialog when the status names a kept and an unreceived holder", async () => {
     setLocale("en-GB");
     const both = status({
@@ -1126,7 +1126,7 @@ describe("making a pack", () => {
       return { api, el, first, download };
     };
 
-    it("offers an older pack's link when only that pack holds the new server key, and re-reads the status", async () => {
+    it("offers an older pack's link when only that pack holds the new box key, and re-reads the status", async () => {
       const { api, el, first, download } = await twoMakes("replaced", "unchanged");
       await openDialog(el);
       const reads = api.getRecoveryPackStatus.mock.calls.length;
@@ -1135,7 +1135,7 @@ describe("making a pack", () => {
       await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
     });
 
-    it("never offers an older pack whose new server key a later pack has replaced", async () => {
+    it("never offers an older pack whose new box key a later pack has replaced", async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
         .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced", madeAt: MADE_AT })

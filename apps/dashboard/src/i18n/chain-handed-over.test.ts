@@ -7,7 +7,7 @@ afterEach(() => setLocale("en-GB"));
 it.each([
   [
     "en-GB",
-    "This server is no longer the main server, so it cannot add new records for the tax agency. Open this page on the main server.",
+    "This box is no longer the main box, so it cannot add new records for the tax agency. Open this page on the main box.",
   ],
   [
     "es-ES",

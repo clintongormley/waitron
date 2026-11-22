@@ -159,7 +159,7 @@ const en = {
   "fiscal_filing.awaiting_certificate":
     "Nothing can be sent until the tax agency's certificate is installed.",
   "fiscal_filing.conflict.stopped":
-    "This box has stopped issuing invoices because of an identity conflict. Recovering needs the server key.",
+    "This box has stopped issuing invoices because of an identity conflict. Recovering needs the box key.",
   "fiscal_filing.conflict.open": "Open conflict recovery",
   "fiscal_filing.conflict.reply.fiscal.huella_divergente":
     "AEAT already holds a different record for invoice {number}, so it refused this box's record.",
@@ -274,11 +274,11 @@ const en = {
   "fiscal_filing.put_right.replace.confirm":
     "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated {today}.",
   "fiscal_filing.put_right.replace.undated":
-    "The server cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.",
+    "The box cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.",
   "fiscal_filing.put_right.replace.order":
     "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
   "fiscal_filing.put_right.replace.day_differs":
-    "The server's date, {server}, and the venue's date by this device's clock, {device}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.",
+    "The box's date, {server}, and the venue's date by this device's clock, {device}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.",
   "fiscal_filing.put_right.replace.send": "Send the replacement",
   "fiscal_filing.put_right.replace.issued":
     "Replacement issued. To print its original, open it on a till in Find a bill, on the Transactions tab, and choose Reprint. Later prints are copies.",
@@ -292,35 +292,35 @@ const en = {
   "fiscal_filing.refused.fresh_sign_in":
     "Waitron needs you to sign in again before sending this. Send again to be asked.",
   "fiscal_filing.refused.clock_unconfirmed":
-    "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
+    "The box is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
   "fiscal_filing.refused.clock_unusable":
-    "The server's clock is wrong, so nothing was sent. If the server's time service is running, it puts the clock right by itself once it reaches a time server over the internet; until then, or if the service is not running, set it on the Box status page, then send again.",
+    "The box's clock is wrong, so nothing was sent. If the box's time service is running, it puts the clock right by itself once it reaches a time server over the internet; until then, or if the service is not running, set it on the Box status page, then send again.",
   "fiscal_filing.refused.time_zone":
     "The venue's time zone is not ready, so nothing was sent. Check it in Venue settings, then send again.",
   "fiscal_filing.refused.not_main":
-    "This server no longer files the venue's invoices. Open this page on the server that does.",
+    "This box no longer files the venue's invoices. Open this page on the box that does.",
   "fiscal_filing.refused.changed":
     "This case was already put right, or it changed; nothing more was sent.",
   "fiscal_filing.refused.not_sent":
     "Waitron could not accept this request, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.disk_full":
-    "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
+    "The box's disk is full, so nothing was sent. Follow the disk alert, then send again.",
   "fiscal_filing.refused.record_invalid":
     "The record Waitron built failed its own check, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.fingerprint":
-    "The fingerprint check of the server's invoice records failed, so nothing was sent. This is a fault in Waitron; the case stays open.",
+    "The fingerprint check of the box's invoice records failed, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.try_again":
-    "The server could not add the new record to its invoice records this time, so nothing was sent. Send again.",
+    "The box could not add the new record to its invoice records this time, so nothing was sent. Send again.",
   "fiscal_filing.refused.setup":
-    "The server found a problem with its own invoicing setup, so nothing was sent. This is a fault in Waitron; the case stays open.",
+    "The box found a problem with its own invoicing setup, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.operation_date":
-    "The server refused this day: it cannot be after today, after the invoice's date, or more than twenty years ago. Choose another day, then send again.",
+    "The box refused this day: it cannot be after today, after the invoice's date, or more than twenty years ago. Choose another day, then send again.",
   "fiscal_filing.refused.replacement_not_first":
     "This invoice already has a refund or another corrective invoice, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
   "fiscal_filing.refused.correction_unsupported":
     "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
   "fiscal_filing.refused.no_corrective_series":
-    "This server has no corrective invoice series, so nothing was sent. Waitron makes one when it sets up, restores or promotes a server, so this is a fault in Waitron; the case stays open.",
+    "This box has no corrective invoice series, so nothing was sent. Waitron makes one when it sets up, restores or promotes a box, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.taxpayer_domicile":
     "The business has no registered address, which a full invoice must show, so nothing was sent. The invoice was issued with one, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",

@@ -28,7 +28,7 @@ export const en = {
   "permission.invoice.inspect.help":
     "Find, open, download and print every invoice the venue has issued, for the tax office. Held alone, it shows only Invoices and the person's own account settings.",
   "permission.fiscal.remedy.help":
-    "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in. Also accept returned fiscal records during a server handover.",
+    "Authorise the corrective actions offered by Fiscal filing. Opening that page also needs Export reports, and protected corrections ask you to confirm your sign-in. Also accept returned fiscal records during a box handover.",
   "permission.personal_data.export.help":
     "Download another staff member’s personal-data copy from Users, or customer data from Orders. Confirm your sign-in before downloading staff data.",
   "permission.person.manage.help":
@@ -62,7 +62,7 @@ export const en = {
   "permission.system.box_admin.help":
     "Confirm or correct the box’s clock and change the mail server. Opening Box status and reading mail-server settings also needs Manage the system.",
   "permission.node.manage.help":
-    "Manage the venue’s servers: prepare a spare or mirror, hand over service, promote a spare and remove a server. Follow the Servers page for the steps each operation needs.",
+    "Manage the venue’s boxes: prepare a spare or mirror, hand over service, promote a spare and remove a box. Follow the Servers page for the steps each operation needs.",
 
   "access_roles.reload": "Reload",
   "access_roles.delete_message_one": "1 person holds {role}. Deleting it takes it away from them.",
@@ -201,7 +201,7 @@ export const en = {
   "permission_sign_in.read_again": "Read again",
   "zone_repair.ready": "Trading is ready. Reload the dashboard.",
   "zone_repair.conversion_failed":
-    "The selected zone could not be read at the current time. Check the server clock, then try again.",
+    "The selected zone could not be read at the current time. Check the box clock, then try again.",
   "zone_repair.invalid_zone": "Choose a supported time zone for this country.",
   "zone_repair.not_needed": "The venue already has a valid time zone. Check its current status.",
   "zone_repair.heading": "Confirm the venue time zone",
@@ -539,7 +539,7 @@ export const en = {
   "tax_office.notice_failed":
     "The invoices for {month} could not be prepared. Choose Download {month} on Invoices to try again.",
   "tax_office.notice_restarted":
-    "The server restarted before the invoices for {month} were ready. Choose Download {month} on Invoices to prepare them again.",
+    "The box restarted before the invoices for {month} were ready. Choose Download {month} on Invoices to prepare them again.",
   "folders.select": "Select",
   "folders.selected": "{count} selected",
   "folders.selected_one": "1 selected",
@@ -615,7 +615,7 @@ export const en = {
   "nav.cloud": "Cloud services",
   "cloud.intro":
     "Connect this venue to your Waitron Cloud account. If you restored a backup made before connecting, connect again.",
-  "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
+  "cloud.replacement_intro": "Reconnect this restored test box to its existing Cloud venue.",
   "cloud.replacement_request": "Request reconnection",
   "cloud.replacement_reissue": "Get a fresh reconnection request",
   "cloud.replacement_check": "Check reconnection",
@@ -626,7 +626,7 @@ export const en = {
   "cloud.replacement_code": "Original recovery code for Cloud",
   "cloud.replacement_old": "Previous installation",
   "cloud.replacement_warning":
-    "Keep the previous server out of service. Cloud access and backups need separate checks after approval.",
+    "Keep the previous box out of service. Cloud access and backups need separate checks after approval.",
   "cloud.recovery_title": "Recover a Cloud owner account",
   "cloud.recovery_help":
     "After proving your email in Cloud, load your recovery request here. Check the account and venue before deciding.",
@@ -664,13 +664,13 @@ export const en = {
   "cloud.organisation": "Organisation",
   "cloud.business": "Legal business",
   "cloud.connected": "Connected",
-  "cloud.ended": "Cloud access for this server has ended. It was stopped here or in Waitron Cloud.",
+  "cloud.ended": "Cloud access for this box has ended. It was stopped here or in Waitron Cloud.",
   "cloud.ended_help": "Connect again to add this venue to Waitron Cloud as a new venue.",
   "cloud.connect_again": "Connect again",
   "cloud.snapshots": "Snapshots",
   "cloud.translation": "Translate all",
   "cloud.continuous": "Continuous backups",
-  "cloud.access_pending": "Waiting for the server",
+  "cloud.access_pending": "Waiting for the box",
   "cloud.access_active": "Cloud access active",
   "cloud.access_unavailable":
     "Cloud status is unavailable. The last known configuration is shown below.",
@@ -682,7 +682,7 @@ export const en = {
   "cloud.confirm_stop": "Confirm stop",
   "cloud.cancel_stop": "Keep Cloud access",
   "cloud.stop_help":
-    "This ends this server’s current Cloud connection, including remote access and new backups. Local trading continues. Stored backups and subscriptions stay with this venue in Waitron Cloud; this does not cancel billing. Connect again later adds the server to Waitron Cloud as a new venue.",
+    "This ends this box’s current Cloud connection, including remote access and new backups. Local trading continues. Stored backups and subscriptions stay with this venue in Waitron Cloud; this does not cancel billing. Connect again later adds the box to Waitron Cloud as a new venue.",
   "cloud.state_unconfigured": "Not configured",
   "cloud.state_provisioning": "Setting up",
   "cloud.state_ready": "Configured",
@@ -712,8 +712,8 @@ export const en = {
   "cloud.retry": "Try again",
   "cloud.retry_start": "Retry request",
   "cloud.restart": "Start again",
-  "cloud.not_configured": "This server is not connected to Waitron Cloud",
-  "cloud.not_primary": "Open this page on your serving primary server to connect the venue.",
+  "cloud.not_configured": "This box is not connected to Waitron Cloud",
+  "cloud.not_primary": "Open this page on your serving primary box to connect the venue.",
   "cloud.loading": "Checking Cloud connection…",
   "cloud.billing": "Plan and prices",
   "cloud.billing_plan": "Plan",
@@ -1495,9 +1495,9 @@ export const en = {
   "email.settings.prepare_save":
     "Saving a mail server sends invitations and password-reset links to real inboxes.",
   "email.settings.remove_capture":
-    "Remove the saved mail server? Email will be kept in this box's test inbox again. Stop keeps the server settings.",
+    "Remove the saved mail server? Email will be kept in this box's test inbox again. Stop keeps the mail server settings.",
   "email.settings.remove_live":
-    "Remove the saved mail server? Account email cannot be sent and invoices cannot be emailed until you set up another server. Trading continues. Stop keeps the server settings.",
+    "Remove the saved mail server? Account email cannot be sent and invoices cannot be emailed until you set up another mail server. Trading continues. Stop keeps the mail server settings.",
   "email.settings.change": "Change mail server",
   "email.settings.set_up": "Set up mail server",
   "email.settings.unavailable": "Invoices cannot be emailed until you set up a mail server.",
@@ -1534,7 +1534,7 @@ export const en = {
   "profile.language": "Language",
   "profile.saved": "Your changes have been saved.",
   "staff.invitation_captured":
-    "The invitation is on its way to the server inbox. Open Email inbox to read it.",
+    "The invitation is on its way to the box’s inbox. Open Email inbox to read it.",
   "staff.invitation_unconfigured":
     "No invitation was sent because email is not set up. Open Email settings, then send a new invitation.",
   "staff.invitation_reset_throttled":
@@ -1544,7 +1544,7 @@ export const en = {
   "profile.email_sent":
     "The confirmation email is on its way. Enter the code from your new address to confirm it.",
   "profile.email_captured":
-    "The confirmation is on its way to the server inbox. Managers and administrators can read it.",
+    "The confirmation is on its way to the box’s inbox. Managers and administrators can read it.",
   "profile.email_unconfigured":
     "The confirmation could not be sent because email is not set up. After email is set up, open Your details, re-enter the new address and save.",
   "profile.email_admin_help":
@@ -1614,7 +1614,7 @@ export const en = {
   "recovery_pack_dialog.heading": "Make recovery pack",
   "recovery_pack_dialog.intro":
     "The pack holds every key this venue has. It is made once, for this download; the box keeps no copy.",
-  "recovery_pack_dialog.new_key": "Also make a new server key",
+  "recovery_pack_dialog.new_key": "Also make a new box key",
   "recovery_pack_dialog.new_key_held":
     "Only if the pack or sheet holding the current key (recovery pack {number}, made on {date}) is lost.",
   "recovery_pack_dialog.new_key_unknown":
@@ -1622,23 +1622,23 @@ export const en = {
   "recovery_pack_dialog.new_key_effect":
     "New backups will use the new key; older backups still need the old one.",
   "recovery_pack_dialog.unreceived":
-    "The current server key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
+    "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
   "recovery_pack_dialog.make": "Make pack",
   "recovery_pack_dialog.key_failed":
-    "The pack was made, but the server key was {not} replaced. The server key page in the pack says why.",
+    "The pack was made, but the box key was {not} replaced. The pack says why.",
   "recovery_pack_dialog.not": "not",
   "recovery_pack_dialog.key_still_works":
     "The current key, on recovery pack {number} made on {date}, still works.",
   "recovery_pack_dialog.lost_new_key":
-    "The box may have made a recovery pack with a new server key that did not reach this browser. If it did, the only copy of your current server key is on a pack you do not have.",
+    "The box may have made a recovery pack with a new box key that did not reach this browser. If it did, the only copy of your current box key is on a pack you do not have.",
   "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Make a new pack with a new server key replaces the key again and puts it on a pack you download now; you sign in again first. Stop closes this window and changes nothing.",
+    "Make a new pack with a new box key replaces the key again and puts it on a pack you download now; you sign in again first. Stop closes this window and changes nothing.",
   "recovery_pack_dialog.lost":
     "The box may have made the recovery pack, but it did not reach this browser.",
   "recovery_pack_dialog.lost_choices":
     "Try again asks the box for a new pack. Stop closes this window and changes nothing.",
-  "recovery_pack_dialog.remake": "Make a new pack with a new server key",
+  "recovery_pack_dialog.remake": "Make a new pack with a new box key",
   "recovery_pack_dialog.try_again": "Try again",
   "recovery_pack_dialog.stop": "Stop",
   "cloud.emergency_print_pack": "Print recovery pack",
@@ -1654,7 +1654,7 @@ export const en = {
     "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro":
-    "Keep this pack locked away, off the box. It can hold the emergency code, restore codes and keys. The backup encryption key opens encrypted copies. The server key authorises restore or takeover.",
+    "Keep this pack locked away, off the box. It can hold the emergency code, restore codes and keys. The backup encryption key opens encrypted copies. The box key authorises restore or takeover.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
@@ -1662,7 +1662,7 @@ export const en = {
   "recovery_pack.incomplete":
     "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
   "recovery_pack.offered_at_setup":
-    "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new pack with a new server key.",
+    "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new pack with a new box key.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
   "recovery_pack.reason.key_changed": "The backup encryption key changed on {date}.",
@@ -1670,22 +1670,22 @@ export const en = {
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
   "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
-  "recovery_pack.reason.server_key_set_up": "The server key was made after this pack.",
+  "recovery_pack.reason.server_key_set_up": "The box key was made after this pack.",
   "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
   "recovery_pack.reason.archives_removed": "Archives were turned off.",
-  "recovery_pack.reason.server_key_removed": "The box no longer keeps a server key.",
-  "recovery_pack.reason.server_key_replaced": "The server key was replaced.",
+  "recovery_pack.reason.server_key_removed": "The box no longer keeps a box key.",
+  "recovery_pack.reason.server_key_replaced": "The box key was replaced.",
   "recovery_pack.make_new": "Make a new pack.",
-  "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the server key.",
+  "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the box key.",
   "recovery_pack.keep_backup_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup encryption key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.keep_old_server_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its server key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its box key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
     "The box's backups still use the backup encryption key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup encryption key",
-  "recovery_pack.row.server_key": "Server key",
+  "recovery_pack.row.server_key": "Box key",
   "recovery_pack.last_none": "None yet",
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
   "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
@@ -1696,8 +1696,8 @@ export const en = {
   "recovery_pack.server_key_on": "On pack {number}, made on {date}",
   "recovery_pack.server_key_on_unreceived":
     "On pack {number}, made on {date} (the box was never told it arrived)",
-  "recovery_pack.server_key_none": "This venue keeps no server key",
-  "recovery_pack.server_key_not_yet": "This box has no server key yet",
+  "recovery_pack.server_key_none": "This venue keeps no box key",
+  "recovery_pack.server_key_not_yet": "This box has no box key yet",
   "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
@@ -2111,7 +2111,7 @@ export const en = {
   "printers.join_match_prompt": "Tap the number the print agent is showing",
   "printers.join_choice_label": "Number {number}",
   "printers.join_hint":
-    "On the computer the printer is plugged into (or from here, at http://<that computer>:9110), open the print-agent setup page and enter this server address:",
+    "On the computer the printer is plugged into (or from here, at http://<that computer>:9110), open the print-agent setup page and enter this box address:",
   "printers.provenance_self": "On this box",
   "printers.provenance_other_box": "On another box",
   "printers.list_title": "Printers",
@@ -2172,7 +2172,7 @@ export const en = {
   "printers.test_qr_45": "Closer to 45 mm",
   "printers.agent_step_open":
     "On the computer connected to your printer, open the print agent’s setup page at http://localhost:9110.",
-  "printers.agent_step_address": "Enter this Waitron server address on that page:",
+  "printers.agent_step_address": "Enter this Waitron box address on that page:",
   "printers.agent_step_match":
     "When the agent appears below, choose {action} and match the number shown on its setup page.",
   "printers.add_printer": "Add a printer",
@@ -2325,9 +2325,9 @@ export const en = {
   "servers.hand_over": "Hand over the venue",
   "servers.switch_label": "Print switch label",
   "servers.switch_label_title": "Switch label: {name}",
-  "servers.switch_label_qr_alt": "QR code that opens this server's switch page",
+  "servers.switch_label_qr_alt": "QR code that opens this box's switch page",
   "servers.switch_label_words":
-    "If the main server fails, scan this with any till or phone on the venue's network",
+    "If the main box fails, scan this with any till or phone on the venue's network",
   "servers.handover_intro":
     "Sales stop on this box while the final copy moves. On the spare, sign in again, confirm the details and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
   "servers.handover_no_password":
@@ -2341,11 +2341,11 @@ export const en = {
   "servers.handover_sent":
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
   "servers.intro":
-    "Every machine on this venue's list of servers. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
-  "servers.server": "Server",
+    "Every machine on this venue's list of boxes. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
+  "servers.server": "Box",
   "servers.actions": "Actions",
-  "servers.loading": "Loading servers…",
-  "servers.empty": "This server holds no list of the venue's servers.",
+  "servers.loading": "Loading boxes…",
+  "servers.empty": "This box holds no list of the venue's boxes.",
   "servers.joins_heading": "Boxes asking to join",
   "servers.join_asking": "A box at {address} is asking to join",
   "servers.join_started_again": "This box started again. Tap only a code it showed after that.",
@@ -2366,8 +2366,8 @@ export const en = {
   "servers.no_address": "No address",
   "servers.machine": "Machine",
   "servers.not_primary":
-    "Only the primary server can remove machines or clear them from the list. Open this screen on the primary.",
-  "servers.this_server": "This server",
+    "Only the primary box can remove machines or clear them from the list. Open this screen on the primary.",
+  "servers.this_server": "This box",
   "servers.standing.primary": "Primary",
   "servers.standing.standby": "Standby",
   "servers.standing.sell_only": "Replaced; not selling",
@@ -2376,39 +2376,39 @@ export const en = {
   "servers.remove": "Remove",
   "servers.remove_title": "Remove this spare?",
   "servers.remove_explanation":
-    "This marks it removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
+    "This marks it removed on the list of boxes, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
   "servers.declare_explanation":
-    "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now.",
+    "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now.",
   "servers.declare_switched_off": "This spare is switched off",
   "servers.declare_no_recovery":
-    "Nobody is restoring this venue from a backup or switching it to another server right now",
-  "servers.remove_former_title": "Remove this former main server?",
+    "Nobody is restoring this venue from a backup or switching it to another box right now",
+  "servers.remove_former_title": "Remove this former main box?",
   "servers.reset_warning":
-    "The former main server has not returned its invoice records. Switched on again with its data, it could sell beside this main server. If it does come back, reset it, and never choose “Carry on as the main box” on it.",
+    "The former main box has not returned its invoice records. Switched on again with its data, it could sell beside this main box. If it does come back, reset it, and never choose “Carry on as the main box” on it.",
   "servers.reset_statement":
-    "The former main server has been reset, or will never be switched on again",
-  "servers.return_waiting": "Waiting for the former main server to return its invoice records",
+    "The former main box has been reset, or will never be switched on again",
+  "servers.return_waiting": "Waiting for the former main box to return its invoice records",
   "servers.abandon": "Will not return",
-  "servers.abandon_title": "Stop waiting for the former main server's invoice records?",
+  "servers.abandon_title": "Stop waiting for the former main box's invoice records?",
   "servers.abandon_explanation":
-    "Choose this only if the former main server will not be switched on again with its data, for example because it has been reset. The last handover stops waiting for its invoice records. Any it made after the copy this main server started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
+    "Choose this only if the former main box will not be switched on again with its data, for example because it has been reset. The last handover stops waiting for its invoice records. Any it made after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
   "servers.abandon_confirm": "Stop waiting for its invoice records",
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
-    "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
+    "Clearing frees the place it takes on the list of boxes. If it tries to come back under its old identity, this primary refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
   "backup.title": "Backups",
   "backup.guide": "Backups guide",
   "node_pack.create": "Create pack",
-  "node_pack.key_error": "The server key is not valid.",
+  "node_pack.key_error": "The box key is not valid.",
   "node_pack.title": "Node recovery pack",
-  "node_pack.key": "Server key",
+  "node_pack.key": "Box key",
   "node_pack.register": "Allocation register",
-  "node_pack.secret_warning": "Keep this secret pack outside the server and its backups.",
+  "node_pack.secret_warning": "Keep this secret pack outside the box and its backups.",
   "node_pack.old_key_warning":
-    "Older backups restore their older server key. Keep that paper until no older backup remains.",
+    "Older backups restore their older box key. Keep that paper until no older backup remains.",
   "node_pack.archive_key_warning":
-    "This is the server key. The backup file opens with the separate backup encryption key.",
+    "This is the box key. The backup file opens with the separate backup encryption key.",
   "node_pack.snapshot_warning":
     "This register is a snapshot and may be out of date. Reprinting never frees used names. Consult the current outside register before recovery.",
   "node_pack.file": "Signed allocation register",
@@ -2417,7 +2417,7 @@ export const en = {
   "node_pack.print": "Printable copy",
   "node_pack.failed": "The recovery pack could not be created.",
   "node_pack.intro":
-    "Use the current server key and the signed register from its custodian. No bucket or subscription is needed.",
+    "Use the current box key and the signed register from its custodian. No bucket or subscription is needed.",
   "node_pack.clear": "Clear pack",
   "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
@@ -2580,7 +2580,7 @@ export const en = {
   "backup.key.too_short":
     "The backup encryption key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
-    "Save this key now. It opens encrypted backups. Keep your server key too. You need it to authorise restore or takeover.",
+    "Save this key now. It opens encrypted backups. Keep your box key too. You need it to authorise restore or takeover.",
   "backup.key.copy": "Copy",
   "backup.key.download": "Download key file",
   "backup.key.paste_label": "Your own backup encryption key",
@@ -2632,7 +2632,7 @@ export const en = {
   "stream.title": "Continuous copy to your bucket",
   "stream.explanation":
     "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery pack.",
-  "stream.not_primary": "Only the main server sends the copy to the bucket.",
+  "stream.not_primary": "Only the main box sends the copy to the bucket.",
   "stream.demo": "A Demo venue does not offer a copy to your bucket.",
   "stream.settings_incomplete":
     "The saved bucket settings are incomplete. Change bucket to enter them again, or turn off the copy.",
@@ -2640,7 +2640,7 @@ export const en = {
   "stream.state.opening": "Starting",
   "stream.state.streaming": "On",
   "stream.state.paused": "Paused — the bucket cannot be reached",
-  "stream.state.another_server": "Stopped — another server is writing to this bucket",
+  "stream.state.another_server": "Stopped — another box is writing to this bucket",
   "stream.state.unusable": "Stopped — the bucket settings cannot be used",
   "stream.state.folder_in_use":
     "Stopped — this bucket folder holds another copy. Choose a different prefix in Change bucket.",
@@ -2703,10 +2703,10 @@ export const en = {
   "stream.probe.list_failed":
     "The bucket's contents could not be listed; the key needs permission to list.",
   "stream.probe.create_only_ignored":
-    "The bucket replaced a file it should have refused to replace, so it cannot guard against two servers writing at once.",
+    "The bucket replaced a file it should have refused to replace, so it cannot guard against two boxes writing at once.",
   "stream.probe.fresh_version_refused": "The bucket refused a safe write it should have accepted.",
   "stream.probe.if_match_ignored":
-    "The bucket accepted a write over a changed file, so it cannot guard against two servers writing at once.",
+    "The bucket accepted a write over a changed file, so it cannot guard against two boxes writing at once.",
   "stream.probe.delete_failed": "The test file could not be deleted from the bucket.",
   "stream.probe.batch_delete_refused":
     "The test file could not be deleted the way the daily clean-up deletes old backup files: several in one request. Check that the key may delete files, or choose another provider.",
@@ -2832,7 +2832,7 @@ export const en = {
   "editor.per_unit": "per {unit}",
   "editor.price_each": "{price} each",
   "editor.summary_course": "Course",
-  "editor.field_rejected": "The server rejected this value. Check it and try again.",
+  "editor.field_rejected": "The box rejected this value. Check it and try again.",
   "editor.price": "Price",
   "editor.price_unit": "Price per {unit}",
   "editor.available": "Available",
@@ -4673,7 +4673,7 @@ export const en = {
   "box_status.restart_help": "Use it when an alert says to. Tills stop selling until it is back.",
   "box_status.restart_help_guide": "More about restarting the box",
   "box_status.fillers":
-    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, server key, backup encryption key and saved backups.",
+    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, box key, backup encryption key and saved backups.",
   "box_status.checks_unavailable":
     "Some checks could not be made, so this page may not show every problem.",
   "box_status.other_alerts": "{count} other alerts",
@@ -5328,7 +5328,7 @@ export const es: Record<StringKey, string> = {
   "cloud.recovery_help":
     "Después de verificar tu correo en Cloud, carga aquí tu solicitud de recuperación. Comprueba la cuenta y el local antes de decidir.",
   "cloud.recovery_local":
-    "Abre este panel en la dirección del equipo del local para aprobar o rechazar la recuperación. El acceso remoto del personal no permite aprobarla.",
+    "Abre este panel en la dirección del servidor del local para aprobar o rechazar la recuperación. El acceso remoto del personal no permite aprobarla.",
   "cloud.recovery_load": "Cargar solicitudes de recuperación",
   "cloud.recovery_account": "Cuenta de Cloud",
   "cloud.recovery_venue": "ID del local",
@@ -5345,7 +5345,7 @@ export const es: Record<StringKey, string> = {
   "cloud.recovery_refused":
     "Cloud ha registrado el rechazo. Esta solicitud ya no permite recuperar la cuenta.",
   "cloud.recovery_empty":
-    "No hay solicitudes de recuperación pendientes para este equipo. Si acabas de verificar tu correo en Cloud, vuelve a cargarlas.",
+    "No hay solicitudes de recuperación pendientes para este servidor. Si acabas de verificar tu correo en Cloud, vuelve a cargarlas.",
   "cloud.recovery_changed":
     "Esta solicitud de recuperación ya no está disponible. Vuelve a cargar las solicitudes para comprobar cuáles siguen pendientes.",
   "cloud.recovery_sign_in": "Entrar como administrador",
@@ -7122,7 +7122,7 @@ export const es: Record<StringKey, string> = {
     "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
   "servers.remove_former_title": "¿Retirar este antiguo servidor principal?",
   "servers.reset_warning":
-    "El antiguo servidor principal no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, restablécelo y no elijas nunca «Seguir como equipo principal» en él.",
+    "El antiguo servidor principal no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, restablécelo y no elijas nunca «Seguir como servidor principal» en él.",
   "servers.reset_statement":
     "El antiguo servidor principal se ha restablecido o no se volverá a encender nunca",
   "servers.return_waiting":
@@ -9275,14 +9275,14 @@ export const es: Record<StringKey, string> = {
   "box_status.part.sales": "Ventas",
   "box_status.part.tax": "Hacienda",
   "box_status.part.bucket": "Copia en el bucket",
-  "box_status.part.spare": "Equipo de reserva",
+  "box_status.part.spare": "Servidor de reserva",
   "box_status.spare.rebuilding": "Reconstruyendo la copia",
   "box_status.spare.unknown": "Actualización desconocida",
   "box_status.spare.behind": "{seconds} s de retraso",
   "box_status.spare.pending": "Actualización pendiente",
   "box_status.spare.last": "Última copia recibida {time}",
   "box_status.spare.switch_copy":
-    "Al cambiar, primero se pone al día la copia de este equipo de reserva.",
+    "Al cambiar, primero se pone al día la copia de este servidor de reserva.",
   "box_status.part.printers": "Impresoras",
   "box_status.part.readers": "Lectores de tarjetas",
   "box_status.part.clock": "Reloj",
@@ -9308,7 +9308,7 @@ export const es: Record<StringKey, string> = {
   "box_status.upgrade_settings.save_busy":
     "Ya hay un guardado en curso. Espera un momento y vuelve a intentarlo.",
   "box_status.upgrade_settings.read_only":
-    "Los ajustes de actualización son de solo lectura en este equipo. Para cambiar los del equipo principal, abre su página Estado del servidor.",
+    "Los ajustes de actualización son de solo lectura en este servidor. Para cambiar los del servidor principal, abre su página Estado del servidor.",
   "box_status.upgrade.upgraded": "Se actualizó de la versión {fromVersion} a la {toVersion}",
   "box_status.upgrade.rolled_back":
     "Volvió a la versión {fromVersion}. La versión ofrecida era la {toVersion}.",

@@ -19,7 +19,7 @@ function click(el: CloudServicesScreen, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`#${id}`)!.click();
 }
 it.each([
-  ["en", "This server is not connected to Waitron Cloud"],
+  ["en", "This box is not connected to Waitron Cloud"],
   ["es", "Este servidor no está conectado a Waitron Cloud"],
 ])("explains a server without Cloud configuration in %s", async (locale, message) => {
   const previous = currentLocale();
@@ -495,7 +495,7 @@ it("ignores a delayed reply after removal and reloads when the screen is reconne
   );
   await expect
     .poll(() => el.shadowRoot!.textContent)
-    .toContain("This server is not connected to Waitron Cloud");
+    .toContain("This box is not connected to Waitron Cloud");
   expect(el.shadowRoot!.textContent).not.toContain("Old account");
   expect(calls).toBe(2);
 });
@@ -617,7 +617,7 @@ for (const locale of ["en", "es"] as const)
     await flush(el);
     expect(el.shadowRoot!.textContent).toContain(
       locale === "en"
-        ? "Cloud access for this server has ended."
+        ? "Cloud access for this box has ended."
         : "El acceso a Cloud de este servidor ha terminado.",
     );
     expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
@@ -1052,7 +1052,7 @@ it("says Cloud access has ended and connects again from the start on the primary
   await expect.poll(() => el.shadowRoot!.querySelector("#connect-again")).not.toBeNull();
   const text = el.shadowRoot!.textContent!;
   expect(el.shadowRoot!.querySelector('[role="status"]')?.textContent).toContain(
-    "Cloud access for this server has ended.",
+    "Cloud access for this box has ended.",
   );
   expect(text).toContain("as a new venue");
   expect(text).not.toContain("Connected");
@@ -1083,7 +1083,7 @@ it("says Cloud access has ended without offering to connect again on a box that 
   const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
   await expect
     .poll(() => el.shadowRoot!.textContent)
-    .toContain("Cloud access for this server has ended.");
+    .toContain("Cloud access for this box has ended.");
   expect(el.shadowRoot!.querySelector("#connect-again")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("Connected");
 });

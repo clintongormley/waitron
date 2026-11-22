@@ -437,7 +437,7 @@ describe("stream-settings-panel: the bucket form", () => {
   it.each([
     [
       "en-GB",
-      "This venue has a standby server, listed under Servers, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row under Servers, then save again.",
+      "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row on the Servers page, then save again.",
     ],
     [
       "es-ES",
@@ -699,7 +699,7 @@ describe("stream-settings-panel: once set up", () => {
     expect(q(el, "[data-test=stream-lag]")).not.toBeNull();
   });
 
-  it("does not say another server is writing when the settings are what stopped the copy", async () => {
+  it("does not say another box is writing when the settings are what stopped the copy", async () => {
     const { el } = await mount(
       stubApi({}, withStatus({ ...STREAMING, state: "refused", reason: "config_unsafe" })),
     );
@@ -946,7 +946,7 @@ describe("stream-settings-panel: once set up", () => {
     expect(api.saveStreamSettings).not.toHaveBeenCalled();
   });
 
-  it("offers nothing to change on a server that is not the primary", async () => {
+  it("offers nothing to change on a box that is not the primary", async () => {
     const { el } = await mount(stubApi({}, { ...OFF, isPrimary: false }));
     expect(text(el, "[data-test=not-primary]")).toBe(t("stream.not_primary"));
     expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();

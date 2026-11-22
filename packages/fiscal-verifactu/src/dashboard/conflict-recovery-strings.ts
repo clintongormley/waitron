@@ -1,13 +1,13 @@
 export const CONFLICT_RECOVERY_STRINGS = {
   en: {
     "conflict_recovery.title": "Recover from an invoice identity conflict",
-    "conflict_recovery.key": "Current server key",
+    "conflict_recovery.key": "Current box key",
     "conflict_recovery.inspect": "Check conflict",
     "conflict_recovery.stop": "Stop",
-    "conflict_recovery.key_required": "Enter the current server key.",
+    "conflict_recovery.key_required": "Enter the current box key.",
     "conflict_recovery.invalid": "Correct the highlighted fields to continue.",
     "conflict_recovery.key_refused":
-      "The server key was refused. Enter the current key and try again.",
+      "The box key was refused. Enter the current key and try again.",
     "conflict_recovery.failed": "The request could not be completed. Try again or choose Stop.",
     "conflict_recovery.connection_refused":
       "Recovery needs a direct secure connection to this box. Open this box's HTTPS recovery address directly in your browser, then try again or choose Stop.",
@@ -24,7 +24,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.compare": "Compare clocks",
     "conflict_recovery.switch": "Switch identity",
     "conflict_recovery.confirm_why":
-      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+      "The box could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
     "conflict_recovery.confirm_time": "Confirm the time",
     "conflict_recovery.clock_disagrees":
       "The clocks do not agree. Check this box's clock and this device's clock, then compare again or choose Stop.",
@@ -32,7 +32,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "A second clock has not confirmed the box's time. Check this device's clock and compare again, or choose Stop.",
     "conflict_recovery.complete": "Identity switched. New invoice series:",
     "conflict_recovery.uncertain":
-      "The switch result is not confirmed. Check the result with the current server key. Stop cannot undo a switch already committed.",
+      "The switch result is not confirmed. Check the result with the current box key. Stop cannot undo a switch already committed.",
     "conflict_recovery.restart":
       "This attempt cannot be continued. Start a new attempt with a fresh clock comparison, or choose Stop. Invoices stay stopped until an identity switch is confirmed.",
     "conflict_recovery.again": "Start a new attempt",
@@ -42,7 +42,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "Waiting for an available minute: {seconds} seconds. The box checks every five seconds. Compare clocks again when the wait ends; switching always needs your choice.",
     "conflict_recovery.leave_title": "Leave recovery?",
     "conflict_recovery.leave_message":
-      "Leaving clears the server key and your confirmations. It cannot undo an identity switch already committed. Reopen recovery to check its result.",
+      "Leaving clears the box key and your confirmations. It cannot undo an identity switch already committed. Reopen recovery to check its result.",
     "conflict_recovery.keep": "Keep working",
     "conflict_recovery.discard": "Leave and clear key",
   },

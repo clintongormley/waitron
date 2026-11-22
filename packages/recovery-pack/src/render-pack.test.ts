@@ -656,7 +656,7 @@ describe("the server-key page says where the key is", () => {
       ),
     );
     expect(pages[3]!.text).toContain(
-      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, make a new pack with Also make a new server key ticked.",
+      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, make a new pack with Also make a new box key ticked.",
     );
     expect(pages[3]!.text).not.toContain("Keep that pack");
   });

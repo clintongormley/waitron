@@ -119,7 +119,7 @@ export const WAITING_PAGE_WORDS: Readonly<
     ],
     otherBox: "otro equipo",
     carryOn: {
-      heading: "Seguir como equipo principal",
+      heading: "Seguir como servidor principal",
       bucketMain:
         "Otro equipo ha publicado una copia de seguridad firmada más reciente para este local. Este equipo no puede seguir como principal. Abre el otro equipo para usar el local; deja este equipo esperando o apágalo.",
       openMain: "Abrir el otro equipo",
@@ -134,7 +134,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       switchedOff: ["", " está apagado"],
       noOtherRecovery:
         "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro equipo en este momento",
-      action: "Seguir como equipo principal",
+      action: "Seguir como servidor principal",
       emailMissing: "Introduce tu correo electrónico.",
       passwordMissing: "Introduce tu contraseña.",
       totpMissing:

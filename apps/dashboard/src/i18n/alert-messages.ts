@@ -32,7 +32,7 @@ export const ALERT_MESSAGES: Readonly<
     es: "Un responsable ha confirmado la zona horaria del local: {timeZone}.",
   },
   "fiscal.clock_drift": {
-    en: "The server's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
+    en: "The box's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
     es: "La última comparación del reloj del servidor con la AEAT mostró una diferencia de {seconds} segundos. Comprueba su fecha y hora; puedes seguir vendiendo.",
   },
   "job.failing": {
@@ -112,7 +112,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
+        en: "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby box is not receiving the restaurant's data. Check that the standby box is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
         es: "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
       },
     },
@@ -127,7 +127,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The spare copy is {seconds} seconds behind while {phase:spare_copy_phase}. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        en: "The spare copy is {seconds} seconds behind while {phase:spare_copy_phase}. Sales continue. Check that the standby box is switched on and connected to the restaurant's network.",
         es: "La copia de reserva lleva {seconds} segundos de retraso mientras {phase:spare_copy_phase}. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
@@ -138,7 +138,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "Old copies on the standby server are not being tidied because their marker could not be found. Waitron tries again daily while the copy is running normally. After service, open Box status and press Restart the box to request a fresh marker.",
+        en: "Old copies on the standby box are not being tidied because their marker could not be found. Waitron tries again daily while the copy is running normally. After service, open Box status and press Restart the box to request a fresh marker.",
         es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, abre Estado del servidor y pulsa Reiniciar el servidor para pedir un marcador nuevo.",
       },
     },
@@ -149,7 +149,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        en: "The copy to the standby box is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. Check that the standby box is switched on and connected to the restaurant's network.",
         es: "La copia en el servidor en espera está en pausa: este servidor no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
@@ -160,7 +160,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+        en: "The copy to the standby box has stopped because another box is writing this venue's copy to the standby box. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
         es: "La copia en el servidor en espera se ha detenido porque otro servidor está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
       },
     },
@@ -171,7 +171,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
+        en: "The copy to the standby box has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
         es: "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio servidor. Las ventas continúan. Es un fallo de Waitron o de la instalación de este servidor, y reiniciar el servidor no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
       },
     },
@@ -182,7 +182,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        en: "The standby box is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. Check that the standby box is switched on and connected to the restaurant's network.",
         es: "El servidor en espera no está recibiendo los datos del restaurante: este servidor no consigue contactar con él, o el servidor en espera está rechazando este servidor. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
       },
     },
@@ -193,7 +193,7 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
+        en: "The copy to the standby box is not running, so new changes are not reaching the standby box. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
         es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este servidor lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del servidor y pulsa Reiniciar el servidor.",
       },
     },
@@ -263,7 +263,7 @@ export const ALERT_MESSAGES: Readonly<
       peer: {
         mode: "replace",
         en: "The spare box's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on both boxes.",
-        es: "El reloj del equipo de reserva y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de ambos servidores.",
+        es: "El reloj del servidor de reserva y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de ambos servidores.",
       },
     },
   },
@@ -547,7 +547,7 @@ export const ALERT_WORDS: Readonly<
     words: {
       upload: {
         en: "changes wait to be sent to the spare",
-        es: "hay cambios pendientes de enviar al equipo de reserva",
+        es: "hay cambios pendientes de enviar al servidor de reserva",
       },
       apply: {
         en: "received changes wait to be applied",

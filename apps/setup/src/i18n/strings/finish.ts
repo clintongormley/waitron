@@ -73,7 +73,7 @@ export const finishEn = {
   "done.devices.ip":
     "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this server, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
-    "A print agent on this server reconnects by itself. One on another computer that was given an IP address needs its Server address changed on its own page, at port 9110 on that computer.",
+    "A print agent on this server reconnects by itself. One on another computer that was given an IP address needs its Box address changed on its own page, at port 9110 on that computer.",
   "done.break_glass.heading": "Save your server key now",
   "done.break_glass.key_name": "Server key {date} · {code}",
   "done.break_glass.backups":
@@ -199,7 +199,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.devices.ip":
     "Los que se abrieron en una dirección IP (por ejemplo, escaneando un código QR) hay que volver a abrirlos: ve a /setup/trust en este servidor, escanea su código QR y vuelve a configurar el dispositivo.",
   "done.devices.print_agent":
-    "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Server address» en su propia página, en el puerto 9110 de ese ordenador.",
+    "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Box address» en su propia página, en el puerto 9110 de ese ordenador.",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":

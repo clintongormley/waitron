@@ -60,7 +60,7 @@ En el servidor principal, abre **Sistema → Servidores** para comprobar el retr
 Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
 comprueba que el equipo de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos equipos encendidos mientras se restaura la copia.
 
-Al cambiar, primero se pone al día la copia de este equipo de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
+Al cambiar, primero se pone al día la copia de este servidor de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
 La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el equipo de reserva durante dos minutos.
 
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
@@ -156,7 +156,7 @@ principal se quedan solo en él, salvo que se vuelva a encender antes de que lo 
 
 Para retirar un antiguo servidor principal, elige **Retirar** en el menú de su fila. Si no ha
 devuelto sus registros de facturación, marca que se ha restablecido o que no se volverá a encender
-nunca. Si vuelve, restablécelo y no elijas nunca **Seguir como equipo principal** en él.
+nunca. Si vuelve, restablécelo y no elijas nunca **Seguir como servidor principal** en él.
 
 ## Traspasar el local a un servidor de reserva {#hand-over}
 
@@ -297,10 +297,10 @@ esperando a** y la dirección del otro servidor, lo indica. Mientras espera no h
 a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro servidor responde, este se inicia con
 normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
-## Seguir como equipo principal {#carry-on}
+## Seguir como servidor principal {#carry-on}
 
 Si sabes que el otro servidor está apagado, puedes dejar que este servidor siga sin él. Abre el servidor
-en su dirección `https://`, inicia sesión como administrador en **Seguir como equipo principal** y
+en su dirección `https://`, inicia sesión como administrador en **Seguir como servidor principal** y
 marca las dos casillas. Este servidor lleva entonces el local hasta que se reinicie, y entonces vuelve
 a preguntar al otro servidor. Si el otro es un servidor de reserva que ya no necesitas,
 [retíralo](servers.md#remove-a-spare) cuando este servidor esté funcionando, para que deje de

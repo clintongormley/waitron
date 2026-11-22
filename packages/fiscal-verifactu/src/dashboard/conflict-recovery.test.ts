@@ -142,7 +142,7 @@ it("validates the key before any network work and allows a corrected key", async
   await click(screen, "inspect");
   expect(calls).toEqual([]);
   expect(screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.textContent).toContain(
-    "Enter the current server key.",
+    "Enter the current box key.",
   );
   await key(screen, "paper-secret");
   await click(screen, "inspect");
@@ -335,7 +335,7 @@ it("with only this device agreeing, shows both times and selects with confirmed 
     ).toBe("Confirm the time"),
   );
   expect(screen.shadowRoot!.querySelector("[data-confirm-time]")?.textContent).toContain(
-    "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+    "The box could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
   );
   expect(screen.shadowRoot!.querySelectorAll("[data-confirm-time] dt")).toHaveLength(2);
   const zone = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" })

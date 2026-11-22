@@ -95,7 +95,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `The key itself is on recovery pack ${number}, made on ${day}. Keep that pack.`,
     keyOnUnreceivedPack: (number, day) =>
-      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
+      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
     keyOnSheet: (keyName, day) =>
       `The key itself is on the recovery sheet whose key name is ${keyName}, made on ${day}. Keep that sheet.`,
     spaceMark: "Each \u02fd is a space: type one space for it.",
@@ -308,7 +308,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     currentKeyOnPack: (number, day) =>
       `The current key, on recovery pack ${number} made on ${day}, still works.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `The current server key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
+      `The current server key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
     currentKeyOnSheet: (keyName, day) =>
       `The current key, on the recovery sheet whose key name is ${keyName}, made on ${day}, still works.`,
     failures: {
