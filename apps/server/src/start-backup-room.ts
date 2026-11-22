@@ -7,7 +7,7 @@ import {
   readRestoreFlowPhase,
 } from "@waitron/provisioning";
 import { codeOf } from "@waitron/server-kit";
-import { hasCode, isAppError } from "@waitron/shared";
+import { hasCode, isAppError, readVariable } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { loadRecoveryKey } from "./backup-config.js";
 import {
@@ -106,7 +106,7 @@ async function checks(
     stateDir: deps.stateDir,
     venueDir: deps.venueDir,
     // An unset or empty node id matches no note: a note's node id is never empty.
-    nodeId: merged.WAITRON_NODE_ID ?? "",
+    nodeId: readVariable(merged, "WAITRON_NODE_ID") ?? "",
   });
   if ("skipped" in read) return read;
   const { note } = read;

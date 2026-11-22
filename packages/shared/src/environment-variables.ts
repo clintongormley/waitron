@@ -91,13 +91,13 @@ export const ENVIRONMENT_VARIABLES = {
     default: "http://localhost:5191 outside production",
     rule: "required in production, HTTPS outside loopback",
   }),
-  WAITRON_INSTALLATION_ORIGIN: variable("compose", "origin", server, { rule: "an HTTPS origin" }),
+  WAITRON_INSTALLATION_ORIGIN: variable("compose", "choice", server, { rule: "usb" }),
   WAITRON_CLOUD_ORIGIN: variable("compose", "origin", server, {
     rule: "HTTPS origin, or HTTP loopback in dev",
   }),
   WAITRON_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
   WAITRON_PRINT_AGENT_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
-  WAITRON_PRINT_AGENT_APPARMOR: variable("compose", "text", compose, { default: "unconfined" }),
+  WAITRON_PRINT_AGENT_APPARMOR: variable("compose", "text", compose, { default: "docker-default" }),
   WAITRON_BOX_SOCKET_DIR: variable("compose", "path", compose),
   WAITRON_TUNNEL_CONTROL_DIR: variable("compose", "path", server, unset),
   WAITRON_TUNNEL_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
@@ -134,7 +134,6 @@ export const ENVIRONMENT_VARIABLES = {
     { default: "/opt/waitron-host" },
   ),
   WAITRON_SH_REFRESHED: variable("operator", "choice", host),
-  WAITRON_STAFF_ORIGIN: variable("operator", "origin", server, { rule: "HTTPS origin" }),
   WAITRON_STAFF_PORT: variable("operator", "port", server, { default: "8443", rule: port }),
   WAITRON_STAFF_HOST: variable("operator", "text", server, { default: "127.0.0.1" }),
   WAITRON_SPARE_STORE_PORT: variable("operator", "port", server, {
@@ -187,6 +186,7 @@ export const ENVIRONMENT_VARIABLES = {
   }),
   WAITRON_STREAM_ACCESS_KEY_ID: variable("internal", "key", litestream),
   WAITRON_STREAM_SECRET_ACCESS_KEY: variable("internal", "key", litestream),
+  WAITRON_STREAM_ENCRYPTION_KEY: variable("internal", "key", litestream),
   WAITRON_PRODUCER_CHANGE_ALLOWED: variable("build", "text", ["CI"], {
     rule: "tax number the publish job permits",
   }),
@@ -210,6 +210,12 @@ export const ENVIRONMENT_VARIABLES = {
     default: "versitygw from PATH",
   }),
   WAITRON_REQUIRE_TEST_TOOLS: variable("test", "choice", tests),
+  WAITRON_LARGE_CLOUD_BACKUP_TEST: variable("test", "choice", tests, {
+    rule: "1 runs the large backup cases",
+  }),
+  WAITRON_LARGE_CLOUD_BACKUP_BASELINE: variable("test", "choice", tests, {
+    rule: "1 runs the baseline upload measurement",
+  }),
   WAITRON_FULL_DISK_ROOT: variable("test", "path", tests),
   WAITRON_TEST_HOST_ROOT: variable("test", "path", ["waitron.sh", "waitron-box.sh"]),
   WAITRON_TEST_HEALTH_TRIES: variable("test", "count", host),
@@ -220,8 +226,6 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_PRE_PUSH_FETCH_SECONDS: variable("test", "count", ["pre-push"]),
   WAITRON_STARTUP_ENGINES: variable("test", "list", ["bench"]),
   WAITRON_WRITE_GOLDEN: variable("test", "choice", tests),
-  WAITRON_CANVAS_UPGRADE_RECEIPTS: variable("test", "path", tests),
-  WAITRON_STATION_ORDER_RECEIPT: variable("test", "path", tests),
   WAITRON_CERT_CHECK_PFX_BASE64: variable("test", "key", tests),
   WAITRON_CERT_CHECK_PASSPHRASE: variable("test", "text", tests, secret),
   WAITRON_CERT_CHECK_KIND: variable("test", "choice", tests),

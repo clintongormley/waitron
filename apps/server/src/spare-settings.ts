@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { lstat, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
@@ -66,7 +67,7 @@ export async function sendBackupSettings(
   if (
     settings === null
       ? await present(join(deps.stateDir, BACKUP_ENV_FILE))
-      : settings.WAITRON_BACKUP_RECOVERY_KEY === undefined
+      : readVariable(settings, "WAITRON_BACKUP_RECOVERY_KEY") === undefined
   )
     return { delivered: false, reason: "unreadable" };
   const digest = backupSettingsDigestOf(settings);

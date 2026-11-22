@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { venueDirOf } from "@waitron/store";
 import { Hono } from "hono";
 import { resolveLogDir } from "@waitron/db";
@@ -46,7 +47,7 @@ export async function startServerOrFirstSetupResolution(
    */
   failedLater: Promise<never>;
 }> {
-  const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(readVariable(env, "WAITRON_STATE_DIR"), DEFAULT_STATE_ROOT);
   const venueDir = venueDirOf(env, stateDir);
   const log = createLogger(
     (line) => process.stdout.write(line),
@@ -112,14 +113,15 @@ export async function startServerOrFirstSetupResolution(
       freeSpace: () => lowestFreeBytes([admission.roots.stateDir, admission.roots.venueDir]),
       port,
       log,
-      httpHost: isUnset(effectiveEnv.WAITRON_HTTP_HOST)
+      httpHost: isUnset(readVariable(effectiveEnv, "WAITRON_HTTP_HOST"))
         ? DEFAULT_HTTP_HOST
-        : effectiveEnv.WAITRON_HTTP_HOST,
+        : readVariable(effectiveEnv, "WAITRON_HTTP_HOST"),
       landing: landingConfigFrom(effectiveEnv, admission.roots.stateDir, port),
       onRepaired,
       operatorTls:
-        !isUnset(effectiveEnv.WAITRON_TLS_CERT_FILE) || !isUnset(effectiveEnv.WAITRON_TLS_KEY_FILE),
-      notSetUp: isUnset(effectiveEnv.WAITRON_NODE_ID),
+        !isUnset(readVariable(effectiveEnv, "WAITRON_TLS_CERT_FILE")) ||
+        !isUnset(readVariable(effectiveEnv, "WAITRON_TLS_KEY_FILE")),
+      notSetUp: isUnset(readVariable(effectiveEnv, "WAITRON_NODE_ID")),
     };
     lastOptions = options;
     if (await needsConnectionBootstrap(options, effectiveEnv))

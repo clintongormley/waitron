@@ -22,6 +22,7 @@ import {
   PRINT_AGENT_ONLY_NAMES,
   unknownVariables,
   type BoxFile,
+  readVariable,
 } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import {
@@ -448,16 +449,17 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       lowestFreeBytes([admission.roots.stateDir, admission.roots.venueDir], deps.statfs),
     port: transportPort,
     log: deps.log,
-    httpHost: isUnset(transportEnv.WAITRON_HTTP_HOST)
+    httpHost: isUnset(readVariable(transportEnv, "WAITRON_HTTP_HOST"))
       ? DEFAULT_HTTP_HOST
-      : transportEnv.WAITRON_HTTP_HOST,
+      : readVariable(transportEnv, "WAITRON_HTTP_HOST"),
     landing: landingConfigFrom(transportEnv, admission.roots.stateDir, transportPort),
     onRepaired: async () => {
       (deps.exit ?? DEFAULT_EXIT)(0);
     },
     operatorTls:
-      !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
-    notSetUp: isUnset(transportEnv.WAITRON_NODE_ID),
+      !isUnset(readVariable(transportEnv, "WAITRON_TLS_CERT_FILE")) ||
+      !isUnset(readVariable(transportEnv, "WAITRON_TLS_KEY_FILE")),
+    notSetUp: isUnset(readVariable(transportEnv, "WAITRON_NODE_ID")),
   };
   // Ordering 8 in the doc comment above.
   if (
@@ -582,9 +584,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     await deps.serveRecovery(admission.app, {
       stateDir: admission.roots.stateDir,
       port,
-      httpHost: isUnset(deps.baseEnv.WAITRON_HTTP_HOST)
+      httpHost: isUnset(readVariable(deps.baseEnv, "WAITRON_HTTP_HOST"))
         ? DEFAULT_HTTP_HOST
-        : deps.baseEnv.WAITRON_HTTP_HOST,
+        : readVariable(deps.baseEnv, "WAITRON_HTTP_HOST"),
       log: deps.log,
       landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
       onRepaired: transport.onRepaired,
@@ -785,8 +787,8 @@ async function runAdmittedEntry(
             venueDir: deps.venueDir,
             migrationsRoot,
             log: deps.log,
-            recoverySecret: deps.baseEnv.WAITRON_NODE_RECOVERY_KEY,
-            recoveryOperationPath: deps.baseEnv.WAITRON_RECOVERY_OPERATION_FILE,
+            recoverySecret: readVariable(deps.baseEnv, "WAITRON_NODE_RECOVERY_KEY"),
+            recoveryOperationPath: readVariable(deps.baseEnv, "WAITRON_RECOVERY_OPERATION_FILE"),
             onManagedCloudRestored: async (binding) => {
               if (recoveryOrigin)
                 await createCloudRecoveryClient({
@@ -888,7 +890,9 @@ async function runAdmittedEntry(
       // Ordering 9 in the doc comment above.
       await refuseUnactivatedEmergencyCopy(
         deps.venueDir,
-        isUnset(env.WAITRON_NODE_ID) ? undefined : env.WAITRON_NODE_ID,
+        isUnset(readVariable(env, "WAITRON_NODE_ID"))
+          ? undefined
+          : readVariable(env, "WAITRON_NODE_ID"),
       );
       // Unchecked, an ahead database would surface as an unclassified driver error in whatever
       // query first touched the changed schema.
@@ -978,14 +982,14 @@ async function recordRefusal(
    exercised by a container boot, not by a unit test, as in `run-server.ts`'s `DEFAULT_DEPS`. */
 function bootThisProcess(): Promise<void> {
   const env = { ...process.env };
-  const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(readVariable(env, "WAITRON_STATE_DIR"), DEFAULT_STATE_ROOT);
   setVenueHolderIdentity("server", env, stateDir);
   // `loadConfig`'s own expressions for `venueDir` and `migrationsRoot`, repeated rather than read
   // through `loadConfig`, because a broken config is what lands a box here.
   const venueDir = venueDirOf(env, stateDir);
-  const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
+  const migrationsRoot = isUnset(readVariable(env, "WAITRON_MIGRATIONS_DIR"))
     ? DEFAULT_MIGRATIONS_ROOT
-    : env.WAITRON_MIGRATIONS_DIR;
+    : readVariable(env, "WAITRON_MIGRATIONS_DIR");
   const log = createLogger(
     (line) => void process.stdout.write(line),
     () => new Date(),

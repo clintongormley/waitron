@@ -161,7 +161,7 @@ import {
 } from "@waitron/module";
 import type { AlertSource, ModuleOperationHost, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
-import { AppError, builtRelease, type BuiltRelease } from "@waitron/shared";
+import { AppError, builtRelease, type BuiltRelease, readVariable } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
@@ -1338,9 +1338,9 @@ async function bootServer(
     readMembership: () => readNodeMembership(db),
     devMode: config.devMode,
     vitePorts: {
-      till: process.env.WAITRON_TILL_VITE_PORT,
-      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
-      setup: process.env.WAITRON_SETUP_VITE_PORT,
+      till: readVariable(process.env, "WAITRON_TILL_VITE_PORT"),
+      dashboard: readVariable(process.env, "WAITRON_DASHBOARD_VITE_PORT"),
+      setup: readVariable(process.env, "WAITRON_SETUP_VITE_PORT"),
     },
     now: () => Date.now(),
   });
@@ -1511,8 +1511,8 @@ async function bootServer(
       assertStartsWith: (trading) => {
         // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
         const next = { ...env };
-        if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
-        if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
+        if (isUnset(readVariable(next, "WAITRON_NODE_ID"))) next.WAITRON_NODE_ID = trading.nodeId;
+        if (isUnset(readVariable(next, "WAITRON_ENV"))) next.WAITRON_ENV = trading.environment;
         const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
         refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
       },
@@ -1559,7 +1559,7 @@ async function bootServer(
         requestFromBox: seams.requestFromBox,
         joinAttempt,
         prepareRecovery: recoveryPreparation,
-        recoveryOperationPath: base.WAITRON_RECOVERY_OPERATION_FILE,
+        recoveryOperationPath: readVariable(base, "WAITRON_RECOVERY_OPERATION_FILE"),
         receiveArchive: (request, options) =>
           receiveSetupArchive(request, join(config.stateDir, RESTORE_STAGING_DIR), options),
         stageRecovery: recoveryPreparation.stage,

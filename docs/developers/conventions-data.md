@@ -4079,6 +4079,19 @@ An env or prompt value set to `""` falls back to its default exactly as an unset
 `resolveLogDir` in `packages/db/src/venue-holder-identity.ts`), and a reader with no default refuses
 `""` explicitly, as `resolveVenueDir` does with `provisioning.venue_dir_missing`.
 
+## Environment variables have one inventory
+
+Add the name and its source to [the shared inventory](../../packages/shared/src/environment-variables.ts).
+Use `readVariable` for TypeScript reads. It returns the raw setting, including an empty string, so the
+reader still decides its own fallback. Declare print-agent inputs in
+[its config module](../../apps/print-agent/src/config.ts).
+
+The server reads `trading.env`, `secrets.env` and `backup.env` for their own names. For example, put
+`WAITRON_NODE_ID` in `trading.env`. If you put it in `backup.env`, startup skips it and names it in
+the `config.unknown_variables` warning. A non-empty process value still takes precedence.
+`scripts/environment-variables.test.ts` matches names in tracked text. It cannot follow how a
+program constructs a name or uses a value at runtime.
+
 ## Every read of printers names its kind
 
 Use `isReceiptPrinter()` or `isA4Printer()` from `@waitron/db`. Test the kind on the alias in raw

@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import {
   VENUE_DIR_NAME,
   SECRETS_ENV_FILE,
@@ -127,21 +128,21 @@ if (savedEnv !== undefined) {
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_RP_ID: "127.0.0.1",
     WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${port}`,
-    WAITRON_CREDENTIALS_KEY: boxSecrets.WAITRON_CREDENTIALS_KEY,
-    WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
+    WAITRON_CREDENTIALS_KEY: readVariable(boxSecrets, "WAITRON_CREDENTIALS_KEY"),
+    WAITRON_CREDENTIALS_KEY_VERSION: readVariable(boxSecrets, "WAITRON_CREDENTIALS_KEY_VERSION"),
     WAITRON_NODE_ID: result.nodeId,
     WAITRON_CLOUD_ORIGIN: process.env.CLOUD_TEST_ORIGIN,
-    WAITRON_DASHBOARD_APP_DIR: isUnset(process.env.WAITRON_DASHBOARD_APP_DIR)
+    WAITRON_DASHBOARD_APP_DIR: isUnset(readVariable(process.env, "WAITRON_DASHBOARD_APP_DIR"))
       ? resolve(import.meta.dirname, "../../dashboard/dist")
-      : process.env.WAITRON_DASHBOARD_APP_DIR,
+      : readVariable(process.env, "WAITRON_DASHBOARD_APP_DIR"),
   };
   await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });
 }
-const identityStore = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
+const identityStore = await openVenueDatabase(readVariable(env, "WAITRON_VENUE_DIR")!);
 let venueId: string | null;
 try {
   const result = await identityStore.venue.execute<{ id: string }>(
-    sql`select id from nodes where id = ${env.WAITRON_NODE_ID}`,
+    sql`select id from nodes where id = ${readVariable(env, "WAITRON_NODE_ID")}`,
   );
   if (result.rows[0] === undefined) throw new Error("Fixture node missing");
   venueId = await readCloudVenueId(identityStore.venue);
@@ -156,8 +157,8 @@ const readyPath = join(root, "ready.json");
 await writeFile(
   `${readyPath}.tmp`,
   JSON.stringify({
-    origin: env.WAITRON_MANAGEMENT_ORIGIN,
-    port: Number(env.WAITRON_HTTP_PORT),
+    origin: readVariable(env, "WAITRON_MANAGEMENT_ORIGIN"),
+    port: Number(readVariable(env, "WAITRON_HTTP_PORT")),
     venueId,
   }),
   { mode: 0o600 },
@@ -166,9 +167,11 @@ await rename(`${readyPath}.tmp`, readyPath);
 // Only the parent integration process can submit synthetic adapter observations over IPC.
 const cloud = createCloudConnection({
   stateDir: root,
-  origin: env.WAITRON_CLOUD_ORIGIN!,
+  origin: readVariable(env, "WAITRON_CLOUD_ORIGIN")!,
   readVenueId: async () => {
-    const store = await openVenueDatabase(env.WAITRON_VENUE_DIR!, { exclusive: false });
+    const store = await openVenueDatabase(readVariable(env, "WAITRON_VENUE_DIR")!, {
+      exclusive: false,
+    });
     try {
       return await readCloudVenueId(store.venue);
     } finally {

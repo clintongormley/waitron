@@ -74,7 +74,7 @@ import {
 } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import {
   readTunnelPublicKey,
   writeTunnelConfiguration,
@@ -174,7 +174,7 @@ const name = (v: unknown): v is string =>
 const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 export function loadCloudOrigin(env: NodeJS.ProcessEnv): string | undefined {
-  const value = env.WAITRON_CLOUD_ORIGIN;
+  const value = readVariable(env, "WAITRON_CLOUD_ORIGIN");
   if (!value) return undefined;
   try {
     const url = new URL(value);
@@ -184,7 +184,7 @@ export function loadCloudOrigin(env: NodeJS.ProcessEnv): string | undefined {
       url.password ||
       !(
         url.protocol === "https:" ||
-        (env.WAITRON_ENV === "dev" &&
+        (readVariable(env, "WAITRON_ENV") === "dev" &&
           url.protocol === "http:" &&
           ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))
       )
@@ -203,8 +203,8 @@ export function loadCloudSignInCallback(
   managementOrigin: string,
 ): string | undefined {
   const variable = "WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK";
-  const value = env[variable];
-  if (!value || env.WAITRON_ENV === "production") return undefined;
+  const value = readVariable(env, variable);
+  if (!value || readVariable(env, "WAITRON_ENV") === "production") return undefined;
   const expected = `${managementOrigin}${CLOUD_SIGN_IN_CALLBACK}`;
   if (!expected.startsWith("https://") || value !== expected)
     throw new AppError("server.config_invalid", { variable, reason: "secure_origin_required" });

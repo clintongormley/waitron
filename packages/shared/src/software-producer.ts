@@ -1,3 +1,4 @@
+import { readVariable } from "./environment-variables.js";
 import { isUnset } from "./env-value.js";
 import { AppError, type ErrorParams } from "./errors.js";
 
@@ -18,9 +19,9 @@ const MAX_LENGTH = 200;
 export function readSoftwareProducer(
   env: Readonly<Record<string, string | undefined>>,
 ): SoftwareProducer | null {
-  const name = env.WAITRON_PRODUCER_NAME;
-  const taxId = env.WAITRON_PRODUCER_TAX_ID;
-  const address = env.WAITRON_PRODUCER_ADDRESS;
+  const name = readVariable(env, "WAITRON_PRODUCER_NAME");
+  const taxId = readVariable(env, "WAITRON_PRODUCER_TAX_ID");
+  const address = readVariable(env, "WAITRON_PRODUCER_ADDRESS");
   if (isUnset(name) && isUnset(taxId) && isUnset(address)) return null;
   if (isUnset(name)) refuse("WAITRON_PRODUCER_NAME", "partial");
   if (isUnset(taxId)) refuse("WAITRON_PRODUCER_TAX_ID", "partial");

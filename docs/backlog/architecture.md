@@ -821,11 +821,10 @@ also qualifies the historical operation-description references in this section.
   job.
   Handhelds and kitchen displays keep timed reads under
   jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
-  jr13's SIGSTOP probe is a stand-in only. 111 product
-  environment variables become 51. Duplicate address names are merged, the print agent uses its host name,
-  and host-script and full-disk tests use shared roots. The mail sender is a settings document;
-  its SMTP connection URL stays sealed. Archive and bucket-copy choices share a backup settings
-  document, with only bucket keys sealed. The remaining environment slices stay open.
+  jr13's SIGSTOP probe is a stand-in only. The shared environment inventory declares each setting's
+  source, and the server reports unknown names and ignores misplaced file entries. The print agent
+  uses its host name. Host-script and full-disk tests use shared roots. The SMTP connection URL and
+  bucket keys are sealed. The fiscal environment cleanup in env8 remains open.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
   Each shift now holds its own job role and area and belongs to a rota week; deleting a draft week
@@ -944,8 +943,6 @@ download's first write-lock turn took a median 25 ms with a seeded year and 216 
 
 These entries stay open until the A1308 or A760 slice that removes the need for them lands (backlog review, 2026-11-06). The slice that does so deletes them here. If a slice changes course, its entry goes back to the index.
 
-- **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
-  edit puts one there (the writers read, not run). Two such boxes pass and can differ in a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
   crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { codeOf } from "@waitron/server-kit";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable } from "@waitron/shared";
 import { type ArchiveSettings } from "./archive-settings.js";
 import {
   recordMetaOf,
@@ -67,7 +67,7 @@ export function checkedNewRecoveryKey(recoveryKey: string | undefined): string |
 
 /** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
 export function loadRecoveryKey(env: Env): string | undefined {
-  return checkedRecoveryKey(env.WAITRON_BACKUP_RECOVERY_KEY);
+  return checkedRecoveryKey(readVariable(env, "WAITRON_BACKUP_RECOVERY_KEY"));
 }
 
 /** A new recovery key: 32 random bytes, base64url. */
@@ -95,7 +95,9 @@ export async function readHeldKey(
 
 /** When the recovery key was last rotated, as the box env records it. */
 export function loadKeyRotatedAt(env: Env): string | undefined {
-  return isUnset(env.WAITRON_BACKUP_KEY_ROTATED_AT) ? undefined : env.WAITRON_BACKUP_KEY_ROTATED_AT;
+  return isUnset(readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT"))
+    ? undefined
+    : readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT");
 }
 
 function requiredKey(env: Env): string {

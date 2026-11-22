@@ -2,7 +2,7 @@ import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.j
 import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import {
   deploymentTableExists,
@@ -76,13 +76,13 @@ export interface CliDeps {
 
 /** The variable `apps/server` reads the venue directory from, so the tool and the server open the
  * same directory. */
-const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
+const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR" satisfies EnvironmentVariableName;
 
 /** A login secret never comes from argv (world-readable in `ps`, kept in shell history): only from
  * these variables or an echo-off prompt. `parse` declares no such flag, so `strict: true` refuses
  * one. */
-const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN";
-const ADMIN_PASSWORD_VARIABLE = "WAITRON_ADMIN_PASSWORD";
+const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN" satisfies EnvironmentVariableName;
+const ADMIN_PASSWORD_VARIABLE = "WAITRON_ADMIN_PASSWORD" satisfies EnvironmentVariableName;
 
 const USAGE = [
   "usage: waitron-provision <command> [options]",
@@ -303,7 +303,10 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     if ((values["recovery-pdf"] !== undefined || values["test-fiscal"]) && !owned)
       throw new AppError("setup.not_ready", {});
     if (owned) {
-      if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
+      if (
+        deps.initialVenue !== undefined ||
+        readVariable(deps.env, "WAITRON_INITIAL_VENUE_INPUT")?.trim()
+      )
         throw new AppError("provisioning.initial_input_invalid", {});
       if (values["recovery-pdf"] !== undefined)
         await runtime.commandDelivery.checkDestination(values["recovery-pdf"], deps.io);
@@ -406,7 +409,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
       // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
       // stamping is permanent, so declining must leave the directory exactly as it was found.
-      const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
+      const inputPath = readVariable(deps.env, "WAITRON_INITIAL_VENUE_INPUT");
       const initialVenue =
         deps.initialVenue ??
         (inputPath?.trim()
@@ -486,8 +489,9 @@ async function withVenueState(
   deps: CliDeps,
   body: (target: Database, node: NodeDatabase) => Promise<number>,
 ): Promise<number> {
-  if (deps.env.WAITRON_STATE_DIR !== undefined && deps.env.WAITRON_STATE_DIR !== "")
-    await assertVenueFirstSetupAllowed(venueDir, deps.env.WAITRON_STATE_DIR);
+  const stateDir = readVariable(deps.env, "WAITRON_STATE_DIR");
+  if (stateDir !== undefined && stateDir !== "")
+    await assertVenueFirstSetupAllowed(venueDir, stateDir);
   else await assertNoStartAgainDeletion(venueDir);
   let store: VenueDatabase;
   try {
@@ -496,8 +500,9 @@ async function withVenueState(
     throw asUnreadable(error, venueDir);
   }
   try {
-    if (deps.env.WAITRON_STATE_DIR !== undefined && deps.env.WAITRON_STATE_DIR !== "")
-      await assertVenueFirstSetupAllowed(venueDir, deps.env.WAITRON_STATE_DIR);
+    const stateDir = readVariable(deps.env, "WAITRON_STATE_DIR");
+    if (stateDir !== undefined && stateDir !== "")
+      await assertVenueFirstSetupAllowed(venueDir, stateDir);
     else await assertNoStartAgainDeletion(venueDir);
     return await body(store.venue, store.node);
   } finally {
@@ -595,7 +600,7 @@ function assertReceiptLanguage(locales: string[], country: string, province: str
 async function resolveVenueDir(flag: string | undefined, deps: CliDeps): Promise<string> {
   const fromFlag = flag?.trim();
   if (fromFlag !== undefined && fromFlag !== "") return fromFlag;
-  const fromEnv = deps.env[VENUE_DIR_VARIABLE]?.trim();
+  const fromEnv = readVariable(deps.env, VENUE_DIR_VARIABLE)?.trim();
   if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
   const answer = (await deps.io.prompt("venue directory: ")).trim();
   if (answer === "") {
@@ -607,14 +612,14 @@ async function resolveVenueDir(flag: string | undefined, deps: CliDeps): Promise
 /** Not trimmed: every character of a secret is significant. An empty answer is refused by the
  * caller's length check, so there is no separate "missing" code. */
 async function readAdminPin(deps: CliDeps): Promise<string> {
-  const fromEnv = deps.env[ADMIN_PIN_VARIABLE];
+  const fromEnv = readVariable(deps.env, ADMIN_PIN_VARIABLE);
   if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
   return deps.io.promptSecret("admin PIN (not shown): ");
 }
 
 /** Not trimmed, like `readAdminPin`. */
 async function readAdminPassword(deps: CliDeps): Promise<string> {
-  const fromEnv = deps.env[ADMIN_PASSWORD_VARIABLE];
+  const fromEnv = readVariable(deps.env, ADMIN_PASSWORD_VARIABLE);
   if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
   return deps.io.promptSecret("admin password (not shown): ");
 }

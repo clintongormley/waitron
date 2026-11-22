@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import {
   lockVenueDatabase,
   openVenueDatabase,
@@ -41,7 +41,10 @@ async function eligible(deps: BookingsRecoveryDeps): Promise<boolean> {
   const state = await readRecoveryState(deps.roots.stateDir);
   if (state.level !== "recovery" || state.refused || state.lastErrorCode === "storage.disk_full")
     return false;
-  const nodeId = (await loadBoxEnv(deps.baseEnv, deps.roots.stateDir)).WAITRON_NODE_ID;
+  const nodeId = readVariable(
+    await loadBoxEnv(deps.baseEnv, deps.roots.stateDir),
+    "WAITRON_NODE_ID",
+  );
   if (!nodeId) return false;
   const role = await readRecoveryDatabase(
     deps.roots,

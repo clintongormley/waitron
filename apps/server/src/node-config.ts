@@ -1,7 +1,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { AppError, nodeId } from "@waitron/shared";
-import type { NodeId } from "@waitron/shared";
+import { AppError, nodeId, readVariable } from "@waitron/shared";
+import type { EnvironmentVariableName, NodeId } from "@waitron/shared";
 import { nodes, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
@@ -11,8 +11,8 @@ export interface NodeIdentityConfig {
 }
 
 /** Only the variable NAME travels in the error, never the value. */
-function required(env: NodeJS.ProcessEnv, key: string): string {
-  const value = env[key];
+function required(env: NodeJS.ProcessEnv, key: EnvironmentVariableName): string {
+  const value = readVariable(env, key);
   if (value === undefined || value === "") {
     throw new AppError("server.node_config_missing", { key });
   }
@@ -33,7 +33,7 @@ export function loadNodeIdentity(env: NodeJS.ProcessEnv): NodeIdentityConfig {
 }
 
 export function tryLoadNodeIdentity(env: NodeJS.ProcessEnv): NodeIdentityConfig | undefined {
-  return isUnset(env.WAITRON_NODE_ID) ? undefined : loadNodeIdentity(env);
+  return isUnset(readVariable(env, "WAITRON_NODE_ID")) ? undefined : loadNodeIdentity(env);
 }
 
 /**

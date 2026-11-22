@@ -1,7 +1,7 @@
 import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { startLandingListener, type LandingListenerConfig } from "./boot.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES } from "./box-name.js";
 import { lstat } from "node:fs/promises";
@@ -84,7 +84,11 @@ export async function needsConnectionBootstrap(
   opts: RecoveryServeOptions,
   env: NodeJS.ProcessEnv,
 ): Promise<boolean> {
-  if (!isUnset(env.WAITRON_TLS_CERT_FILE) || !isUnset(env.WAITRON_TLS_KEY_FILE)) return false;
+  if (
+    !isUnset(readVariable(env, "WAITRON_TLS_CERT_FILE")) ||
+    !isUnset(readVariable(env, "WAITRON_TLS_KEY_FILE"))
+  )
+    return false;
   let retained = false;
   for (const path of [join(opts.stateDir, TLS_DIR), join(opts.stateDir, SECRETS_ENV_FILE)]) {
     try {
@@ -198,12 +202,13 @@ export function landingConfigFrom(
 ): LandingListenerConfig {
   let boxAddresses: string[] | undefined;
   try {
-    boxAddresses = parseBoxAddresses(env.WAITRON_BOX_ADDRESSES);
+    boxAddresses = parseBoxAddresses(readVariable(env, "WAITRON_BOX_ADDRESSES"));
   } catch {
     // A malformed WAITRON_BOX_ADDRESSES must not crash recovery; fall back to enumerating interfaces.
     boxAddresses = undefined;
   }
-  const raw = env.WAITRON_HTTP_LANDING_PORT;
+  const raw = readVariable(env, "WAITRON_HTTP_LANDING_PORT");
+  const httpHost = readVariable(env, "WAITRON_HTTP_HOST");
   // `0` is kept, unlike in `httpPortFrom`: it disables the listener.
   const landingPort = isUnset(raw) ? DEFAULT_HTTP_LANDING_PORT : Number.parseInt(raw, 10);
   return {
@@ -211,7 +216,7 @@ export function landingConfigFrom(
       Number.isInteger(landingPort) && landingPort >= 0 && landingPort <= MAX_HTTP_PORT
         ? landingPort
         : DEFAULT_HTTP_LANDING_PORT,
-    httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
+    httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     stateDir,
     httpPort,
     boxAddresses,
@@ -225,6 +230,6 @@ export function landingConfigFrom(
  * "any free port", which puts the page somewhere the operator cannot find it.
  */
 export function httpPortFrom(env: NodeJS.ProcessEnv): number {
-  const port = Number.parseInt(env.WAITRON_HTTP_PORT ?? "", 10);
+  const port = Number.parseInt(readVariable(env, "WAITRON_HTTP_PORT") ?? "", 10);
   return Number.isInteger(port) && port > 0 && port <= MAX_HTTP_PORT ? port : DEFAULT_HTTP_PORT;
 }

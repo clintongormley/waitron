@@ -7,7 +7,7 @@ import {
   type Database,
   type VenueLock,
 } from "@waitron/db";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir } from "./config.js";
@@ -76,7 +76,10 @@ export async function runRejoin(deps: {
     return reportCode((err as AppError).code);
   }
 
-  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(
+    readVariable(deps.env, "WAITRON_STATE_DIR"),
+    DEFAULT_STATE_ROOT,
+  );
   const venueDir = venueDirOf(deps.env, stateDir);
   const log = createLogger(
     (line) => deps.out(line.trimEnd()),

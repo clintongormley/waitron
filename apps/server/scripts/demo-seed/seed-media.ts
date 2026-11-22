@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, uploadImage } from "@waitron/media";
 import { customerPresentationText, readContentLanguages } from "@waitron/menu";
-import { FALLBACK_LOCALE } from "@waitron/shared";
+import { FALLBACK_LOCALE, readVariable } from "@waitron/shared";
 
 export function demoMediaPath(
   mediaDataSet: string,
@@ -30,7 +30,7 @@ export async function storeDemoImage(
   names: Record<string, string>,
 ): Promise<string> {
   const bytes = await readFile(
-    demoMediaPath(mediaDataSet, basename, process.env.WAITRON_DEMO_MEDIA_SOURCE),
+    demoMediaPath(mediaDataSet, basename, readVariable(process.env, "WAITRON_DEMO_MEDIA_SOURCE")),
   );
   const image = await prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
   const { image: stored } = await uploadImage(tx, { image, names });

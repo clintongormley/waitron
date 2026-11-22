@@ -9,10 +9,10 @@ describe("the environment list", () => {
   });
 
   it("reports unknown Waitron names in order and recognises separately supplied names", () => {
-    const env = { WAITRON_ZZZ: "1", WAITRON_AAA: "", WAITRON_HTTP_PORT: "1", PATH: "/bin" };
+    const env = { WAITRON_TEST_MARK: "1", WAITRON_PROBE: "", WAITRON_HTTP_PORT: "1", PATH: "/bin" };
     expect(shared.unknownVariables).toEqual(expect.any(Function));
-    expect(shared.unknownVariables(env)).toEqual(["WAITRON_AAA", "WAITRON_ZZZ"]);
-    expect(shared.unknownVariables(env, ["WAITRON_AAA"])).toEqual(["WAITRON_ZZZ"]);
+    expect(shared.unknownVariables(env)).toEqual(["WAITRON_PROBE", "WAITRON_TEST_MARK"]);
+    expect(shared.unknownVariables(env, ["WAITRON_PROBE"])).toEqual(["WAITRON_TEST_MARK"]);
     expect(shared.unknownVariables({})).toEqual([]);
   });
 

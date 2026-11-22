@@ -2,7 +2,7 @@ import { venueDirOf } from "@waitron/store";
 import { resolve } from "node:path";
 import { deploymentEnvironmentFor, resolveLogDir } from "@waitron/db";
 import type { DeploymentEnvironment } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/payments";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
@@ -193,8 +193,8 @@ export function resolveDutyTimings(
 
 type Env = Record<string, string | undefined>;
 
-function required(env: Env, variable: string): string {
-  const value = env[variable];
+function required(env: Env, variable: EnvironmentVariableName): string {
+  const value = readVariable(env, variable);
   if (isUnset(value)) {
     throw new AppError("server.config_missing", { variable });
   }
@@ -216,12 +216,12 @@ export function resolveConfigDir(raw: string | undefined, fallback: string): str
  */
 function requiredInProduction(
   env: Env,
-  variable: string,
+  variable: EnvironmentVariableName,
   environment: DeploymentEnvironment,
   devDefault: string,
 ): string {
   if (environment === "production") return required(env, variable);
-  const raw = env[variable];
+  const raw = readVariable(env, variable);
   return isUnset(raw) ? devDefault : raw;
 }
 
@@ -265,7 +265,7 @@ function secureManagementOrigin(value: string): string {
 }
 
 function loadVenueDomain(env: Env): string | undefined {
-  const raw = env.WAITRON_VENUE_DOMAIN;
+  const raw = readVariable(env, "WAITRON_VENUE_DOMAIN");
   if (isUnset(raw)) return undefined;
   if (/[/:\s]/.test(raw)) {
     throw new AppError("server.config_invalid", {
@@ -276,8 +276,8 @@ function loadVenueDomain(env: Env): string | undefined {
   return raw.toLowerCase();
 }
 
-function parsePositiveInt(env: Env, variable: string): number | undefined {
-  const raw = env[variable];
+function parsePositiveInt(env: Env, variable: EnvironmentVariableName): number | undefined {
+  const raw = readVariable(env, variable);
   if (isUnset(raw)) return undefined;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -287,12 +287,12 @@ function parsePositiveInt(env: Env, variable: string): number | undefined {
 }
 
 // Exported so `backup-config.ts` validates its knobs by the same rule.
-export function positiveInt(env: Env, variable: string, fallback: number): number {
+export function positiveInt(env: Env, variable: EnvironmentVariableName, fallback: number): number {
   return parsePositiveInt(env, variable) ?? fallback;
 }
 
 /** A port a listener binds: `1..MAX_HTTP_PORT`. */
-function listeningPort(env: Env, variable: string, fallback: number): number {
+function listeningPort(env: Env, variable: EnvironmentVariableName, fallback: number): number {
   const port = positiveInt(env, variable, fallback);
   if (port > MAX_HTTP_PORT) {
     throw new AppError("server.config_invalid", { variable, reason: "port_out_of_range" });
@@ -301,8 +301,8 @@ function listeningPort(env: Env, variable: string, fallback: number): number {
 }
 
 /** A port in `0..MAX_HTTP_PORT`, where `0` means "disabled", so not `positiveInt`. */
-function boundedPort(env: Env, variable: string, fallback: number): number {
-  const raw = env[variable];
+function boundedPort(env: Env, variable: EnvironmentVariableName, fallback: number): number {
+  const raw = readVariable(env, variable);
   if (isUnset(raw)) return fallback;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_HTTP_PORT) {
@@ -318,7 +318,7 @@ function boundedPort(env: Env, variable: string, fallback: number): number {
  * invoices for money never taken.
  */
 export function deploymentEnvironment(env: Env): DeploymentEnvironment {
-  const environment = deploymentEnvironmentFor(env.WAITRON_ENV);
+  const environment = deploymentEnvironmentFor(readVariable(env, "WAITRON_ENV"));
   if (environment === null) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_ENV",
@@ -331,7 +331,7 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
 /** {@link deploymentEnvironment} maps `dev` to `preproduction`, so a host is never both
  * production and dev mode. */
 export function isDevMode(env: Env): boolean {
-  return env.WAITRON_ENV === "dev";
+  return readVariable(env, "WAITRON_ENV") === "dev";
 }
 
 /** Parse the product intent and prove it agrees with the independently selected fiscal environment. */
@@ -339,7 +339,7 @@ function onboardingIntent(
   env: Env,
   environment: DeploymentEnvironment,
 ): OnboardingIntent | undefined {
-  const raw = env.WAITRON_ONBOARDING_INTENT;
+  const raw = readVariable(env, "WAITRON_ONBOARDING_INTENT");
   if (isUnset(raw)) return undefined;
   if (raw !== "demo" && raw !== "prepare" && raw !== "live") {
     throw new AppError("server.config_invalid", {
@@ -361,7 +361,7 @@ function onboardingIntent(
 }
 
 function fiscalTestSubmissions(env: Env): boolean {
-  const raw = env.WAITRON_FISCAL_TEST_SUBMISSIONS;
+  const raw = readVariable(env, "WAITRON_FISCAL_TEST_SUBMISSIONS");
   if (isUnset(raw)) return false;
   if (raw !== "enabled") {
     throw new AppError("server.config_invalid", {
@@ -397,19 +397,19 @@ export function loadConfig(
       reason: "listener_port_conflict",
     });
   }
-  const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
-  const stateDir = env.WAITRON_STATE_DIR;
+  const migrationsDir = readVariable(env, "WAITRON_MIGRATIONS_DIR");
+  const stateDir = readVariable(env, "WAITRON_STATE_DIR");
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
   const venueDir = venueDirOf(env, resolvedStateDir);
   const logDir = resolveLogDir(env, resolvedStateDir);
   assertOutsideScratch(resolvedStateDir, venueDir, "WAITRON_VENUE_DIR");
   assertOutsideScratch(resolvedStateDir, logDir, "WAITRON_LOG_DIR");
-  const httpHost = env.WAITRON_HTTP_HOST;
+  const httpHost = readVariable(env, "WAITRON_HTTP_HOST");
   // A half-configured pair is refused rather than silently falling back to plain HTTP; the error
   // names the missing variable.
-  const certFile = env.WAITRON_TLS_CERT_FILE;
-  const keyFile = env.WAITRON_TLS_KEY_FILE;
+  const certFile = readVariable(env, "WAITRON_TLS_CERT_FILE");
+  const keyFile = readVariable(env, "WAITRON_TLS_KEY_FILE");
   let tls: { certFile: string; keyFile: string } | undefined;
   if (!isUnset(certFile) && !isUnset(keyFile)) {
     tls = { certFile, keyFile };
@@ -420,7 +420,7 @@ export function loadConfig(
     });
   }
   const environment = deploymentEnvironment(env);
-  const installationOrigin = env.WAITRON_INSTALLATION_ORIGIN;
+  const installationOrigin = readVariable(env, "WAITRON_INSTALLATION_ORIGIN");
   if (!isUnset(installationOrigin) && installationOrigin !== "usb") {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_INSTALLATION_ORIGIN",
@@ -436,8 +436,8 @@ export function loadConfig(
   const managementOrigin = secureManagementOrigin(
     requiredInProduction(env, "WAITRON_MANAGEMENT_ORIGIN", environment, DEFAULT_MANAGEMENT_ORIGIN),
   );
-  const googleClientId = env.WAITRON_GOOGLE_CLIENT_ID;
-  const googleClientSecret = env.WAITRON_GOOGLE_CLIENT_SECRET;
+  const googleClientId = readVariable(env, "WAITRON_GOOGLE_CLIENT_ID");
+  const googleClientSecret = readVariable(env, "WAITRON_GOOGLE_CLIENT_SECRET");
   const hasGoogleId = !isUnset(googleClientId);
   const hasGoogleSecret = !isUnset(googleClientSecret);
   if (hasGoogleId !== hasGoogleSecret) {
@@ -446,13 +446,19 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
-  const staffSocket = env.WAITRON_STAFF_SOCKET;
+  const staffSocket = readVariable(env, "WAITRON_STAFF_SOCKET");
+  const staffHost = readVariable(env, "WAITRON_STAFF_HOST");
+  const versitygwBin = readVariable(env, "WAITRON_VERSITYGW_BIN");
+  const tunnelControlDir = readVariable(env, "WAITRON_TUNNEL_CONTROL_DIR");
+  const tillAppDir = readVariable(env, "WAITRON_TILL_APP_DIR");
+  const dashboardAppDir = readVariable(env, "WAITRON_DASHBOARD_APP_DIR");
+  const setupAppDir = readVariable(env, "WAITRON_SETUP_APP_DIR");
   const staff: ServerConfig["staff"] =
     environment === "production"
       ? undefined
       : isUnset(staffSocket)
         ? {
-            host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
+            host: isUnset(staffHost) ? DEFAULT_HTTP_HOST : staffHost,
             port: listeningPort(env, "WAITRON_STAFF_PORT", 8443),
           }
         : { socketPath: staffSocket };
@@ -460,7 +466,7 @@ export function loadConfig(
     ...(staff === undefined ? {} : { staff }),
     ...(installationOrigin === "usb" ? { installationOrigin } : {}),
     environment,
-    configuredEnvironment: isUnset(env.WAITRON_ENV) ? null : environment,
+    configuredEnvironment: isUnset(readVariable(env, "WAITRON_ENV")) ? null : environment,
     devMode: isDevMode(env),
     onboardingIntent:
       onboardingIntent(env, environment) ?? (environment === "production" ? "live" : undefined),
@@ -472,14 +478,12 @@ export function loadConfig(
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
-    versitygwBin: isUnset(env.WAITRON_VERSITYGW_BIN) ? "versitygw" : env.WAITRON_VERSITYGW_BIN,
+    versitygwBin: isUnset(versitygwBin) ? "versitygw" : versitygwBin,
     stateDir: resolvedStateDir,
-    ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
-      ? {}
-      : { tunnelControlDir: resolve(env.WAITRON_TUNNEL_CONTROL_DIR) }),
+    ...(isUnset(tunnelControlDir) ? {} : { tunnelControlDir: resolve(tunnelControlDir) }),
     venueDir,
     // Validated at load so a typo fails boot rather than minting a certificate for it.
-    boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
+    boxAddresses: parseBoxAddresses(readVariable(env, "WAITRON_BOX_ADDRESSES")),
     logDir,
     ...(tls === undefined ? {} : { tls }),
     node: tryLoadNodeIdentity(env),
@@ -495,10 +499,8 @@ export function loadConfig(
         }
       : {}),
     venueDomain: loadVenueDomain(env),
-    tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
-    dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
-      ? undefined
-      : env.WAITRON_DASHBOARD_APP_DIR,
-    setupAppDir: isUnset(env.WAITRON_SETUP_APP_DIR) ? undefined : env.WAITRON_SETUP_APP_DIR,
+    tillAppDir: isUnset(tillAppDir) ? undefined : tillAppDir,
+    dashboardAppDir: isUnset(dashboardAppDir) ? undefined : dashboardAppDir,
+    setupAppDir: isUnset(setupAppDir) ? undefined : setupAppDir,
   };
 }

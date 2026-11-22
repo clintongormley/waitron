@@ -2,7 +2,7 @@ import { type KeyRing, credentialRevision, writePairLinkTx } from "@waitron/cred
 import "./errors.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
@@ -234,9 +234,12 @@ async function refuseBeforeReserving(
   }
   await refuseWhileBucketStream(deps);
   // From the file, not the box env: `backup.env` is what travels to the spare in its bundle.
-  const { key } = await readHeldKey(async () =>
-    checkedRecoveryKey((await readBackupSettings(deps.stateDir))?.WAITRON_BACKUP_RECOVERY_KEY),
-  );
+  const { key } = await readHeldKey(async () => {
+    const backup = await readBackupSettings(deps.stateDir);
+    return checkedRecoveryKey(
+      backup === null ? undefined : readVariable(backup, "WAITRON_BACKUP_RECOVERY_KEY"),
+    );
+  });
   if (key === undefined) throw new AppError("backup.recovery_key_missing", {});
   if (checkName) refuseTakenBoxName(deps.designated.nodeId, held, standbyNodeId);
   if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);

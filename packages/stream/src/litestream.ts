@@ -1,6 +1,6 @@
 import { VENUE_FILE, LITESTREAM_META_SUFFIX } from "@waitron/store";
 import { basename, dirname, join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { bucketKey, normalisePrefix } from "./names.js";
 import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
@@ -21,7 +21,7 @@ export const DEFAULT_LITESTREAM_BIN = "litestream";
  * throws.
  */
 export function resolveLitestreamBin(env: Readonly<Record<string, string | undefined>>): string {
-  const value = env.WAITRON_LITESTREAM_BIN;
+  const value = readVariable(env, "WAITRON_LITESTREAM_BIN");
   return value === undefined || value === "" ? DEFAULT_LITESTREAM_BIN : value;
 }
 

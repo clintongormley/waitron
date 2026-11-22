@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isDeepStrictEqual } from "node:util";
 import { randomUUID } from "node:crypto";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { readDeploymentEnvironment, withTransaction, type Database } from "@waitron/db";
 import {
   configureModuleOperations,
@@ -157,7 +157,7 @@ export function createFirstSetupRuntime(options: {
   const resolution = createFirstSetupResolutionInspection({
     ...options,
     store,
-    migrationsRoot: options.environment.WAITRON_MIGRATIONS_DIR || null,
+    migrationsRoot: readVariable(options.environment, "WAITRON_MIGRATIONS_DIR") || null,
     expectedMigrationSets: modulesWithSets(options.modules).map((module) => module.migrations.name),
     publicEvidencePaths: retained.flatMap((sources) => sources.files),
     publicEvidenceDirectories: retained.flatMap((sources) => sources.directories),

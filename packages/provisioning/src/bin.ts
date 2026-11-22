@@ -17,7 +17,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { modulesSettings, serializeModuleConfig, type ModuleConfig } from "@waitron/module";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable } from "@waitron/shared";
 import { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { timedatectlSynchronised } from "./timedatectl-reader.js";
@@ -67,7 +67,7 @@ export async function runBin(proc: BinProcess, run: typeof runCli = runCli): Pro
       applyVenue,
       modules: ALL_MODULES,
       configureFirstSetup: (venueDir) => {
-        const stateDir = proc.env.WAITRON_STATE_DIR;
+        const stateDir = readVariable(proc.env, "WAITRON_STATE_DIR");
         if (stateDir === undefined || stateDir === "") throw new AppError("setup.not_ready", {});
         return createFirstSetupRuntime({
           environment: Object.freeze({ ...proc.env }),
@@ -172,6 +172,10 @@ if (
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
-  setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
+  setVenueHolderIdentity(
+    "provisioning",
+    process.env,
+    readVariable(process.env, "WAITRON_STATE_DIR") || undefined,
+  );
   process.exitCode = await runBin(process);
 }

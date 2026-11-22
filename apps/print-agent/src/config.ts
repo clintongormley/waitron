@@ -14,6 +14,20 @@ export interface EnvConfig {
 export const DEFAULT_STATE_DIR = "/var/lib/waitron-print-agent";
 export const DEFAULT_SETUP_PORT = 9110;
 
+export const PRINT_AGENT_VARIABLES = {
+  WAITRON_PRINT_AGENT_SERVER_URL: { source: "compose", kind: "origin", secret: false },
+  WAITRON_PRINT_AGENT_SETUP_URL: { source: "compose", kind: "origin", secret: false },
+  WAITRON_SETUP_PORT: {
+    source: "image",
+    kind: "port",
+    default: String(DEFAULT_SETUP_PORT),
+    secret: false,
+  },
+  WAITRON_STATE_DIR: { source: "image", kind: "path", default: DEFAULT_STATE_DIR, secret: false },
+  WAITRON_BOX_ADDRESSES: { source: "compose", kind: "list", secret: false },
+  WAITRON_HTTP_PORT: { source: "development", kind: "port", default: "8080", secret: false },
+} as const;
+
 /** An env var set to `""` falls back exactly as an unset one does (CLAUDE.md §3). */
 function value(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;

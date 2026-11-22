@@ -34,7 +34,7 @@ import {
   modulesSettings,
   serializeModuleConfig,
 } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import type { FirstSetupCommandDeployment } from "./first-setup-command-activation.js";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";
@@ -100,7 +100,7 @@ export function createFirstSetupCommandDeployment(options: {
       (readinessInput) =>
         submitFiscalReadiness({
           stateDir: state.stateDir,
-          migrationsRoot: environment.WAITRON_MIGRATIONS_DIR || undefined,
+          migrationsRoot: readVariable(environment, "WAITRON_MIGRATIONS_DIR") || undefined,
           modules,
           venue: state.frozen.request,
           contribution: selected.contribution!,
@@ -120,7 +120,7 @@ export function createFirstSetupCommandDeployment(options: {
       return store.run(input);
     },
     async publication(state) {
-      const path = environment.WAITRON_SETUP_SETTINGS_FILE;
+      const path = readVariable(environment, "WAITRON_SETUP_SETTINGS_FILE");
       if (!path && state.frozen.environment === "production")
         throw new AppError("setup.not_ready", {});
       const selection = venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory);
@@ -141,7 +141,7 @@ export function createFirstSetupCommandDeployment(options: {
       const ring = loadKeyRing({ ...storedEnvironment, ...environment });
       let contactUrl: string;
       try {
-        const parsed = new URL(environment.WAITRON_MANAGEMENT_ORIGIN ?? "");
+        const parsed = new URL(readVariable(environment, "WAITRON_MANAGEMENT_ORIGIN") ?? "");
         if (
           !["https:", "http:"].includes(parsed.protocol) ||
           parsed.username ||
@@ -231,7 +231,10 @@ export function createFirstSetupCommandDeployment(options: {
           persistTrading: async (result, current) => {
             const entries = {
               WAITRON_NODE_ID: result.nodeId,
-              WAITRON_ENV: environment.WAITRON_ENV === "dev" ? "dev" : current.frozen.environment,
+              WAITRON_ENV:
+                readVariable(environment, "WAITRON_ENV") === "dev"
+                  ? "dev"
+                  : current.frozen.environment,
               WAITRON_ONBOARDING_INTENT: "live",
             };
             await writeFileDurable(

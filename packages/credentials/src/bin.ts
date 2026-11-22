@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
-import { isAppError } from "@waitron/shared";
+import { isAppError, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import { runCli, type CliIo, type Resealer } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
 
-const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
+const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR" satisfies EnvironmentVariableName;
 
 /**
  * The whole command, with the process kept outside it so a test need not spawn anything; the shim
@@ -24,7 +24,7 @@ export async function runBin(
   io: CliIo,
   resealers: readonly Resealer[],
 ): Promise<number> {
-  const venueDir = env[VENUE_DIR_VARIABLE];
+  const venueDir = readVariable(env, VENUE_DIR_VARIABLE);
   if (venueDir === undefined || venueDir === "") {
     io.stderr(`${VENUE_DIR_VARIABLE} is not set`);
     return 2;

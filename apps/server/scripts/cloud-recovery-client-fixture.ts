@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import {
   VENUE_DIR_NAME,
   TRADING_ENV_FILE,
@@ -101,7 +102,7 @@ else if (request.command === "stage") {
       assert(trading);
       if (request.expectedSourceNodeId)
         assert.equal(
-          parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
+          readVariable(parseEnvFile(Buffer.from(trading.bytes).toString()), "WAITRON_NODE_ID"),
           request.expectedSourceNodeId,
         );
       assert(!checked.secretEntries.some((entry) => entry.name.startsWith("secrets/cloud/")));
@@ -140,7 +141,10 @@ else if (request.command === "stage") {
     await store.close();
   }
   assert.equal(
-    parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")).WAITRON_NODE_ID,
+    readVariable(
+      parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")),
+      "WAITRON_NODE_ID",
+    ),
     request.expectedSourceNodeId,
   );
   assert.equal(await exists(join(stateDir, BACKUP_ENV_FILE)), false);
@@ -157,9 +161,10 @@ else if (request.command === "stage") {
   await client.reportRestored();
   result = { reported: true };
 } else if (request.command === "prepareReplacement" || request.command === "statusReplacement") {
-  const nodeId = parseEnvFile(
-    await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"),
-  ).WAITRON_NODE_ID;
+  const nodeId = readVariable(
+    parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")),
+    "WAITRON_NODE_ID",
+  );
   assert(nodeId);
   if (request.expectedSourceNodeId) assert.equal(nodeId, request.expectedSourceNodeId);
   const store = await openVenueDatabase(venueDir);
