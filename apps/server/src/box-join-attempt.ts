@@ -66,6 +66,7 @@ export interface BoxJoinAttemptDeps {
   steadyNow?: () => number;
   /** This box's own network addresses; by default every interface address that is not loopback. */
   addresses?: () => string[];
+  /** Every request to the main box, its certificate read included. */
   exchange?: typeof boxExchange;
   lookup?: BoxLookup;
 }
@@ -316,7 +317,10 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
 
   async function open(primaryUrl: string) {
     const base = assertSafePrimaryUrl(primaryUrl);
-    const certificate = await fetchPrimaryCertificate(primaryUrl, { lookup: deps.lookup });
+    const certificate = await fetchPrimaryCertificate(primaryUrl, {
+      lookup: deps.lookup,
+      exchange,
+    });
     const trust = certificate === null ? {} : { ca: certificate.pem, rejectUnauthorized: true };
 
     const identity = generateStandbyIdentity();

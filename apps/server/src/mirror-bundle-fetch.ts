@@ -570,7 +570,11 @@ export async function boxDownload(
  */
 export async function fetchPrimaryCertificate(
   primaryUrl: string,
-  { timeoutMs = CERTIFICATE_READ_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
+  {
+    timeoutMs = CERTIFICATE_READ_LIMIT_MS,
+    lookup,
+    exchange = boxExchange,
+  }: RequestLimit & { lookup?: BoxLookup; exchange?: typeof boxExchange } = {},
 ): Promise<{ pem: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
@@ -582,7 +586,7 @@ export async function fetchPrimaryCertificate(
     // It skips the certificate check: it carries no credential, body or cookie, and what it returns
     // is public. The join's own signatures, not this certificate, say who answered.
     answer = await withinLimit(timeoutMs, (signal) =>
-      boxExchange(
+      exchange(
         url,
         { method: "GET", trust: { rejectUnauthorized: false }, signal, lookup },
         MAX_CERTIFICATE_BYTES,

@@ -26,6 +26,7 @@ import { createBoxJoinRequests, type BoxJoinRequests } from "../box-join-request
 import { unlockJoinBundle, type LockedJoinBundle } from "../box-join-seal.js";
 import { boxHostnameFor } from "../box-name.js";
 import type { Logger } from "../logger.js";
+import type { boxExchange } from "../mirror-bundle-fetch.js";
 import { generateStandbyIdentity, type StandbyIdentity } from "../reserved-identity.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 
@@ -124,6 +125,47 @@ export function boxPost(app: Hono, path: string, body: unknown, from: string): P
       { incoming: { socket: { remoteAddress: from } } },
     ),
   );
+}
+
+/** One request {@link appExchange} sent, with the status it was answered once it was. */
+export interface ExchangeSent {
+  path: string;
+  body: Record<string, unknown>;
+  status?: number;
+}
+
+/**
+ * A `boxExchange` the main box's `app` answers, as if from `from`, so the real
+ * `createBoxJoinAttempt` joins it with no listener. `GET /ca.crt` answers `certificate`, and is
+ * not found without one; no other GET is answered.
+ */
+export function appExchange(options: {
+  app: () => Hono;
+  from: string;
+  certificate?: string;
+  onSent?: (sent: ExchangeSent) => void;
+  /** Whether the main box's answer to this request is lost after the main box acted on it. */
+  lose?: (path: string) => boolean;
+}): typeof boxExchange {
+  return async (url, request) => {
+    if (request.method === "GET") {
+      const found = url.pathname === "/ca.crt" && options.certificate !== undefined;
+      return found ? { status: 200, text: options.certificate! } : { status: 404, text: "" };
+    }
+    const record: ExchangeSent = { path: url.pathname, body: JSON.parse(request.body!) };
+    options.onSent?.(record);
+    const response = await options
+      .app()
+      .request(
+        url.href,
+        { method: "POST", headers: { "content-type": "application/json" }, body: request.body },
+        { incoming: { socket: { remoteAddress: options.from } } },
+      );
+    record.status = response.status;
+    const text = await response.text();
+    if (options.lose?.(url.pathname)) throw new Error("answer lost");
+    return { status: response.status, text };
+  };
 }
 
 export interface HelloAnswer {

@@ -15,6 +15,7 @@ import { lockJoinBundle } from "./box-join-seal.js";
 import type { boxExchange } from "./mirror-bundle-fetch.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { appExchange, type ExchangeSent } from "./testing/box-join.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -38,34 +39,21 @@ function publicHalf(privateKey: string): string {
     .toString("base64");
 }
 
-interface Sent {
-  path: string;
-  body: Record<string, unknown>;
-  status?: number;
-}
-
 describe("the new box's join attempt", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS], timeoutMs: 60_000 });
   let app: Hono;
   let requests: BoxJoinRequests;
   let mainNodeId: string;
-  let sent: Sent[];
+  let sent: ExchangeSent[];
   /** Whether the main box's answer to this request is lost after the main box acted on it. */
   let lose: (path: string) => boolean;
 
-  const exchange: typeof boxExchange = async (url, options) => {
-    const record: Sent = { path: url.pathname, body: JSON.parse(options.body!) };
-    sent.push(record);
-    const response = await app.request(
-      url.href,
-      { method: "POST", headers: { "content-type": "application/json" }, body: options.body },
-      { incoming: { socket: { remoteAddress: FROM } } },
-    );
-    record.status = response.status;
-    const text = await response.text();
-    if (lose(url.pathname)) throw new Error("answer lost");
-    return { status: response.status, text };
-  };
+  const exchange = appExchange({
+    app: () => app,
+    from: FROM,
+    onSent: (record) => sent.push(record),
+    lose: (path) => lose(path),
+  });
 
   const deps = (overrides: Partial<BoxJoinAttemptDeps> = {}): BoxJoinAttemptDeps => ({
     exchange,
