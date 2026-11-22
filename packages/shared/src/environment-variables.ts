@@ -95,7 +95,7 @@ export const ENVIRONMENT_VARIABLES = {
   }),
   WAITRON_INSTALLATION_ORIGIN: variable("compose", "choice", server, { rule: "usb" }),
   WAITRON_CLOUD_ORIGIN: variable("compose", "origin", server, {
-    rule: "HTTPS origin, or HTTP loopback in dev",
+    rule: "HTTPS, or HTTP loopback in dev",
   }),
   WAITRON_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
   WAITRON_PRINT_AGENT_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
@@ -105,7 +105,7 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_TUNNEL_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
   WAITRON_STAFF_SOCKET: variable("compose", "path", server, unset),
   WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: variable("compose", "url", server, {
-    rule: "the HTTPS dashboard sign-in callback, outside production only",
+    rule: "HTTPS, outside production only",
   }),
   WAITRON_HTTP_PORT: variable("operator", "port", ["server", "print agent development"], {
     default: "8080",
@@ -115,11 +115,9 @@ export const ENVIRONMENT_VARIABLES = {
     default: "80",
     rule: "0 disables the listener, otherwise 1–65535",
   }),
-  WAITRON_TLS_CERT_FILE: variable("operator", "path", server, {
-    rule: "set with the TLS key path",
-  }),
+  WAITRON_TLS_CERT_FILE: variable("operator", "path", server, { rule: "set with the TLS key" }),
   WAITRON_TLS_KEY_FILE: variable("operator", "path", server, {
-    rule: "set with the certificate path",
+    rule: "set with the TLS certificate",
   }),
   WAITRON_VENUE_DOMAIN: variable("operator", "text", server, {
     rule: "domain without a scheme or port",

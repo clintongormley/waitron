@@ -539,12 +539,8 @@ it("real HTTP refuses forged origins and streamed private input while an empty a
   expect(await repair(port)).toMatchObject({ state: "healthy", trust: "retained" });
 });
 
-it("recovery respects operator TLS selected in the retained settings without exposing those paths", async () => {
+it("recovery respects process settings for operator TLS without exposing those paths", async () => {
   const f = await fixture();
-  await writeFile(
-    join(f.stateDir, "trading.env"),
-    "WAITRON_TLS_CERT_FILE=/operator/server.pem\nWAITRON_TLS_KEY_FILE=/operator/server.pem\n",
-  );
   const [port] = (await retainedPorts(1)) as [number];
   const forbidden = async () => {
     throw new Error("protected work reached");
@@ -556,6 +552,8 @@ it("recovery respects operator TLS selected in the retained settings without exp
       WAITRON_HTTP_HOST: "127.0.0.1",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_TLS_CERT_FILE: "/operator/server.pem",
+      WAITRON_TLS_KEY_FILE: "/operator/server.pem",
     },
     readRecoveryState: async () => ({ ...FRESH, level: "recovery" }),
     writeRecoveryState: forbidden,

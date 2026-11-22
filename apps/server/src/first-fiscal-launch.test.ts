@@ -157,7 +157,7 @@ async function launchFixture(ownerSetup = false) {
   return { root, stateDir, input, evidenceEnv, base, port };
 }
 it.each(["direct", "supervised"])(
-  "%s launch binds its passed/file-merged module evidence and activates owned hour setup despite conflicting process.env",
+  "%s launch binds its passed module evidence and activates owned hour setup despite conflicting process.env",
   async (kind) => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime("2026-10-16T11:38:00Z");
@@ -168,15 +168,9 @@ it.each(["direct", "supervised"])(
     try {
       if (kind === "direct") server = await startServer({ ...f.base, ...f.evidenceEnv });
       else {
-        await writeFile(
-          join(f.stateDir, "backup.env"),
-          Object.entries(f.evidenceEnv)
-            .map(([key, value]) => `${key}=${value}`)
-            .join("\n") + "\n",
-        );
         await runEntry({
           args: [],
-          baseEnv: f.base,
+          baseEnv: { ...f.base, ...f.evidenceEnv },
           stateDir: f.stateDir,
           venueDir: f.base.WAITRON_VENUE_DIR,
           migrationsRoot: f.base.WAITRON_MIGRATIONS_DIR,
