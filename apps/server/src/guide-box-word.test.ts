@@ -10,7 +10,7 @@ import { guideRoot } from "./guide-catalogue.js";
 // "caja" that means the box, or a sentence that names the box some other way, passes.
 const OTHER_SERVERS = [
   /\b(e?mail|SMTP|time)[\s-]+servers?\b/gi,
-  /\b(the|its)\s+(\*\*)?Servers(\*\*)?\s+page\b/g,
+  /\b(the|its|box[’']s)\s+(\*\*)?Servers(\*\*)?\s+page\b/g,
   /\*\*System\s+→\s+Servers\*\*/g,
   /^# Servers$/gm,
   /\bservers\.md\b/g,
