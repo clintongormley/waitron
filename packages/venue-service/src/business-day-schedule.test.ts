@@ -1320,7 +1320,6 @@ describe("a waiting change checks the hours written while it waits", () => {
     ).resolves.toBeUndefined();
     expect(await specialDayNames()).toEqual(["Special day"]);
   });
-  // The two dates' conflicts came back in either order across repeat runs.
   it("answers a special day clashing only under the waiting start as a waiting-change conflict", async () => {
     const v = await fixture([]);
     await waiting(v);
@@ -1360,7 +1359,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 2,
-        conflicts: expect.arrayContaining([
+        conflicts: [
           expect.objectContaining({
             specialDayName: "Late weekend",
             date: "2026-11-06",
@@ -1375,7 +1374,7 @@ describe("a waiting change checks the hours written while it waits", () => {
             endsAt: "04:00",
             reason: "endpoint_day",
           }),
-        ]),
+        ],
       },
     });
     expect(await specialDayNames()).toEqual([]);
@@ -2255,6 +2254,114 @@ it("reports an overlap among a day's ranges beside a range that fails on its own
   ]);
 });
 
+it("leaves out a range that overlaps nothing beside an overlap and a range that fails on its own", async () => {
+  const v = await fixture([
+    range("09:00", "10:00"),
+    range("13:00", "16:00"),
+    range("15:00", "17:00"),
+    range("22:00", "04:30"),
+  ]);
+  const result = await withTransaction(suite.db, (tx) =>
+    businessDayClockConflicts(tx, before, candidate("03:00"), E),
+  );
+  expect(
+    result.conflicts.map((c) => [c.departmentId, c.weekday, `${c.startsAt}-${c.endsAt}`, c.reason]),
+  ).toEqual([
+    [v.departmentId, 3, "13:00-16:00", "overlap"],
+    [v.departmentId, 3, "15:00-17:00", "overlap"],
+    [v.departmentId, 3, "22:00-04:30", "range"],
+  ]);
+});
+
+it("marks as overlapping only the ranges that overlap another", async () => {
+  const v = await fixture([
+    range("09:00", "10:00"),
+    range("13:00", "16:00"),
+    range("15:00", "17:00"),
+  ]);
+  const result = await withTransaction(suite.db, (tx) =>
+    businessDayClockConflicts(tx, before, candidate("03:00"), E),
+  );
+  expect(
+    result.conflicts.map((c) => [c.departmentId, c.weekday, `${c.startsAt}-${c.endsAt}`, c.reason]),
+  ).toEqual([
+    [v.departmentId, 3, "13:00-16:00", "overlap"],
+    [v.departmentId, 3, "15:00-17:00", "overlap"],
+  ]);
+});
+
+it("lists a department's zones in their display order, after its department-wide hours", async () => {
+  const v = await fixture([range("22:00", "04:30")]);
+  const result = await withTransaction(suite.db, async (tx) => {
+    // Display order runs against the names and the ids, and 10 sorts before 2 as text.
+    const zones = [
+      { id: "a0000000-0000-4000-8000-000000000001", name: "Alpha", displayOrder: 10 },
+      { id: "b0000000-0000-4000-8000-000000000001", name: "Beta", displayOrder: 2 },
+      { id: "c0000000-0000-4000-8000-000000000001", name: "Gamma", displayOrder: -1 },
+    ];
+    for (const zone of zones) {
+      await seedZone(tx, { ...zone, departmentId: v.departmentId });
+      await tx.insert(openingHours).values({
+        zoneId: zone.id,
+        seasonId: v.seasonId,
+        weekday: 3,
+        kind: "closed",
+        startsAt: "22:00:00",
+        endsAt: "04:30:00",
+      });
+    }
+    return businessDayClockConflicts(tx, before, candidate("03:00"), E);
+  });
+  expect(result.conflicts.map((c) => c.zoneName ?? "department")).toEqual([
+    "department",
+    "Gamma",
+    "Beta",
+    "Alpha",
+  ]);
+});
+
+it("lists a day's equal ranges with no period first, then by period name", async () => {
+  const v = await fixture([]);
+  const result = await withTransaction(suite.db, async (tx) => {
+    // Sorts after any random id, so only the name can put Brunch ahead of Service.
+    const brunchId = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+    const [menu] = await tx
+      .select({ id: menuPeriods.menuId })
+      .from(menuPeriods)
+      .where(eq(menuPeriods.id, v.periodId));
+    await tx
+      .insert(menuPeriods)
+      .values({ id: brunchId, departmentId: v.departmentId, menuId: menu!.id, name: "Brunch" });
+    const specialDayId = randomUUID(),
+      specialDayDateId = randomUUID();
+    await tx.insert(specialDays).values({ id: specialDayId, name: "Fiesta", repeatsYearly: false });
+    await tx
+      .insert(specialDayDates)
+      .values({ id: specialDayDateId, specialDayId, date: "2026-11-20", closedAllDay: false });
+    // Inserted, and given ids, in the reverse of the listed order.
+    const rows = [
+      { id: "a0000000-0000-4000-8000-000000000001", periodId: v.periodId },
+      { id: "b0000000-0000-4000-8000-000000000001", periodId: brunchId },
+      { id: "c0000000-0000-4000-8000-000000000001", periodId: null },
+    ];
+    for (const row of rows)
+      await tx.insert(openingHours).values({
+        ...row,
+        kind: row.periodId === null ? "closed" : "period",
+        specialDayDateId,
+        departmentId: v.departmentId,
+        startsAt: "22:00:00",
+        endsAt: "04:30:00",
+      });
+    return businessDayClockConflicts(tx, before, candidate("03:00"), E);
+  });
+  expect(result.conflicts.map((c) => [c.periodName ?? "closed", c.rangeIndex])).toEqual([
+    ["closed", 0],
+    ["Brunch", 1],
+    ["Service", 2],
+  ]);
+});
+
 it("counts a range painted in every season once, so a capped list still names every department", async () => {
   const v = await fixture([]);
   const result = await withTransaction(suite.db, async (tx) => {
@@ -2657,6 +2764,29 @@ describe("a keep-open for the night before the change", () => {
       keptOpenConflicts(tx, before, candidate("03:00"), E),
     );
     expect(conflicts).toEqual([]);
+  });
+
+  it("lists kept-open zones in their display order", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, async (tx) => {
+      // Names and ids sort in the reverse of the display order.
+      const zones = [
+        { id: "e0000000-0000-4000-8000-000000000001", name: "Alpha", displayOrder: 1 },
+        { id: "f0000000-0000-4000-8000-000000000001", name: "Beta", displayOrder: 0 },
+      ];
+      for (const zone of zones)
+        await tx.insert(floorZones).values({
+          ...zone,
+          departmentId: v.departmentId,
+          keptOpenDay: "2026-11-03",
+          keptOpenFrom: "22:00:00",
+          keptOpenUntil: "04:30:00",
+        });
+    });
+    const conflicts = await withTransaction(suite.db, (tx) =>
+      keptOpenConflicts(tx, before, candidate("03:00"), E),
+    );
+    expect(conflicts.map((c) => c.zoneName)).toEqual(["Beta", "Alpha"]);
   });
 
   it("refuses the change with the keep-open in the list and the count", async () => {
