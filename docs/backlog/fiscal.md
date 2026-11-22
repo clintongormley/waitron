@@ -899,8 +899,8 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Next: plans for the design's pieces A, B
-and C. From M7v, owner rulings
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
+requests, the first storing each product's takeaway rate; pieces B and C have no plan yet. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
