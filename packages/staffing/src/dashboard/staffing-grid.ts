@@ -450,7 +450,14 @@ export class StaffingGrid extends LitElement {
       const moved = stretch.start === resizing.anchor ? stretch.end : stretch.start;
       return resizeBlock(day, resizing.index, resizing.edge, clockAt(moved, cutover), cutover);
     }
-    return addBlock(this.#shownBlocks(stretch.key), {
+    const blocks =
+      this.#value(stretch.key) === null
+        ? this.#shownBlocks(stretch.key).flatMap((block) => {
+            const { start, end } = resizeSpan(block, cutover);
+            return start < end ? [{ ...block, endsAt: clockAt(end, cutover) }] : [];
+          })
+        : day;
+    return addBlock(blocks, {
       staffRoleId: this.chosen!,
       headcount: this.headcount,
       startsAt: clockAt(stretch.start, cutover),

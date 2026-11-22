@@ -1327,6 +1327,25 @@ test("the same stroke draws different clock times on dates with different starts
   ]);
 });
 
+test("resizing at a date's own start keeps the preview and saved hours on that scale", async () => {
+  const early = { ...headChef, startsAt: "05:00", endsAt: "07:00" };
+  const el = await grid({ mon: [early] });
+  el.columns = [{ key: "mon", label: "Monday", cutover: "04:00" }];
+  await el.updateComplete;
+  await pickBlock(el, "mon");
+  const seen = changes(el);
+  point(el, "mon", 180, "pointerdown", edge(el, "mon", 0, "end"));
+  point(el, "mon", 240, "pointermove");
+  await el.updateComplete;
+  const preview = el.shadowRoot!.querySelector(".preview")!;
+  expect(preview.getBoundingClientRect().top).toBeCloseTo(
+    block(el, "mon").getBoundingClientRect().top,
+    0,
+  );
+  point(el, "mon", 240, "pointerup");
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...early, endsAt: "08:00" }] }]);
+});
+
 test("copying a day that follows the season makes the ticked days follow their own seasons", async () => {
   const el = await grid({ mon: null, tue: [headChef] }, { followable: true });
   el.seasonBlocks = new Map([["mon", [sous]]]);
@@ -1380,6 +1399,32 @@ test("the first stroke on a following date adds to the inherited blocks", async 
       key: "mon",
       blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "17:00", endsAt: "19:00" }],
     },
+  ]);
+});
+
+test("the first stroke keeps only the quarter-hours of inherited blocks inside the date", async () => {
+  const el = await grid({ mon: null }, { followable: true, chosen: "sc" });
+  el.columns = [{ key: "mon", label: "Monday", cutover: "05:05" }];
+  const crossing = { ...headChef, startsAt: "04:00", endsAt: "06:00" };
+  const tooShort = { ...sous, startsAt: "05:00", endsAt: "06:00" };
+  el.seasonBlocks = new Map([["mon", [headChef, crossing, tooShort]]]);
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 595, 655);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [
+        headChef,
+        { ...crossing, endsAt: "05:00" },
+        { staffRoleId: "sc", headcount: 1, startsAt: "15:00", endsAt: "16:00" },
+      ],
+    },
+  ]);
+  expect(el.seasonBlocks.get("mon")?.map(({ endsAt }) => endsAt)).toEqual([
+    "16:30",
+    "06:00",
+    "06:00",
   ]);
 });
 

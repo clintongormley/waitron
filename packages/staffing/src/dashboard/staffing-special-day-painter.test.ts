@@ -137,8 +137,9 @@ it("titles the special day and draws one column per date, which may follow the s
 
 it("draws each date's scale and inherited blocks from its own business-day start", async () => {
   const read = specialDayStaffing();
-  read.dates[1]!.cutover = "09:00";
+  read.dates[1]!.cutover = "08:15";
   read.areas[0]!.dates[1]!.seasonBlocks = [headChef];
+  read.guides["department:dep-restaurant"]!.day = [{ ...LUNCH_GUIDE, startsAt: "09:00" }];
   const { painter } = await mount({ read: async () => read });
   const root = grid(painter).shadowRoot!;
   const rulers = [...root.querySelectorAll(".times")];
@@ -147,10 +148,11 @@ it("draws each date's scale and inherited blocks from its own business-day start
     "09:00",
   ]);
   const day = root.querySelector('.day[data-column="day"]')!;
-  expect(day.querySelector(".inherited")!.getBoundingClientRect().top).toBeCloseTo(
-    day.getBoundingClientRect().top,
-    0,
-  );
+  const box = day.getBoundingClientRect();
+  const nine = box.top + box.height / 32;
+  for (const selector of [".inherited", ".guide", ".line"]) {
+    expect(day.querySelector(selector)!.getBoundingClientRect().top, selector).toBeCloseTo(nine, 0);
+  }
 });
 
 it("shows inherited blocks only while the date follows, with no edit controls", async () => {
