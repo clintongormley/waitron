@@ -50,28 +50,27 @@ varios días, abre **Ventas y cobros** y elige un día anterior para consultar s
 
 En un servidor de pruebas, abre **Preparación** e inicia sesión en Waitron Cloud. En el paso de correo,
 marca **Enviar el correo del personal a través de Waitron Cloud**. Deja el servidor de correo
-en blanco y continúa, o introduce los datos de tu servidor y envía una prueba. Cuando el equipo se
-reinicie y se conecte, Cloud podrá enviar invitaciones al personal, enlaces para restablecer
-contraseñas y códigos de cambio de correo.
+en blanco y continúa. Cuando el equipo se reinicie y se conecte, Cloud podrá enviar invitaciones
+al personal, enlaces para restablecer contraseñas y códigos de cambio de correo.
 
 Si eliges Cloud y dejas en blanco el servidor de correo, Cloud también envía los avisos sobre
 cambios de seguridad de la cuenta y de roles, y el aviso a la dirección anterior cuando otra
 persona cambia el correo de un miembro del personal en **Usuarios**. Los encargados con correo
 electrónico también pueden recibir alertas por falta de espacio, copias de seguridad eliminadas o
-detenidas, actualizaciones revertidas y correcciones del reloj. Tu servidor de correo tiene
-prioridad para estos avisos cuando lo configuras. Para enviar correos a
-clientes, enviar el informe diario o recibir otras alertas del servidor por correo, añade un
-servidor de correo en **Sistema → Correo**.
+detenidas, actualizaciones revertidas y correcciones del reloj. Si añades tu propio servidor de
+correo, Waitron lo usa para esos mensajes. Para enviar correos a clientes, enviar el informe diario
+o recibir otras alertas del equipo por correo, añade un servidor en **Sistema → Correo**.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
 **Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
 
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 
-Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invitaciones,
-los enlaces para restablecer contraseñas y los códigos de cambio de correo se envían por Cloud,
-también en Demostración. Revisa el buzón real del destinatario en lugar de la Bandeja de correo
-de Demostración. Mantén un servidor de correo para los recibos y otros avisos.
+Tu servidor de correo guardado envía las invitaciones, los enlaces para restablecer contraseñas y
+los códigos de cambio de correo. Si dejas el servidor en blanco y activas el correo de Cloud de
+prueba, Cloud envía esos mensajes. En Demostración fuera de desarrollo, activa el correo de Cloud
+para enviar al buzón real del destinatario. Si no lo activas, abre la **Bandeja de correo** de
+Demostración.
 
 En un servidor configurado para enviar registros fiscales de prueba, los encargados con correo
 electrónico pueden recibir recordatorios de caducidad del certificado a través de Cloud de prueba
@@ -80,11 +79,11 @@ si activas el correo de Cloud y dejas en blanco el servidor de correo.
 Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no
 llega un correo, solicita un enlace o código nuevo; un mensaje anterior aún puede llegar después.
-Al desactivar el envío por Cloud, los nuevos envíos vuelven al servidor de correo o al buzón
-de Demostración que corresponda. Vincular la caja conserva tu ruta anterior hasta que haya usado
-Cloud activado. Si Cloud deja de estar disponible después, el correo de cuentas espera; guardar
-ajustes SMTP no desvía esos mensajes. Restablece Cloud o desactiva explícitamente su correo
-antes de solicitar otro enlace o código.
+Si dependes del correo de Cloud y deja de estar disponible, restablece Cloud. Fuera de
+Demostración, también puedes añadir un servidor de correo en **Sistema → Correo**. Si los ajustes
+de correo guardados no funcionan, las invitaciones, los enlaces para restablecer contraseñas y
+los códigos de cambio de correo que ya están en cola quedan pendientes. Corrige los ajustes y
+envía otra prueba antes de solicitar un enlace o código nuevo.
 
 ## Comprueba el resultado de la prueba {#test-results}
 
@@ -113,7 +112,8 @@ Con el permiso de administración del equipo (Admin de forma predeterminada), el
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
-En Preparación o En vivo, los recibos y avisos necesitan un servidor configurado. El correo de
-cuentas sigue la [ruta de Cloud](email.md#cloud-account-email) si está activada, o tu servidor habitual.
-Las ventas continúan. En una caja de desarrollo, el correo por la ruta habitual vuelve al buzón de prueba. Si los ajustes no se cargan tras
-quitar el servidor, vuelve a cargarlos; el servidor ya se ha quitado.
+Fuera de desarrollo, conserva un servidor de correo para enviar recibos, el informe diario y los
+avisos que Cloud no gestiona. Si has activado el correo de Cloud de prueba, Cloud puede enviar el
+[correo de cuentas](email.md#cloud-account-email). Las ventas continúan. En una caja de desarrollo
+sin correo de Cloud, consulta el buzón de prueba. Si los ajustes no se cargan tras quitar el servidor,
+vuelve a cargarlos. El servidor ya se ha quitado.

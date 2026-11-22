@@ -7,7 +7,7 @@ export const venueEn = {
   "email.heading": "Set up email",
   "email.cloud_staff_email": "Send staff email through Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud sends staff invitations, password resets and email-change codes. If you leave the mail server blank, Cloud also sends warnings to previous email addresses, account security and role change notices, and selected box alerts. To skip your mail server, leave the server, sender email, username and password blank.",
+    "To use Cloud for staff invitations, password resets, email-change codes and selected notices, leave the server, sender email, username and password blank. If you set up your own mail server, Waitron uses it for those messages.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
   "email.intro_optional":
@@ -279,7 +279,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.heading": "Configura el correo electrónico",
   "email.cloud_staff_email": "Enviar el correo del personal a través de Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud envía invitaciones al personal, enlaces para restablecer contraseñas y códigos de cambio de correo. Si dejas en blanco el servidor de correo, Cloud también envía avisos a las direcciones anteriores, avisos sobre cambios de seguridad de la cuenta y de roles, y algunas alertas del servidor. Para omitir tu servidor de correo, deja en blanco el servidor, el correo del remitente, el nombre de usuario y la contraseña.",
+    "Para usar Cloud para las invitaciones al personal, los enlaces para restablecer contraseñas, los códigos de cambio de correo y algunos avisos, deja en blanco el servidor, el correo del remitente, el nombre de usuario y la contraseña. Si configuras tu propio servidor de correo, Waitron lo usa para esos mensajes.",
   "email.intro":
     "Envía un mensaje de prueba a {recipient} antes de continuar. Usa los ajustes de tu proveedor de correo.",
   "email.intro_optional":

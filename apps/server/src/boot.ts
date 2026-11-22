@@ -2652,7 +2652,16 @@ async function bootServer(
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
+  const usesSavedAccountSmtp = async (tx: Transaction) => !captureOnly && (await hasSavedSmtp(tx));
   const accountMailMode = async (tx: Transaction) => {
+    if (await usesSavedAccountSmtp(tx)) {
+      try {
+        return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
+      } catch (error) {
+        log("error", "mail.delivery_unavailable", { rule: "notice", errorCode: codeOf(error) });
+        return "unconfigured" as const;
+      }
+    }
     try {
       if (await cloudConnection?.emailRelayEnabled()) return "cloud" as const;
     } catch {
@@ -2661,8 +2670,10 @@ async function bootServer(
     return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
   };
   const cloudMail = {
-    resolveAccountRelay: (signal: AbortSignal) =>
-      cloudConnection?.emailRelay(signal) ?? Promise.resolve(null),
+    resolveAccountRelay: async (signal: AbortSignal) => {
+      if (!cloudConnection || (await usesSavedAccountSmtp(db))) return null;
+      return cloudConnection.emailRelay(signal);
+    },
     sendCloudEmail: cloudConnection?.sendEmail,
     ...(cloudConnection &&
       !captureAccountEmail && {
@@ -3427,7 +3438,16 @@ async function bootServer(
       log,
     );
   }
-  mountEmailSettingsApi(app, { db, ring, config }, log);
+  mountEmailSettingsApi(
+    app,
+    {
+      db,
+      ring,
+      config,
+      ...(cloudConnection && { refreshCloudMail: () => cloudConnection.emailRelay() }),
+    },
+    log,
+  );
   const certificateDiagnosis =
     enabledFiscal.certificate?.diagnose !== undefined &&
     enabledFiscal.certificate.diagnoseInChild !== undefined

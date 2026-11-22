@@ -1239,28 +1239,21 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
 
-- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare now
-  requires SMTP outside development for invoice and notice mail; selected account actions may use test Cloud. Settings lets admins
+- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare can
+  use a mail server or test Cloud for staff email. Settings lets admins
   save and remove the relay, with manager reads and actionable SMTP tests. Users and Account settings
   distinguish queued, captured and unconfigured account mail, and an immediate invitation
   retry says when nothing changed. Ordinary SMTP and Settings tests use the venue sender name.
-  Demo's normal route captures account mail, reminders and alerts outside development; an enabled
-  test Cloud relay takes its three selected account classes.
+  A saved server takes priority for invitations, password resets and email-change codes. Demo
+  outside development uses test Cloud for those messages when enabled and the practice inbox otherwise.
   A fresh Prepare box that opts into Cloud email and leaves its mail server blank can also
   send the old-address warning, security notices, role changes and selected box alerts through
   test Cloud. A box configured for test filings can send certificate reminders through the same
   relay. The two new notice classes need the compatible Cloud release, and box alerts have a
   joint inbox check pending.
   Left: qualify invitations, resets and email-change codes against the live test Cloud
-  (BOX-EMAIL-RELAY). Receipts and other notices still use SMTP.
+  (BOX-EMAIL-RELAY), the paid Cloud plan and the remaining free notice work.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
-
-- **A venue's own mail server always wins; Cloud sends only when there is none (owner,
-  2026-11-21).** On a paid Cloud plan, Cloud sends every email the box would send, as the venue's
-  own domain or a Waitron address. On 2026-11-22 the owner chose five free notice types in
-  addition to invitations, resets and email-change codes. Today a
-  paired test Cloud takes invitations, resets and email changes ahead of a saved mail server
-  (`apps/server/src/mail-sender.ts`, the `accountDelivery` choice), so that order flips. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
 
 - **A box in first setup still sends a test email through a mail server whose login the caller
   holds (A987 review, 2026-10-22) — OPEN.**

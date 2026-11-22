@@ -391,15 +391,15 @@ Cut A supplies the structured failure classifier, bounded account sends and remi
 its diagnostics preserve rejected versus unknown outcomes. Cut B shows those diagnostics beside
 the relevant field or at the bottom of both SMTP forms, with the matching English and Spanish
 guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
-settings separately from invoice capture on development boxes. The Prepare wizard now collects and
-tests SMTP outside development; ordinary Prepare uses the relay or reports unavailable mail. Demo's
+settings separately from invoice capture on development boxes. The Prepare wizard can test SMTP
+or request Cloud email on a test box. Demo's
 inbox link is offered publicly and to signed-in admins. Users and Account settings distinguish queued, captured and unconfigured
 account mail; throttled invitation actions say nothing changed.
 Ordinary SMTP and the Settings test use the venue name with the configured mailbox; setup tests
-retain their own sender. Outside development, Demo's normal route captures reminders, alerts and
-account mail even with a saved server; development keeps its saved-server preference. A paired test Cloud takes precedence for
-invitation, password_reset and email_change only when a fresh grant says enabled. Explicit off
-uses the normal SMTP/capture rule. One optional boolean in the existing private Cloud state
+retain their own sender. A saved server takes priority for invitations, password resets and
+email-change codes, including on development boxes. With no saved server, a paired test box can
+use Cloud for those messages when a fresh grant says enabled. Outside development, Demo uses
+Cloud when enabled and the practice inbox otherwise. One optional boolean in the existing private Cloud state
 remembers whether relay was enabled: null, unreadable or expired authority defers only after an
 enabled read; otherwise the normal route remains available. Confirmed local revoke remembers off. BOX-EMAIL-RELAY's
 local signed-client and worker checks are separate from live qualification: the joint test must
@@ -414,6 +414,9 @@ Cloud release. The box alerts also have a joint inbox check pending. The full-di
 direct mail, and the unusable-clock alert
 uses the box's own mail route. Setup can finish with a notice if the Cloud grant is unconfirmed.
 The hosted test release and live Google qualification remain open.
+The owner decided on 2026-11-21 that a paid Cloud plan sends every email the box would send, from
+the venue's own domain or a Waitron address. On 2026-11-22 the owner chose five free notice types
+in addition to invitations, resets and email-change codes. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
 The setup email test issue below remains separate open work.
 
 ## A box in first setup still sends a test email through a mail server whose login the caller holds (A987 review, 2026-10-22) — OPEN
