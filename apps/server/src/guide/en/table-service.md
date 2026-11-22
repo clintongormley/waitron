@@ -570,6 +570,9 @@ receiving bill does not name, the till asks first: choose the customer the merge
 to, or **Do not merge**. If you move the table's last bill away, the till stays at the table with a
 fresh empty bill.
 
+If unsent orders block **Join a table**, **Move guests**, **Move this bill** or **Merge bills**,
+choose **Take over draft** for the bills listed, then try the action again.
+
 If another till merges the bill on your screen into another bill, or moves it to another table,
 your screen switches to another of the table's bills and says so,
 such as **Bill 2 is no longer at this table. Now showing Bill 1.** Dishes you had added to the bill
@@ -705,8 +708,8 @@ move would leave the bill owing less than has been paid, the till says how much 
 **Refund** button for that amount. If the move is refused because a card payment or refund is
 still going through on the bill you chose, or because that bill was presented or paid in the
 meantime, the till names that bill before the reason, such as **Bill 2: This bill is closed**. If
-someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
-again to choose afresh.
+someone else has unsent dishes on either bill, choose **Take over draft** in the message.
+Choose **Review** to check your dishes and destination, then choose **Move** again.
 
 ## Split a table {#split-table}
 
@@ -750,7 +753,7 @@ such as **Bill 2 · Clint**, in some places with the party's name in front, such
 Clint**. To name the bill on screen, for example after the guest paying it, open the **⋮** menu,
 choose **Name this bill**, type up to 40 characters and choose **Save**. Empty the field to remove
 the name. **Name the party**, under **Whole table** in the same menu, names the whole party instead.
-If someone else has dishes on the bill that are not sent yet, take over their order first.
+If someone else has unsent dishes on that bill, choose **Take over draft** before you name it.
 
 To change the name the station sees, use **Name the party**. If station work is still outstanding,
 its printers receive a [name-change slip](kitchen-service.md#party-names).

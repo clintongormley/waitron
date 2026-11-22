@@ -627,20 +627,28 @@ export class DraftSync {
   }
 
   /** Takeover transfers only the saved outbox; a local candidate stays separate. */
-  async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
+  async takeOver(
+    draftId: string,
+    revision: number,
+    observed?: BillEditExpected,
+  ): Promise<TakeOverOutcome> {
     if (this.#commanding || this.#recoveryRequired) return "failed";
     const refusal = this.#billRefusal;
     if (refusal !== undefined) return refusal;
     const locked = this.store.sending;
     this.store.sending = true;
     try {
-      return await this.#takeOver(draftId, revision);
+      return await this.#takeOver(draftId, revision, observed);
     } finally {
       this.store.sending = locked;
     }
   }
 
-  async #takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
+  async #takeOver(
+    draftId: string,
+    revision: number,
+    observed: BillEditExpected | undefined,
+  ): Promise<TakeOverOutcome> {
     this.#cancelTimer();
     this.retainCandidate();
     await this.#queue;
@@ -656,7 +664,7 @@ export class DraftSync {
         draftId,
         {
           revision,
-          expectedEdit: this.expectedEdit!,
+          expectedEdit: observed ?? this.expectedEdit!,
           submissionId: crypto.randomUUID(),
         },
         {

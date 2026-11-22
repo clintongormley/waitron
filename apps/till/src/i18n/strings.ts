@@ -1598,6 +1598,14 @@ export const en = {
   "table.others_draft_unnamed": "An unsent order",
   "table.draft_taken_by": "Taken over by {name}",
   "table.draft_taken_by_unnamed": "Taken over by someone else",
+  "table.edit_conflicts_title": "Unsent orders",
+  "table.edit_conflicts":
+    "Unsent orders are holding up this change. Choose Take over draft on each bill below, then try again.",
+  "table.move_dish_conflicts":
+    "The dishes haven't moved. Take over the orders below, then review the move.",
+  "table.review_after_take_over": "Review",
+  "table.try_action_again": "Close this message, then try the action again.",
+  "table.conflict_review_bill": "Review this bill before trying again.",
   "table.take_over": "Take over draft",
   "table.take_over_title": "Take over {name}'s order?",
   "table.take_over_title_unnamed": "Take over this order?",
@@ -3835,6 +3843,14 @@ export const es: Record<StringKey, string> = {
   "table.others_draft_unnamed": "Un pedido sin enviar",
   "table.draft_taken_by": "Tomado por {name}",
   "table.draft_taken_by_unnamed": "Tomado por otra persona",
+  "table.edit_conflicts_title": "Pedidos sin enviar",
+  "table.edit_conflicts":
+    "Hay pedidos sin enviar que impiden el cambio. Elige Tomar el pedido en cada cuenta de abajo y vuelve a intentarlo.",
+  "table.move_dish_conflicts":
+    "Los platos siguen en su cuenta. Toma los pedidos de abajo y luego revisa el traslado.",
+  "table.review_after_take_over": "Revisar",
+  "table.try_action_again": "Cierra este aviso y vuelve a intentarlo.",
+  "table.conflict_review_bill": "Revisa esta cuenta antes de volver a intentarlo.",
   "table.take_over": "Tomar el pedido",
   "table.take_over_title": "¿Tomar el pedido de {name}?",
   "table.take_over_title_unnamed": "¿Tomar este pedido?",

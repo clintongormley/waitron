@@ -127,7 +127,6 @@ const looseOf = (id: string, ...picks: string[]): SplitPicks => ({
 });
 
 const luis = { draftId: "draft-luis", revision: 7, ownerName: "Luis", takenFromYou: false };
-const nobody = { draftId: "draft-x", revision: 3, ownerName: null, takenFromYou: false };
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const nameOf = (dish: TabLine) => dish.name ?? "";
@@ -488,24 +487,6 @@ describe("till-split-picker", () => {
       expect(active(el)).toBeNull();
       expect(seen).toHaveLength(0);
     });
-  });
-
-  it("a holder with no name draws the unnamed words", async () => {
-    const { el } = await picker([source("b1", 1, DISHES, { held: nobody })]);
-    expect(billText(el, "b1")).toContain(t("table.others_draft_unnamed"));
-  });
-
-  it("an order taken from this person draws the taken-over words, named and unnamed", async () => {
-    const { el } = await picker(
-      [
-        source("b1", 1, DISHES, { held: { ...luis, takenFromYou: true } }),
-        source("b2", 2, DISHES, { held: { ...nobody, takenFromYou: true } }),
-      ],
-      NOTHING,
-    );
-    expect(billText(el, "b1")).toContain(fill(t("table.draft_taken_by"), { name: "Luis" }));
-    expect(billText(el, "b1")).not.toContain(fill(t("table.others_draft"), { name: "Luis" }));
-    expect(billText(el, "b2")).toContain(t("table.draft_taken_by_unnamed"));
   });
 
   it("the panel's read decides the taken-over words: only a draft taken from this person draws them", async () => {

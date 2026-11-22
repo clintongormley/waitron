@@ -290,6 +290,9 @@ import {
 import "./widgets/unpaid-departure-dialog.js";
 import "./widgets/cancel-credit-dialog.js";
 import "./widgets/dead-ends-section.js";
+import { billEditConflictRows, type BillEditConflict } from "./state/bill-edit-conflicts.js";
+import "./widgets/bill-edit-conflicts-dialog.js";
+import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import type {
@@ -1442,6 +1445,7 @@ type MealEndAnswer = { press: MealEndPress; said: MealEndSaid; seen: boolean };
 
 interface TableRelocation {
   source: BillComposition;
+  destination: BillEditExpected[];
   expectedEdits: BillEditExpected[];
   target: SeatedRead;
 }
@@ -18263,7 +18267,8 @@ export class TillApp extends LitElement {
       result = await asked.source.api.moveGuests(party.id, toTableId, revisions);
     } catch (error) {
       if (!live()) return;
-      await this.#onRelocationRefusal(error, live);
+      if (!this.#offerBillEditConflicts(error, asked.source, asked))
+        await this.#onRelocationRefusal(error, live);
       return;
     }
     if (!live()) return;
@@ -18345,7 +18350,8 @@ export class TillApp extends LitElement {
           (error as { code?: string } | undefined)?.code === "station.no_replacement"
         )
           continue;
-        await this.#onRelocationRefusal(error, live);
+        if (!this.#offerBillEditConflicts(error, asked.source, asked))
+          await this.#onRelocationRefusal(error, live);
         return;
       }
     }
@@ -18763,7 +18769,8 @@ export class TillApp extends LitElement {
       result = await asked.source.api.joinTables(party.id, tableId, revisions);
     } catch (error) {
       if (!live()) return;
-      await this.#onRelocationRefusal(error, live);
+      if (!this.#offerBillEditConflicts(error, asked.source, asked))
+        await this.#onRelocationRefusal(error, live);
       return;
     }
     if (!live()) return;
@@ -19602,6 +19609,118 @@ export class TillApp extends LitElement {
     if (live()) await this.#refreshBillDraft();
   }
 
+  @state() private billEditConflicts:
+    (BillEditConflictsPrompt & { current: () => boolean }) | null = null;
+
+  #offerBillEditConflicts(
+    error: unknown,
+    asked: BillComposition,
+    relocation?: TableRelocation,
+    reviewMove?: () => void,
+  ): boolean {
+    const current = () => this.#finishCurrent(asked) && this.#orderScreenShown();
+    if (!current()) return false;
+    const label = (party: TableParty | undefined, billId: string) => {
+      const known = this.partyBills.find((bill) => bill.workingOrderId === billId);
+      const floor = party?.unsentDrafts.find((draft) => draft.billId === billId);
+      const bill = billLabel(known ?? { billNumber: floor?.billNumber ?? null, billName: null });
+      if (party === undefined) return bill;
+      const tables = tableLabels(this.tables, party.tableIds).names || party.displayName;
+      return tables === "" ? bill : `${tables} · ${bill}`;
+    };
+    const target = relocation?.target;
+    const rows = billEditConflictRows(error, [
+      {
+        partyId: asked.partyId,
+        edits: asked.expectedEdits,
+        label: (billId) => label(this.orderParty ?? undefined, billId),
+      },
+      ...(relocation === undefined || target == null || target.id === asked.partyId
+        ? []
+        : [
+            {
+              partyId: target.id,
+              edits: relocation.destination,
+              label: (billId: string) => label(partyOf(this.tables, target.id), billId),
+            },
+          ]),
+    ]);
+    if (rows.length === 0) return false;
+    const prompt = {
+      rows,
+      current,
+      moveDishes: reviewMove !== undefined,
+      takeOver: (row: BillEditConflict) => this.#takeOverConflict(asked, row, live),
+      close: (review: boolean) => {
+        if (this.billEditConflicts !== prompt) return;
+        this.billEditConflicts = null;
+        if (review && reviewMove !== undefined && current()) {
+          void this.#loadLinesAndBills().then(async ([, read]) => {
+            const balanced = await read.balance;
+            if (!current()) return;
+            if (read.bills !== null && balanced) reviewMove();
+            else this.errorKey = "table.reread_failed";
+          });
+        }
+      },
+    };
+    const live = () => this.billEditConflicts === prompt && current();
+    this.billEditConflicts = prompt;
+    return true;
+  }
+
+  async #takeOverConflict(
+    asked: BillComposition,
+    { partyId, edit }: BillEditConflict,
+    current: () => boolean,
+  ): Promise<string | TemplateResult | null> {
+    const { billId, draftId, draftRevision } = edit;
+    if (!current() || draftId === null || draftRevision === null)
+      return t("table.take_over_changed");
+    if (partyId !== asked.partyId) {
+      const limit = limited(TABLE_REQUEST_LIMIT_MS);
+      try {
+        await asked.api.takeOverDraft(
+          partyId,
+          draftId,
+          { revision: draftRevision, expectedEdit: edit, submissionId: crypto.randomUUID() },
+          { signal: limit.signal },
+        );
+        return null;
+      } catch (error) {
+        const code = (error as { code?: string } | undefined)?.code;
+        if (
+          code === "draft.taken_over" ||
+          code === "draft.out_of_date" ||
+          code === "draft.not_found" ||
+          code === "draft.already_submitted"
+        )
+          return t("table.take_over_changed");
+        return code === undefined ? t("table.error") : codeMessage(code);
+      } finally {
+        limit.done();
+      }
+    }
+    const sync = asked.sync;
+    if (sync === undefined) return t("table.take_over_changed");
+    if (!this.#billChoiceMatches(edit)) await this.#refreshBillDraft();
+    if (!current() || !this.#billChoiceMatches(edit)) return t("table.take_over_changed");
+    const outcome =
+      billId === sync.billId
+        ? await sync.takeOver(draftId, draftRevision, edit)
+        : await sync.takeOverOn(billId, draftId, draftRevision);
+    if (outcome === "taken" || (typeof outcome === "object" && "taken" in outcome)) return null;
+    if (typeof outcome !== "object") return t("table.error");
+    return errorText(
+      takeOverRefusalError(outcome.refused),
+      this.tableMenus,
+      this.tables,
+      undefined,
+      this.checkTimeOffered,
+      "panel",
+    );
+  }
+
   readonly #relocationPrompts = new WeakMap<object, Promise<TableRelocation | null>>();
 
   async #onRelocationOpen(event: Event): Promise<void> {
@@ -19652,7 +19771,7 @@ export class TillApp extends LitElement {
       this.errorKey = { code: "draft.out_of_date" };
       return null;
     }
-    return { source, expectedEdits, target };
+    return { source, destination, expectedEdits, target };
   }
 
   #billComposition(billIds: string[]): BillComposition | null {
@@ -19716,6 +19835,7 @@ export class TillApp extends LitElement {
       else await asked.api.mergeBills(asked.billId, fromBillId, revisions, choice);
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
+      if (this.#offerBillEditConflicts(error, asked)) return;
       if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
         const read = await this.#loadPartyBills();
         if (!this.#billCompositionCurrent(asked)) return;
@@ -19860,8 +19980,8 @@ export class TillApp extends LitElement {
     confirmed?: BillComposition,
     choice?: MergeInvoiceChoice,
   ): Promise<void> {
-    const { lineIds, toBillId } = (
-      event as CustomEvent<{ lineIds: string[]; toBillId: string | null }>
+    const { lineIds, toBillId, review } = (
+      event as CustomEvent<{ lineIds: string[]; toBillId: string | null; review?: () => void }>
     ).detail;
     if (this.activeTabId === undefined || lineIds.length === 0) return;
     const asked =
@@ -19897,6 +20017,7 @@ export class TillApp extends LitElement {
       }
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
+      if (this.#offerBillEditConflicts(error, asked, undefined, review)) return;
       if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
         // The server also refuses a choice sent with a move that no longer takes every dish, so the
         // question is asked again only if the fresh lines still empty the bill.
@@ -21496,6 +21617,7 @@ export class TillApp extends LitElement {
   #forgetParty(): void {
     this.differentPeopleConfirmation = null;
     this.mergeInvoiceAsk = null;
+    this.billEditConflicts = null;
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
@@ -24583,11 +24705,22 @@ export class TillApp extends LitElement {
       );
       return html`<p class="error" role="alert">${said}</p>`;
     };
+    const conflicts = this.billEditConflicts;
     const mealEndError = this.#mealEndErrorShown();
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
       ${this.#renderAllergyDialog()} ${this.#renderMoveAllergyDialog()}
+      ${
+        conflicts !== null && conflicts.current()
+          ? keyed(
+              conflicts,
+              html`<till-bill-edit-conflicts-dialog
+                .prompt=${conflicts}
+              ></till-bill-edit-conflicts-dialog>`,
+            )
+          : nothing
+      }
       ${this.#renderPaymentsPaused()}
       <div
         class="app"

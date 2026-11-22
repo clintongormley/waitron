@@ -146,7 +146,11 @@ const picked = (screen: TillTableOrderScreen, lineNo = 1) =>
   String(movePicks(screen).has(`line-${lineNo}`));
 const moveCommand = (...lineNos: number[]) => ({
   type: "move-dishes",
-  detail: { lineIds: lineNos.map((lineNo) => `line-${lineNo}`), toBillId: "other" },
+  detail: {
+    lineIds: lineNos.map((lineNo) => `line-${lineNo}`),
+    toBillId: "other",
+    review: expect.any(Function),
+  },
 });
 async function moveToOther(screen: TillTableOrderScreen) {
   await click(screen, '[data-move-dishes-to="other"]');
@@ -746,9 +750,7 @@ it("A803 move dishes unsaved: Move releases the protection before it sends", asy
     .shadowRoot!.querySelector("[data-move-dishes-confirm]")!
     .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   await screen.updateComplete;
-  expect(app.commands).toEqual([
-    { type: "move-dishes", detail: { lineIds: ["line-1"], toBillId: "other" } },
-  ]);
+  expect(app.commands).toEqual([moveCommand(1)]);
   expect(app.protectionAtSubmit).toEqual([false]);
   expect((await question(app)).open).toBe(false);
 });

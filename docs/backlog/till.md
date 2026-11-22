@@ -1411,16 +1411,11 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Bundle: Take over offered where it is needed
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M.
 
-- **A1349. Take-over rows exist only in Split a table (left open by A803 slice 4c).** The rows that
-  let a waiter take over someone else's unsent dishes on a bill not on screen (A773 §6) are drawn by
-  `widgets/split-picker.ts` alone; Join tables and the moves still read no `conflicts` from
-  `draft.taken_over`.
-- **A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to
-  someone else. Reload the table to see it" (seen in A803 slice 4a's LOOK).** Decide the words, and
-  whether the refusal offers Take over in place.
-  [Detail](till.md#a1289-moving-dishes-onto-a-bill-with-someone-elses-unsent-dish-says-this-order-belongs-to-someone-else-reload-the-table-to-see-it)
+- **A1349. Take-over rows on the floor and counter (left open by A803 slice 4c).** Offer
+  Take over when Join with or drag-to-join is blocked on the floor, or when Move to table
+  from Held orders is blocked by another person's unsent order.
 
 ## Bundle: Part-quantity handling of whole dishes
 
@@ -2868,7 +2863,7 @@ _Modules, data and code health_. Slice 2, named bills that keep their number at 
 landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-has landed (#2372); it leaves open A1287, A1289–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
+has landed (#2372); it leaves open A1287, A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, not
 scheduled for the foreseeable future (owner, 2026-11-17). One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
@@ -2907,15 +2902,6 @@ bill (`#otherBills` answers none without a party, `apps/till/src/screens/till-ta
 and `#onMergeBills` returns without a word when `#billComposition` answers `null`, which it does
 with no party (`apps/till/src/till-app.ts`). By reading, not run. Slice 4a took Split by item and
 Transfer items out of that section for the same reason. Decide whether Merge bills goes too.
-
-## A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to someone else. Reload the table to see it"
-
-**A1289. Moving dishes onto a bill with someone else's unsent dish says "This order belongs to
-someone else. Reload the table to see it" (seen in A803 slice 4a's LOOK).** It names neither the
-person nor the bill, reloading does not help, and Take over sits on the other bill, where the
-waiter has to find it. The panel offered that bill with no sign of the unsent dish. The words are
-the approved `draft.taken_over` text the plan chose (D9); after Take over the move works. Decide
-the words, and whether the refusal offers Take over in place. Pictures `s7-*`, `s8-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
 
 ## A1290. The table screen's action panel can put Back and its action half below the window, and "+ New bill" touches Back
 

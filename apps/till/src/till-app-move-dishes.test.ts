@@ -22,6 +22,7 @@ import {
   table7,
   tableOrder,
   till,
+  server,
 } from "../test/allergy-app-fixture.js";
 
 const locale = currentLocale();
@@ -911,6 +912,95 @@ describe("A803 move dishes app:", () => {
       expect(bannerText(el)).not.toContain(t("table.error"));
     },
   );
+
+  it("restores the dish and destination after taking over a bill and waits for another Move", async () => {
+    server.bills.add("bill-1");
+    server.drafts.push({
+      id: "held-draft",
+      partyId: "v1",
+      billId: "bill-1",
+      ownerId: "luis",
+      ownerName: "Luis",
+      revision: 2,
+      takenOverFrom: null,
+      lines: [
+        {
+          id: "unsent-dish",
+          menuItemId: "offer-cana",
+          menuVersionId: null,
+          variantId: null,
+          sourceLineId: null,
+          source: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          unavailable: false,
+        },
+      ],
+    });
+    const conflict = server.edit("bill-1");
+    const moveDishes = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "draft.taken_over",
+        status: 409,
+        billId: conflict.billId,
+        draftId: conflict.draftId,
+        ownerId: conflict.editorId,
+        ownerName: conflict.editorName,
+        edit: conflict,
+        conflicts: [conflict],
+      })
+      .mockResolvedValue({ billId: "bill-1" });
+    const { el, order } = await open({ moveDishes });
+    const root = order.shadowRoot!;
+    const menu = () => root.querySelector<HTMLElement>("[data-table-menu]")!;
+    const picker = () => root.querySelector<TillPortionPicker>("till-portion-picker");
+    const move = () => root.querySelector<HTMLElement>("[data-move-dishes-confirm]")!;
+    await userEvent.click(menu());
+    await userEvent.click(menu().querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+    await vi.waitFor(() => expect(picker()).not.toBeNull());
+    await userEvent.click(
+      picker()!.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!,
+    );
+    await userEvent.click(root.querySelector<HTMLElement>('[data-move-dishes-to="bill-1"]')!);
+    await userEvent.click(move());
+
+    const dialog = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    const controls = dialog()!.shadowRoot!;
+    expect(controls.textContent).toContain("Luis");
+    await userEvent.click(controls.querySelector<HTMLElement>('[data-split-take-over="bill-1"]')!);
+    await userEvent.click(controls.querySelector<HTMLElement>("[data-confirm-take-over]")!);
+    const review = () => controls.querySelector<HTMLElement>("[data-finish-conflicts]");
+    await vi.waitFor(() => expect(review()).not.toBeNull());
+    await userEvent.click(review()!);
+
+    await vi.waitFor(() => expect(picker()?.picks).toEqual(new Set(["line-1"])));
+    expect(root.querySelector('[data-move-dishes-to="bill-1"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(moveDishes).toHaveBeenCalledTimes(1);
+    await userEvent.click(move());
+    await vi.waitFor(() => expect(moveDishes).toHaveBeenCalledTimes(2));
+    expect(moveDishes.mock.calls[1]).toEqual([
+      "wo-4",
+      ["line-1"],
+      "bill-1",
+      expect.objectContaining({
+        expectedEdits: [
+          expect.objectContaining({ billId: "bill-1", editorVersion: conflict.editorVersion + 1 }),
+          sourceEdit,
+        ],
+      }),
+    ]);
+  });
 
   it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes… again starts with nothing picked over the re-read balance", async () => {
     const getBillBalance = vi

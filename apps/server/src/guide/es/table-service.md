@@ -613,6 +613,9 @@ cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a q
 factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
 la mesa con una cuenta nueva y vacía.
 
+Si hay pedidos sin enviar que impiden **Unir una mesa**, **Mover clientes**, **Mover esta cuenta**
+o **Juntar cuentas**, elige **Tomar el pedido** en las cuentas indicadas y vuelve a intentarlo.
+
 Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla
 pasa a otra de las cuentas de la mesa y lo indica, por
 ejemplo **Cuenta 2 ya no está en esta mesa. Ahora se muestra Cuenta 1.** Los platos que habías
@@ -754,8 +757,9 @@ mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, 
 y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
 elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
 o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
-cerrada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
-pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
+cerrada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, elige
+**Tomar el pedido** en el aviso. Elige **Revisar** para comprobar los platos y la cuenta de
+destino y vuelve a elegir **Mover**.
 
 ## Separar una mesa {#split-table}
 
@@ -801,8 +805,8 @@ le pongas, como **Cuenta 2 · Clint**, y en algunos sitios con el nombre de los 
 como **4 · Cuenta 2 · Clint**. Para poner nombre a la cuenta en pantalla, por ejemplo el del cliente
 que la paga, abre el menú **⋮**, elige **Poner nombre a esta cuenta**, escribe hasta 40 caracteres y
 elige **Guardar**. Vacía el campo para quitar el nombre. **Poner nombre a los clientes**, en **Toda
-la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en la
-cuenta, toma primero su pedido.
+la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en
+esa cuenta, elige **Tomar el pedido** antes de ponerle nombre.
 
 Para cambiar el nombre que ve la estación, usa **Poner nombre a los clientes**. Si queda trabajo
 pendiente en la estación, sus impresoras reciben un [ticket de cambio de nombre](kitchen-service.md#party-names).

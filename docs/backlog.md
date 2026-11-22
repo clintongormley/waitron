@@ -675,7 +675,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
 
-- **Take over offered where it is needed** (bundle of 2, size M). Holds A1349, A1289. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
+- **Take over offered where it is needed** (bundle of 1, size M). Holds A1349. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
 
 
 - **Table screen panels that do not fit** (bundle of 4, size S). Holds A1359, A1265, A1290, A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
