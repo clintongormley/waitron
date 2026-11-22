@@ -152,10 +152,6 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
   device/printer deletion fixture text.
   Low priority.
-- **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
-  treats an inherited property such as `constructor` as a language entry. Qualify the selection path with country-pack
-  choices carrying such a code before changing it. Its reachability through an installed pack
-  has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The shared bill and order venues use Anna, Administrator and Sophia for staff samples.
   The shared party venue uses Administrator, including station authorizer readbacks.
