@@ -244,6 +244,28 @@ export function seatsAtFreeTable(action: DropAction): boolean {
   return action.kind === "seat" || (action.kind === "join" && action.other === null);
 }
 
+/** The added tables that need to be ready before the drop can seat guests. */
+export function dropSeatingRefusal(
+  action: DropAction,
+  zoneTables: readonly TableState[],
+): string | undefined {
+  let added: readonly TableState[];
+  if (action.kind === "seat") {
+    added = zoneTables.filter((table) => action.withTableIds.includes(table.id));
+  } else if (action.kind === "join" && action.other === null) {
+    const free = zoneTables.find((table) => table.id === action.tableId)!;
+    added = mergeMembersOf(zoneTables, free);
+  } else {
+    return undefined;
+  }
+  if (added.some((table) => table.condition === "needs_clearing"))
+    return codeMessage("table.needs_clearing");
+  const moving = added.find(needsMovingToday);
+  return moving === undefined
+    ? undefined
+    : tableSentence(moving, "floor.needs_moving_first", "floor.needs_moving_first_named");
+}
+
 /** The placed member whose centre is nearest `point`; the first on a tie. */
 function nearestMember(
   members: readonly TableState[],
@@ -261,7 +283,7 @@ function nearestMember(
   return best;
 }
 
-/** The placement the floor draws until the next read (slice 4 decision 14): the moved group's members, or the merged table. */
+/** Positions previewed for a moved group or a table dropped against another. */
 export function pendingPlaces(
   zoneTables: readonly TableState[],
   action: DropAction,

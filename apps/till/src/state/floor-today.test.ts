@@ -11,6 +11,7 @@ import type {
 import {
   carryRevisions,
   dropAction,
+  dropSeatingRefusal,
   groupName,
   groupSplitOf,
   normalGroupName,
@@ -368,6 +369,43 @@ describe("seatsAtFreeTable", () => {
     expect(seatsAtFreeTable({ kind: "move", tableId: "t", x: 1, y: 2 })).toBe(false);
     expect(seatsAtFreeTable({ kind: "say", message: "no" })).toBe(false);
     expect(seatsAtFreeTable({ kind: "none" })).toBe(false);
+  });
+});
+
+describe("drop seating", () => {
+  const clearing = table("b", "2", { condition: "needs_clearing" });
+  const moving = table("b", "2", { today: today({ needsMoving: true }) });
+  const fixed = table("a", "1", { today: today({ fixed: true }) });
+  const clearFirst = "That table needs clearing first. Mark it cleared, then try again";
+  const moveFirst = "Table 2 needs moving. Mark it moved first.";
+
+  it.each([
+    { blocked: clearing, reason: clearFirst, needs: "clearing" },
+    { blocked: moving, reason: moveFirst, needs: "moving" },
+  ])("refuses an added table needing $needs", ({ blocked, reason }) => {
+    const tables = [fixed, blocked];
+    const drop = dropAction(tables, { tableId: "a", targetId: "b", x: 6, y: 0 });
+    expect(dropSeatingRefusal(drop, tables)).toBe(reason);
+  });
+
+  it("checks a blocked member of the group even when the drop is on a ready member", () => {
+    const first = table("b", "2", { today: today({ joinId: "g" }) });
+    const blocked = table("c", "3", {
+      condition: "needs_clearing",
+      today: today({ joinId: "g", placement: place(4, 0) }),
+    });
+    const tables = [fixed, first, blocked];
+    const drop = dropAction(tables, { tableId: "a", targetId: "b", x: 6, y: 0 });
+    expect(dropSeatingRefusal(drop, tables)).toBe(clearFirst);
+  });
+
+  it.each([
+    { tableId: "a", targetId: "b" },
+    { tableId: "b", targetId: "a" },
+  ])("checks the free table when $tableId is dropped on $targetId", ({ tableId, targetId }) => {
+    const tables = [table("a", "1", seatedBy(party("p", ["a"]))), moving];
+    const drop = dropAction(tables, { tableId, targetId, x: 6, y: 0 });
+    expect(dropSeatingRefusal(drop, tables)).toBe(moveFirst);
   });
 });
 

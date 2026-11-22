@@ -670,6 +670,33 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     });
   });
 
+  it("a fixed table dropped onto one needing clearing does not offer seats", async () => {
+    const api = stubApi();
+    const dirty = { ...planned("t2", 20), condition: "needs_clearing" as const };
+    const el = await mount([planned("t1", 2, { fixed: true }), dirty], api);
+    el.canChangeToday = true;
+    await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+    await settle(el);
+
+    expect(refusal(el)).toBe("That table needs clearing first. Mark it cleared, then try again");
+    expect(el.shadowRoot!.querySelector("till-seat-dialog, till-today-seats-dialog")).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
+  it("a party dropped onto a free table needing moving does not offer seats", async () => {
+    const api = stubApi();
+    const el = await mount(
+      [planned("t1", 2, {}, "1", P), planned("t2", 20, { needsMoving: true })],
+      api,
+    );
+    await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+    await settle(el);
+
+    expect(refusal(el)).toBe("Table 2 needs moving. Mark it moved first.");
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
   it("a fixed table needing clearing dropped on a free one offers to clear it", async () => {
     const api = stubApi();
     const dirty = {
