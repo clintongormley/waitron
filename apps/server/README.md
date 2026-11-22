@@ -837,12 +837,10 @@ The ones worth grepping for:
 - **`reconcile.complete`** (`info`) — the reconcile equivalent. `ran` is broken down by outcome —
   `{ succeeded, failed, parked }` — rather than a bare total, plus `deferred`, `beyondHorizon`,
   `skipped` (matching the body above) and the duty's own `nextDueAt`.
-- **`resolve_pending.failed`** (`warn`) — `{ error }`, plus `provider` when one provider's pass
-  threw. This node's card sweep failed: listing the card providers threw, working out whose
-  payments this box's sweep may resolve threw, or one provider's `resolvePending` threw. The sweep
-  is deliberately NOT health-tracked (`withPendingSweep`, `src/boot.ts`), so this line is the SOLE
-  operator signal of a stuck card sweep — grep it. A card-settlement backstop, not a fiscal-legal or
-  process-liveness signal; it does not flip `/health`.
+- **`resolve_pending.failed`** (`warn`) — `{ error }`, plus `provider` when one provider's check
+  threw. These entries cover failures to list the providers, identify this box's payments or check a
+  provider's pending payments. The card follow-up job reports a failed pass as `job.failed`. A
+  lasting failure raises a `job.failing` box alert. This job does not change the `/health` result.
 - **`resolve_pending.complete`** carries `{ captured, failed, incidentsRaised, nextDueAt }`.
   This box logs an empty card sweep at `debug`. Pending work, captures, failures and incidents
   appear at `info`. The incidents are `payment.pending_outcome_unactionable` and

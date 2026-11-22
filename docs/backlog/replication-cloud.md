@@ -88,10 +88,6 @@ Left by Slice 2:
 - A streamed download leaves the gate's count when its response returns, before its body ends.
 - The close-deadline log does not name the step still running.
 - A drain stopped early reads as a successful pass to `/health`'s last-success time.
-- Boot passes `pendingCardController.signal` to both `pendingCardPass` and its loop; the compiler
-  requires a signal there, but nothing checks it is the loop's own.
-- `withPendingSweep` never reads the stop signal itself: it hands it to each provider's
-  `resolvePending` and still calls the remaining providers after it is raised.
 - The four new server-starting test files (`boot.restricted*.test.ts`,
   `handover-stepdown.real.test.ts`, `handover-stepdown.crash.test.ts`) each rebuild the boot
   setup by hand; three carry their own clock-watch mock (`boot.restricted-quiet`,

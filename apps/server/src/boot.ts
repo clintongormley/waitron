@@ -4652,6 +4652,7 @@ async function bootServer(
             attendance: attendanceRecorder,
             clockUnconfirmed: startClockHolds,
             stopSignal,
+            log,
           }),
         startRefundResolvers: () => startTenderRefundResolvers(db),
         stopRefundResolvers: () => stopTenderRefundResolvers(db),

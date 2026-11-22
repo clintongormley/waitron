@@ -162,6 +162,29 @@ describe("card follow-up on the job runner", () => {
     expect(recoverRefunds).not.toHaveBeenCalled();
   });
 
+  it("keeps refund recovery and its resolvers off where the box may not recover refunds", async () => {
+    const recoverRefunds = vi.fn(async () => ({ pending: 0, nextDueAt: null }));
+    const startRefundResolvers = vi.fn();
+    const stopRefundResolvers = vi.fn(async () => []);
+    runner.add(
+      testCardFollowUp(
+        {
+          recoverRefunds,
+          startRefundResolvers,
+          stopRefundResolvers,
+        },
+        { recoversRefunds: false, log },
+      ),
+    );
+
+    await advance();
+    expect(runner.views()["card.follow_up"]?.lastOkAt).toBe("2026-11-22T18:00:00.000Z");
+    await runner.stopJobs();
+    expect(recoverRefunds).not.toHaveBeenCalled();
+    expect(startRefundResolvers).not.toHaveBeenCalled();
+    expect(stopRefundResolvers).not.toHaveBeenCalled();
+  });
+
   it("starts shutting down request-owned refund resolvers even before the first sweep returns", async () => {
     let release = () => {};
     const stopRefundResolvers = vi.fn(async () => []);

@@ -1,6 +1,7 @@
 import { and, eq, or, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, withTransaction } from "@waitron/db";
+import { codeOf } from "@waitron/server-kit";
 import { raisePendingRefundUnresolved } from "./bill-refund-alerts.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import { recoverCardRefund, refundsPaused, tenderRefundIsLive } from "./tender-refund-sends.js";
@@ -110,12 +111,20 @@ export async function recoverTenderRefunds(
       return failures;
     }),
   );
-  const errors = [
-    ...results.flatMap((result) =>
-      result.status === "rejected" ? [result.reason as unknown] : result.value,
-    ),
-    ...(await sweep(true)),
-  ];
+  const errors: unknown[] = [];
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      errors.push(result.reason as unknown);
+      continue;
+    }
+    for (const error of result.value) {
+      deps.log?.("error", "tender_refund.recovery_failed", {
+        refundId: batch[index]!.id,
+        errorCode: codeOf(error),
+      });
+    }
+  }
+  errors.push(...(await sweep(true)));
   if (errors.length > 0) throw new AggregateError(errors, FAILED);
   const [summary] = await deps.db
     .select({
