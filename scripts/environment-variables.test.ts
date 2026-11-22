@@ -24,6 +24,8 @@ it("rewrites only tracked TypeScript reads and makes no further changes on a sec
     execFileSync("git", args, { cwd: root, env, encoding: "utf8" });
   const source = "apps/server/src/config.ts";
   const test = "apps/server/src/config.test.ts";
+  const sharedSource = "packages/shared/src/producer.ts";
+  const unsupportedSource = "packages/standalone/src/config.ts";
   const contents = [
     "const byDot = process.env.WAITRON_ENV;",
     'const byKey = env["WAITRON_HTTP_PORT"];',
@@ -39,9 +41,16 @@ it("rewrites only tracked TypeScript reads and makes no further changes on a sec
   );
   writeFileSync(join(root, source), contents);
   writeFileSync(join(root, test), contents);
+  mkdirSync(join(root, "packages/shared/src"), { recursive: true });
+  writeFileSync(join(root, "packages/shared/package.json"), "{}");
+  writeFileSync(join(root, sharedSource), "const value = process.env.WAITRON_ENV;\n");
   git("init", "--quiet");
   git("add", ".");
-  expect(run(root)).toEqual([source]);
+  expect(run(root)).toEqual([source, sharedSource]);
+  expect(readFileSync(join(root, sharedSource), "utf8")).toBe(
+    'import { readVariable } from "./environment-variables.js";\n' +
+      'const value = readVariable(process.env, "WAITRON_ENV");\n',
+  );
   const rewritten = readFileSync(join(root, source), "utf8");
   expect(rewritten).toBe(
     'import { readVariable } from "@waitron/shared";\n' +
@@ -55,6 +64,14 @@ it("rewrites only tracked TypeScript reads and makes no further changes on a sec
   expect(readFileSync(join(root, test), "utf8")).toBe(contents);
   expect(run(root)).toEqual([]);
   expect(readFileSync(join(root, source), "utf8")).toBe(rewritten);
+  mkdirSync(join(root, "packages/standalone/src"), { recursive: true });
+  writeFileSync(join(root, "packages/standalone/package.json"), "{}");
+  writeFileSync(join(root, unsupportedSource), contents);
+  writeFileSync(join(root, source), contents);
+  git("add", ".");
+  expect(() => run(root)).toThrow("packages/standalone has no @waitron/shared dependency");
+  expect(readFileSync(join(root, source), "utf8")).toBe(contents);
+  expect(readFileSync(join(root, unsupportedSource), "utf8")).toBe(contents);
 });
 
 const CODE_NAMES = new Set([
