@@ -154,6 +154,26 @@ describe("SetupApi", () => {
     });
   });
 
+  it.each([
+    [65_000, 65_000],
+    [0, 0],
+    [-4_000, null],
+    [Number.MAX_VALUE, null],
+    [1.5, null],
+    ["65000", null],
+    [null, null],
+    [undefined, null],
+  ])("mainServer reads a silentForMs of %j as %j", async (silentForMs, expected) => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ mainUrl: "https://main.example", silentForMs }));
+    const api = new SetupApi("", fetchImpl);
+    expect(await api.mainServer()).toEqual({
+      mainUrl: "https://main.example",
+      silentForMs: expected,
+    });
+  });
+
   it("getStatus GETs /setup-api/status with credentials and returns the parsed status", async () => {
     const status = { provisioned: false, environment: "preproduction", needs: ["venue"] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(status));

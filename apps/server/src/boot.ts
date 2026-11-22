@@ -2406,7 +2406,12 @@ async function bootServer(
     app.use("*", gate);
     staffPageGates.push(gate);
   }
-  if (isMirror) mountMainServerApi(app, { readMembership: () => readNodeMembership(db) }, log);
+  if (isMirror)
+    mountMainServerApi(
+      app,
+      { readMembership: () => readNodeMembership(db), main: () => mainSilence?.state() },
+      log,
+    );
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
   // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for

@@ -9,6 +9,7 @@ import {
 import type { DeploymentEnvironment } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { MainSilenceState } from "./main-silence-watch.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
 
 export interface NodeApiDeps {
@@ -74,18 +75,29 @@ export function mainServerUrl(held: SignedMembershipDocument | null): string | n
 /**
  * `GET /api/node/main` — mounted on a spare only: the address its switch page tries before offering
  * the switch, so a main server the spare cannot reach but the person's device can is not switched
- * away from.
+ * away from. It also answers `silentForMs`: milliseconds, by the spare's clock, since the first of an
+ * unbroken run of the watch's asks that found the main box unreachable, or `null` while no watch
+ * runs or its last ask did not find it unreachable.
  */
 export function mountMainServerApi(
   app: Hono,
-  deps: Pick<NodeApiDeps, "readMembership">,
+  deps: Pick<NodeApiDeps, "readMembership"> & {
+    /** The spare's watch of the main box; `undefined` while no watch runs. */
+    main?: () => MainSilenceState | undefined;
+    now?: () => number;
+  },
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "node.failed");
   app.get("/api/node/main", (c) =>
     run(c, log, async () => {
       c.header("cache-control", "no-store");
-      return c.json({ mainUrl: mainServerUrl(await deps.readMembership()) });
+      const since = deps.main?.()?.silentSinceMs ?? null;
+      return c.json({
+        mainUrl: mainServerUrl(await deps.readMembership()),
+        // Measured here so the page never compares its own clock with the box's.
+        silentForMs: since === null ? null : (deps.now ?? Date.now)() - since,
+      });
     }),
   );
 }

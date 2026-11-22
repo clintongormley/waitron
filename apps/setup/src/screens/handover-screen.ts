@@ -11,11 +11,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import {
   startAuthentication,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import { baseStyles, pageTitleStyles, focusFirstInvalid } from "@waitron/ui";
+import { formatDuration } from "@waitron/shared";
 import {
   SetupApi,
   type HandoverStatus,
@@ -73,11 +75,56 @@ export class SetupHandoverScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     css`
+      /* Keeps the card's margins inside the page rather than collapsing into the body's. */
       :host {
-        display: block;
-        max-width: 70ch;
-        padding: var(--wt-space-5);
+        display: flow-root;
         overflow-wrap: anywhere;
+      }
+      main {
+        box-sizing: border-box;
+        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
+        margin: var(--wt-space-5) auto;
+        padding: var(--wt-space-5) var(--wt-modal-inline-padding);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
+      }
+      .choices {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        margin-block: var(--wt-space-4);
+      }
+      .choices wt-button {
+        display: block;
+      }
+      /* A link that goes back looks like the button beside it: leaving is navigation. */
+      a.button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+        text-decoration: none;
+        text-align: center;
+      }
+      a.button:not(.primary):hover {
+        border-color: var(--wt-color-primary-text);
+      }
+      a.button.primary {
+        border-color: transparent;
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      a.button.primary:hover {
+        background: var(--wt-color-primary-hover);
       }
       wt-input,
       wt-textarea,
@@ -103,7 +150,8 @@ export class SetupHandoverScreen extends LitElement {
       h2 {
         font-size: var(--wt-font-size-lg);
       }
-      a {
+      a,
+      summary {
         color: var(--wt-color-primary-text);
       }
     `,
@@ -147,7 +195,12 @@ export class SetupHandoverScreen extends LitElement {
   @state() private declaredAtMs?: number;
   /** The device's own check of the main server, before the switch is offered (4d plan, D5). */
   @state() private mainCheck: "checking" | { serversUrl: string } | "clear" = "clear";
+  /** Pressed Start switching on the page that explains the switch, since the last check. */
+  @state() private switchStarted = false;
   #mainCheckController?: AbortController;
+  /** How long the spare had found the main box silent, and when this page read it. */
+  #silentFor?: { ms: number; readAtMs: number };
+  #silentTicker?: ReturnType<typeof setInterval>;
   #pendingDeclaration?: Omit<EmergencyHandoverDeclaration, "signIn">;
   get #isEmergency(): boolean {
     return this.emergency || this.status?.scenario === "emergency";
@@ -167,6 +220,16 @@ export class SetupHandoverScreen extends LitElement {
   }
   get #leaveHref(): string {
     return (this.#isEmergency && this.#back) || "/";
+  }
+  /** Before a switch is declared, leaving names the till when there is one to go back to. */
+  get #leaveLabel(): StringKey {
+    return this.#isEmergency && this.#back
+      ? "handover.emergency.leave_till"
+      : "handover.emergency.leave";
+  }
+  /** The main box is silent and the person has not yet chosen to switch. */
+  get #explaining(): boolean {
+    return this.#checksMain && this.mainCheck === "clear" && !this.switchStarted && !this.#declared;
   }
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
@@ -190,7 +253,7 @@ export class SetupHandoverScreen extends LitElement {
   }
   #leaveLink() {
     return html`<a href=${this.#leaveHref}
-      >${t(this.#declared ? "handover.emergency.leave_saved" : "handover.emergency.leave")}</a
+      >${t(this.#declared ? "handover.emergency.leave_saved" : this.#leaveLabel)}</a
     >`;
   }
   @state() private status?: HandoverStatus;
@@ -250,6 +313,9 @@ export class SetupHandoverScreen extends LitElement {
   #leavePage = (): void => {
     this.#controller?.abort();
     clearTimeout(this.#timer);
+    this.#mainCheckController?.abort();
+    this.#mainCheckController = undefined;
+    this.#stopSilentTicker();
     this.#resetSelection();
     this.password = this.code = "";
     this.#assertion = undefined;
@@ -293,18 +359,42 @@ export class SetupHandoverScreen extends LitElement {
   }
   #startMainCheck(): void {
     this.mainCheck = "checking";
-    void this.#checkMain();
+    this.switchStarted = false;
+    void this.#checkMain().then((silent) => {
+      if (silent && this.#explaining && this.#silentFor && this.isConnected)
+        this.#startSilentTicker();
+    });
+  }
+  /** Redraws the count of the main box's silence once a second while the explanation shows. */
+  #startSilentTicker(): void {
+    this.#stopSilentTicker();
+    this.#silentTicker = setInterval(() => {
+      if (this.#explaining) this.requestUpdate();
+      else this.#stopSilentTicker();
+    }, 1000);
+  }
+  #stopSilentTicker(): void {
+    clearInterval(this.#silentTicker);
+    this.#silentTicker = undefined;
+  }
+  async #startSwitching(): Promise<void> {
+    this.switchStarted = true;
+    this.#stopSilentTicker();
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus();
   }
   /**
-   * True when the main server stayed silent and no later check replaced this one. Any answer at all
-   * means the main server is up; a failure or the deadline lets the page go on: a device that cannot
-   * trust or resolve the main server always lands here, and the spare's own check still guards every
-   * step.
+   * True when the main server stayed silent and no later check, or leaving the page, replaced this
+   * one. Any answer at all counts as the main server answering; a failure or the deadline lets the
+   * page go on: a device that cannot trust or resolve the main server always lands here, and the
+   * spare's own check still guards every step. When the result changes the page, focus moves to its
+   * heading.
    */
   async #checkMain(): Promise<boolean> {
     this.#mainCheckController?.abort();
     const controller = new AbortController();
     this.#mainCheckController = controller;
+    this.#silentFor = undefined;
     let limit: ReturnType<typeof setTimeout> | undefined;
     const serversUrl = await Promise.race([
       this.#askMain(controller.signal),
@@ -315,13 +405,21 @@ export class SetupHandoverScreen extends LitElement {
     clearTimeout(limit);
     controller.abort();
     if (this.#mainCheckController !== controller) return false;
+    const changesPage = this.mainCheck === "checking" || serversUrl !== undefined;
     this.mainCheck = serversUrl === undefined ? "clear" : { serversUrl };
+    if (changesPage)
+      void this.updateComplete.then(() => {
+        if (this.isConnected && this.#mainCheckController === controller)
+          this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus();
+      });
     return serversUrl === undefined;
   }
   /** The main server's Servers page when it answers; never rejects. */
   async #askMain(signal: AbortSignal): Promise<string | undefined> {
     try {
-      const { mainUrl } = await this.api.mainServer(signal);
+      const { mainUrl, silentForMs } = await this.api.mainServer(signal);
+      if (!signal.aborted && silentForMs !== null)
+        this.#silentFor = { ms: silentForMs, readAtMs: performance.now() };
       if (typeof mainUrl !== "string" || mainUrl === "") return undefined;
       const serversUrl = new URL("/servers", mainUrl).href;
       await this.api.probeMain(mainUrl, signal);
@@ -332,18 +430,59 @@ export class SetupHandoverScreen extends LitElement {
   }
   #mainCheckContent(check: "checking" | { serversUrl: string }) {
     if (check === "checking")
-      return html`<p role="status">${t("handover.emergency.main_checking")}</p>`;
-    return html`<p role="alert">${t("handover.emergency.main_answering")}</p>
-      <p><a href=${check.serversUrl}>${check.serversUrl}</a></p>
-      <wt-form-actions>
+      return html`<p>${t("handover.emergency.spare_intro")}</p>
+        <p role="status">
+          <wt-spinner decorative size="sm"></wt-spinner> ${t("handover.emergency.main_checking")}
+        </p>`;
+    return html`<p>${t("handover.emergency.main_answering_body")}</p>
+      <div class="choices">
+        <a class="button primary" data-test="go-back" href=${this.#leaveHref}
+          >${t(this.#leaveLabel)}</a
+        >
+      </div>
+      <details>
+        <summary>${t("handover.emergency.still_move")}</summary>
+        <p>${t("handover.emergency.still_move_body")}</p>
+        <p><a href=${check.serversUrl}>${t("handover.emergency.main_servers")}</a></p>
         <wt-button
           data-test="main-check-again"
-          variant="primary"
-          @click=${() => this.#startMainCheck()}
+          variant="secondary"
+          @click=${() => {
+            this.#startMainCheck();
+            void this.updateComplete.then(() =>
+              this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus(),
+            );
+          }}
           >${t("handover.emergency.main_check_again")}</wt-button
         >
-      </wt-form-actions>
-      <p>${this.#leaveLink()}</p>`;
+      </details>`;
+  }
+  #explanation() {
+    const silent = this.#silentFor;
+    const duration =
+      silent && formatDuration(silent.ms + performance.now() - silent.readAtMs, currentLocale());
+    return html`<p>
+        ${duration ? html`${format("handover.emergency.silent_for", { duration })} ` : nothing}${t("handover.emergency.silent_copy")}
+      </p>
+      <h2>${t("handover.emergency.before_heading")}</h2>
+      <p>${t("handover.emergency.before_body")}</p>
+      <h2>${t("handover.emergency.what_heading")}</h2>
+      <p>${t("handover.emergency.what_body")}</p>
+      <div class="choices">
+        <wt-button
+          data-test="start-switching"
+          variant="primary"
+          @click=${() => void this.#startSwitching()}
+          >${t("handover.emergency.start")}</wt-button
+        >
+        <a class="button" data-test="go-back" href=${this.#leaveHref}>${t(this.#leaveLabel)}</a>
+      </div>`;
+  }
+  get #heading(): StringKey {
+    if (this.restarting || activated(this.status) || closed(this.status)) return "handover.heading";
+    if (this.mainCheck === "checking") return "handover.emergency.checking_heading";
+    if (this.mainCheck !== "clear") return "handover.emergency.main_answering";
+    return this.#explaining ? "handover.emergency.silent_heading" : "handover.heading";
   }
   #resetSelection(): void {
     this.entry?.clear();
@@ -1194,6 +1333,7 @@ export class SetupHandoverScreen extends LitElement {
         ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
       </p>`;
     if (this.mainCheck !== "clear") return this.#mainCheckContent(this.mainCheck);
+    if (this.#explaining) return this.#explanation();
     if (
       this.#isEmergency ||
       (status?.role === "destination" && status.copyPlaced && status.scenario === "controlled")
@@ -1213,7 +1353,7 @@ export class SetupHandoverScreen extends LitElement {
         if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
-      <h1 tabindex="-1">${t("handover.heading")}</h1>
+      <h1 tabindex="-1">${t(this.#heading)}</h1>
       ${this.#content()}
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : status.waitingReason === "handover.copy_check_failed" ? "handover.check_failed" : "handover.wait")}</p>` : nothing}
       ${status?.waitingReason === "handover.copy_check_failed" ? html`<p><a href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/servers#emergency`}>${t("handover.check_help")}</a></p>` : nothing}

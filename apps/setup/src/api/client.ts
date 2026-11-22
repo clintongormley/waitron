@@ -394,8 +394,13 @@ export class SetupApi {
     return ((await response.json()) as { body: HandoverStatus }).body;
   }
 
-  /** The main server's own address, from the chart this spare holds; `null` when it names none. */
-  async mainServer(signal?: AbortSignal): Promise<{ mainUrl: string | null }> {
+  /**
+   * The main server's own address, from the chart this spare holds; `null` when it names none. With
+   * how long the spare has found it silent, by the spare's clock; `null` when it does not know.
+   */
+  async mainServer(
+    signal?: AbortSignal,
+  ): Promise<{ mainUrl: string | null; silentForMs: number | null }> {
     const fetchImpl = this.#fetchImpl;
     const response = await fetchImpl(this.#baseUrl + "/api/node/main", {
       method: "GET",
@@ -403,7 +408,14 @@ export class SetupApi {
       signal,
     });
     if (!response.ok) throw await apiError(response);
-    return (await response.json()) as { mainUrl: string | null };
+    const body = (await response.json()) as { mainUrl: string | null; silentForMs?: unknown };
+    return {
+      mainUrl: body.mainUrl,
+      silentForMs:
+        Number.isSafeInteger(body.silentForMs) && (body.silentForMs as number) >= 0
+          ? (body.silentForMs as number)
+          : null,
+    };
   }
 
   /** This box's standing in the chart it holds, from its role probe; `null` when the answer names none. */
