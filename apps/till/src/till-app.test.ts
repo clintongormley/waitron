@@ -609,7 +609,8 @@ async function flush(el: TillApp): Promise<void> {
   await el.updateComplete;
 }
 
-const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
+const lock = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen:not([compact])");
 const modeIndicator = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-indicator]");
 const counter = (el: TillApp) =>
@@ -2344,7 +2345,6 @@ describe("till-app", () => {
     });
     await flush(el);
     expect(currentApi.getDeviceStationScreen).toHaveBeenCalled();
-    // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
     expect(lock(el)).toBeNull();
     const s = station(el);
     expect(s).not.toBeNull();

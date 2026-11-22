@@ -607,7 +607,7 @@ it("does not expose a refund command or its reads on a shared kitchen display", 
     await status(t.refundId),
     await retry(t.refundId),
   ])
-    expect(answer).toMatchObject({ status: 403, json: { code: "device.forbidden_action" } });
+    expect(answer).toMatchObject({ status: 401, json: { code: "session.required" } });
   expect(await effects()).toEqual(before);
   expect(venue.card.refundCalls).toHaveLength(1);
   expect(venue.card.lookupCalls).toHaveLength(0);
