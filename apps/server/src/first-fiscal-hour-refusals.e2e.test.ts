@@ -73,7 +73,7 @@ it.each([
             "06:00",
             "--series-code",
             "B",
-            "--corrective-code",
+            "--corrective-series-code",
             "R",
             "--admin-name",
             "Elena",

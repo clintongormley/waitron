@@ -56,7 +56,7 @@ const args = [
   "06:00",
   "--series-code",
   "A",
-  "--corrective-code",
+  "--corrective-series-code",
   "R",
   "--admin-name",
   "Owner",

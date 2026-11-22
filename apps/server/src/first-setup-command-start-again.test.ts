@@ -116,7 +116,7 @@ function command(
     request.dayCutover,
     "--series-code",
     "A",
-    "--corrective-code",
+    "--corrective-series-code",
     "R",
     "--admin-name",
     request.admin.displayName,

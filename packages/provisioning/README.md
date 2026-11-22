@@ -47,7 +47,7 @@ usage: waitron-provision <command> [options]
            [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
-           [--corrective-code <code>] [--admin-name <name>] [--admin-email <email>]
+           [--corrective-series-code <code>] [--admin-name <name>] [--admin-email <email>]
            [--admin-first-names <names>] [--admin-last-names <names>]
            [--recovery-pdf <absolute external path of a new file>] [--yes]
 ```
@@ -270,7 +270,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                         | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
 | `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give one of the territories named above, such as `ES-common`.                                                                                                                                                                        |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
-| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--corrective-code` are the same                               | Give each invoice purpose a different code.                                                                                                                                                                                          |
+| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--corrective-series-code` are the same                        | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
 several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved

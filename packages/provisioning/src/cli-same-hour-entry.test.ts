@@ -98,7 +98,7 @@ Object.defineProperty(performance, "now", { value: () => passed });
     "time-zone": "Europe/Madrid",
     "day-cutover": "06:00",
     "series-code": "A",
-    "corrective-code": "R",
+    "corrective-series-code": "R",
     "admin-name": "Elena",
     "admin-email": "owner@example.test",
     "recovery-pdf": pdfPath,

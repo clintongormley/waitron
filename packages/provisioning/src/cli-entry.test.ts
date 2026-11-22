@@ -42,7 +42,7 @@ it("the installed command refuses a missing host-state directory before creating
     "time-zone": "Europe/Madrid",
     "day-cutover": "06:00",
     "series-code": "A",
-    "corrective-code": "R",
+    "corrective-series-code": "R",
     "admin-name": "Elena",
     "admin-email": "owner@example.test",
   };
