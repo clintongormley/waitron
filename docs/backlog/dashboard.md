@@ -19,16 +19,14 @@ their full text.
   - The PIN back-off
     (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
     one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
-  - Password-reset timing (A147, #942; A159, #986): the real mail-server conversation, which only a
-    known address starts, was not measured, and no way to match it was tried. Nothing pins that the
-    unknown-address decoy (`writeAndRemoveDecoyAction`, `packages/identity/src/account-action.ts`)
-    runs the same statements as a known address: its read, its dead-link delete and its retire
-    change no row, so deleting any one of them left the suites green; only a timing script (not in
-    the tree) shows them. A copy of the database is not unchanged by a decoy: with `secure_delete`
-    at 0 a reviewer found the decoy's random person id and token hash still in the file's bytes
-    after commit and checkpoint. It follows, though it was not separately measured, that a copy can
-    show that, and when, an unknown-address request happened — not for which address, since the
-    row's values are taken from no part of the address (read from the code, not measured).
+  - Password-reset timing (A147, #942; A159, #986): the reset route answers before it looks the
+    address up (`apps/server/src/management-api.ts`), then queues mail. A known address queues one
+    mail; an unknown one queues a mail for a person nobody has and deletes it
+    (`queueAccountRecovery`, `packages/identity/src/account-action.ts`), which "writes and then
+    removes one reset row" in `account-action.test.ts` checks. The mail worker's later send, which
+    only a known address starts, was not measured. Before #2670 queued the mail, a reviewer found
+    the decoy's random person id and token hash still in the database file's bytes after commit
+    and checkpoint; nothing sets `secure_delete`, and the queued decoy was not re-measured.
 
 ## Password-manager autofill in the confirmation window (C98, #934) — still open:
 

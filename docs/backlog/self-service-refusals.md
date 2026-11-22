@@ -75,7 +75,7 @@ Repeat the literal searches with:
 ```sh
 rg -n -i 'contact.{0,40}(support|soporte)|asistencia técnica|helpdesk' apps packages --glob '!*.test.*'
 rg -n -i 'wait a|try again|try .* again|retry|espera|intént|reintént' apps/setup/src/i18n apps/dashboard/src/i18n apps/till/src/i18n apps/server/src/guide
-rg -n 'setup.not_ready|setup.attempt_invalid|setup.operation_conflict|backup.effective_mismatch|passkey.verification_failed' apps/server/src packages --glob '!*.test.*'
+rg -n 'setup.not_ready|setup.attempt_invalid|setup.operation_conflict|backup.effective_mismatch' apps/server/src packages --glob '!*.test.*'
 ```
 
 The source paths and line numbers below refer to that dated tree. Follow each message through its
@@ -578,21 +578,6 @@ Wording: `apps/setup/src/i18n/strings/shell.ts:23`, `apps/setup/src/i18n/strings
 State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
 
 Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. A1042 (#2101, landed 2026-10-26) changed some of these paths; recheck them against main.
-
-### Passkey sign-in
-
-Message: `passkey.verification_failed`. Fix: [sign-in](#sign-in).
-
-| Language | Current words |
-| --- | --- |
-| EN | Could not verify the passkey, try again |
-| ES | No se pudo verificar la passkey, inténtalo de nuevo |
-
-Wording: `apps/dashboard/src/i18n/codes.ts:359`, `apps/dashboard/src/i18n/codes.ts:360`.
-
-State: The login screen displays this code (login-screen.ts:848 and :905). The producer refuses a non-active credential owner with this same code (packages/identity/src/passkey.ts:292), as well as invalid proofs. Waiting or repeating that credential cannot activate the account. Bug-only: no; non-active account status is an explicit branch.
-
-Route: Existing: the login screen offers other sign-in methods. Missing: a neutral next step if retry fails, such as using another offered method or asking the administrator. Preserve the same answer for a suspended/pending account; never reveal its status.
 
 ### Backup recovery-key write
 

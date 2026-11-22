@@ -97,9 +97,6 @@ code, not run again here.
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
   at a skipped 02:30 are refused, while the joined range is accepted.
 - [The special-day-then-season rule is written out in several places](#the-special-day-then-season-rule-is-written-out-in-several-places).
-- `business-day-schedule.ts` copies the changeover lookup of
-  `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
-  every day; a lookup exported from `shared` that validates once would remove the copy.
 
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 

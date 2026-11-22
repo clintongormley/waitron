@@ -731,12 +731,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by the comments sweep (#613–#623).** Found while pruning comments.
-  - Split-off checks may reach the same path as a held-order edit that changes sent lines (#623).
-    [Detail](backlog/till.md#split-off-checks-may-reach-the-same-path-as-a-held-order-edit-that-changes-sent-lines)
   - The table screen's redundant exit configuration was not audited (#616).
     [Detail](backlog/till.md#the-table-screens-redundant-exit-configuration-was-not-audited)
-  - The table-order screen's `#lineGross` comment was not restored (#614).
-    [Detail](backlog/till.md#the-table-order-screens-linegross-comment-was-not-restored)
 
 - **Cash handed back for a voided cash sale is recorded nowhere** — OPEN (found 2026-09-24 by #605).
   A void writes no payment or refund row, so if staff give a customer cash back, the void's day

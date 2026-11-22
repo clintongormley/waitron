@@ -9,24 +9,10 @@ their full text.
   writer makes two live tables follow one master table today); the delivery-release trigger
   accepts an empty label.
 
-## Split-off checks may reach the same path as a held-order edit that changes sent lines
-
-- Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-  comments-only change. Split-off checks may reach the same path as a held-order edit that
-  changes sent lines (read, not run). The walk-up concurrent double-pay case in
-  `working-order.pay-and-dispatch.test.ts` replays through the settled branch and never reaches
-  `payWorkingOrder`'s duplicate-key catch; nothing checks that a location or status foreign-key
-  refusal in `tables.ts` is not reported as a zone fault.
-
 ## The table screen's redundant exit configuration was not audited
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: the table screen still needs its
   redundant exit configuration audited.
-
-## The table-order screen's `#lineGross` comment was not restored
-
-- Found by #614 (`apps/till/src/screens`). Not restored because nothing confirms it: the
-  table-order screen's `#lineGross` comment "same arithmetic the server files with".
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
