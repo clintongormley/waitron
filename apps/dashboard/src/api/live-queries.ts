@@ -89,6 +89,7 @@ export const QUERY_DEPENDENCIES = {
   getPagePrinterDeleteImpact: ["printers", "invoice_deliveries", "devices", "device_profiles"],
   getPrinterDeleteImpact: [
     "printers",
+    "drawer_entries",
     "print_jobs",
     "invoice_deliveries",
     // The impact names devices by their printer choices.

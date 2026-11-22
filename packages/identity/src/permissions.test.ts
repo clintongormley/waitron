@@ -60,9 +60,9 @@ describe("approved permission names preserve default holders", () => {
 });
 
 describe("roleHasPermission", () => {
-  it("gives staff no permission but taking a payment", () => {
+  it("gives staff only the core permissions to take a payment and use the drawer", () => {
     for (const p of PERMISSIONS) {
-      if (p === "payment.take") continue;
+      if (p === "payment.take" || p === "cash.drawer") continue;
       expect(roleHasPermission("staff", p)).toBe(false);
     }
   });
@@ -165,11 +165,11 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
   });
-  it("grants cash.drawer to supervisor, manager and admin but not staff (cash-drawer authorization)", () => {
+  it("grants cash.drawer to staff, supervisors, managers and admins (cash-drawer authorization)", () => {
     expect(roleHasPermission("supervisor", "cash.drawer")).toBe(true);
     expect(roleHasPermission("manager", "cash.drawer")).toBe(true);
     expect(roleHasPermission("admin", "cash.drawer")).toBe(true);
-    expect(roleHasPermission("staff", "cash.drawer")).toBe(false);
+    expect(roleHasPermission("staff", "cash.drawer")).toBe(true);
   });
   it("grants hardware.manage to manager and admin only (printing subsystem central management)", () => {
     expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
@@ -247,7 +247,7 @@ describe("permissionsForRole", () => {
   it("spans core + module permissions from explicit declarations", () => {
     // Registered here too so this test does not depend on the order it runs in.
     registerModulePermissions([{ permission: "booking.manage", defaultHolders: ["manager"] }]);
-    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
+    expect(permissionsForRole("staff")).toEqual(["payment.take", "cash.drawer"]);
     expect(permissionsForRole("supervisor")).toContain("report.view");
     expect(permissionsForRole("supervisor")).not.toContain("booking.manage");
     expect(permissionsForRole("manager")).toContain("booking.manage");
@@ -278,7 +278,7 @@ describe("explicit permission declarations", () => {
       "sale.void": supervisors,
       "sale.refund": supervisors,
       "sale.rectify": supervisors,
-      "cash.drawer": supervisors,
+      "cash.drawer": all,
       "report.view": supervisors,
       "venue.view": supervisors,
       "person.manage": ["manager"],
@@ -297,7 +297,7 @@ describe("explicit permission declarations", () => {
       "node.manage": [],
       "system.box_admin": [],
     });
-    expect(defaultPermissionsFor("staff")).toEqual(["payment.take"]);
+    expect(defaultPermissionsFor("staff")).toEqual(["payment.take", "cash.drawer"]);
     expect(isDeclaredPermission("payment.take")).toBe(true);
   });
   it("Admin holds a permission registered after start", () => {

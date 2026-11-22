@@ -33,6 +33,17 @@ Añade un artículo antes de cobrar o enviar un pedido.
 Si se rechaza el cobro en efectivo de un pedido aparcado que has editado, los cambios siguen en
 la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guardar los cambios sin cobrar.
 
+## Cerrar un cajón de efectivo {#close-drawer}
+
+En un terminal asignado al cajón, abre **Más** y elige **Cerrar cajón**. Si no se abre, usa la
+llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la diferencia, si la hay,
+y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
+**Cerrar cajón** en cualquier terminal asignado al mismo cajón para continuar.
+
+Introduce el efectivo que quieres dejar y comprueba el importe **Para el banco** antes de retirar
+el resto. Elige **Finalizar cierre**. Puedes reimprimir el justificante en
+[Ventas](sales.md#drawer-close-history).
+
 ## Usar otro datáfono {#outside-card}
 
 Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono**. Si tu local

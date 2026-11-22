@@ -204,6 +204,7 @@ export type {
   DeleteImpactItem,
   DeleteImpactRefusal,
   DeleteTarget,
+  PrinterDeleteImpact,
 } from "./delete-impact.js";
 export { deleteTargetName } from "./delete-impact.js";
 export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";

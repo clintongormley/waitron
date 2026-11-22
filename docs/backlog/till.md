@@ -451,7 +451,8 @@ last close. It takes in A239, so the two are built together, and A240 can land a
 and builds on the completed refund flow (#3971). Sales and the daily email keep each figure on its
 existing reporting date, including later writes dated to that day. A saved drawer close keeps its
 count and withdrawal, and later cash movement belongs to the next close. Sales shows drawer counts
-and withdrawals and can reprint a finished close. The next slice lets staff close a drawer at the till.
+and withdrawals and can reprint a finished close. Staff count and close a drawer from **More**
+on the till. The next slice records cash top-ups and other withdrawals.
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
@@ -460,8 +461,7 @@ Now part of [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-dra
 recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
 in float cash). The entries replace the two typed totals the daily close takes today (opening float
 and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
-No screen collects cash
-counts yet; this is where one belongs.
+Enter cash counts through **Close drawer** on the till.
 
 ## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 

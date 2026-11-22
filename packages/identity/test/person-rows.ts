@@ -61,6 +61,21 @@ export async function setBuiltInRoleForTest(
     );
   await db.insert(personRoles).values({ personId, roleId: builtIns[role] });
 }
+export async function removeBuiltInPermissionForTest(
+  tx: Transaction,
+  role: BuiltInRoleKey,
+  permission: string,
+): Promise<void> {
+  const [row] = await tx
+    .select({ id: roles.id, permissions: roles.permissions })
+    .from(roles)
+    .where(eq(roles.builtInKey, role));
+  await tx
+    .update(roles)
+    .set({ permissions: row!.permissions.filter((held) => held !== permission) })
+    .where(eq(roles.id, row!.id));
+}
+
 export async function builtInRoleForTest(
   db: Database | Transaction,
   personId: string,

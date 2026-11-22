@@ -531,6 +531,7 @@ export class TillShell extends LitElement {
    * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
   @property({ type: Boolean }) canSwitchProfile = false;
+  @property({ type: Boolean }) canCloseDrawer = false;
   @property({ type: Boolean }) canChooseDevice = false;
 
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
@@ -1223,6 +1224,7 @@ export class TillShell extends LitElement {
       items["find-bill"],
       items.schedule,
       items.profile,
+      this.#drawerCloseItem(),
       items["transfer-count"],
       items["transfer-button"],
     ];
@@ -1296,6 +1298,19 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
+  #drawerCloseItem() {
+    return this.canCloseDrawer
+      ? html`<wt-button
+          class="drawer-close"
+          @click=${(event: Event) =>
+            this.#emit("open-drawer-close", {
+              opener: (event.currentTarget as HTMLElement).closest("wt-row-actions"),
+            })}
+          >${t("drawer_close.title")}</wt-button
+        >`
+      : nothing;
+  }
+
   #tillMenu(): TemplateResult {
     const action = (cls: string, event: string, label: string, help?: HelpKey) =>
       this.#withHelp(
@@ -1313,7 +1328,7 @@ export class TillShell extends LitElement {
       ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
       ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
       ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
-      ${this.#chooser("group")}
+      ${this.#drawerCloseItem()} ${this.#chooser("group")}
       ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
       ${this.#reportOption()}${this.#aboutOption()} ${action("logout", "logout", t("shell.logout"))}
       ${

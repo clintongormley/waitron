@@ -1,5 +1,5 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
@@ -81,6 +81,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    await inTx(venue, (tx) => removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"));
     const productIds = await inTx(venue, async (tx) => {
       const [kg] = await tx
         .insert(units)

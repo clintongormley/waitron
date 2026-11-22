@@ -278,6 +278,42 @@ it("refreshes a stale withdrawal, keeps the count difference, and starts the nex
   ).rejects.toThrow(/append.only/i);
 });
 
+it("keeps a drawer eligible to close while it holds cash or has a pending count", async () => {
+  const needsClose = () =>
+    withTransaction(fx.db, (tx) => closes.drawerNeedsClose(tx, first.printerId));
+  expect(await needsClose()).toBe(false);
+  const zero = await count("0.00");
+  expect(await needsClose()).toBe(true);
+  await finish(zero.first.id, "0.00", zero.confirmSequence);
+  expect(await needsClose()).toBe(false);
+  await move(500);
+  expect(await needsClose()).toBe(true);
+  const saved = await count("5.00", 3);
+  await finish(saved.first.id, "5.00", saved.confirmSequence);
+  expect(await needsClose()).toBe(true);
+});
+
+it("keeps the count open when saving the new close's slip fails", async () => {
+  const pending = await count("10.00");
+  await expect(
+    withTransaction(fx.db, (tx) =>
+      closes.finishDrawerClose(
+        tx,
+        second,
+        {
+          firstCountId: pending.first.id,
+          amountLeft: decimal("0.00"),
+          confirmSequence: pending.confirmSequence,
+        },
+        async () => {
+          throw new Error("Could not queue slip");
+        },
+      ),
+    ),
+  ).rejects.toThrow("Could not queue slip");
+  expect(await current()).toEqual(pending);
+});
+
 it("refuses to leave more money than remains after cash goes out", async () => {
   const saved = await count("10.00");
   expect(saved).toMatchObject({ available: "10.00" });

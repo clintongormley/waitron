@@ -1,6 +1,6 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql, and, isNotNull } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
@@ -510,6 +510,7 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual([]);
   });
   it("counts wrong PINs in the shared device override throttle", async () => {
+    await inTx(v, (tx) => removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"));
     for (let i = 0; i < 4; i++) {
       const answer = await call(
         "PUT",

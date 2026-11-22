@@ -327,6 +327,7 @@ import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
+import "./screens/till-drawer-close.js";
 import "./widgets/find-bill-dialog.js";
 import { canScan } from "./widgets/equipment-dialog.js";
 import "./widgets/profile-dialog.js";
@@ -4282,6 +4283,11 @@ export class TillApp extends LitElement {
   /** The box offers this till "Check the time", from the latest equipment read applied. */
   @state() private checkTimeOffered = false;
   @state() private drawerOpening = false;
+  @state() private drawerClose: {
+    printerId: string;
+    opensDrawer: boolean;
+    opener: HTMLElement | null;
+  } | null = null;
   @state() private boxTimeOpen = false;
   @state() private paymentsPausedOpen = false;
   /** Only while the latest read carried a notice that pauses payments: a notice kept for display
@@ -22021,6 +22027,7 @@ export class TillApp extends LitElement {
     this.captureWarning = null;
     this.checkTimeOffered = false;
     this.boxTimeOpen = false;
+    this.drawerClose = null;
     this.paymentsPausedOpen = false;
     this.#paymentsWait = false;
     this.#menuPoll.stop();
@@ -24933,6 +24940,15 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @open-equipment=${() => void this.#onOpenEquipment()}
+        @open-drawer-close=${(event: CustomEvent<{ opener: HTMLElement | null }>) => {
+          const printerId = this.deviceEquipment?.drawerPrinterId;
+          if (printerId && this.#inShell())
+            this.drawerClose = {
+              printerId,
+              opensDrawer: this.#mayOpenDrawer,
+              opener: event.detail.opener,
+            };
+        }}
         @open-settings=${() => (this.deviceSettingsOpen = true)}
         @open-device-zones=${() => this.#openDeviceZones()}
         @open-profile=${() => void this.#onOpenProfile()}
@@ -25508,6 +25524,7 @@ export class TillApp extends LitElement {
                           .kiosk=${this.deviceMode}
                           .canChooseDevice=${this.deviceMode && (this.devTab || this.devDevices !== undefined)}
                           .canSwitchProfile=${this.approvedProfiles.length > 1}
+                          .canCloseDrawer=${this.deviceEquipment?.drawerPrinterId != null}
                           .transferAvailable=${this.transferSnapshot !== undefined}
                           @open-transfers=${() => {
                             this.transferQueueOpen = true;
@@ -25551,6 +25568,19 @@ export class TillApp extends LitElement {
                                     this.#departmentTransfers?.dismiss(event.detail.requestId);
                                   }}
                                 ></till-department-transfers>`
+                          }
+                          ${
+                            this.drawerClose === null
+                              ? nothing
+                              : html`<till-drawer-close
+                                  .api=${this.api}
+                                  .printerId=${this.drawerClose.printerId}
+                                  .opensDrawer=${this.drawerClose.opensDrawer}
+                                  .opener=${this.drawerClose.opener}
+                                  @drawer-close-dismiss=${() => {
+                                    this.drawerClose = null;
+                                  }}
+                                ></till-drawer-close>`
                           }
                           ${this.#activeTabBody()}
                           ${this.#findBillBody()}${this.#drillBody() /* the drill overlay, when one is open */}

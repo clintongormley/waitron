@@ -10654,6 +10654,47 @@ describe("Deleting a printer", () => {
     expect(dialogOf(el)!.shadowRoot!.textContent).toContain(t("printers.delete_retained"));
   });
 
+  it.each([{ devices: [{ id: "d-bar", name: "Bar till" }] }, { devices: [] }])(
+    "shows Close first guidance immediately for a printer with an unfinished drawer",
+    async ({ devices }) => {
+      const { el, api } = await mounted({
+        getPrinterDeleteImpact: vi.fn(async () => ({ ...kitchenImpact, drawerClose: { devices } })),
+      });
+      await openDelete(el, "p1");
+      const root = dialogOf(el)!.shadowRoot!;
+      expect(root.textContent).toContain(t("printers.drawer_delete_retained"));
+      expect(confirmOf(el).textContent?.trim()).toBe(t("printers.drawer_delete_anyway"));
+      expect(root.querySelector("[data-test=delete-cancel]")?.textContent?.trim()).toBe(
+        t("printers.drawer_delete_stop"),
+      );
+      const guidance = root.querySelector('[data-test="delete-guidance"]')!;
+      expect(guidance.textContent).toContain(t("printers.drawer_delete_close_first"));
+      expect(root.querySelector("[data-test=delete-alternative]")).toBeNull();
+      if (devices.length > 0) {
+        expect(guidance.textContent).toContain("Bar till");
+      } else {
+        expect(guidance.querySelector("a")?.getAttribute("href")).toBe("/devices");
+      }
+      expect(api.deletePrinter).not.toHaveBeenCalled();
+    },
+  );
+
+  it("says to turn the drawer setting on before assigning the printer to a till", async () => {
+    const { el } = await mounted({
+      getPrinterDeleteImpact: vi.fn(async () => ({
+        ...kitchenImpact,
+        drawerClose: { devices: [], needsDrawerSetting: true as const },
+      })),
+    });
+    await openDelete(el, "p1");
+    const root = dialogOf(el)!.shadowRoot!;
+    const guidance = root.querySelector('[data-test="delete-guidance"]')!;
+    expect(guidance.textContent).toContain(t("printers.drawer_attached"));
+    expect(guidance.querySelector("a")?.getAttribute("href")).toBe(
+      "/printers/view/printers/printer/p1/editor/calibrate/step/3",
+    );
+  });
+
   it("draws a target's name as text, not markup", async () => {
     const { el } = await mounted({
       getPrinterDeleteImpact: vi.fn(async () =>

@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { devices, drawerEntries } from "@waitron/db";
+import { devices, drawerEntries, personRoles, printers, printJobs } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
+import { setPersonLocale } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
+import { readDrawerCloseForPrint } from "./drawer-close-report.js";
+import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
+import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import {
   cashPayment,
@@ -24,7 +27,6 @@ let printerId: string;
 
 beforeEach(async () => {
   venue = await provisionBillVenue(store.db);
-  await setBuiltInRoleForTest(store.db, venue.operatorId, "supervisor");
   const [device] = await store.db.select().from(devices).where(eq(devices.id, venue.deviceId));
   printerId = device!.cashDrawerPrinterId!;
 });
@@ -141,8 +143,117 @@ it("allows a manually counted close during a clock stop", async () => {
   });
 });
 
+it.each([true, false])(
+  "finishes with the drawer printer switched on=%s and queues at most one slip",
+  async (active) => {
+    if (!active) {
+      await inTx(venue, (tx) =>
+        tx.update(printers).set({ active }).where(eq(printers.id, printerId)),
+      );
+    }
+    const saved = await postCount({});
+    expect(saved.status).toBe(200);
+    const firstId = (saved.json.first as { id: string }).id;
+    const finish = () =>
+      send(venue.app, venue.cookie, "POST", `${path}/${firstId}/finish`, {
+        confirmSequence: 1,
+        amountLeft: "2.00",
+      });
+
+    const done = await finish();
+    expect(done).toMatchObject({
+      status: 200,
+      json: { state: "finished", bankWithdrawal: "8.00", slip: active ? "queued" : "unavailable" },
+    });
+    expect(await finish()).toMatchObject({
+      status: 200,
+      json: { id: done.json.id, bankWithdrawal: "8.00", slip: "already_closed" },
+    });
+    const jobs = await store.db.select().from(printJobs);
+    expect(jobs).toHaveLength(active ? 1 : 0);
+    if (active) {
+      expect(jobs[0]).toMatchObject({ printerId, kind: "document" });
+      expect(jobs[0]!.payload).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(jobs[0]!.payload!).includes(Buffer.from([27, 112]))).toBe(false);
+    }
+  },
+);
+
+it("prints the close in the staff member's saved language on a till set to another language", async () => {
+  await inTx(venue, (tx) => setPersonLocale(tx, { personId: venue.operatorId, locale: "es-ES" }));
+  const saved = await postCount({});
+  const firstId = (saved.json.first as { id: string }).id;
+  const response = await venue.app.request(`${path}/${firstId}/finish`, {
+    method: "POST",
+    headers: {
+      cookie: venue.cookie,
+      "content-type": "application/json",
+      "accept-language": "en-GB",
+    },
+    body: JSON.stringify({ confirmSequence: 1, amountLeft: "2.00" }),
+  });
+  expect(response.status).toBe(200);
+  const { id } = (await response.json()) as { id: string };
+  const close = (await inTx(venue, (tx) => readDrawerCloseForPrint(tx, [venue.cfg.nodeId], id)))!;
+  const [job] = await store.db.select().from(printJobs);
+  const paper = { paperWidth: "80mm", resolution: "180dpi" } as const;
+  expect(job?.payload).toEqual(formatDrawerCloseTicket(close, paper, "es-ES", "Europe/Madrid"));
+  expect(job?.payload).not.toEqual(formatDrawerCloseTicket(close, paper, "en-GB", "Europe/Madrid"));
+});
+
+it("offers a close for cash on an assigned till and keeps the balance when the same printer returns", async () => {
+  const order = await tabWith(venue, "Croquettes");
+  expect((await cashPayment(venue, venue.cookie, order, "10.00")).status).toBe(200);
+
+  const read = (id: string) => inTx(venue, (tx) => readPrinterDeleteImpact(tx, id));
+  expect(await read(printerId)).toMatchObject({
+    drawerClose: { devices: expect.arrayContaining([{ id: venue.deviceId, name: "Barra" }]) },
+  });
+
+  const drawerSetting = (hasCashDrawer: boolean) =>
+    inTx(venue, (tx) =>
+      tx.update(printers).set({ hasCashDrawer }).where(eq(printers.id, printerId)),
+    );
+  await drawerSetting(false);
+  expect(await read(printerId)).toMatchObject({
+    drawerClose: { devices: [], needsDrawerSetting: true },
+  });
+  await drawerSetting(true);
+
+  const [printer] = await store.db.select().from(printers).where(eq(printers.id, printerId));
+  await inTx(venue, (tx) => deletePrinter(tx, printerId));
+  const restored = await inTx(venue, (tx) =>
+    createPrinter(tx, {
+      name: "Replacement at the same address",
+      transport: "cloud_poll",
+      pollId: printer!.pollId!,
+    }),
+  );
+  expect(restored.id).toBe(printerId);
+  expect(await read(printerId)).toMatchObject({ drawerClose: { devices: [] } });
+
+  const different = await inTx(venue, (tx) =>
+    createPrinter(tx, {
+      name: "Another drawer",
+      transport: "cloud_poll",
+      pollId: "different-address",
+      hasCashDrawer: true,
+    }),
+  );
+  expect((await read(different.id)).drawerClose).toBeUndefined();
+});
+
+it("offers a close for a pending count even when expected cash is zero", async () => {
+  expect((await postCount({ counted: "0.00" })).status).toBe(200);
+  expect(await inTx(venue, (tx) => readPrinterDeleteImpact(tx, printerId))).toMatchObject({
+    drawerClose: { devices: expect.arrayContaining([{ id: venue.deviceId, name: "Barra" }]) },
+  });
+});
+
 it("requires the person's drawer permission even when their till can open the drawer", async () => {
-  await setBuiltInRoleForTest(store.db, venue.operatorId, "staff");
+  await inTx(venue, (tx) =>
+    tx.delete(personRoles).where(eq(personRoles.personId, venue.operatorId)),
+  );
   expect(await send(venue.app, venue.cookie, "GET", path)).toEqual({
     status: 403,
     json: { code: "authorization.not_permitted", params: { permission: "cash.drawer" } },

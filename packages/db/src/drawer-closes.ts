@@ -81,6 +81,13 @@ async function cashSince(tx: Transaction, printerId: string, sequence: number) {
   return { amount: rawCentsToDecimal(total!.amount), last: total!.last ?? sequence };
 }
 
+export async function drawerNeedsClose(tx: Transaction, printerId: string): Promise<boolean> {
+  const drawer = await readDrawer(tx, printerId);
+  if (drawer.first !== undefined) return true;
+  const cash = await cashSince(tx, printerId, drawer.afterClose);
+  return compareDecimal(addDecimal(drawer.openingCash, cash.amount), zero) !== 0;
+}
+
 function savedCount(row: Entry) {
   const { expected, cashMovedWhileCounting, throughSequence } = row.facts as CountFacts;
   const counted = centsToDecimal(row.amount);
@@ -198,6 +205,7 @@ export async function finishDrawerClose(
   tx: Transaction,
   actor: DrawerActor,
   input: { firstCountId: string; amountLeft: Decimal; confirmSequence: number },
+  onFinished?: (close: ReturnType<typeof savedFinish>) => Promise<void>,
 ) {
   const drawer = await readDrawer(tx, actor.printerId);
   if (drawer.first?.id !== input.firstCountId) {
@@ -231,7 +239,7 @@ export async function finishDrawerClose(
     difference: (pending.recount ?? pending.first).difference,
     throughSequence: drawer.sequence,
   };
-  return savedFinish(
+  const finished = savedFinish(
     await appendDrawerEntry(tx, {
       ...actor,
       kind: "finish",
@@ -240,4 +248,6 @@ export async function finishDrawerClose(
       facts,
     }),
   );
+  await onFinished?.(finished);
+  return finished;
 }

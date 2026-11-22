@@ -6,6 +6,7 @@ import {
   loginWithPin,
   PIN_THROTTLE_FREE_ATTEMPTS,
 } from "@waitron/identity";
+import { removeBuiltInPermissionForTest } from "@waitron/identity/test/person-rows.js";
 import { seedPerson, seedSessionDevice } from "@waitron/identity/test/fixtures.js";
 import { describe, expect, it, vi } from "vitest";
 import { keysInTurn } from "./attempt-turns.js";
@@ -31,6 +32,9 @@ async function sessionOf(role: "staff" | "supervisor"): Promise<{ id: string; to
 describe("overrideToCheck", () => {
   it("names the override of an operator who lacks the permission", async () => {
     const session = await sessionOf("staff");
+    await withTransaction(suite.db, (tx) =>
+      removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"),
+    );
     const override = { personId: await seedPerson(suite.db, "supervisor"), pin: "1234" };
 
     expect(

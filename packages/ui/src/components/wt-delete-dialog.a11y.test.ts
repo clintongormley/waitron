@@ -42,7 +42,10 @@ const refused: DeleteImpact = {
 const empty: DeleteImpact = { ...ready, ends: [], removes: [] };
 
 type State = Partial<
-  Pick<WtDeleteDialog, "open" | "impact" | "loading" | "submitting" | "readError" | "actionError">
+  Pick<
+    WtDeleteDialog,
+    "open" | "impact" | "loading" | "submitting" | "readError" | "actionError" | "copy"
+  >
 >;
 
 const states: [string, State][] = [
@@ -53,6 +56,23 @@ const states: [string, State][] = [
   ["after a failed delete", { impact: ready, actionError: "The printer could not be deleted." }],
   ["while deleting", { impact: ready, submitting: true }],
   ["with an empty impact", { impact: empty }],
+  [
+    "with instructions and a link before deletion",
+    {
+      impact: ready,
+      copy: {
+        ...copy,
+        alternative: () => ({
+          warning: "Cash is still assigned to this printer.",
+          heading: "Close first",
+          guidance: "Assign the drawer to a till.",
+          link: { href: "/devices", label: "Open Devices" },
+          cancel: "Stop",
+          confirm: "Delete anyway",
+        }),
+      },
+    },
+  ],
   ["closed", { impact: ready, open: false }],
 ];
 

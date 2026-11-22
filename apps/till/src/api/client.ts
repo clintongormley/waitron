@@ -1971,12 +1971,52 @@ export interface RoleEquipment {
   choices: EquipmentItem[];
 }
 
+type DrawerCount = {
+  id: string;
+  personId: string;
+  recordedAt: string;
+  counted: string;
+  expected: string;
+  difference: string;
+  cashMovedWhileCounting: boolean;
+  throughSequence: number;
+};
+
+export type SavedDrawerCount = {
+  printerId: string;
+  state: "counted";
+  openingCash: string;
+  first: DrawerCount;
+  recount: DrawerCount | null;
+  available: string;
+  confirmSequence: number;
+};
+
+export type DrawerCloseRead =
+  | { printerId: string; state: "new"; openingCash: string; startSequence: number }
+  | SavedDrawerCount;
+
+export type FinishedDrawerClose = {
+  printerId: string;
+  state: "finished";
+  id: string;
+  firstCountId: string;
+  personId: string;
+  recordedAt: string;
+  bankWithdrawal: string;
+  amountLeft: string;
+  difference: string;
+  throughSequence: number;
+  slip: "queued" | "unavailable" | "already_closed";
+};
+
 /** `PUT /api/device/equipment` success, and the equipment half of the GET's: always the five roles. */
 export interface DeviceEquipment {
   roles: RoleEquipment[];
   /** The device has a drawer it may open: its drawer printer is switched on, has a drawer, and
    * its profile allows opening it. */
   opensDrawer?: boolean;
+  drawerPrinterId?: string | null;
 }
 
 /** One notice for staff, as `GET /api/device/equipment` sends it: worded by the till from `code`. */
@@ -3448,6 +3488,32 @@ export class TillApi {
    */
   async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
     await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});
+  }
+
+  readDrawerClose(): Promise<DrawerCloseRead> {
+    return this.#request("/api/drawer/close", "GET");
+  }
+
+  saveDrawerCount(body: {
+    printerId: string;
+    counted: string;
+    startSequence: number;
+  }): Promise<SavedDrawerCount> {
+    return this.#request("/api/drawer/close/count", "POST", body);
+  }
+
+  recountDrawer(
+    firstCountId: string,
+    body: { counted: string; startSequence: number },
+  ): Promise<SavedDrawerCount> {
+    return this.#request(`/api/drawer/close/${firstCountId}/recount`, "POST", body);
+  }
+
+  finishDrawerClose(
+    firstCountId: string,
+    body: { amountLeft: string; confirmSequence: number },
+  ): Promise<FinishedDrawerClose> {
+    return this.#request(`/api/drawer/close/${firstCountId}/finish`, "POST", body);
   }
 
   /**

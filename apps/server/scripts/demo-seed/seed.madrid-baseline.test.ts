@@ -1021,7 +1021,7 @@ for (const locale of ["en", "es"] as const) {
       }
       const roleDefaults = {
         admin: [],
-        staff: ["payment.take", "adjustment.apply"],
+        staff: ["payment.take", "cash.drawer", "adjustment.apply"],
         supervisor: [
           "payment.take",
           "sale.void",

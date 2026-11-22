@@ -855,6 +855,27 @@ describe("till-shell's Zones on this device entry", () => {
   });
 });
 
+it.each(["till", "tablet-landscape"] as const)(
+  "opens Close drawer from More on a %s with a drawer",
+  async (formFactor) => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      ...full,
+      formFactor,
+      canCloseDrawer: true,
+    });
+    const close = vi.fn();
+    el.addEventListener("open-drawer-close", close);
+    await userEvent.click(triggerOf(el));
+    const button = menuOf(el)!.querySelector<HTMLElement>(".drawer-close");
+    expect(button?.textContent?.trim()).toBe("Close drawer");
+    await userEvent.click(button!);
+    expect(close).toHaveBeenCalledOnce();
+    el.canCloseDrawer = false;
+    await el.updateComplete;
+    expect(menuOf(el)!.querySelector(".drawer-close")).toBeNull();
+  },
+);
+
 describe("a handheld's More", () => {
   const working: Partial<TillShell> = {
     ...full,

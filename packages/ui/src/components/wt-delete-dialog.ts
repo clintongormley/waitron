@@ -24,6 +24,16 @@ export type DeleteDialogCopy = {
   loading: string;
   item: (item: DeleteImpactItem) => string;
   refusal: (item: DeleteImpactRefusal) => string;
+  alternative?: (impact: DeleteImpact) =>
+    | {
+        warning: string;
+        heading: string;
+        guidance: string;
+        link?: { href: string; label: string };
+        confirm: string;
+        cancel: string;
+      }
+    | undefined;
 };
 
 /** Asks before deleting a record, naming it and showing what refuses the delete, the work it ends
@@ -78,6 +88,10 @@ export class WtDeleteDialog extends LitElement {
 
       .status:empty {
         margin: 0;
+      }
+
+      .guidance a {
+        color: var(--wt-color-primary-text);
       }
 
       .irreversible {
@@ -171,6 +185,7 @@ export class WtDeleteDialog extends LitElement {
     const { copy, impact } = this;
     if (!copy) return nothing;
     const ready = this.ready;
+    const alternative = impact && copy.alternative?.(impact);
     const message = [this.readError, this.actionError].filter((each) => each !== "").join(" ");
     const status = this.loading
       ? html`<wt-spinner size="sm" decorative></wt-spinner>${copy.loading}`
@@ -205,6 +220,22 @@ export class WtDeleteDialog extends LitElement {
                   impact.removes.map((each) => copy.item(each)),
                 )}
                 <p class="irreversible" data-irreversible>${copy.irreversible}</p>
+                ${
+                  alternative
+                    ? html`
+                        <p>${alternative.warning}</p>
+                        <div class="guidance" data-test="delete-guidance">
+                          <h3>${alternative.heading}</h3>
+                          ${alternative.guidance}
+                          ${
+                            alternative.link
+                              ? html`<a href=${alternative.link.href}>${alternative.link.label}</a>`
+                              : nothing
+                          }
+                        </div>
+                      `
+                    : nothing
+                }
               `
             : nothing
         }
@@ -215,7 +246,7 @@ export class WtDeleteDialog extends LitElement {
             variant="secondary"
             ?disabled=${this.submitting}
             @click=${this.onCancel}
-            >${copy.cancel}</wt-button
+            >${alternative?.cancel ?? copy.cancel}</wt-button
           >
           ${
             this.readError === ""
@@ -235,7 +266,7 @@ export class WtDeleteDialog extends LitElement {
             ?disabled=${this.submitting || !ready}
             ?loading=${this.submitting}
             @click=${this.onConfirm}
-            >${copy.confirm}</wt-button
+            >${alternative?.confirm ?? copy.confirm}</wt-button
           >
         </wt-form-actions>
       </wt-modal>
