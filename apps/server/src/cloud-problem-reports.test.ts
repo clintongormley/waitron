@@ -101,19 +101,28 @@ it("keeps exact preview bytes across an offline restart and omits incident detai
   ]);
 });
 
-it.each(["refusal", "changed registration"])("retires pending work after %s", async (change) => {
+it.each([
+  ["refusal", false],
+  ["refusal", true],
+  ["changed registration", false],
+] as const)("retires pending work after %s (administrator %s)", async (change, admin) => {
   const f = await fixture();
   const reports = f.reports();
   const preview = await reports.preview("dashboard", "alice");
   expect(preview.available).toBe(true);
   if (!preview.available) return;
   f.delivered.mockResolvedValueOnce("retry").mockResolvedValueOnce("stop");
-  expect(await reports.send("dashboard", "alice", preview.id)).toBe("queued");
+  expect(
+    await reports.send("dashboard", "alice", preview.id, { text: "Drawer jammed", admin }),
+  ).toBe("queued");
   if (change === "changed registration") f.registration("second");
   const restarted = f.reports();
   await restarted.run(signal());
   await restarted.run(signal());
   expect(f.delivered).toHaveBeenCalledTimes(change === "refusal" ? 2 : 1);
+  expect(await readFile(join(f.stateDir, "cloud/problem-reports.json"), "utf8")).not.toContain(
+    "Drawer jammed",
+  );
   expect(f.log.mock.calls).toEqual([
     ["warn", change === "refusal" ? "cloud.request_invalid" : "cloud.not_configured"],
   ]);
@@ -145,17 +154,26 @@ it("refuses a dashboard preview sent from another sign-in by the same person", a
   const first = await signIn();
   const second = await signIn();
   const app = new Hono();
-  mountProblemReportApi(app, { db, reports: f.reports() }, () => {});
+  const reports = f.reports();
+  mountProblemReportApi(app, { db, reports }, () => {});
   const base = "/management-api/problem-reports";
   const preview = await app.request(`${base}/preview`, { headers: first });
   const { id } = await preview.json();
   const send = (headers: HeadersInit) =>
-    app.request(`${base}/${id}/send`, { method: "POST", headers });
+    app.request(`${base}/${id}/send`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ description: "Drawer jammed" }),
+    });
 
   const refused = await send(second);
   expect(refused.status).toBe(400);
   expect(await refused.json()).toMatchObject({ error: { code: "cloud.request_invalid" } });
-  expect(await (await send(first)).json()).toEqual({ delivery: "sent" });
+  expect(await (await send(first)).json()).toEqual({ delivery: "sent", description: "queued" });
+  await reports.run(signal());
+  expect(f.delivered.mock.calls[1]?.[2]).toBe(
+    JSON.stringify({ reportId: id, description: "Drawer jammed", time: 1767225600000 }),
+  );
 });
 
 it("keeps staff text local until approval and retries the same signed description after restart", async () => {

@@ -127,7 +127,7 @@ export function mountProblemReportApi(
           const id = c.req.param("id");
           if (!isUuid(id)) throw new AppError("cloud.request_invalid", {});
           let text: string | undefined;
-          if (c.req.raw.body !== null) {
+          if ((await c.req.text()) !== "") {
             const body = await readRawJsonBody<{ description?: unknown }>(c);
             if (!body || typeof body.description !== "string")
               throw new AppError("cloud.request_invalid", {});

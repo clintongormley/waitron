@@ -180,6 +180,7 @@ export class DashboardProblemReport extends LitElement {
             sent: t("problem_report.sent"),
             queued: t("problem_report.queued"),
             refused: t("problem_report.refused"),
+            descriptionRefused: t("problem_report.description_refused"),
           },
         }}
         @wt-description-change=${this.edited}

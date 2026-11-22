@@ -402,3 +402,16 @@ it.each(["send", "discard"] as const)(
     await expect.poll(() => el.shadowRoot!.activeElement).toBe(q(el, "[data-description-heading]"));
   },
 );
+
+it("hides the description review controls when the server refuses a manager", async () => {
+  const getProblemDescriptions = vi.fn(async () => {
+    throw { code: "authorization.not_permitted" };
+  });
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({ getProblemDescriptions }),
+    canReviewDescriptions: true,
+  });
+  await flush(el);
+  expect(getProblemDescriptions).toHaveBeenCalledOnce();
+  expect(q(el, "[data-description-refresh]")).toBeNull();
+});

@@ -188,7 +188,7 @@ export const en = {
   "problem_report.cloud_scope":
     "Review the Cloud attachment before sending. The download keeps this browser's activity and your description in a file.",
   "problem_report.description_review":
-    "A manager can review your description on this box and choose whether to send it.",
+    "An administrator can review your description on this box and decide whether to send it.",
   "problem_report.description_direct":
     "Sending this report also sends your description to Waitron Cloud.",
   "problem_report.description_waiting": "Your description is waiting for a manager to send it.",
@@ -206,6 +206,8 @@ export const en = {
   "problem_report.sent": "Sent to Waitron Cloud.",
   "problem_report.queued": "Saved on this box. It will try sending again.",
   "problem_report.refused": "Could not send the report. Download it to keep a copy.",
+  "problem_report.description_refused":
+    "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
   "time.today_at": "Today {time}",
   "time.yesterday_at": "Yesterday {time}",
   "zone_repair.sign_in": "Sign in as a manager",
@@ -4917,6 +4919,8 @@ export const es: Record<StringKey, string> = {
   "problem_report.sent": "Enviado a Waitron Cloud.",
   "problem_report.queued": "Guardado en este servidor. Volverá a intentar enviarlo.",
   "problem_report.refused": "No se ha podido enviar el informe. Descárgalo para guardar una copia.",
+  "problem_report.description_refused":
+    "No se ha podido enviar el informe. Borra la descripción para intentar enviar solo los datos de diagnóstico o descarga una copia.",
   "time.today_at": "Hoy {time}",
   "time.yesterday_at": "Ayer {time}",
   "zone_repair.sign_in": "Iniciar sesión como responsable",

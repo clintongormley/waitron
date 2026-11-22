@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -130,7 +130,7 @@ export class DiagnosticsScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#refresh();
-    if (this.canReviewDescriptions) void this.#loadDescriptions();
+    if (this.hasUpdated && this.canReviewDescriptions) void this.#loadDescriptions();
     this.#timer = setInterval(() => {
       if (!this.paused) void this.#refresh(true);
     }, POLL_MS);
@@ -144,16 +144,23 @@ export class DiagnosticsScreen extends LitElement {
     super.disconnectedCallback();
   }
 
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("canReviewDescriptions") && this.canReviewDescriptions)
+      void this.#loadDescriptions();
+  }
+
   async #loadDescriptions(): Promise<void> {
     if (this.reviewBusy) return;
     const read = new AbortController();
     this.#reviewRead = read;
     this.reviewBusy = true;
-    this.reviewError = false;
     this.reviewResult = undefined;
     try {
       const drafts = await this.api.getProblemDescriptions(read.signal);
-      if (!read.signal.aborted) this.descriptions = drafts;
+      if (!read.signal.aborted) {
+        this.descriptions = drafts;
+        this.reviewError = false;
+      }
     } catch (error) {
       if (!read.signal.aborted) {
         this.descriptions = undefined;
@@ -184,7 +191,7 @@ export class DiagnosticsScreen extends LitElement {
   }
 
   #renderDescriptions() {
-    if (!this.canReviewDescriptions) return nothing;
+    if (!this.canReviewDescriptions || (!this.descriptions && !this.reviewError)) return nothing;
     return html`
       <h2 data-description-heading tabindex="-1">${t("problem_report.review_title")}</h2>
       <wt-button

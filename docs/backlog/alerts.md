@@ -71,7 +71,7 @@ separate follow-ups.
 ## Decisions and deliberate limits
 
 - **Administrators decide which problem descriptions reach Cloud.** The owner made sending an
-  administrator decision on 2026-10-24. On 2026-11-22 the watcher confirmed that staff descriptions
+  administrator decision on 2026-10-24 (“make it an admin decision to send”). On 2026-11-22 the watcher confirmed that staff descriptions
   wait on the box for an administrator to review, send or discard. Administrators can send their
   own descriptions directly. See [Cloud’s monitoring design §11](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md).
 

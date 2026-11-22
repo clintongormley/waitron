@@ -40,6 +40,7 @@ export interface ReportDialogCopy {
     sent: string;
     queued: string;
     refused: string;
+    descriptionRefused: string;
   };
 }
 
@@ -180,7 +181,12 @@ export class WtReportDialog extends LitElement {
     const invalid = this.validationError !== "",
       ready = !invalid && this.preview !== "";
     const cloudCopy = this.cloudPreview && c.cloud;
-    const feedback = this.delivery === "refused" ? cloudCopy?.refused : this.downloadError;
+    const feedback =
+      this.delivery === "refused"
+        ? this.description.trim()
+          ? cloudCopy?.descriptionRefused
+          : cloudCopy?.refused
+        : this.downloadError;
     const fields = new Set(invalid && this.delivery !== "refused" ? ["description"] : []);
     return html`<wt-modal
       size="standard"

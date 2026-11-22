@@ -282,7 +282,13 @@ it.each([
   },
 );
 
-it("offers a download when Cloud delivery is refused", async () => {
+it.each([
+  ["", "Could not send the report. Download it to keep a copy."],
+  [
+    "Printer jammed",
+    "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
+  ],
+] as const)("offers recovery when Cloud delivery is refused (%s)", async (description, message) => {
   const api = new DashboardApi("", async (_, init) =>
     init.method === "GET"
       ? Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' })
@@ -290,9 +296,8 @@ it("offers a download when Cloud delivery is refused", async () => {
   );
   const { dialog } = await fixture(api);
   await expect.poll(() => dialog.shadowRoot!.querySelector("[data-send]")).not.toBeNull();
+  if (description) await describeProblem(dialog, description);
   await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error)
-    .toBe("Could not send the report. Download it to keep a copy.");
+  await expect.poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error).toBe(message);
   expect(dialog.shadowRoot!.querySelector<WtButton>("[data-download]")!.disabled).toBe(false);
 });
