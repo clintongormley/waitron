@@ -1,12 +1,9 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
-import type { AddressInfo } from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { serve, type ServerType } from "@hono/node-server";
-import { Hono } from "hono";
 import { deployment, nodes, taxpayer, withNodeTransaction } from "@waitron/db";
 import { readPairLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,17 +13,15 @@ import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { adoptFromPrimary } from "./adopt.js";
-import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
-import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
+import { adoptFromPrimary, type AdoptHooks } from "./adopt.js";
 import { writeCredentialsRing } from "./box-secrets.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
 import {
   readPendingAdoption,
   runFinishAdoption,
   writePendingAdoption,
   type PendingAdoption,
 } from "./finish-adoption.js";
-import { mountSetup } from "./setup-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
@@ -41,10 +36,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-const credential = {
-  email: "owner@example.test",
-  password: "synthetic-login",
-};
 let stateDir: string;
 beforeEach(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "adoption-allocation-"));
@@ -82,7 +73,7 @@ function bundle(): MirrorBundle {
     boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
   };
 }
-function deps(value = bundle()) {
+function deps() {
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
@@ -91,27 +82,8 @@ function deps(value = bundle()) {
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     }),
-    advertisedOrigin: "https://spare.test",
-    spareStorePort: 7443,
     assertStartsWith: () => {},
     environment: "preproduction" as const,
-    // The main box endorses the identity this box sends.
-    fetchBundle: async (
-      _url: string,
-      _credential: unknown,
-      standby: { nodeId: string; publicKey: string },
-    ) => ({
-      ...value,
-      reservedIdentity: {
-        ...value.reservedIdentity,
-        endorsement: endorseKey(
-          standby.nodeId,
-          standby.publicKey,
-          PRIMARY,
-          PRIMARY_KEYS.privateKey,
-        ),
-      },
-    }),
     persistTrading: async () => {},
     persistBackupSettings: async () => {},
     persistModuleConfig: async () => {},
@@ -123,14 +95,26 @@ function deps(value = bundle()) {
     now: () => new Date(),
   };
 }
-const request = { primaryUrl: "https://primary.test", credential };
+/** This box's identity and the bundle the main box endorsed it in, handed to adopt as a code join does. */
+async function adoptJoined(value: MirrorBundle, hooks: AdoptHooks) {
+  const identity = generateStandbyIdentity();
+  const storeUrl = "https://spare.test:7443";
+  const endorsement = endorseKey(
+    identity.nodeId,
+    identity.publicKey,
+    PRIMARY,
+    PRIMARY_KEYS.privateKey,
+  );
+  const joined = { ...value, reservedIdentity: { ...value.reservedIdentity, endorsement } };
+  return adoptFromPrimary(deps(), { identity, bundle: joined, storeUrl }, hooks);
+}
 
 it("keeps the stamped-environment refusal before allocation-dependent adoption", async () => {
   await suite.db.insert(deployment).values({ id: 1, environment: "production" });
   const before = await state();
   let reachedFirstWrite = false;
   await expect(
-    adoptFromPrimary(deps(), request, {
+    adoptJoined(bundle(), {
       beforeFirstWrite: async () => {
         reachedFirstWrite = true;
       },
@@ -168,9 +152,9 @@ async function fiscalState() {
 it("adopts with the allocation-dependent module enabled, writing no fiscal row", async () => {
   const before = await fiscalState();
   expect(Object.values(before).every((rows) => Array.isArray(rows))).toBe(true);
-  await expect(
-    adoptFromPrimary(deps(), request, { beforeFirstWrite: async () => {} }),
-  ).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
+  await expect(adoptJoined(bundle(), { beforeFirstWrite: async () => {} })).resolves.toMatchObject({
+    breakGlassKeyName: expect.any(String),
+  });
   expect(await fiscalState()).toEqual(before);
   expect(await readPendingAdoption(stateDir)).toMatchObject({
     originNodeId: PRIMARY,
@@ -180,7 +164,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
 it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
-  const adopted = adoptFromPrimary(deps(value), request, { beforeFirstWrite: async () => {} });
+  const adopted = adoptJoined(value, { beforeFirstWrite: async () => {} });
   await expect(adopted).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
   const result = await adopted;
   expect(result.breakGlassKeyName).toMatch(/^\d{4}-\d{2}-\d{2} · /);
@@ -251,67 +235,3 @@ it("a pending adoption with the allocation-dependent module enabled finishes wit
   expect((await readPairLink(suite.node, STANDBY))?.state).toBe("copied");
   expect(await state()).toEqual(before);
 });
-
-// The main box's answer to the join, as `mirror-bundle-api.ts` sends each refusal; typed by
-// `JOIN_REFUSALS`, so a refusal added there without a case here does not compile.
-const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, unknown>> = {
-  "mirror.bucket_stream_active": {},
-  "mirror.standby_name_taken": {},
-  "mirror.spare_already_joined": {},
-  "backup.recovery_key_missing": {},
-  "mirror.clocks_apart": {
-    primaryAt: "2026-11-10T12:00:00.000Z",
-    standbyAt: "2026-11-10T12:05:00.000Z",
-  },
-};
-it.each(Object.entries(JOIN_REFUSAL_CASES))(
-  "the setup route passes on the main box's %s through the real fetch, writes nothing and does not restart",
-  async (code, params) => {
-    const main = new Hono();
-    main.post("/management-api/mirror-bundle", (c) =>
-      c.json({ error: { code, params: { ...params, detail: "https://primary.internal" } } }, 409),
-    );
-    const server = await new Promise<ServerType>((resolve) => {
-      const started = serve({ fetch: main.fetch, hostname: "127.0.0.1", port: 0 }, () =>
-        resolve(started),
-      );
-    });
-    try {
-      const { port } = server.address() as AddressInfo;
-      const before = {
-        venue: await state(),
-        node: await state(suite.node),
-        files: await readdir(stateDir),
-      };
-      let restarts = 0;
-      const app = new Hono();
-      mountSetup(
-        app,
-        {
-          environment: "preproduction",
-          adopt: (req, hooks) =>
-            adoptFromPrimary({ ...deps(), fetchBundle: fetchMirrorBundle }, req, hooks),
-          requestRestart: () => {
-            restarts += 1;
-          },
-        },
-        () => {},
-      );
-      const response = await app.request("/setup-api/adopt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ primaryUrl: `http://127.0.0.1:${port}`, credential }),
-      });
-      expect(response.status).toBe(409);
-      expect(await response.json()).toEqual({ error: { code, params } });
-      expect(restarts).toBe(0);
-      expect({
-        venue: await state(),
-        node: await state(suite.node),
-        files: await readdir(stateDir),
-      }).toEqual(before);
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
-  },
-);

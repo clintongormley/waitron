@@ -24,13 +24,16 @@ import {
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
 import { isAppError } from "@waitron/shared";
-import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { adoptFromPrimary } from "./adopt.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { writeModuleConfig } from "./module-config.js";
-import { mountSetup } from "./setup-api.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { spareStoreUrl } from "./box-name.js";
+import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
@@ -84,41 +87,44 @@ const migrate = (venueDir: string) =>
 const ringIn = async (path: string): Promise<KeyRing> =>
   loadKeyRing(parseEnvFile(await readFile(path, "utf8")));
 
-type Adopt = (req: AdoptRequest, hooks: AdoptHooks) => Promise<{ breakGlassSecret: string }>;
+type Adopt = NonNullable<SetupDeps["adoptJoined"]>;
 
-/** The real `POST /setup-api/adopt` over the real `adoptFromPrimary`; only the main box is a stub. */
+/**
+ * The real Join and Finish joining routes over the real `adoptFromPrimary`; the main box and its
+ * approval are stubs.
+ */
 async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
   await migrate(venueDir);
   const store = await openVenueDatabase(venueDir);
   try {
-    const adopt: Adopt = async (req, hooks) =>
+    // What the new box holds once the main box approved its join.
+    const identity = generateStandbyIdentity();
+    const bundle: MirrorBundle = {
+      ...BUNDLE,
+      reservedIdentity: {
+        modules: {
+          "fiscal-verifactu": {
+            nif: "90000001K",
+            idSistemaInformatico: "WS",
+            numeroInstalacion: 7,
+          },
+        },
+        series: [{ code: "SA-7", purpose: "standard" }],
+        endorsement: endorseKey(
+          identity.nodeId,
+          identity.publicKey,
+          PRIMARY_NODE_ID,
+          PRIMARY_KEYS.privateKey,
+        ),
+      },
+    };
+    const adopt: Adopt = async (joined, hooks) =>
       adoptFromPrimary(
         {
           ownerDb: store.venue,
           ownerNode: store.node,
           environmentKeys: {},
           ring: await ringIn(join(stateDir, "secrets.env")),
-          fetchBundle: async (_url, _credential, standby) => ({
-            ...BUNDLE,
-            reservedIdentity: {
-              modules: {
-                "fiscal-verifactu": {
-                  nif: "90000001K",
-                  idSistemaInformatico: "WS",
-                  numeroInstalacion: 7,
-                },
-              },
-              series: [{ code: "SA-7", purpose: "standard" }],
-              endorsement: endorseKey(
-                standby.nodeId,
-                standby.publicKey,
-                PRIMARY_NODE_ID,
-                PRIMARY_KEYS.privateKey,
-              ),
-            },
-          }),
-          advertisedOrigin: "https://standby.example",
-          spareStorePort: 7443,
           assertStartsWith: () => {},
           environment: "preproduction",
           persistTrading: async (cfg) => {
@@ -134,7 +140,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
           listIpv4: () => [],
           now: () => new Date(),
         },
-        req,
+        joined,
         hooks,
       );
     const app = new Hono();
@@ -143,19 +149,17 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
       {
         environment: "preproduction",
         operations: createSetupOperationStore(stateDir),
-        adopt,
+        joinAttempt: approvedJoinAttempt(() => ({
+          identity,
+          bundle,
+          storeUrl: spareStoreUrl("https://standby.example", identity.nodeId, 7443),
+        })),
+        adoptJoined: adopt,
         requestRestart: vi.fn(),
       },
       () => {},
     );
-    const response = await app.request("/setup-api/adopt", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        primaryUrl: "https://primary.example",
-        credential: { email: "owner@example.test", password: "a-password" },
-      }),
-    });
+    const response = await finishJoining(app);
     expect(response.status).toBe(200);
     expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
   } finally {

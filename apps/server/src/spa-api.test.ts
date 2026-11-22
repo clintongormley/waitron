@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { isAppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { assertBuiltApp, mountSpa, safeResolve } from "./spa-api.js";
+import { assertBuiltApp, mountBuiltApps, mountSpa, safeResolve } from "./spa-api.js";
 
 const noopLog: Logger = () => {};
 
@@ -163,6 +163,17 @@ describe("mountSpa", () => {
     const res = await app.request("/assets");
     expect(res.status).toBe(404);
     expect(lines.some((l) => l.event === "spa.read_failed")).toBe(true);
+  });
+
+  it("lets only the dashboard's own origin frame its pages", async () => {
+    const app = new Hono();
+    mountBuiltApps(app, { dashboardAppDir: root! }, noopLog);
+    for (const path of ["/", "/settings/servers"]) {
+      const res = await app.request(path, { headers: { Accept: "text/html" } });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("id=app");
+      expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    }
   });
 
   describe("assertBuiltApp", () => {

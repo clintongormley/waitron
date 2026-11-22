@@ -39,11 +39,10 @@ import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
-import type { MirrorBundle } from "./mirror-bundle.js";
-import { generateStandbyIdentity } from "./reserved-identity.js";
+import type { JoinedBox } from "./box-join-attempt.js";
 import { writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
-import { leafHostnamesFor, ownContactUrl } from "./box-name.js";
+import { leafHostnamesFor } from "./box-name.js";
 import "./errors.js";
 
 /**
@@ -74,22 +73,6 @@ export function nodeTablesAdoptLeaves(tables: readonly string[]): string[] {
 
 export type PersistTradingArgs = TradingConfig;
 
-/** The admin's sign-in for the PRIMARY: it authorises the bundle mint there and never touches this
- * mirror's own database. `totp` is present only when the admin has TOTP enrolled. */
-export interface AdoptCredential {
-  email: string;
-  password: string;
-  totp?: string;
-}
-
-export interface AdoptRequest {
-  primaryUrl: string;
-  credential: AdoptCredential;
-  /** The main box's authority as the person confirmed it; absent only for a plain-http loopback
-   * main box. */
-  confirmedCaPem?: string;
-}
-
 export interface AdoptHooks {
   /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step,
    * with the environment the join is about to stamp. */
@@ -110,24 +93,6 @@ export interface AdoptDeps {
   environmentKeys: Readonly<Record<string, string>>;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
-  /** Sends the standby identity so the primary can reserve and endorse it. */
-  fetchBundle: (
-    primaryUrl: string,
-    credential: AdoptCredential,
-    standby: {
-      nodeId: string;
-      publicKey: string;
-      contactUrl: string;
-      storeUrl: string;
-      at: number;
-    },
-    confirmedCaPem?: string,
-  ) => Promise<MirrorBundle>;
-  /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
-   * can route here after a failover. */
-  advertisedOrigin: string;
-  /** This box's store port; its name and this port are sent as the spare's store address (D15). */
-  spareStorePort: number;
   /** The environment this box's `WAITRON_ENV` names, or `null` when it is unset or empty: the box
    * then takes the main box's. */
   environment: DeploymentEnvironment | null;
@@ -159,26 +124,10 @@ export interface AdoptDeps {
  */
 export async function adoptFromPrimary(
   deps: AdoptDeps,
-  req: AdoptRequest,
+  joined: JoinedBox,
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
-  const standby = generateStandbyIdentity();
-  const contactUrl = ownContactUrl(deps.advertisedOrigin, standby.nodeId);
-  const storeUrl = new URL(contactUrl);
-  storeUrl.protocol = "https:";
-  storeUrl.port = String(deps.spareStorePort);
-  const bundle = await deps.fetchBundle(
-    req.primaryUrl,
-    req.credential,
-    {
-      nodeId: standby.nodeId,
-      publicKey: standby.publicKey,
-      contactUrl,
-      storeUrl: storeUrl.origin,
-      at: deps.now().getTime(),
-    },
-    req.confirmedCaPem,
-  );
+  const { identity: standby, bundle, storeUrl } = joined;
   const { designated } = bundle;
 
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
@@ -216,10 +165,8 @@ export async function adoptFromPrimary(
   if ((await listCredentials(deps.ownerDb)).length > 0) {
     throw new AppError("mirror.vault_not_empty", {});
   }
-  // This proves only that the bundle agrees with itself and with the identity this box sent, not
-  // who sent it: that rests on the authority the person confirmed, which `fetchMirrorBundle` trusts
-  // before it sends the password (trust and fencing,
-  // docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md §6).
+  // This proves only that the bundle agrees with itself and with this box's identity; who sent it
+  // rests on the code compared on both boxes and the main box's signature (`box-join-attempt.ts`).
   const { endorsement } = bundle.reservedIdentity;
   if (
     endorsement.nodeId !== standby.nodeId ||
@@ -274,7 +221,7 @@ export async function adoptFromPrimary(
       state: "awaiting_copy",
       peerNodeId: designated.nodeId,
       peerPublicKey: bundle.primaryPublicKey,
-      storeUrl: storeUrl.origin,
+      storeUrl,
       ...bundle.store,
     });
     const { name } = await mintBreakGlassKeyTx(deps.ownerDb, tx, standby.nodeId, recovery);

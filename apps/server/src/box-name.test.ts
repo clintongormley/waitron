@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxHostnameFor, ownContactUrl, sameBoxName } from "./box-name.js";
+import { boxHostnameFor, ownContactUrl, sameBoxName, spareStoreUrl } from "./box-name.js";
 
 const NODE = "7f3a9c00-0000-4000-8000-000000000001";
 
@@ -22,6 +22,16 @@ describe("a box's own name", () => {
     expect(ownContactUrl("https://localhost:8443", NODE)).toBe("https://localhost:8443");
     expect(ownContactUrl("https://box.deli.test", NODE)).toBe("https://box.deli.test");
     expect(ownContactUrl("https://shop.waitron.local", NODE)).toBe("https://shop.waitron.local");
+  });
+
+  it("puts a spare's store at its contact address over https, on the store port", () => {
+    expect(spareStoreUrl("http://waitron.local:8080", NODE, 7443)).toBe(
+      "https://box-7f3a.waitron.local:7443",
+    );
+    expect(spareStoreUrl("https://spare.test", NODE, 7443)).toBe("https://spare.test:7443");
+    expect(spareStoreUrl("https://waitron.local:8443", NODE, 443)).toBe(
+      "https://box-7f3a.waitron.local",
+    );
   });
 
   it("calls two node ids the same box name when their first four characters match", () => {

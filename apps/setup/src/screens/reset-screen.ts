@@ -1,42 +1,12 @@
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  focusFirstInvalid,
-  submitOnEnter,
-  baseStyles,
-  pageTitleStyles,
-  leaveCoordinatorFor,
-  type DraftScope,
-} from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { passwordIcon } from "../password-icon.js";
-import {
-  actionsStyles,
-  errorStyles,
-  fieldStyles,
-  helpLinkStyles,
-  statusStyles,
-} from "../form-styles.js";
+import { actionsStyles, errorStyles, helpLinkStyles, statusStyles } from "../form-styles.js";
 import { dispatchResetRequested, dispatchSetupGoto } from "../events.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
-
-export type ResetField = "email" | "password";
-
-const FIELDS: readonly ResetField[] = ["email", "password"];
-
-const MISSING: Record<ResetField, StringKey> = {
-  email: "reset.missing.email",
-  password: "reset.missing.password",
-};
-
-const CHECK: Record<ResetField, StringKey> = {
-  email: "reset.check.email",
-  password: "reset.check.password",
-};
 
 export interface ResetScreenOutcome {
   kind: "resetting" | "refused";
@@ -48,7 +18,6 @@ export class SetupResetScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
-    fieldStyles,
     errorStyles,
     statusStyles,
     helpLinkStyles,
@@ -62,14 +31,7 @@ export class SetupResetScreen extends LitElement {
 
   @property({ type: Boolean }) busy = false;
 
-  /** The server refused the login. Marks no field (owner rule, A153); its message stays until
-   * either field changes or the reset is asked again. */
-  @property({ type: Boolean }) credentialsRejected = false;
-
-  /** A field the server refused on its own (`setup.request_invalid`'s `params.field`). */
-  @property() invalidField?: ResetField;
-
-  /** A refusal the operator cannot correct in the fields; it never disables the reset. */
+  /** A refusal of the reset; it never disables the reset. */
   @property() errorMessage?: string;
   /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
   @property({ attribute: false }) refusal?: unknown;
@@ -77,51 +39,11 @@ export class SetupResetScreen extends LitElement {
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
   @property({ attribute: false }) outcome?: ResetScreenOutcome;
 
-  /** The main box's Servers page, from the address typed in this tab; unset when not known. */
   @property({ attribute: false }) serversUrl?: string;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
-  @state() private values: Record<ResetField, string> = { email: "", password: "" };
-
-  @state() private attempted = false;
-
-  @state() private rejectionDismissed = false;
-
-  @state() private fieldRefusalDismissed = false;
-
   @state() private refusalDismissed = false;
-
-  @state() private passwordVisible = false;
-
-  #baseline?: Record<ResetField, string>;
-  #scope?: DraftScope<Record<ResetField, string>>;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.#registerScope();
-  }
-
-  override disconnectedCallback(): void {
-    this.#scope?.dispose();
-    this.#scope = undefined;
-    super.disconnectedCallback();
-  }
-
-  #registerScope(): void {
-    if (!this.isConnected || !this.#baseline || this.#scope || this.outcome) return;
-    this.#scope = leaveCoordinatorFor(this)?.register({
-      id: this,
-      current: () => this.values,
-      snapshot: (form) => ({ ...form }),
-      equal: (a, b) => a.email.trim() === b.email.trim() && a.password === b.password,
-      restore: (form) => {
-        this.values = { ...form };
-        this.attempted = false;
-      },
-    });
-    this.#scope?.commit(this.#baseline);
-  }
 
   constructor() {
     super();
@@ -129,106 +51,13 @@ export class SetupResetScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    this.#baseline ??= { ...this.values };
-    if (this.outcome) {
-      this.#scope?.dispose();
-      this.#scope = undefined;
-    }
-    if (changed.has("credentialsRejected")) this.rejectionDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("refusal")) this.refusalDismissed = false;
-  }
-
-  protected override updated(changed: PropertyValues<this>): void {
-    this.#registerScope();
-    if (changed.has("invalidField") && this.#refusedField() !== undefined)
-      this.#focusFirstInvalid();
-    else if (changed.has("credentialsRejected") && this.#rejected()) this.#focusPassword();
-  }
-
-  #focusPassword(): void {
-    void this.updateComplete.then(() => {
-      if (this.isConnected)
-        this.shadowRoot!.querySelector<HTMLElement>("wt-input[name=password]")?.focus();
-    });
-  }
-
-  #focusFirstInvalid(): void {
-    void this.updateComplete.then(() => {
-      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
-    });
-  }
-
-  #rejected(): boolean {
-    return this.credentialsRejected && !this.rejectionDismissed;
-  }
-
-  #refusedField(): ResetField | undefined {
-    return this.fieldRefusalDismissed ? undefined : this.invalidField;
-  }
-
-  #missing(): Set<ResetField> {
-    if (!this.attempted) return new Set();
-    return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
-  }
-
-  #onField(key: ResetField, event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.values = { ...this.values, [key]: event.detail.value };
-    this.#scope?.changed();
-    this.rejectionDismissed = true;
-    if (key === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
   #reset(): void {
     if (this.busy) return;
-    this.attempted = true;
     this.refusalDismissed = true;
-    this.rejectionDismissed = true;
-    this.fieldRefusalDismissed = true;
-    if (this.#missing().size > 0) {
-      this.#focusFirstInvalid();
-      return;
-    }
-    // `password` is not trimmed: whitespace can be intentional in a secret.
-    dispatchResetRequested(this, {
-      email: this.values.email.trim(),
-      password: this.values.password,
-    });
-  }
-
-  #field(label: string, key: ResetField, missing: Set<ResetField>): TemplateResult {
-    const error = missing.has(key)
-      ? t(MISSING[key])
-      : this.#refusedField() === key
-        ? t(CHECK[key])
-        : "";
-    return html`<wt-input
-      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]"))}
-      class="field"
-      label=${label}
-      name=${key}
-      autocomplete=${key === "password" ? "current-password" : "username"}
-      required
-      error=${error}
-      ?invalid=${error !== ""}
-      data-test=${key}
-      type=${key === "email" ? "email" : !this.passwordVisible ? "password" : "text"}
-      .value=${this.values[key]}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      >${
-        key === "password"
-          ? html`<wt-button
-              slot="end"
-              variant="ghost"
-              data-test="toggle-password"
-              aria-label=${t(this.passwordVisible ? "reset.hide_password" : "reset.show_password")}
-              @click=${() => (this.passwordVisible = !this.passwordVisible)}
-              >${passwordIcon(this.passwordVisible)}</wt-button
-            >`
-          : nothing
-      }</wt-input
-    >`;
+    dispatchResetRequested(this);
   }
 
   override render(): TemplateResult {
@@ -250,13 +79,7 @@ export class SetupResetScreen extends LitElement {
         </div>
       `;
     }
-    const missing = this.#missing();
-    const rejected = this.#rejected();
-    const bottom = [
-      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
-      ...(rejected ? [t("reset.rejected")] : []),
-      ...(missing.size > 0 || this.#refusedField() !== undefined ? [t("reset.fix_fields")] : []),
-    ].join(" ");
+    const bottom = this.refusalDismissed ? "" : (this.errorMessage ?? "");
     return html`
       <h1>${t("reset.heading")}</h1>
       <p>${t("reset.explanation")}</p>
@@ -275,9 +98,6 @@ export class SetupResetScreen extends LitElement {
                 ${t("reset.remove_after")}`
         }
       </p>
-      <p>${t("reset.prompt")}</p>
-      ${this.#field(t("reset.email_label"), "email", missing)}
-      ${this.#field(t("reset.password_label"), "password", missing)}
       <wt-form-actions .error=${bottom}>
         <wt-button
           variant="ghost"
@@ -289,7 +109,7 @@ export class SetupResetScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="reset"
-          ?disabled=${this.busy || missing.size > 0}
+          ?disabled=${this.busy}
           @click=${() => this.#reset()}
           >${t(this.busy ? "reset.busy" : "reset.submit")}</wt-button
         >

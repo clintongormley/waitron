@@ -740,7 +740,7 @@ established. The only way past the refusal on a genuinely production box is deli
 The command was designed and built in #314.
 
 A box whose join to another server stopped partway can also be reset from the setup wizard, without
-a terminal, given the admin login the join used; the server refuses it in any other state. The box
+a terminal and with no sign-in; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them),
 `pending-adoption.json`, the record of the stopped join and, last, its own request file,
@@ -1009,7 +1009,8 @@ replaced (`restore.membership_invalid`, described under
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing in the server: the SANs in the leaf certificate it presents, the reach URLs and QR the
-setup wizard shows, and the mDNS responder's answers. The setup start's check for another box
+setup wizard shows, the mDNS responder's answers, and the addresses a new box sends when it asks
+to join a main box (unset, that list is every interface address that is not loopback). The setup start's check for another box
 answering `waitron.local` counts both these and every interface address as this box's own. The
 addresses `waitron.sh` prints on the console do not use it. Leave it empty on a
 real box — unset, the box advertises only its **default-route interface** (its real uplink), so the

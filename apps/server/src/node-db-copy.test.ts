@@ -36,6 +36,8 @@ import {
 import { verifySecretAsync } from "@waitron/identity";
 import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import { spareStoreUrl } from "./box-name.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
@@ -131,15 +133,26 @@ beforeAll(async () => {
   const bStore = await openStore(bDir);
   let persisted: EncodedKeyRing | undefined;
   let bId: string | undefined;
-  let bJoinedPublicKey: string | undefined;
+  // What B holds once A approved its join, as Finish joining hands it to `adoptFromPrimary`.
+  const identity = generateStandbyIdentity();
+  const bJoinedPublicKey = identity.publicKey;
+  const bundle = await assembleMirrorBundle({
+    appDb: aStore.venue,
+    node: aStore.node,
+    ring: RING_A,
+    stateDir: aState,
+    ...PAIR_BUNDLE_FIELDS,
+    boxHostname: "waitron.local",
+
+    designated: { nodeId: aId },
+    standby: identity,
+  });
   const joined = await adoptFromPrimary(
     {
       ownerDb: bStore.venue,
       ownerNode: bStore.node,
       environmentKeys: {},
       ring: RING_B_OWN,
-      advertisedOrigin: "https://spare.test",
-      spareStorePort: 7443,
       assertStartsWith: () => {},
       environment: "preproduction",
       database: "spare",
@@ -154,25 +167,8 @@ beforeAll(async () => {
       persistCredentialsRing: async (ring) => {
         persisted = ring;
       },
-      fetchBundle: async (_url, _credential, standby) => {
-        bJoinedPublicKey = standby.publicKey;
-        return assembleMirrorBundle({
-          appDb: aStore.venue,
-          node: aStore.node,
-          ring: RING_A,
-          stateDir: aState,
-          ...PAIR_BUNDLE_FIELDS,
-          boxHostname: "waitron.local",
-
-          designated: { nodeId: aId },
-          standby,
-        });
-      },
     },
-    {
-      primaryUrl: "https://primary.test",
-      credential: { email: "owner@example.test", password: "x" },
-    },
+    { identity, bundle, storeUrl: spareStoreUrl("https://spare.test", identity.nodeId, 7443) },
     { beforeFirstWrite: async () => {} },
   );
 
@@ -194,7 +190,7 @@ beforeAll(async () => {
   a = { id: aId, publicKey: nodeSigningPublicKey(aKey), secret: aSecret, dir: aDir };
   b = {
     id: bId!,
-    joinedPublicKey: bJoinedPublicKey!,
+    joinedPublicKey: bJoinedPublicKey,
     secret: joined.breakGlassSecret,
     dir: bDir,
     ring: loadKeyRing(keyRingEnv(persisted!)),

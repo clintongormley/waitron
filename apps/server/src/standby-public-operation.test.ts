@@ -34,7 +34,14 @@ import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import {
+  joinAsBundleAnswer,
+  joiningBox,
+  mountBoxJoin,
+  signedInCookie,
+  type PersonSent,
+} from "./testing/box-join.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
@@ -191,7 +198,7 @@ async function promotionApp() {
 async function bundleApp() {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const app = new Hono();
-  mountMirrorBundleApi(app, {
+  mountBoxJoin(app, {
     appDb: suite.db,
     node: suite.node,
     ring: RING,
@@ -199,11 +206,26 @@ async function bundleApp() {
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
     designated: { nodeId: PRIMARY },
-
-    credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });
   return app;
+}
+/** The spare asks to join and the administrator, signed in afresh, taps its code. */
+async function approvedJoin(
+  app: Hono,
+  body: ReturnType<typeof bundleBody>,
+  sent: Partial<PersonSent> = {},
+) {
+  const spare = joiningBox("192.168.1.20", {
+    identity: { ...generateStandbyIdentity(), nodeId: TARGET },
+    contactUrl: "https://spare.test",
+    storeUrl: "https://spare.test:7443",
+  });
+  return joinAsBundleAnswer(app, {
+    box: spare,
+    sent: { cookie: await signedInCookie(suite.db, ADMIN), ...sent },
+    moduleOperation: body.moduleOperation,
+  });
 }
 function post(app: Hono, path: string, body: unknown) {
   return app.request(path, {
@@ -220,16 +242,7 @@ function promoteBody(credentials: Record<string, unknown>) {
   };
 }
 function bundleBody() {
-  return {
-    email: ADMIN_EMAIL,
-    password: PASSWORD,
-    standbyNodeId: TARGET,
-    standbyPublicKey: generateNodeKeyPair().publicKey,
-    standbyContactUrl: "https://spare.test",
-    standbyStoreUrl: "https://spare.test:7443",
-    standbyAt: Date.now(),
-    moduleOperation: { binding: scope("reserve"), input },
-  };
+  return { moduleOperation: { binding: scope("reserve"), input } };
 }
 async function untouched() {
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
@@ -268,8 +281,8 @@ it.each(["account", "key"])(
     expect(observedOperator).toEqual(expectedOperator);
   },
 );
-it("reserves an opaque dormant identity through the public bundle route after reauthentication", async () => {
-  const response = await post(await bundleApp(), "/management-api/mirror-bundle", bundleBody());
+it("reserves an opaque dormant identity through the approved join of a freshly signed-in administrator", async () => {
+  const response = await approvedJoin(await bundleApp(), bundleBody());
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   const bundle = await response.json();
   expect(bundle.reservedIdentity.modules).toEqual({
@@ -312,7 +325,7 @@ it("admits with the module operation over the streaming link of a spare the char
     await setPairLinkStateTx(tx, PRIMARY, "streaming");
   });
 
-  const response = await post(app, "/management-api/mirror-bundle", bundleBody());
+  const response = await approvedJoin(app, bundleBody());
 
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   expect((await readPairLink(suite.node, PRIMARY))?.peerNodeId).toBe(TARGET);
@@ -405,7 +418,7 @@ it.each(["action", "sourceId", "targetNodeId"])(
     Object.assign(body.moduleOperation.binding, {
       [field]: field === "action" ? "promote" : ADMIN,
     });
-    const response = await post(await bundleApp(), "/management-api/mirror-bundle", body);
+    const response = await approvedJoin(await bundleApp(), body);
     expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe("module.operation_invalid");
     expect(collected).toEqual([]);
@@ -417,7 +430,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
   modules.length = 0;
   const body = bundleBody();
   body.moduleOperation.binding.module = "disabled-regime";
-  const response = await post(app, "/management-api/mirror-bundle", body);
+  const response = await approvedJoin(app, body);
   expect(response.status).toBe(400);
   expect((await response.json()).error).toEqual({
     code: "module.operation_invalid",
@@ -483,10 +496,10 @@ it("refuses a promotion runner redirected to another node before collecting evid
   expect(collected).toEqual([]);
   await untouched();
 });
-it("refuses a manager's correct password before collecting reservation evidence", async () => {
+it("refuses an approver without node.manage before collecting reservation evidence", async () => {
   const app = await bundleApp();
   await setBuiltInRoleForTest(suite.db, ADMIN, "manager");
-  const response = await post(app, "/management-api/mirror-bundle", bundleBody());
+  const response = await approvedJoin(app, bundleBody());
   expect(response.status).toBe(403);
   expect((await response.json()).error).toEqual({
     code: "authorization.not_permitted",
@@ -495,3 +508,27 @@ it("refuses a manager's correct password before collecting reservation evidence"
   expect(collected).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
+it.each([
+  [
+    "a stale sign-in",
+    async () => ({ cookie: await signedInCookie(suite.db, ADMIN, false) }),
+    400,
+    "management_session.proof_required",
+  ],
+  [
+    "another page",
+    async () => ({ headers: { origin: "https://elsewhere.example" } }),
+    403,
+    "node.operation_page_required",
+  ],
+] as const)(
+  "does not consult outside evidence for a join approved on %s",
+  async (_case, sent, status, code) => {
+    const app = await bundleApp();
+    const response = await approvedJoin(app, bundleBody(), await sent());
+    expect(response.status).toBe(status);
+    expect((await response.json()).error.code).toBe(code);
+    expect(collected).toEqual([]);
+    expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  },
+);

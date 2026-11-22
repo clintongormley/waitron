@@ -2024,10 +2024,23 @@ export interface ServerRow {
 export interface ServerListing {
   spare?: SpareFollowView | null;
   term: number | null;
-  /** This box's authority fingerprint, which a joining spare asks the person to compare; null
-   * when the box serves no authority of its own. */
-  authorityFingerprint: string | null;
   nodes: ServerRow[];
+  /** Boxes asking to join that the main box lists; absent on a box that answers none. */
+  joinRequests?: BoxJoinRequestRow[];
+}
+
+/** LOCAL copy of the server's `ListedJoinRequest` (`apps/server/src/box-join-requests.ts`). */
+export interface BoxJoinRequestRow {
+  id: string;
+  address: string;
+  askedAt: string;
+  /** A box at this address started again recently: tap only a code it showed after that. */
+  startedAgain: boolean;
+}
+
+/** The Check answer (`apps/server/src/box-join-api.ts`): three six-digit codes, one the new box's. */
+export interface BoxJoinCheck {
+  choices: string[];
 }
 
 /** LOCAL copy of the server's `DestinationView` (`apps/server/src/backup-supervisor.ts`). */
@@ -5328,6 +5341,30 @@ export class DashboardApi {
       `/management-api/servers/${encodeURIComponent(nodeId)}/return-abandoned`,
       "POST",
       { confirmed: true },
+    );
+  }
+
+  /** Needs a fresh sign-in; writes nothing. */
+  checkBoxJoin(requestId: string): Promise<BoxJoinCheck> {
+    return this.#request(
+      `/management-api/box-joins/${encodeURIComponent(requestId)}/check`,
+      "POST",
+    );
+  }
+
+  /** A wrong code ends the request (`mirror.join_wrong_code`); any other refusal leaves it waiting. */
+  approveBoxJoin(requestId: string, code: string): Promise<void> {
+    return this.#request(
+      `/management-api/box-joins/${encodeURIComponent(requestId)}/approve`,
+      "POST",
+      { code },
+    );
+  }
+
+  dismissBoxJoin(requestId: string): Promise<void> {
+    return this.#request(
+      `/management-api/box-joins/${encodeURIComponent(requestId)}/dismiss`,
+      "POST",
     );
   }
 

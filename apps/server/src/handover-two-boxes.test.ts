@@ -416,7 +416,7 @@ async function newSpareJoins(args: {
       ),
       email: args.email,
     },
-    { primaryUrl: args.advertisedOrigin, spareUrl: "https://new-spare.test" },
+    { spareUrl: "https://new-spare.test" },
   );
   const newId = joinedSpare.spareId;
   // As in `joined()`: the taxpayer and the chart its first copy would bring.
@@ -604,7 +604,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const rejoined = await joinSpare(
         { spareBox: resetBox, spareState: resetState, ring: RING },
         { bundleApp: cBundle, email: boxes.main.email },
-        { primaryUrl: SPARE_URL, spareUrl: "https://reset.test" },
+        { spareUrl: "https://reset.test" },
       );
       const newId = rejoined.spareId;
       expect(newId).not.toBe(mainId);
@@ -917,7 +917,6 @@ describe("the owner's case: an emergency switch while the old main box stays off
           ring: RING,
           nodeId: spareId,
           reloadStream: async () => {},
-          authorityFingerprint: async () => null,
         },
         () => undefined,
       );

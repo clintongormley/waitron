@@ -28,18 +28,6 @@ export const finishEn = {
   "reset.servers_link": "Servers page",
   "reset.remove_after":
     "and, in this server's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this server again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
-  "reset.prompt": "Enter the admin email and password you used to connect this server.",
-  "reset.email_label": "Admin email",
-  "reset.password_label": "Admin password",
-  "reset.show_password": "Show password",
-  "reset.hide_password": "Hide password",
-  "reset.missing.email": "Enter the admin email.",
-  "reset.missing.password": "Enter the admin password.",
-  "reset.check.email": "Check the admin email.",
-  "reset.check.password": "Check the admin password.",
-  "reset.rejected":
-    "That email and password are not the admin login used to connect this server. Check them and try again.",
-  "reset.fix_fields": "Correct the highlighted fields to continue.",
   "reset.back": "Back",
   "reset.submit": "Reset this server",
   "reset.busy": "Resetting…",
@@ -164,19 +152,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.servers_link": "página Servidores",
   "reset.remove_after":
     "del principal y, en el menú de la fila de este servidor, elige Retirar y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
-  "reset.prompt":
-    "Introduce el correo y la contraseña del administrador que usaste para conectar este servidor.",
-  "reset.email_label": "Correo del administrador",
-  "reset.password_label": "Contraseña del administrador",
-  "reset.show_password": "Mostrar contraseña",
-  "reset.hide_password": "Ocultar contraseña",
-  "reset.missing.email": "Introduce el correo del administrador.",
-  "reset.missing.password": "Introduce la contraseña del administrador.",
-  "reset.check.email": "Revisa el correo del administrador.",
-  "reset.check.password": "Revisa la contraseña del administrador.",
-  "reset.rejected":
-    "Ese correo y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
-  "reset.fix_fields": "Corrige los campos marcados para continuar.",
   "reset.back": "Volver",
   "reset.submit": "Restablecer este servidor",
   "reset.busy": "Restableciendo…",

@@ -26,7 +26,6 @@ const row = (overrides: Partial<ServerRow>): ServerRow => ({
 
 const listingWith = (old: Partial<ServerRow>): ServerListing => ({
   term: 5,
-  authorityFingerprint: null,
   nodes: [
     row({
       nodeId: SELF,

@@ -83,41 +83,89 @@ export const startEn = {
     "Rebuild onto this fresh server from the continuous copy in your own storage bucket, when the old server is gone. You need the recovery pack or kit file.",
   "role.back": "Back",
 
-  "connect.heading": "Connect to the primary",
+  "connect.heading": "Join the main box",
   "connect.intro":
-    "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To restore a backup instead, choose Back.",
-  "connect.primary_url.label": "Primary server address",
-  "connect.primary_url.error": "Check the primary server address.",
+    "This box joins your venue's main box and keeps a copy of its data. Once it has joined, it can take over: by a handover from the main box's Servers page, or by an emergency switch if the main box fails. Enter the main box's address and choose Join. To restore a backup instead, choose Back.",
+  "connect.primary_url.label": "Main box address",
+  "connect.primary_url.error": "Enter the main box's address.",
   "connect.primary_url.refused":
-    "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
+    "This address can't be used. Enter the main box's name, starting with https://, for example https://waitron.local. An IP address on the venue's network, such as https://192.168.1.10, is not accepted.",
   "connect.primary_url.hint": "For example https://waitron.local",
-  "connect.email.label": "Admin email",
-  "connect.email.error": "Check the admin email.",
-  "connect.email.hint": "An admin's sign-in email on the primary server",
-  "connect.password.label": "Admin password",
-  "connect.password.error": "Check the admin password.",
-  "connect.password.hint": "That admin's dashboard password",
-  "connect.totp.label": "Authenticator code",
-  "connect.totp.error": "Check the authenticator code.",
-  "connect.totp.hint": "The code the authenticator shows now",
-  "connect.totp.notice":
-    "This account uses an authenticator app. Enter its current code and choose Connect.",
   "connect.fix_fields": "Correct the highlighted fields to continue.",
   "connect.back": "Back",
-  "connect.connect": "Connect",
-  "connect.continue": "Continue",
-  "connect.certificate_failed":
-    "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
-  "connect.compare.intro_before": "Open",
-  "connect.compare.intro_link": "your primary server's Servers page",
-  "connect.compare.intro_after":
-    "on a device already signed in to it. The public certificate fingerprint shown there must match this one.",
-  "connect.compare.label": "Public certificate fingerprint",
-  "connect.compare.matches": "It matches",
-  "connect.compare.mismatch": "It doesn't match",
-  "connect.stopped":
-    "The fingerprints don't match, so this may not be your primary server. Nothing was sent to it. Check the address and compare again, or go back.",
-  "connect.check_address": "Change the address",
+  "connect.join": "Join",
+  "connect.start_again": "Start again",
+  "connect.finish": "Finish joining",
+  "connect.finish.bundle_fetch_failed":
+    "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
+  "connect.reading": "Checking this box's join…",
+  "connect.waiting.lead":
+    "On the main box, open System → Servers, choose Check beside the request from this box, and tap this code:",
+  "connect.waiting.addresses":
+    "The request on the main box should come from one of this box's addresses: {addresses}",
+  "connect.waiting.main": "Main box: {primaryUrl}",
+  "connect.waiting.time_left": "Time left: {minutes} min",
+  "connect.approved": "The main box approved a join with code {code}.",
+  "connect.approved.hint":
+    "Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
+  "connect.elsewhere":
+    "A join was started from another page or device. This page cannot show its code. Choose Start again to start one here; the other page's join then ends.",
+  "connect.replaced":
+    "This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. Choose Start again for a new code.",
+  "connect.ended.wrong_code":
+    "On the main box, a code that is not this box's was chosen, so this request has ended and nothing was sent. Choose Start again for a new code.",
+  "connect.ended.dismissed":
+    "The main box's Servers page dismissed this request. Choose Start again to ask again.",
+  "connect.ended.cancelled":
+    "This request was cancelled, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
+  "connect.ended.stopped":
+    "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+  "connect.ended.unknown":
+    "The main box ended this request, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
+  "connect.ended.code_taken": "The main box needs this box to ask again. Choose Start again.",
+  "connect.ended.invalid":
+    "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
+  "connect.failed":
+    "This join stopped, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
+  "connect.failed.not_found":
+    "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
+  "connect.failed.copy_invalid":
+    "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+  "connect.refusal.join_invalid":
+    "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+  "connect.refusal.join_not_found":
+    "The main box no longer has this request: it ran out of time or the main box restarted. Choose Join again.",
+  "connect.refusal.join_address_mismatch":
+    "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Join again. If it happens again, check what is connected between the two boxes.",
+  "connect.refusal.join_code_taken": "The main box needs this box to ask again. Choose Join again.",
+  "connect.refusal.join_full_address":
+    "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
+  "connect.refusal.join_full_network":
+    "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Join again. If this keeps happening, something on the network is sending them.",
+  "connect.refusal.join_full_listed":
+    "The main box already has {max} other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+  "connect.refusal.join_full_recent":
+    "The main box has had {max} requests to join in the last {minutes} minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
+  "connect.refusal.join_waiting":
+    "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
+  "connect.refusal.join_approving":
+    "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
+  "connect.refusal.join_in_use":
+    "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
+  "connect.refusal.join_handle_invalid":
+    "This join was started on another page or device, so this page cannot finish it. Finish it there, or choose Start again.",
+  "connect.refusal.unreachable":
+    "This box got no usable answer from the main box at that address. Check the address and that the main box is switched on, then choose Join again.",
+  "connect.refusal.clocks_apart":
+    "The two boxes' clocks are more than 10 minutes apart (the main box reads {primaryAt}, this box {standbyAt}). If this box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Join again.",
+  "connect.refusal.name_taken":
+    "This box picked a name another box of the venue already uses. Nothing was changed. Choose Join again: it picks a new name.",
+  "connect.refusal.insecure":
+    "This page is not using a secure connection, so this box will not join from it. Open this box's setup page at an address starting with https://, then try again.",
+  "connect.refusal.adopt_incomplete":
+    "An earlier join of this box stopped partway. Reload this page to see how to clear it.",
+  "connect.refusal.generic":
+    "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
 
   "mode.heading": "Set up this Waitron server",
   "mode.intro":
@@ -277,41 +325,91 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
   "role.back": "Volver",
 
-  "connect.heading": "Conectar con el servidor principal",
+  "connect.heading": "Unirse al servidor principal",
   "connect.intro":
-    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para restaurar una copia de seguridad, elige Volver.",
+    "Este servidor se une al servidor principal de tu local y guarda una copia de sus datos. Una vez unido, puede tomar el relevo: con un traspaso desde la página Servidores del servidor principal, o con un cambio de emergencia si el servidor principal falla. Escribe la dirección del servidor principal y elige Unirse. Para restaurar una copia de seguridad, elige Volver.",
   "connect.primary_url.label": "Dirección del servidor principal",
-  "connect.primary_url.error": "Revisa la dirección del servidor principal.",
+  "connect.primary_url.error": "Escribe la dirección del servidor principal.",
   "connect.primary_url.refused":
-    "Esta dirección no se puede usar. Introduce el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del restaurante, como https://192.168.1.10.",
+    "No se puede usar esta dirección. Escribe el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del local, como https://192.168.1.10.",
   "connect.primary_url.hint": "Por ejemplo https://waitron.local",
-  "connect.email.label": "Correo del administrador",
-  "connect.email.error": "Revisa el correo del administrador.",
-  "connect.email.hint": "Correo de acceso de un administrador del servidor principal",
-  "connect.password.label": "Contraseña del administrador",
-  "connect.password.error": "Revisa la contraseña del administrador.",
-  "connect.password.hint": "La contraseña del panel de ese administrador",
-  "connect.totp.label": "Código del autenticador",
-  "connect.totp.error": "Revisa el código del autenticador.",
-  "connect.totp.hint": "El código que muestra ahora el autenticador",
-  "connect.totp.notice":
-    "Esta cuenta usa una aplicación de autenticación. Escribe el código que muestra ahora y elige Conectar.",
   "connect.fix_fields": "Corrige los campos marcados para continuar.",
   "connect.back": "Volver",
-  "connect.connect": "Conectar",
-  "connect.continue": "Continuar",
-  "connect.certificate_failed":
-    "No se ha podido leer el certificado del servidor principal. Revisa la dirección y que el servidor principal esté encendido, e inténtalo de nuevo.",
-  "connect.compare.intro_before": "Abre",
-  "connect.compare.intro_link": "la página Servidores de tu servidor principal",
-  "connect.compare.intro_after":
-    "en un dispositivo que ya tenga la sesión iniciada en él. La huella del certificado público que aparece allí debe coincidir con esta.",
-  "connect.compare.label": "Huella del certificado público",
-  "connect.compare.matches": "Coincide",
-  "connect.compare.mismatch": "No coincide",
-  "connect.stopped":
-    "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
-  "connect.check_address": "Cambiar la dirección",
+  "connect.join": "Unirse",
+  "connect.start_again": "Empezar de nuevo",
+  "connect.finish": "Terminar la unión",
+  "connect.finish.bundle_fetch_failed":
+    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
+  "connect.reading": "Comprobando la unión de este servidor…",
+  "connect.waiting.lead":
+    "En el servidor principal, abre Sistema → Servidores, elige Comprobar junto a la solicitud de este servidor y toca este código:",
+  "connect.waiting.addresses":
+    "La solicitud en el servidor principal debe venir de una de las direcciones de este servidor: {addresses}",
+  "connect.waiting.main": "Servidor principal: {primaryUrl}",
+  "connect.waiting.time_left": "Tiempo restante: {minutes} min",
+  "connect.approved": "El servidor principal aprobó una unión con el código {code}.",
+  "connect.approved.hint":
+    "Elige Terminar la unión solo si tocaste ese código en el servidor principal. Si no, elige Empezar de nuevo aquí. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista.",
+  "connect.elsewhere":
+    "Se empezó una unión desde otra página o dispositivo. Esta página no puede mostrar su código. Elige Empezar de nuevo para empezar una aquí; la unión de la otra página terminará.",
+  "connect.replaced":
+    "La unión de esta página se terminó desde otra página o dispositivo, así que su código ya no vale. No lo toques en el servidor principal. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.wrong_code":
+    "En el servidor principal se eligió un código que no es el de este servidor, así que esta solicitud ha terminado y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.dismissed":
+    "En la página Servidores del servidor principal se descartó esta solicitud. Elige Empezar de nuevo para volver a pedir la unión.",
+  "connect.ended.cancelled":
+    "Esta solicitud se canceló, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.stopped":
+    "El servidor principal se detuvo a medias al aprobar este servidor, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
+  "connect.ended.unknown":
+    "El servidor principal terminó esta solicitud, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.code_taken":
+    "El servidor principal necesita que este servidor vuelva a pedir la unión. Elige Empezar de nuevo.",
+  "connect.ended.invalid":
+    "El servidor principal no ha podido leer la solicitud de este servidor. Elige Empezar de nuevo. Si vuelve a pasar, comprueba que los dos servidores tienen la misma versión de Waitron.",
+  "connect.failed":
+    "Esta unión se detuvo, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.failed.not_found":
+    "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Elige Empezar de nuevo.",
+  "connect.failed.copy_invalid":
+    "El servidor principal aprobó este servidor, pero la copia que envió no ha superado la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
+  "connect.refusal.join_invalid":
+    "El servidor principal no ha podido leer la solicitud de este servidor. Vuelve a elegir Unirse. Si pasa otra vez, comprueba que los dos servidores tienen la misma versión de Waitron.",
+  "connect.refusal.join_not_found":
+    "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Vuelve a elegir Unirse.",
+  "connect.refusal.join_address_mismatch":
+    "El servidor principal recibió la solicitud de este servidor desde una dirección de red que este servidor no tiene, así que algo en la red podría estar reenviándola. Vuelve a elegir Unirse. Si pasa otra vez, comprueba qué hay conectado entre los dos servidores.",
+  "connect.refusal.join_code_taken":
+    "El servidor principal necesita que este servidor vuelva a pedir la unión. Vuelve a elegir Unirse.",
+  "connect.refusal.join_full_address":
+    "El servidor principal ha recibido demasiadas solicitudes desde la dirección de este servidor en el último minuto. Espera un minuto y vuelve a elegir Unirse.",
+  "connect.refusal.join_full_network":
+    "El servidor principal ha recibido demasiadas solicitudes para unirse desde la red en el último minuto. Espera un minuto y vuelve a elegir Unirse. Si sigue pasando, algo en la red las está enviando.",
+  "connect.refusal.join_full_listed":
+    "Ya hay otros {max} servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y vuelve a elegir Unirse aquí.",
+  "connect.refusal.join_full_recent":
+    "El servidor principal ha recibido {max} solicitudes para unirse en los últimos {minutes} minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
+  "connect.refusal.join_waiting":
+    "Este servidor ya está esperando para unirse, o todavía está terminando su última solicitud. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
+  "connect.refusal.join_approving":
+    "El servidor principal está aprobando esta unión, o acaba de dejar de aprobarla, así que no se puede detener desde aquí. Espera un momento: esta página mostrará después la respuesta del servidor principal.",
+  "connect.refusal.join_in_use":
+    "La unión de este servidor está abierta ahora en otra página o dispositivo. Termínala o cancélala allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
+  "connect.refusal.join_handle_invalid":
+    "Esta unión se empezó en otra página o dispositivo, así que esta página no puede terminarla. Termínala allí o elige Empezar de nuevo.",
+  "connect.refusal.unreachable":
+    "Este servidor no ha recibido una respuesta útil del servidor principal en esa dirección. Comprueba la dirección y que el servidor principal está encendido, y vuelve a elegir Unirse.",
+  "connect.refusal.clocks_apart":
+    "Los relojes de los dos servidores tienen más de 10 minutos de diferencia (el principal marca {primaryAt}, este servidor {standbyAt}). Si la hora de este servidor es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y vuelve a elegir Unirse.",
+  "connect.refusal.name_taken":
+    "Este servidor eligió un nombre que ya usa otro servidor del local. No se ha cambiado nada. Vuelve a elegir Unirse: tomará otro nombre.",
+  "connect.refusal.insecure":
+    "Esta página no usa una conexión segura, así que este servidor no se unirá desde ella. Abre la página de configuración de este servidor en una dirección que empiece por https:// e inténtalo de nuevo.",
+  "connect.refusal.adopt_incomplete":
+    "Una unión anterior de este servidor se detuvo a medias. Recarga esta página para ver cómo resolverlo.",
+  "connect.refusal.generic":
+    "Este servidor no ha podido hacerlo ahora. Comprueba la dirección y que el servidor principal está encendido, e inténtalo de nuevo.",
 
   "mode.heading": "Configura este servidor Waitron",
   "mode.intro":

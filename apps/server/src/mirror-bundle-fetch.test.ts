@@ -17,21 +17,19 @@ import { createServer as createTlsServer } from "node:tls";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import type { Context } from "hono";
 import { createHash, X509Certificate } from "node:crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
-import type { AdoptCredential } from "./adopt.js";
 import { lookupBoxName, type BoxAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import {
   boxDownload,
   boxExchange,
-  fetchMirrorBundle,
   fetchPrimaryCertificate,
   CheckedAddresses,
   CheckedAddressUnreached,
+  isMirrorBundle,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import {
@@ -46,7 +44,6 @@ import { PAIR_STORE } from "./testing/pair-bundle.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
-// The fetcher only JSON-round-trips it, so the content is immaterial.
 const SAMPLE_BUNDLE: MirrorBundle = {
   designated: {
     nodeId: "44444444-4444-4444-4444-444444444444",
@@ -77,19 +74,6 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",
 };
 
-const CREDENTIAL: AdoptCredential = {
-  email: "owner@example.test",
-  password: "correct-horse-battery",
-};
-
-const STANDBY = {
-  nodeId: "55555555-5555-5555-5555-555555555555",
-  publicKey: "STANDBY_PUB",
-  contactUrl: "https://cloud.deli.test",
-  storeUrl: "https://cloud.deli.test:7443",
-  at: 1_800_000_000_000,
-};
-
 const servers: ServerType[] = [];
 
 async function startServer(app: Hono): Promise<string> {
@@ -112,18 +96,13 @@ afterEach(async () => {
   }
 });
 
-describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () => {
-  it("fetches a designated node and venue with no cached invoice series", async () => {
-    const identity = { ...SAMPLE_BUNDLE.designated };
-    const expected = { ...SAMPLE_BUNDLE, designated: identity };
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c) => c.json(expected));
-    const bundle = await fetchMirrorBundle(await startServer(app), CREDENTIAL, STANDBY);
-    expect(bundle).toEqual(expected);
-    expect(bundle.designated).not.toHaveProperty("seriesId");
+describe("isMirrorBundle", () => {
+  it("accepts a bundle with no cached invoice series", () => {
+    expect(isMirrorBundle(SAMPLE_BUNDLE)).toBe(true);
+    expect(SAMPLE_BUNDLE.designated).not.toHaveProperty("seriesId");
   });
 
-  it("keeps a key ring's previous key and version", async () => {
+  it("accepts a key ring's previous key and version", () => {
     const rotating = {
       ...SAMPLE_BUNDLE,
       credentialsRing: {
@@ -131,264 +110,23 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         previous: { key: Buffer.alloc(32, 6).toString("base64"), version: 2 },
       },
     };
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c) => c.json(rotating));
-    expect(await fetchMirrorBundle(await startServer(app), CREDENTIAL, STANDBY)).toEqual(rotating);
+    expect(isMirrorBundle(rotating)).toBe(true);
   });
 
-  it("POSTs the credential to /management-api/mirror-bundle and parses a 200 into a MirrorBundle", async () => {
-    let seen: { method: string; path: string; body: string } | undefined;
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", async (c: Context) => {
-      seen = { method: c.req.method, path: c.req.path, body: await c.req.text() };
-      return c.json(SAMPLE_BUNDLE);
-    });
-    const base = await startServer(app);
-
-    const bundle = await fetchMirrorBundle(base, CREDENTIAL, STANDBY);
-
-    expect(bundle).toEqual(SAMPLE_BUNDLE);
-    expect(bundle.boxHostname).toBe("waitron.local");
-    expect(seen).toEqual({
-      method: "POST",
-      path: "/management-api/mirror-bundle",
-      body: JSON.stringify({
-        ...CREDENTIAL,
-        standbyNodeId: STANDBY.nodeId,
-        standbyPublicKey: STANDBY.publicKey,
-        standbyContactUrl: STANDBY.contactUrl,
-        standbyStoreUrl: STANDBY.storeUrl,
-        standbyAt: STANDBY.at,
+  it("accepts a bundle carrying the main box's backup settings", () => {
+    expect(
+      isMirrorBundle({
+        ...SAMPLE_BUNDLE,
+        backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef" },
       }),
-    });
-  });
-
-  it("accepts a bundle carrying the main box's backup settings", async () => {
-    const withSettings: MirrorBundle = {
-      ...SAMPLE_BUNDLE,
-      backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef" },
-    };
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => c.json(withSettings));
-    const base = await startServer(app);
-
-    expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(withSettings);
+    ).toBe(true);
   });
 
   it.each([
     ["name anything but a WAITRON_BACKUP_ setting", { WAITRON_CREDENTIALS_KEY: "x" }],
     ["hold a tab", { WAITRON_BACKUP_RECOVERY_KEY: "recovery\t0123456789" }],
-  ])("refuses a bundle whose backup settings %s", async (_shape, backupSettings) => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) =>
-      c.json({ ...SAMPLE_BUNDLE, backupSettings }),
-    );
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
-  it("tolerates a primaryUrl with a trailing slash (no double-slash path)", async () => {
-    let path: string | undefined;
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => {
-      path = c.req.path;
-      return c.json(SAMPLE_BUNDLE);
-    });
-    const base = await startServer(app);
-
-    const bundle = await fetchMirrorBundle(`${base}/`, CREDENTIAL, STANDBY);
-
-    expect(bundle).toEqual(SAMPLE_BUNDLE);
-    expect(path).toBe("/management-api/mirror-bundle");
-  });
-
-  it("sends a typed path or query nowhere over plain http either", async () => {
-    let seen: string | undefined;
-    const app = new Hono();
-    app.all("*", (c: Context) => {
-      seen = `${c.req.method} ${new URL(c.req.url).pathname}${new URL(c.req.url).search}`;
-      return c.json(SAMPLE_BUNDLE);
-    });
-    const base = await startServer(app);
-
-    await fetchMirrorBundle(`${base}/admin/reboot?now=1#`, CREDENTIAL, STANDBY);
-
-    expect(seen).toBe("POST /management-api/mirror-bundle");
-  });
-
-  it("re-runs the SSRF guard at the fetch boundary: a private/metadata URL throws before any fetch", async () => {
-    for (const bad of [
-      "http://169.254.169.254/latest",
-      "https://10.0.0.5",
-      "ftp://x",
-      "not-a-url",
-    ]) {
-      const error = await fetchMirrorBundle(bad, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-      expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
-    }
-  });
-
-  it("relays the primary's password.invalid as password.invalid, carrying none of its params", async () => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) =>
-      c.json(
-        { error: { code: "password.invalid", params: { detail: "https://primary.internal" } } },
-        401,
-      ),
-    );
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
-    expect(isAppError(error) && error.params).toEqual({});
-    expect(isAppError(error) && error.reason).toBe("primary_refused");
-  });
-
-  it("relays the primary's totp.required as totp.required, carrying none of its params", async () => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) =>
-      c.json(
-        { error: { code: "totp.required", params: { detail: "https://primary.internal" } } },
-        401,
-      ),
-    );
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "totp.required")).toBe(true);
-    expect(isAppError(error) && error.params).toEqual({});
-  });
-
-  it.each([
-    ["totp.invalid", { detail: "https://primary.internal" }],
-    ["person.not_found", { personId: "99999999-9999-9999-9999-999999999999" }],
-  ])(
-    "passes no %s through, so the box never says which part of the login failed",
-    async (code, params) => {
-      const app = new Hono();
-      app.post("/management-api/mirror-bundle", (c: Context) =>
-        c.json({ error: { code, params } }, 401),
-      );
-      const base = await startServer(app);
-
-      const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-      expect(isAppError(error) && error.params).toEqual({});
-    },
-  );
-
-  it.each([
-    ["an unparseable body", "not json"],
-    ["a body that is not an object", JSON.stringify(["totp.invalid"])],
-    ["an error that is not an object", JSON.stringify({ error: "totp.invalid" })],
-    ["an error with no code", JSON.stringify({ error: {} })],
-    ["a code other than password.invalid", JSON.stringify({ error: { code: "person.suspended" } })],
-  ])("maps a refusal with %s to mirror.bundle_fetch_failed", async (_shape, body) => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => c.body(body, 403));
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
-  async function refusalFor(body: unknown): Promise<unknown> {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => c.json(body, 409));
-    const base = await startServer(app);
-    return fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-  }
-
-  it.each([
-    "mirror.bucket_stream_active",
-    "mirror.standby_name_taken",
-    "mirror.spare_already_joined",
-  ])("passes on %s, carrying none of its parameters", async (code) => {
-    const error = await refusalFor({
-      error: { code, params: { detail: "https://primary.internal" } },
-    });
-    expect(isAppError(error) && error.code).toBe(code);
-    expect(isAppError(error) && error.params).toEqual({});
-  });
-
-  it("passes on backup.recovery_key_missing, carrying no parameters", async () => {
-    const error = await refusalFor({
-      error: {
-        code: "backup.recovery_key_missing",
-        params: { detail: "https://primary.internal" },
-      },
-    });
-    expect(isAppError(error) && error.code).toBe("backup.recovery_key_missing");
-    expect(isAppError(error) && error.params).toEqual({});
-  });
-
-  it("passes on mirror.clocks_apart with its two times only, and not with a time that is not one", async () => {
-    const primaryAt = "2026-11-10T12:00:00.000Z";
-    const standbyAt = "2026-11-10T12:05:00.000Z";
-    const relayed = await refusalFor({
-      error: {
-        code: "mirror.clocks_apart",
-        params: { primaryAt, standbyAt, detail: "https://primary.internal" },
-      },
-    });
-    expect(isAppError(relayed) && relayed.code).toBe("mirror.clocks_apart");
-    expect(isAppError(relayed) && relayed.params).toEqual({ primaryAt, standbyAt });
-
-    for (const params of [
-      { primaryAt, standbyAt: "https://primary.internal" },
-      { primaryAt: "2026-11-10", standbyAt },
-      { primaryAt, standbyAt: Date.parse(standbyAt) },
-      { primaryAt },
-    ]) {
-      const error = await refusalFor({ error: { code: "mirror.clocks_apart", params } });
-      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
-      expect(isAppError(error) && error.params).toEqual({});
-    }
-  });
-
-  it("passes on password.throttled with its whole-second wait only, and not with a wait that is not one", async () => {
-    const relayed = await refusalFor({
-      error: {
-        code: "password.throttled",
-        params: { retryAfterSeconds: 2, detail: "https://primary.internal" },
-      },
-    });
-    expect(isAppError(relayed) && relayed.code).toBe("password.throttled");
-    expect(isAppError(relayed) && relayed.params).toEqual({ retryAfterSeconds: 2 });
-
-    for (const params of [
-      { retryAfterSeconds: "2" },
-      { retryAfterSeconds: 0 },
-      { retryAfterSeconds: -1 },
-      { retryAfterSeconds: 1.5 },
-      {},
-    ]) {
-      const error = await refusalFor({ error: { code: "password.throttled", params } });
-      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
-      expect(isAppError(error) && error.params).toEqual({});
-    }
-  });
-
-  it("maps a 200 with an unparseable body to mirror.bundle_fetch_failed", async () => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) =>
-      c.body("not json at all", 200, { "content-type": "application/json" }),
-    );
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
-  it("maps a 200 with JSON null to mirror.bundle_fetch_failed", async () => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => c.json(null));
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  ])("refuses a bundle whose backup settings %s", (_shape, backupSettings) => {
+    expect(isMirrorBundle({ ...SAMPLE_BUNDLE, backupSettings })).toBe(false);
   });
 
   it.each([
@@ -504,54 +242,12 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         credentialsRing: { ...SAMPLE_BUNDLE.credentialsRing, previous: { key: 4, version: 2 } },
       },
     ],
-  ])("maps 200 JSON with %s to mirror.bundle_fetch_failed", async (_shape, body) => {
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) =>
-      c.body(JSON.stringify(body), 200, { "content-type": "application/json" }),
-    );
-    const base = await startServer(app);
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
-  it("follows no redirect, so the password reaches no address the guard refuses", async () => {
-    let received = "";
-    const target = new Hono();
-    target.all("*", async (c: Context) => {
-      received += await c.req.text();
-      return c.json(SAMPLE_BUNDLE);
-    });
-    // The guard refuses this spelling of loopback, yet this machine still answers it.
-    const refused = `http://[::ffff:127.0.0.1]:${new URL(await startServer(target)).port}/`;
-    const source = new Hono();
-    source.post("/management-api/mirror-bundle", (c: Context) => c.redirect(refused, 307));
-    const base = await startServer(source);
-
-    const error = await fetchMirrorBundle(refused, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.primary_url_invalid")).toBe(true);
-
-    const redirected = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-
-    expect(isAppError(redirected) && hasCode(redirected, "mirror.bundle_fetch_failed")).toBe(true);
-    expect(received).toBe("");
-  });
-
-  it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
-    // A port just closed refuses the connect fast and deterministically.
-    const app = new Hono();
-    const base = await startServer(app);
-    const server = servers.pop()!;
-    await new Promise<void>((resolve, reject) =>
-      server.close((err) => (err ? reject(err) : resolve())),
-    );
-
-    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  ])("refuses %s", (_shape, body) => {
+    expect(isMirrorBundle(body)).toBe(false);
   });
 });
 
-describe("the spare checks the main box's certificate before it sends a password", () => {
+describe("the main box's authority certificate, and a request pinned to it", () => {
   let x: BoxAuthority;
   let y: BoxAuthority;
   const boxServers: BoxServer[] = [];
@@ -564,67 +260,41 @@ describe("the spare checks the main box's certificate before it sends a password
     while (boxServers.length > 0) await boxServers.pop()!.close();
   });
 
-  async function serveBundle(authority: BoxAuthority, boxCaPem: string): Promise<BoxServer> {
-    const server = await startBoxServer(authority, () => ({
-      status: 200,
-      body: JSON.stringify({ ...SAMPLE_BUNDLE, boxCaPem }),
-    }));
-    boxServers.push(server);
-    return server;
-  }
+  it("sends nothing to a box whose certificate is not the pinned authority, and reaches one that is", async () => {
+    const [other, pinned] = await Promise.all([
+      startBoxServer(y, () => ({ status: 200, body: "{}" })),
+      startBoxServer(x, () => ({ status: 200, body: "{}" })),
+    ]);
+    boxServers.push(other, pinned);
+    const send = (url: string) =>
+      boxExchange(new URL(`${url}/x`), {
+        method: "POST",
+        trust: { ca: x.caPem, rejectUnauthorized: true },
+        body: "{}",
+        signal: AbortSignal.timeout(5_000),
+      });
 
-  it("with the confirmed authority, the bundle arrives", async () => {
-    const server = await serveBundle(x, x.caPem);
+    const error = await send(other.url).catch((e: unknown) => e);
 
-    const bundle = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem);
-
-    expect(bundle).toEqual({ ...SAMPLE_BUNDLE, boxCaPem: x.caPem });
-    expect(server.requests).toHaveLength(1);
-  });
-
-  it("refuses a bundle whose authority is not the confirmed one, after the box received the request", async () => {
-    const server = await serveBundle(x, y.caPem);
-
-    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
-      (e: unknown) => e,
-    );
-
-    expect(server.requests).toHaveLength(1);
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-    expect(isAppError(error) && error.params).toEqual({});
-  });
-
-  it("refuses mirror.primary_unconfirmed over https when nothing was confirmed, sending nothing", async () => {
-    const server = await serveBundle(x, x.caPem);
-
-    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY).catch((e: unknown) => e);
-
-    expect(isAppError(error) && hasCode(error, "mirror.primary_unconfirmed")).toBe(true);
-    expect(server.requests).toHaveLength(0);
-  });
-
-  // A pin, not a failing test: today's default trust refuses Y as well. The first case is its
-  // control.
-  it("sends nothing to a box whose certificate is not the confirmed one", async () => {
-    const server = await serveBundle(y, y.caPem);
-
-    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
-      (e: unknown) => e,
-    );
-
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-    expect(server.requests).toHaveLength(0);
+    expect(error).toMatchObject({ code: "CERT_SIGNATURE_FAILURE" });
+    expect(other.requests).toHaveLength(0);
+    expect(await send(pinned.url)).toEqual({ status: 200, text: "{}" });
+    expect(pinned.requests).toHaveLength(1);
   });
 
   it("sends nothing to a box under another authority even with Node's certificate checks switched off", async () => {
-    const server = await serveBundle(y, y.caPem);
+    const server = await startBoxServer(y, () => ({ status: 200, body: "{}" }));
+    boxServers.push(server);
     vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
     try {
-      const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
-        (e: unknown) => e,
-      );
+      const error = await boxExchange(new URL(`${server.url}/x`), {
+        method: "POST",
+        trust: { ca: x.caPem, rejectUnauthorized: true },
+        body: "{}",
+        signal: AbortSignal.timeout(5_000),
+      }).catch((e: unknown) => e);
 
-      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+      expect(error).toMatchObject({ code: "CERT_SIGNATURE_FAILURE" });
       expect(server.requests).toHaveLength(0);
     } finally {
       vi.unstubAllEnvs();
@@ -642,7 +312,7 @@ describe("the spare checks the main box's certificate before it sends a password
     const read = await fetchPrimaryCertificate(server.url);
 
     const expected = new X509Certificate(x.caPem);
-    expect(read).toEqual({ pem: expected.toString(), fingerprint256: expected.fingerprint256 });
+    expect(read).toEqual({ pem: expected.toString() });
     expect(server.requests).toHaveLength(1);
     const [seen] = server.requests;
     expect(seen!.method).toBe("GET");
@@ -652,7 +322,7 @@ describe("the spare checks the main box's certificate before it sends a password
     expect(seen!.headers).not.toHaveProperty("cookie");
   });
 
-  it("answers null for a plain-http loopback main box, which has no certificate to compare", async () => {
+  it("answers null for a plain-http loopback main box, which has no certificate to trust", async () => {
     expect(await fetchPrimaryCertificate("http://127.0.0.1:1")).toBeNull();
   });
 
@@ -708,67 +378,17 @@ describe("the spare checks the main box's certificate before it sends a password
     expect(server.requests).toHaveLength(0);
   });
 
-  it.each([
-    ["an empty certificate", () => ""],
-    ["two certificates, the wrong one first", () => y.caPem + x.caPem],
-    ["the box's leaf, which is no authority", () => y.certPem],
-    [
-      "a broken certificate",
-      () => "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
-    ],
-  ])(
-    "refuses mirror.primary_unconfirmed when what was confirmed is %s, sending nothing",
-    async (_label, confirmed) => {
-      const server = await serveBundle(y, y.caPem);
-
-      const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, confirmed()).catch(
-        (e: unknown) => e,
-      );
-
-      expect(isAppError(error) && hasCode(error, "mirror.primary_unconfirmed")).toBe(true);
-      expect(server.requests).toHaveLength(0);
-    },
-  );
-
-  it("refuses a bundle whose authority cannot be read as a certificate", async () => {
-    const server = await serveBundle(x, "not a certificate");
-
-    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
-      (e: unknown) => e,
-    );
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
-  it("relays a refused login over https as password.invalid", async () => {
+  it("sends a typed path, query or fragment nowhere: the certificate read asks for /ca.crt", async () => {
     const server = await startBoxServer(x, () => ({
-      status: 401,
-      body: JSON.stringify({ error: { code: "password.invalid", params: { detail: "x" } } }),
+      status: 200,
+      body: x.caPem,
+      contentType: "application/x-pem-file",
     }));
     boxServers.push(server);
 
-    const error = await fetchMirrorBundle(server.url, CREDENTIAL, STANDBY, x.caPem).catch(
-      (e: unknown) => e,
-    );
-    expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
-    expect(isAppError(error) && error.params).toEqual({});
-  });
+    await fetchPrimaryCertificate(`${server.url}/admin/reboot?now=1#`);
 
-  it("sends a typed path, query or fragment to neither the certificate read nor the bundle request", async () => {
-    const server = await startBoxServer(x, (seen) =>
-      seen.method === "GET"
-        ? { status: 200, body: x.caPem, contentType: "application/x-pem-file" }
-        : { status: 200, body: JSON.stringify({ ...SAMPLE_BUNDLE, boxCaPem: x.caPem }) },
-    );
-    boxServers.push(server);
-    const typed = `${server.url}/admin/reboot?now=1#`;
-
-    await fetchPrimaryCertificate(typed);
-    await fetchMirrorBundle(typed, CREDENTIAL, STANDBY, x.caPem);
-
-    expect(server.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
-      "GET /ca.crt",
-      "POST /management-api/mirror-bundle",
-    ]);
+    expect(server.requests.map(({ method, path }) => `${method} ${path}`)).toEqual(["GET /ca.crt"]);
   });
 });
 
@@ -824,35 +444,6 @@ describe("a main box that never answers is given up on, so setup is not held", (
     },
   );
 
-  it.each(shapes)(
-    "the bundle request refuses a box that %s within its limit",
-    async (_label, tls) => {
-      const { port } = await silentBox(tls);
-
-      const error = await settleWithin(
-        fetchMirrorBundle(`https://localhost:${port}`, CREDENTIAL, STANDBY, x.caPem, {
-          timeoutMs: LIMIT_MS,
-        }),
-        DEADLINE_MS,
-      );
-
-      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-    },
-  );
-
-  it("the plain-http bundle request refuses a loopback box that never answers within its limit", async () => {
-    const { port } = await silentBox(false);
-
-    const error = await settleWithin(
-      fetchMirrorBundle(`http://127.0.0.1:${port}`, CREDENTIAL, STANDBY, undefined, {
-        timeoutMs: LIMIT_MS,
-      }),
-      DEADLINE_MS,
-    );
-
-    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-  });
-
   describe("the limits a caller gets when it names none", () => {
     afterEach(() => {
       vi.useRealTimers();
@@ -875,16 +466,6 @@ describe("a main box that never answers is given up on, so setup is not held", (
 
       const call = fetchPrimaryCertificate(`https://localhost:${port}`);
       expect(await pendingAfter(call, 9_999)).toBe("still waiting");
-      const error = await pendingAfter(call, 1);
-      expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
-    });
-
-    it("the bundle request waits 60 seconds", async () => {
-      const { port } = await silentBox(true);
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-
-      const call = fetchMirrorBundle(`https://localhost:${port}`, CREDENTIAL, STANDBY, x.caPem);
-      expect(await pendingAfter(call, 59_999)).toBe("still waiting");
       const error = await pendingAfter(call, 1);
       expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
     });
@@ -1725,7 +1306,7 @@ describe("a box named on the venue's network is found by asking it", () => {
           }),
       });
 
-      expect(read?.fingerprint256).toBe(new X509Certificate(other.caPem).fingerprint256);
+      expect(read).toEqual({ pem: new X509Certificate(other.caPem).toString() });
     },
   );
 });

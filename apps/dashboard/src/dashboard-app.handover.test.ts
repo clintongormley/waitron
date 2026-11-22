@@ -48,7 +48,7 @@ it.each([true, false])(
       }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
       getDiskStop: async () => ({ stopped: false, deleted: null }),
-      listServers: async () => ({ term: 2, authorityFingerprint: null, nodes: [] }),
+      listServers: async () => ({ term: 2, nodes: [] }),
     } as unknown as DashboardApi;
     Object.defineProperty(api, "background", { get: () => api });
     history.replaceState(null, "", "/servers");

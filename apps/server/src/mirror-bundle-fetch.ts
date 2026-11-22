@@ -6,19 +6,13 @@ import { isIP } from "node:net";
 import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
-import type { AdoptCredential } from "./adopt.js";
 import { checkBackupSettings } from "./backup-env-writer.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
-// The registries of the codes this file relays from the primary.
-import "@waitron/identity";
-import "@waitron/module";
-import "@waitron/provisioning";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -40,7 +34,7 @@ function isEncodedKeyRing(value: unknown): boolean {
   return isKeyEntry(value) && (value.previous === undefined || isKeyEntry(value.previous));
 }
 
-function isMirrorBundle(value: unknown): value is MirrorBundle {
+export function isMirrorBundle(value: unknown): value is MirrorBundle {
   if (!isRecord(value)) return false;
   const {
     designated,
@@ -89,67 +83,11 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
-type RelayedBare =
-  | "password.invalid"
-  | "totp.required"
-  | Exclude<(typeof JOIN_REFUSALS)[number], "mirror.clocks_apart">;
-
-function isRelayedBare(code: unknown): code is RelayedBare {
-  return (
-    code === "password.invalid" ||
-    code === "totp.required" ||
-    ((JOIN_REFUSALS as readonly unknown[]).includes(code) && code !== "mirror.clocks_apart")
-  );
-}
-
 /** Text that is an ISO time exactly as `Date.prototype.toISOString` writes one. */
-function isIsoTime(value: unknown): value is string {
+export function isIsoTime(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const time = new Date(value);
   return !Number.isNaN(time.getTime()) && time.toISOString() === value;
-}
-
-/**
- * A refusal from the main box is passed on only when it is `password.invalid`, `totp.required`,
- * `password.throttled` or one of `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box
- * wrote travels on: with no parameters, except `mirror.clocks_apart` with `{ primaryAt, standbyAt }`
- * only when both are ISO times, and `password.throttled` with `{ retryAfterSeconds }` only when it
- * is a whole number of seconds above zero. Every other code, and any of these whose parameters fail
- * their check, is `mirror.bundle_fetch_failed`.
- */
-async function refusalFrom(response: Response): Promise<AppError> {
-  let error: Record<string, unknown> = {};
-  try {
-    const body: unknown = await response.json();
-    if (isRecord(body) && isRecord(body.error)) error = body.error;
-  } catch {
-    // An unreadable answer is the generic refusal below.
-  }
-  const { code } = error;
-  const params = isRecord(error.params) ? error.params : {};
-  if (isRelayedBare(code))
-    return new AppError(
-      code,
-      {},
-      code === "password.invalid" ? { reason: "primary_refused" } : undefined,
-    );
-  if (
-    code === "mirror.clocks_apart" &&
-    isIsoTime(params.primaryAt) &&
-    isIsoTime(params.standbyAt)
-  ) {
-    return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
-  }
-  const { retryAfterSeconds } = params;
-  if (
-    code === "password.throttled" &&
-    typeof retryAfterSeconds === "number" &&
-    Number.isSafeInteger(retryAfterSeconds) &&
-    retryAfterSeconds > 0
-  ) {
-    return new AppError(code, { retryAfterSeconds });
-  }
-  return new AppError("mirror.bundle_fetch_failed", {});
 }
 
 // A box's authority certificate is about 1–2 KiB; anything far larger is not one.
@@ -158,9 +96,6 @@ const MAX_CERTIFICATE_BYTES = 64 * 1024;
 // One small file from a box on the venue's network: a box that has not sent it by then is not
 // answering, and the person should be told so rather than watch a frozen screen.
 const CERTIFICATE_READ_LIMIT_MS = 10_000;
-// Far above the time a bundle mint takes, and well under the five minutes Node's fetch waits for an
-// answer's headers by default.
-const BUNDLE_REQUEST_LIMIT_MS = 60_000;
 
 /** A request still unanswered after `timeoutMs` is destroyed and refused. */
 export interface RequestLimit {
@@ -630,14 +565,17 @@ export async function boxDownload(
 }
 
 /**
- * The main box's authority certificate, read before anything secret is sent so the person can
- * compare its fingerprint with the one the main box shows. `null` for a plain-http address, which
- * only a loopback host may use and which carries no certificate to compare.
+ * The main box's authority certificate, read unchecked. `null` for a plain-http address, which only
+ * a loopback host may use.
  */
 export async function fetchPrimaryCertificate(
   primaryUrl: string,
-  { timeoutMs = CERTIFICATE_READ_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
-): Promise<{ pem: string; fingerprint256: string } | null> {
+  {
+    timeoutMs = CERTIFICATE_READ_LIMIT_MS,
+    lookup,
+    exchange = boxExchange,
+  }: RequestLimit & { lookup?: BoxLookup; exchange?: typeof boxExchange } = {},
+): Promise<{ pem: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
   // A main box's address is its origin: a typed path, query or fragment is not sent to it.
@@ -646,9 +584,9 @@ export async function fetchPrimaryCertificate(
   let answer: { status: number; text: string };
   try {
     // It skips the certificate check: it carries no credential, body or cookie, and what it returns
-    // is public, and is trusted only once the person confirms it.
+    // is public. The join's own signatures, not this certificate, say who answered.
     answer = await withinLimit(timeoutMs, (signal) =>
-      boxExchange(
+      exchange(
         url,
         { method: "GET", trust: { rejectUnauthorized: false }, signal, lookup },
         MAX_CERTIFICATE_BYTES,
@@ -660,7 +598,7 @@ export async function fetchPrimaryCertificate(
   if (answer.status !== 200) throw new AppError("mirror.bundle_fetch_failed", {});
   const certificate = authorityCertificate(answer.text);
   if (certificate === null) throw new AppError("mirror.bundle_fetch_failed", {});
-  return { pem: certificate.toString(), fingerprint256: certificate.fingerprint256 };
+  return { pem: certificate.toString() };
 }
 
 /** One PEM certificate that is an authority, or `null`. */
@@ -672,97 +610,4 @@ function authorityCertificate(pem: string): X509Certificate | null {
   } catch {
     return null;
   }
-}
-
-function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
-  try {
-    return (
-      new X509Certificate(bundleCaPem).fingerprint256 ===
-      new X509Certificate(confirmedCaPem).fingerprint256
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Only the PUBLIC half of the standby's key travels; the private key never leaves the mirror.
- * `standby.storeUrl` is where the spare's store listens; the main box refuses one whose host is not
- * `standby.contactUrl`'s.
- *
- * A network error, a non-2xx response `refusalFrom` does not relay, unparseable JSON, or a
- * malformed bundle is `mirror.bundle_fetch_failed`; no refusal carries upstream detail that could
- * include a URL or connection information.
- */
-export async function fetchMirrorBundle(
-  primaryUrl: string,
-  credential: AdoptCredential,
-  standby: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string; at: number },
-  confirmedCaPem?: string,
-  { timeoutMs = BUNDLE_REQUEST_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
-): Promise<MirrorBundle> {
-  // Re-checked here so no caller can make this fetch an unvalidated URL; the request is built from
-  // the parsed `URL`, not the raw string.
-  const base = assertSafePrimaryUrl(primaryUrl);
-  const url = new URL("/management-api/mirror-bundle", base.origin).href;
-  // Plain http is allowed only to a loopback host, which only this machine can answer, so it needs
-  // no confirmation. Every https request, `localhost` included, is sent only to the one authority
-  // certificate the person confirmed, and is refused before any connection when there is none.
-  const https = base.protocol === "https:";
-  if (https && (confirmedCaPem === undefined || authorityCertificate(confirmedCaPem) === null)) {
-    throw new AppError("mirror.primary_unconfirmed", {});
-  }
-  const body = JSON.stringify({
-    ...credential,
-    standbyNodeId: standby.nodeId,
-    standbyPublicKey: standby.publicKey,
-    standbyContactUrl: standby.contactUrl,
-    standbyStoreUrl: standby.storeUrl,
-    standbyAt: standby.at,
-  });
-
-  let response: Response;
-  try {
-    const answer = await withinLimit(timeoutMs, async (signal) => {
-      if (https) {
-        // `ca` is the confirmed AUTHORITY: trusting the box's own leaf instead would refuse it.
-        // `rejectUnauthorized` is explicit so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
-        return boxExchange(new URL(url), {
-          method: "POST",
-          trust: { ca: confirmedCaPem, rejectUnauthorized: true },
-          signal,
-          body,
-          lookup,
-        });
-      }
-      const plain = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-        signal,
-        // A redirect would resend the password to an address `assertSafePrimaryUrl` never saw.
-        redirect: "error",
-      });
-      return { status: plain.status, text: await plain.text() };
-    });
-    response = new Response(answer.text, { status: answer.status });
-  } catch {
-    throw new AppError("mirror.bundle_fetch_failed", {});
-  }
-
-  if (!response.ok) throw await refusalFrom(response);
-
-  let bundle: unknown;
-  try {
-    bundle = await response.json();
-  } catch {
-    throw new AppError("mirror.bundle_fetch_failed", {});
-  }
-  if (!isMirrorBundle(bundle)) throw new AppError("mirror.bundle_fetch_failed", {});
-  // The box that answered is under the confirmed authority; the bundle it sent must name that
-  // authority too, or the spare would go on to trust a different one.
-  if (confirmedCaPem !== undefined && !sameAuthority(bundle.boxCaPem, confirmedCaPem)) {
-    throw new AppError("mirror.bundle_fetch_failed", {});
-  }
-  return bundle;
 }

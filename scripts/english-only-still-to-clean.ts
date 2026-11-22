@@ -613,7 +613,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/setup/src/screens/cert-screen.test.ts",
   "apps/setup/src/screens/cloud-restore-screen.test.ts",
   "apps/setup/src/screens/configuration-preview-screen.test.ts",
-  "apps/setup/src/screens/connect-screen.test.ts",
   "apps/setup/src/screens/connection-screen.test.ts",
   "apps/setup/src/screens/done-screen.test.ts",
   "apps/setup/src/screens/email-screen.test.ts",

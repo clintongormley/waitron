@@ -1,1080 +1,668 @@
-import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expectBreaksOnlyAfterColons } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { cleanupWidgets, mountWidget, mountWithLeave } from "../widgets/test-helpers.js";
+import { localTime, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./connect-screen.js";
 import type { SetupConnectScreen } from "./connect-screen.js";
-import type { AdoptBody, PrimaryCertificate } from "../api/client.js";
-
-type Emitted = { kind: "adopt"; detail: unknown };
-
-function collect(host: HTMLElement): Emitted[] {
-  const events: Emitted[] = [];
-  host.addEventListener("adopt-requested", (e) =>
-    events.push({ kind: "adopt", detail: (e as CustomEvent).detail }),
-  );
-  return events;
-}
+import type { JoinStarted, JoinState } from "../api/client.js";
 
 const q = (el: SetupConnectScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const text = (el: SetupConnectScreen, sel: string) => q(el, sel)?.textContent?.trim() ?? "";
 
-async function type(el: SetupConnectScreen, field: string, value: string): Promise<void> {
-  q(el, `[data-test=${field}]`)!.dispatchEvent(
+async function type(el: SetupConnectScreen, value: string): Promise<void> {
+  q(el, "[data-test=primaryUrl]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
 
-/** The form's one message about a failed Connect, as `wt-form-actions` shows it. */
+async function press(el: SetupConnectScreen, button: string): Promise<void> {
+  q(el, `[data-test=${button}]`)!.click();
+  await el.updateComplete;
+}
+
+/** The form's one message, as `wt-form-actions` shows it. */
 async function bottomOf(el: SetupConnectScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
-/** Every alert in the screen and in its action row. */
-async function alerts(el: SetupConnectScreen): Promise<Element[]> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return [
-    ...el.shadowRoot!.querySelectorAll("[role=alert]"),
-    ...actions.shadowRoot!.querySelectorAll("[role=alert]"),
-  ];
+const MAIN = "https://waitron.local";
+const STARTED: JoinStarted = {
+  code: "482913",
+  addresses: ["192.168.1.23", "fd00::23"],
+  timeLeftMs: 14.5 * 60_000,
+  handle: "h1",
+};
+const WAITING: JoinState = {
+  state: "waiting",
+  code: "482913",
+  addresses: ["192.168.1.23", "fd00::23"],
+  primaryUrl: MAIN,
+  timeLeftMs: STARTED.timeLeftMs,
+};
+
+function stubApi(state: JoinState = { state: "none" }) {
+  return {
+    startJoin: vi.fn().mockResolvedValue(STARTED),
+    joinState: vi.fn().mockResolvedValue(state),
+    cancelJoin: vi.fn().mockResolvedValue(undefined),
+  };
 }
 
-const FIX_FIELDS = "Correct the highlighted fields to continue.";
-
-const ADDRESS_REFUSED =
-  "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.";
-
-const VALID: Record<string, string> = {
-  primaryUrl: "https://waitron.local",
-  email: "op1@example.com",
-  password: "correct horse",
-};
-
-const CERT: PrimaryCertificate = {
-  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
-  fingerprint256:
-    "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16",
-};
-
-const CERT_B: PrimaryCertificate = {
-  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-B\n-----END CERTIFICATE-----\n",
-  fingerprint256:
-    "B0:B1:B2:B3:B4:B5:B6:B7:B8:B9:BA:BB:BC:BD:BE:BF:C0:C1:C2:C3:C4:C5:C6:C7:C8:C9:CA:CB:CC:CD:CE:CF",
-};
-
-/** A request the shell hands back: one the person already compared. */
-const REQUEST: AdoptBody = {
-  primaryUrl: "https://primary.example",
-  credential: { email: "op7@example.com", password: " secret " },
-  confirmedCaPem: CERT.pem,
-};
-
-/** The main server's ask for `VALID`'s login, handed back with its address still to compare. */
-const ASKED: Partial<SetupConnectScreen> = {
-  request: {
-    primaryUrl: VALID.primaryUrl,
-    credential: { email: VALID.email, password: VALID.password },
-  },
-  askForCode: true,
-};
-
-function stubApi(answer: PrimaryCertificate | null = CERT) {
-  return { primaryCertificate: vi.fn().mockResolvedValue(answer) };
+async function mount(api = stubApi(), props: Partial<SetupConnectScreen> = {}) {
+  const mounted = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+    api,
+    ...props,
+  });
+  await vi.waitFor(() => expect(q(mounted.el, "[data-test=reading]")).toBeNull());
+  return { ...mounted, api };
 }
 
-function mount(props: Partial<SetupConnectScreen> = {}) {
-  return mountWidget<SetupConnectScreen>("setup-connect-screen", { api: stubApi(), ...props });
-}
+/** The buttons drawn, in order, by their `data-test` names. */
+const buttons = (el: SetupConnectScreen) =>
+  [...el.shadowRoot!.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test"));
 
-const pressed = async (el: SetupConnectScreen, button: string): Promise<void> => {
-  q(el, `[data-test=${button}]`)!.click();
-  await el.updateComplete;
-};
+const disabled = (el: SetupConnectScreen, button: string) =>
+  q(el, `[data-test=${button}]`)!.hasAttribute("disabled");
 
-/** The address step's Continue, then the compare step's "It matches" when it is shown. */
-async function toLogin(el: SetupConnectScreen, address = VALID.primaryUrl): Promise<void> {
-  await type(el, "primaryUrl", address);
-  await pressed(el, "continue");
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=matches]") ?? q(el, "[data-test=email]")).not.toBeNull(),
+function handles(el: SetupConnectScreen): (string | undefined)[] {
+  const seen: (string | undefined)[] = [];
+  el.addEventListener("join-handle", (e) =>
+    seen.push((e as CustomEvent<{ handle?: string }>).detail.handle),
   );
-  if (q(el, "[data-test=matches]") !== null) await pressed(el, "matches");
-}
-
-async function fillValid(
-  el: SetupConnectScreen,
-  overrides: Record<string, string> = {},
-): Promise<void> {
-  const { primaryUrl, ...login } = { ...VALID, ...overrides };
-  if (q(el, "[data-test=continue]") !== null) await toLogin(el, primaryUrl);
-  for (const [key, value] of Object.entries(login)) {
-    await type(el, key, value);
-  }
+  return seen;
 }
 
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  vi.useRealTimers();
 });
 
-describe("setup-connect-screen", () => {
-  it.each([
-    [
-      "en-GB",
-      {
-        primaryUrl: "For example https://waitron.local",
-        email: "An admin's sign-in email on the primary server",
-        password: "That admin's dashboard password",
-        totp: "The code the authenticator shows now",
-      },
-    ],
-    [
-      "es-ES",
-      {
-        primaryUrl: "Por ejemplo https://waitron.local",
-        email: "Correo de acceso de un administrador del servidor principal",
-        password: "La contraseña del panel de ese administrador",
-        totp: "El código que muestra ahora el autenticador",
-      },
-    ],
-  ] as const)(
-    "explains each field with a hint in the empty field and no ? (%s)",
-    async (locale, hints) => {
-      setLocale(locale);
-      const { el } = await mount(ASKED);
-      const hintOf = (field: string) => q(el, `[data-test=${field}]`)!.getAttribute("hint");
-      expect(hintOf("primaryUrl")).toBe(hints.primaryUrl);
-      await toLogin(el);
-      expect({
-        primaryUrl: hintOf("primaryUrl"),
-        email: hintOf("email"),
-        password: hintOf("password"),
-        totp: hintOf("totp"),
-      }).toEqual(hints);
-      expect(el.shadowRoot!.querySelector("wt-help-tooltip")).toBeNull();
-    },
-  );
-
-  it.each([
-    [
-      "en-GB",
-      "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To restore a backup instead, choose Back.",
-    ],
-    [
-      "es-ES",
-      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para restaurar una copia de seguridad, elige Volver.",
-    ],
-  ] as const)(
-    "says a mirror keeps a copy and can take over once it has joined (%s)",
-    async (locale, intro) => {
-      setLocale(locale);
-      const { el } = await mount();
-      expect(q(el, "[data-test=connect-intro]")!.textContent!.trim()).toBe(intro);
-    },
-  );
-
-  it("assembles the adopt body as a STRUCTURED credential object and emits adopt-requested", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await fillValid(el);
-    q(el, "[data-test=connect]")!.click();
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: {
-            primaryUrl: "https://waitron.local",
-            credential: { email: "op1@example.com", password: "correct horse" },
-            confirmedCaPem: CERT.pem,
-          },
-        },
-      },
-    ]);
-  });
-
-  it("turns off autocorrect, the capital first letter and spellcheck on the sign-in code", async () => {
-    const { el } = await mount(ASKED);
-    await toLogin(el);
-    const field = q(el, "[data-test=totp]") as SetupConnectScreen;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector("input")!;
-    expect(
-      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
-    ).toEqual(["none", "off", "false"]);
-  });
-
-  it("carries a filled TOTP into the credential object", async () => {
-    const { el, host } = await mount(ASKED);
-    const events = collect(host);
-    await fillValid(el, { totp: "123456" });
-    q(el, "[data-test=connect]")!.click();
-    const body = (events[0].detail as { body: { credential: Record<string, unknown> } }).body;
-    expect(body.credential).toEqual({
-      email: "op1@example.com",
-      password: "correct horse",
-      totp: "123456",
-    });
-  });
-
-  it("trims whitespace on primaryUrl/email/totp but leaves the password verbatim", async () => {
-    const { el, host } = await mount(ASKED);
-    const events = collect(host);
-    await fillValid(el, {
-      primaryUrl: "  https://waitron.local  ",
-      email: "  op1@example.com  ",
-      password: "  correct horse  ",
-      totp: "  123456  ",
-    });
-    q(el, "[data-test=connect]")!.click();
-    expect((events[0].detail as { body: unknown }).body).toEqual({
-      primaryUrl: "https://waitron.local",
-      credential: { email: "op1@example.com", password: "  correct horse  ", totp: "123456" },
-      confirmedCaPem: CERT.pem,
-    });
-  });
-
-  it("connects when Enter is pressed in a field", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await fillValid(el);
-    q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: {
-            primaryUrl: "https://waitron.local",
-            credential: { email: "op1@example.com", password: "correct horse" },
-            confirmedCaPem: CERT.pem,
-          },
-        },
-      },
-    ]);
-  });
-
-  it("shows the primary password on request without submitting the sign-in", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await fillValid(el);
-    const input = q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!;
-    expect(input.type).toBe("password");
-    await page.getByRole("button", { name: "Show password", exact: true }).click();
-    expect(input.type).toBe("text");
-    expect(input.value).toBe("correct horse");
-    expect(events).toEqual([]);
-    await userEvent.keyboard("{Enter}");
-    expect(input.type).toBe("password");
-    expect(events).toEqual([]);
-  });
-
-  it("asks for the admin's sign-in email in a named email field with login autocomplete", async () => {
+describe("setup-connect-screen: the address", () => {
+  it("asks only for the main box's address: no password, email or code field", async () => {
     const { el } = await mount();
-    await toLogin(el);
-    const email = q(el, "[data-test=email]")!;
-    expect(email.getAttribute("name")).toBe("email");
-    expect(email.getAttribute("type")).toBe("email");
-    expect(email.getAttribute("autocomplete")).toBe("username");
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input")].map((f) =>
+      f.getAttribute("name"),
+    );
+    expect(fields).toEqual(["primaryUrl"]);
+    expect(el.shadowRoot!.querySelector("[type=password]")).toBeNull();
+    expect(text(el, "[data-test=join]")).toBe("Join");
   });
 
-  it("blocks Continue and marks primaryUrl invalid when it is blank, reading nothing", async () => {
-    const api = stubApi();
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    await type(el, "primaryUrl", "   ");
-    await pressed(el, "continue");
-    expect(events).toEqual([]);
-    expect(api.primaryCertificate).not.toHaveBeenCalled();
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(await alerts(el)).toHaveLength(1);
+  it("marks a blank address on Join and sends nothing", async () => {
+    const { el, api } = await mount();
+    await press(el, "join");
     expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(true);
+    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
+    expect(api.startJoin).not.toHaveBeenCalled();
   });
 
-  it.each(["email", "password"])(
-    "blocks Connect and marks %s invalid when it is blank, emitting nothing",
-    async (field) => {
-      const { el, host } = await mount();
-      const events = collect(host);
-      await fillValid(el, { [field]: "   " }); // whitespace-only required field
-      q(el, "[data-test=connect]")!.click();
-      await el.updateComplete;
-      expect(events).toEqual([]);
-      expect(await bottomOf(el)).toBe(FIX_FIELDS);
-      expect(await alerts(el)).toHaveLength(1);
-      expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(true);
-    },
-  );
-
-  it("shows a routed-back server error above Connect as one alert, leaving Connect working", async () => {
-    const { el } = await mount({
-      errorMessage: "Couldn't reach the primary server.",
-      request: REQUEST,
-    });
-    expect(await bottomOf(el)).toBe("Couldn't reach the primary server.");
-    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
-    expect(await alerts(el)).toHaveLength(1);
-    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
-  });
-
-  it.each([1280, 390])(
-    "puts a routed-back server error on its own line at the form's left edge, between the last field and the buttons (%ipx)",
-    async (width) => {
-      await page.viewport(width, 900);
-      try {
-        const { el } = await mount({
-          errorMessage: "Couldn't reach the primary server.",
-          request: REQUEST,
-          askForCode: true,
-        });
-        const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-        await actions.updateComplete;
-        const message = actions.shadowRoot!.querySelector("[data-error]")!;
-        const lastField = q(el, "[data-test=totp]")!.getBoundingClientRect();
-        const box = message.getBoundingClientRect();
-        expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
-        for (const button of ["back", "connect"]) {
-          expect(box.bottom).toBeLessThanOrEqual(
-            q(el, `[data-test=${button}]`)!.getBoundingClientRect().top,
-          );
-        }
-        expect(box.left).toBeCloseTo(lastField.left, 0);
-        expect(box.right).toBeCloseTo(lastField.right, 0);
-        expect(getComputedStyle(message).textAlign).toBe("start");
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    },
-  );
-
-  it("shows a request refusal of one field under that field and focuses it, leaving Continue working", async () => {
-    const { el } = await mount({ invalidField: "primaryUrl" });
-    await new Promise((resolve) => setTimeout(resolve));
-    const url = q(el, "[data-test=primaryUrl]")!;
-    expect(url.hasAttribute("invalid")).toBe(true);
-    expect(url.getAttribute("error")).toBe(ADDRESS_REFUSED);
-    expect(url.shadowRoot!.activeElement).toBe(url.shadowRoot!.querySelector("input"));
-    expect(q(el, "[data-test=email]")).toBeNull();
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(await alerts(el)).toHaveLength(1);
-    expect((q(el, "[data-test=continue]") as HTMLElement & { disabled: boolean }).disabled).toBe(
-      false,
+  it.each([
+    [{ code: "mirror.primary_url_invalid" }],
+    [{ code: "setup.request_invalid", params: { field: "primaryUrl" } }],
+  ])("shows a refusal of the address under the field (%o)", async (refusal) => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue(refusal);
+    const { el } = await mount(api);
+    await type(el, "https://10.0.0.1");
+    await press(el, "join");
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toMatch(/can't be used/),
     );
-
-    await type(el, "primaryUrl", "https://primary.example");
-    expect(url.hasAttribute("invalid")).toBe(false);
-    expect(await bottomOf(el)).toBe("");
-  });
-
-  it("fills every field from a request the shell hands back that carries no one-time code", async () => {
-    const { el, host } = await mount({ request: REQUEST });
-    const events = collect(host);
-    const value = (field: string) =>
-      (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-    expect([value("primaryUrl"), value("email"), value("password")]).toEqual([
-      "https://primary.example",
-      "op7@example.com",
-      " secret ",
-    ]);
-    expect(q(el, "[data-test=totp]")).toBeNull();
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: {
-            primaryUrl: "https://primary.example",
-            credential: { email: "op7@example.com", password: " secret " },
-            confirmedCaPem: CERT.pem,
-          },
-        },
-      },
-    ]);
-  });
-
-  it("leaves the one-time code blank when the request the shell hands back carries one", async () => {
-    const { el } = await mount({
-      request: {
-        ...REQUEST,
-        credential: { email: "op7@example.com", password: " secret ", totp: "123456" },
-      },
-      askForCode: true,
-    });
-    const value = (field: string) =>
-      (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-    expect([value("primaryUrl"), value("email"), value("password"), value("totp")]).toEqual([
-      "https://primary.example",
-      "op7@example.com",
-      " secret ",
-      "",
-    ]);
-  });
-
-  it("drops a field refusal on the next press and sends the form", async () => {
-    const { el, host } = await mount({ invalidField: "email", request: REQUEST });
-    const events = collect(host);
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(true);
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(events).toHaveLength(1);
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
-    expect(await bottomOf(el)).toBe("");
-  });
-
-  it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
-    const { el } = await mount({
-      errorMessage: "Couldn't reach the primary server.",
-      request: REQUEST,
-    });
-    await type(el, "email", "");
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(await alerts(el)).toHaveLength(1);
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-  });
-
-  it("clears the client message once the form is valid and Connect succeeds", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await toLogin(el);
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    await fillValid(el);
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toBe("");
-    expect(events).toHaveLength(1);
-  });
-
-  it("says nothing and leaves Continue working before the first press", async () => {
-    const { el } = await mount();
-    await type(el, "primaryUrl", "");
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(false);
-  });
-
-  it("on a failed press marks each blank field, focuses the first and disables Connect", async () => {
-    const { el } = await mount();
-    await toLogin(el, "https://waitron.local");
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Check the admin email.");
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
-    expect(q(el, "[data-test=totp]")).toBeNull();
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    const email = q(el, "[data-test=email]")!;
-    expect(email.shadowRoot!.activeElement).toBe(email.shadowRoot!.querySelector("input"));
-    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(true);
-  });
-
-  it("re-checks each change after a failed press, and Connect works again once every field is fixed", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await pressed(el, "continue");
-
-    await type(el, "primaryUrl", " ");
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe(
-      "Check the primary server address.",
-    );
-
-    await type(el, "primaryUrl", "https://waitron.local");
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(false);
-
-    await toLogin(el);
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(true);
-
-    await fillValid(el);
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
-    q(el, "[data-test=connect]")!.click();
-    expect(events).toHaveLength(1);
-  });
-
-  it("steps back to the role screen without emitting an adopt", async () => {
-    const { el, host } = await mount();
-    const events: { kind: string; detail: unknown }[] = [];
-    host.addEventListener("setup-goto", (e) =>
-      events.push({ kind: "goto", detail: (e as CustomEvent).detail }),
-    );
-    q(el, "[data-test=back]")!.click();
-    expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
+    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
   });
 });
 
-describe("setup-connect-screen: comparing the primary server's fingerprint", () => {
-  const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
-
-  it("asks the person to compare the fingerprint before the password is sent", async () => {
-    const api = stubApi();
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    expect(q(el, "[data-test=password]")).toBeNull();
-    expect(q(el, "[data-test=email]")).toBeNull();
-
-    await type(el, "primaryUrl", "  https://waitron.local  ");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
-    expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT.fingerprint256);
-    expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "Open your primary server's Servers page on a device already signed in to it. The public certificate fingerprint shown there must match this one.",
+describe("setup-connect-screen: waiting", () => {
+  it("joins the origin of the typed address and shows the code, this box's addresses, the main box and the time left", async () => {
+    const { el, api } = await mount();
+    const seen = handles(el);
+    await type(el, `${MAIN}/dashboard?x=1`);
+    await press(el, "join");
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
+    expect(seen).toEqual(["h1"]);
+    expect(text(el, "[data-test=addresses]")).toBe(
+      "The request on the main box should come from one of this box's addresses: 192.168.1.23, fd00::23",
     );
-    const servers = q(el, "[data-test=servers-link]")!;
-    expect(text(servers)).toBe("your primary server's Servers page");
-    expect(servers.getAttribute("href")).toBe("https://waitron.local/servers");
-    expect(servers.getAttribute("target")).toBe("_blank");
-    expect(servers.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(q(el, "[data-test=password]")).toBeNull();
-    expect(q(el, "[data-test=connect]")).toBeNull();
-    expect(events).toEqual([]);
-
-    await pressed(el, "matches");
-    expect(q(el, "[data-test=fingerprint]")).toBeNull();
-    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("readonly")).toBe(true);
-    await type(el, "email", "op1@example.com");
-    await type(el, "password", "correct horse");
-    await pressed(el, "connect");
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: {
-            primaryUrl: "https://waitron.local",
-            credential: { email: "op1@example.com", password: "correct horse" },
-            confirmedCaPem: CERT.pem,
-          },
-        },
-      },
-    ]);
+    expect(text(el, "[data-test=main]")).toBe(`Main box: ${MAIN}`);
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
+    expect(q(el, "[data-test=start-again]")).not.toBeNull();
+    expect(q(el, "[data-test=finish]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();
   });
 
-  it("stops when the fingerprint does not match, sending nothing, and lets the person check the address", async () => {
-    const api = stubApi();
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    await type(el, "primaryUrl", "https://waitron.local");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=mismatch]")).not.toBeNull());
-    await pressed(el, "mismatch");
-
-    expect(await bottomOf(el)).toBe(
-      "The fingerprints don't match, so this may not be your primary server. Nothing was sent to it. Check the address and compare again, or go back.",
-    );
-    expect(await alerts(el)).toHaveLength(1);
-    expect(q(el, "[data-test=password]")).toBeNull();
-    expect(q(el, "[data-test=fingerprint]")).toBeNull();
-    expect(events).toEqual([]);
-
-    await pressed(el, "check-address");
-    const url = q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string };
-    expect(url.value).toBe("https://waitron.local");
-    expect(url.hasAttribute("readonly")).toBe(false);
-    await type(el, "primaryUrl", "https://waitron-main.local");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(api.primaryCertificate).toHaveBeenCalledTimes(2));
-    expect(api.primaryCertificate).toHaveBeenLastCalledWith("https://waitron-main.local");
+  it("reads the join with this tab's handle on opening, and shows its waiting code", async () => {
+    const { el, api } = await mount(stubApi(WAITING), { handle: "h1" });
+    expect(api.joinState).toHaveBeenCalledWith("h1");
+    expect(text(el, "[data-test=code]")).toBe("482\u00a0913");
   });
 
-  it("goes straight to the login step for a plain-http address, sending no certificate", async () => {
-    const { el, host } = await mount({ api: stubApi(null) });
-    const events = collect(host);
-    await type(el, "primaryUrl", "http://127.0.0.1:8080");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=email]")).not.toBeNull());
-    expect(q(el, "[data-test=fingerprint]")).toBeNull();
-    await fillValid(el);
-    await pressed(el, "connect");
-    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
-      primaryUrl: "http://127.0.0.1:8080",
-      credential: { email: "op1@example.com", password: "correct horse" },
-    });
+  it("never draws a code without the handle, even when an answer carries one", async () => {
+    for (const state of [WAITING, { state: "approved", code: "482913" } as const]) {
+      const { el } = await mount(stubApi(state));
+      expect(el.shadowRoot!.textContent).not.toMatch(/482/);
+      expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
+      cleanupWidgets();
+    }
   });
 
-  it("reads the certificate once while a read is under way", async () => {
-    let answer!: (value: PrimaryCertificate) => void;
-    const api = {
-      primaryCertificate: vi.fn(
-        () =>
-          new Promise<PrimaryCertificate>((resolve) => {
-            answer = resolve;
-          }),
-      ),
-    };
-    const { el } = await mount({ api });
-    await type(el, "primaryUrl", "https://waitron.local");
-    await pressed(el, "continue");
-    await pressed(el, "continue");
-    expect(api.primaryCertificate).toHaveBeenCalledOnce();
-    answer(CERT);
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-  });
+  it.each([[null], [""]])(
+    "counts only a non-empty string as a handle (%o): no code is drawn and the read names none",
+    async (handle) => {
+      const { el, api } = await mount(stubApi(WAITING), {
+        handle: handle as unknown as string,
+      });
+      expect(api.joinState).toHaveBeenCalledWith(undefined);
+      expect(el.shadowRoot!.textContent).not.toMatch(/482/);
+      expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
+    },
+  );
 
-  it.each([
-    [
-      { code: "mirror.bundle_fetch_failed", params: {}, status: 502 },
-      "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
-    ],
-    [
-      new TypeError("network"),
-      "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
-    ],
-  ])("says a failed certificate read %o stops on the address step", async (refusal, sentence) => {
-    const api = { primaryCertificate: vi.fn().mockRejectedValue(refusal) };
-    const { el } = await mount({ api });
-    await type(el, "primaryUrl", "https://waitron.local");
-    await pressed(el, "continue");
-    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(sentence));
-    expect(q(el, "[data-test=email]")).toBeNull();
-    expect(q(el, "[data-test=continue]")!.hasAttribute("disabled")).toBe(false);
-  });
-
-  it.each([
-    [{ code: "mirror.primary_url_invalid", params: {}, status: 400 }],
-    [{ code: "setup.request_invalid", params: { field: "primaryUrl" }, status: 400 }],
-  ])("marks the address when the certificate read refuses it (%o)", async (refusal) => {
-    const api = { primaryCertificate: vi.fn().mockRejectedValue(refusal) };
-    const { el } = await mount({ api });
-    await type(el, "primaryUrl", "ftp://waitron.local");
-    await pressed(el, "continue");
-    const url = q(el, "[data-test=primaryUrl]")!;
-    await vi.waitFor(() => expect(url.getAttribute("error")).toBe(ADDRESS_REFUSED));
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-  });
-
-  it("drops a certificate read still under way when the address is edited, and compares only the address on screen", async () => {
-    const answers: Array<(value: PrimaryCertificate) => void> = [];
-    const api = {
-      primaryCertificate: vi.fn(
-        () => new Promise<PrimaryCertificate>((resolve) => answers.push(resolve)),
-      ),
-    };
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    await type(el, "primaryUrl", "https://a.example");
-    await pressed(el, "continue");
-    await type(el, "primaryUrl", "https://b.example");
-    answers[0]!(CERT);
-    await new Promise((resolve) => setTimeout(resolve));
+  it("keeps the time left moving while its reads fail", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const api = stubApi({ ...WAITING, timeLeftMs: 3 * 60_000 });
+    const { el } = await mount(api, { handle: "h1" });
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 3 min");
+    api.joinState.mockRejectedValue({ code: "server.internal" });
+    await vi.advanceTimersByTimeAsync(2 * 60_000 + 1_000);
     await el.updateComplete;
-    expect(q(el, "[data-test=fingerprint]")).toBeNull();
-    expect(q(el, "[data-test=continue]")!.hasAttribute("loading")).toBe(false);
-
-    await pressed(el, "continue");
-    expect(api.primaryCertificate).toHaveBeenLastCalledWith("https://b.example");
-    answers[1]!(CERT_B);
-    await vi.waitFor(() =>
-      expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT_B.fingerprint256),
-    );
-    await pressed(el, "matches");
-    await type(el, "email", "op1@example.com");
-    await type(el, "password", "correct horse");
-    await pressed(el, "connect");
-    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
-      primaryUrl: "https://b.example",
-      credential: { email: "op1@example.com", password: "correct horse" },
-      confirmedCaPem: CERT_B.pem,
-    });
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 1 min");
   });
 
-  it("says nothing about a dropped certificate read that fails after the address is edited", async () => {
-    let refuse!: (reason: unknown) => void;
-    const api = {
-      primaryCertificate: vi.fn(
-        () =>
-          new Promise<PrimaryCertificate>((_resolve, reject) => {
-            refuse = reject;
-          }),
-      ),
-    };
-    const { el } = await mount({ api });
-    await type(el, "primaryUrl", "https://a.example");
-    await pressed(el, "continue");
-    await type(el, "primaryUrl", "https://b.example");
-    refuse({ code: "mirror.primary_url_invalid", params: {}, status: 400 });
-    await new Promise((resolve) => setTimeout(resolve));
-    await el.updateComplete;
-    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
-    expect(await bottomOf(el)).toBe("");
+  it("counts the time left from this box's answer, whatever the browser's clock says", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 8 * 60_000 });
+    const { el } = await mount(stubApi({ ...WAITING, timeLeftMs: 15 * 60_000 }), { handle: "h1" });
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
   });
 
-  it("drops a certificate confirmed earlier once the address is read again", async () => {
-    const { el, host } = await mount({
-      api: stubApi(null),
-      request: REQUEST,
-      invalidField: "primaryUrl",
-    });
-    const events = collect(host);
-    await type(el, "primaryUrl", "http://127.0.0.1:8080");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=connect]")).not.toBeNull());
-    await pressed(el, "connect");
-    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
-      primaryUrl: "http://127.0.0.1:8080",
-      credential: REQUEST.credential,
-    });
-  });
-
-  it("presses Continue when Enter is pressed in the address field", async () => {
-    const api = stubApi();
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    await type(el, "primaryUrl", "https://waitron.local");
-    q(el, "[data-test=primaryUrl]")!.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
-    expect(events).toEqual([]);
-  });
-
-  it("lets the person correct the address from the login step, keeping the login", async () => {
-    const api = { primaryCertificate: vi.fn().mockResolvedValue(CERT_B) };
-    const { el, host } = await mount({
+  it("treats a reopened tab's address, filled in by its read, as unchanged", async () => {
+    const api = stubApi(WAITING);
+    const { el, host } = await mountWithLeave<SetupConnectScreen>("setup-connect-screen", {
       api,
-      request: REQUEST,
-      errorMessage: "Couldn't join the primary server.",
+      handle: "h1",
     });
-    const events = collect(host);
-    expect(q(el, "[data-test=connect]")).not.toBeNull();
-    expect(text(q(el, "[data-test=check-address]")!)).toBe("Change the address");
-
-    await pressed(el, "check-address");
-    const url = q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string };
-    expect(url.hasAttribute("readonly")).toBe(false);
-    expect(url.value).toBe(REQUEST.primaryUrl);
-    expect(q(el, "[data-test=email]")).toBeNull();
-    await type(el, "primaryUrl", "https://main.example");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=matches]")).not.toBeNull());
-    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://main.example");
-    await pressed(el, "matches");
-    await pressed(el, "connect");
-    expect((events[0]!.detail as { body: AdoptBody }).body).toEqual({
-      primaryUrl: "https://main.example",
-      credential: REQUEST.credential,
-      confirmedCaPem: CERT_B.pem,
-    });
+    await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
+    await el.updateComplete;
+    const shell = host.querySelector("setup-test-leave-shell") as HTMLElement & {
+      leave: { coordinator: { isDirty(scopes?: readonly object[]): boolean } };
+    };
+    expect(shell.leave.coordinator.isDirty([el])).toBe(false);
   });
 
-  it("drops a refusal of the login once the person goes back to the address, which shows no login field", async () => {
-    const { el } = await mount({
-      request: REQUEST,
-      errorMessage: "The login failed.",
-      errorAboutLogin: true,
-    });
-    expect(await bottomOf(el)).toBe("The login failed.");
-    await pressed(el, "check-address");
-    expect(await bottomOf(el)).toBe("");
+  it("reads the join every 2 seconds while it waits, but never while its own start is still waiting", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const api = stubApi(WAITING);
+    let finishStart!: (answer: JoinStarted) => void;
+    api.startJoin.mockReturnValue(new Promise((resolve) => (finishStart = resolve)));
+    const { el } = await mount(api, { handle: "h0" });
+    expect(api.joinState.mock.calls).toEqual([["h0"]]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.joinState.mock.calls).toEqual([["h0"], ["h0"]]);
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(api.startJoin).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.joinState).toHaveBeenCalledTimes(2);
+    finishStart({ ...STARTED, handle: "h2" });
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.joinState.mock.calls.at(-1)).toEqual(["h2"]);
+  });
+});
+
+describe("setup-connect-screen: Start again", () => {
+  it("cancels with the handle, forgets it, and asks the same main box for a new code", async () => {
+    const api = stubApi(WAITING);
+    api.startJoin.mockResolvedValue({ ...STARTED, code: "105377", handle: "h2" });
+    const { el } = await mount(api, { handle: "h1" });
+    const seen = handles(el);
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("105\u00a0377"));
+    expect(api.cancelJoin).toHaveBeenCalledWith("h1");
+    expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
+    expect(seen).toEqual([undefined, "h2"]);
   });
 
-  it("keeps a refusal that is not about the login when the person goes back to the address", async () => {
-    const { el } = await mount({
-      request: REQUEST,
-      errorMessage: "Check that the address is right.",
-    });
-    await pressed(el, "check-address");
-    expect(await bottomOf(el)).toBe("Check that the address is right.");
+  it("returns to the address when it does not know the main box", async () => {
+    const { el, api } = await mount(stubApi({ state: "elsewhere" }));
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    expect(api.cancelJoin).toHaveBeenCalledWith(undefined);
+    expect(api.startJoin).not.toHaveBeenCalled();
   });
 
-  it("asks for no hidden field to be corrected once the person goes back to the address", async () => {
-    const { el } = await mount({ request: REQUEST, invalidField: "password" });
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    await pressed(el, "check-address");
-    expect(await bottomOf(el)).toBe("");
-  });
-
-  it("reads and sends only the origin of a typed address, and shows that origin", async () => {
-    const api = stubApi();
-    const { el, host } = await mount({ api });
-    const events = collect(host);
-    await type(el, "primaryUrl", " https://Main.Example:443/admin/reboot?now=1#top ");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=matches]")).not.toBeNull());
-    expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://main.example");
-    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
-      "https://main.example",
+  it("shows join_in_use's words when the other page still holds the join, and stays put", async () => {
+    const api = stubApi({ state: "elsewhere" });
+    api.cancelJoin.mockRejectedValue({ code: "mirror.join_in_use" });
+    const { el } = await mount(api);
+    await press(el, "start-again");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
+      ),
     );
-    await pressed(el, "matches");
-    await type(el, "email", "op1@example.com");
-    await type(el, "password", "correct horse");
-    await pressed(el, "connect");
-    expect((events[0]!.detail as { body: AdoptBody }).body.primaryUrl).toBe("https://main.example");
+    expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
   });
+});
 
-  it.each(["ftp://waitron.local/x", "waitron.local"])(
-    "sends an address that is not an http or https URL (%s) as typed, for the server to refuse",
-    async (typed) => {
-      const api = stubApi();
-      const { el } = await mount({ api });
-      await type(el, "primaryUrl", typed);
-      await pressed(el, "continue");
-      expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith(typed);
-    },
-  );
-
-  it.each([1280, 390])(
-    "breaks the fingerprint only after a colon, keeping its text (%ipx)",
-    async (width) => {
-      await page.viewport(width, 900);
-      try {
-        const { el } = await mount({ api: stubApi() });
-        await type(el, "primaryUrl", "https://waitron.local");
-        await pressed(el, "continue");
-        await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-        const fingerprint = q(el, "[data-test=fingerprint]")!;
-        expect(fingerprint.textContent!.trim()).toBe(CERT.fingerprint256);
-        expectBreaksOnlyAfterColons(fingerprint, width === 390);
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    },
-  );
-
-  it("opens the address step for a handed-back https request that carries no confirmed certificate", async () => {
-    const { el } = await mount({
-      request: { primaryUrl: "https://primary.example", credential: REQUEST.credential },
-      errorMessage: "Compare the certificate first.",
-    });
-    expect(q(el, "[data-test=email]")).toBeNull();
-    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
-      "https://primary.example",
-    );
-    expect(await bottomOf(el)).toBe("Compare the certificate first.");
-  });
-
-  it("opens the login step for a handed-back plain-http request", async () => {
-    const { el } = await mount({
-      request: { primaryUrl: "http://127.0.0.1:8080", credential: REQUEST.credential },
-    });
-    expect(q(el, "[data-test=email]")).not.toBeNull();
-  });
-
-  it("links to the Servers page of the address as compared, never the address as typed", async () => {
-    const { el } = await mount();
-    await type(el, "primaryUrl", "  https://192.168.1.20:8443/dashboard/sales?x=1#top  ");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(q(el, "[data-test=servers-link]")!.getAttribute("href")).toBe(
-      "https://192.168.1.20:8443/servers",
-    );
-  });
-
-  it("draws no link for an address that is not a web address", async () => {
-    const { el } = await mount();
-    await type(el, "primaryUrl", "javascript:alert(1)");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(q(el, "[data-test=servers-link]")).toBeNull();
-    expect(q(el, "[data-test=compare] a")).toBeNull();
-    expect(text(q(el, "[data-test=compare]")!)).toContain("your primary server's Servers page");
-  });
-
-  it("draws no link for a web address the browser cannot read", async () => {
-    const { el } = await mount();
-    await type(el, "primaryUrl", "https://waitron.local:65536");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(q(el, "[data-test=compare] a")).toBeNull();
-    expect(text(q(el, "[data-test=compare]")!)).toContain("your primary server's Servers page");
-  });
-
-  it("asks for the comparison in Spanish", async () => {
+describe("setup-connect-screen: the main box's join limits", () => {
+  it("fills in the limits the main box sends, in Spanish too", async () => {
+    expect(es["connect.refusal.join_full_listed"]).toContain("{max}");
+    expect(es["connect.refusal.join_full_recent"]).toContain("{minutes}");
     setLocale("es-ES");
-    const { el } = await mount();
-    await type(el, "primaryUrl", "https://waitron.local");
-    expect(text(q(el, "[data-test=continue]")!)).toBe("Continuar");
-    await pressed(el, "continue");
-    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
-    expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "Abre la página Servidores de tu servidor principal en un dispositivo que ya tenga la sesión iniciada en él. La huella del certificado público que aparece allí debe coincidir con esta.",
+    const api = stubApi();
+    api.startJoin
+      .mockRejectedValueOnce({
+        code: "mirror.join_full",
+        params: { limit: "listed", retryAt: "2026-11-21T10:15:00.000Z", max: 4, minutes: 20 },
+      })
+      .mockRejectedValueOnce({
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: "2026-11-21T10:15:00.000Z", max: 7, minutes: 20 },
+      });
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(es["connect.refusal.join_full_listed"].replace("{max}", "4")),
     );
-    expect(text(q(el, "[data-test=matches]")!)).toBe("Coincide");
-    expect(text(q(el, "[data-test=mismatch]")!)).toBe("No coincide");
-    await pressed(el, "mismatch");
-    expect(await bottomOf(el)).toBe(
-      "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
+    await press(el, "join");
+    const recent = es["connect.refusal.join_full_recent"]
+      .replace("{max}", "7")
+      .replace("{minutes}", "20")
+      .replace("{retryAt}", localTime("2026-11-21T10:15:00.000Z")!);
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(recent));
+  });
+});
+
+describe("setup-connect-screen: Start again while the main box approves", () => {
+  it.each([
+    [
+      "en-GB",
+      "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
+    ],
+    ["es-ES", es["connect.refusal.join_approving"]],
+  ])("says so in %s, keeps the code and goes on reading", async (locale, words) => {
+    setLocale(locale as "en-GB" | "es-ES");
+    const api = stubApi(WAITING);
+    api.cancelJoin.mockRejectedValue({ code: "mirror.join_approving" });
+    const { el } = await mount(api, { handle: "h1" });
+    await press(el, "start-again");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+    expect(text(el, "[data-test=code]")).toBe("482\u00a0913");
+    api.joinState.mockResolvedValue({ state: "approved", code: "482913" });
+    await vi.waitFor(() => expect(q(el, "[data-test=finish]")).not.toBeNull(), {
+      timeout: 5_000,
+    });
+  });
+});
+
+describe("setup-connect-screen: approved and Finish joining", () => {
+  it("offers Finish joining only once approved, and hands it to the shell", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const finished = vi.fn();
+    el.addEventListener("join-finish-requested", finished);
+    expect(text(el, "[data-test=state]")).toBe(
+      "The main box approved a join with code 482\u00a0913. Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
     );
-    expect(text(q(el, "[data-test=check-address]")!)).toBe("Cambiar la dirección");
+    await press(el, "finish");
+    expect(finished).toHaveBeenCalledOnce();
+  });
+
+  it("reads the join again, showing no error, when Finish joining finds it no longer approved", async () => {
+    const api = stubApi({ state: "approved", code: "482913" });
+    const { el } = await mount(api, { handle: "h1" });
+    api.joinState.mockResolvedValue({ state: "ended", reason: "dismissed" });
+    el.errorMessage = "The server rejected the details.";
+    el.refusal = { code: "setup.request_invalid", params: { field: "join" } };
+    await vi.waitFor(() => expect(text(el, "[data-test=state]")).toMatch(/dismissed/));
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=finish]")).toBeNull();
+  });
+
+  it("sends Finish joining once however often it is clicked, and shows it is working until a refusal comes back", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const finished = vi.fn();
+    el.addEventListener("join-finish-requested", finished);
+    q(el, "[data-test=finish]")!.click();
+    q(el, "[data-test=finish]")!.click();
+    await el.updateComplete;
+    expect(finished).toHaveBeenCalledOnce();
+    expect(el.finishing).toBe(true);
+    expect(disabled(el, "finish")).toBe(true);
+    expect((q(el, "[data-test=finish]") as HTMLElement & { loading: boolean }).loading).toBe(true);
+    expect(disabled(el, "start-again")).toBe(true);
+    expect(disabled(el, "back")).toBe(true);
+    el.errorMessage = "The shell's words.";
+    el.refusal = { code: "mirror.vault_not_empty" };
+    await el.updateComplete;
+    expect(el.finishing).toBe(false);
+    expect(disabled(el, "finish")).toBe(false);
+    expect(disabled(el, "back")).toBe(false);
+    await press(el, "finish");
+    expect(finished).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the generic words for a routed-back refusal that comes with no words", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    el.refusal = { code: "mirror.vault_not_empty" };
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
+      ),
+    );
+  });
+
+  it.each([
+    [
+      { code: "mirror.join_handle_invalid" },
+      "This join was started on another page or device, so this page cannot finish it. Finish it there, or choose Start again.",
+    ],
+    [{ code: "mirror.vault_not_empty" }, "The shell's words."],
+  ])("shows a refusal of Finish joining in the bottom message (%o)", async (refusal, words) => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    el.errorMessage = "The shell's words.";
+    el.refusal = refusal;
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+  });
+
+  it("names Start again, which is drawn, when Finish joining cannot check the main box's copy", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    el.refusal = { code: "mirror.bundle_fetch_failed" };
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
+      ),
+    );
+    expect(q(el, "[data-test=start-again]")).not.toBeNull();
+    setLocale("es-ES");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(es["connect.finish.bundle_fetch_failed"]),
+    );
+  });
+});
+
+const START_AGAIN_FOR_CODE = "Choose Start again for a new code.";
+
+describe("setup-connect-screen: the words of every state", () => {
+  it.each<[JoinState, string]>([
+    [
+      { state: "elsewhere" },
+      "A join was started from another page or device. This page cannot show its code. Choose Start again to start one here; the other page's join then ends.",
+    ],
+    [
+      { state: "replaced" },
+      `This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "ended", reason: "wrong_code" },
+      `On the main box, a code that is not this box's was chosen, so this request has ended and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "ended", reason: "dismissed" },
+      "The main box's Servers page dismissed this request. Choose Start again to ask again.",
+    ],
+    [
+      { state: "ended", reason: "replaced" },
+      `This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "ended", reason: "cancelled" },
+      `This request was cancelled, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "ended", reason: "code_taken" },
+      "The main box needs this box to ask again. Choose Start again.",
+    ],
+    [
+      { state: "ended", reason: "invalid" },
+      "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
+    ],
+    [
+      { state: "ended", reason: "stopped" },
+      "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+    ],
+    [
+      { state: "ended", reason: "unknown" },
+      `The main box ended this request, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "failed", error: "mirror.join_invalid" },
+      "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+    ],
+    [
+      { state: "failed", error: "mirror.join_not_found" },
+      "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
+    ],
+    [
+      { state: "failed", error: "mirror.join_code_taken" },
+      `This join stopped, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
+      { state: "failed", error: "server.internal" },
+      `This join stopped, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+  ])("%o", async (state, words) => {
+    const { el } = await mount(stubApi(state), { handle: "h1" });
+    expect(text(el, "[data-test=state]")).toBe(words);
+    expect(q(el, "[data-test=code]")).toBeNull();
+    expect(q(el, "[data-test=finish]")).toBeNull();
+    expect(q(el, "[data-test=start-again]")).not.toBeNull();
+  });
+});
+
+const RETRY_AT = "2026-11-21T10:15:00.000Z";
+const PRIMARY_AT = "2026-11-21T10:00:00.000Z";
+const STANDBY_AT = "2026-11-21T10:30:00.000Z";
+
+const JOIN_ONLY = ["back", "join"];
+const START_AGAIN_TOO = ["back", "start-again", "join"];
+
+describe("setup-connect-screen: the words of every refusal of Join", () => {
+  it.each<[{ code: string; params?: Record<string, unknown> }, string, string[]]>([
+    [
+      { code: "mirror.join_address_mismatch" },
+      "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Join again. If it happens again, check what is connected between the two boxes.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_invalid" },
+      "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.standby_invalid" },
+      "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_code_taken" },
+      "The main box needs this box to ask again. Choose Join again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_not_found" },
+      "The main box no longer has this request: it ran out of time or the main box restarted. Choose Join again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "address", retryAt: RETRY_AT } },
+      "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "network", retryAt: RETRY_AT } },
+      "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Join again. If this keeps happening, something on the network is sending them.",
+      JOIN_ONLY,
+    ],
+    [
+      {
+        code: "mirror.join_full",
+        params: { limit: "listed", retryAt: RETRY_AT, max: 4, minutes: 20 },
+      },
+      "The main box already has 4 other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+      JOIN_ONLY,
+    ],
+    [
+      {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: RETRY_AT, max: 7, minutes: 20 },
+      },
+      `The main box has had 7 requests to join in the last 20 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until ${localTime(RETRY_AT)}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.`,
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.join_waiting" },
+      "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
+      START_AGAIN_TOO,
+    ],
+    [
+      { code: "mirror.join_in_use" },
+      "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
+      START_AGAIN_TOO,
+    ],
+    [
+      { code: "mirror.bundle_fetch_failed" },
+      "This box got no usable answer from the main box at that address. Check the address and that the main box is switched on, then choose Join again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.clocks_apart", params: { primaryAt: PRIMARY_AT, standbyAt: STANDBY_AT } },
+      `The two boxes' clocks are more than 10 minutes apart (the main box reads ${localTime(PRIMARY_AT)}, this box ${localTime(STANDBY_AT)}). If this box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Join again.`,
+      JOIN_ONLY,
+    ],
+    [
+      { code: "mirror.standby_name_taken" },
+      "This box picked a name another box of the venue already uses. Nothing was changed. Choose Join again: it picks a new name.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.connection_insecure" },
+      "This page is not using a secure connection, so this box will not join from it. Open this box's setup page at an address starting with https://, then try again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.owner_required" },
+      "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.already_provisioning" },
+      "Setup is already in progress on this server.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.not_ready" },
+      "The server isn't ready yet. Wait a moment, then try again.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.adopt_incomplete" },
+      "An earlier join of this box stopped partway. Reload this page to see how to clear it.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "server.internal" },
+      "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
+      JOIN_ONLY,
+    ],
+  ])("%o", async (refusal, words, drawn) => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue(refusal);
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=join]")!.hasAttribute("disabled")).toBe(false);
+    expect(buttons(el)).toEqual(drawn);
+  });
+
+  it("Start again after a refusal naming it cancels the held join and asks the same main box again", async () => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValueOnce({ code: "mirror.join_in_use" });
+    const { el } = await mount(api);
+    const seen = handles(el);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(() => expect(q(el, "[data-test=start-again]")).not.toBeNull());
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(api.cancelJoin).toHaveBeenCalledWith(undefined);
+    expect(api.startJoin.mock.calls).toEqual([
+      [MAIN, undefined],
+      [MAIN, undefined],
+    ]);
+    expect(seen).toEqual([undefined, "h1"]);
+  });
+
+  it("redraws a refusal in the new language when the language changes", async () => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue({ code: "mirror.join_waiting" });
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toMatch(/^This box is already waiting/),
+    );
+    setLocale("es-ES");
+    await el.updateComplete;
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(es["connect.refusal.join_waiting"]),
+    );
+    expect(text(el, "[data-test=start-again]")).toBe(es["connect.start_again"]);
+  });
+});
+
+describe("setup-connect-screen: nothing leaves the screen while a request is out", () => {
+  it("disables Back while Join's start is out, and enables it again once it answers", async () => {
+    const api = stubApi();
+    let answer!: (started: JoinStarted) => void;
+    api.startJoin.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    expect(disabled(el, "back")).toBe(false);
+    await press(el, "join");
+    expect(disabled(el, "back")).toBe(true);
+    answer(STARTED);
+    await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
+    expect(disabled(el, "back")).toBe(false);
+  });
+
+  it("disables Back while Start again's cancel is out", async () => {
+    const api = stubApi({ state: "elsewhere" });
+    let ended!: () => void;
+    api.cancelJoin.mockReturnValue(new Promise<void>((resolve) => (ended = resolve)));
+    const { el } = await mount(api);
+    await press(el, "start-again");
+    expect(disabled(el, "back")).toBe(true);
+    ended();
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    expect(disabled(el, "back")).toBe(false);
   });
 });
 
 describe("setup-connect-screen in Spanish", () => {
-  const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
-
-  it("labels the form and explains a blank field in Spanish", async () => {
+  it("shows the waiting code and its lines in Spanish", async () => {
     setLocale("es-ES");
-    const { el } = await mount();
-    expect(text(q(el, "h1")!)).toBe("Conectar con el servidor principal");
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("label")).toBe(
-      "Dirección del servidor principal",
+    const { el } = await mount(stubApi(WAITING), { handle: "h1" });
+    expect(text(el, "h1")).toBe("Unirse al servidor principal");
+    expect(text(el, "[data-test=addresses]")).toBe(
+      "La solicitud en el servidor principal debe venir de una de las direcciones de este servidor: 192.168.1.23, fd00::23",
     );
-    await fillValid(el, { email: "" });
-    expect(text(q(el, "[data-test=connect]")!)).toBe("Conectar");
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe(
-      "Revisa el correo del administrador.",
-    );
-  });
-
-  it("says under the address, in Spanish, that the server refused it and to enter the name", async () => {
-    setLocale("es-ES");
-    const api = {
-      primaryCertificate: vi
-        .fn()
-        .mockRejectedValue({ code: "mirror.primary_url_invalid", params: {}, status: 400 }),
-    };
-    const { el } = await mount({ api });
-    await type(el, "primaryUrl", "https://192.168.10.10");
-    q(el, "[data-test=continue]")!.click();
-    const url = q(el, "[data-test=primaryUrl]")!;
-    await vi.waitFor(() =>
-      expect(url.getAttribute("error")).toBe(
-        "Esta dirección no se puede usar. Introduce el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del restaurante, como https://192.168.1.10.",
-      ),
-    );
-    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
-  });
-
-  it("switches language while mounted and keeps what was typed", async () => {
-    const { el } = await mount();
-    await type(el, "primaryUrl", "https://waitron.local");
-    setLocale("es-ES");
-    await el.updateComplete;
-    expect(text(q(el, "h1")!)).toBe("Conectar con el servidor principal");
-    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("label")).toBe(
-      "Dirección del servidor principal",
-    );
-    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
-      "https://waitron.local",
-    );
+    expect(text(el, "[data-test=start-again]")).toBe("Empezar de nuevo");
   });
 });
 
-describe("setup-connect-screen: the authenticator code, drawn only once the main server asks for it", () => {
-  it("draws no code field on the login step until asked", async () => {
+describe("setup-connect-screen: Back", () => {
+  it("steps back to the role screen", async () => {
     const { el } = await mount();
-    await toLogin(el);
-    expect(q(el, "[data-test=email]")).not.toBeNull();
-    expect(q(el, "[data-test=totp]")).toBeNull();
-    expect(q(el, "[data-test=totp-notice]")).toBeNull();
-  });
-
-  it.each([
-    [
-      "en-GB",
-      "Authenticator code",
-      "This account uses an authenticator app. Enter its current code and choose Connect.",
-    ],
-    [
-      "es-ES",
-      "Código del autenticador",
-      "Esta cuenta usa una aplicación de autenticación. Escribe el código que muestra ahora y elige Conectar.",
-    ],
-  ] as const)(
-    "once asked, shows a required, focused code field with a sentence saying why, and marks nothing (%s)",
-    async (locale, label, notice) => {
-      setLocale(locale);
-      const { el } = await mount({ request: REQUEST, askForCode: true });
-      await new Promise((resolve) => setTimeout(resolve));
-      const totp = q(el, "[data-test=totp]")!;
-      expect(totp.getAttribute("label")).toBe(label);
-      expect(totp.hasAttribute("required")).toBe(true);
-      expect(totp.shadowRoot!.activeElement).toBe(totp.shadowRoot!.querySelector("input"));
-      expect(q(el, "[data-test=totp-notice]")!.textContent!.trim()).toBe(notice);
-      for (const field of ["primaryUrl", "email", "password", "totp"]) {
-        expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(false);
-        expect(q(el, `[data-test=${field}]`)!.getAttribute("error")).toBe("");
-      }
-      expect(await bottomOf(el)).toBe("");
-      expect(await alerts(el)).toHaveLength(0);
-      const value = (field: string) =>
-        (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-      expect([value("email"), value("password")]).toEqual(["op7@example.com", " secret "]);
-    },
-  );
-
-  it("once asked, refuses a blank code without sending, and sends a typed one", async () => {
-    const { el, host } = await mount({ request: REQUEST, askForCode: true });
-    const events = collect(host);
-    await pressed(el, "connect");
-    expect(events).toEqual([]);
-    expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("Check the authenticator code.");
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-
-    await type(el, "totp", " 654321 ");
-    await pressed(el, "connect");
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: { ...REQUEST, credential: { ...REQUEST.credential, totp: "654321" } },
-        },
-      },
-    ]);
-  });
-
-  it("keeps the code field, required, when only the password changes", async () => {
-    const { el, host } = await mount({ request: REQUEST, askForCode: true });
-    const events = collect(host);
-    await type(el, "password", "another secret");
-    expect(q(el, "[data-test=totp-notice]")).not.toBeNull();
-    await pressed(el, "connect");
-    expect(events).toEqual([]);
-    expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("Check the authenticator code.");
-  });
-
-  it("drops the code field while the email is another than the one asked about, sending no typed code", async () => {
-    const { el, host } = await mount({ request: REQUEST, askForCode: true });
-    const events = collect(host);
-    await type(el, "totp", "654321");
-    await type(el, "email", "other@example.com");
-    expect(q(el, "[data-test=totp]")).toBeNull();
-    expect(q(el, "[data-test=totp-notice]")).toBeNull();
-    await pressed(el, "connect");
-    expect(events).toEqual([
-      {
-        kind: "adopt",
-        detail: {
-          body: { ...REQUEST, credential: { email: "other@example.com", password: " secret " } },
-        },
-      },
-    ]);
-
-    await type(el, "email", "  op7@example.com ");
-    expect(q(el, "[data-test=totp]")!.hasAttribute("required")).toBe(true);
-    expect((q(el, "[data-test=totp]") as HTMLElement & { value: string }).value).toBe("");
-  });
-
-  it("keeps the code field when the address is checked again and left as it was", async () => {
-    const { el } = await mount({ request: REQUEST, askForCode: true });
-    await pressed(el, "check-address");
-    await toLogin(el, REQUEST.primaryUrl);
-    expect(q(el, "[data-test=totp]")!.hasAttribute("required")).toBe(true);
-  });
-
-  it("drops the code field once the address is changed", async () => {
-    const { el } = await mount({ request: REQUEST, askForCode: true });
-    await pressed(el, "check-address");
-    await toLogin(el, "https://main.example");
-    expect(q(el, "[data-test=email]")).not.toBeNull();
-    expect(q(el, "[data-test=totp]")).toBeNull();
+    const goto = vi.fn();
+    el.addEventListener("setup-goto", (e) => goto((e as CustomEvent).detail));
+    await press(el, "back");
+    expect(goto).toHaveBeenCalledWith({ screen: "role" });
   });
 });

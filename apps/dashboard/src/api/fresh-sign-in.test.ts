@@ -120,3 +120,19 @@ it("each GET attempt owns its deadline; waiting for a person has none", async ()
     vi.useRealTimers();
   }
 });
+
+it.each([
+  ["/management-api/handover", false],
+  ["/management-api/box-joins/66666666-6666-4666-8666-666666666666/check", false],
+  ["/management-api/box-joins/66666666-6666-4666-8666-666666666666/approve", false],
+  ["/management-api/box-joins/66666666-6666-4666-8666-666666666666/check/x", true],
+  ["/management-api/servers/66666666-6666-4666-8666-666666666666/remove", true],
+])("asks for a fresh sign-in on %s with a recovery code allowed: %s", async (path, allowed) => {
+  const prompt = vi.fn(async () => false);
+  const request: DashboardRequest = async () => {
+    throw refusal;
+  };
+  const gate = createFreshSignInGate({ sessionGeneration: () => 0, prompt });
+  await expect(gate.wrap(request)(path, "POST")).rejects.toBe(refusal);
+  expect(prompt).toHaveBeenCalledWith(expect.any(AbortSignal), { allowRecoveryCode: allowed });
+});

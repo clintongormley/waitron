@@ -1118,8 +1118,8 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `box` and `node_pair_link`, writing this box's rows and deleting abandoned rows under another node
 id from those node tables and `node_take_failures`; the emergency
-switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's joining route
-(`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's join approval
+(`issueMirrorBundle`, `apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `box`'s role group; first setup and replacing the recovery key reach its recovery-key group; first setup
 and `waitron-credentials rotate` reach its signing-key group; `mode.ts`, `recovery-key.ts` and
 credentials' `node-signing-key.ts` append role-change, replacement and rotation events through
@@ -2373,7 +2373,7 @@ before. A wrong-PIN or wrong-password limit that sat inside the transaction stay
 reuse. The server's early halves include `withPinCheckAhead` (`apps/server/src/pin-check-ahead.ts`),
 `ownPasswordChanges` (`apps/server/src/own-password-ahead.ts`), `pinGated`
 (`apps/server/src/payments-api.ts`) and direct `checkManagerPassword` calls in the dashboard
-sign-in, promote and mirror-bundle routes.
+sign-in and promote routes.
 `grep -rn 'withPinCheckAhead\|ownPasswordChanges\|pinGated\|checkPin(\|checkManagerPassword(' apps/server/src --exclude='*.test.ts'`
 lists the two helpers' own files and every route file with an early check. Each runs the early check when what the route can read before the transaction says the
 secret will be checked, so a request the transaction refuses before its own check (an order already
@@ -3884,9 +3884,9 @@ NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 owner's bucket, so the two are never configured together. Saving bucket settings is refused with
 `backup.spare_stream_active` while `node.db` holds a pair link (`refuseWhilePaired`,
 `apps/server/src/stream-api.ts:159-163`), and a join is refused with `mirror.bucket_stream_active`
-while bucket settings are stored (`refuseWhileBucketStream`, `apps/server/src/mirror-bundle-api.ts:341-348`).
+while bucket settings are stored (`refuseWhileBucketStream`, `apps/server/src/mirror-bundle-api.ts:267-274`).
 Each check is repeated under `node.db`'s write lock, where the other side writes
-(`stream-api.ts:253-254`, `mirror-bundle-api.ts:190-200`), so of two requests at once one sees the
+(`stream-api.ts:253-254`, `mirror-bundle-api.ts:140-145`), so of two requests at once one sees the
 other. The stream host reads the pair link first and the bucket settings only when there is no
 streaming link (`apps/server/src/stream-host.ts:286-289`). Passing the spare's copy on to the
 bucket is not built (the 3b plan's "copy-up", slice 5e).
@@ -3894,7 +3894,7 @@ bucket is not built (the 3b plan's "copy-up", slice 5e).
 **The pair link.** `node_pair_link` (`packages/node-db/src/schema/node-pair-link.ts`) is one row per
 box, keyed by its own node id, so a box has at most one spare; a join is refused with
 `mirror.spare_already_joined` while the link is `streaming` to a spare the held chart does not list
-as evicted or cleared (`mirror-bundle-api.ts:192-197`); any other link is replaced. The main box's
+as evicted or cleared (`mirror-bundle-api.ts:204-214`); any other link is replaced. The main box's
 row has role `streams` and moves `pending` → `streaming` when it writes the spare's `nodes` row,
 which happens when the spare's store first answers it, not when the bundle is handed out
 (`recordSpare`, `apps/server/src/spare-join.ts:157-186`; decision D6 in [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). The spare's row

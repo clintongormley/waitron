@@ -1,4 +1,3 @@
-import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -11,26 +10,6 @@ function collect(host: HTMLElement): unknown[] {
   const events: unknown[] = [];
   host.addEventListener("reset-requested", (e) => events.push((e as CustomEvent).detail));
   return events;
-}
-
-async function type(el: SetupResetScreen, field: string, value: string): Promise<void> {
-  q(el, `[data-test=${field}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-}
-
-async function fillValid(
-  el: SetupResetScreen,
-  overrides: Record<string, string> = {},
-): Promise<void> {
-  for (const [key, value] of Object.entries({
-    email: "op1@example.com",
-    password: "correct horse",
-    ...overrides,
-  })) {
-    await type(el, key, value);
-  }
 }
 
 /** The one message above the reset button, as `wt-form-actions` shows it. */
@@ -49,11 +28,6 @@ async function alerts(el: SetupResetScreen): Promise<Element[]> {
     ...(actions?.shadowRoot!.querySelectorAll("[role=alert]") ?? []),
   ];
 }
-
-const FIX_FIELDS = "Correct the highlighted fields to continue.";
-
-const REJECTED =
-  "That email and password are not the admin login used to connect this server. Check them and try again.";
 
 afterEach(() => {
   setLocale("en-GB");
@@ -114,304 +88,47 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=servers-link]")).toBeNull();
   });
 
-  it("emits reset-requested with the trimmed email and the password as typed", async () => {
+  it("asks for nothing and emits reset-requested carrying nothing", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
-    await fillValid(el, { email: "  op1@example.com  ", password: "  correct horse  " });
-    q(el, "[data-test=reset]")!.click();
-    expect(events).toEqual([
-      { credential: { email: "op1@example.com", password: "  correct horse  " } },
-    ]);
-  });
-
-  it("resets when Enter is pressed in a field", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    await fillValid(el);
-    q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(events).toEqual([
-      { credential: { email: "op1@example.com", password: "correct horse" } },
-    ]);
-  });
-
-  it("names both fields semantically, marks them required and gives them login autocomplete", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const email = q(el, "[data-test=email]")!;
-    const password = q(el, "[data-test=password]")!;
-    expect(email.getAttribute("name")).toBe("email");
-    expect(email.getAttribute("autocomplete")).toBe("username");
-    expect(email.hasAttribute("required")).toBe(true);
-    expect(email.getAttribute("type")).toBe("email");
-    expect(password.getAttribute("name")).toBe("password");
-    expect(password.getAttribute("autocomplete")).toBe("current-password");
-    expect(password.hasAttribute("required")).toBe(true);
-    expect(password.getAttribute("type")).toBe("password");
-  });
-
-  it("reveals and hides the password without changing it or resetting", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    await type(el, "password", "correct horse");
-    const input = q(el, "[data-test=password]")! as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    const toggle = input.querySelector<HTMLElement>("[data-test=toggle-password]")!;
-    expect(toggle.getAttribute("aria-label")).toBe("Show password");
-    toggle.click();
-    await el.updateComplete;
-    await input.updateComplete;
-    expect(input.shadowRoot!.querySelector("input")!.type).toBe("text");
-    expect(input.shadowRoot!.querySelector("input")!.value).toBe("correct horse");
-    expect(toggle.getAttribute("aria-label")).toBe("Hide password");
-    toggle.click();
-    await el.updateComplete;
-    await input.updateComplete;
-    expect(input.shadowRoot!.querySelector("input")!.type).toBe("password");
-    expect(events).toEqual([]);
-  });
-
-  it.each([
-    ["email", "Enter the admin email."],
-    ["password", "Enter the admin password."],
-  ])(
-    "blocks the reset and explains %s when it is blank, emitting nothing",
-    async (field, sentence) => {
-      const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-      const events = collect(host);
-      await fillValid(el, { [field]: field === "password" ? "" : "   " });
-      q(el, "[data-test=reset]")!.click();
-      await el.updateComplete;
-      expect(events).toEqual([]);
-      const input = q(el, `[data-test=${field}]`)!;
-      expect(input.hasAttribute("invalid")).toBe(true);
-      expect(input.getAttribute("error")).toBe(sentence);
-      expect(await bottomOf(el)).toBe(FIX_FIELDS);
-      expect(await alerts(el)).toHaveLength(1);
-    },
-  );
-
-  it("clears the client message once a valid reset is submitted", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    await fillValid(el);
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(0);
     expect(await bottomOf(el)).toBe("");
-    expect(events).toHaveLength(1);
+    q(el, "[data-test=reset]")!.click();
+    expect(events).toEqual([null]);
   });
 
   it("disables the reset button and reads Resetting… while the reset is in flight", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", { busy: true });
     const events = collect(host);
-    await fillValid(el);
     const reset = q(el, "[data-test=reset]")!;
     expect(reset.hasAttribute("disabled")).toBe(true);
     expect(reset.textContent!.trim()).toBe("Resetting…");
     reset.click();
-    q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("{Enter}");
     expect(events).toEqual([]);
-  });
-
-  it("marks no field and names the refused login above the reset button when the login was refused", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      credentialsRejected: true,
-    });
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe(REJECTED);
-    expect(await alerts(el)).toHaveLength(1);
-  });
-
-  // Owner rule (A153, 2026-09-30): a refused login marks no field; only a missing or malformed value is marked.
-  it("marks no field on a refused login, says so once above the reset button and focuses the password", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await fillValid(el);
-    el.credentialsRejected = true;
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-
-    for (const field of ["email", "password"]) {
-      const input = q(el, `[data-test=${field}]`)!;
-      expect(input.getAttribute("error")).toBe("");
-      expect(input.hasAttribute("invalid")).toBe(false);
-    }
-    expect(await bottomOf(el)).toBe(REJECTED);
-    expect(await bottomOf(el)).not.toContain(FIX_FIELDS);
-    expect(await alerts(el)).toHaveLength(1);
-    const password = q(el, "[data-test=password]")!;
-    expect(el.shadowRoot!.activeElement).toBe(password);
-    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
   });
 
   it("shows a routed-back message as one alert above the reset button, leaving it working", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      errorMessage: "Too many attempts. Wait 30 seconds, then try again.",
+      errorMessage: "The server could not be reset.",
     });
-    expect(await bottomOf(el)).toBe("Too many attempts. Wait 30 seconds, then try again.");
+    expect(await bottomOf(el)).toBe("The server could not be reset.");
     expect(await alerts(el)).toHaveLength(1);
-    expect(q(el, "[data-test=email]")).not.toBeNull();
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("drops a routed-back message for the client message when a press finds blank fields", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      errorMessage: "The server could not be reset.",
-    });
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Enter the admin email.");
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Enter the admin password.");
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(await alerts(el)).toHaveLength(1);
-  });
-
-  it("drops a routed-back message when the reset is asked for again", async () => {
+  it("drops a routed-back message when the reset is asked for again, and shows a new refusal", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       errorMessage: "The server could not be reset.",
+      refusal: {},
     });
     const events = collect(host);
-    await fillValid(el);
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
     expect(events).toHaveLength(1);
     expect(await bottomOf(el)).toBe("");
-  });
-
-  it("says nothing and leaves the reset button working before the first press", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "email", "");
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
-  });
-
-  it("on a failed press focuses the first blank field and disables the reset button", async () => {
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "email", "op1@example.com");
-    q(el, "[data-test=reset]")!.click();
+    el.refusal = {};
     await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-    const password = q(el, "[data-test=password]")!;
-    expect(password.getAttribute("error")).toBe("Enter the admin password.");
-    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
-  });
-
-  it("re-checks each change after a failed press, and the reset works again once both are filled", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-
-    await type(el, "email", "op1@example.com");
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
-
-    await type(el, "email", " ");
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Enter the admin email.");
-
-    await fillValid(el);
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
-    q(el, "[data-test=reset]")!.click();
-    expect(events).toHaveLength(1);
-  });
-
-  it("leaves the reset button working under a refused login, and focuses the password when it arrives", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    await fillValid(el);
-    el.credentialsRejected = true;
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-
-    const password = q(el, "[data-test=password]")!;
-    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
-    expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
-      false,
-    );
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(events).toEqual([
-      { credential: { email: "op1@example.com", password: "correct horse" } },
-    ]);
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe("");
-  });
-
-  it("shows a request refusal of one field under that field, leaving the reset button working", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    await fillValid(el);
-    el.invalidField = "password";
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-
-    const password = q(el, "[data-test=password]")!;
-    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
-    expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
-    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
-    expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
-      false,
-    );
-
-    await type(el, "password", "battery staple");
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe("");
-    el.invalidField = undefined;
-    await el.updateComplete;
-    el.invalidField = "email";
-    await el.updateComplete;
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(events).toHaveLength(1);
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-  });
-
-  it.each([
-    ["email", "op2@example.com", { email: "op2@example.com", password: "correct horse" }],
-    ["password", "battery staple", { email: "op1@example.com", password: "battery staple" }],
-  ])(
-    "withdraws a refused login's message once %s changes, and the reset then sends the new login",
-    async (field, value, credential) => {
-      const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-      const events = collect(host);
-      await fillValid(el);
-      el.credentialsRejected = true;
-      await el.updateComplete;
-      expect(await bottomOf(el)).toBe(REJECTED);
-
-      await type(el, field, value);
-      expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("");
-      expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-      expect(await bottomOf(el)).toBe("");
-      expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
-      q(el, "[data-test=reset]")!.click();
-      expect(events).toEqual([{ credential }]);
-    },
-  );
-
-  it("keeps a field's wt-change inside the screen", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const escaped: Event[] = [];
-    host.addEventListener("wt-change", (e) => escaped.push(e));
-    await type(el, "email", "op1@example.com");
-    expect(escaped).toEqual([]);
+    expect(await bottomOf(el)).toBe("The server could not be reset.");
   });
 
   it("steps back to the provisioning message without resetting", async () => {
@@ -434,7 +151,7 @@ describe("setup-reset-screen", () => {
     const status = q(el, "[data-test=outcome]")!;
     expect(status.getAttribute("role")).toBe("status");
     expect(status.textContent).toContain("resetting and will restart");
-    expect(q(el, "[data-test=email]")).toBeNull();
+    expect(q(el, "[data-test=reset]")).toBeNull();
     expect(q(el, "[data-test=back]")).toBeNull();
     q(el, "[data-test=reload]")!.click();
     expect(reload).toHaveBeenCalledOnce();
@@ -448,50 +165,8 @@ describe("setup-reset-screen", () => {
     const alert = q(el, "[data-test=outcome]")!;
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toContain("no half-finished join");
-    expect(q(el, "[data-test=email]")).toBeNull();
+    expect(q(el, "[data-test=reset]")).toBeNull();
     expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Reload");
-  });
-
-  it("shows the form in Spanish", async () => {
-    setLocale("es-ES");
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
-    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
-    expect(text).toContain("No se cambia nada en el servidor principal");
-    expect(q(el, "[data-test=email]")!.getAttribute("label")).toBe("Correo del administrador");
-    expect(q(el, "[data-test=password]")!.getAttribute("label")).toBe(
-      "Contraseña del administrador",
-    );
-    expect(q(el, "[data-test=toggle-password]")!.getAttribute("aria-label")).toBe(
-      "Mostrar contraseña",
-    );
-    expect(q(el, "[data-test=back]")!.textContent!.trim()).toBe("Volver");
-    expect(q(el, "[data-test=reset]")!.textContent!.trim()).toBe("Restablecer este servidor");
-  });
-
-  it("explains missing fields in Spanish", async () => {
-    setLocale("es-ES");
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    q(el, "[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe(
-      "Introduce el correo del administrador.",
-    );
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
-      "Introduce la contraseña del administrador.",
-    );
-    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
-  });
-
-  it("names a refused login in Spanish", async () => {
-    setLocale("es-ES");
-    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      credentialsRejected: true,
-    });
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe(
-      "Ese correo y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
-    );
   });
 
   it("shows the in-flight button and the outcome in Spanish", async () => {
@@ -504,15 +179,21 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Recargar");
   });
 
-  it("redraws in Spanish on a live language switch and keeps what was typed", async () => {
+  it("shows the screen in Spanish", async () => {
+    setLocale("es-ES");
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    await type(el, "email", "op7@example.com");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain("No se cambia nada en el servidor principal");
+    expect(q(el, "[data-test=back]")!.textContent!.trim()).toBe("Volver");
+    expect(q(el, "[data-test=reset]")!.textContent!.trim()).toBe("Restablecer este servidor");
+  });
+
+  it("redraws in Spanish on a live language switch", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this server");
     setLocale("es-ES");
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
-    expect(q(el, "[data-test=email]")!.getAttribute("label")).toBe("Correo del administrador");
-    const input = q(el, "[data-test=email]") as HTMLElement & { value: string };
-    expect(input.value).toBe("op7@example.com");
   });
 });

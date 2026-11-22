@@ -7,12 +7,8 @@ import type { DashboardApi, ServerListing } from "../api/client.js";
 
 const STANDBY = "22222222-2222-4222-8222-222222222222";
 
-const FINGERPRINT =
-  "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16";
-
 const listing: ServerListing = {
   term: 3,
-  authorityFingerprint: FINGERPRINT,
   nodes: [
     {
       nodeId: "11111111-1111-4111-8111-111111111111",
@@ -97,7 +93,6 @@ const REMOVED = "44444444-4444-4444-8444-444444444444";
 // The server marks `canClear` only on a removed row, and only while this server is the primary.
 const clearable: ServerListing = {
   term: 4,
-  authorityFingerprint: FINGERPRINT,
   nodes: listing.nodes.map((n) => ({ ...n, canClear: n.nodeId === REMOVED })),
 };
 
@@ -207,7 +202,6 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     const blank = "55555555-5555-4555-8555-555555555555";
     const withBlank: ServerListing = {
       term: 3,
-      authorityFingerprint: FINGERPRINT,
       nodes: [
         ...listing.nodes,
         {
@@ -270,7 +264,6 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
   it("renders the not-primary note accessibly", async () => {
     const onStandby: ServerListing = {
       term: 3,
-      authorityFingerprint: FINGERPRINT,
       nodes: listing.nodes.map((n) => ({ ...n, isSelf: n.nodeId === STANDBY, removable: false })),
     };
     const { el, host } = await mountWidget<ServersScreen>(
@@ -414,6 +407,95 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
     await flush(el);
     await openOn(el, "remove");
     expect(el.shadowRoot!.querySelector("wt-switch[data-test=reset-statement]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+});
+
+const JOIN = "66666666-6666-4666-8666-666666666666";
+const asking: ServerListing = {
+  ...listing,
+  joinRequests: [
+    {
+      id: JOIN,
+      address: "192.168.1.23",
+      askedAt: "2026-11-21T10:00:00.000Z",
+      startedAgain: true,
+    },
+  ],
+};
+
+async function openJoin(el: ServersScreen): Promise<HTMLElementTagNameMap["wt-dialog"]> {
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="join-check-${JOIN}"]`)!.click();
+  await flush(el);
+  await flush(el);
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    "wt-dialog[data-test=join-dialog]",
+  )!;
+  expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  return dialog;
+}
+
+describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) => {
+  const mountAsking = (overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) =>
+    mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(asking),
+          checkBoxJoin: vi.fn().mockResolvedValue({ choices: ["482913", "105770", "930264"] }),
+          ...overrides,
+        }),
+      },
+      theme,
+    );
+
+  it("renders the request in the list accessibly", async () => {
+    const { el, host } = await mountAsking();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(`[data-test="join-row-${JOIN}"]`)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the codes dialog accessibly", async () => {
+    const { el, host } = await mountAsking();
+    await flush(el);
+    const dialog = await openJoin(el);
+    expect(dialog.querySelectorAll("[data-choice]")).toHaveLength(3);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused Check accessibly", async () => {
+    const { el, host } = await mountAsking({
+      checkBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.spare_already_joined", status: 409 }),
+    });
+    await flush(el);
+    const dialog = await openJoin(el);
+    expect(await formMessageOf(dialog.querySelector("wt-form-actions")!)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders an approved join accessibly", async () => {
+    const { el, host } = await mountAsking({
+      approveBoxJoin: vi.fn().mockResolvedValue(undefined),
+    });
+    await flush(el);
+    const dialog = await openJoin(el);
+    dialog.querySelector<HTMLElement>("[data-choice]")!.click();
+    await flush(el);
+    await flush(el);
+    expect(dialog.querySelector('[data-test="join-approved"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused Dismiss accessibly", async () => {
+    const { el, host } = await mountAsking({
+      dismissBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_in_progress", status: 409 }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="join-dismiss-${JOIN}"]`)!.click();
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="join-list-error"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

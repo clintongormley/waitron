@@ -453,61 +453,61 @@ it("a refused public adoption retains its independently signed reservation witho
   let fetched: ReservedIdentity | undefined;
   const adoptionDir = join(stateDir!, "empty-adoption");
   await mkdir(adoptionDir);
-  const refusal = await adoptFromPrimary(
-    {
-      ownerDb: unadopted.db,
-      ownerNode: unadopted.node,
-      environmentKeys: {},
-      ring: RING,
-      advertisedOrigin: "https://spare.test",
-      spareStorePort: 7443,
-      assertStartsWith: () => {},
-      environment: "production",
-      database: "synthetic-empty-spare",
-      listIpv4: () => [],
-      now: () => new Date(),
-      stateDir: adoptionDir,
-      persistTrading: async () => {},
-      persistBackupSettings: async () => {},
-      persistModuleConfig: async () => {},
-      persistCredentialsRing: async () => {},
-      fetchBundle: async (_url, _credential, standby) => {
-        target = standby.nodeId;
-        const held = joinRequest(target, "reserve");
-        originalConfirmation = JSON.stringify(held.confirmation);
-        originalReservation = JSON.stringify(held.input);
-        await writeFile(configuration().confirmationPath, originalConfirmation);
-        const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
-          asJoinReserver(() =>
-            assembleMirrorBundle({
-              appDb: primary.db,
-              node: primary.node,
-              ring: RING,
-              ...PAIR_BUNDLE_FIELDS,
-              stateDir: stateDir!,
-              boxHostname: "waitron.local",
+  const identity = generateStandbyIdentity();
+  const storeUrl = "https://spare.test:7443";
+  const refusal = await (async () => {
+    const standby = {
+      nodeId: identity.nodeId,
+      publicKey: identity.publicKey,
+      contactUrl: "https://spare.test",
+      storeUrl,
+      at: Date.now(),
+    };
+    target = standby.nodeId;
+    const held = joinRequest(target, "reserve");
+    originalConfirmation = JSON.stringify(held.confirmation);
+    originalReservation = JSON.stringify(held.input);
+    await writeFile(configuration().confirmationPath, originalConfirmation);
+    const bundle = await withOperationAuthority(held.binding, held.operatorId, (authority) =>
+      asJoinReserver(() =>
+        assembleMirrorBundle({
+          appDb: primary.db,
+          node: primary.node,
+          ring: RING,
+          ...PAIR_BUNDLE_FIELDS,
+          stateDir: stateDir!,
+          boxHostname: "waitron.local",
 
-              designated: { nodeId: PRIMARY },
-              standby,
-              moduleOperations: new Map([
-                [held.binding.module, { binding: held.binding, authority, input: held.input }],
-              ]),
-            }),
-          ),
-        );
-        fetched = bundle.reservedIdentity;
-        return bundle;
+          designated: { nodeId: PRIMARY },
+          standby,
+          moduleOperations: new Map([
+            [held.binding.module, { binding: held.binding, authority, input: held.input }],
+          ]),
+        }),
+      ),
+    );
+    fetched = bundle.reservedIdentity;
+    return adoptFromPrimary(
+      {
+        ownerDb: unadopted.db,
+        ownerNode: unadopted.node,
+        environmentKeys: {},
+        ring: RING,
+        assertStartsWith: () => {},
+        environment: "production",
+        database: "synthetic-empty-spare",
+        listIpv4: () => [],
+        now: () => new Date(),
+        stateDir: adoptionDir,
+        persistTrading: async () => {},
+        persistBackupSettings: async () => {},
+        persistModuleConfig: async () => {},
+        persistCredentialsRing: async () => {},
       },
-    },
-    {
-      primaryUrl: "https://primary.test",
-      credential: {
-        email: "owner@example.test",
-        password: "synthetic-unused-credential",
-      },
-    },
-    { beforeFirstWrite: async () => {} },
-  ).then(
+      { identity, bundle, storeUrl },
+      { beforeFirstWrite: async () => {} },
+    );
+  })().then(
     () => undefined,
     (error: unknown) => error,
   );

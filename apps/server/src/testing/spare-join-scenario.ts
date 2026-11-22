@@ -2,7 +2,7 @@
 // provisions its box, but with no bucket copy or recovery key until the test switches them on while
 // M is down, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
-import { randomUUID, X509Certificate } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -61,6 +61,7 @@ import {
   switchOnStreaming,
   type BoxDirs,
 } from "./stream-box.js";
+import { joinThenFinish, type SetupPageSend } from "./setup-join.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
 import { offerProducts } from "./zone-offers.js";
 
@@ -265,6 +266,8 @@ export class TestBox {
           this.lookups.push(hostname);
           return loopbackLookup(hostname, ask);
         },
+        // Every box here listens and connects on loopback.
+        joinAddresses: () => ["127.0.0.1"],
         restart: () => void this.restart(),
       },
     );
@@ -545,23 +548,76 @@ export async function managementHeaders(
   return managing;
 }
 
-/** The spare at `spareUrl` asked to adopt the main box at `primaryUrl` as `ADMIN`. */
+interface Answer {
+  status: number;
+  body: unknown;
+}
+
+async function answerOf(response: Response): Promise<Answer> {
+  const text = await response.text();
+  return { status: response.status, body: text === "" ? null : (JSON.parse(text) as unknown) };
+}
+
+/**
+ * The spare at `spare.url` joins the main box at `primaryUrl` by code: Join on the spare, Check
+ * and a tap on the code the spare shows by `ADMIN` on the main box, then Finish joining on the
+ * spare. Answers Finish joining's answer, or the Join's or the Check's refusal; after a refused
+ * Check the request is dismissed and the spare's join cancelled, so neither holds a place.
+ */
 export async function adoptFrom(
-  spareUrl: string,
-  via: Via,
-  primary: { primaryUrl: string; caPem: string },
-): Promise<{ status: number; body: unknown }> {
-  const adopted = await fetch(`${spareUrl}/setup-api/adopt`, {
-    ...via,
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      primaryUrl: primary.primaryUrl,
-      credential: { email: ADMIN.email, password: ADMIN.password },
-      confirmedCaPem: primary.caPem,
-    }),
-  });
-  return { status: adopted.status, body: (await adopted.json()) as unknown };
+  spare: { url: string; via: Via },
+  main: { url: string; via: Via; origin: string },
+  primaryUrl: string,
+  wait: <T>(what: string, ms: number, probe: () => Promise<T | undefined>) => Promise<T>,
+): Promise<Answer> {
+  const onSpare: SetupPageSend = (path, init) =>
+    fetch(`${spare.url}${path}`, {
+      ...spare.via,
+      method: init.method ?? "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: spare.url,
+        ...(init.handle === undefined ? {} : { "x-waitron-join-handle": init.handle }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    });
+
+  const approve = async ({ code, handle }: { code: string; handle: string }) => {
+    const managing = await managementHeaders(main.url, main.origin, main.via);
+    const onMain = (path: string, body?: unknown) =>
+      fetch(`${main.url}${path}`, {
+        ...main.via,
+        method: body === undefined ? "GET" : "POST",
+        // The box-join routes take a person's request only from the page at the address it used.
+        headers: { ...managing, origin: main.url },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const servers = await answerOf(await onMain("/management-api/servers"));
+    expect(servers.status, JSON.stringify(servers.body)).toBe(200);
+    const listed = (servers.body as { joinRequests: { id: string }[] }).joinRequests;
+    expect(listed, JSON.stringify(listed)).toHaveLength(1);
+    const requestId = listed[0]!.id;
+    const checked = await onMain(`/management-api/box-joins/${requestId}/check`, {});
+    if (checked.status !== 200) {
+      const dismissed = await answerOf(
+        await onMain(`/management-api/box-joins/${requestId}/dismiss`, {}),
+      );
+      expect(dismissed.status, JSON.stringify(dismissed.body)).toBe(204);
+      const cancelled = await onSpare("/setup-api/join/cancel", { handle });
+      expect(cancelled.status, await cancelled.text()).toBe(204);
+      return checked;
+    }
+    expect(((await checked.json()) as { choices: string[] }).choices).toContain(code);
+    const approved = await answerOf(
+      await onMain(`/management-api/box-joins/${requestId}/approve`, { code }),
+    );
+    expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+    return undefined;
+  };
+
+  return answerOf(
+    await joinThenFinish(onSpare, primaryUrl, { approve, wait, waitMs: LINK_WAIT_MS }),
+  );
 }
 
 /**
@@ -718,7 +774,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       });
       expect(sold.status, await sold.text()).toBe(200);
       expect(saleOf(dirsM.venue, workingOrderId)).toBe(true);
-      return { caM, viaM };
+      return { viaM };
     })();
     // S's setup start reads nothing of M's, so it runs while M starts and sells. Both settle before
     // either failure is thrown, so cleanup never runs while M's branch can still open a client.
@@ -731,7 +787,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     expect(adoption.adopted.size).toBe(2);
     await adoption.bound;
     adoption.restore();
-    const { caM, viaM } = selling.value;
+    const { viaM } = selling.value;
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.
@@ -741,19 +797,14 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // M's address is the one its chart gives it, at its own name; S reaches it through the lookup.
     const addressM = ownContactUrl(boxM.origin, m.nodeId);
     expect(new URL(addressM).hostname).not.toBe(BOX_HOSTNAME);
-    const read = await fetch(`${urlS}/setup-api/primary-certificate`, {
-      ...viaS,
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ primaryUrl: addressM }),
-    });
-    const answer = (await read.json()) as unknown;
-    expect(read.status, JSON.stringify(answer)).toBe(200);
-    expect(answer).toMatchObject({
-      fingerprint256: new X509Certificate(caM).fingerprint256,
-    });
 
-    const adopt = () => adoptFrom(urlS, viaS, { primaryUrl: addressM, caPem: caM });
+    const adopt = () =>
+      adoptFrom(
+        { url: urlS, via: viaS },
+        { url: urlM, via: viaM, origin: boxM.origin },
+        addressM,
+        wait,
+      );
 
     clock.begin("spare-refused-no-key");
     const beforeNoKey = await joinState(dirsM.venue, m.nodeId);

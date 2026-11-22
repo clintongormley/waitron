@@ -49,12 +49,10 @@ import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import type {
   RecoveryRestoreCredentials,
   EmailSettingsDraft,
-  AdoptBody,
   ApiError,
   ConfigurationPreview,
   VenueDraft,
   ProvisionBody,
-  ResetCredential,
   SetupApi,
   CloudRecoveryView,
 } from "./api/client.js";
@@ -71,15 +69,14 @@ import type {
   RestoreRequestDetail,
 } from "./events.js";
 import type { CloudField, CloudRestoreConfirmation } from "./screens/cloud-restore-screen.js";
-import type { ConnectField } from "./screens/connect-screen.js";
 import type { BucketField, RestoredVenue } from "./screens/restore-bucket-screen.js";
 import type { RestoreField } from "./screens/restore-screen.js";
-import type { ResetField, ResetScreenOutcome } from "./screens/reset-screen.js";
+import type { ResetScreenOutcome } from "./screens/reset-screen.js";
 import { VENUE_SERVER_FIELDS } from "./server-fields.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
-import { currentLocale, format, localTime, setLocale, t } from "./i18n/t.js";
+import { currentLocale, format, setLocale, t } from "./i18n/t.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -367,46 +364,29 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "fiscal.regime_not_implemented": "shell.venue_error.regime_not_implemented",
 };
 
+/** This tab's join handle: only the tab holding it is shown the code and may finish the join. */
+export const JOIN_HANDLE_KEY = "waitron-setup-join-handle";
+/** The main box this tab's join asked, for the done and reset screens' link to its Servers page. */
+export const JOIN_PRIMARY_KEY = "waitron-setup-join-primary";
+
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
-  "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
   "mirror.vault_not_empty": "shell.adopt.vault_not_empty",
   "mirror.vault_key_differs": "shell.adopt.vault_key_differs",
-  // A fault in Waitron: the connect screen sends a certificate only from its own read, which the
-  // server has already checked is one authority certificate.
-  "mirror.primary_unconfirmed": "shell.adopt.primary_unconfirmed",
-  "password.invalid": "shell.adopt.login_failed",
-  "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",
-  "mirror.bucket_stream_active": "shell.adopt.bucket_stream_active",
-  "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
-  "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
-  "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
   "server.unreleased_build": "shell.adopt.unreleased_build",
   "mirror.environment_mismatch": "shell.adopt.environment_mismatch",
 };
 
-const ADOPT_NO_CODE_MESSAGES: Record<string, StringKey> = {
-  "password.invalid": "shell.adopt.login_failed_no_code",
-  "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed_no_code",
-};
-
 /**
- * A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language.
- * While the connect form shows no code field, a refusal in `ADOPT_NO_CODE_MESSAGES` does not ask
- * for a code.
+ * A refusal of Finish joining in words, for the join screen to show when it has none of its own.
  */
-function adoptErrorWords(
-  code: string,
-  params: Record<string, unknown> | undefined,
-  codeFieldShown: boolean,
-): Message {
+function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
   const manifestKey = manifestRefusalKey(code, params);
   if (manifestKey !== undefined) return say(manifestKey);
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
-  if (code === "password.throttled") return describeThrottle(params);
-  const { primaryAt, standbyAt, variable } = params ?? {};
+  const { variable } = params ?? {};
   if (
     (code === "server.config_missing" || code === "server.config_invalid") &&
     typeof variable === "string"
@@ -418,21 +398,7 @@ function adoptErrorWords(
           : "shell.adopt.setting_unusable",
         { variable },
       );
-  if (
-    code === "mirror.clocks_apart" &&
-    typeof primaryAt === "string" &&
-    typeof standbyAt === "string"
-  )
-    return () =>
-      format("shell.adopt.clocks_apart", {
-        primaryAt: localTime(primaryAt) ?? primaryAt,
-        standbyAt: localTime(standbyAt) ?? standbyAt,
-      });
-  return say(
-    (codeFieldShown ? undefined : ADOPT_NO_CODE_MESSAGES[code]) ??
-      ADOPT_ERROR_MESSAGES[code] ??
-      "shell.adopt.generic",
-  );
+  return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
 }
 
 /** A full disk's words say a restart frees space only where the server says it does. */
@@ -468,7 +434,6 @@ function finishRefusalKey(
 
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
-  "setup.request_invalid": "shell.reset.request_invalid",
   "setup.not_ready": "shell.not_ready",
 };
 
@@ -488,22 +453,6 @@ function refusedField<F extends string>(
   }
   return typeof code === "string" && Object.hasOwn(byCode, code) ? byCode[code] : undefined;
 }
-
-const RESET_FIELD_PATHS: Record<string, ResetField> = {
-  email: "email",
-  password: "password",
-};
-
-const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
-  "mirror.primary_url_invalid": "primaryUrl",
-};
-
-const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
-  primaryUrl: "primaryUrl",
-  "credential.email": "email",
-  "credential.password": "password",
-  "credential.totp": "totp",
-};
 
 function withoutRecoveryCredentials<T extends RecoveryRestoreCredentials>(
   request: T,
@@ -586,14 +535,6 @@ const CLOUD_FIELD_CHECKS: Record<CloudField | "pointId", StringKey> = {
   pointId: "cloud_restore.check.point",
   oldBoxGone: "cloud_restore.check.old_box",
 };
-
-function describeThrottle(params: Record<string, unknown> | undefined): Message {
-  const seconds = params?.retryAfterSeconds;
-  if (typeof seconds !== "number") return say("shell.throttle");
-  return seconds === 1
-    ? say("shell.throttle_wait_one")
-    : sayWith("shell.throttle_wait", { seconds });
-}
 
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
 const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
@@ -1104,16 +1045,9 @@ export class SetupApp extends LitElement {
    */
   @state() private venueInvalidField?: string;
 
+  /** A new object for every refusal of Finish joining, which is how the join screen sees it. */
+  @state() private joinRefusal?: { code: string; params?: Record<string, unknown> };
   @state() private connectError?: Message;
-  @state() private connectErrorAboutLogin = false;
-  @state() private connectInvalidField?: ConnectField;
-  /** Held only in this tab's memory, to hand back to the connect form with a refusal. */
-  @state() private connectRequest?: AdoptBody;
-  /**
-   * Whether the main server asked for the authenticator code for `connectRequest`: it answered
-   * `totp.required`, or the request carried a code. Set anew from every refusal.
-   */
-  @state() private connectAskForCode = false;
   @state() private restoreError?: Message;
   @state() private restoreInvalidField?: RestoreField;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
@@ -1167,7 +1101,6 @@ export class SetupApp extends LitElement {
    */
   @state() private mirrorJoin = false;
 
-  /** The main box's Servers page, from the address typed in this tab to join or to reset. */
   @state() private primaryServersUrl?: string;
 
   /** `undefined` while a request is in flight, which the provisioning screen shows as such. */
@@ -1182,8 +1115,6 @@ export class SetupApp extends LitElement {
   @state() private provisionCanReset = false;
 
   @state() private resetBusy = false;
-  @state() private resetCredentialsRejected = false;
-  @state() private resetInvalidField?: ResetField;
   @state() private resetError?: Message;
   @state() private resetOutcome?: { kind: ResetScreenOutcome["kind"]; message: Message };
 
@@ -1469,10 +1400,8 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
+    this.joinRefusal = undefined;
     this.connectError = undefined;
-    this.connectErrorAboutLogin = false;
-    this.connectInvalidField = undefined;
-    this.connectRequest = undefined;
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
@@ -1496,8 +1425,6 @@ export class SetupApp extends LitElement {
     this.emailError = undefined;
     this.resetBusy = false;
     this.resetOutcome = undefined;
-    this.resetCredentialsRejected = false;
-    this.resetInvalidField = undefined;
     this.resetError = undefined;
     this.adminRefusal = undefined;
     if (
@@ -2168,25 +2095,62 @@ export class SetupApp extends LitElement {
     }
   }
 
-  async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
+  /** Session storage answers `null` for a key it does not hold, which is never sent. */
+  #joinValue(key: string): string | undefined {
+    return sessionStorage.getItem(key) ?? undefined;
+  }
+
+  #joinServersUrl(): string | undefined {
+    const primaryUrl = this.#joinValue(JOIN_PRIMARY_KEY);
+    return primaryUrl === undefined ? undefined : serversPageOf(primaryUrl);
+  }
+
+  /** The join screen's requests, keeping the main box each names for the Servers link. */
+  readonly #joinApi: Pick<SetupApi, "startJoin" | "joinState" | "cancelJoin"> = {
+    startJoin: async (primaryUrl, handle) => {
+      const started = await this.api.startJoin(primaryUrl, handle);
+      sessionStorage.setItem(JOIN_PRIMARY_KEY, primaryUrl);
+      return started;
+    },
+    joinState: async (handle) => {
+      const state = await this.api.joinState(handle);
+      if (state.state === "waiting") sessionStorage.setItem(JOIN_PRIMARY_KEY, state.primaryUrl);
+      return state;
+    },
+    cancelJoin: (handle) => this.api.cancelJoin(handle),
+  };
+
+  #onJoinHandle(event: CustomEvent<{ handle?: string }>): void {
     event.stopPropagation();
+    const { handle } = event.detail;
+    if (handle === undefined) this.#forgetJoin();
+    else sessionStorage.setItem(JOIN_HANDLE_KEY, handle);
+  }
+
+  #forgetJoin(): void {
+    sessionStorage.removeItem(JOIN_HANDLE_KEY);
+    sessionStorage.removeItem(JOIN_PRIMARY_KEY);
+  }
+
+  async #onJoinFinishRequested(event: Event): Promise<void> {
+    event.stopPropagation();
+    this.joinRefusal = undefined;
     this.connectError = undefined;
-    this.connectErrorAboutLogin = false;
-    this.connectInvalidField = undefined;
-    this.connectRequest = undefined;
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
-      const outcome = await this.api.adopt(event.detail.body);
+      const outcome = await this.api.finishJoin(this.#joinValue(JOIN_HANDLE_KEY));
+      const serversUrl = this.#joinServersUrl();
+      this.#forgetJoin();
       if (!this.isConnected) return;
       this.breakGlassSecret = outcome.breakGlassSecret;
       this.breakGlassKeyName = outcome.breakGlassKeyName;
-      this.primaryServersUrl = serversPageOf(event.detail.body.primaryUrl.trim());
+      this.primaryServersUrl = serversUrl;
       this.mirrorJoin = true;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
-      await this.#mapAdoptError(error as ApiError, event.detail.body);
+      await this.#mapAdoptError(error as ApiError);
     }
   }
 
@@ -2570,9 +2534,9 @@ export class SetupApp extends LitElement {
    * here for parity. Any other code the server answered (the error carries
    * an HTTP `status`) reads the saved setup first, and an adopt saved past "started" and short of
    * "complete" gets the stopped-partway message. Otherwise `setup.operation_conflict` is terminal
-   * too, and everything else routes back to the connect form, the mirror path's retry surface.
+   * too, and everything else routes back to the join screen, where Finish joining is chosen again.
    */
-  async #mapAdoptError(error: ApiError, body: AdoptBody): Promise<void> {
+  async #mapAdoptError(error: ApiError): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (this.#mapFirstSetupError(error)) return;
@@ -2589,37 +2553,22 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.adopt_incomplete":
-        this.#offerReset(body);
+        this.#offerReset();
         return;
     }
-    // The server matches a resend by its exact body, and a one-time code changes it, so an adopt
-    // that stopped partway can come back as a conflict or as the first failure itself. With no
-    // answer from the server the adopt may still be running there, past "started" too.
+    // An adopt that stopped partway can come back as a conflict or as the first failure itself.
+    // With no answer from the server the adopt may still be running there, past "started" too.
     const stoppedPartway = error.status !== undefined && (await this.#savedAdoptStoppedPartway());
     if (!this.isConnected) return;
     if (stoppedPartway) {
-      this.#offerReset(body);
+      this.#offerReset();
     } else if (code === "setup.operation_conflict") {
       this.provisionMessage = say("shell.operation_conflict");
       this.provisionCanRetry = false;
       this.provisionReloadLabel = say("shell.reload");
-    } else if (code === "totp.required") {
-      this.connectAskForCode = true;
-      this.connectRequest = body;
-      this.screen = "connect";
     } else {
-      this.connectAskForCode = body.credential.totp !== undefined;
-      this.connectInvalidField = refusedField(
-        code,
-        error.params,
-        ADOPT_FIELD_CODES,
-        ADOPT_FIELD_PATHS,
-      );
-      if (this.connectInvalidField === undefined) {
-        this.connectError = adoptErrorWords(code, error.params, this.connectAskForCode);
-        this.connectErrorAboutLogin = code === "password.invalid" || code === "password.throttled";
-      }
-      this.connectRequest = body;
+      this.joinRefusal = { code, params: error.params };
+      this.connectError = adoptErrorWords(code, error.params);
       this.screen = "connect";
     }
   }
@@ -2645,15 +2594,15 @@ export class SetupApp extends LitElement {
     this.primaryServersUrl = undefined;
   }
 
-  #offerReset(body: AdoptBody): void {
-    this.primaryServersUrl = serversPageOf(body.primaryUrl.trim());
+  #offerReset(): void {
+    this.primaryServersUrl = this.#joinServersUrl();
     this.provisionMessage = say("shell.adopt.incomplete");
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
     this.provisionCanReset = true;
   }
 
-  async #onResetRequested(event: CustomEvent<{ credential: ResetCredential }>): Promise<void> {
+  async #onResetRequested(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.resetBusy) return;
     const owner = this.shadowRoot?.querySelector("setup-reset-screen");
@@ -2665,28 +2614,21 @@ export class SetupApp extends LitElement {
       this.shadowRoot?.querySelector("setup-reset-screen") === owner;
     const current = () => ownsBusy() && generation === this.#rootGeneration;
     this.resetBusy = true;
-    this.resetCredentialsRejected = false;
-    this.resetInvalidField = undefined;
     this.resetError = undefined;
     try {
-      await this.api.resetIncompleteAdopt(event.detail.credential);
+      await this.api.resetIncompleteAdopt();
+      this.#forgetJoin();
       if (!current()) return;
       this.resetOutcome = { kind: "resetting", message: say("shell.reset.resetting") };
     } catch (error) {
       if (!current()) return;
-      const { code, params } = (error ?? {}) as ApiError;
+      const { code } = (error ?? {}) as ApiError;
       const held = restoreOrResetRefusalWords(code, "shell.reset.first_setup_held");
       if (held !== undefined) {
         this.resetOutcome = { kind: "refused", message: held };
         return;
       }
       switch (code) {
-        case "password.invalid":
-          this.resetCredentialsRejected = true;
-          break;
-        case "password.throttled":
-          this.resetError = describeThrottle(params);
-          break;
         case "setup.reset_unavailable":
           this.resetOutcome = { kind: "refused", message: say("shell.reset.unavailable") };
           break;
@@ -2697,8 +2639,6 @@ export class SetupApp extends LitElement {
           this.resetOutcome = { kind: "refused", message: say("shell.operation_conflict") };
           break;
         default:
-          this.resetInvalidField = refusedField(code, params, {}, RESET_FIELD_PATHS);
-          if (this.resetInvalidField !== undefined) break;
           this.resetError = say(
             (typeof code === "string" ? RESET_ERROR_MESSAGES[code] : undefined) ??
               "shell.reset.generic",
@@ -2745,7 +2685,8 @@ export class SetupApp extends LitElement {
         @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
         @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
         @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
-        @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+        @join-handle=${(e: CustomEvent<{ handle?: string }>) => this.#onJoinHandle(e)}
+        @join-finish-requested=${(e: Event) => void this.#onJoinFinishRequested(e)}
         @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
           void this.#onRestoreRequested(e)}
         @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
@@ -2756,8 +2697,7 @@ export class SetupApp extends LitElement {
           void this.#onConfigurationRequested(e)}
         @taxpayer-chosen=${(e: CustomEvent<{ newTaxpayer: boolean }>) => this.#onTaxpayerChosen(e)}
         @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
-        @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
-          void this.#onResetRequested(e)}
+        @reset-requested=${(e: Event) => void this.#onResetRequested(e)}
       >
         <header>
           <wt-waitron-lockup class="logo" data-test="setup-logo"></wt-waitron-lockup>
@@ -3115,12 +3055,10 @@ export class SetupApp extends LitElement {
       case "connect":
         return html`<setup-connect-screen
           data-test="screen-connect"
-          .api=${this.api}
+          .api=${this.#joinApi}
+          .handle=${this.#joinValue(JOIN_HANDLE_KEY)}
+          .refusal=${this.joinRefusal}
           .errorMessage=${this.connectError?.()}
-          .errorAboutLogin=${this.connectErrorAboutLogin}
-          .invalidField=${this.connectInvalidField}
-          .request=${this.connectRequest}
-          .askForCode=${this.connectAskForCode}
         ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen
@@ -3167,8 +3105,6 @@ export class SetupApp extends LitElement {
         return html`<setup-reset-screen
           data-test="screen-reset"
           .busy=${this.resetBusy}
-          .credentialsRejected=${this.resetCredentialsRejected}
-          .invalidField=${this.resetInvalidField}
           .errorMessage=${this.resetError?.()}
           .refusal=${this.resetError}
           .serversUrl=${this.primaryServersUrl}

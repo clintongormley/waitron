@@ -2340,13 +2340,29 @@ export const en = {
   "servers.handover_stop": "Stop",
   "servers.handover_sent":
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
-  "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
     "Every machine on this venue's list of servers. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
   "servers.empty": "This server holds no list of the venue's servers.",
+  "servers.joins_heading": "Boxes asking to join",
+  "servers.join_asking": "A box at {address} is asking to join",
+  "servers.join_started_again": "This box started again. Tap only a code it showed after that.",
+  "servers.join_check": "Check",
+  "servers.join_check_again": "Check again",
+  "servers.join_dismiss": "Dismiss",
+  "servers.join_dialog_title": "Add this box as a spare",
+  "servers.join_checking": "Checking the request…",
+  "servers.join_match_prompt": "Tap the code the new box shows",
+  "servers.join_compare":
+    "Check that the address is the one the new box shows and the code is the one it shows now. A wrong tap ends the request; choose Start again on the new box.",
+  "servers.join_choice_label": "Code {code}",
+  "servers.join_approved": "Approved. On the new box, choose Finish joining.",
+  "servers.join_recovery_key_missing":
+    "This box has no backup encryption key, which a spare needs. Choose Turn on backups under Backups, then choose Check again.",
+  "servers.join_module_config_invalid":
+    "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
   "servers.machine": "Machine",
   "servers.not_primary":
@@ -7071,13 +7087,30 @@ export const es: Record<StringKey, string> = {
   "servers.handover_stop": "Parar",
   "servers.handover_sent":
     "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
-  "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
     "Todas las máquinas de la lista de servidores del local. Un servidor en espera se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
   "servers.empty": "Este servidor no tiene la lista de servidores del local.",
+  "servers.joins_heading": "Servidores que piden unirse",
+  "servers.join_asking": "Un servidor en {address} está pidiendo unirse",
+  "servers.join_started_again":
+    "Este servidor empezó de nuevo. Toca solo un código que haya mostrado después.",
+  "servers.join_check": "Comprobar",
+  "servers.join_check_again": "Comprobar",
+  "servers.join_dismiss": "Descartar",
+  "servers.join_dialog_title": "Añadir este servidor como reserva",
+  "servers.join_checking": "Comprobando la solicitud…",
+  "servers.join_match_prompt": "Toca el código que muestra el servidor nuevo",
+  "servers.join_compare":
+    "Comprueba que la dirección es la que muestra el servidor nuevo y que el código es el que muestra ahora. Un toque equivocado termina la solicitud; elige Empezar de nuevo en el servidor nuevo.",
+  "servers.join_choice_label": "Código {code}",
+  "servers.join_approved": "Aprobado. En el servidor nuevo, elige Terminar la unión.",
+  "servers.join_recovery_key_missing":
+    "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar las copias en Copias de seguridad y vuelve a elegir Comprobar.",
+  "servers.join_module_config_invalid":
+    "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
   "servers.machine": "Máquina",
   "servers.not_primary":

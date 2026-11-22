@@ -1,41 +1,28 @@
 import { readFile } from "node:fs/promises";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import {
-  createHash,
-  generateKeyPairSync,
-  randomBytes,
-  randomUUID,
-  X509Certificate,
-} from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Socket, type AddressInfo } from "node:net";
+import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { serve } from "@hono/node-server";
-import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
-import { createFirstSetupCoordinator, type VenueResult } from "@waitron/provisioning";
+import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
-import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
+import type { AdoptHooks } from "./adopt.js";
+import type { JoinedBox } from "./box-join-attempt.js";
+import { approvedJoinAttempt } from "./testing/setup-join.js";
 import type { Logger, LogLevel } from "./logger.js";
-import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
-import {
-  mintBoxAuthority,
-  startBoxServer,
-  startSilentServer,
-  type BoxServer,
-} from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
@@ -2113,6 +2100,14 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     expect(await res.text()).toContain("setup-wizard-spa");
   });
 
+  it("lets only the setup page's own origin frame it", async () => {
+    const app = new Hono();
+    mountSetupSpa(app, wizardDir!, noopLog);
+    const res = await app.request("/", { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+  });
+
   // mountSetup answers /api/* before the SPA's middleware runs; the first-setup resolution app does not.
   it("keeps a missing /api path as 404 where nothing answers /api/* before the setup app", async () => {
     const app = new Hono();
@@ -2148,44 +2143,78 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
 });
 
 const PRIMARY_URL = "https://primary.example";
-const ADOPT_CREDENTIAL: AdoptCredential = {
-  email: "owner@example.test",
-  password: "correct-horse-battery",
-};
 const BREAK_GLASS_SECRET = "break-glass-secret-abc123DEF456";
+const JOINED = {
+  identity: { nodeId: "55555555-5555-4555-8555-555555555555", publicKey: "P", privateKey: "K" },
+  bundle: {},
+  storeUrl: "https://box-5555.waitron.local:7443",
+} as unknown as JoinedBox;
 
-/** An adopt-only box wires just the two deps the adopt route's gate needs. */
-function makeAdoptDeps(overrides: Partial<SetupDeps> = {}): {
+type AdoptJoined = NonNullable<SetupDeps["adoptJoined"]>;
+
+/** Finish joining's deps: a join the main box approved at once, and `adopt` to take it. */
+function joinedDeps(adopt: AdoptJoined | undefined): Partial<SetupDeps> {
+  return { adoptJoined: adopt, joinAttempt: approvedJoinAttempt(() => JOINED) };
+}
+
+/** A box that can only join: Finish joining's deps and the restart its gate needs. */
+function makeAdoptDeps(overrides: Partial<SetupDeps> & { adopt?: AdoptJoined | undefined } = {}): {
   deps: SetupDeps;
   adopt: ReturnType<typeof vi.fn>;
-  adoptRequests: AdoptRequest[];
   requestRestart: ReturnType<typeof vi.fn>;
 } {
-  const adoptRequests: AdoptRequest[] = [];
-  const adopt = vi.fn(async (req: AdoptRequest) => {
-    adoptRequests.push(req);
-    return { breakGlassSecret: BREAK_GLASS_SECRET };
-  });
+  const defaultAdopt = vi.fn(async () => ({ breakGlassSecret: BREAK_GLASS_SECRET }));
+  const { adopt = "adopt" in overrides ? undefined : defaultAdopt, ...rest } = overrides;
   const requestRestart = vi.fn();
   const deps: SetupDeps = {
     environment: "preproduction",
-    adopt,
+    ...joinedDeps(adopt),
     requestRestart,
-    ...overrides,
+    ...rest,
   };
-  return { deps, adopt, adoptRequests, requestRestart };
+  return { deps, adopt: (adopt ?? defaultAdopt) as ReturnType<typeof vi.fn>, requestRestart };
 }
 
-function adoptBody(): Record<string, unknown> {
-  return { primaryUrl: PRIMARY_URL, credential: ADOPT_CREDENTIAL };
+/** A request from the box's own page over an encrypted connection, as the setup page sends it. */
+async function fromOwnPage(
+  app: Hono,
+  path: string,
+  { body, handle }: { body?: unknown; handle?: string } = {},
+): Promise<Response> {
+  const socket = new TLSSocket(new Socket());
+  try {
+    return await app.request(
+      `https://box.test${path}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://box.test",
+          ...(handle === undefined ? {} : { "x-waitron-join-handle": handle }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      },
+      { incoming: { socket } },
+    );
+  } finally {
+    socket.destroy();
+  }
 }
 
-async function postAdopt(app: Hono, body: unknown): Promise<Response> {
-  return app.request("/setup-api/adopt", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  });
+const joinHandles = new WeakMap<Hono, string>();
+
+/** Finish joining on `app`, starting the page's join on its first call. */
+async function postAdopt(app: Hono): Promise<Response> {
+  let handle = joinHandles.get(app);
+  if (handle === undefined) {
+    const started = await fromOwnPage(app, "/setup-api/join/start", {
+      body: { primaryUrl: PRIMARY_URL },
+    });
+    if (started.status !== 200) return started;
+    handle = ((await started.json()) as { handle: string }).handle;
+    joinHandles.set(app, handle);
+  }
+  return fromOwnPage(app, "/setup-api/adopt", { body: {}, handle });
 }
 
 async function postRestore(
@@ -2890,26 +2919,19 @@ describe("POST /setup-api/restore-bucket", () => {
   });
 });
 
-describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, sharing provision's latch", () => {
+describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing provision's latch", () => {
   it("persists adoption completion without retaining the break-glass secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
     try {
       const operations = createSetupOperationStore(dir);
       const first = new Hono();
       mountSetup(first, makeAdoptDeps({ operations }).deps, noopLog);
-      const response = await postAdopt(first, adoptBody());
+      const response = await postAdopt(first);
       expect(await response.json()).toMatchObject({ breakGlassSecret: BREAK_GLASS_SECRET });
       expect((await operations.read())?.data).toEqual({
         adopted: true,
         restarting: true,
       });
-
-      const restarted = new Hono();
-      const next = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
-      mountSetup(restarted, next.deps, noopLog);
-      const replay = await postAdopt(restarted, adoptBody());
-      expect(await replay.json()).toEqual({ adopted: true, restarting: true });
-      expect(next.adopt).not.toHaveBeenCalled();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -2917,13 +2939,14 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
   it("returns the minted recovery key name with its handover secret", async () => {
     const app = new Hono();
-    const { deps } = makeAdoptDeps();
-    deps.adopt = async () => ({
-      breakGlassSecret: BREAK_GLASS_SECRET,
-      breakGlassKeyName: "2026-10-15 · K7QF",
+    const { deps } = makeAdoptDeps({
+      adopt: async () => ({
+        breakGlassSecret: BREAK_GLASS_SECRET,
+        breakGlassKeyName: "2026-10-15 · K7QF",
+      }),
     });
     mountSetup(app, deps, noopLog);
-    const response = await postAdopt(app, adoptBody());
+    const response = await postAdopt(app);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       adopted: true,
@@ -2933,12 +2956,12 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     });
   });
 
-  it("adopts a venue: 200, passes the body through to adopt, defers the restart", async () => {
+  it("adopts a venue: 200, hands adopt the approved join, defers the restart", async () => {
     const app = new Hono();
-    const { deps, adopt, adoptRequests, requestRestart } = makeAdoptDeps();
+    const { deps, adopt, requestRestart } = makeAdoptDeps();
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       adopted: true,
@@ -2947,7 +2970,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     });
 
     expect(adopt).toHaveBeenCalledTimes(1);
-    expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential: ADOPT_CREDENTIAL });
+    expect(adopt).toHaveBeenCalledWith(JOINED, expect.anything());
 
     expect(requestRestart).not.toHaveBeenCalled();
     await tick();
@@ -2960,7 +2983,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { log, lines } = capturingLog();
     mountSetup(app, deps, log);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(200);
     expect((await res.json()).breakGlassSecret).toBe(BREAK_GLASS_SECRET);
     await tick();
@@ -2976,7 +2999,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({
       error: { code: "mirror.bundle_fetch_failed", params: {} },
@@ -2993,7 +3016,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: { code: "mirror.vault_not_empty", params: {} },
@@ -3010,7 +3033,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: { code: "mirror.vault_key_differs", params: {} },
@@ -3040,115 +3063,11 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: { code: error.code, params: error.params } });
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
-  });
-
-  it("answers the primary's refused login from adopt as 401 password.invalid, naming no field", async () => {
-    const app = new Hono();
-    const adopt = vi.fn(async () => {
-      throw new AppError("password.invalid", {});
-    });
-    const { deps, requestRestart } = makeAdoptDeps({ adopt });
-    mountSetup(app, deps, noopLog);
-
-    const res = await postAdopt(app, adoptBody());
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    await tick();
-    expect(requestRestart).not.toHaveBeenCalled();
-  });
-
-  it("relays a primary that refuses the login as 401 password.invalid, carrying nothing the primary wrote", async () => {
-    const primary = new Hono();
-    primary.post("/management-api/mirror-bundle", (c) =>
-      c.json(
-        { error: { code: "password.invalid", params: { detail: "https://primary.internal" } } },
-        401,
-      ),
-    );
-    const server = await new Promise<ServerType>((resolve) => {
-      const started = serve({ fetch: primary.fetch, port: 0, hostname: "127.0.0.1" }, () =>
-        resolve(started),
-      );
-    });
-    try {
-      const { port } = server.address() as AddressInfo;
-      const app = new Hono();
-      const adopt = vi.fn((req: AdoptRequest) =>
-        fetchMirrorBundle(req.primaryUrl, req.credential, {
-          nodeId: "55555555-5555-5555-5555-555555555555",
-          publicKey: "STANDBY_PUB",
-          contactUrl: "",
-          storeUrl: "",
-          at: Date.now(),
-        }).then(() => ({ breakGlassSecret: BREAK_GLASS_SECRET })),
-      );
-      const { deps, requestRestart } = makeAdoptDeps({ adopt });
-      mountSetup(app, deps, noopLog);
-
-      const res = await postAdopt(app, {
-        primaryUrl: `http://127.0.0.1:${port}`,
-        credential: ADOPT_CREDENTIAL,
-      });
-      expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-      await tick();
-      expect(requestRestart).not.toHaveBeenCalled();
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
-  });
-
-  it("relays a primary's refusal of too many sign-in attempts as 429 password.throttled with its wait only", async () => {
-    const primary = new Hono();
-    primary.post("/management-api/mirror-bundle", (c) =>
-      c.json(
-        {
-          error: {
-            code: "password.throttled",
-            params: { retryAfterSeconds: 2, detail: "https://primary.internal" },
-          },
-        },
-        429,
-      ),
-    );
-    const server = await new Promise<ServerType>((resolve) => {
-      const started = serve({ fetch: primary.fetch, port: 0, hostname: "127.0.0.1" }, () =>
-        resolve(started),
-      );
-    });
-    try {
-      const { port } = server.address() as AddressInfo;
-      const app = new Hono();
-      const adopt = vi.fn((req: AdoptRequest) =>
-        fetchMirrorBundle(req.primaryUrl, req.credential, {
-          nodeId: "55555555-5555-5555-5555-555555555555",
-          publicKey: "STANDBY_PUB",
-          contactUrl: "",
-          storeUrl: "",
-          at: Date.now(),
-        }).then(() => ({ breakGlassSecret: BREAK_GLASS_SECRET })),
-      );
-      const { deps, requestRestart } = makeAdoptDeps({ adopt });
-      mountSetup(app, deps, noopLog);
-
-      const res = await postAdopt(app, {
-        primaryUrl: `http://127.0.0.1:${port}`,
-        credential: ADOPT_CREDENTIAL,
-      });
-      expect(res.status).toBe(429);
-      expect(await res.json()).toEqual({
-        error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
-      });
-      await tick();
-      expect(requestRestart).not.toHaveBeenCalled();
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
   });
 
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
@@ -3161,10 +3080,10 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const first = postAdopt(app, adoptBody());
-    await tick(); // let the first request reach + set the shared latch
+    const first = postAdopt(app);
+    await vi.waitFor(() => expect(adopt).toHaveBeenCalled()); // the first holds the shared latch
 
-    const second = await postAdopt(app, adoptBody());
+    const second = await postAdopt(app);
     expect(second.status).toBe(409);
     expect(await second.json()).toEqual({
       error: { code: "setup.already_provisioning", params: {} },
@@ -3185,12 +3104,12 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    const first = await postAdopt(app, adoptBody());
+    const first = await postAdopt(app);
     expect(first.status).toBe(500); // a non-AppError adopt fault → opaque server.internal
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
 
-    const second = await postAdopt(app, adoptBody());
+    const second = await postAdopt(app);
     expect(second.status).toBe(200);
     await tick();
     expect(requestRestart).toHaveBeenCalledTimes(1);
@@ -3201,113 +3120,16 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, adopt } = makeAdoptDeps();
     mountSetup(app, deps, noopLog);
 
-    const first = await postAdopt(app, adoptBody());
+    const first = await postAdopt(app);
     expect(first.status).toBe(200);
     await tick(); // let the deferred restart fire; the latch stays set
 
-    const second = await postAdopt(app, adoptBody());
+    const second = await postAdopt(app);
     expect(second.status).toBe(409);
     expect(await second.json()).toEqual({
       error: { code: "setup.already_provisioning", params: {} },
     });
     expect(adopt).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([["primaryUrl"], ["credential"]] as const)(
-    "rejects a body missing %s with 400 setup.request_invalid naming the field, without adopting",
-    async (field) => {
-      const app = new Hono();
-      const { deps, adopt, requestRestart } = makeAdoptDeps();
-      mountSetup(app, deps, noopLog);
-
-      const body = adoptBody();
-      delete body[field];
-      const res = await postAdopt(app, body);
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe("setup.request_invalid");
-      expect(json.error.params.field).toBe(field);
-      expect(adopt).not.toHaveBeenCalled();
-      await tick();
-      expect(requestRestart).not.toHaveBeenCalled();
-    },
-  );
-
-  // A wrong-shape login is refused at the mirror's own boundary rather than failing at the primary
-  // as a 502, and the error names the field, never its value.
-  it.each([
-    ["credential.email", (c: Record<string, unknown>) => delete c.email],
-    ["credential.password", (c: Record<string, unknown>) => delete c.password],
-  ] as const)(
-    "rejects a credential missing %s with 400 setup.request_invalid, without adopting",
-    async (field, mutate) => {
-      const app = new Hono();
-      const { deps, adopt } = makeAdoptDeps();
-      mountSetup(app, deps, noopLog);
-
-      const cred: Record<string, unknown> = { ...ADOPT_CREDENTIAL };
-      mutate(cred);
-      const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: cred });
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe("setup.request_invalid");
-      expect(json.error.params.field).toBe(field);
-      expect(adopt).not.toHaveBeenCalled();
-    },
-  );
-
-  it("rejects a non-object credential with 400 setup.request_invalid naming 'credential'", async () => {
-    const app = new Hono();
-    const { deps, adopt } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential: "1234" });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error.code).toBe("setup.request_invalid");
-    expect(json.error.params.field).toBe("credential");
-    expect(adopt).not.toHaveBeenCalled();
-  });
-
-  // SSRF guard: the route is UNAUTHENTICATED, so a `primaryUrl` pointing at a metadata endpoint, an
-  // internal host or a non-http scheme is refused before `adopt` fetches anything.
-  it.each([
-    ["the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data"],
-    ["an https private literal IP", "https://10.0.0.5"],
-    ["a private literal IP over http", "http://192.168.1.1"],
-    ["a non-loopback host over plain http", "http://primary.example"],
-    ["a non-http scheme", "file:///etc/passwd"],
-    ["an unparseable primaryUrl", "not-a-url"],
-  ])(
-    "rejects %s with 400 mirror.primary_url_invalid and never reaches adopt",
-    async (_label, primaryUrl) => {
-      const app = new Hono();
-      const { deps, adopt, requestRestart } = makeAdoptDeps();
-      mountSetup(app, deps, noopLog);
-
-      const res = await postAdopt(app, { primaryUrl, credential: ADOPT_CREDENTIAL });
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe("mirror.primary_url_invalid");
-      // No fetch/adopt was driven, and the offending URL is never echoed back to the caller.
-      expect(adopt).not.toHaveBeenCalled();
-      expect(JSON.stringify(json)).not.toContain(primaryUrl);
-      await tick();
-      expect(requestRestart).not.toHaveBeenCalled();
-    },
-  );
-
-  it("accepts a credential carrying an optional totp and adopts (200)", async () => {
-    const app = new Hono();
-    const { deps, adopt, adoptRequests } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const credential: AdoptCredential = { ...ADOPT_CREDENTIAL, totp: "123456" };
-    const res = await postAdopt(app, { primaryUrl: PRIMARY_URL, credential });
-    expect(res.status).toBe(200);
-    expect(adopt).toHaveBeenCalledTimes(1);
-    expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential });
-    await tick();
   });
 
   // Pins that provision and adopt share ONE latch, in both directions; same-route tests cannot tell
@@ -3324,12 +3146,12 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       const adopt = vi.fn(async () => ({
         breakGlassSecret: BREAK_GLASS_SECRET,
       }));
-      const { deps } = makeDeps({ provision, adopt });
+      const { deps } = makeDeps({ provision, ...joinedDeps(adopt) });
       mountSetup(app, deps, noopLog);
 
       const first = postProvision(app, demoBody());
       await tick(); // the provision holds the shared latch
-      const blocked = await postAdopt(app, adoptBody());
+      const blocked = await postAdopt(app);
       expect(blocked.status).toBe(409);
       expect(await blocked.json()).toEqual({
         error: { code: "setup.already_provisioning", params: {} },
@@ -3349,11 +3171,11 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         release = resolve;
       });
       const adopt = vi.fn(() => pending);
-      const { deps, provision } = makeDeps({ adopt });
+      const { deps, provision } = makeDeps(joinedDeps(adopt));
       mountSetup(app, deps, noopLog);
 
-      const first = postAdopt(app, adoptBody());
-      await tick(); // the adopt holds the shared latch
+      const first = postAdopt(app);
+      await vi.waitFor(() => expect(adopt).toHaveBeenCalled()); // the adopt holds the shared latch
       const blocked = await postProvision(app, demoBody());
       expect(blocked.status).toBe(409);
       expect(await blocked.json()).toEqual({
@@ -3372,7 +3194,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, adopt } = makeAdoptDeps({ adopt: undefined });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     expect(adopt).not.toHaveBeenCalled();
@@ -3383,7 +3205,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps, adopt } = makeAdoptDeps({ requestRestart: undefined });
     mountSetup(app, deps, noopLog);
 
-    const res = await postAdopt(app, adoptBody());
+    const res = await postAdopt(app);
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     expect(adopt).not.toHaveBeenCalled();
@@ -3394,60 +3216,36 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
     const CLOUD_POINT_ID = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
 
-    it.each([
-      [
-        "the primary refusing the login (502 mirror.bundle_fetch_failed)",
-        { ...adoptBody(), credential: { ...ADOPT_CREDENTIAL, password: "wrong-password" } },
-        502,
-        "mirror.bundle_fetch_failed",
-      ],
-      [
-        "a malformed body (400 setup.request_invalid)",
-        { primaryUrl: PRIMARY_URL },
-        400,
-        "setup.request_invalid",
-      ],
-      [
-        "an unsafe primaryUrl (400 mirror.primary_url_invalid)",
-        { primaryUrl: "http://169.254.169.254/latest/meta-data", credential: ADOPT_CREDENTIAL },
-        400,
-        "mirror.primary_url_invalid",
-      ],
-    ])(
-      "after %s, drops the record so a corrected request adopts",
-      async (_label, refusedBody, status, code) => {
-        const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-refused-"));
-        try {
-          const adopt = vi.fn(async (req: AdoptRequest) => {
-            if (req.credential.password === "wrong-password") {
-              throw new AppError("mirror.bundle_fetch_failed", {});
-            }
-            return { breakGlassSecret: BREAK_GLASS_SECRET };
-          });
-          const app = new Hono();
-          const { deps, requestRestart } = makeAdoptDeps({
-            adopt,
-            operations: createSetupOperationStore(dir),
-          });
-          mountSetup(app, deps, noopLog);
+    it("after a refusal before adopt's first write, drops the record so a resend adopts", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-refused-"));
+      try {
+        const adopt = vi
+          .fn<AdoptJoined>()
+          .mockRejectedValueOnce(new AppError("mirror.bundle_fetch_failed", {}))
+          .mockResolvedValueOnce({ breakGlassSecret: BREAK_GLASS_SECRET });
+        const app = new Hono();
+        const { deps, requestRestart } = makeAdoptDeps({
+          adopt,
+          operations: createSetupOperationStore(dir),
+        });
+        mountSetup(app, deps, noopLog);
 
-          const refused = await postAdopt(app, refusedBody);
-          expect(refused.status).toBe(status);
-          expect((await refused.json()).error.code).toBe(code);
-          expect(existsSync(recordPath(dir))).toBe(false);
-          await tick();
-          expect(requestRestart).not.toHaveBeenCalled();
+        const refused = await postAdopt(app);
+        expect(refused.status).toBe(502);
+        expect((await refused.json()).error.code).toBe("mirror.bundle_fetch_failed");
+        expect(existsSync(recordPath(dir))).toBe(false);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
 
-          const corrected = await postAdopt(app, adoptBody());
-          expect(await corrected.json()).not.toEqual(conflict);
-          expect(corrected.status).toBe(200);
-          await tick();
-          expect(requestRestart).toHaveBeenCalledTimes(1);
-        } finally {
-          rmSync(dir, { recursive: true, force: true });
-        }
-      },
-    );
+        const resent = await postAdopt(app);
+        expect(await resent.json()).not.toEqual(conflict);
+        expect(resent.status).toBe(200);
+        await tick();
+        expect(requestRestart).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
 
     it.each([
       ["provision", (app: Hono) => postProvision(app, demoBody()), 200],
@@ -3475,9 +3273,11 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
           const app = new Hono();
           const { deps, requestRestart } = makeDeps({
             operations: createSetupOperationStore(dir),
-            adopt: vi.fn(async () => {
-              throw new AppError("mirror.bundle_fetch_failed", {});
-            }),
+            ...joinedDeps(
+              vi.fn(async () => {
+                throw new AppError("mirror.bundle_fetch_failed", {});
+              }),
+            ),
             stageRestore: vi.fn(async () => {}),
             stageBucketRestore: vi.fn(async () => {}),
             cloudRecovery: {
@@ -3490,7 +3290,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
           });
           mountSetup(app, deps, noopLog);
 
-          expect((await postAdopt(app, adoptBody())).status).toBe(502);
+          expect((await postAdopt(app)).status).toBe(502);
           await tick();
           expect(requestRestart).not.toHaveBeenCalled();
 
@@ -3505,43 +3305,12 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       },
     );
 
-    it("keeps the record once adopt is past its own checks, so a different request is refused", async () => {
-      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-"));
-      try {
-        const operations = createSetupOperationStore(dir);
-        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
-          await hooks.beforeFirstWrite("production");
-          throw new AppError("mirror.bundle_fetch_failed", {});
-        });
-        const app = new Hono();
-        const { deps, requestRestart } = makeAdoptDeps({ adopt, operations });
-        mountSetup(app, deps, noopLog);
-
-        expect((await postAdopt(app, adoptBody())).status).toBe(502);
-        await tick();
-        expect(requestRestart).not.toHaveBeenCalled();
-        expect((await operations.read())?.phase).toBe("venue_committed");
-        // What the next start reads when WAITRON_ENV is unset (`withUnfinishedJoinEnvironment`).
-        expect((await operations.read())?.data.environment).toBe("production");
-
-        const other = await postAdopt(app, {
-          ...adoptBody(),
-          credential: { ...ADOPT_CREDENTIAL, password: "another-password" },
-        });
-        expect(other.status).toBe(409);
-        expect(await other.json()).toEqual(conflict);
-        expect(adopt).toHaveBeenCalledOnce();
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
-
     it("refuses the same request resent after adopt failed past its first write, leaving the record untouched", async () => {
       const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-resend-"));
       try {
         const operations = createSetupOperationStore(dir);
         let calls = 0;
-        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+        const adopt = vi.fn(async (_joined: JoinedBox, hooks: AdoptHooks) => {
           calls += 1;
           await hooks.beforeFirstWrite("preproduction");
           if (calls === 1) throw new AppError("mirror.bundle_fetch_failed", {});
@@ -3551,10 +3320,10 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         const { deps, requestRestart } = makeAdoptDeps({ adopt, operations });
         mountSetup(app, deps, noopLog);
 
-        expect((await postAdopt(app, adoptBody())).status).toBe(502);
+        expect((await postAdopt(app)).status).toBe(502);
         const before = readFileSync(recordPath(dir), "utf8");
 
-        const resent = await postAdopt(app, adoptBody());
+        const resent = await postAdopt(app);
         expect(resent.status).toBe(409);
         expect(await resent.json()).toEqual({
           error: { code: "setup.adopt_incomplete", params: {} },
@@ -3564,73 +3333,14 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         await tick();
         expect(requestRestart).not.toHaveBeenCalled();
 
-        const again = await postAdopt(app, adoptBody());
+        const again = await postAdopt(app);
         expect((await again.json()).error.code).toBe("setup.adopt_incomplete");
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
-
-    // The wizard reads the status to show the partly-set-up message for this conflict: a resend
-    // carrying a fresh one-time code hashes differently, so it is never answered adopt_incomplete.
-    it("answers a resend with a fresh one-time code as a conflict, and the status then reports the half-finished adopt", async () => {
-      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-totp-"));
-      try {
-        const operations = createSetupOperationStore(dir);
-        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
-          await hooks.beforeFirstWrite("preproduction");
-          throw new AppError("mirror.bundle_fetch_failed", {});
-        });
-        const app = new Hono();
-        const { deps } = makeAdoptDeps({ adopt, operations });
-        mountSetup(app, deps, noopLog);
-
-        const first = { ...adoptBody(), credential: { ...ADOPT_CREDENTIAL, totp: "123456" } };
-        expect((await postAdopt(app, first)).status).toBe(502);
-
-        const resent = await postAdopt(app, {
-          ...adoptBody(),
-          credential: { ...ADOPT_CREDENTIAL, totp: "654321" },
-        });
-        expect(resent.status).toBe(409);
-        expect(await resent.json()).toEqual(conflict);
-        expect(adopt).toHaveBeenCalledOnce();
 
         const status = (await (await app.request("/setup-api/status")).json()) as {
           operation?: { kind: string; phase: string };
         };
         expect(status.operation?.kind).toBe("adopt");
         expect(status.operation?.phase).toBe("venue_committed");
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
-
-    it("answers the main box's request for an authenticator code with 401, and adopts the resend that carries it", async () => {
-      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-totp-required-"));
-      try {
-        const operations = createSetupOperationStore(dir);
-        const adopt = vi.fn(async (req: AdoptRequest, hooks: AdoptHooks) => {
-          if (req.credential.totp === undefined) throw new AppError("totp.required", {});
-          await hooks.beforeFirstWrite("preproduction");
-          return { breakGlassSecret: BREAK_GLASS_SECRET };
-        });
-        const app = new Hono();
-        const { deps } = makeAdoptDeps({ adopt, operations });
-        mountSetup(app, deps, noopLog);
-
-        const asked = await postAdopt(app, adoptBody());
-        expect({ status: asked.status, body: await asked.json() }).toEqual({
-          status: 401,
-          body: { error: { code: "totp.required", params: {} } },
-        });
-
-        const resent = await postAdopt(app, {
-          ...adoptBody(),
-          credential: { ...ADOPT_CREDENTIAL, totp: "123456" },
-        });
-        expect(resent.status, JSON.stringify(await resent.clone().json())).toBe(200);
-        expect(adopt).toHaveBeenCalledTimes(2);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -3647,213 +3357,9 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const app = new Hono();
     mountSetup(app, makeAdoptDeps({ adopt }).deps, noopLog);
 
-    const response = await postAdopt(app, adoptBody());
+    const response = await postAdopt(app);
     expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe("deployment.already_stamped");
-  });
-});
-
-describe("POST /setup-api/primary-certificate — the main box's authority, read before a password is sent", () => {
-  async function postCertificate(app: Hono, body: unknown): Promise<Response> {
-    return app.request("/setup-api/primary-certificate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  }
-
-  it("answers the main box's certificate and fingerprint, refusing an unsafe address with mirror.primary_url_invalid", async () => {
-    const authority = await mintBoxAuthority();
-    const box: BoxServer = await startBoxServer(authority, () => ({
-      status: 200,
-      body: authority.caPem,
-      contentType: "application/x-pem-file",
-    }));
-    try {
-      const app = new Hono();
-      const { deps } = makeAdoptDeps();
-      mountSetup(app, deps, noopLog);
-
-      const res = await postCertificate(app, { primaryUrl: box.url });
-      expect(res.status).toBe(200);
-      const expected = new X509Certificate(authority.caPem);
-      expect(await res.json()).toEqual({
-        pem: expected.toString(),
-        fingerprint256: expected.fingerprint256,
-      });
-
-      const unsafe = await postCertificate(app, { primaryUrl: "https://10.0.0.5" });
-      expect(unsafe.status).toBe(400);
-      expect(await unsafe.json()).toEqual({
-        error: { code: "mirror.primary_url_invalid", params: {} },
-      });
-      expect(box.requests).toHaveLength(1);
-    } finally {
-      await box.close();
-    }
-  });
-
-  it("answers null for a plain-http loopback main box, which has no certificate to compare", async () => {
-    const app = new Hono();
-    const { deps } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postCertificate(app, { primaryUrl: "http://127.0.0.1:1" });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toBeNull();
-  });
-
-  it("answers 502 mirror.bundle_fetch_failed when what answers is not an authority certificate", async () => {
-    const authority = await mintBoxAuthority();
-    const box = await startBoxServer(authority, () => ({ status: 200, body: authority.certPem }));
-    try {
-      const app = new Hono();
-      const { deps } = makeAdoptDeps();
-      mountSetup(app, deps, noopLog);
-
-      const res = await postCertificate(app, { primaryUrl: box.url });
-      expect(res.status).toBe(502);
-      expect(await res.json()).toEqual({
-        error: { code: "mirror.bundle_fetch_failed", params: {} },
-      });
-    } finally {
-      await box.close();
-    }
-  });
-
-  it("serves the next setup request once a read from a box that never answers passes its limit", async () => {
-    const silent = await startSilentServer(await mintBoxAuthority());
-    try {
-      const app = new Hono();
-      const { deps } = makeAdoptDeps({
-        firstSetup: {
-          coordinator: createFirstSetupCoordinator(),
-          assertOtherAllowed: async () => {},
-        },
-        readPrimaryCertificate: (url) => fetchPrimaryCertificate(url, { timeoutMs: 300 }),
-      });
-      mountSetup(app, deps, noopLog);
-
-      const hung = postCertificate(app, { primaryUrl: `https://localhost:${silent.port}` });
-      const next = postCertificate(app, { primaryUrl: "http://127.0.0.1:1" });
-      let timer: NodeJS.Timeout | undefined;
-      const answered = await Promise.race([
-        next,
-        new Promise((resolve) => {
-          timer = setTimeout(() => resolve("still waiting"), 5_000);
-        }),
-      ]);
-      clearTimeout(timer);
-
-      expect(answered).toBeInstanceOf(Response);
-      expect((answered as Response).status).toBe(200);
-      expect(await (answered as Response).json()).toBeNull();
-      const refused = await hung;
-      expect(refused.status).toBe(502);
-      expect(await refused.json()).toEqual({
-        error: { code: "mirror.bundle_fetch_failed", params: {} },
-      });
-    } finally {
-      await silent.close();
-    }
-  });
-
-  it("answers another setup request at once while a certificate read is still waiting, since the read writes nothing", async () => {
-    let answerRead!: (value: null) => void;
-    const read = new Promise<null>((resolve) => {
-      answerRead = resolve;
-    });
-    const readPrimaryCertificate = vi.fn(() => read);
-    const app = new Hono();
-    const { deps } = makeAdoptDeps({
-      firstSetup: {
-        coordinator: createFirstSetupCoordinator(),
-        assertOtherAllowed: async () => {},
-      },
-      readPrimaryCertificate,
-    });
-    mountSetup(app, deps, noopLog);
-
-    const waiting = postCertificate(app, { primaryUrl: "https://main.example" });
-    await vi.waitFor(() => expect(readPrimaryCertificate).toHaveBeenCalledOnce());
-    const other = app.request("/setup-api/adopt", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    let timer: NodeJS.Timeout | undefined;
-    const answered = await Promise.race([
-      other,
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve("still waiting"), 2_000);
-      }),
-    ]);
-    clearTimeout(timer);
-    answerRead(null);
-
-    expect(answered).toBeInstanceOf(Response);
-    expect(((await (answered as Response).json()) as { error: { code: string } }).error.code).toBe(
-      "setup.request_invalid",
-    );
-    expect((await waiting).status).toBe(200);
-  });
-
-  it("still refuses a certificate read while another first setup is under way", async () => {
-    const readPrimaryCertificate = vi.fn(async () => null);
-    const app = new Hono();
-    const { deps } = makeAdoptDeps({
-      firstSetup: {
-        coordinator: createFirstSetupCoordinator(),
-        assertOtherAllowed: async () => {
-          throw new AppError("setup.attempt_conflict", {});
-        },
-      },
-      readPrimaryCertificate,
-    });
-    mountSetup(app, deps, noopLog);
-
-    const res = await postCertificate(app, { primaryUrl: "https://main.example" });
-    expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
-      "setup.attempt_conflict",
-    );
-    expect(readPrimaryCertificate).not.toHaveBeenCalled();
-  });
-
-  it("refuses a body with no address as 400 setup.request_invalid", async () => {
-    const app = new Hono();
-    const { deps } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postCertificate(app, {});
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("setup.request_invalid");
-  });
-
-  it("carries the confirmed certificate into the adopt request", async () => {
-    const app = new Hono();
-    const { deps, adoptRequests } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postAdopt(app, { ...adoptBody(), confirmedCaPem: "CONFIRMED-PEM" });
-    expect(res.status).toBe(200);
-    expect(adoptRequests[0]).toEqual({
-      primaryUrl: PRIMARY_URL,
-      credential: ADOPT_CREDENTIAL,
-      confirmedCaPem: "CONFIRMED-PEM",
-    });
-    await tick();
-  });
-
-  it("refuses a confirmed certificate that is not a string as 400 setup.request_invalid", async () => {
-    const app = new Hono();
-    const { deps, adopt } = makeAdoptDeps();
-    mountSetup(app, deps, noopLog);
-
-    const res = await postAdopt(app, { ...adoptBody(), confirmedCaPem: 42 });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("setup.request_invalid");
-    expect(adopt).not.toHaveBeenCalled();
   });
 });
 
@@ -4201,13 +3707,13 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         }).deps,
         noopLog,
       );
-      expect((await postAdopt(failing, adoptBody())).status).toBe(502);
+      expect((await postAdopt(failing)).status).toBe(502);
       expect(await operations.read()).toBeNull();
 
       const retry = new Hono();
       const next = makeAdoptDeps({ operations });
       mountSetup(retry, next.deps, noopLog);
-      expect((await postAdopt(retry, adoptBody())).status).toBe(200);
+      expect((await postAdopt(retry)).status).toBe(200);
       expect(next.adopt).toHaveBeenCalledOnce();
       expect((await operations.read())?.phase).toBe("complete");
     } finally {
@@ -4510,42 +4016,6 @@ describe("the setup latch after a request refused before its work starts", () =>
     expect(next.status).toBe(200);
   });
 
-  it("adopt: a request refused for another recorded request leaves the matching one free to resume it", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-adopt-"));
-    try {
-      recordOperation(dir, "adopt", sha256(JSON.stringify(adoptBody())));
-      expect((await createSetupOperationStore(dir).read())?.kind).toBe("adopt");
-      const app = new Hono();
-      const deps = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
-      mountSetup(app, deps.deps, noopLog);
-
-      const other = await postAdopt(app, { ...adoptBody(), extra: "different" });
-      expect(other.status).toBe(409);
-      expect(await other.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
-
-      const matching = await postAdopt(app, adoptBody());
-      expect(await matching.json()).not.toEqual(busy);
-      expect(matching.status).toBe(200);
-      expect(deps.adopt).toHaveBeenCalledOnce();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("adopt: a body that fails while it is read leaves the next request free", async () => {
-    const app = new Hono();
-    const deps = makeAdoptDeps();
-    mountSetup(app, deps.deps, noopLog);
-
-    const failed = await app.request(unreadableBody("/setup-api/adopt"));
-    expect(failed.status).toBe(500);
-    expect(await failed.json()).toEqual({ error: { code: "server.internal" } });
-
-    const next = await postAdopt(app, adoptBody());
-    expect(await next.json()).not.toEqual(busy);
-    expect(next.status).toBe(200);
-  });
-
   it.each([
     ["restore", (app: Hono) => postRestore(app, Uint8Array.from([1]))],
     [
@@ -4589,21 +4059,9 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   const OPERATION_ID = "00000000-0000-4000-8000-0000000000aa";
   const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
   const unavailable = { error: { code: "setup.reset_unavailable", params: {} } };
-  const invalid = { error: { code: "password.invalid", params: {} } };
 
-  async function postReset(app: Hono, body: unknown): Promise<Response> {
-    return app.request("/setup-api/reset-incomplete-adopt", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: typeof body === "string" ? body : JSON.stringify(body),
-    });
-  }
-
-  const resetBody = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-    email: ADOPT_CREDENTIAL.email,
-    password: ADOPT_CREDENTIAL.password,
-    ...over,
-  });
+  const postReset = (app: Hono): Promise<Response> =>
+    fromOwnPage(app, "/setup-api/reset-incomplete-adopt");
 
   function writeRecord(dir: string, kind: string, phase: string, data = {}): void {
     mkdirSync(join(dir, "flows/setup"), { recursive: true });
@@ -4630,7 +4088,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     stageReset: ReturnType<typeof vi.fn>;
     requestRestart: ReturnType<typeof vi.fn>;
   }> {
-    const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+    const adopt = vi.fn(async (_joined: JoinedBox, hooks: AdoptHooks) => {
       await hooks.beforeFirstWrite("preproduction");
       throw new AppError("mirror.bundle_fetch_failed", {});
     });
@@ -4643,18 +4101,18 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       ...overrides,
     });
     mountSetup(app, deps, noopLog);
-    expect((await postAdopt(app, adoptBody())).status).toBe(502);
+    expect((await postAdopt(app)).status).toBe(502);
     return { app, stageReset, requestRestart };
   }
 
-  it("stages the reset of the adopt that stopped partway, given the login the primary accepted, and restarts", async () => {
+  it("stages the reset of the adopt that stopped partway, and restarts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-"));
     try {
       const { app, stageReset, requestRestart } = await halfAdopted(dir);
       const record = await createSetupOperationStore(dir).read();
       expect(record?.phase).toBe("venue_committed");
 
-      const response = await postReset(app, resetBody());
+      const response = await postReset(app);
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
       expect(stageReset).toHaveBeenCalledOnce();
@@ -4662,114 +4120,6 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       expect(requestRestart).not.toHaveBeenCalled();
       await tick();
       expect(requestRestart).toHaveBeenCalledOnce();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("accepts the adopt's email in another letter case and with surrounding spaces", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-case-"));
-    try {
-      const { app, stageReset } = await halfAdopted(dir);
-
-      const response = await postReset(app, resetBody({ email: " OWNER@Example.test  " }));
-      expect(response.status).toBe(202);
-      expect(stageReset).toHaveBeenCalledOnce();
-      await tick();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("lets the event loop turn while it checks the password", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-turn-"));
-    try {
-      const order: string[] = [];
-      let watching = false;
-      const store = createSetupOperationStore(dir);
-      const operations = {
-        ...store,
-        read: async () => {
-          const record = await store.read();
-          if (watching) setImmediate(() => order.push("turned"));
-          return record;
-        },
-      };
-      const stageReset = vi.fn(async () => {
-        order.push("staged");
-      });
-      const { app } = await halfAdopted(dir, { operations, stageReset });
-      watching = true;
-
-      expect((await postReset(app, resetBody())).status).toBe(202);
-      expect(order).toEqual(["turned", "staged"]);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("saves the proof as the email and a password hash, never the password", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-proof-"));
-    try {
-      await halfAdopted(dir);
-      const text = readFileSync(recordPath(dir), "utf8");
-      expect(text).not.toContain(ADOPT_CREDENTIAL.password);
-      const proof = (await createSetupOperationStore(dir).read())?.data.resetProof as {
-        email: string;
-        passwordHash: string;
-      };
-      expect(proof.email).toBe(ADOPT_CREDENTIAL.email);
-      expect(await verifyPassword(ADOPT_CREDENTIAL.password, proof.passwordHash)).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it.each([
-    ["a wrong password", resetBody({ password: "not-the-password" })],
-    ["a different email", resetBody({ email: "someone-else@example.test" })],
-  ])(
-    "refuses %s with password.invalid, staging nothing and leaving the record",
-    async (_label, body) => {
-      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-wrong-"));
-      try {
-        const { app, stageReset, requestRestart } = await halfAdopted(dir);
-        const before = readFileSync(recordPath(dir), "utf8");
-
-        const response = await postReset(app, body);
-        expect(response.status).toBe(401);
-        expect(await response.json()).toEqual(invalid);
-        expect(stageReset).not.toHaveBeenCalled();
-        expect(readFileSync(recordPath(dir), "utf8")).toBe(before);
-        await tick();
-        expect(requestRestart).not.toHaveBeenCalled();
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it("refuses a record saved without a proof with password.invalid", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-no-proof-"));
-    try {
-      writeRecord(dir, "adopt", "venue_committed");
-      const stageReset = vi.fn(async () => {});
-      const app = new Hono();
-      const log = vi.fn();
-      mountSetup(
-        app,
-        makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
-        log,
-      );
-      const response = await postReset(app, resetBody());
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual(invalid);
-      expect(stageReset).not.toHaveBeenCalled();
-      expect(log).toHaveBeenCalledWith(
-        "warn",
-        "password.invalid",
-        expect.objectContaining({ logReason: "reset_proof_mismatch" }),
-      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -4791,7 +4141,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         stageReset,
       });
       mountSetup(app, deps, noopLog);
-      const response = await postReset(app, resetBody());
+      const response = await postReset(app);
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual(unavailable);
       expect(stageReset).not.toHaveBeenCalled();
@@ -4814,7 +4164,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         stageReset,
       });
       mountSetup(app, deps, noopLog);
-      const response = await postReset(app, resetBody());
+      const response = await postReset(app);
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
         error: { code: "setup.operation_conflict", params: {} },
@@ -4837,7 +4187,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
         noopLog,
       );
-      expect((await postAdopt(app, adoptBody())).status).toBe(200);
+      expect((await postAdopt(app)).status).toBe(200);
       await tick();
 
       // A second mount, as the box after its restart; the first mount's latch stays held.
@@ -4847,7 +4197,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
         noopLog,
       );
-      const response = await postReset(restarted, resetBody());
+      const response = await postReset(restarted);
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual(unavailable);
       expect(stageReset).not.toHaveBeenCalled();
@@ -4855,98 +4205,6 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-
-  it("throttles repeated wrong passwords with password.throttled", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-"));
-    try {
-      const { app, stageReset } = await halfAdopted(dir);
-      const wrong = resetBody({ password: "not-the-password" });
-      // The PIN policy's free attempts, then the first failure that opens a wait window.
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        expect((await postReset(app, wrong)).status).toBe(401);
-      }
-      const throttled = await postReset(app, resetBody());
-      expect(throttled.status).toBe(429);
-      expect(await throttled.json()).toMatchObject({
-        error: { code: "password.throttled", params: { retryAfterSeconds: expect.any(Number) } },
-      });
-      expect(stageReset).not.toHaveBeenCalled();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  const inventedEmail = (n: number): string => `invented-${n}@example.test`;
-
-  it("counts wrong passwords sent under different emails against the one saved login", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-rotate-"));
-    try {
-      const { app, stageReset } = await halfAdopted(dir);
-      const statuses: number[] = [];
-      for (let n = 0; n < 5; n += 1) {
-        const body = resetBody({ email: inventedEmail(n), password: "not-the-password" });
-        statuses.push((await postReset(app, body)).status);
-      }
-      expect(statuses).toEqual([401, 401, 401, 401, 429]);
-      expect(stageReset).not.toHaveBeenCalled();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("accepts the correct login once the advertised wait has passed, after 1000 invented emails", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-throttle-flood-"));
-    vi.useFakeTimers({ toFake: ["Date"] });
-    let steady = 0;
-    const clock = vi.spyOn(performance, "now").mockImplementation(() => steady);
-    try {
-      const { app, stageReset } = await halfAdopted(dir);
-      for (let n = 0; n < 1000; n += 1) {
-        const body = resetBody({ email: inventedEmail(n), password: "not-the-password" });
-        expect([401, 429]).toContain((await postReset(app, body)).status);
-      }
-
-      const refused = await postReset(app, resetBody());
-      expect(refused.status).toBe(429);
-      const { retryAfterSeconds } = (
-        (await refused.json()) as {
-          error: { params: { retryAfterSeconds: number } };
-        }
-      ).error.params;
-      vi.setSystemTime(Date.now() + retryAfterSeconds * 1000);
-      steady += retryAfterSeconds * 1000;
-
-      const accepted = await postReset(app, resetBody());
-      expect(accepted.status).toBe(202);
-      expect(stageReset).toHaveBeenCalledOnce();
-      await tick();
-    } finally {
-      clock.mockRestore();
-      vi.useRealTimers();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it.each([
-    ["email", { password: "x" }],
-    ["password", { email: ADOPT_CREDENTIAL.email, password: "" }],
-  ])(
-    "refuses a missing or empty %s with setup.request_invalid, never echoing it",
-    async (field, body) => {
-      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-shape-"));
-      try {
-        const { app, stageReset } = await halfAdopted(dir);
-        const response = await postReset(app, body);
-        expect(response.status).toBe(400);
-        expect(await response.json()).toEqual({
-          error: { code: "setup.request_invalid", params: { field } },
-        });
-        expect(stageReset).not.toHaveBeenCalled();
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
-  );
 
   it.each([
     ["stageReset", { stageReset: undefined }],
@@ -4966,7 +4224,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         }).deps,
         noopLog,
       );
-      const response = await postReset(app, resetBody());
+      const response = await postReset(app);
       expect(response.status).toBe(503);
       expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     } finally {
@@ -4989,9 +4247,9 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         makeAdoptDeps({ adopt, stageReset, operations: createSetupOperationStore(dir) }).deps,
         noopLog,
       );
-      const inFlight = postAdopt(app, adoptBody());
-      await tick();
-      const blocked = await postReset(app, resetBody());
+      const inFlight = postAdopt(app);
+      await vi.waitFor(() => expect(adopt).toHaveBeenCalled());
+      const blocked = await postReset(app);
       expect(blocked.status).toBe(409);
       expect(await blocked.json()).toEqual({
         error: { code: "setup.already_provisioning", params: {} },
@@ -5012,8 +4270,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         stageReset: vi.fn(async () => {}),
       });
       mountSetup(app, deps, noopLog);
-      expect((await postReset(app, resetBody())).status).toBe(409);
-      expect((await postAdopt(app, adoptBody())).status).toBe(200);
+      expect((await postReset(app)).status).toBe(409);
+      expect((await postAdopt(app)).status).toBe(200);
       await tick();
     } finally {
       rmSync(next, { recursive: true, force: true });
@@ -5033,28 +4291,10 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       }).deps,
       noopLog,
     );
-    const response = await postReset(app, resetBody());
+    const response = await postReset(app);
     expect(response.status).toBe(500);
     expect((await response.json()).error.code).toBe("server.internal");
-    expect((await postReset(app, resetBody())).status).toBe(500);
+    expect((await postReset(app)).status).toBe(500);
     expect(read).toHaveBeenCalledTimes(2);
-  });
-
-  it("never returns the saved proof from the status route", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-status-"));
-    try {
-      const { app } = await halfAdopted(dir);
-      const proof = (await createSetupOperationStore(dir).read())?.data.resetProof as {
-        passwordHash: string;
-      };
-      const text = await (await app.request("/setup-api/status")).text();
-      expect(text).toContain("venue_committed");
-      expect(text).not.toContain(proof.passwordHash);
-      expect(text).not.toContain("passwordHash");
-      expect(text).not.toContain(ADOPT_CREDENTIAL.password);
-      expect(text).not.toContain(ADOPT_CREDENTIAL.email);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 });

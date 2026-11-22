@@ -197,9 +197,9 @@ it("the staff entrance forwards dashboard requests and marks their source remote
     "/%2e%2e/setup",
     "/%2f..%2fsetup",
     "/management-api/membership",
-    "/management-api/mirror-bundle",
     "/management-api/promote",
     "/management-api/promote/preparation",
+    "/management-api/box-joins/00000000-0000-4000-8000-000000000000/approve",
   ]) {
     for (const method of ["GET", "POST"])
       expect(
@@ -587,6 +587,23 @@ it("serves dashboard pages and assets directly, never arbitrary main-app root ha
       (await staff.request("https://other.example.test/", { headers: { Accept: "text/html" } }))
         .status,
     ).toBe(404);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("lets only the staff address itself frame the dashboard pages it serves", async () => {
+  const root = await mkdtemp(join(tmpdir(), "waitron-staff-frame-"));
+  try {
+    await writeFile(join(root, "index.html"), "<html>dashboard bundle</html>");
+    const staff = createStaffApp(new Hono(), async () => "https://staff.example.test", { root });
+    for (const path of ["/", "/settings/servers"]) {
+      const response = await staff.request(`https://staff.example.test${path}`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -28,7 +28,9 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { adoptFromPrimary } from "./adopt.js";
+import type { JoinedBox } from "./box-join-attempt.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { markJoined } from "./box-tls-install.js";
@@ -39,7 +41,9 @@ import type { Logger } from "./logger.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { writeModuleConfig } from "./module-config.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
-import { mountSetup } from "./setup-api.js";
+import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { spareStoreUrl } from "./box-name.js";
+import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
@@ -85,11 +89,6 @@ function watchRemovals(failing?: string): string[] {
 
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PRIMARY_NODE_ID = "22222222-2222-4222-8222-222222222222";
-const ADOPT_BODY = JSON.stringify({
-  primaryUrl: "https://primary.example",
-  credential: { email: "owner@example.test", password: "a-password" },
-});
-
 const PRIMARY_KEYS = generateNodeKeyPair();
 const BUNDLE: MirrorBundle = {
   designated: {
@@ -170,7 +169,7 @@ async function halfAdoptedBox(joined = false): Promise<{
   const operations = createSetupOperationStore(stateDir);
   await operations
     .run("adopt", "a-request", async (operation) => {
-      await operation.advance("venue_committed", { resetProof: {} });
+      await operation.advance("venue_committed", { environment: "preproduction" });
       throw new Error("stopped partway");
     })
     .catch(() => {});
@@ -203,11 +202,15 @@ async function snapshot(stateDir: string): Promise<string[]> {
   );
 }
 
-type Adopt = (req: AdoptRequest, hooks: AdoptHooks) => Promise<{ breakGlassSecret: string }>;
+type Adopt = NonNullable<SetupDeps["adoptJoined"]>;
 
+/** Join and Finish joining on the setup routes, with `joined` what the approved join holds. */
 async function postAdopt(
   stateDir: string,
-  adopt: Adopt = vi.fn(async () => ({ breakGlassSecret: "secret" })),
+  adopt: Adopt = vi.fn(async () => ({ breakGlassSecret: "secret", breakGlassKeyName: "key" })),
+  joined: () => JoinedBox = () => {
+    throw new Error("no join was approved");
+  },
 ): Promise<number> {
   const app = new Hono();
   mountSetup(
@@ -215,16 +218,13 @@ async function postAdopt(
     {
       environment: "preproduction",
       operations: createSetupOperationStore(stateDir),
-      adopt,
+      joinAttempt: approvedJoinAttempt(joined),
+      adoptJoined: adopt,
       requestRestart: vi.fn(),
     },
     () => {},
   );
-  const response = await app.request("/setup-api/adopt", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: ADOPT_BODY,
-  });
+  const response = await finishJoining(app);
   await new Promise((resolve) => setTimeout(resolve, 0));
   return response.status;
 }
@@ -432,8 +432,21 @@ describe("runStagedReset", () => {
     await migrate(venueDir);
     const store = await openVenueDatabase(venueDir);
     try {
-      let standbyNodeId: string | undefined;
-      const adopt = vi.fn<Adopt>((req, hooks) =>
+      const identity = generateStandbyIdentity();
+      const standbyNodeId = identity.nodeId;
+      const bundle: MirrorBundle = {
+        ...BUNDLE,
+        reservedIdentity: {
+          ...BUNDLE.reservedIdentity,
+          endorsement: endorseKey(
+            identity.nodeId,
+            identity.publicKey,
+            PRIMARY_NODE_ID,
+            PRIMARY_KEYS.privateKey,
+          ),
+        },
+      };
+      const adopt = vi.fn<Adopt>((joined, hooks) =>
         adoptFromPrimary(
           {
             ownerDb: store.venue,
@@ -443,23 +456,6 @@ describe("runStagedReset", () => {
               WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
               WAITRON_CREDENTIALS_KEY_VERSION: "1",
             }),
-            fetchBundle: async (_url, _credential, standby) => {
-              standbyNodeId = standby.nodeId;
-              return {
-                ...BUNDLE,
-                reservedIdentity: {
-                  ...BUNDLE.reservedIdentity,
-                  endorsement: endorseKey(
-                    standby.nodeId,
-                    standby.publicKey,
-                    PRIMARY_NODE_ID,
-                    PRIMARY_KEYS.privateKey,
-                  ),
-                },
-              };
-            },
-            advertisedOrigin: "https://standby.example",
-            spareStorePort: 7443,
             assertStartsWith: () => {},
             environment: "preproduction",
             persistTrading: async (cfg) => {
@@ -475,12 +471,17 @@ describe("runStagedReset", () => {
             listIpv4: () => [],
             now: () => new Date(),
           },
-          req,
+          joined,
           hooks,
         ),
       );
 
-      expect(await postAdopt(stateDir, adopt)).toBe(200);
+      const joined = () => ({
+        identity,
+        bundle,
+        storeUrl: spareStoreUrl("https://standby.example", identity.nodeId, 7443),
+      });
+      expect(await postAdopt(stateDir, adopt, joined)).toBe(200);
       expect(await adopt.mock.results[0]?.value).toEqual({
         breakGlassSecret: expect.any(String),
         breakGlassKeyName: expect.stringMatching(/\S/),
@@ -494,7 +495,7 @@ describe("runStagedReset", () => {
       ) as PendingAdoption;
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
-      expect(await readMirrorLink(store.node, standbyNodeId!)).toMatchObject({
+      expect(await readMirrorLink(store.node, standbyNodeId)).toMatchObject({
         originNodeId: PRIMARY_NODE_ID,
       });
     } finally {
@@ -618,6 +619,41 @@ describe("runStagedReset", () => {
     expect(await snapshot(box.stateDir)).toEqual(before);
     expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
     expect(events).toContainEqual(["warn", "setup.reset_discarded", { reason }]);
+  });
+
+  it("discards a reset asked for without a proof on a box with trading settings", async () => {
+    const box = await halfAdoptedBox();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        operations: createSetupOperationStore(box.stateDir),
+        stageReset: (operationId) => stageResetRequest(box.stateDir, operationId),
+        requestRestart: vi.fn(),
+      },
+      () => {},
+    );
+    const response = await app.request(
+      "/setup-api/reset-incomplete-adopt",
+      { method: "POST" },
+      { incoming: { socket: { remoteAddress: "127.0.0.1" } } },
+    );
+    expect(response.status).toBe(202);
+    await writeFile(join(box.stateDir, "trading.env"), "WAITRON_NODE_ID=x\n");
+    const before = await snapshot(box.stateDir);
+    const { log, events } = capturingLog();
+
+    expect(await runStagedReset({ stateDir: box.stateDir, venueDir: box.venueDir, log })).toBe(
+      false,
+    );
+
+    expect(await snapshot(box.stateDir)).toEqual(before);
+    expect(events).toContainEqual([
+      "warn",
+      "setup.reset_discarded",
+      { reason: "trading_configured" },
+    ]);
   });
 
   it("counts a database it cannot read as holding a venue", async () => {

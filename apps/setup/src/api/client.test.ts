@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
-import type { AdoptBody, ProvisionBody } from "./client.js";
+import type { ProvisionBody } from "./client.js";
 import { REVIEWED_CREDENTIALS as CREDENTIALS } from "../widgets/test-helpers.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -299,64 +299,66 @@ describe("SetupApi", () => {
     await expect(api.provision(provisionBody)).resolves.toBeUndefined();
   });
 
-  const adoptBody: AdoptBody = {
-    primaryUrl: "https://waitron.local",
-    credential: { email: "op1@example.com", password: "correct horse", totp: "123456" },
-  };
-
-  it("adopt POSTs the body (credential as a nested object) as JSON and returns the result", async () => {
-    const result = { adopted: true, restarting: true };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
-    const api = new SetupApi("", fetchImpl);
-    expect(await api.adopt(adoptBody)).toEqual(result);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/adopt", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(adoptBody),
-    });
-  });
-
-  it("surfaces the mirror.bundle_fetch_failed code on a 502", async () => {
+  it("sends the join's handle on every join request that has one, and the same empty body to finish", async () => {
+    const started = { code: "482913", addresses: ["192.168.1.23"], timeLeftMs: 1, handle: "h1" };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(
-        jsonResponse({ error: { code: "mirror.bundle_fetch_failed" } }, false, 502),
-      );
+      .mockResolvedValueOnce(jsonResponse(started))
+      .mockResolvedValueOnce(jsonResponse({ state: "approved", code: "482913" }))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse({ adopted: true, restarting: true }))
+      .mockResolvedValueOnce(jsonResponse({ state: "none" }));
     const api = new SetupApi("", fetchImpl);
-    await expect(api.adopt(adoptBody)).rejects.toMatchObject({
-      code: "mirror.bundle_fetch_failed",
-    });
+    const handle = { "x-waitron-join-handle": "h0" };
+    expect(await api.startJoin("https://waitron.local", "h0")).toEqual(started);
+    expect(await api.joinState("h1")).toEqual({ state: "approved", code: "482913" });
+    await api.cancelJoin("h1");
+    await api.finishJoin("h1");
+    await api.joinState(undefined);
+    expect(fetchImpl.mock.calls).toEqual([
+      [
+        "/setup-api/join/start",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", ...handle },
+          body: JSON.stringify({ primaryUrl: "https://waitron.local" }),
+        },
+      ],
+      [
+        "/setup-api/join",
+        { method: "GET", credentials: "include", headers: { "x-waitron-join-handle": "h1" } },
+      ],
+      [
+        "/setup-api/join/cancel",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", "x-waitron-join-handle": "h1" },
+          body: "{}",
+        },
+      ],
+      [
+        "/setup-api/adopt",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", "x-waitron-join-handle": "h1" },
+          body: "{}",
+        },
+      ],
+      ["/setup-api/join", { method: "GET", credentials: "include" }],
+    ]);
   });
 
-  it("primaryCertificate POSTs the address and returns the certificate, or null for plain http", async () => {
-    const certificate = { pem: "-----BEGIN CERTIFICATE-----", fingerprint256: "AA:BB" };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(certificate))
-      .mockResolvedValueOnce(jsonResponse(null));
-    const api = new SetupApi("", fetchImpl);
-    expect(await api.primaryCertificate("https://waitron.local")).toEqual(certificate);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/primary-certificate", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ primaryUrl: "https://waitron.local" }),
-    });
-    expect(await api.primaryCertificate("http://127.0.0.1:8080")).toBeNull();
-  });
-
-  it("resetIncompleteAdopt POSTs the admin login as JSON and returns the result", async () => {
+  it("resetIncompleteAdopt POSTs with no body and returns the result", async () => {
     const result = { resetStaged: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
     const api = new SetupApi("", fetchImpl);
-    const credential = { email: "op1@example.com", password: "correct horse" };
-    expect(await api.resetIncompleteAdopt(credential)).toEqual(result);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/reset-incomplete-adopt", {
+    expect(await api.resetIncompleteAdopt()).toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/setup-api/reset-incomplete-adopt", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(credential),
     });
   });
 
@@ -371,9 +373,7 @@ describe("SetupApi", () => {
         ),
       );
     const api = new SetupApi("", fetchImpl);
-    await expect(
-      api.resetIncompleteAdopt({ email: "op1@example.com", password: "wrong" }),
-    ).rejects.toEqual({
+    await expect(api.resetIncompleteAdopt()).rejects.toEqual({
       code: "password.throttled",
       params: { retryAfterSeconds: 30 },
       status: 429,

@@ -120,7 +120,11 @@ export function createStaffApp(
   const dashboard = new Hono();
   if (pages !== undefined) {
     for (const gate of pages.gates ?? []) dashboard.use("*", gate);
-    mountSpa(dashboard, { root: pages.root, basePath: "", navigationPath: isDashboardPath }, log);
+    mountSpa(
+      dashboard,
+      { root: pages.root, basePath: "", navigationPath: isDashboardPath, frameSelfOnly: true },
+      log,
+    );
   }
   staff.use("*", async (c, next) => {
     try {
@@ -146,9 +150,9 @@ export function createStaffApp(
     const url = new URL(c.req.url);
     const path = url.pathname;
     if (/%2f|%5c|%00/i.test(path)) return c.notFound();
-    // These machine operations check a password outside the dashboard sign-in throttle.
+    // Joining and machine operations stay off remote access.
     if (
-      ["membership", "mirror-bundle", "promote"].some(
+      ["membership", "promote", "box-joins"].some(
         (name) => path === `/management-api/${name}` || path.startsWith(`/management-api/${name}/`),
       )
     )

@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
 import {
-  dispatchAdoptRequested,
   dispatchBucketRestoreRequested,
   dispatchConfigurationRequested,
   dispatchFiscalTestRequested,
@@ -53,21 +52,9 @@ test("dispatchProvisionRequested fires a composed, bubbling provision-requested 
   expect(e.composed).toBe(true);
 });
 
-test("dispatchAdoptRequested fires a composed, bubbling adopt-requested wrapping the body", () => {
-  const body = {
-    primaryUrl: "https://waitron.local",
-    credential: { email: "op1@example.com", password: "correct horse", totp: "123456" },
-  };
-  const e = capture("adopt-requested", (el) => dispatchAdoptRequested(el, body));
-  expect(e.detail).toEqual({ body });
-  expect(e.bubbles).toBe(true);
-  expect(e.composed).toBe(true);
-});
-
-test("dispatchResetRequested fires a composed, bubbling reset-requested wrapping the login", () => {
-  const credential = { email: "op1@example.com", password: "correct horse" };
-  const e = capture("reset-requested", (el) => dispatchResetRequested(el, credential));
-  expect(e.detail).toEqual({ credential });
+test("dispatchResetRequested fires a composed, bubbling reset-requested carrying nothing", () => {
+  const e = capture("reset-requested", (el) => dispatchResetRequested(el));
+  expect(e.detail).toBeNull();
   expect(e.bubbles).toBe(true);
   expect(e.composed).toBe(true);
 });

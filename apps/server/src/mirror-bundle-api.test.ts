@@ -1,5 +1,4 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,7 +27,6 @@ import {
   type KeyRing,
 } from "@waitron/credentials";
 import { personIdForLoginEmail } from "@waitron/identity";
-import { generateSync } from "otplib";
 import {
   canonicalize,
   endorseKey,
@@ -49,7 +47,7 @@ import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/tes
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
-import { nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import {
   standbyContract,
   allocatedStandbyModules,
@@ -61,15 +59,21 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { personHolding } from "./testing/session-holding.js";
 import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
-import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
-import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
+import {
+  approveJoin,
+  joinAsBundleAnswer,
+  joiningBox,
+  listedJoin,
+  mountBoxJoin,
+  pollJoin,
+  signedInCookie,
+} from "./testing/box-join.js";
+import { createBoxJoinRequests, ENDED_KEPT_MS } from "./box-join-requests.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 
@@ -87,6 +91,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 const pause = vi.hoisted(() => ({
   beforeModuleConfigRead: undefined as (() => Promise<void>) | undefined,
   beforeChartMint: undefined as (() => Promise<void>) | undefined,
+  beforeReserve: undefined as (() => Promise<void>) | undefined,
   moduleConfigReads: 0,
 }));
 
@@ -122,17 +127,15 @@ vi.mock("./membership-mint.js", async (importOriginal) => {
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const ADMIN_EMAIL = "owner@example.test";
-const STAFF_EMAIL = "cashier@example.test";
-const SUSPENDED_EMAIL = "suspended@example.test";
-const STAFF_PASSWORD = "staffPass123";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// A real key, so the endorsement's signature can be verified.
-const STANDBY_PUB = generateNodeKeyPair().publicKey;
+// A real key, so the endorsement's signature can be verified and the joining box can sign.
+const STANDBY_KEYS = generateNodeKeyPair();
+const STANDBY_PUB = STANDBY_KEYS.publicKey;
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -216,18 +219,11 @@ async function setupVenue(): Promise<{
   return { designated, adminPersonId, primaryPublicKey };
 }
 
-async function seedStaff(): Promise<string> {
-  return withTransaction(db, async (tx) => {
-    const [row] = await seedPersons(tx, {
-      displayName: "Cashier",
-      email: STAFF_EMAIL,
-      pinHash: fixturePinHash("4321"),
-      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
-      role: "staff",
-    });
-    return row!.id;
-  });
-}
+/**
+ * The join store's own clock. Each join in this suite stands alone, so the next arrives once the
+ * main box has forgotten the last approval, which otherwise holds back a second for 2 minutes.
+ */
+let joinClock = 0;
 
 function mountApp(
   designated: AdoptResult,
@@ -237,23 +233,19 @@ function mountApp(
   wakeSpareJoin: () => void = () => {},
 ): Hono {
   const app = new Hono();
-  mountMirrorBundleApi(
-    app,
-    {
-      appDb: db,
-      node: suite.node,
-      ring: RING,
-      stateDir,
-      boxHostname: "waitron.local",
-      advertisedOrigin,
-      designated,
-
-      credentialKeyRing: TOTP_KEY_RING,
-      wakeSpareJoin,
-      now,
-    },
+  mountBoxJoin(app, {
+    requests: createBoxJoinRequests({ steadyNow: () => joinClock }),
+    appDb: db,
+    node: suite.node,
+    ring: RING,
+    stateDir,
+    boxHostname: "waitron.local",
+    advertisedOrigin,
+    designated,
+    wakeSpareJoin,
+    now,
     log,
-  );
+  });
   return app;
 }
 
@@ -312,29 +304,20 @@ async function holdChartWithStandby(
   return term;
 }
 
-async function rawPost(app: Hono, body: unknown): Promise<Response> {
-  return app.request("/management-api/mirror-bundle", {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "content-type": "application/json" },
-  });
-}
 // The fiscal module joins as an unmarked stand-in unless `veriFactu` is set, so the join's
 // reservation path, which a module whose series open on activation never takes, stays reachable.
-async function post(
-  app: Hono,
-  body: unknown,
-  { veriFactu = false }: { veriFactu?: boolean } = {},
+async function withFixtureOperation(
+  request: Record<string, unknown>,
+  veriFactu: boolean,
+  send: (moduleOperation: unknown) => Promise<Response>,
 ): Promise<Response> {
-  if (typeof body !== "object" || body === null) return rawPost(app, body);
-  const request = body as Record<string, unknown>;
   if (
     request.moduleOperation !== undefined ||
     typeof request.standbyNodeId !== "string" ||
     !/^[0-9a-f-]{36}$/i.test(request.standbyNodeId) ||
     typeof request.email !== "string"
   )
-    return rawPost(app, body);
+    return send(request.moduleOperation);
   const primary = (await db.select().from(nodes))[0]!;
   const fixture = await standbyContract(
     db,
@@ -359,6 +342,9 @@ async function post(
         standby: {
           ...standby,
           async reserve(...args: Parameters<typeof standby.reserve>) {
+            const hook = pause.beforeReserve;
+            pause.beforeReserve = undefined;
+            await hook?.();
             const result = await standby.reserve(...args);
             outsideReservations.push(structuredClone(fixture.state));
             return result;
@@ -373,12 +359,50 @@ async function post(
     ...(veriFactu ? allocated : withoutActivationMark(allocated)),
   );
   try {
-    return await rawPost(app, {
-      ...request,
-      moduleOperation: { binding: held.binding, input: held.input },
-    });
+    return await send({ binding: held.binding, input: held.input });
   } finally {
     (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
+  }
+}
+
+let joinAddresses = 0;
+
+/**
+ * A join reaching `issueMirrorBundle` through the box-join routes: the spare named in `body` asks
+ * from an address of its own, and the person `body.email` names, signed in afresh, taps its code.
+ * Answers with the bundle or the refusal (`joinAsBundleAnswer`). `plain` sends no module
+ * operation.
+ */
+async function approvedJoin(
+  app: Hono,
+  body: Record<string, unknown>,
+  { veriFactu = false, plain = false }: { veriFactu?: boolean; plain?: boolean } = {},
+): Promise<Response> {
+  joinAddresses += 1;
+  const box = joiningBox(`10.20.${Math.floor(joinAddresses / 250)}.${(joinAddresses % 250) + 1}`, {
+    identity: {
+      nodeId: body.standbyNodeId as string,
+      publicKey: body.standbyPublicKey as string,
+      privateKey:
+        body.standbyPublicKey === STANDBY_PUB
+          ? STANDBY_KEYS.privateKey
+          : generateNodeKeyPair().privateKey,
+    },
+    contactUrl: body.standbyContactUrl as string,
+    storeUrl: body.standbyStoreUrl as string,
+  });
+  const cookie = await signedInCookie(db, await personIdForLoginEmail(db, body.email as string));
+  const send = (moduleOperation: unknown) =>
+    joinAsBundleAnswer(app, {
+      box,
+      sent: { cookie },
+      moduleOperation,
+      at: body.standbyAt as number,
+    });
+  try {
+    return await (plain ? send(undefined) : withFixtureOperation(body, veriFactu, send));
+  } finally {
+    joinClock += ENDED_KEPT_MS;
   }
 }
 
@@ -407,23 +431,23 @@ beforeEach(async () => {
 afterEach(() => {
   pause.beforeModuleConfigRead = undefined;
   pause.beforeChartMint = undefined;
+  pause.beforeReserve = undefined;
 });
 
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
-describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
-  it("returns a bundle carrying the venue identity for an authorised admin credential", async () => {
+describe("issueMirrorBundle, through the box-join routes", () => {
+  it("returns a bundle carrying the venue identity for a join an administrator approved", async () => {
     const { designated } = await setupVenue();
     const lines: string[] = [];
     const log: Logger = (level, event, fields) =>
       lines.push(JSON.stringify({ level, event, fields }));
     const app = mountApp(designated, log);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(200);
@@ -467,9 +491,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         }),
       );
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         standbyNodeId,
         standbyPublicKey: STANDBY_PUB,
         standbyContactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
@@ -492,9 +515,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
   it("answers 409 mirror.not_provisioned when this box's database carries no deployment stamp", async () => {
     const { designated } = await setupVenue();
     await db.execute(sql`delete from deployment where id = 1`);
-    const res = await post(mountApp(designated), {
+    const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(409);
@@ -506,9 +528,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await db.execute(
       sql`insert into settings (module, version, revision, doc, updated_at) values ('modules', 1, 1, '{"modules":{"bookings":"yes"}}', '2026-11-20T12:00:00.000Z') on conflict (module) do update set doc = excluded.doc`,
     );
-    const res = await post(mountApp(designated), {
+    const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(500);
@@ -520,9 +541,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     pause.moduleConfigReads = 0;
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -559,9 +579,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const before = await readNodeMembership(db);
     expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test",
@@ -595,9 +614,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
 
     // A re-adopt of the same node refreshes its entry in place rather than adding a second.
-    const res2 = await post(app, {
+    const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud2.deli.test",
@@ -636,9 +654,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await db.update(nodes).set({ endorsement }).where(eq(nodes.id, designated.nodeId));
     const app = mountApp(designated);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(200);
@@ -705,9 +722,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     try {
       const app = mountApp(designated);
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(200);
@@ -752,9 +768,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ),
     );
     try {
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(503);
@@ -767,89 +782,59 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect((await readNodeMembership(db))?.body.term).toBe(seedTerm);
   });
 
-  it("refuses a non-admin (staff) credential with 403", async () => {
-    const { designated } = await setupVenue();
-    await seedStaff();
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: STAFF_EMAIL,
-      password: STAFF_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error.code).toBe("authorization.not_permitted");
-  });
-
-  it("refuses a credential holding only invoice.inspect as lacking node.manage", async () => {
-    const { designated } = await setupVenue();
-    await personHolding(db, ["invoice.inspect"], {
-      email: STAFF_EMAIL,
-      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
-    });
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: STAFF_EMAIL,
-      password: STAFF_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toEqual({
-      code: "authorization.not_permitted",
-      params: { permission: "node.manage" },
-    });
-  });
-
-  it("refuses a wrong password with 401 before it can authorize", async () => {
+  it("reserves once when a join is sent again after membership.write_contended", async () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
-
-    const res = await post(app, { email: ADMIN_EMAIL, password: "wrong", ...validStandby() });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("refuses a non-string email with 401 password.invalid and no params", async () => {
-    const { designated } = await setupVenue();
-    const log = vi.fn();
-    const app = mountApp(designated, log);
-
-    const res = await post(app, { email: 42, password: ADMIN_PASSWORD, ...validStandby() });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    expect(log).toHaveBeenCalledWith(
-      "warn",
-      "password.invalid",
-      expect.objectContaining({ logReason: "malformed" }),
+    const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+    const standby = validStandby();
+    await db.execute(
+      sql.raw(
+        "create trigger test_node_membership_contended before update on node_membership begin select raise(ignore); end",
+      ),
     );
-  });
+    try {
+      const res = await approvedJoin(app, {
+        email: ADMIN_EMAIL,
+        ...standby,
+      });
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.write_contended", params: { attempts: 8 } },
+      });
+    } finally {
+      await db.execute(sql.raw("drop trigger test_node_membership_contended"));
+    }
+    expect(outsideReservations).toEqual([]);
 
-  it("signs in by email whatever its letter case and surrounding spaces", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: "  Owner@Example.TEST ",
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-  });
-
-  it("signs in by email on the plain path, with no module operation", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await rawPost(app, { email: ADMIN_EMAIL, password: "wrong", ...validStandby() });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    const signedIn = await rawPost(app, {
+    const again = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
+      ...standby,
+    });
+
+    expect(again.status, JSON.stringify(await again.clone().json())).toBe(200);
+    expect(outsideReservations).toHaveLength(1);
+    expect((await readNodeMembership(db))?.body.term).toBe(seedTerm + 1);
+  });
+
+  it("lists nothing in the chart when a module's reserve refuses", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+    pause.beforeReserve = async () => {
+      // The chart round has already written its term in this transaction.
+      expect((await readNodeMembership(db))?.body.term).toBe(seedTerm + 1);
+      throw new AppError("mirror.not_provisioned", {});
+    };
+
+    const res = await approvedJoin(app, {
+      email: ADMIN_EMAIL,
       ...validStandby(),
     });
-    expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
+
+    expect(pause.beforeReserve).toBeUndefined();
+    expect(res.status).toBe(409);
+    expect((await readNodeMembership(db))?.body.term).toBe(seedTerm);
+    expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
   it("accepts a Veri*Factu venue's join with no module operation, reserving nothing fiscal", async () => {
@@ -862,7 +847,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const before = await allocationSnapshot();
     const standby = validStandby();
 
-    const res = await rawPost(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+    const res = await approvedJoin(app, { email: ADMIN_EMAIL, ...standby }, { plain: true });
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     const reserved = (await res.json()).reservedIdentity;
@@ -882,9 +867,9 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     const before = await allocationSnapshot();
 
-    const res = await post(
+    const res = await approvedJoin(
       app,
-      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
+      { email: ADMIN_EMAIL, ...validStandby() },
       { veriFactu: true },
     );
 
@@ -897,283 +882,13 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await allocationSnapshot()).toEqual(before);
   });
 
-  it("refuses a present non-string totp with 401 (screened before loginManager)", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: 123 });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("signs in an admin with an authenticator who sends a correct current code", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      totp: generateSync({ secret }),
-      ...validStandby(),
-    });
-    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-  });
-
-  it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      totp: wrongTotpCode(secret),
-      ...validStandby(),
-    });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("answers every login that fails identically on the module-operation path, whatever the cause, and reserves nothing", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    await withTransaction(db, async (tx) => {
-      const [row] = await seedPersons(tx, {
-        displayName: "Suspended administrator",
-        email: SUSPENDED_EMAIL,
-        pinHash: fixturePinHash("1234"),
-        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
-        role: "admin",
-        status: "suspended",
-      });
-      return row!.id;
-    });
-    const app = mountApp(designated);
-    const counterBefore = await allocationSnapshot();
-
-    const causes: Record<string, Record<string, unknown>> = {
-      unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
-      // The suspended admin's own password, so only the suspension can be the cause.
-      suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
-      wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
-      wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
-      missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-    };
-    const answers: Record<string, unknown> = {};
-    for (const [cause, credential] of Object.entries(causes)) {
-      const res = await post(app, { ...credential, ...validStandby() });
-      answers[cause] = { status: res.status, body: await res.json() };
-    }
-    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
-    expect(answers).toEqual({
-      unknown: refused,
-      suspended: refused,
-      wrongPassword: refused,
-      wrongCode: refused,
-      missingCode: refused,
-    });
-    expect(await allocationSnapshot()).toEqual(counterBefore);
-  });
-
-  it("asks on the plain path for the authenticator code only once the password is right, and reserves nothing", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const suspendedPersonId = await withTransaction(db, async (tx) => {
-      const [row] = await seedPersons(tx, {
-        displayName: "Suspended administrator",
-        email: SUSPENDED_EMAIL,
-        pinHash: fixturePinHash("1234"),
-        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
-        role: "admin",
-      });
-      return row!.id;
-    });
-    // Enrolment needs an active account, so the suspension follows it.
-    await enrolAuthenticator(db, suspendedPersonId, TOTP_KEY_RING);
-    await db.execute(sql`update persons set status = 'suspended' where id = ${suspendedPersonId}`);
-    const app = mountApp(designated);
-    const counterBefore = await allocationSnapshot();
-
-    const causes: Record<string, Record<string, unknown>> = {
-      unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
-      suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
-      wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
-      wrongPasswordNoCode: { email: ADMIN_EMAIL, password: "wrong" },
-      wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
-      missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-    };
-    const answers: Record<string, unknown> = {};
-    for (const [cause, credential] of Object.entries(causes)) {
-      const res = await rawPost(app, { ...credential, ...validStandby() });
-      answers[cause] = { status: res.status, body: await res.json() };
-    }
-    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
-    expect(answers).toEqual({
-      unknown: refused,
-      suspended: refused,
-      wrongPassword: refused,
-      wrongPasswordNoCode: refused,
-      wrongCode: refused,
-      missingCode: { status: 401, body: { error: { code: "totp.required", params: {} } } },
-    });
-    expect(await allocationSnapshot()).toEqual(counterBefore);
-  });
-
-  describe("repeated wrong passwords", () => {
-    const wrongAttempt = (email: string) => ({ email, password: "wrong", ...validStandby() });
-    const rightAttempt = (email = ADMIN_EMAIL) => ({
-      email,
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    const throttled = {
-      status: 429,
-      body: {
-        error: { code: "password.throttled", params: { retryAfterSeconds: expect.any(Number) } },
-      },
-    };
-    const answer = async (res: Response) => ({ status: res.status, body: await res.json() });
-
-    it("refuses a fifth quick attempt for one email with 429 password.throttled, even with the right password", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-      const before = await allocationSnapshot();
-
-      for (let attempt = 0; attempt < 4; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
-      expect(await allocationSnapshot()).toEqual(before);
-    });
-
-    it("counts the plain path's wrong passwords against the same limit as the module-operation path", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 4; attempt += 1)
-        expect((await rawPost(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      expect(await answer(await rawPost(app, rightAttempt()))).toEqual(throttled);
-      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
-    });
-
-    it("counts two spellings of one address against one limit", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (const email of [
-        ADMIN_EMAIL,
-        "  Owner@Example.TEST ",
-        "OWNER@EXAMPLE.TEST",
-        "owner@example.test  ",
-      ])
-        expect((await post(app, wrongAttempt(email))).status).toBe(401);
-
-      expect(await answer(await post(app, rightAttempt(" Owner@example.test")))).toEqual(throttled);
-    });
-
-    it("answers an unknown email's attempts exactly as a known one's, its two spellings sharing one limit", async () => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
-      try {
-        const { designated } = await setupVenue();
-        const answers = async (emails: string[]) => {
-          const app = mountApp(designated);
-          const seen = [];
-          for (const email of emails) seen.push(await answer(await post(app, wrongAttempt(email))));
-          return seen;
-        };
-
-        const known = await answers(Array.from({ length: 5 }, () => ADMIN_EMAIL));
-        expect(known.map(({ status }) => status)).toEqual([401, 401, 401, 401, 429]);
-        expect(known[4]).toEqual(throttled);
-        const unknown = await answers([
-          "nobody@example.test",
-          " NOBODY@example.test",
-          "nobody@example.test",
-          "Nobody@Example.Test ",
-          "nobody@example.test",
-        ]);
-        expect(unknown).toEqual(known);
-      } finally {
-        clock.mockRestore();
-        vi.useRealTimers();
-      }
-    });
-
-    it("does not count a request for the authenticator code as a failed try", async () => {
-      const { designated, adminPersonId } = await setupVenue();
-      const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        expect(await answer(await rawPost(app, rightAttempt()))).toEqual({
-          status: 401,
-          body: { error: { code: "totp.required", params: {} } },
-        });
-
-      const signedIn = await rawPost(app, { ...rightAttempt(), totp: generateSync({ secret }) });
-      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
-    });
-
-    it("lets a correct sign-in through before the limit, and starts the count again after it", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 3; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-      const signedIn = await post(app, rightAttempt());
-      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
-
-      const after: number[] = [];
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        after.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
-      expect(after).toEqual([401, 401, 401, 401, 429]);
-    });
-
-    it("does not count a refusal that checks no password, nor a join refused after a correct sign-in", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-      for (let attempt = 0; attempt < 3; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      const ownName = `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`;
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const gated = await post(app, { ...rightAttempt(), standbyNodeId: ownName });
-        expect((await gated.json()).error.code).toBe("mirror.standby_name_taken");
-        const badOperation = await rawPost(app, {
-          ...wrongAttempt(ADMIN_EMAIL),
-          moduleOperation: { nonsense: true },
-        });
-        expect((await badOperation.json()).error.code).toBe("module.operation_invalid");
-        const malformed = await post(app, { ...wrongAttempt(ADMIN_EMAIL), totp: 123 });
-        expect(await answer(malformed)).toEqual({
-          status: 401,
-          body: { error: { code: "password.invalid", params: {} } },
-        });
-        const badContact = await post(app, {
-          ...wrongAttempt(ADMIN_EMAIL),
-          standbyContactUrl: "https://cloud.deli.test/path",
-        });
-        expect((await badContact.json()).error.code).toBe("mirror.standby_invalid");
-      }
-
-      const statuses: number[] = [];
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        statuses.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
-      expect(statuses).toEqual([401, 401, 401, 401, 429]);
-    });
-  });
-
   describe("the pair's store and its key", () => {
     it("hands out a bundle with no relay, carrying the main box's address and the pair's key", async () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1201,9 +916,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const keys: string[] = [];
       for (let i = 0; i < 2; i += 1) {
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
         expect(res.status).toBe(200);
@@ -1220,9 +934,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const standby = validStandby();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...standby,
       });
 
@@ -1243,18 +956,16 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         seen.push(readPairLink(suite.node, designated.nodeId).then((link) => link?.state)),
       );
 
-      const refused = await post(app, {
+      const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyStoreUrl: "http://cloud.deli.test:7443",
       });
       expect(refused.status).toBe(400);
       expect(seen).toHaveLength(0);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(200);
@@ -1272,9 +983,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const before = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyStoreUrl,
       });
@@ -1314,9 +1024,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         });
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1362,9 +1071,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       };
       const standby = validStandby();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...standby,
       });
 
@@ -1423,7 +1131,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         await holdRetiredLink(designated, peer);
         const standby = validStandby();
 
-        const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+        const res = await approvedJoin(app, {
+          email: ADMIN_EMAIL,
+          ...standby,
+        });
 
         expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
         expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
@@ -1438,9 +1149,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const joined = await holdRetiredLink(designated, "unlisted");
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1462,7 +1172,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     const { res, fixture } = await allocatedReply(app, designated, adminPersonId, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://cloud.deli.test",
@@ -1519,14 +1228,13 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+    const res = await approvedJoin(app, { email: ADMIN_EMAIL });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.standby_invalid");
 
     // Every field but the one under test is well-formed; `""` is a valid contact URL.
-    const res2 = await post(app, {
+    const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: "not-a-uuid",
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "",
@@ -1535,9 +1243,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(res2.status).toBe(400);
     expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
 
-    const res3 = await post(app, {
+    const res3 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: "",
       standbyContactUrl: "",
@@ -1552,9 +1259,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
 
     // Not a bare origin: tills concatenate paths onto it.
-    const slash = await post(app, {
+    const slash = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test/",
@@ -1563,9 +1269,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(slash.status).toBe(400);
     expect(await slash.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
 
-    const script = await post(app, {
+    const script = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "javascript:alert(1)",
@@ -1580,9 +1285,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     const before = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyContactUrl: "",
     });
@@ -1614,9 +1318,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyNodeId: removedId,
     });
@@ -1627,9 +1330,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readNodeMembership(db)).toEqual(chartBefore);
 
     // A fresh id through the same app reaches the signed outside reservation.
-    const fresh = await post(app, {
+    const fresh = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(fresh.status).toBe(200);
@@ -1659,9 +1361,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyNodeId: clearedId,
     });
@@ -1694,9 +1395,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -1730,52 +1430,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
     }
 
-    // Every table's row count, how many sign-ins are live, the chart, the reservations and the
-    // `nodes` rows.
-    async function venueState() {
-      const tables = await db.execute<{ name: string }>(
-        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,
-      );
-      const counts: Record<string, unknown> = {};
-      for (const { name } of tables.rows) {
-        counts[name] = (
-          await db.execute<{ n: number }>(
-            sql.raw(`select count(*) as n from "${name.replaceAll('"', '""')}"`),
-          )
-        ).rows[0]!.n;
-      }
-      const liveSessions = (
-        await db.execute<{ n: number }>(
-          sql`select count(*) as n from dashboard_sessions where ended_at is null`,
-        )
-      ).rows[0]!.n;
-      return {
-        counts,
-        liveSessions,
-        ...(await reservedAndListed()),
-        nodes: await db.select().from(nodes),
-      };
-    }
-
-    async function expectOnlySignInHistory(before: Awaited<ReturnType<typeof venueState>>) {
-      expect(await venueState()).toEqual({
-        ...before,
-        counts: {
-          ...before.counts,
-          activity_log: Number(before.counts["activity_log"]) + 2,
-        },
-      });
-      const entries = await db.execute<{ kind: string; data: string }>(
-        sql`select kind, data from activity_log order by rowid desc limit 2`,
-      );
-      expect(
-        entries.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
-      ).toEqual([
-        { kind: "dashboard.signed_in", data: { method: "password" } },
-        { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
-      ]);
-    }
-
     describe("this box's recovery key", () => {
       afterEach(async () => {
         await holdRecoveryKey(stateDir);
@@ -1785,11 +1439,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const { designated } = await setupVenue();
         const app = mountApp(designated);
         await replaceBackupSettings(stateDir, null);
-        const before = await venueState();
+        const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1797,7 +1450,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlySignInHistory(before);
+        expect(await reservedAndListed()).toEqual(before);
         expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
       });
 
@@ -1805,11 +1458,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const { designated } = await setupVenue();
         const app = mountApp(designated);
         await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH - 1));
-        const before = await venueState();
+        const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1817,7 +1469,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlySignInHistory(before);
+        expect(await reservedAndListed()).toEqual(before);
       });
 
       it("a key in backup.env lets the join through", async () => {
@@ -1825,9 +1477,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const app = mountApp(designated);
         await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH));
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1841,9 +1492,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       await writePairLink(designated, "streaming");
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1859,9 +1509,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       await writePairLink(designated, "pending");
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1888,9 +1537,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1923,9 +1571,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         );
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1975,9 +1622,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
       let res: Response;
       try {
-        res = await post(app, {
+        res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
       } finally {
@@ -2017,9 +1663,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2035,9 +1680,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
       });
@@ -2056,9 +1700,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       await holdChartWithStandby(designated, listed);
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: `${listed.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
       });
@@ -2093,9 +1736,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2118,9 +1760,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const standbyAt = primaryAt + minutes * 60_000;
         const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
           standbyAt,
         });
@@ -2144,9 +1785,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const primaryAt = Date.now();
       const app = mountApp(designated, undefined, undefined, () => new Date(primaryAt));
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyAt: primaryAt + minutes * 60_000,
       });
@@ -2154,8 +1794,67 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     });
 
+    // The hello checks the clock and the name too; these pass it, so the bundle's own checks answer.
+    async function listedSpare(app: Hono, at: number) {
+      const box = joiningBox("10.30.0.1", {
+        identity: {
+          nodeId: unusedFixtureNodeId(),
+          publicKey: STANDBY_PUB,
+          privateKey: STANDBY_KEYS.privateKey,
+        },
+        contactUrl: "https://cloud.deli.test",
+        storeUrl: "https://cloud.deli.test:7443",
+      });
+      return listedJoin(app, box, at);
+    }
+
+    it("refuses at approve a spare whose latest poll reads a clock too far away, reserving nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const primaryAt = Date.now();
+      const app = mountApp(designated, undefined, undefined, () => new Date(primaryAt));
+      const listed = await listedSpare(app, primaryAt);
+      const standbyAt = primaryAt + 11 * 60_000;
+      expect(await pollJoin(app, listed, standbyAt)).toEqual({ state: "waiting" });
+      const before = await reservedAndListed();
+
+      const answer = await approveJoin(
+        app,
+        listed.requestId,
+        { code: listed.code },
+        { cookie: await signedInCookie(db, adminPersonId) },
+      );
+
+      expect(answer.status).toBe(409);
+      expect((answer.body as { error: { code: string } }).error.code).toBe("mirror.clocks_apart");
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("refuses at approve a spare whose name a box listed after its hello already has, reserving nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const listed = await listedSpare(app, Date.now());
+      const newNodeId = listed.box.hello.newNodeId;
+      await holdChartWithStandby(
+        designated,
+        `${newNodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
+      );
+      const before = await reservedAndListed();
+
+      const answer = await approveJoin(
+        app,
+        listed.requestId,
+        { code: listed.code },
+        { cookie: await signedInCookie(db, adminPersonId) },
+      );
+
+      expect(answer).toEqual({
+        status: 409,
+        body: { error: { code: "mirror.standby_name_taken", params: {} } },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
     it.each([
-      ["missing", undefined],
       ["a string", "1700000000000"],
       ["null", null],
       ["far past a date's range", 1e300],
@@ -2165,9 +1864,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
 
-      const res = await rawPost(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyAt,
       });
@@ -2196,9 +1894,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2229,9 +1926,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2267,9 +1963,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated, (doc) => ({ ...doc, note: "x" }));
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2286,9 +1981,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated, (doc) => ({ ...doc, signature: undefined }));
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2305,9 +1999,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2341,9 +2034,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const chartBefore = await readNodeMembership(db);
       const counterBefore = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2367,9 +2059,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
       pause.beforeChartMint = () => holdMainSignedBody(designated, bodyAt(seedTerm + 1));
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2409,7 +2100,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await writeNodeMembership(db, { ...retirement, endorsements: [endorsement] });
     const standby = validStandby();
 
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+    const res = await approvedJoin(app, {
+      email: ADMIN_EMAIL,
+      ...standby,
+    });
 
     expect(res.status).toBe(200);
     const held = (await readNodeMembership(db))!;
@@ -2473,9 +2167,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const chartBefore = await readNodeMembership(db);
       const counterBefore = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2493,9 +2186,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { ids } = await holdFullChart(designated);
       const removed = ids[0]!;
       const newcomer = validStandby();
-      const refused = await post(app, {
+      const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...newcomer,
       });
       expect(refused.status).toBe(409);
@@ -2506,9 +2198,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       expect(clearance.cleared).toBe(true);
 
-      const joined = await post(app, {
+      const joined = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...newcomer,
       });
       expect(joined.status).toBe(200);
@@ -2517,9 +2208,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(after.body.nodes.map((n) => n.nodeId)).toContain(newcomer.standbyNodeId);
       expect(after.body.revoked).toEqual([removed]);
 
-      const returning = await post(app, {
+      const returning = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: removed,
       });
@@ -2535,9 +2225,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { ids } = await holdFullChart(designated);
       const listed = ids[1]!;
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: listed,
       });
@@ -2559,9 +2248,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         filledTerm = (await holdFullChart(designated)).term;
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2593,9 +2281,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const counterBefore = await allocationSnapshot();
       pause.beforeModuleConfigRead = removeDuringRequest(designated, adminPersonId, standbyNodeId);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId,
       });
@@ -2635,9 +2322,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           }),
         );
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId,
       });
@@ -2645,24 +2331,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(pause.beforeChartMint).toBeUndefined();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-      // The chart refusal does not undo the outside reservation returned during assembly.
-      expect(await allocationSnapshot()).toEqual({
-        ...counterBefore,
-        outsideReservations: [
-          ...counterBefore.outsideReservations,
-          expect.objectContaining({
-            version: 1,
-            evidence: expect.objectContaining({
-              reservation: expect.objectContaining({
-                payload: expect.objectContaining({
-                  targetNodeId: standbyNodeId,
-                  allocationId: "contract-P000042",
-                }),
-              }),
-            }),
-          }),
-        ],
-      });
+      // The chart is written before any module reserves, so its refusal reserves nothing.
+      expect(await allocationSnapshot()).toEqual(counterBefore);
       // The removal's chart is the one held: the request wrote no later term over it.
       const after = (await readNodeMembership(db))!;
       expect(after.body.term).toBe(seedTerm + 1);
@@ -2674,9 +2344,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: 42,
@@ -2684,18 +2353,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
-  });
-
-  it("lets another writer commit while it derives the key", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const { result, order } = await writerBesideRequest(db, () =>
-      post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() }),
-    );
-
-    expect(result.status).toBe(200);
-    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
 
@@ -2727,7 +2384,7 @@ async function allocatedReply(
     ...withoutActivationMark(allocatedStandbyModules(ALL_MODULES, fixture)),
   );
   try {
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       ...body,
       moduleOperation: { binding: held.binding, input: held.input },
     });

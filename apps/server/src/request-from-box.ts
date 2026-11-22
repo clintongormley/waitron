@@ -1,3 +1,4 @@
+import { isIP, SocketAddress } from "node:net";
 import { networkInterfaces } from "node:os";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import type { Context } from "hono";
@@ -27,9 +28,13 @@ export function ownInterfaceAddresses(
   );
 }
 
-/** An IPv4 address mapped into IPv6, or one carrying a `%scope`, written as its plain form. */
-function plainAddress(address: string): string {
-  return address.replace(/%.*$/, "").replace(/^::ffff:/i, "");
+/** One spelling per address: no `%scope`, an IPv4-mapped address as IPv4, IPv6 lower-case and compressed. */
+export function plainAddress(address: string): string {
+  const bare = address.replace(/%.*$/, "");
+  const compressed =
+    isIP(bare) === 6 ? new SocketAddress({ address: bare, family: "ipv6" }).address : bare;
+  const mapped = /^::ffff:(.*)$/i.exec(compressed)?.[1];
+  return mapped !== undefined && isIP(mapped) === 4 ? mapped : compressed;
 }
 
 /** The request's source address in plain form, or `undefined` when it has no connection to read. */

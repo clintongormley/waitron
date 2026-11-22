@@ -5,11 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import indexHtml from "../index.html?raw";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
-import { SetupApp, assembleBody } from "./setup-app.js";
+import { JOIN_HANDLE_KEY, JOIN_PRIMARY_KEY, SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import {
   SetupApi,
-  type AdoptBody,
   type ConfigurationPreview,
   type ProvisionBody,
   type SetupStatus,
@@ -27,6 +26,17 @@ import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { REVIEWED_CREDENTIALS, reviewBackup } from "./widgets/test-helpers.js";
+import {
+  APPROVED,
+  JOIN_HANDLE,
+  MAIN,
+  WAITING,
+  chooseFinish,
+  finishJoining,
+  forgetJoin,
+  joinScreen,
+  joinStubs,
+} from "../test/join-browser.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -34,6 +44,7 @@ beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+  forgetJoin();
 });
 
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
@@ -47,11 +58,7 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       needs: ["venue"],
     } satisfies SetupStatus),
     provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
-    adopt: vi.fn().mockResolvedValue({
-      adopted: true,
-      breakGlassSecret: "bg-default",
-      restarting: true,
-    }),
+    ...joinStubs(),
     restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
     restoreFromBucket: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
     startCloudRecovery: vi.fn(),
@@ -61,21 +68,9 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
     stageConfiguration: vi.fn(),
     runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     resetIncompleteAdopt: vi.fn().mockResolvedValue({ resetStaged: true, restarting: true }),
-    primaryCertificate: vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE),
     ...overrides,
   } as unknown as SetupApi;
 }
-
-const PRIMARY_CERTIFICATE = {
-  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
-  fingerprint256: "3F:A1:9C:0B",
-};
-
-const adoptBody = {
-  primaryUrl: "https://waitron.local",
-  credential: { email: "op1@example.com", password: "correct horse" },
-  confirmedCaPem: PRIMARY_CERTIFICATE.pem,
-};
 
 async function mountSetupApp(api: SetupApi = stubApi()): Promise<SetupApp> {
   const host = document.createElement("div");
@@ -129,12 +124,6 @@ function advance(el: SetupApp): void {
 function provisionRequest(el: SetupApp): void {
   wizard(el).dispatchEvent(
     new CustomEvent("provision-requested", { bubbles: true, composed: true }),
-  );
-}
-
-function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
-  wizard(el).dispatchEvent(
-    new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
   );
 }
 
@@ -359,7 +348,9 @@ async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
   const text = (await screenText(el, "provisioning", "[data-test=error]"))!.replace(/\s+/g, " ");
   expect(text).toContain("partly set up");
   expect(text).toContain("stopped partway");
-  expect(text).toContain("admin email and password you used to connect");
+  expect(text).toContain(
+    "Choosing Reset this server clears what the stopped join left on this server",
+  );
   expect(text).not.toContain("Contact support");
   const host = await screenHost(el, "provisioning");
   expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
@@ -1975,18 +1966,102 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     goto(el, "connect");
     await el.updateComplete;
-    const connect = await screenHost(el, "connect");
-    expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain(
-      "Connect to the primary",
-    );
+    const connect = await joinScreen(el);
+    expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain("Join the main box");
   });
 
-  it("adopts on adopt-requested and, on the 200, advances to done — forwarding the body verbatim", async () => {
-    const adopt = vi.fn().mockResolvedValue({ adopted: true, restarting: true });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+  it("keeps Join's handle and main box in this tab's session storage, and forgets both on Start again", async () => {
+    const api = stubApi();
+    const el = await mountSetupApp(api);
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    connect
+      .shadowRoot!.querySelector("[data-test=primaryUrl]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: MAIN }, bubbles: true, composed: true }),
+      );
+    await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await vi.waitFor(() => expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBe(JOIN_HANDLE));
+    expect(api.startJoin).toHaveBeenCalledExactlyOnceWith(MAIN, undefined);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
+    vi.mocked(api.startJoin).mockReturnValue(new Promise(() => {}));
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=start-again]")!.click();
+    await vi.waitFor(() => expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull());
+    expect(api.cancelJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+  });
+
+  it("sends the stored handle on the join's reads and on Finish joining, and keeps the main box a read names", async () => {
+    const api = stubApi();
+    vi.mocked(api.joinState)
+      .mockResolvedValueOnce({ ...WAITING, primaryUrl: "https://main.example:8443" })
+      .mockResolvedValue(APPROVED);
+    sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
+    const el = await mountSetupApp(api);
+    goto(el, "connect");
+    await el.updateComplete;
+    await chooseFinish(el);
+    expect(api.joinState).toHaveBeenCalledWith(JOIN_HANDLE);
+    expect(vi.mocked(api.joinState).mock.calls.every(([handle]) => handle === JOIN_HANDLE)).toBe(
+      true,
+    );
+    expect(api.finishJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
+    const done = await screenHost(el, "done");
+    await expect
+      .poll(
+        () =>
+          done.shadowRoot!.querySelector<HTMLAnchorElement>(
+            "[data-test=task-label] [data-test=servers-link]",
+          )?.href,
+      )
+      .toBe("https://main.example:8443/servers");
+  });
+
+  it("forgets the tab's join once Finish joining succeeds, keeping the done screen's Servers link", async () => {
+    const el = await mountSetupApp(stubApi());
+    await finishJoining(el, "https://main.example:8443");
     await flush(el);
-    expect(adopt).toHaveBeenCalledWith(adoptBody);
+    const done = await screenHost(el, "done");
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+    await expect
+      .poll(
+        () =>
+          done.shadowRoot!.querySelector<HTMLAnchorElement>(
+            "[data-test=task-label] [data-test=servers-link]",
+          )?.href,
+      )
+      .toBe("https://main.example:8443/servers");
+  });
+
+  it("keeps the tab's join when Finish joining is refused, so it can be tried again", async () => {
+    const finishJoin = vi
+      .fn()
+      .mockRejectedValue({ code: "mirror.vault_not_empty", params: {}, status: 409 });
+    const el = await mountSetupApp(stubApi({ finishJoin }));
+    await finishJoining(el);
+    await joinScreen(el);
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBe(JOIN_HANDLE);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
+  });
+
+  it("posts nothing when the main box approves the join until Finish joining is chosen", async () => {
+    const api = stubApi();
+    sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
+    const el = await mountSetupApp(api);
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    await vi.waitFor(() =>
+      expect(connect.shadowRoot!.querySelector("[data-test=finish]")).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.finishJoin).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+    await chooseFinish(el);
+    expect(api.finishJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
@@ -1997,7 +2072,7 @@ describe("setup-app", () => {
     "hands the done screen the Servers page of the typed address %s",
     async (primaryUrl, servers) => {
       const el = await mountSetupApp(stubApi());
-      adoptRequest(el, { ...adoptBody, primaryUrl });
+      await finishJoining(el, primaryUrl);
       await flush(el);
       const done = (await screenHost(el, "done")) as HTMLElement & {
         updateComplete: Promise<unknown>;
@@ -2019,8 +2094,8 @@ describe("setup-app", () => {
       breakGlassSecret: secret,
       restarting: true,
     });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe(secret);
@@ -2034,7 +2109,7 @@ describe("setup-app", () => {
   it("passes the adopted recovery key's name to its handover screen", async () => {
     const el = await mountSetupApp(
       stubApi({
-        adopt: vi.fn().mockResolvedValue({
+        finishJoin: vi.fn().mockResolvedValue({
           adopted: true,
           restarting: true,
           breakGlassSecret: "key-on-paper",
@@ -2042,7 +2117,7 @@ describe("setup-app", () => {
         }),
       }),
     );
-    adoptRequest(el);
+    await finishJoining(el);
     await flush(el);
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
       "Server key 15 Oct 2026 · K7QF",
@@ -2058,8 +2133,8 @@ describe("setup-app", () => {
           resolveAdopt = resolve;
         }),
     );
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull();
     resolveAdopt({ adopted: true, restarting: true });
@@ -2068,66 +2143,19 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.bundle_fetch_failed", 502, "couldn't supply a mirror setup"],
-    ["setup.request_invalid", 400, "rejected the details"],
+    ["mirror.bundle_fetch_failed", 502, "copy from the main box that checks out"],
     ["setup.not_ready", 503, "isn't ready"],
-    ["server.internal", 500, "Couldn't connect"],
-    ["some.unexpected_code", 400, "Couldn't connect"],
+    ["server.internal", 500, "could not finish joining"],
+    ["some.unexpected_code", 400, "could not finish joining"],
   ])(
-    "routes the adopt failure %s (HTTP %i) back to the connect form with a message above Connect",
+    "routes the Finish joining failure %s (HTTP %i) back to the join screen with its message",
     async (code, status, fragment) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      adoptRequest(el);
+      const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+      await finishJoining(el);
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-      expect(await bottomOf(await screenHost(el, "connect"))).toContain(fragment);
-    },
-  );
-
-  it.each([
-    [
-      "en-GB",
-      false,
-      "The primary couldn't supply a mirror setup. Press Connect to try again, or choose Back to restore a backup instead.",
-    ],
-    [
-      "es-ES",
-      false,
-      "El servidor principal no ha podido proporcionar la configuración de una réplica. Pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
-    ],
-    [
-      "en-GB",
-      true,
-      "The primary couldn't supply a mirror setup. Enter a new authenticator code if you use one, and press Connect to try again, or choose Back to restore a backup instead.",
-    ],
-    [
-      "es-ES",
-      true,
-      "El servidor principal no ha podido proporcionar la configuración de una réplica. Introduce un nuevo código del autenticador si usas uno y pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
-    ],
-  ] as const)(
-    "says the primary could not supply a mirror setup, offering Connect or Back to restore and naming the code only beside its field (%s, code sent: %s)",
-    async (locale, codeSent, sentence) => {
-      try {
-        const adopt = vi
-          .fn()
-          .mockRejectedValue({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 });
-        const el = await mountSetupApp(stubApi({ adopt }));
-        setLocale(locale);
-        adoptRequest(
-          el,
-          codeSent
-            ? { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } }
-            : adoptBody,
-        );
-        await flush(el);
-        const connect = await screenHost(el, "connect");
-        expect(await bottomOf(connect)).toBe(sentence);
-        expect(connect.shadowRoot!.querySelector("[data-test=totp]") !== null).toBe(codeSent);
-      } finally {
-        setLocale("en-GB");
-      }
+      expect(await bottomOf(await joinScreen(el))).toContain(fragment);
     },
   );
 
@@ -2147,11 +2175,11 @@ describe("setup-app", () => {
         const adopt = vi
           .fn()
           .mockRejectedValue({ code: "mirror.vault_not_empty", params: {}, status: 409 });
-        const el = await mountSetupApp(stubApi({ adopt }));
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
         setLocale(locale);
-        adoptRequest(el);
+        await finishJoining(el);
         await flush(el);
-        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+        expect(await bottomOf(await joinScreen(el))).toBe(sentence);
       } finally {
         setLocale("en-GB");
       }
@@ -2174,11 +2202,11 @@ describe("setup-app", () => {
         const adopt = vi
           .fn()
           .mockRejectedValue({ code: "mirror.vault_key_differs", params: {}, status: 409 });
-        const el = await mountSetupApp(stubApi({ adopt }));
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
         setLocale(locale);
-        adoptRequest(el);
+        await finishJoining(el);
         await flush(el);
-        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+        expect(await bottomOf(await joinScreen(el))).toBe(sentence);
       } finally {
         setLocale("en-GB");
       }
@@ -2239,374 +2267,52 @@ describe("setup-app", () => {
     async (code, params, locale, sentence) => {
       try {
         const adopt = vi.fn().mockRejectedValue({ code, params, status: 409 });
-        const el = await mountSetupApp(stubApi({ adopt }));
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
         setLocale(locale);
-        adoptRequest(el);
+        await finishJoining(el);
         await flush(el);
-        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+        expect(await bottomOf(await joinScreen(el))).toBe(sentence);
       } finally {
         setLocale("en-GB");
       }
     },
   );
 
-  describe("a join the primary server refuses", () => {
+  describe("a refusal of Finish joining", () => {
     const refusedJoin = async (
       code: string,
       locale: string,
       params: Record<string, unknown> = {},
     ) => {
-      const adopt = vi.fn().mockRejectedValue({ code, params, status: 409 });
-      const el = await mountSetupApp(stubApi({ adopt }));
+      const finishJoin = vi.fn().mockRejectedValue({ code, params, status: 409 });
+      const el = await mountSetupApp(stubApi({ finishJoin }));
       setLocale(locale);
-      adoptRequest(el);
-      await flush(el);
-      const connect = await screenHost(el, "connect");
-      const control = (name: string) =>
-        connect.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-          `[data-test=${name}]`,
-        );
-      return { el, adopt, connect, control };
+      await finishJoining(el);
+      const connect = await joinScreen(el);
+      return { el, finishJoin, connect };
     };
-    // The typed login is a refused submission, so Back first asks whether to discard it.
-    const backLeadsToRole = async (
-      el: SetupApp,
-      control: (name: string) => (HTMLElement & { disabled: boolean }) | null,
-    ) => {
-      control("back")!.click();
-      await el.updateComplete;
-      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "wt-unsaved-changes",
-      )!;
-      await expect.poll(() => warning.open).toBe(true);
-      warning.dispatchEvent(
-        new CustomEvent("wt-unsaved-choice", {
-          detail: { decision: "discard" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await expect
-        .poll(() => el.shadowRoot!.querySelector("[data-test=screen-role]"))
-        .not.toBeNull();
-    };
-
-    it.each([
-      [
-        "en-GB",
-        "The primary server copies the restaurant's data to its own storage bucket, and it can copy to only one place at a time. This version of Waitron cannot yet pass that copy on from this server to the bucket, so joining now would end the restaurant's offsite copy. Nothing was changed on either server. To join anyway, turn off the bucket copy in the primary's dashboard under Backups — the restaurant then has no offsite copy — enter a new authenticator code if you use one, and press Connect again. To keep the bucket copy, press Back: nothing changes, and this server can join later.",
-      ],
-      [
-        "es-ES",
-        "El servidor principal copia los datos del restaurante en su propio bucket de almacenamiento, y solo puede copiar en un sitio a la vez. Esta versión de Waitron aún no puede pasar esa copia desde este servidor al bucket, así que unirlo ahora acabaría con la copia externa del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para unirlo de todos modos, desactiva la copia al bucket en el panel del servidor principal, en Copias de seguridad —el restaurante se queda entonces sin copia externa—, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. Para conservar la copia al bucket, pulsa Volver: no cambia nada, y este servidor puede unirse más adelante.",
-      ],
-    ] as const)(
-      "shows the bucket refusal's words with both choices (%s)",
-      async (locale, sentence) => {
-        try {
-          const { el, connect, control } = await refusedJoin("mirror.bucket_stream_active", locale);
-          expect(await bottomOf(connect)).toBe(sentence);
-          expect(control("connect")!.disabled).toBe(false);
-          await backLeadsToRole(el, control);
-        } finally {
-          setLocale("en-GB");
-        }
-      },
-    );
-
-    it.each([
-      [
-        "en-GB",
-        "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Enter a new authenticator code if you use one, and press Connect again: it picks a new name.",
-      ],
-      [
-        "es-ES",
-        "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar: elegirá un nombre nuevo.",
-      ],
-    ] as const)(
-      "shows the name refusal and leaves Connect working (%s)",
-      async (locale, sentence) => {
-        try {
-          const { el, adopt, connect, control } = await refusedJoin(
-            "mirror.standby_name_taken",
-            locale,
-          );
-          expect(await bottomOf(connect)).toBe(sentence);
-          adopt.mockResolvedValue({ adopted: true, restarting: true });
-          control("connect")!.click();
-          await flush(el);
-          expect(adopt).toHaveBeenCalledTimes(2);
-        } finally {
-          setLocale("en-GB");
-        }
-      },
-    );
-
-    it.each([
-      [
-        "en-GB",
-        "The primary server has no backup encryption key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
-      ],
-      [
-        "es-ES",
-        "El servidor principal aún no tiene clave de cifrado de copias. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
-      ],
-    ] as const)(
-      "shows the no-key refusal and leaves Connect working (%s)",
-      async (locale, sentence) => {
-        try {
-          const { el, adopt, connect, control } = await refusedJoin(
-            "backup.recovery_key_missing",
-            locale,
-          );
-          expect(await bottomOf(connect)).toBe(sentence);
-          expect(control("connect")!.disabled).toBe(false);
-          adopt.mockResolvedValue({ adopted: true, restarting: true });
-          control("connect")!.click();
-          await flush(el);
-          expect(adopt).toHaveBeenCalledTimes(2);
-        } finally {
-          setLocale("en-GB");
-        }
-      },
-    );
-
-    it.each([
-      ["en-GB", { retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
-      ["en-GB", { retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
-      ["en-GB", {}, "Too many attempts. Wait a few minutes, then try again."],
-      [
-        "es-ES",
-        { retryAfterSeconds: 30 },
-        "Demasiados intentos. Espera 30 segundos y vuelve a intentarlo.",
-      ],
-    ] as const)(
-      "asks the person to wait when the primary refuses too many sign-in attempts (%s, %o)",
-      async (locale, params, sentence) => {
-        try {
-          const { connect, control } = await refusedJoin("password.throttled", locale, params);
-          expect(await bottomOf(connect)).toBe(sentence);
-          expect(control("connect")!.disabled).toBe(false);
-        } finally {
-          setLocale("en-GB");
-        }
-      },
-    );
 
     it("shows the generic join failure for a refused module operation, whichever module it names", async () => {
       const { connect } = await refusedJoin("module.operation_invalid", "en-GB", {
         module: "fiscal-verifactu",
       });
       expect(await bottomOf(connect)).toBe(
-        "Couldn't connect to the primary. Check the address and login, then try again.",
+        "This server could not finish joining just now. Check that it is switched on and connected, then try again.",
       );
     });
 
-    it.each([
-      [
-        "en-GB",
-        "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. Nothing was changed on either server. To use this server instead, open Servers on the primary server, choose Remove on the old standby's row and confirm it is switched off and that nobody is restoring the restaurant from a backup or switching it to another server, then enter a new authenticator code if you use one, and press Connect again. Or choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant.",
-      ],
-      [
-        "es-ES",
-        "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para usar este servidor en su lugar, abre Servidores en el servidor principal, elige Retirar en la fila del servidor en espera anterior y confirma que está apagado y que nadie está recuperando el restaurante desde una copia de seguridad ni pasándolo a otro servidor; después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. O elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo.",
-      ],
-    ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
+    it("rewords the refusal when the language changes after it", async () => {
       try {
-        const { el, connect, control } = await refusedJoin("mirror.spare_already_joined", locale);
-        expect(await bottomOf(connect)).toBe(sentence);
-        await backLeadsToRole(el, control);
-      } finally {
-        setLocale("en-GB");
-      }
-    });
-
-    const primaryAt = "2026-11-10T09:30:00.000Z";
-    const standbyAt = "2026-11-10T08:55:00.000Z";
-    const shown = (iso: string, locale: string) =>
-      new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
-    const CLOCKS = [
-      [
-        "en-GB",
-        (standby: string, primary: string) =>
-          `This server's clock and the primary server's are 10 minutes or more apart: this server reads ${standby}, the primary reads ${primary}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.`,
-      ],
-      [
-        "es-ES",
-        (standby: string, primary: string) =>
-          `El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca ${standby} y el principal marca ${primary}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.`,
-      ],
-    ] as const;
-    it.each(CLOCKS)("shows the clocks refusal with both times (%s)", async (locale, sentence) => {
-      try {
-        const { connect, control } = await refusedJoin("mirror.clocks_apart", locale, {
-          primaryAt,
-          standbyAt,
-        });
-        expect(await bottomOf(connect)).toBe(
-          sentence(shown(standbyAt, locale), shown(primaryAt, locale)),
-        );
-        expect(await bottomOf(connect)).not.toContain(primaryAt);
-        expect(control("connect")!.disabled).toBe(false);
-      } finally {
-        setLocale("en-GB");
-      }
-    });
-
-    it("words the clocks refusal's times in the browser's language", () => {
-      expect(shown(primaryAt, "es-ES")).not.toBe(shown(primaryAt, "en-GB"));
-    });
-
-    it("rewords the clocks refusal's times when the language changes after it", async () => {
-      try {
-        const { el, connect } = await refusedJoin("mirror.clocks_apart", "en-GB", {
-          primaryAt,
-          standbyAt,
-        });
+        const { el, connect } = await refusedJoin("mirror.vault_not_empty", "en-GB");
         setLocale("es-ES");
         await flush(el);
         await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-        expect(await bottomOf(connect)).toBe(
-          CLOCKS[1][1](shown(standbyAt, "es-ES"), shown(primaryAt, "es-ES")),
-        );
+        expect(await bottomOf(connect)).toBe(shellEs["shell.adopt.vault_not_empty"]);
       } finally {
         setLocale("en-GB");
       }
-    });
-
-    it("shows a clocks refusal's time as sent when it is not a time", async () => {
-      const { connect } = await refusedJoin("mirror.clocks_apart", "en-GB", {
-        primaryAt,
-        standbyAt: "not a time",
-      });
-      expect(await bottomOf(connect)).toBe(CLOCKS[0][1]("not a time", shown(primaryAt, "en-GB")));
-    });
-
-    it("shows the generic join failure for a clocks refusal missing a time", async () => {
-      const { connect } = await refusedJoin("mirror.clocks_apart", "en-GB", { primaryAt });
-      expect(await bottomOf(connect)).toBe(
-        "Couldn't connect to the primary. Check the address and login, then try again.",
-      );
     });
   });
-
-  it.each([
-    [
-      "mirror.primary_url_invalid",
-      {},
-      "primaryUrl",
-      "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
-    ],
-    [
-      "setup.request_invalid",
-      { field: "primaryUrl" },
-      "primaryUrl",
-      "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
-    ],
-    ["setup.request_invalid", { field: "credential.email" }, "email", "Check the admin email."],
-    [
-      "setup.request_invalid",
-      { field: "credential.password" },
-      "password",
-      "Check the admin password.",
-    ],
-    [
-      "setup.request_invalid",
-      { field: "credential.totp" },
-      "totp",
-      "Check the authenticator code.",
-    ],
-  ])(
-    "sends the adopt refusal %s %o back to connect under its field, leaving its button working",
-    async (code, params, field, message) => {
-      const adopt = vi.fn().mockRejectedValue({ code, params, status: 400 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      // A code is sent only once the main server asked for one.
-      adoptRequest(
-        el,
-        field === "totp"
-          ? { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } }
-          : adoptBody,
-      );
-      await flush(el);
-      const connect = await screenHost(el, "connect");
-      const input = connect.shadowRoot!.querySelector(`[data-test=${field}]`)!;
-      expect(input.getAttribute("error")).toBe(message);
-      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
-      const button = connect.shadowRoot!.querySelector(
-        field === "primaryUrl" ? "[data-test=continue]" : "[data-test=connect]",
-      ) as HTMLElement & { disabled: boolean };
-      expect(button.disabled).toBe(false);
-    },
-  );
-
-  const UNCONFIRMED = [
-    [
-      "en-GB",
-      "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
-    ],
-    [
-      "es-ES",
-      "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
-    ],
-  ] as const;
-
-  it.each(UNCONFIRMED)(
-    "says an unconfirmed certificate sent nothing and reopens the address step (%s)",
-    async (locale, sentence) => {
-      try {
-        const adopt = vi
-          .fn()
-          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
-        const el = await mountSetupApp(stubApi({ adopt }));
-        setLocale(locale);
-        adoptRequest(el, { primaryUrl: adoptBody.primaryUrl, credential: adoptBody.credential });
-        await flush(el);
-        const connect = await screenHost(el, "connect");
-        expect(await bottomOf(connect)).toBe(sentence);
-        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
-        expect(connect.shadowRoot!.querySelector("[data-test=password]")).toBeNull();
-      } finally {
-        setLocale("en-GB");
-      }
-    },
-  );
-
-  it.each(UNCONFIRMED)(
-    "after a compared certificate is refused as unconfirmed, names only what the login step offers (%s)",
-    async (locale, sentence) => {
-      try {
-        const adopt = vi
-          .fn()
-          .mockRejectedValue({ code: "mirror.primary_unconfirmed", params: {}, status: 409 });
-        const el = await mountSetupApp(stubApi({ adopt }));
-        setLocale(locale);
-        adoptRequest(el, adoptBody);
-        await flush(el);
-        const connect = await screenHost(el, "connect");
-        expect(await bottomOf(connect)).toBe(sentence);
-        expect(connect.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
-        expect(connect.shadowRoot!.querySelector("[data-test=check-address]")).not.toBeNull();
-      } finally {
-        setLocale("en-GB");
-      }
-    },
-  );
-
-  it("keeps an adopt refusal of a field the connect form does not show above Connect", async () => {
-    const adopt = vi.fn().mockRejectedValue({
-      code: "setup.request_invalid",
-      params: { field: "credential" },
-      status: 400,
-    });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
-    await flush(el);
-    const connect = await screenHost(el, "connect");
-    expect(await bottomOf(connect)).toContain("rejected the details");
-    expect(connect.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
-  });
-
   it.each([
     ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
     [
@@ -2621,11 +2327,11 @@ describe("setup-app", () => {
       window.addEventListener("unhandledrejection", onReject);
       try {
         const adopt = vi.fn().mockRejectedValue(rejection);
-        const el = await mountSetupApp(stubApi({ adopt }));
-        adoptRequest(el);
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+        await finishJoining(el);
         await flush(el);
         expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-        expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
+        expect(await bottomOf(await joinScreen(el))).toContain("could not finish joining");
       } finally {
         window.removeEventListener("unhandledrejection", onReject);
       }
@@ -2635,8 +2341,8 @@ describe("setup-app", () => {
 
   it("maps setup.already_provisioning on adopt to an in-progress message with a reload (no retry)", async () => {
     const adopt = vi.fn().mockRejectedValue({ code: "setup.already_provisioning", params: {} });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
       "already in progress",
@@ -2648,8 +2354,8 @@ describe("setup-app", () => {
 
   it("maps the fiscal 409 setup.already_provisioned on adopt to 'already set up' with a bare reload and NO retry", async () => {
     const adopt = vi.fn().mockRejectedValue({ code: "setup.already_provisioned", params: {} });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
     const host = await screenHost(el, "provisioning");
@@ -2661,8 +2367,8 @@ describe("setup-app", () => {
 
   it("maps setup.adopt_incomplete on adopt to a stopped-partway message that offers the reset, with NO retry", async () => {
     const adopt = vi.fn().mockRejectedValue({ code: "setup.adopt_incomplete", params: {} });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     await expectAdoptIncompleteWithReset(el);
   });
@@ -2671,8 +2377,8 @@ describe("setup-app", () => {
     const adopt = vi
       .fn()
       .mockRejectedValue({ code: "setup.operation_conflict", params: {}, status: 409 });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
     expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
@@ -2684,605 +2390,19 @@ describe("setup-app", () => {
     );
   });
 
-  it("re-adopts when the connect form re-emits adopt-requested after a routed-back failure", async () => {
+  it("posts Finish joining again when it is chosen again after a routed-back failure", async () => {
     const adopt = vi
       .fn()
       .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
       .mockResolvedValue({ adopted: true, restarting: true });
-    const el = await mountSetupApp(stubApi({ adopt }));
-    adoptRequest(el);
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    await finishJoining(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-    adoptRequest(el);
+    await chooseFinish(el);
     await flush(el);
     expect(adopt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-  });
-
-  describe("what the operator typed on the connect form", () => {
-    const TYPED = {
-      primaryUrl: "https://primary.example",
-      email: "op7@example.com",
-      password: "  kept secret ",
-      totp: "123456",
-    };
-
-    const input = (connect: HTMLElement, field: string) =>
-      connect
-        .shadowRoot!.querySelector(`[data-test=${field}]`)!
-        .shadowRoot!.querySelector("input")!;
-
-    const TOTP_REQUIRED = { code: "totp.required", params: {}, status: 401 };
-
-    /** Types the address, confirms the fingerprint, types the email and password and presses Connect. */
-    async function typeLoginAndConnect(el: SetupApp): Promise<void> {
-      goto(el, "connect");
-      await el.updateComplete;
-      const connect = await screenHost(el, "connect");
-      await userEvent.fill(input(connect, "primaryUrl"), TYPED.primaryUrl);
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
-      await vi.waitFor(() =>
-        expect(connect.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
-      );
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await userEvent.fill(input(connect, "email"), TYPED.email);
-      await userEvent.fill(input(connect, "password"), TYPED.password);
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-    }
-
-    /**
-     * The whole join of an account with an authenticator: the main server answers the first Connect
-     * with `totp.required`, the code is typed, and Connect is pressed again. Only that second press
-     * reaches the test's own `adopt`.
-     */
-    async function typeAndConnect(el: SetupApp): Promise<void> {
-      const api = (el as unknown as { api: SetupApi }).api;
-      const later = api.adopt;
-      api.adopt = vi
-        .fn()
-        .mockRejectedValueOnce(TOTP_REQUIRED)
-        .mockImplementation((body: AdoptBody) => later.call(api, body));
-      await typeLoginAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      await vi.waitFor(() =>
-        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
-      );
-      await userEvent.fill(input(connect, "totp"), TYPED.totp);
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-    }
-
-    it("asks for the authenticator code only when the main server answers totp.required, keeping what was typed", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValueOnce(TOTP_REQUIRED)
-        .mockResolvedValue({ adopted: true, restarting: true });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      goto(el, "connect");
-      await el.updateComplete;
-      const first = await screenHost(el, "connect");
-      await userEvent.fill(input(first, "primaryUrl"), TYPED.primaryUrl);
-      first.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
-      await vi.waitFor(() =>
-        expect(first.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
-      );
-      first.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
-      await (first as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(first.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      await userEvent.fill(input(first, "email"), TYPED.email);
-      await userEvent.fill(input(first, "password"), TYPED.password);
-      first.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenCalledExactlyOnceWith({
-        ...sentBody,
-        credential: { email: TYPED.email, password: TYPED.password },
-      });
-
-      const connect = await screenHost(el, "connect");
-      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
-      expect(totp.hasAttribute("required")).toBe(true);
-      expect(
-        connect.shadowRoot!.querySelector("[data-test=totp-notice]")!.textContent!.trim(),
-      ).toBe("This account uses an authenticator app. Enter its current code and choose Connect.");
-      for (const field of ["primaryUrl", "email", "password"] as const) {
-        expect(input(connect, field).value).toBe(TYPED[field]);
-      }
-      for (const field of ["primaryUrl", "email", "password", "totp"]) {
-        expect(
-          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
-        ).toBe("");
-      }
-      expect(await bottomOf(connect)).toBe("");
-
-      await userEvent.fill(input(connect, "totp"), TYPED.totp);
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenCalledTimes(2);
-      expect(adopt).toHaveBeenLastCalledWith(sentBody);
-      expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-    });
-
-    it("does not draw the code field after an ordinary refusal of the login", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeLoginAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toBe(
-        "The login failed. Check the admin email and password, then try again.",
-      );
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
-    });
-
-    it("keeps a login refusal dismissed by Check address gone when the language changes", async () => {
-      const before = currentLocale();
-      try {
-        setLocale("en-GB");
-        const adopt = vi
-          .fn()
-          .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-        const el = await mountSetupApp(stubApi({ adopt }));
-        adoptRequest(el);
-        await flush(el);
-        const connect = await screenHost(el, "connect");
-        expect(await bottomOf(connect)).toBe(
-          "The login failed. Check the admin email and password, then try again.",
-        );
-        connect.shadowRoot!.querySelector<HTMLElement>("[data-test=check-address]")!.click();
-        await flush(el);
-        expect(await bottomOf(connect)).toBe("");
-        setLocale("es-ES");
-        await flush(el);
-        await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-        expect(await bottomOf(connect)).toBe("");
-      } finally {
-        setLocale(before);
-      }
-    });
-
-    it("draws the code field, empty, when the refused request carried a code", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      adoptRequest(el, { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } });
-      await flush(el);
-      const connect = await screenHost(el, "connect");
-      expect(input(connect, "email").value).toBe(adoptBody.credential.email);
-      expect(input(connect, "totp").value).toBe("");
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")!.hasAttribute("required")).toBe(
-        true,
-      );
-    });
-
-    it("drops the code request once the admin email changes, sending email and password alone", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValueOnce(TOTP_REQUIRED)
-        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeLoginAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      await vi.waitFor(() =>
-        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
-      );
-      await userEvent.fill(input(connect, "totp"), "123456");
-      await userEvent.fill(input(connect, "email"), "other@example.com");
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
-
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenCalledTimes(2);
-      expect(adopt).toHaveBeenLastCalledWith({
-        ...sentBody,
-        credential: { email: "other@example.com", password: TYPED.password },
-      });
-      const refused = await screenHost(el, "connect");
-      expect(await bottomOf(refused)).toBe(
-        "The login failed. Check the admin email and password, then try again.",
-      );
-      expect(refused.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-    });
-
-    it("focuses the code field when the main server asks again for another email", async () => {
-      const adopt = vi.fn().mockRejectedValue(TOTP_REQUIRED);
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeLoginAndConnect(el);
-      const first = await screenHost(el, "connect");
-      await vi.waitFor(() =>
-        expect(first.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
-      );
-      await userEvent.fill(input(first, "email"), "other@example.com");
-      first.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenCalledTimes(2);
-
-      const connect = await screenHost(el, "connect");
-      expect(connect).not.toBe(first);
-      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
-      expect(input(connect, "email").value).toBe("other@example.com");
-    });
-
-    it("focuses the code field when the main server asks again after the person left and came back", async () => {
-      const adopt = vi.fn().mockRejectedValue(TOTP_REQUIRED);
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeLoginAndConnect(el);
-      const first = await screenHost(el, "connect");
-      await vi.waitFor(() =>
-        expect(first.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
-      );
-      goto(el, "role");
-      await el.updateComplete;
-      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "wt-unsaved-changes",
-      )!;
-      await expect.poll(() => warning.open).toBe(true);
-      warning.dispatchEvent(
-        new CustomEvent("wt-unsaved-choice", {
-          detail: { decision: "discard" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await expect.poll(() => readState(el, ["screen"]).screen).toBe("role");
-
-      await typeLoginAndConnect(el);
-      expect(adopt).toHaveBeenCalledTimes(2);
-      const connect = await screenHost(el, "connect");
-      expect(connect).not.toBe(first);
-      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
-    });
-
-    it("drops the code request once the person changes the address, before the new main server answers", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValueOnce(TOTP_REQUIRED)
-        .mockResolvedValue({ adopted: true, restarting: true });
-      const primaryCertificate = vi
-        .fn()
-        .mockResolvedValueOnce(PRIMARY_CERTIFICATE)
-        .mockResolvedValueOnce(OTHER_CERTIFICATE);
-      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
-      await typeLoginAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      await vi.waitFor(() =>
-        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
-      );
-      await userEvent.fill(input(connect, "totp"), "123456");
-
-      button(connect, "check-address")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
-      button(connect, "continue")!.click();
-      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
-      button(connect, "matches")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "email").value).toBe(TYPED.email);
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
-
-      button(connect, "connect")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenLastCalledWith({
-        primaryUrl: "https://main.example",
-        credential: { email: TYPED.email, password: TYPED.password },
-        confirmedCaPem: OTHER_CERTIFICATE.pem,
-      });
-    });
-
-    const sentBody = {
-      primaryUrl: "https://primary.example",
-      credential: { email: "op7@example.com", password: "  kept secret ", totp: "123456" },
-      confirmedCaPem: PRIMARY_CERTIFICATE.pem,
-    };
-
-    it.each([
-      [
-        "names a field",
-        { code: "setup.request_invalid", params: { field: "credential.password" } },
-      ],
-      ["names no field", { code: "mirror.bundle_fetch_failed", params: {} }],
-    ])(
-      "is still in every field but the one-time code after a refusal that %s, and Connect sends it with a new code",
-      async (_label, refusal) => {
-        const adopt = vi
-          .fn()
-          .mockRejectedValueOnce({ ...refusal, status: 400 })
-          .mockResolvedValue({ adopted: true, restarting: true });
-        const el = await mountSetupApp(stubApi({ adopt }));
-        await typeAndConnect(el);
-        expect(adopt).toHaveBeenCalledWith(sentBody);
-
-        const connect = await screenHost(el, "connect");
-        for (const field of ["primaryUrl", "email", "password"] as const) {
-          expect(input(connect, field).value).toBe(TYPED[field]);
-        }
-        expect(input(connect, "totp").value).toBe("");
-        const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
-          disabled: boolean;
-        };
-        expect(button.disabled).toBe(false);
-
-        await userEvent.fill(input(connect, "totp"), "654321");
-        button.click();
-        await flush(el);
-        expect(adopt).toHaveBeenCalledTimes(2);
-        expect(adopt).toHaveBeenLastCalledWith({
-          ...sentBody,
-          credential: { ...sentBody.credential, totp: "654321" },
-        });
-        expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-      },
-    );
-
-    it("shows a refusal naming a field under that field, with the typed password kept", async () => {
-      const adopt = vi.fn().mockRejectedValue({
-        code: "setup.request_invalid",
-        params: { field: "credential.password" },
-        status: 400,
-      });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(connect.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
-        "Check the admin password.",
-      );
-      expect(input(connect, "password").value).toBe(TYPED.password);
-    });
-
-    const OTHER_CERTIFICATE = {
-      pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-B\n-----END CERTIFICATE-----\n",
-      fingerprint256: "B0:B1:B2:B3",
-    };
-
-    const button = (connect: HTMLElement, name: string) =>
-      connect.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
-
-    it("pairs an address edited while its certificate is read only with its own certificate", async () => {
-      const answers: Array<(value: unknown) => void> = [];
-      const primaryCertificate = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
-      const adopt = vi.fn().mockResolvedValue({ adopted: true, restarting: true });
-      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
-      goto(el, "connect");
-      await el.updateComplete;
-      const connect = await screenHost(el, "connect");
-      await userEvent.fill(input(connect, "primaryUrl"), "https://a.example");
-      button(connect, "continue")!.click();
-      await userEvent.fill(input(connect, "primaryUrl"), "https://b.example");
-      answers[0]!(PRIMARY_CERTIFICATE);
-      await flush(el);
-      expect(button(connect, "matches")).toBeNull();
-      expect(input(connect, "primaryUrl").value).toBe("https://b.example");
-
-      button(connect, "continue")!.click();
-      expect(primaryCertificate).toHaveBeenLastCalledWith("https://b.example");
-      answers[1]!(OTHER_CERTIFICATE);
-      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
-      expect(
-        connect.shadowRoot!.querySelector("[data-test=fingerprint]")!.textContent!.trim(),
-      ).toBe(OTHER_CERTIFICATE.fingerprint256);
-      button(connect, "matches")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await userEvent.fill(input(connect, "email"), "op1@example.com");
-      await userEvent.fill(input(connect, "password"), "pw");
-      button(connect, "connect")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenCalledExactlyOnceWith({
-        primaryUrl: "https://b.example",
-        credential: { email: "op1@example.com", password: "pw" },
-        confirmedCaPem: OTHER_CERTIFICATE.pem,
-      });
-    });
-
-    it("after a join refused at the main box's certificate, lets the person correct the address and compare again", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
-        .mockResolvedValue({ adopted: true, restarting: true });
-      const primaryCertificate = vi
-        .fn()
-        .mockResolvedValueOnce(PRIMARY_CERTIFICATE)
-        .mockResolvedValueOnce(OTHER_CERTIFICATE);
-      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toContain("couldn't supply a mirror setup");
-      expect(button(connect, "check-address")!.textContent!.trim()).toBe("Change the address");
-
-      button(connect, "check-address")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "primaryUrl").readOnly).toBe(false);
-      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
-      button(connect, "continue")!.click();
-      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
-      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
-      button(connect, "matches")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "email").value).toBe(TYPED.email);
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      button(connect, "connect")!.click();
-      await flush(el);
-      expect(adopt).toHaveBeenLastCalledWith({
-        primaryUrl: "https://main.example",
-        credential: { email: TYPED.email, password: TYPED.password },
-        confirmedCaPem: OTHER_CERTIFICATE.pem,
-      });
-    });
-
-    it("after a join refused at the login, drops the login's message once the person goes back to the address", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toContain("The login failed.");
-      button(connect, "check-address")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "primaryUrl").readOnly).toBe(false);
-      expect(await bottomOf(connect)).toBe("");
-    });
-
-    it("after a join refused for too many attempts, drops the wait message once the person goes back to the address", async () => {
-      const adopt = vi.fn().mockRejectedValue({
-        code: "password.throttled",
-        params: { retryAfterSeconds: 30 },
-        status: 429,
-      });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toBe("Too many attempts. Wait 30 seconds, then try again.");
-      button(connect, "check-address")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(input(connect, "primaryUrl").readOnly).toBe(false);
-      expect(await bottomOf(connect)).toBe("");
-    });
-
-    it("after a join refused for its address, reopens the address step marked and editable, and reads the corrected one", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "mirror.primary_url_invalid", params: {}, status: 400 });
-      const primaryCertificate = vi.fn().mockResolvedValue(PRIMARY_CERTIFICATE);
-      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      expect(
-        connect.shadowRoot!.querySelector("[data-test=primaryUrl]")!.getAttribute("error"),
-      ).toBe(
-        "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
-      );
-      expect(input(connect, "primaryUrl").readOnly).toBe(false);
-      expect(button(connect, "connect")).toBeNull();
-
-      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
-      button(connect, "continue")!.click();
-      await vi.waitFor(() => expect(primaryCertificate).toHaveBeenCalledTimes(2));
-      expect(primaryCertificate).toHaveBeenLastCalledWith("https://main.example");
-    });
-
-    // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
-    // field; a message under the code or the password would say the details before it were right.
-    it("says only that the login failed, above Connect, when the primary refuses the login", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      await new Promise((resolve) => setTimeout(resolve));
-      const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toBe(
-        "The login failed. Check the admin email, password and authenticator code, then try again.",
-      );
-      for (const field of ["primaryUrl", "email", "password", "totp"] as const) {
-        expect(
-          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
-        ).toBe("");
-        expect(input(connect, field).getAttribute("aria-invalid")).toBe("false");
-      }
-      expect(input(connect, "email").value).toBe(TYPED.email);
-      expect(input(connect, "password").value).toBe(TYPED.password);
-      expect(input(connect, "totp").value).toBe("");
-      expect(connect.shadowRoot!.activeElement).toBeNull();
-    });
-
-    it.each([
-      ["totp.invalid", 401],
-      ["person.not_found", 404],
-    ])("marks no field for %s", async (code, status) => {
-      const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      const connect = await screenHost(el, "connect");
-      for (const field of ["email", "totp"] as const) {
-        expect(
-          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
-        ).toBe("");
-      }
-      expect(await bottomOf(connect)).toBe(
-        "Couldn't connect to the primary. Check the address and login, then try again.",
-      );
-    });
-
-    it("shows a refusal of the one-time code under that field, empty and focused", async () => {
-      const adopt = vi.fn().mockRejectedValue({
-        code: "setup.request_invalid",
-        params: { field: "credential.totp" },
-        status: 400,
-      });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      await new Promise((resolve) => setTimeout(resolve));
-      const connect = await screenHost(el, "connect");
-      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      expect(totp.getAttribute("error")).toBe("Check the authenticator code.");
-      expect(input(connect, "totp").value).toBe("");
-      expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp"));
-      expect(input(connect, "password").value).toBe(TYPED.password);
-    });
-
-    it("is dropped from the shell once a later Connect succeeds", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
-        .mockResolvedValue({ adopted: true, restarting: true });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: sentBody });
-      const connect = await screenHost(el, "connect");
-      await userEvent.fill(input(connect, "totp"), "654321");
-      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-      await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-      expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: undefined });
-    });
-
-    it("is not kept once the operator discards changes and leaves the connect screen", async () => {
-      const adopt = vi.fn().mockRejectedValue({
-        code: "mirror.bundle_fetch_failed",
-        params: {},
-        status: 502,
-      });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      await typeAndConnect(el);
-      goto(el, "role");
-      await el.updateComplete;
-      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "wt-unsaved-changes",
-      )!;
-      await expect.poll(() => warning.open).toBe(true);
-      warning.dispatchEvent(
-        new CustomEvent("wt-unsaved-choice", {
-          detail: { decision: "discard" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      await expect.poll(() => readState(el, ["screen"]).screen).toBe("role");
-      goto(el, "connect");
-      await el.updateComplete;
-      const connect = await screenHost(el, "connect");
-      expect(input(connect, "primaryUrl").value).toBe("");
-      await userEvent.fill(input(connect, "primaryUrl"), TYPED.primaryUrl);
-      button(connect, "continue")!.click();
-      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
-      button(connect, "matches")!.click();
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      await userEvent.fill(input(connect, "email"), TYPED.email);
-      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(connect.shadowRoot!.querySelector("[data-test=email]")).not.toBeNull();
-      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
-      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
-    });
   });
 
   describe("an adopt refusal read against the saved setup operation", () => {
@@ -3320,7 +2440,7 @@ describe("setup-app", () => {
         expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
       } else {
         expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-        expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
+        expect(await bottomOf(await joinScreen(el))).toContain("could not finish joining");
       }
     }
 
@@ -3329,8 +2449,8 @@ describe("setup-app", () => {
       async (code, status) => {
         const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
         const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
-        const el = await mountSetupApp(stubApi({ adopt, getStatus }));
-        adoptRequest(el);
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt, getStatus }));
+        await finishJoining(el);
         await flush(el);
         await expectAdoptIncomplete(el);
       },
@@ -3347,8 +2467,10 @@ describe("setup-app", () => {
       async (_label, operation) => {
         for (const [code, status] of answered) {
           const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-          const el = await mountSetupApp(stubApi({ adopt, getStatus: statusWith(operation) }));
-          adoptRequest(el);
+          const el = await mountSetupApp(
+            stubApi({ finishJoin: adopt, getStatus: statusWith(operation) }),
+          );
+          await finishJoining(el);
           await flush(el);
           await expectConflictMessageOrConnectForm(el, code);
         }
@@ -3360,9 +2482,9 @@ describe("setup-app", () => {
       async (code, status) => {
         const getStatus = statusWith();
         const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-        const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+        const el = await mountSetupApp(stubApi({ finishJoin: adopt, getStatus }));
         getStatus.mockRejectedValue(new TypeError("Failed to fetch"));
-        adoptRequest(el);
+        await finishJoining(el);
         await flush(el);
         await expectConflictMessageOrConnectForm(el, code);
       },
@@ -3373,13 +2495,13 @@ describe("setup-app", () => {
     it("sends a rejection with no HTTP status back to the connect form without reading the status", async () => {
       const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
       const adopt = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+      const el = await mountSetupApp(stubApi({ finishJoin: adopt, getStatus }));
       const bootReads = getStatus.mock.calls.length;
-      adoptRequest(el);
+      await finishJoining(el);
       await flush(el);
       expect(getStatus).toHaveBeenCalledTimes(bootReads);
       expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-      expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
+      expect(await bottomOf(await joinScreen(el))).toContain("could not finish joining");
     });
 
     it.each([
@@ -3389,9 +2511,9 @@ describe("setup-app", () => {
     ])("maps %s (HTTP %i) without reading the status", async (code, status, fragment) => {
       const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
       const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-      const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+      const el = await mountSetupApp(stubApi({ finishJoin: adopt, getStatus }));
       const bootReads = getStatus.mock.calls.length;
-      adoptRequest(el);
+      await finishJoining(el);
       await flush(el);
       expect(getStatus).toHaveBeenCalledTimes(bootReads);
       expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(fragment);
@@ -3400,11 +2522,9 @@ describe("setup-app", () => {
 });
 
 describe("resetting a join that stopped partway", () => {
-  const LOGIN = { email: "op1@example.com", password: "  correct horse  " };
-
   async function offerReset(api: SetupApi): Promise<SetupApp> {
     const el = await mountSetupApp(api);
-    adoptRequest(el);
+    await finishJoining(el);
     await flush(el);
     return el;
   }
@@ -3416,16 +2536,8 @@ describe("resetting a join that stopped partway", () => {
     return screenHost(el, "reset");
   }
 
-  async function submitReset(el: SetupApp, login = LOGIN): Promise<void> {
+  async function submitReset(el: SetupApp): Promise<void> {
     const screen = await screenHost(el, "reset");
-    for (const [field, value] of Object.entries(login)) {
-      screen
-        .shadowRoot!.querySelector(`[data-test=${field}]`)!
-        .dispatchEvent(
-          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-        );
-    }
-    await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();
     await flush(el);
   }
@@ -3433,9 +2545,9 @@ describe("resetting a join that stopped partway", () => {
   const incomplete = () =>
     vi.fn().mockRejectedValue({ code: "setup.adopt_incomplete", params: {}, status: 409 });
 
-  it("links the reset screen to the Servers page of the address typed in this tab", async () => {
-    const el = await mountSetupApp(stubApi({ adopt: incomplete() }));
-    adoptRequest(el, { ...adoptBody, primaryUrl: "https://waitron.local:8443" });
+  it("links the reset screen to the Servers page of the main box this tab joined", async () => {
+    const el = await mountSetupApp(stubApi({ finishJoin: incomplete() }));
+    await finishJoining(el, "https://waitron.local:8443");
     await flush(el);
     const screen = await openReset(el);
     await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
@@ -3464,7 +2576,7 @@ describe("resetting a join that stopped partway", () => {
     "offers the reset screen when %s, and Back returns to the message",
     async (_label, adopt, getStatus) => {
       const el = await offerReset(
-        stubApi(getStatus === undefined ? { adopt } : { adopt, getStatus }),
+        stubApi(getStatus === undefined ? { finishJoin: adopt } : { finishJoin: adopt, getStatus }),
       );
       await expectAdoptIncompleteWithReset(el);
       const screen = await openReset(el);
@@ -3490,9 +2602,9 @@ describe("resetting a join that stopped partway", () => {
 
   it("does not offer the reset after an adopt that stopped partway is followed by a fresh adopt refused otherwise", async () => {
     const adopt = incomplete();
-    const el = await offerReset(stubApi({ adopt }));
+    const el = await offerReset(stubApi({ finishJoin: adopt }));
     adopt.mockRejectedValue({ code: "setup.already_provisioning", params: {}, status: 409 });
-    adoptRequest(el);
+    await finishJoining(el);
     await flush(el);
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=error]")!.textContent).toContain(
@@ -3505,7 +2617,7 @@ describe("resetting a join that stopped partway", () => {
     const provision = vi
       .fn()
       .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), provision }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), provision }));
     await expectAdoptIncompleteWithReset(el);
     provisionRequest(el);
     await flush(el);
@@ -3534,7 +2646,7 @@ describe("resetting a join that stopped partway", () => {
       const pending = deferred();
       const el = await offerReset(
         stubApi({
-          adopt: incomplete(),
+          finishJoin: incomplete(),
           restore: vi.fn().mockReturnValue(pending.promise),
           restoreFromBucket: vi.fn().mockReturnValue(pending.promise),
         }),
@@ -3551,19 +2663,58 @@ describe("resetting a join that stopped partway", () => {
     },
   );
 
-  it("posts the typed email and password to the reset route", async () => {
+  it("posts the reset with nothing in it", async () => {
     const resetIncompleteAdopt = vi.fn().mockResolvedValue({ resetStaged: true, restarting: true });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
-    expect(resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith({
-      email: "op1@example.com",
-      password: "  correct horse  ",
-    });
+    expect(resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("forgets the tab's join once the reset succeeds", async () => {
+    const el = await offerReset(stubApi({ finishJoin: incomplete() }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+  });
+
+  it("sends no handle when Join is chosen again after a reset", async () => {
+    const api = stubApi({ finishJoin: incomplete() });
+    const el = await offerReset(api);
+    await openReset(el);
+    await submitReset(el);
+    vi.mocked(api.joinState).mockClear();
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    expect(api.joinState).toHaveBeenCalledExactlyOnceWith(undefined);
+    connect
+      .shadowRoot!.querySelector("[data-test=primaryUrl]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: MAIN }, bubbles: true, composed: true }),
+      );
+    await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await vi.waitFor(() => expect(api.startJoin).toHaveBeenCalledOnce());
+    expect(api.startJoin).toHaveBeenCalledExactlyOnceWith(MAIN, undefined);
+  });
+
+  it("keeps the tab's join when the reset is refused", async () => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.reset_unavailable", params: {}, status: 409 });
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(resetIncompleteAdopt).toHaveBeenCalledOnce();
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBe(JOIN_HANDLE);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
   });
 
   it("keeps reset-requested inside the wizard", async () => {
-    const el = await offerReset(stubApi({ adopt: incomplete() }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete() }));
     const escaped: Event[] = [];
     el.parentElement!.addEventListener("reset-requested", (e) => escaped.push(e));
     await openReset(el);
@@ -3571,32 +2722,17 @@ describe("resetting a join that stopped partway", () => {
     expect(escaped).toEqual([]);
   });
 
-  it("keeps an empty form from posting", async () => {
-    const resetIncompleteAdopt = vi.fn();
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-    await openReset(el);
-    await submitReset(el, { email: "", password: "" });
-    expect(resetIncompleteAdopt).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-reset]")).not.toBeNull();
-  });
-
   it("shows Resetting… and sends one request while the reset is in flight", async () => {
     const pending = deferred();
     const resetIncompleteAdopt = vi.fn().mockReturnValue(pending.promise);
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     const screen = await openReset(el);
     await submitReset(el);
     await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     const button = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!;
     expect(button.hasAttribute("disabled")).toBe(true);
     expect(button.textContent!.trim()).toBe("Resetting…");
-    screen.dispatchEvent(
-      new CustomEvent("reset-requested", {
-        detail: { credential: LOGIN },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    screen.dispatchEvent(new CustomEvent("reset-requested", { bubbles: true, composed: true }));
     await flush(el);
     expect(resetIncompleteAdopt).toHaveBeenCalledTimes(1);
     pending.resolve({ resetStaged: true, restarting: true });
@@ -3604,7 +2740,7 @@ describe("resetting a join that stopped partway", () => {
   });
 
   it("tells the operator to wait and reload once the reset is staged", async () => {
-    const el = await offerReset(stubApi({ adopt: incomplete() }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete() }));
     await openReset(el);
     await submitReset(el);
     expect((await screenText(el, "reset", "[data-test=outcome]"))?.replace(/\s+/g, " ")).toBe(
@@ -3625,7 +2761,7 @@ describe("resetting a join that stopped partway", () => {
     ],
   ])("ends at a Reload for %s", async (code, message) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     const screen = await screenHost(el, "reset");
@@ -3633,7 +2769,7 @@ describe("resetting a join that stopped partway", () => {
     expect(outcome.getAttribute("role")).toBe("alert");
     expect(outcome.textContent!.replace(/\s+/g, " ").trim()).toBe(message);
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
-    expect(screen.shadowRoot!.querySelector("[data-test=email]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
   });
 
   it.each(["setup.owner_required", "setup.attempt_uncertain", "setup.attempt_conflict"] as const)(
@@ -3642,7 +2778,7 @@ describe("resetting a join that stopped partway", () => {
       for (const locale of ["en-GB", "es-ES"]) {
         try {
           const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
-          const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+          const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
           setLocale(locale);
           await openReset(el);
           await submitReset(el);
@@ -3662,100 +2798,11 @@ describe("resetting a join that stopped partway", () => {
     },
   );
 
-  it("marks no field and names the refused login when the password is refused", async () => {
-    const resetIncompleteAdopt = vi
-      .fn()
-      .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-    await openReset(el);
-    await submitReset(el);
-    const screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("[data-test=email]")!.hasAttribute("invalid")).toBe(
-      false,
-    );
-    expect(screen.shadowRoot!.querySelector("[data-test=password]")!.hasAttribute("invalid")).toBe(
-      false,
-    );
-    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "That email and password are not the admin login used to connect this server. Check them and try again.",
-    );
-    const reset = screen.shadowRoot!.querySelector("[data-test=reset]") as HTMLElement & {
-      disabled: boolean;
-    };
-    expect(reset.disabled).toBe(false);
-  });
-
-  it.each([
-    ["email", "Check the admin email."],
-    ["password", "Check the admin password."],
-  ])(
-    "marks the %s field a setup.request_invalid names, leaving the reset working",
-    async (field, message) => {
-      const resetIncompleteAdopt = vi
-        .fn()
-        .mockRejectedValue({ code: "setup.request_invalid", params: { field }, status: 400 });
-      const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-      await openReset(el);
-      await submitReset(el);
-      const screen = await screenHost(el, "reset");
-      const input = screen.shadowRoot!.querySelector(`[data-test=${field}]`)!;
-      expect(input.getAttribute("error")).toBe(message);
-      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
-      const reset = screen.shadowRoot!.querySelector("[data-test=reset]") as HTMLElement & {
-        disabled: boolean;
-      };
-      expect(reset.disabled).toBe(false);
-    },
-  );
-
-  it("names a second refused login after the operator corrects the password", async () => {
-    const resetIncompleteAdopt = vi
-      .fn()
-      .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-    await openReset(el);
-    await submitReset(el);
-    await submitReset(el, { email: "op1@example.com", password: "battery staple" });
-    expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
-    const screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
-      "",
-    );
-    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "That email and password are not the admin login used to connect this server. Check them and try again.",
-    );
-  });
-
-  it("keeps a reset refusal pressed away with a field empty gone when the language changes", async () => {
-    const before = currentLocale();
-    try {
-      setLocale("en-GB");
-      const resetIncompleteAdopt = vi
-        .fn()
-        .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
-      const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-      await openReset(el);
-      await submitReset(el);
-      const screen = await screenHost(el, "reset");
-      expect(await bottomOf(screen)).toBe(
-        "The server could not be reset. Check the connection and try again.",
-      );
-      await submitReset(el, { ...LOGIN, email: "" });
-      expect(resetIncompleteAdopt).toHaveBeenCalledOnce();
-      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
-      setLocale("es-ES");
-      await flush(el);
-      expect(await bottomOf(screen)).toBe("Corrige los campos marcados para continuar.");
-    } finally {
-      setLocale(before);
-    }
-  });
-
   it("shows the same general message again when a second reset fails the same way", async () => {
     const resetIncompleteAdopt = vi
       .fn()
       .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     await submitReset(el);
@@ -3765,40 +2812,20 @@ describe("resetting a join that stopped partway", () => {
     );
   });
 
-  it.each([
-    [{ retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
-    [{ retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
-    [{}, "Too many attempts. Wait a few minutes, then try again."],
-    [{ retryAfterSeconds: "30" }, "Too many attempts. Wait a few minutes, then try again."],
-  ])("asks the operator to wait when attempts are throttled (%o)", async (params, message) => {
-    const resetIncompleteAdopt = vi
-      .fn()
-      .mockRejectedValue({ code: "password.throttled", params, status: 429 });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-    await openReset(el);
-    await submitReset(el);
-    expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
-  });
-
-  it.each([
-    [
-      "setup.request_invalid",
-      400,
-      "The server rejected the details. Check the admin email and password, then try again.",
-    ],
-    ["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."],
-  ])("keeps the form with its own message for %s", async (code, status, message) => {
-    const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status });
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
-    await openReset(el);
-    await submitReset(el);
-    expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
-    const screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("[data-test=email]")).not.toBeNull();
-    expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
-      false,
-    );
-  });
+  it.each([["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."]])(
+    "keeps the form with its own message for %s",
+    async (code, status, message) => {
+      const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+      const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
+      await openReset(el);
+      await submitReset(el);
+      expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
+      const screen = await screenHost(el, "reset");
+      expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
+        false,
+      );
+    },
+  );
 
   it.each([
     ["server.internal", { code: "server.internal", params: {}, status: 500 }],
@@ -3806,7 +2833,7 @@ describe("resetting a join that stopped partway", () => {
     ["a rejection carrying nothing", undefined],
   ])("keeps the form with a general message for %s", async (_label, error) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue(error);
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
@@ -3822,33 +2849,19 @@ describe("resetting a join that stopped partway", () => {
     const pending = deferred();
     const resetIncompleteAdopt = vi
       .fn()
-      .mockRejectedValueOnce({ code: "password.invalid", params: {}, status: 401 })
+      .mockRejectedValueOnce({ code: "setup.not_ready", params: {}, status: 503 })
       .mockRejectedValueOnce({ code: "server.internal", params: {}, status: 500 })
       .mockReturnValueOnce(pending.promise);
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     await submitReset(el);
     const screen = await screenHost(el, "reset");
-    expect((screen as HTMLElement & { credentialsRejected: boolean }).credentialsRejected).toBe(
-      false,
-    );
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "The server could not be reset. Check the connection and try again.",
     );
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await el.updateComplete;
-    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      "wt-unsaved-changes",
-    )!;
-    await expect.poll(() => warning.open).toBe(true);
-    warning.dispatchEvent(
-      new CustomEvent("wt-unsaved-choice", {
-        detail: { decision: "discard" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=screen-provisioning]") !== null)
       .toBe(true);
@@ -3865,22 +2878,19 @@ describe("resetting a join that stopped partway", () => {
     [
       "a refused reset",
       (d: ReturnType<typeof deferred>) =>
-        d.reject({ code: "password.invalid", params: {}, status: 401 }),
+        d.reject({ code: "server.internal", params: {}, status: 500 }),
     ],
   ])("writes nothing for %s that answers after the element is detached", async (_label, settle) => {
     const pending = deferred();
     const resetIncompleteAdopt = vi.fn().mockReturnValue(pending.promise);
-    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
     el.remove();
     settle(pending);
     await flush(el);
-    expect(
-      readState(el, ["resetOutcome", "resetCredentialsRejected", "resetError", "resetBusy"]),
-    ).toEqual({
+    expect(readState(el, ["resetOutcome", "resetError", "resetBusy"])).toEqual({
       resetOutcome: undefined,
-      resetCredentialsRejected: false,
       resetError: undefined,
       resetBusy: true,
     });
@@ -6667,16 +5677,16 @@ describe("an answer that arrives after the element is detached", () => {
     },
     {
       name: "an adopt success",
-      method: "adopt",
-      fire: (el: SetupApp) => adoptRequest(el),
+      method: "finishJoin",
+      fire: (el: SetupApp) => finishJoining(el),
       settle: (d: ReturnType<typeof deferred>) =>
         d.resolve({ adopted: true, breakGlassSecret: "bg", restarting: true }),
       unchanged: { screen: "provisioning", breakGlassSecret: undefined, mirrorJoin: false },
     },
     {
       name: "an adopt refusal",
-      method: "adopt",
-      fire: (el: SetupApp) => adoptRequest(el),
+      method: "finishJoin",
+      fire: (el: SetupApp) => finishJoining(el),
       settle: (d: ReturnType<typeof deferred>) =>
         d.reject({ code: "mirror.bundle_fetch_failed", params: {} }),
       unchanged: { screen: "provisioning", connectError: undefined },
@@ -6748,7 +5758,8 @@ describe("an answer that arrives after the element is detached", () => {
     const pending = deferred();
     const el = await mountSetupApp(stubApi({ [method]: vi.fn().mockReturnValue(pending.promise) }));
     goto(el, "live-source");
-    fire(el);
+    await flush(el);
+    await fire(el);
     await el.updateComplete;
     el.remove();
     settle(pending);
@@ -6766,11 +5777,11 @@ describe("an answer that arrives after the element is detached", () => {
     const adopt = vi
       .fn()
       .mockRejectedValue({ code: "setup.operation_conflict", params: {}, status: 409 });
-    const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+    const el = await mountSetupApp(stubApi({ finishJoin: adopt, getStatus }));
     const bootReads = getStatus.mock.calls.length;
     const pending = deferred<SetupStatus>();
     getStatus.mockReturnValue(pending.promise);
-    adoptRequest(el);
+    await finishJoining(el);
     await flush(el);
     expect(getStatus).toHaveBeenCalledTimes(bootReads + 1);
     el.remove();
@@ -7146,7 +6157,7 @@ describe("first setup owner refusals", () => {
     (
       [
         ["provision", "provision", (el: SetupApp) => provisionRequest(el)],
-        ["adopt", "provision", (el: SetupApp) => adoptRequest(el)],
+        ["finishJoin", "provision", (el: SetupApp) => finishJoining(el)],
         ["restoreFromBucket", "restore", (el: SetupApp) => bucketRequest(el)],
         [
           "restore",
@@ -7647,8 +6658,8 @@ describe("a finish refused while a clock step's note is unsaved", () => {
   ])(
     "an adopt refused %o goes back to the connect form with its words",
     async (refusal, sentence) => {
-      const el = await mountSetupApp(stubApi({ adopt: vi.fn().mockRejectedValue(refusal) }));
-      adoptRequest(el);
+      const el = await mountSetupApp(stubApi({ finishJoin: vi.fn().mockRejectedValue(refusal) }));
+      await finishJoining(el);
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
       const { connectError } = readState(el, ["connectError"]) as { connectError: () => string };

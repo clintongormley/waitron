@@ -432,7 +432,8 @@ export const QUERY_DEPENDENCIES = {
   getEmailInbox: ["email_inbox"],
   listReturnedInvoices: ["nodes", "settings.venue", "settings.business_day", "day_cutover_changes"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
-  listServers: ["node_membership", "nodes"],
+  // `box_joins`: a new box's join request is held in memory, so the store announces it.
+  listServers: ["node_membership", "nodes", "box_joins"],
   getBackupStatus: ["backup_status", "settings.backup"],
   getStreamSettings: ["backup_status", "settings.backup"],
   // Its answer ages with time and reads the box's key files, the running backups' key, node.db's

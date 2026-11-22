@@ -138,20 +138,6 @@ export interface ProvisionResult {
   cloudStaffEmailUnavailable?: true;
 }
 
-export interface AdoptBody {
-  primaryUrl: string;
-  /** `totp` is omitted, not `""`, when blank: the server refuses an empty string. */
-  credential: { email: string; password: string; totp?: string };
-  /** The main box's authority certificate the person compared; absent for a plain-http address. */
-  confirmedCaPem?: string;
-}
-
-/** The main box's authority certificate, read before anything secret is sent to it. */
-export interface PrimaryCertificate {
-  pem: string;
-  fingerprint256: string;
-}
-
 export interface AdoptOutcome {
   adopted: true;
   /** The offline promote fallback. The server returns it once, so the wizard must show it before
@@ -161,11 +147,27 @@ export interface AdoptOutcome {
   restarting: true;
 }
 
-/** The admin login used on the connect screen for the join that stopped partway. */
-export interface ResetCredential {
-  email: string;
-  password: string;
+/** A join's code as the new box first shows it, with the handle that keeps it on this tab. */
+export interface JoinStarted {
+  code: string;
+  addresses: string[];
+  /** Measured on the new box's own clock when it answered; the browser's clock plays no part. */
+  timeLeftMs: number;
+  handle: string;
 }
+
+/**
+ * `elsewhere`: another page holds this box's join; `replaced`: this page's handle no longer counts.
+ * `reason` and `error` are kept as strings: a newer server may send one this page does not know.
+ */
+export type JoinState =
+  | { state: "none" }
+  | { state: "elsewhere" }
+  | { state: "replaced" }
+  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; timeLeftMs: number }
+  | { state: "approved"; code: string }
+  | { state: "ended"; reason: string }
+  | { state: "failed"; error: string };
 
 export interface ResetOutcome {
   resetStaged: true;
@@ -287,6 +289,9 @@ export interface ApiError {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+const joinHeaders = (handle: string | undefined): Record<string, string> =>
+  handle === undefined ? {} : { "x-waitron-join-handle": handle };
 
 /**
  * The body is untrusted: a failed response need not carry our envelope, may not be JSON, or may be
@@ -588,19 +593,25 @@ export class SetupApi {
     });
   }
 
-  /** `null` for a plain-http address, which only this machine can answer. */
-  primaryCertificate(primaryUrl: string): Promise<PrimaryCertificate | null> {
-    return this.#request<PrimaryCertificate | null>("/setup-api/primary-certificate", "POST", {
-      primaryUrl,
-    });
+  startJoin(primaryUrl: string, handle: string | undefined): Promise<JoinStarted> {
+    return this.#request("/setup-api/join/start", "POST", { primaryUrl }, joinHeaders(handle));
   }
 
-  adopt(body: AdoptBody): Promise<AdoptOutcome> {
-    return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
+  joinState(handle: string | undefined): Promise<JoinState> {
+    return this.#request("/setup-api/join", "GET", undefined, joinHeaders(handle));
   }
 
-  resetIncompleteAdopt(credential: ResetCredential): Promise<ResetOutcome> {
-    return this.#request<ResetOutcome>("/setup-api/reset-incomplete-adopt", "POST", credential);
+  cancelJoin(handle: string | undefined): Promise<void> {
+    return this.#request("/setup-api/join/cancel", "POST", {}, joinHeaders(handle));
+  }
+
+  /** Finish joining: the server reads nothing from the body, so every resend is the same request. */
+  finishJoin(handle: string | undefined): Promise<AdoptOutcome> {
+    return this.#request("/setup-api/adopt", "POST", {}, joinHeaders(handle));
+  }
+
+  resetIncompleteAdopt(): Promise<ResetOutcome> {
+    return this.#request<ResetOutcome>("/setup-api/reset-incomplete-adopt", "POST");
   }
 
   startCloudRecovery(): Promise<CloudRecoveryView> {

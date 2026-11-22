@@ -318,7 +318,7 @@ It forwards the management API, the dashboard's box and backup API groups, theme
 reads, help and legal pages, and `GET /public/availability` (Cloud's public gate asks it there) to the main app. Till and setup paths return 404, as does a request for another origin. Requests through it are remote even when the gateway connects over
 loopback. Use your usual password; enrol passkeys separately for the staff hostname. The staff roster
 requires a signed-in session through this entrance. Dashboard images are served read-only;
-membership, mirror-bundle and promotion operations stay off it. Sign-in bodies are limited to
+membership, box joins and promotion operations stay off it. Sign-in bodies are limited to
 64 KiB and the entrance permits twenty anonymous passkey challenges per minute. Password
 backoff is shared with LAN sign-in: remote wrong guesses can temporarily block local password
 sign-in for that same email address. Register the staff origin's `/management-api/google/callback`

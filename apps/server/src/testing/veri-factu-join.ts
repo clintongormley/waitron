@@ -1,5 +1,5 @@
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -17,15 +17,15 @@ import type { VenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { enabledModules } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
-import { adoptFromPrimary, type AdoptCredential } from "../adopt.js";
+import { personIdForLoginEmail } from "@waitron/identity";
+import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
-import type { MirrorBundle } from "../mirror-bundle.js";
-import { mountMirrorBundleApi } from "../mirror-bundle-api.js";
+import { createBoxJoinAttempt, type JoinedBox } from "../box-join-attempt.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
-import { TOTP_KEY_RING } from "./authenticator.js";
+import { appExchange, approveJoin, mountBoxJoin, signedInCookie } from "./box-join.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./membership-doc-fixture.js";
 import { applyWithFirstSetup } from "./minute-first-setup.js";
@@ -36,7 +36,7 @@ export const SPARE_URL = "https://spare.test";
 export const ADMIN_PASSWORD = "correct horse";
 
 /** Two boxes on separate databases and state folders; the main box's database chooses its modules. */
-export interface TwoBoxes {
+interface TwoBoxes {
   mainBox: VenueDb;
   spareBox: VenueDb;
   mainState: string;
@@ -46,7 +46,7 @@ export interface TwoBoxes {
 
 /**
  * A main box set up in Spain with the modules its venue database enables, signed in as its
- * administrator, its chart listing only itself, and the real bundle route mounted on `bundleApp`.
+ * administrator, its chart listing only itself, and its real box-join routes mounted on `bundleApp`.
  */
 export async function veriFactuMainBox(boxes: TwoBoxes) {
   const { mainBox, mainState, ring } = boxes;
@@ -109,14 +109,23 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
   return { modules, mainId, mainKey, session, email, bundleApp };
 }
 
-/** The real bundle route of the main box `nodeId`, whose files are `box`'s. */
+/**
+ * The main box behind each app {@link mirrorBundleApp} made: its database, for the approver's
+ * sign-in, the state folder holding the certificate it serves, and its address.
+ */
+const MAIN_BOXES = new WeakMap<
+  Hono,
+  { db: Database; stateDir: string; advertisedOrigin: string }
+>();
+
+/** The real box-join routes of the main box `nodeId`, whose files are `box`'s. */
 export function mirrorBundleApp(
   box: { db: Database; node: NodeDatabase; stateDir: string; ring: KeyRing },
   nodeId: string,
   advertisedOrigin: string,
 ): Hono {
   const bundleApp = new Hono();
-  mountMirrorBundleApi(bundleApp, {
+  mountBoxJoin(bundleApp, {
     appDb: box.db,
     node: box.node,
     ring: box.ring,
@@ -124,10 +133,9 @@ export function mirrorBundleApp(
     boxHostname: "waitron.local",
     advertisedOrigin,
     designated: { nodeId },
-
-    credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });
+  MAIN_BOXES.set(bundleApp, { db: box.db, stateDir: box.stateDir, advertisedOrigin });
   return bundleApp;
 }
 
@@ -144,15 +152,74 @@ async function holdBoxSecrets(stateDir: string): Promise<void> {
   await holdRecoveryKey(stateDir);
 }
 
-/** The spare joins `main` through the real `adoptFromPrimary`, the bundle route answering 200. */
+let joinAddresses = 0;
+
+/**
+ * A new box at `spareUrl` asks `main` to join by code, through the real `createBoxJoinAttempt`
+ * answered by `main`'s app, and the administrator `email` taps its code on the main box; answers
+ * what the new box then holds, as Finish joining hands it to `adoptFromPrimary`. It throws where
+ * the attempt refuses the main box's answers.
+ */
+export async function collectJoin(
+  main: { bundleApp: Hono; email: string },
+  { spareUrl = SPARE_URL, storePort = 7443 }: { spareUrl?: string; storePort?: number } = {},
+): Promise<JoinedBox> {
+  const mainBox = MAIN_BOXES.get(main.bundleApp);
+  if (mainBox === undefined) throw new Error("collectJoin needs an app from mirrorBundleApp");
+  joinAddresses += 1;
+  const address = `10.40.0.${joinAddresses}`;
+  const cookie = await signedInCookie(
+    mainBox.db,
+    await personIdForLoginEmail(mainBox.db, main.email),
+  );
+  const answers = appExchange({
+    app: () => main.bundleApp,
+    from: address,
+    certificate: await readFile(join(mainBox.stateDir, "tls", "ca.crt"), "utf8"),
+  });
+  let requestId: string | undefined;
+  const attempt = createBoxJoinAttempt({
+    advertisedOrigin: spareUrl,
+    spareStorePort: storePort,
+    now: () => new Date(),
+    addresses: () => [address],
+    pollEveryMs: 50,
+    exchange: async (url, request, maxBytes) => {
+      const answer = await answers(url, request, maxBytes);
+      if (url.pathname.endsWith("/hello") && answer.status === 200)
+        requestId = (JSON.parse(answer.text) as { requestId: string }).requestId;
+      return answer;
+    },
+  });
+  const { code } = await attempt.start(mainBox.advertisedOrigin);
+  try {
+    const approved = await approveJoin(main.bundleApp, requestId!, { code }, { cookie });
+    expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+    for (let waited = 0; attempt.current()?.state === "waiting" && waited < 10_000; waited += 50)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    const joined = attempt.joined();
+    if (joined === null)
+      throw new Error(`approved join not collected: ${JSON.stringify(attempt.current())}`);
+    return joined;
+  } catch (error) {
+    // So a failed join leaves nothing polling the main box for the rest of the file.
+    await attempt.cancel().catch(() => {});
+    throw error;
+  }
+}
+
+/**
+ * The spare joins `main` by code ({@link collectJoin}), and what it collects goes to the real
+ * `adoptFromPrimary`, as `adoptJoined` hands it in `boot.ts`.
+ */
 export async function joinSpare(
   boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
   main: { bundleApp: Hono; email: string },
-  { primaryUrl = MAIN_URL, spareUrl = SPARE_URL } = {},
+  options: { spareUrl?: string } = {},
 ) {
   const { spareBox, spareState, ring } = boxes;
-  let bundle!: MirrorBundle;
-  let standby!: { nodeId: string; publicKey: string };
+  const { identity, bundle, storeUrl } = await collectJoin(main, options);
+  const standby = { nodeId: identity.nodeId, publicKey: identity.publicKey };
   let spareId!: string;
   await adoptFromPrimary(
     {
@@ -161,28 +228,6 @@ export async function joinSpare(
       environmentKeys: {},
       ring,
       persistCredentialsRing: async () => {},
-      fetchBundle: async (_url, credential: AdoptCredential, sent) => {
-        standby = { nodeId: sent.nodeId, publicKey: sent.publicKey };
-        const response = await main.bundleApp.request("/management-api/mirror-bundle", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email: credential.email,
-            password: credential.password,
-            standbyNodeId: sent.nodeId,
-            standbyPublicKey: sent.publicKey,
-            standbyContactUrl: sent.contactUrl,
-            standbyStoreUrl: sent.storeUrl,
-            standbyAt: sent.at,
-          }),
-        });
-        const body = await response.json();
-        expect(response.status, JSON.stringify(body)).toBe(200);
-        bundle = body as MirrorBundle;
-        return bundle;
-      },
-      advertisedOrigin: spareUrl,
-      spareStorePort: 7443,
       assertStartsWith: () => {},
       environment: "preproduction",
       persistTrading: async (args) => {
@@ -197,7 +242,7 @@ export async function joinSpare(
       listIpv4: () => [],
       now: () => new Date(),
     },
-    { primaryUrl, credential: { email: main.email, password: ADMIN_PASSWORD } },
+    { identity, bundle, storeUrl },
     { beforeFirstWrite: async () => {} },
   );
   return { bundle, standby, spareId };

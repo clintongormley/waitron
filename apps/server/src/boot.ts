@@ -387,11 +387,13 @@ import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
+import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { createBoxJoinAttempt } from "./box-join-attempt.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
@@ -408,13 +410,8 @@ import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
-import { adoptFromPrimary } from "./adopt.js";
-import {
-  fetchMirrorBundle,
-  fetchPrimaryCertificate,
-  rememberCheckedAddressesIn,
-  type BoxLookup,
-} from "./mirror-bundle-fetch.js";
+import { adoptFromPrimary, type AdoptDeps } from "./adopt.js";
+import { rememberCheckedAddressesIn, type BoxLookup } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
@@ -445,7 +442,6 @@ import { dailyReportMail } from "./daily-report-mail.js";
 import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
-import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
   caCertPath,
@@ -1059,6 +1055,11 @@ export interface StartServerSeams {
    */
   boxLookup?: BoxLookup;
   /**
+   * This box's addresses as a new box's Join lists them; unset, the configured box addresses or its
+   * interface addresses.
+   */
+  joinAddresses?: () => string[];
+  /**
    * Takes every restart a start asks for, so a test running servers in its own process is not
    * stopped: `"restart"` where production calls `restartProcess`, `"signal"` where it sends itself
    * SIGTERM.
@@ -1651,6 +1652,42 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
+    const adoptDeps: AdoptDeps = {
+      ownerDb: db,
+      ownerNode: store.node,
+      ring,
+      environmentKeys: keyRingVariables(base),
+      persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
+      persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
+      environment: config.configuredEnvironment,
+      persistTrading,
+      assertStartsWith: (trading) => {
+        // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
+        const next = { ...env };
+        if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
+        if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
+        const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+        refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
+      },
+      persistModuleConfig: async (c) => {
+        await writeModuleConfig(db, c, null);
+      },
+      stateDir: config.stateDir,
+      database: ownerDatabaseName,
+      listIpv4: boxAddresses,
+      now,
+    };
+    const joinAttempt = createBoxJoinAttempt({
+      lookup: seams.boxLookup,
+      ...(seams.joinAddresses !== undefined
+        ? { addresses: seams.joinAddresses }
+        : config.boxAddresses === undefined
+          ? {}
+          : { addresses: () => config.boxAddresses! }),
+      advertisedOrigin: config.managementOrigin,
+      spareStorePort: config.spareStorePort,
+      now,
+    });
     mountSetup(
       app,
       {
@@ -1673,8 +1710,7 @@ async function bootServer(
         cloudRecovery,
         cloudSignIn,
         requestFromBox: seams.requestFromBox,
-        readPrimaryCertificate: (primaryUrl) =>
-          fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
+        joinAttempt,
         prepareRecovery: recoveryPreparation,
         recoveryOperationPath: base.WAITRON_RECOVERY_OPERATION_FILE,
         receiveArchive: (request, options) =>
@@ -1894,42 +1930,7 @@ async function bootServer(
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
         recoveryPackEvidence: documentEvidence,
-        adopt: (req, hooks) =>
-          adoptFromPrimary(
-            {
-              ownerDb: db,
-              ownerNode: store.node,
-              ring,
-              environmentKeys: keyRingVariables(base),
-              persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
-              persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
-              fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>
-                fetchMirrorBundle(primaryUrl, credential, standby, confirmedCaPem, {
-                  lookup: seams.boxLookup,
-                }),
-              advertisedOrigin: config.managementOrigin,
-              spareStorePort: config.spareStorePort,
-              environment: config.configuredEnvironment,
-              persistTrading,
-              assertStartsWith: (trading) => {
-                // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
-                const next = { ...env };
-                if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
-                if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
-                const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
-                refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
-              },
-              persistModuleConfig: async (c) => {
-                await writeModuleConfig(db, c, null);
-              },
-              stateDir: config.stateDir,
-              database: ownerDatabaseName,
-              listIpv4: boxAddresses,
-              now,
-            },
-            req,
-            hooks,
-          ),
+        adoptJoined: (joined, hooks) => adoptFromPrimary(adoptDeps, joined, hooks),
         establishIdentity: (nodeId) =>
           establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
         seedMembership: (nodeId) =>
@@ -4184,6 +4185,10 @@ async function bootServer(
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  // One store, so the Servers page lists the requests the new boxes' routes hold.
+  const boxJoinRequests = createBoxJoinRequests({
+    changed: () => publishState(liveEvents, "box_joins", log),
+  });
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
   mountMembershipRemovalApi(
@@ -4195,9 +4200,7 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       reloadStream: () => backupTurns(() => streamHost.reload()),
       readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
-      // `/ca.crt` serves no authority when the operator supplies the certificate files.
-      authorityFingerprint: () =>
-        config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
+      listJoinRequests: () => boxJoinRequests.listed(),
     },
     log,
   );
@@ -4360,21 +4363,22 @@ async function bootServer(
   );
 
   if (isSingletonPrimary) {
-    mountMirrorBundleApi(
+    const bundleDeps = {
+      appDb: db,
+      node: store.node,
+      ring,
+      stateDir: config.stateDir,
+      boxHostname: BOX_HOSTNAME,
+      advertisedOrigin: config.managementOrigin,
+      designated: config.node,
+      wakeSpareJoin: () => spareJoin?.wake(),
+    };
+    mountBoxJoinApi(
       app,
-      {
-        appDb: db,
-        node: store.node,
-        ring,
-        stateDir: config.stateDir,
-        boxHostname: BOX_HOSTNAME,
-        advertisedOrigin: config.managementOrigin,
-        designated: config.node,
-        credentialKeyRing: ring,
-        wakeSpareJoin: () => spareJoin?.wake(),
-      },
+      { appDb: db, node: store.node, ring, designated: config.node, requests: boxJoinRequests },
       log,
     );
+    mountBoxJoinPersonApi(app, { ...bundleDeps, requests: boxJoinRequests }, log);
   }
 
   const promoteDeps: PromoteDeps = {

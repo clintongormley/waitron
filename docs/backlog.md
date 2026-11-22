@@ -419,7 +419,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
 
-- **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
+- **A1089: an incomplete-join reset needs an outcome after a failed restart.** Add a supported way to retry or restart if the half-join remains.
   [Audit](backlog/self-service-refusals.md#setup-reset).
 
 - **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1159 and A1161 list what still refuses. Start again (former A1158) and Recover from backup still have no warned way out when a damaged setup retains its installed box row, even without sales or fiscal records.
@@ -954,8 +954,9 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   Backups, recovery material, exports, people, your own sign-in, connections, handover and fiscal/box
   changes use the fifteen-minute session window. Handover requires a confirmation without a recovery
   code and an account with a password for the spare’s sign-in. The [ask-again plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md)
-  retains current authenticator codes for own-account changes; sessionless promotion and mirror
-  creation keep body credentials. A Google-only account needs a password from password reset
+  retains current authenticator codes for own-account changes; sessionless promotion keeps body
+  credentials, and approving a box join needs a signed-in session with `node.manage` and a fresh
+  sign-in. A Google-only account needs a password from password reset
   to open the window. Google proof and the later sign-in steps remain in the
   [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
 

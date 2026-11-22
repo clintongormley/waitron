@@ -33,6 +33,14 @@ export function ownContactUrl(advertisedOrigin: string, nodeId: string): string 
   return url.origin;
 }
 
+/** A spare's store address: its contact address, switched to `https`, on the store port. */
+export function spareStoreUrl(advertisedOrigin: string, nodeId: string, storePort: number): string {
+  const store = new URL(ownContactUrl(advertisedOrigin, nodeId));
+  store.protocol = "https:";
+  store.port = String(storePort);
+  return store.origin;
+}
+
 /** Whether two node ids give the same box name. */
 export function sameBoxName(a: string, b: string): boolean {
   return boxHostnameFor(a) === boxHostnameFor(b);

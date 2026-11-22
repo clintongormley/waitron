@@ -5,6 +5,7 @@ import type { Dining } from "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
+import type { JoinLimit } from "./box-join-requests.js";
 import type { CancellationContext } from "./line-cancel-context.js";
 import type { BillEditState } from "./order-drafts.js";
 import type { UnservedDish } from "./finish-party-service.js";
@@ -1475,12 +1476,8 @@ declare module "@waitron/shared" {
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
     /**
-     * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
-     * UUID, `standbyPublicKey` absent or empty, `standbyContactUrl` absent, not a string, or a
-     * non-empty value that is not a bare http(s) origin, `standbyStoreUrl` not an `https` bare
-     * origin at the contact URL's host (so an empty contact URL is refused), or `standbyAt` not a
-     * number or not a time a `Date` can hold. Not
-     * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
+     * A join's hello carried a malformed new-box identity (`parseHello` in `box-join-api.ts`). The
+     * new box's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
     /**
@@ -1502,14 +1499,8 @@ declare module "@waitron/shared" {
      */
     "mirror.vault_key_differs": Record<string, never>;
     /**
-     * A spare was asked to join a main box over https before the person confirmed that box's
-     * authority certificate, or with something other than one authority certificate as the
-     * confirmed one; nothing was sent.
-     */
-    "mirror.primary_unconfirmed": Record<string, never>;
-    /**
      * The membership document could not be written because every read-mint-write round lost its
-     * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
+     * term race. Issuing a join's bundle refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
      * bound, a constant of this process. A machine's removal (`removeStandby`) and
      * clearance (`clearRemovedMachine`) raise it the same way.
@@ -1549,12 +1540,12 @@ declare module "@waitron/shared" {
      */
     "membership.node_not_removed": Record<string, never>;
     /**
-     * A mirror-bundle request named a standby node id this node's held chart lists as `evicted` or
+     * A join named a standby node id this node's held chart lists as `evicted` or
      * has cleared. A fresh join mints a fresh id.
      */
     "mirror.standby_removed": Record<string, never>;
     /**
-     * A mirror-bundle request named a standby node id this node's held chart does not list, and
+     * A join named a standby node id this node's held chart does not list, and
      * the chart already lists `limit` (MAX_NODES) machines, the most a chart may hold. Clearing a
      * removed machine frees a place.
      */
@@ -1570,6 +1561,60 @@ declare module "@waitron/shared" {
     "mirror.standby_name_taken": Record<string, never>;
     /** The two boxes' clocks, both given as ISO times, are 10 minutes or more apart. */
     "mirror.clocks_apart": { primaryAt: string; standbyAt: string };
+    /** A join hello, or a later message of that join, came from an address the hello does not list. */
+    "mirror.join_address_mismatch": Record<string, never>;
+    /**
+     * A join message the main box cannot accept: a bad signature, a `seq` not greater than the last,
+     * a second reveal with another nonce (which ends the request) or an unknown `protocol`. The new
+     * box also uses it when the main box's reveal or approved answer does not check.
+     */
+    "mirror.join_invalid": Record<string, never>;
+    /**
+     * A join limit was reached; `retryAt` is when it frees, as an ISO time on the main box's clock;
+     * `max` and `minutes` are the limit itself (`JoinFull` in `box-join-requests.ts`).
+     */
+    "mirror.join_full": { limit: JoinLimit; retryAt: string; max: number; minutes: number };
+    /** A reveal's code equals one a listed request shows; the request ended and no nonce was sent. */
+    "mirror.join_code_taken": Record<string, never>;
+    /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */
+    "mirror.join_not_found": Record<string, never>;
+    /** A person tapped a code that is not the new box's; the request ended and nothing was sent. */
+    "mirror.join_wrong_code": Record<string, never>;
+    /**
+     * A right tap, or a Dismiss, arrived while an earlier tap was still preparing the new box's
+     * copy.
+     */
+    "mirror.join_in_progress": Record<string, never>;
+    /**
+     * The new box's cancel arrived while the main box was approving the request, had approved it,
+     * or had stopped approving it after listing the new box. A new box still waiting keeps
+     * following the request; one already holding an answer forgets its join, and a person removes
+     * the main box's listing of it by choosing Remove, then Clear from list, on its Servers page.
+     */
+    "mirror.join_approving": Record<string, never>;
+    /**
+     * A right tap while another request's copy is being prepared, or was approved less than 2
+     * minutes ago unless a newer request from its address has since ended it; the request stays
+     * waiting.
+     */
+    "mirror.join_other_approved": Record<string, never>;
+    /**
+     * The request ended while its copy was built, or the approval failed after the chart had
+     * listed the spare; either way the chart lists it.
+     */
+    "mirror.join_stopped_after_listing": Record<string, never>;
+    /**
+     * This box already has a join attempt, or is starting or cancelling one; a held attempt must be
+     * cancelled first.
+     */
+    "mirror.join_waiting": Record<string, never>;
+    /**
+     * A join cancel or start without the current join's handle, while the page holding that handle
+     * read the join's state in the last 15 seconds.
+     */
+    "mirror.join_in_use": Record<string, never>;
+    /** A Finish joining without the current join's handle. */
+    "mirror.join_handle_invalid": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;
@@ -1597,8 +1642,7 @@ declare module "@waitron/shared" {
      * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket or
      * archives page is drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
      * or a spare asks this box to join while its `backup.env` holds no usable key
-     * (`mirror-bundle-api.ts`), refused before anything is reserved and passed on by the spare's
-     * adopt route. */
+     * (`mirror-bundle-api.ts`), refused on this box before anything is reserved. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -1716,9 +1760,7 @@ declare module "@waitron/shared" {
     /**
      * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,
      * or names a host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over
-     * any scheme, or a non-loopback host over plain http). `POST /setup-api/adopt` is
-     * UNAUTHENTICATED, so this is what stops an attacker driving the mirror to send its admin
-     * credential to such a target. It covers LITERAL-IP SSRF only: a public DNS hostname over https
+     * any scheme, or a non-loopback host over plain http). It covers LITERAL-IP SSRF only: a public DNS hostname over https
      * is trusted, so DNS rebinding to an internal address is NOT blocked here.
      *
      * NO params: the URL is attacker-controlled and is never echoed — it can carry a credential in

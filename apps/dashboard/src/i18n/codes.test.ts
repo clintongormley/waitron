@@ -882,6 +882,15 @@ it("says a box holds no recovery key rather than asking for one to be entered, s
   );
 });
 
+it("words a module's unreadable settings generally, since a personal-data download shows it too", () => {
+  expect(codeMessage("module.config_invalid", "en")).toBe(
+    "A module's settings on this box could not be read, so this could not be done. Nothing was changed.",
+  );
+  expect(codeMessage("module.config_invalid", "es")).toBe(
+    "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha podido hacer. No se ha cambiado nada.",
+  );
+});
+
 it("words each Translate all code in both languages", () => {
   for (const code of [
     "content.suggestion_job_running",
@@ -1361,4 +1370,38 @@ it.each([
   ["es", "Este artículo ya no está en la carta."],
 ])("explains a missing menu item in %s", (locale, explanation) => {
   expect(codeMessage("menu_item.not_found", locale)).toContain(explanation);
+});
+
+it("has a sentence in both languages for each refusal of a box asking to join", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "membership.held_untrusted",
+    "mirror.join_not_found",
+    "mirror.join_wrong_code",
+    "mirror.join_in_progress",
+    "mirror.join_other_approved",
+    "mirror.join_stopped_after_listing",
+    "mirror.spare_already_joined",
+    "mirror.bucket_stream_active",
+    "mirror.clocks_apart",
+    "mirror.standby_name_taken",
+    "mirror.membership_full",
+    "mirror.standby_removed",
+    "mirror.standby_invalid",
+    "mirror.not_provisioned",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es"), code).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
+it("words a tap refused while another box is being or was just approved as a next step", () => {
+  expect(codeMessage("mirror.join_other_approved", "en")).toBe(
+    "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+  );
+  expect(codeMessage("mirror.join_other_approved", "es")).toBe(
+    "Se está aprobando la unión de otro servidor, o se aprobó hace un momento. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+  );
 });

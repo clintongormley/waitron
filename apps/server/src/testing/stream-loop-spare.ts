@@ -203,10 +203,16 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     const urlC = `https://127.0.0.1:${portC}`;
     const clientC = httpsVia(await readFile(join(dirsC.state, "tls", "ca.crt"), "utf8"));
     closers.push(clientC.close);
-    const primary = { primaryUrl: ownContactUrl(boxB.origin, nodeIdB), caPem: caB };
+    const joinB = () =>
+      adoptFrom(
+        { url: urlC, via: clientC.via },
+        { url: urlB, via: viaB, origin: boxB.origin },
+        ownContactUrl(boxB.origin, nodeIdB),
+        wait,
+      );
     const before = await joinState(dirsB.venue, nodeIdB);
     const fiscalBefore = fiscalRowsIn(dirsB.venue);
-    const refused = await adoptFrom(urlC, clientC.via, primary);
+    const refused = await joinB();
     expect(refused.status, JSON.stringify(refused.body)).toBe(409);
     expect(refused.body).toEqual({ error: { code: "mirror.bucket_stream_active", params: {} } });
     expect(await joinState(dirsB.venue, nodeIdB)).toEqual(before);
@@ -229,7 +235,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     const preparationB = await preparationIn(dirsB.state);
     const logAtJoin = logSoFar().length;
     adoption = adoptRetainedListeners([storeListener]);
-    const joined = await adoptFrom(urlC, clientC.via, primary);
+    const joined = await joinB();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
     const link = await readOutside(dirsB.venue, (reader) =>

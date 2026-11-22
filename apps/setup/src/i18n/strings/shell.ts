@@ -95,12 +95,6 @@ export const shellEn = {
   "shell.provision.failed":
     "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
-  "shell.adopt.bundle_fetch_failed":
-    "The primary couldn't supply a mirror setup. Enter a new authenticator code if you use one, and press Connect to try again, or choose Back to restore a backup instead.",
-  "shell.adopt.bundle_fetch_failed_no_code":
-    "The primary couldn't supply a mirror setup. Press Connect to try again, or choose Back to restore a backup instead.",
-  "shell.adopt.request_invalid":
-    "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
     "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
   "shell.adopt.vault_key_differs":
@@ -113,37 +107,16 @@ export const shellEn = {
     "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary server is for real sales. Nothing was changed. Install a released version on this server, then join again.",
   "shell.adopt.environment_mismatch":
     "This server's WAITRON_ENV setting names a different mode from the primary server's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this server, or set it to the primary server's mode, then restart it and join again.",
-  "shell.adopt.primary_unconfirmed":
-    "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
-  "shell.adopt.login_failed":
-    "The login failed. Check the admin email, password and authenticator code, then try again.",
-  "shell.adopt.login_failed_no_code":
-    "The login failed. Check the admin email and password, then try again.",
   "shell.adopt.generic":
-    "Couldn't connect to the primary. Check the address and login, then try again.",
-  "shell.adopt.bucket_stream_active":
-    "The primary server copies the restaurant's data to its own storage bucket, and it can copy to only one place at a time. This version of Waitron cannot yet pass that copy on from this server to the bucket, so joining now would end the restaurant's offsite copy. Nothing was changed on either server. To join anyway, turn off the bucket copy in the primary's dashboard under Backups — the restaurant then has no offsite copy — enter a new authenticator code if you use one, and press Connect again. To keep the bucket copy, press Back: nothing changes, and this server can join later.",
-  "shell.adopt.standby_name_taken":
-    "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Enter a new authenticator code if you use one, and press Connect again: it picks a new name.",
-  "shell.adopt.spare_already_joined":
-    "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. Nothing was changed on either server. To use this server instead, open Servers on the primary server, choose Remove on the old standby's row and confirm it is switched off and that nobody is restoring the restaurant from a backup or switching it to another server, then enter a new authenticator code if you use one, and press Connect again. Or choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant.",
-  "shell.adopt.recovery_key_missing":
-    "The primary server has no backup encryption key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
-  "shell.adopt.clocks_apart":
-    "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.",
+    "This server could not finish joining just now. Check that it is switched on and connected, then try again.",
   "shell.adopt.incomplete":
-    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin email and password you used to connect it, then start setup again.",
+    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this server clears what the stopped join left on this server and restarts setup from the first page. If the main box's Servers page lists this server, choose Remove in its row there, then Clear from list.",
 
-  "shell.reset.request_invalid":
-    "The server rejected the details. Check the admin email and password, then try again.",
   "shell.reset.generic": "The server could not be reset. Check the connection and try again.",
   "shell.reset.resetting":
     "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
   "shell.reset.unavailable":
     "There is no half-finished join to reset on this server. Reload to start setup again.",
-  "shell.throttle": "Too many attempts. Wait a few minutes, then try again.",
-  "shell.throttle_wait": "Too many attempts. Wait {seconds} seconds, then try again.",
-  "shell.throttle_wait_one": "Too many attempts. Wait 1 second, then try again.",
 
   "shell.restore.upload_interrupted":
     "The backup upload did not finish. Connect this device by cable or to the venue’s network, then try again.",
@@ -345,12 +318,6 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.provision.failed":
     "La configuración ha fallado. Comprueba que el servidor está encendido y que tu dispositivo está conectado a su red, e inténtalo de nuevo. Si ves un aviso de certificado, usa la ayuda sobre el certificado de abajo.",
 
-  "shell.adopt.bundle_fetch_failed":
-    "El servidor principal no ha podido proporcionar la configuración de una réplica. Introduce un nuevo código del autenticador si usas uno y pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
-  "shell.adopt.bundle_fetch_failed_no_code":
-    "El servidor principal no ha podido proporcionar la configuración de una réplica. Pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
-  "shell.adopt.request_invalid":
-    "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":
     "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
   "shell.adopt.vault_key_differs":
@@ -363,38 +330,17 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta copia de Waitron no es una versión publicada, así que no puede funcionar para ventas reales, y este servidor principal es para ventas reales. No se ha cambiado nada. Instala una versión publicada en este servidor y vuelve a unirlo.",
   "shell.adopt.environment_mismatch":
     "El ajuste WAITRON_ENV de este servidor indica un modo distinto del del servidor principal: uno es para ventas reales y el otro para pruebas. No se ha cambiado nada. Quita WAITRON_ENV de este servidor o ponle el modo del servidor principal; después reinícialo y vuelve a unirlo.",
-  "shell.adopt.primary_unconfirmed":
-    "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
-  "shell.adopt.login_failed":
-    "No se ha podido iniciar sesión. Revisa el correo, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
-  "shell.adopt.login_failed_no_code":
-    "No se ha podido iniciar sesión. Revisa el correo y la contraseña del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":
-    "No se ha podido conectar con el servidor principal. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
-  "shell.adopt.bucket_stream_active":
-    "El servidor principal copia los datos del restaurante en su propio bucket de almacenamiento, y solo puede copiar en un sitio a la vez. Esta versión de Waitron aún no puede pasar esa copia desde este servidor al bucket, así que unirlo ahora acabaría con la copia externa del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para unirlo de todos modos, desactiva la copia al bucket en el panel del servidor principal, en Copias de seguridad —el restaurante se queda entonces sin copia externa—, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. Para conservar la copia al bucket, pulsa Volver: no cambia nada, y este servidor puede unirse más adelante.",
-  "shell.adopt.standby_name_taken":
-    "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar: elegirá un nombre nuevo.",
-  "shell.adopt.spare_already_joined":
-    "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para usar este servidor en su lugar, abre Servidores en el servidor principal, elige Retirar en la fila del servidor en espera anterior y confirma que está apagado y que nadie está recuperando el restaurante desde una copia de seguridad ni pasándolo a otro servidor; después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. O elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo.",
-  "shell.adopt.recovery_key_missing":
-    "El servidor principal aún no tiene clave de cifrado de copias. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
-  "shell.adopt.clocks_apart":
-    "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+    "Este servidor no ha podido terminar la unión ahora. Comprueba que está encendido y conectado, e inténtalo de nuevo.",
   "shell.adopt.incomplete":
-    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Puedes restablecer este servidor con el correo y la contraseña del administrador que usaste para conectarlo, y volver a empezar la configuración.",
+    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Elegir Restablecer este servidor elimina lo que la unión detenida dejó en este servidor y vuelve a empezar la configuración desde la primera página. Si la página Servidores del servidor principal muestra este servidor, elige Retirar en su fila y después Quitar de la lista.",
 
-  "shell.reset.request_invalid":
-    "El servidor ha rechazado los datos. Revisa el correo y la contraseña del administrador, e inténtalo de nuevo.",
   "shell.reset.generic":
     "No se ha podido restablecer el servidor. Comprueba la conexión e inténtalo de nuevo.",
   "shell.reset.resetting":
     "El servidor se está restableciendo y se reiniciará. Espera un minuto y recarga esta página para volver a empezar la configuración. Si al unirlo de nuevo se indica que la unión anterior se detuvo a medias, el restablecimiento no se ha hecho: vuelve a pulsar Restablecer este servidor.",
   "shell.reset.unavailable":
     "No hay ninguna unión a medias que restablecer en este servidor. Recarga para volver a empezar la configuración.",
-  "shell.throttle": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
-  "shell.throttle_wait": "Demasiados intentos. Espera {seconds} segundos y vuelve a intentarlo.",
-  "shell.throttle_wait_one": "Demasiados intentos. Espera 1 segundo y vuelve a intentarlo.",
 
   "shell.restore.upload_interrupted":
     "La carga de la copia de seguridad no ha terminado. Conecta este dispositivo por cable o a la red del local y vuelve a intentarlo.",

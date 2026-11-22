@@ -15,6 +15,8 @@ import {
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { abandonReturn } from "./return-abandoned.js";
 import type { Logger } from "./logger.js";
+import { isRemoteStaffRequest } from "./request-from-box.js";
+import type { ListedJoinRequest } from "./box-join-requests.js";
 
 export interface MembershipRemovalApiDeps {
   readSpare?: () => Promise<import("./spare-follow.js").SpareFollowView | null>;
@@ -23,8 +25,8 @@ export interface MembershipRemovalApiDeps {
   ring: KeyRing;
   nodeId: string;
   reloadStream: () => Promise<void>;
-  /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
-  authorityFingerprint: () => Promise<string | null>;
+  /** The boxes asking to join that the Servers page lists. */
+  listJoinRequests?: () => ListedJoinRequest[];
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -72,9 +74,12 @@ export function mountMembershipRemovalApi(
       const listing = await listServers(deps.db, deps.node, deps.nodeId);
       return c.json({
         term: listing.term,
-        authorityFingerprint: await deps.authorityFingerprint(),
         nodes: listing.nodes,
         ...(deps.readSpare === undefined ? {} : { spare: await deps.readSpare() }),
+        // A join is approved only on this box's own page (`box-join-api.ts`), never through Cloud.
+        ...(deps.listJoinRequests === undefined || isRemoteStaffRequest(c)
+          ? {}
+          : { joinRequests: deps.listJoinRequests() }),
       });
     }),
   );
