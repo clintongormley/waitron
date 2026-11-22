@@ -141,6 +141,25 @@ it("saves the count before showing the difference, allows a recount and saves th
   await vi.waitFor(() => expect(words(el)).toContain("reprint the slip in Sales"));
 });
 
+it("offers Recount again when later cash makes the latest count stale", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  requests.readDrawerClose.mockResolvedValue({ ...recounted, available: "-40.00" });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(words(el)).toContain("Recount the drawer to finish"));
+  expect(action(el, "finish")).toBeNull();
+  await press(el, "recount");
+  await fill(el, "counted", "3.00");
+  await press(el, "count");
+  expect(requests.recountDrawer).toHaveBeenCalledExactlyOnceWith("first", {
+    counted: "3.00",
+    startSequence: 9,
+  });
+});
+
 it.each(["read", "finish"] as const)(
   "offers another sign-in when the %s is refused for its drawer grant",
   async (stage) => {

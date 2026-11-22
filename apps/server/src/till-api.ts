@@ -677,6 +677,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "drawer.not_attached": 400,
   "drawer.close_not_found": 404,
   "drawer.close_changed": 409,
+  "drawer.assignment_changed": 409,
   "drawer.recount_unavailable": 409,
   // No till address holds a reason id: only a request body can name a missing one.
   "adjustment_reason.not_found": 400,
@@ -2757,7 +2758,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const device = session.device;
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       await assertRequestDevice(deps, c, session);
-      const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
+      const body = await readJsonBody<{
+        override?: { personId?: unknown; pin?: unknown };
+        expectedPrinterId?: unknown;
+      }>(c);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await drawerOverrideToCheck(deps.db, sessionId, body);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
@@ -2775,6 +2779,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           const printer = await resolveDrawerPrinter(tx, cfg.origin);
           if (printer === undefined) {
             throw new AppError("drawer.no_printer", { deviceId: session.deviceId });
+          }
+          if (
+            body.expectedPrinterId !== undefined &&
+            canonicaliseUuid(body.expectedPrinterId) !== printer.id
+          ) {
+            throw new AppError("drawer.assignment_changed", {});
           }
           if (!printer.hasCashDrawer) {
             throw new AppError("drawer.not_attached", { printerId: printer.id });

@@ -31,12 +31,21 @@ Add an item before paying or sending an order.
 If cash is refused while you pay an edited parked order, your edits stay in the basket.
 Correct the payment amount and try again, or park the order to save the edits without paying.
 
+## Record cash in or out {#drawer-cash-entry}
+
+When you top up change or take cash out, open **More** and choose **Cash in or out** on a till
+assigned to the drawer. Choose **Open drawer**, or use the key if the drawer stays shut.
+Choose **Cash in** or **Cash out**, enter the amount and why you moved it, and choose **Save**.
+
 ## Close a cash drawer {#close-drawer}
 
 On a till assigned to the drawer, open **More** and choose **Close drawer**. Open it with the key
 if it stays shut. Count the cash and choose **Save count**. Waitron then shows any difference, and
 you can choose **Recount** once to check it. If you leave after saving a count, choose **Close drawer**
 again from any till assigned to it to pick up where you left off.
+
+If Waitron asks you to recount after cash moved, choose **Recount** and enter what is in the
+drawer now.
 
 Enter the cash you want to leave and check **For the bank** before taking the rest out. Choose
 **Finish close**. If you need another slip, you can reprint it from

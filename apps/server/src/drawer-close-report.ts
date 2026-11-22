@@ -17,6 +17,7 @@ import {
 } from "@waitron/shared";
 
 const recount = alias(drawerEntries, "recount");
+const newerRecount = alias(drawerEntries, "newer_recount");
 const finish = alias(drawerEntries, "finish");
 const firstPerson = alias(persons, "first_person");
 const recountPerson = alias(persons, "recount_person");
@@ -40,7 +41,10 @@ function count(row: Entry, person: string) {
 }
 
 async function readRows(tx: Transaction, nodeIds: readonly string[], filter: Filter) {
-  const related = (entry: typeof recount | typeof finish, kind: "recount" | "finish") =>
+  const related = (
+    entry: typeof recount | typeof newerRecount | typeof finish,
+    kind: "recount" | "finish",
+  ) =>
     and(
       eq(entry.firstCountId, drawerEntries.id),
       eq(entry.printerId, drawerEntries.printerId),
@@ -73,10 +77,21 @@ async function readRows(tx: Transaction, nodeIds: readonly string[], filter: Fil
     .innerJoin(printers, and(eq(printers.id, drawerEntries.printerId), isReceiptPrinter()))
     .innerJoin(firstPerson, eq(firstPerson.id, drawerEntries.personId))
     .leftJoin(recount, related(recount, "recount"))
+    .leftJoin(
+      newerRecount,
+      and(related(newerRecount, "recount"), gt(newerRecount.sequence, recount.sequence)),
+    )
     .leftJoin(recountPerson, eq(recountPerson.id, recount.personId))
     .leftJoin(finish, related(finish, "finish"))
     .leftJoin(finishPerson, eq(finishPerson.id, finish.personId))
-    .where(and(eq(drawerEntries.kind, "count"), inArray(drawerEntries.nodeId, nodeIds), selection))
+    .where(
+      and(
+        eq(drawerEntries.kind, "count"),
+        inArray(drawerEntries.nodeId, nodeIds),
+        selection,
+        isNull(newerRecount.id),
+      ),
+    )
     .orderBy(desc(reportDate), desc(drawerEntries.sequence), asc(drawerEntries.id));
 }
 

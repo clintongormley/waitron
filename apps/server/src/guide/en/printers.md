@@ -88,6 +88,8 @@ Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, ch
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.
 
+If you moved cash by hand, [record it on the till](table-service.md#drawer-cash-entry).
+
 Choose **Reprint** to send a receipt or invoice to any receipt printer. If the original
 already printed, you get a marked copy. Use **Orders** for an A4 copy. You can also reprint a
 station ticket or refund receipt on a printer at least as wide. A printout waiting on a

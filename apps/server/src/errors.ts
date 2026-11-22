@@ -1394,6 +1394,8 @@ declare module "@waitron/shared" {
     "drawer.no_printer": { deviceId: string };
     "drawer.not_attached": { printerId: string };
     "drawer.close_invalid_field": { field: string };
+    "drawer.entry_invalid_field": { field: string };
+    "drawer.assignment_changed": Record<string, never>;
     /**
      * A promote was requested without the operator attesting that the OLD node is physically
      * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is

@@ -332,6 +332,7 @@ import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
 import "./screens/till-drawer-close.js";
+import "./screens/till-drawer-cash.js";
 import "./widgets/find-bill-dialog.js";
 import { canScan } from "./widgets/equipment-dialog.js";
 import "./widgets/profile-dialog.js";
@@ -3936,6 +3937,33 @@ export class TillApp extends LitElement {
     return this.deviceEquipment?.opensDrawer === true;
   }
 
+  #renderDrawerDialog() {
+    const dialog = this.drawerDialog;
+    if (dialog === null) return nothing;
+    const dismiss = () => (this.drawerDialog = null);
+    return dialog.kind === "cash"
+      ? html`<till-drawer-cash
+          .api=${this.api}
+          .printerId=${dialog.printerId}
+          .opensDrawer=${dialog.opensDrawer}
+          .opener=${dialog.opener}
+          @drawer-cash-dismiss=${dismiss}
+        ></till-drawer-cash>`
+      : html`<till-drawer-close
+          .api=${this.api}
+          .printerId=${dialog.printerId}
+          .opensDrawer=${dialog.opensDrawer}
+          .opener=${dialog.opener}
+          @drawer-close-dismiss=${dismiss}
+        ></till-drawer-close>`;
+  }
+
+  #showDrawerDialog(kind: "close" | "cash", opener: HTMLElement | null): void {
+    const printerId = this.deviceEquipment?.drawerPrinterId;
+    if (printerId && this.#inShell())
+      this.drawerDialog = { kind, printerId, opensDrawer: this.#mayOpenDrawer, opener };
+  }
+
   /** The person every request names, one object per sign-in: a refusal hands back the object its
    * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
    * sign-out keeps it, so the sign-out itself names who is leaving. */
@@ -4287,7 +4315,8 @@ export class TillApp extends LitElement {
   /** The box offers this till "Check the time", from the latest equipment read applied. */
   @state() private checkTimeOffered = false;
   @state() private drawerOpening = false;
-  @state() private drawerClose: {
+  @state() private drawerDialog: {
+    kind: "close" | "cash";
     printerId: string;
     opensDrawer: boolean;
     opener: HTMLElement | null;
@@ -22123,7 +22152,7 @@ export class TillApp extends LitElement {
     this.captureWarning = null;
     this.checkTimeOffered = false;
     this.boxTimeOpen = false;
-    this.drawerClose = null;
+    this.drawerDialog = null;
     this.paymentsPausedOpen = false;
     this.#paymentsWait = false;
     this.#menuPoll.stop();
@@ -25037,15 +25066,10 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @open-equipment=${() => void this.#onOpenEquipment()}
-        @open-drawer-close=${(event: CustomEvent<{ opener: HTMLElement | null }>) => {
-          const printerId = this.deviceEquipment?.drawerPrinterId;
-          if (printerId && this.#inShell())
-            this.drawerClose = {
-              printerId,
-              opensDrawer: this.#mayOpenDrawer,
-              opener: event.detail.opener,
-            };
-        }}
+        @open-drawer-close=${(event: CustomEvent<{ opener: HTMLElement | null }>) =>
+          this.#showDrawerDialog("close", event.detail.opener)}
+        @open-drawer-cash=${(event: CustomEvent<{ opener: HTMLElement | null }>) =>
+          this.#showDrawerDialog("cash", event.detail.opener)}
         @open-settings=${() => (this.deviceSettingsOpen = true)}
         @open-device-zones=${() => this.#openDeviceZones()}
         @open-profile=${() => void this.#onOpenProfile()}
@@ -25666,20 +25690,7 @@ export class TillApp extends LitElement {
                                   }}
                                 ></till-department-transfers>`
                           }
-                          ${
-                            this.drawerClose === null
-                              ? nothing
-                              : html`<till-drawer-close
-                                  .api=${this.api}
-                                  .printerId=${this.drawerClose.printerId}
-                                  .opensDrawer=${this.drawerClose.opensDrawer}
-                                  .opener=${this.drawerClose.opener}
-                                  @drawer-close-dismiss=${() => {
-                                    this.drawerClose = null;
-                                  }}
-                                ></till-drawer-close>`
-                          }
-                          ${this.#activeTabBody()}
+                          ${this.#renderDrawerDialog()} ${this.#activeTabBody()}
                           ${this.#findBillBody()}${this.#drillBody() /* the drill overlay, when one is open */}
                         </till-shell>`,
                       )

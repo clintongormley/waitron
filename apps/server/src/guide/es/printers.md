@@ -96,6 +96,8 @@ Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no 
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
+Si moviste efectivo a mano, [regístralo en el terminal](table-service.md#drawer-cash-entry).
+
 Elige **Reimprimir** para enviar un ticket o una factura a cualquier impresora de tickets.
 Si el original ya se imprimió, obtendrás un duplicado. Para una copia en A4, abre **Pedidos**.
 También puedes reimprimir una comanda de estación o un justificante de devolución en una

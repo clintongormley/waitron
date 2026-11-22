@@ -2,7 +2,7 @@
 
 Status: approved by the owner on 6 November 2026, after a fresh reviewer read it. Nothing is built. It replaces the
 "close the day" framing in [A1325](../../backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
-and absorbs [A239](../../backlog/till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03).
+and absorbs [A239](#cash-in-and-out-a239).
 
 ## Intent
 

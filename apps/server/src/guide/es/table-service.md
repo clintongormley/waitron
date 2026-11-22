@@ -33,12 +33,21 @@ Añade un artículo antes de cobrar o enviar un pedido.
 Si se rechaza el cobro en efectivo de un pedido aparcado que has editado, los cambios siguen en
 la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guardar los cambios sin cobrar.
 
+## Registrar una entrada o salida de efectivo {#drawer-cash-entry}
+
+Si repones cambio o retiras efectivo, abre **Más** y elige **Entrada o salida de efectivo** en un
+terminal asignado al cajón. Elige **Abrir cajón** o usa la llave si sigue cerrado. Elige **Entrada**
+o **Salida**, indica el importe y el motivo del movimiento y pulsa **Guardar**.
+
 ## Cerrar un cajón de efectivo {#close-drawer}
 
 En un terminal asignado al cajón, abre **Más** y elige **Cerrar cajón**. Si no se abre, usa la
 llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la diferencia, si la hay,
 y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
 **Cerrar cajón** en cualquier terminal asignado al mismo cajón para continuar.
+
+Si Waitron te pide que vuelvas a contar tras un movimiento de efectivo, elige **Volver a contar**
+e indica cuánto hay ahora en el cajón.
 
 Introduce el efectivo que quieres dejar y comprueba el importe **Para el banco** antes de retirar
 el resto. Elige **Finalizar cierre**. Puedes reimprimir el justificante en
