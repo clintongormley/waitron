@@ -1387,6 +1387,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const table4 = await firedTable(v, "Table 4", ["burger", "fish", "beer"]);
     await voidDish(v, table4, "fish");
     const slip = (await jobsAt(v.kitchenPrinterId)).at(-1)!;
+    expect(slip.lines[0]).toBe("*** VOID ***");
     await setJob(slip.id, exhausted);
     expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBe(true);
 
@@ -1398,6 +1399,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       }),
     );
 
+    expect(
+      (await links()).filter((row) => row.printJobId === slip.id).map((row) => row.workingOrderId),
+    ).toEqual([table4.tabId]);
     expect(await problemsOf(table4.partyId)).toEqual([]);
     expect((await stationCard(v.kitchenStationId, checkId)).printProblem).toBeUndefined();
     expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
