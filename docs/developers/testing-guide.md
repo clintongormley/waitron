@@ -3676,6 +3676,17 @@ clock added the real `performance.now`, and CI's set-clock case (job 13674348721
 120001 against 120000. A spy making `performance.now` gain 2 ms a call reproduced that failure.
 
 
+## Exact elapsed cutoffs use whole milliseconds
+
+Pin the steady clock to a whole millisecond before a report when you assert the exact instant it
+expires. With a fractional starting time, adding the cutoff and subtracting the start can yield
+slightly more than the cutoff.
+
+On 22 November 2026, running `pnpm --filter @waitron/server exec vitest run src/print-api.test.ts
+-t 'accepts Pair up to fifteen seconds'` with a start of `50977.687828019225` failed because the
+report was already absent at the inclusive limit. With the fixture using whole milliseconds, the
+same case passed. The product clock still uses the full reading.
+
 ## A floor test pins the till API's clock away from the day change
 
 A suite that sends a room's revision to a today's-floor write route, whether it read the revision

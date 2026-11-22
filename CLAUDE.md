@@ -756,6 +756,9 @@ passed while proving nothing.
   `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
+- **A test that checks an exact elapsed-millisecond cutoff pins its steady clock to a whole number.**
+  A fractional starting time made the printer Pair test fail at its inclusive limit.
+  [Receipt](docs/developers/testing-guide.md#exact-elapsed-cutoffs-use-whole-milliseconds).
 - **A test child process that freezes `Date` freezes `performance.now` with it**. Guard: the
   one-time 1.1-second holds in the hour test children, weaker than the rule: those children only.
   [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).

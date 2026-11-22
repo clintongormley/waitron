@@ -3622,6 +3622,7 @@ describe("mountPrintApi — the hardware.manage gate", () => {
 
 describe("agent inventory screening and the discovered-printer list", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -3820,7 +3821,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const printing = await joinAndAccept(app, "Back bar agent");
     const blind = await joinAndAccept(app, "Line kitchen agent");
     const { mac, printerId } = await bluetoothPrinter(app);
-    const reportedAt = performance.now();
+    const reportedAt = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(reportedAt);
     await pull(app, printing.token, {
       visible: [{ transport: "bluetooth", localKey: mac }],
@@ -4080,7 +4081,6 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     vi.useFakeTimers({ toFake: ["Date"] });
-    onTestFinished(() => vi.useRealTimers());
     const serial = `SN-${randomUUID()}`;
     const elapsed = vi.spyOn(performance, "now").mockReturnValue(1_000);
     await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
@@ -4097,7 +4097,6 @@ describe("agent inventory screening and the discovered-printer list", () => {
       const { token } = await joinAndAccept(app);
       const serial = `SN-${randomUUID()}`;
       vi.useFakeTimers({ toFake: ["Date"] });
-      onTestFinished(() => vi.useRealTimers());
       const reportedAt = Date.now();
       vi.spyOn(performance, "now").mockReturnValue(1_000);
       await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
@@ -4299,7 +4298,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
-    const scannedAt = performance.now();
+    const scannedAt = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(scannedAt);
     await pull(app, token, { scanned: [scannedMac(mac)] });
 
@@ -4319,7 +4318,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
-    const scannedAt = performance.now();
+    const scannedAt = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(scannedAt);
     await pull(app, token, { scanned: [scannedMac(mac)] });
     vi.spyOn(performance, "now").mockReturnValue(scannedAt + 15_000);
@@ -4335,7 +4334,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const scannedOnly = randomMac();
     const paired = randomMac();
     const host = `10.77.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250) + 1}`;
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(start);
     const opened = await send(app, "POST", "/management-api/printer-discovery/start", {
       cookie: managerCookie,
@@ -4833,7 +4832,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const mac = randomMac();
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(start);
     await pull(app, token, {
       scanned: [scannedMac(mac, { name: "Scanned printer", printerLike: true, make: "Epson" })],
@@ -4858,7 +4857,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const mac = randomMac();
     const visible = [{ transport: "bluetooth", localKey: mac, model: "BlueTooth Printer" }];
     const pairedBluetooth = [{ localKey: mac, name: "BlueTooth Printer" }];
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(start);
     await pull(app, token, {
       visible,
@@ -4947,7 +4946,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const mac = randomMac();
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(start);
     await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
     vi.spyOn(performance, "now").mockReturnValue(start + 10_000);
@@ -4963,7 +4962,7 @@ describe("Bluetooth Pair and Delete commands", () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const mac = randomMac();
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     vi.spyOn(performance, "now").mockReturnValue(start);
     await pull(app, token, { pairedBluetooth: [{ localKey: mac, printerLike: true }] });
     vi.spyOn(performance, "now").mockReturnValue(start + 10_000);
@@ -5719,7 +5718,7 @@ describe("office printers in discovery and the receipt-printer create route", ()
     const app = mountApp();
     const a = await joinAndAccept(app, "Office agent");
     const host = "10.9.249.3";
-    const start = performance.now();
+    const start = Math.floor(performance.now());
     const clock = vi.spyOn(performance, "now").mockReturnValue(start);
     try {
       await pull(app, a.token, {
@@ -6304,7 +6303,7 @@ describe("office printers in discovery and the receipt-printer create route", ()
     });
     const body = { name: "Typed in", transport: "network_tcp", host, port: 9100 };
 
-    elapsed.mockReturnValue(15_000);
+    elapsed.mockReturnValue(16_000);
     const fresh = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body,
