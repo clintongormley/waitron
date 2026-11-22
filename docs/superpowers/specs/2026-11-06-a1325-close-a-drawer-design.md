@@ -1,13 +1,15 @@
 # Closing a drawer (A1325, with A239)
 
-Status: approved by the owner on 6 November 2026, after a fresh reviewer read it. Nothing is built. It replaces the
+The owner approved the original design on 6 November 2026 after a fresh review. It replaces the
 "close the day" framing in [A1325](https://github.com/clintongormley/waitron/blob/e40d2721cd1d8e6b70e203c45a3714a57d803f02/docs/backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 and absorbs [A239](#cash-in-and-out-a239).
 
 _22 November 2026: The [implemented reminder and email plan](../plans/2026-11-21-a1325-close-a-drawer-7-warning.md)
-follows the watcher's clearance of 21 November at 18:02. The dashboard warning repeats daily after
-closing. The daily Sales email keeps its existing schedule and opt-in recipients and includes
-reminders already due when it is queued._
+follows the watcher's clearance of 21 November at 18:02. The dashboard warning is due one hour
+after the last department closes, or at the next business-day start on a day without hours. The
+warning repeats daily until the drawer is closed. After the automatic bill-issue pass, the existing
+daily Sales email goes to its opt-in recipients with closes from the most recently ended business
+day and reminders already due when the email is queued._
 
 ## Intent
 
