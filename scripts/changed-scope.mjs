@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 // Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
-// changed-packages.mjs): whether a change can affect a test, build or type-check result
+// changed-packages.mjs): whether a change can affect what a `code`-gated job runs or finds
 // (`isInertPath` and `classify`), and which gated jobs a resolved scope gives work to (`SCOPE_GATES`
 // and `gateOutputs`).
 //
@@ -23,12 +23,13 @@ const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
 const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 
 /**
- * The repository's own machinery. Code — a wrong classifier breaks every gating decision — but it
- * gives the root Vitest project work and gives no package any, unless ROOT_SCOPE_CONSUMERS or
- * GLOBAL_ROOT_FILES lists it.
+ * The repository's own machinery, and `.impeccable/`, which belongs to no package and is read only
+ * by a root guard (`scripts/design-md-tokens.test.ts`). Code — a wrong classifier breaks every
+ * gating decision — but it gives the root Vitest project work and gives no package any, unless
+ * ROOT_SCOPE_CONSUMERS or GLOBAL_ROOT_FILES lists it.
  * ROOT-ONLY, like INERT_ROOT_PREFIXES: `packages/db/scripts/x.ts` is that package's.
  */
-const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
+const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/", ".impeccable/"];
 
 /**
  * Root-scope files a workspace member depends on, each mapped to the member DIRECTORIES that depend
@@ -177,7 +178,11 @@ export function isImageInputPath(path) {
   return path.startsWith("deploy/") || IMAGE_SMOKE_FILES.includes(path);
 }
 
-/** True when a change to `path` cannot affect any test, build or type-check result. */
+/**
+ * True when no `code`-gated job reads `path`, so a change to it runs no package's tests, builds or
+ * type-checks. The root guards run whatever the scope and read some of these (`CLAUDE.md`,
+ * `DESIGN.md`).
+ */
 export function isInertPath(path) {
   if (path.startsWith("docs/")) return true;
   if (INERT_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;

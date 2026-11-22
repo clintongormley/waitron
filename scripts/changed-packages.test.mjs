@@ -162,6 +162,7 @@ describe("scopeForPaths", () => {
     "scripts/changed-scope.mjs",
     ".husky/pre-push",
     "scripts/changed-packages.mjs",
+    ".impeccable/design.json",
   ])("reports a root run for %s", (path) => {
     expect(scopeForPaths([path], workspace())).toMatchObject({
       kind: "root",

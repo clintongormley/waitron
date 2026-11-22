@@ -3,6 +3,12 @@
 Every screen in this project is built from `wt-*` primitives styled by `--wt-*` tokens.
 This document is the contract. If you are building a view, read this first.
 
+`DESIGN.md` at the repository root is a short summary of this look for design tools, with
+`.impeccable/design.json` beside it. Both hold hand-made copies of token values: whoever changes a
+token updates the copies, and `scripts/design-md-tokens.test.ts` fails while a copy it checks
+differs from its token. That check is weaker than its name; the test file's opening comment
+lists what it checks and what it does not.
+
 ## Shared package boundary
 
 `@waitron/ui-core` owns account-form controls: button, input, textarea, card, icon, spinner,
@@ -5288,7 +5294,7 @@ Global or unknown scopes keep whole-repository formatting and lint. Root guards 
 The hook checks commit sign-offs first and stops at a failed check with a command to reproduce it.
 
 A documentation-only push stops after formatting. Repository machinery changes (`scripts/`,
-`.husky/`, `.github/`) stop after lint, unless they touch a file `ROOT_SCOPE_CONSUMERS`
+`.husky/`, `.github/`, `.impeccable/`) stop after lint, unless they touch a file `ROOT_SCOPE_CONSUMERS`
 or `GLOBAL_ROOT_FILES` lists. Shared configuration, a file `GLOBAL_ROOT_FILES` lists, or an unknown push range selects all workspace typechecks. Deleting
 branches without updating any ref skips the hook. Package browser and database suites run in CI
 rather than in the hook.
