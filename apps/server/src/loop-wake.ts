@@ -4,7 +4,7 @@ export interface LoopWaker {
   /** Ends the sleep under way, or the next one if none is, no sooner than `minTickMs` after that
    * sleep began. One wake is spent by one sleep. */
   wake(): void;
-  /** `LoopDeps["sleep"]`: ends at `ms`, at a wake (as above), or at once when `signal` aborts. */
+  /** Ends at `ms`, at a wake (as above), or at once when `signal` aborts. */
   sleep(ms: number, signal: AbortSignal): Promise<void>;
 }
 

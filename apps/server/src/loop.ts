@@ -1,7 +1,4 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { PassReport } from "./pass.js";
-import { codeOf } from "@waitron/server-kit";
-import type { Logger } from "./logger.js";
 
 /**
  * How long to sleep before the next pass.
@@ -21,24 +18,7 @@ export function sleepMsFor(
   return Math.min(maxTickMs, Math.max(minTickMs, wait));
 }
 
-export interface LoopDeps {
-  pass: (now: Date) => Promise<PassReport>;
-  now: () => Date;
-  /** Injected so the suite asserts durations instead of waiting them out. */
-  sleep: (ms: number, signal: AbortSignal) => Promise<void>;
-  signal: AbortSignal;
-  minTickMs: number;
-  maxTickMs: number;
-  log: Logger;
-  onPass?: (report: PassReport, at: Date) => void;
-}
-
-/**
- * Real sleep, interruptible by the shutdown signal so SIGTERM does not wait out an hour.
- *
- * Narrow on purpose: only the abort is silenced. Anything else rethrows, and `runLoop`'s own
- * try/catch gives it the same visibility an unforeseen pass failure gets.
- */
+/** Only shutdown aborts are silenced. Other errors reach the caller. */
 export async function realSleep(ms: number, signal: AbortSignal): Promise<void> {
   try {
     await delay(ms, undefined, { signal });
@@ -49,40 +29,4 @@ export async function realSleep(ms: number, signal: AbortSignal): Promise<void> 
     if (!signal.aborted) throw error;
     /* v8 ignore stop */
   }
-}
-
-export async function runLoop(deps: LoopDeps): Promise<void> {
-  while (!deps.signal.aborted) {
-    const startedAt = deps.now();
-    let nextDueAt: Date | null;
-    try {
-      const report = await deps.pass(startedAt);
-      nextDueAt = report.nextDueAt;
-      try {
-        // `onPass` is a side observer (health state), not a duty. Its own try/catch keeps a bug in
-        // it from being mislabeled as a pass failure, and — since the pass itself already
-        // succeeded — from clobbering the real `nextDueAt` the pass computed with a false
-        // due-immediately retry.
-        deps.onPass?.(report, startedAt);
-      } catch (error) {
-        deps.log("error", "onPass.threw", { errorCode: codeOf(error) });
-      }
-    } catch (error) {
-      // Retry on the floor if the card recovery pass throws.
-      deps.log("error", "pass.threw", { errorCode: codeOf(error) });
-      nextDueAt = startedAt;
-    }
-    // A stop during the pass skips the wait.
-    if (deps.signal.aborted) break;
-    const sleepMs = sleepMsFor(nextDueAt, deps.now(), deps.minTickMs, deps.maxTickMs);
-    deps.log("debug", "loop.sleeping", { sleepMs });
-    try {
-      await deps.sleep(sleepMs, deps.signal);
-    } catch (error) {
-      // A well-behaved `sleep` resolves for the ordinary abort (see `realSleep`), so a rejection here is
-      // unforeseen and contained like a pass that throws: a sleep failure must not end the hourly duty.
-      deps.log("error", "sleep.threw", { errorCode: codeOf(error) });
-    }
-  }
-  deps.log("info", "loop.stopped");
 }

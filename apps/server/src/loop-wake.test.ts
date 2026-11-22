@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PassReport } from "./pass.js";
-import { runLoop } from "./loop.js";
 import { createLoopWaker, type LoopWaker } from "./loop-wake.js";
 
 const MIN = 5_000;
@@ -213,46 +211,5 @@ describe("createLoopWaker", () => {
     const sleeping = w.sleep(HOUR, controller.signal);
     w.wake();
     await expect(sleeping).resolves.toBeUndefined();
-  });
-});
-
-describe("runLoop with a waker's sleep", () => {
-  function report(): PassReport {
-    return { duties: [], nextDueAt: null };
-  }
-
-  async function secondPassAfter(wakeAt: number | null): Promise<number> {
-    const w = waker();
-    const controller = new AbortController();
-    const passes: number[] = [];
-    const done = runLoop({
-      pass: () => {
-        passes.push(clock());
-        if (passes.length === 2) controller.abort();
-        return Promise.resolve(report());
-      },
-      now: () => new Date(),
-      sleep: w.sleep,
-      signal: controller.signal,
-      minTickMs: MIN,
-      maxTickMs: HOUR,
-      log: () => {},
-    });
-    if (wakeAt !== null) {
-      await vi.advanceTimersByTimeAsync(wakeAt);
-      w.wake();
-    }
-    await vi.advanceTimersByTimeAsync(HOUR);
-    await done;
-    expect(passes).toHaveLength(2);
-    return passes[1]! - passes[0]!;
-  }
-
-  it("starts the second pass the shortest tick after the first sleep began when woken in it", async () => {
-    expect(await secondPassAfter(1_000)).toBe(MIN);
-  });
-
-  it("waits the hour for the second pass without a wake (control)", async () => {
-    expect(await secondPassAfter(null)).toBe(HOUR);
   });
 });

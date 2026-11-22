@@ -865,11 +865,6 @@ The ones worth grepping for:
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
-- **`loop.sleeping`** (`debug`) carries `sleepMs` for the card recovery loop.
-- **`pass.threw`** (`error`) carries the structured `errorCode` when a card recovery pass
-  throws. The loop retries on its minimum interval.
-- **`sleep.threw`** (`error`) carries the `errorCode` of a rejected card-loop timer. The
-  loop logs the failure and starts its next turn.
 - **`server.listening`** (`info`) — `{ port, environment }`, logged once the HTTP listener has
   actually bound (not merely been asked to). A spare's store listener logs
   `{ listener: spare_store, port }` instead.
