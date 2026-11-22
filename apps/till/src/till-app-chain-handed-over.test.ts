@@ -523,3 +523,62 @@ it.each(["en-GB", "es-ES"])(
     expect(shown).toMatch(unconfirmedWords(locale));
   },
 );
+
+const noBoxAnswering = { code: "server.waiting_sales", status: 503 };
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["cash", "card"] as const).map((method) => ({ locale, method })),
+  ),
+)(
+  "says no box is taking sales when the till refuses a whole table $method payment itself, and sends the same payment once one does, in $locale",
+  async ({ locale, method }) => {
+    const write = vi.fn().mockRejectedValue(noBoxAnswering);
+    const { el } = await mount(locale, { recordSale: write });
+    await openTable(el);
+    const tap = () =>
+      emit(tableOrder(el)!, "pay-tab", {
+        method,
+        amount: "120.00",
+        ...(method === "card" ? { externalRef: "op-1" } : {}),
+      });
+    tap();
+    await flush(el);
+    const shown = banner(el)?.textContent?.trim();
+    expect(shown).not.toBe(t("sale.error"));
+    expect(shown).toBe(codeMessage("server.waiting_sales"));
+    expect(shown).not.toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]).toEqual(write.mock.calls[0]);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "keeps a whole table payment unconfirmed when the till refuses it itself after an unanswered send, in %s",
+  async (locale) => {
+    const write = vi.fn().mockRejectedValueOnce(noAnswer()).mockRejectedValue(noBoxAnswering);
+    const { el } = await mount(locale, { recordSale: write });
+    await openTable(el);
+    const tap = () => emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "120.00" });
+    tap();
+    await flush(el);
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]).toEqual(write.mock.calls[0]);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "says no box is taking sales when the till refuses a counter cash sale itself, in %s",
+  async (locale) => {
+    const write = vi.fn().mockRejectedValue(noBoxAnswering);
+    const { el } = await mount(locale, { recordSale: write });
+    emit(await openCounter(el), "confirm-payment", { method: "cash", amount: "5.00" });
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(codeMessage("server.waiting_sales"));
+  },
+);

@@ -1,4 +1,6 @@
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { TillApi as RealTillApi } from "./api/client.js";
+import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
@@ -6264,6 +6266,100 @@ describe("till-app: a bill payment on the card reader", () => {
   ): BillPaymentResult => ({
     ...takenOf({ method: "card", applied: "40.00", tendered: null, change: null, state }, balance),
     outcome,
+  });
+
+  describe("refused by the till itself while no box answers", () => {
+    /** A real client behind the router's refusal. The box goes silent before the confirm, or, with
+     * `earlierUnanswered`, during the first attempt, which then gets no answer. */
+    async function payWhileSilent(method: "cash" | "card", earlierUnanswered: boolean) {
+      let answering = true;
+      const router = new ServerRouter({
+        origin: "https://deli.test",
+        fetchImpl: async () => {
+          if (!answering) throw new TypeError("Failed to fetch");
+          return Response.json({ acceptingSales: true, term: 1 });
+        },
+      });
+      await router.probeNow();
+      const wire = vi.fn(async () => {
+        if (earlierUnanswered && wire.mock.calls.length === 1) {
+          answering = false;
+          await router.probeNow();
+          throw new TypeError("Failed to fetch");
+        }
+        return Response.json(
+          method === "cash"
+            ? takenOf(
+                { applied: "40.00", change: "10.00" },
+                { received: "40.00", outstanding: "80.00" },
+              )
+            : onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      });
+      const client = new RealTillApi("", withServerTarget(wire, router));
+      const takeBillPayment = vi.fn(client.takeBillPayment.bind(client));
+      const { el } = await mountApp({
+        takeBillPayment,
+        ...(method === "card"
+          ? { ...withReader, previewBillPayment: vi.fn().mockResolvedValue(cardPreview) }
+          : {}),
+      });
+      await openTable(el);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      if (method === "cash") await type(el, "tendered", "50");
+      else {
+        await press(el, 'input[name="method"][value="card"]');
+        await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+      }
+      await press(el, "[data-pay-continue]");
+      if (!earlierUnanswered) {
+        answering = false;
+        await router.probeNow();
+      }
+      await press(el, "[data-pay-confirm]");
+      const attempts = earlierUnanswered ? 2 : 1;
+      await expect.poll(() => takeBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(attempts);
+      await expect(takeBillPayment.mock.results[attempts - 1]!.value).rejects.toEqual({
+        code: "server.waiting_sales",
+        status: 503,
+      });
+      await expect.poll(() => inDialog(el, "wt-form-actions")?.error ?? "").not.toBe("");
+      const said = inDialog(el, "wt-form-actions")!.error;
+      const reachedBox = wire.mock.calls.length;
+
+      answering = true;
+      await router.probeNow();
+      if (!earlierUnanswered) await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await expect.poll(() => takeBillPayment.mock.calls.length).toBe(attempts + 1);
+      await expect.poll(() => text(inDialog(el, "[data-pay-taken]"))).not.toBe("");
+      const ids = sent().map((request) => request.submissionId);
+      return { said, reachedBox, ids, wire };
+    }
+
+    it.each(["cash", "card"] as const)(
+      "says no box is taking sales for a first %s attempt, which never left the till, and sends it with the same id once one answers",
+      async (method) => {
+        const { said, reachedBox, ids, wire } = await payWhileSilent(method, false);
+        expect(reachedBox).toBe(0);
+        expect(said).toBe(codeMessage("server.waiting_sales"));
+        expect(said).not.toBe(t("bill_pay.unconfirmed"));
+        expect(new Set(ids).size).toBe(1);
+        expect(wire).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(["cash", "card"] as const)(
+      "keeps a %s payment unconfirmed when an earlier attempt got no answer, and sends it again with the same id",
+      async (method) => {
+        const { said, reachedBox, ids, wire } = await payWhileSilent(method, true);
+        expect(reachedBox).toBe(1);
+        expect(said).toBe(t("bill_pay.unconfirmed"));
+        expect(new Set(ids).size).toBe(1);
+        expect(wire).toHaveBeenCalledTimes(2);
+      },
+    );
   });
 
   async function takeOnReader(

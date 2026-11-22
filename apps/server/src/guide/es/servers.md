@@ -84,9 +84,10 @@ Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el s
 anterior y mantenlo apagado, porque dos servidores principales encendidos podrían cobrar y enviar
 registros por separado. Esta declaración no se puede deshacer.
 
-En una caja o un terminal de camarero, la franja roja **El servidor principal no responde** ofrece
-**Cambiar al servidor de reserva** en la pantalla de inicio de sesión, y a quien tenga **Gestionar
-servidores**. Abre esta página en el servidor de reserva, y **No cambiar, volver** (tras declarar,
+En una caja o un terminal de camarero, **El servidor principal no responde.** ocupa en rojo la
+pantalla de inicio de sesión, en lugar del teclado del PIN mientras el servidor principal no responda, y aparece
+como una franja roja en las demás pantallas. Ofrece **Cambiar al servidor de reserva** en la
+pantalla de inicio de sesión, y a quien tenga **Gestionar servidores**. Abre esta página en el servidor de reserva, y **No cambiar, volver** (tras declarar,
 **Salir de esta página (el cambio está guardado)**) o **Continuar en este servidor** te devuelve a la caja. Cuando el servidor
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
@@ -136,7 +137,7 @@ ofrece su página de progreso. Si responde el servidor principal anterior, abre 
 **Servidores** o apágalo y vuelve a comprobarlo. Si no se puede verificar la copia con la
 declaración, para y conserva los datos de ambos servidores.
 
-Si el alojamiento de emergencia está disponible para tu local, la franja también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
+Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
 
 ## Conservar los datos del servidor averiado {#old-box-returns}
 
@@ -419,7 +420,7 @@ la tarjeta, igual que salir de esta pantalla. La dirección junto al código cor
 La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
 en su perfil. La tarjeta no inicia el local.
 
-Si la caja principal deja de responder, mantén el terminal abierto. Cuando la franja roja ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+Si la caja principal deja de responder, mantén el terminal abierto. Cuando la franja roja o la pantalla roja de inicio de sesión ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
 
 Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
 

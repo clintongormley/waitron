@@ -24,6 +24,7 @@ import {
   type BillRefundRequest,
   type TabLine,
 } from "../api/client.js";
+import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
 import { trimQuantity } from "../widgets/dish-format.js";
@@ -207,6 +208,14 @@ export function paymentNotRecorded(error: unknown): boolean {
   );
 }
 
+/** A box handing over answers `handover.stepping_down` before any route runs, and the till gives
+ * `NO_BOX_ANSWERING` itself without sending anything, so neither says what an earlier send under
+ * the same submission id did. */
+export function refusedBeforeRoute(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === "handover.stepping_down" || code === NO_BOX_ANSWERING;
+}
+
 /** `earlierUnanswered`: an earlier attempt of the same send got no answer, so it may have been
  * recorded under the same submission id. */
 export function unansweredAfter<S extends { unconfirmed?: boolean }>(
@@ -221,7 +230,7 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   return isNetworkFailure(error) ||
     ("billId" in sent
       ? billPaymentUnconfirmed(error, earlierUnanswered)
-      : earlierUnanswered && code === "handover.stepping_down")
+      : earlierUnanswered && refusedBeforeRoute(error))
     ? { ...sent, unconfirmed: true }
     : sent;
 }
@@ -230,9 +239,7 @@ function billPaymentUnconfirmed(error: unknown, earlierUnanswered: boolean): boo
   const code = (error as { code?: unknown } | null)?.code;
   if ((typeof code === "string" && FRESH_ID_AFTER.has(code)) || paymentNotRecorded(error))
     return false;
-  // The gate and the restarted box both answer this before any payment route runs, so it says
-  // nothing of what an earlier attempt that got no answer did.
-  if (code === "handover.stepping_down") return earlierUnanswered;
+  if (refusedBeforeRoute(error)) return earlierUnanswered;
   // Raised only after the route's submission lookup found no payment, inside a transaction it
   // undoes: nothing is recorded under this id.
   if (code === "menu.reset_required") return false;

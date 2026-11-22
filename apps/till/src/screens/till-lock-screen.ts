@@ -113,6 +113,28 @@ export class TillLockScreen extends LitElement {
         margin-left: var(--wt-space-2);
       }
 
+      till-main-server-strip .servers {
+        width: 100%;
+        max-width: var(--wt-till-form-column-width);
+        margin: 0;
+      }
+
+      /* The strip's own panel-button rules cannot reach this slotted button; these match them. */
+      till-main-server-strip .servers wt-button {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      till-main-server-strip wt-button::part(button) {
+        background: var(--wt-color-on-danger);
+        color: var(--wt-color-danger);
+        border-color: var(--wt-color-on-danger);
+      }
+
+      till-main-server-strip wt-button::part(button):hover:not(:disabled) {
+        border-color: var(--wt-color-danger);
+      }
+
       .roster {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(var(--wt-till-roster-card-min-width), 1fr));
@@ -192,8 +214,9 @@ export class TillLockScreen extends LitElement {
 
   @property({ type: Boolean }) serverWaiting = false;
 
-  /** Set while the till app shows the main-server strip, which takes the waiting line's place. */
   @property({ type: Boolean }) mainServerSilent = false;
+  @property({ attribute: false }) mainSilentSince: number | null = null;
+  @property({ attribute: false }) mainLastAnsweredAt: number | null = null;
   @property({ type: Boolean }) spareAnswering = false;
   @property({ type: Boolean }) mainServerRefused = false;
   @property({ type: Boolean }) showCloudEmergency = false;
@@ -370,8 +393,8 @@ export class TillLockScreen extends LitElement {
   }
 
   override render() {
+    if (this.mainServerSilent) return this.#renderMainServer();
     return html`
-      ${this.#renderMainServer()}
       <div class="language-corner">
         <till-about-button></till-about-button>
         ${themeChooser()}
@@ -452,15 +475,18 @@ export class TillLockScreen extends LitElement {
   }
 
   #renderMainServer() {
-    if (!this.mainServerSilent) return nothing;
     return html`<till-main-server-strip
+      panel
       .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
       .refused=${this.mainServerRefused}
       .showCloud=${this.showCloudEmergency}
       .cloudBusy=${this.cloudEmergencyBusy}
       .cloudRefused=${this.cloudEmergencyRefused}
-    ></till-main-server-strip>`;
+      .silentSince=${this.mainSilentSince}
+      .lastAnsweredAt=${this.mainLastAnsweredAt}
+      >${this.#renderServers()}</till-main-server-strip
+    >`;
   }
 
   #renderServers() {
@@ -470,6 +496,7 @@ export class TillLockScreen extends LitElement {
         ${this.mainServerSilent ? nothing : t("server.waiting_sales")}
         <wt-button
           variant="secondary"
+          size=${this.mainServerSilent ? "lg" : "md"}
           data-check-again
           @click=${() =>
             this.dispatchEvent(new CustomEvent("check-again", { bubbles: true, composed: true }))}

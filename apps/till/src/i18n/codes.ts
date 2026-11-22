@@ -1008,6 +1008,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main box once that box is taking sales.",
     es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
   },
+  "server.waiting_sales": { en: en["server.waiting_sales"], es: es["server.waiting_sales"] },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

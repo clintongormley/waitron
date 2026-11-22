@@ -125,7 +125,7 @@ import {
   type MadeHereItem,
   type KitchenNoteSnapshot,
 } from "./api/client.js";
-import { MAIN_SILENT_MS, type ServerRouter } from "./api/server-router.js";
+import { MAIN_SILENT_MS, NO_BOX_ANSWERING, type ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
 import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
@@ -321,6 +321,7 @@ import {
   refundOffered,
   refundSubmissionFor,
   refusalOf,
+  refusedBeforeRoute,
   submissionFor,
   unansweredAfter,
   type DialogRefusal,
@@ -996,13 +997,10 @@ function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
-/** A box handing over, or one that has handed over, answers this without running the sale or refund
- * route, so after an earlier send of the same sale or refund that got no answer, that refusal leaves
- * its outcome unknown. */
-function unknownAfterHandover(error: unknown, earlierUnanswered: boolean): boolean {
-  return (
-    earlierUnanswered && (error as { code?: unknown } | null)?.code === "handover.stepping_down"
-  );
+/** After an earlier send of the same sale or refund that got no answer, a refusal given before any
+ * route ran leaves its outcome unknown. */
+function unknownAfterRefusalBeforeRoute(error: unknown, earlierUnanswered: boolean): boolean {
+  return earlierUnanswered && refusedBeforeRoute(error);
 }
 
 /** What the pay card, and the presented bill's sheet, say of a refused whole payment. */
@@ -1011,7 +1009,7 @@ function wholeTabErrorOf(
   tender: { manualCard: boolean },
   earlierUnanswered = false,
 ): CounterError {
-  if (unknownAfterHandover(error, earlierUnanswered)) return "sale.unconfirmed";
+  if (unknownAfterRefusalBeforeRoute(error, earlierUnanswered)) return "sale.unconfirmed";
   const saleRefusal = saleRefusalOf(error, tender);
   if (saleRefusal !== undefined) return saleRefusal;
   return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
@@ -1847,7 +1845,7 @@ function lateChangeMessage(late: LateChange): string {
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
 function drawerError(code: string | undefined): StringKey | { code: string } {
-  if (code === "storage.disk_full") return { code };
+  if (code === "storage.disk_full" || code === NO_BOX_ANSWERING) return { code };
   return code === "drawer.not_attached" ? code : "drawer.error";
 }
 
@@ -2337,6 +2335,10 @@ function saleRefusalOf(
     case "handover.stepping_down":
     case "fiscal.chain_handed_over":
       return tender.manualCard ? "sale.chain_handed_over_manual_card" : { code: refusal.code };
+    // No terminal refund advice, unlike a handover: the till sent nothing, so trying again once a box
+    // answers records a card already charged on the terminal.
+    case NO_BOX_ANSWERING:
+      return { code: NO_BOX_ANSWERING };
     case "storage.disk_full":
       return tender.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full";
     case "sale.charged_not_recorded":
@@ -4538,7 +4540,7 @@ export class TillApp extends LitElement {
       this.#unansweredSales.add(id);
       return true;
     }
-    return unknownAfterHandover(error, this.#unansweredSales.has(id));
+    return unknownAfterRefusalBeforeRoute(error, this.#unansweredSales.has(id));
   }
 
   /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */
@@ -10301,7 +10303,7 @@ export class TillApp extends LitElement {
       )
         this.#unansweredWholePayments.delete(key);
       if (!current()) return;
-      this.findBillError = unknownAfterHandover(error, unanswered !== undefined)
+      this.findBillError = unknownAfterRefusalBeforeRoute(error, unanswered !== undefined)
         ? "sale.unconfirmed"
         : (saleRefusalOf(error, { manualCard: (payment?.tender ?? tender).method === "card" }) ??
           profileRefusalOf(error) ??
@@ -22578,7 +22580,7 @@ export class TillApp extends LitElement {
       { ...held.tender, guestCount: held.guestCount },
       (error, earlierUnanswered) => {
         if (this.#presentedNow(open.id) === null) return false;
-        if (!isNetworkFailure(error) && !unknownAfterHandover(error, earlierUnanswered))
+        if (!isNetworkFailure(error) && !unknownAfterRefusalBeforeRoute(error, earlierUnanswered))
           this.#showPresentedRefusal(
             open.id,
             this.#counterRefusal(wholeTabErrorOf(error, { manualCard })),
@@ -23962,7 +23964,7 @@ export class TillApp extends LitElement {
           await this.#onRefundRefused(
             open,
             error,
-            unknownAfterHandover(error, unconfirmed),
+            unknownAfterRefusalBeforeRoute(error, unconfirmed),
             override?.personId,
           );
       } finally {
@@ -24051,6 +24053,8 @@ export class TillApp extends LitElement {
         .showCloud=${this.cloudEmergency !== undefined}
         .cloudBusy=${this.cloudEmergencyBusy}
         .cloudRefused=${this.cloudEmergencyRefused}
+        .silentSince=${this.router?.mainSilentSince ?? null}
+        .lastAnsweredAt=${this.router?.mainLastAnsweredAt ?? null}
         @switch-to-spare=${() => void this.#onSwitchToSpare()}
         @start-in-cloud=${() => void this.#onStartInCloud()}
       ></till-main-server-strip>`;
@@ -25871,6 +25875,8 @@ export class TillApp extends LitElement {
                           .serverWaiting=${this.router?.waiting ?? false}
                           .mainServerSilent=${this.#mainServerStrip() !== undefined}
                           .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}
+                          .mainSilentSince=${this.router?.mainSilentSince ?? null}
+                          .mainLastAnsweredAt=${this.router?.mainLastAnsweredAt ?? null}
                           .mainServerRefused=${this.mainServerRefused}
                           .showCloudEmergency=${this.cloudEmergency !== undefined}
                           .cloudEmergencyBusy=${this.cloudEmergencyBusy}

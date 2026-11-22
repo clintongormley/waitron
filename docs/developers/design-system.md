@@ -6756,21 +6756,32 @@ the toned-line cases in `apps/till/src/screens/till-lock-screen.test.ts`.
 ### The main-server strip (till)
 
 `till-main-server-strip` (`apps/till/src/widgets/main-server-strip.ts`) shows on a till, handheld or
-kitchen display whose server list names a spare, once the main server has not answered for 20
-seconds (A947 §6.1). The lock screen draws it and leaves the waiting words off its server line; on
-the shell it takes the waiting line's place. It is app-owned, not a `wt-*` primitive.
+kitchen display whose server list names a spare, once the main box has not answered for 20
+seconds (A947 §6.1). On the lock screen it is drawn with `panel`: it fills the screen and replaces
+the sign-in, PIN pad, language and theme choosers and notice lines included, until the main box answers again, with Check again inside it while no box takes
+sales. On the shell it is a strip in the waiting line's place. It is app-owned, not a `wt-*`
+primitive.
 
 - **Look.** Unlike the notice strip, the whole strip is filled with `--wt-color-danger`, its words
-  bold in `--wt-color-on-danger`: the design asks for a red strip.
-- **States.** "The main box is not answering" with a **Switch to the spare box** button while
+  in `--wt-color-on-danger`, the first line bold: the design asks for red. As a panel its buttons,
+  Check again included, are drawn the other way round, filled with `--wt-color-on-danger` and
+  worded in `--wt-color-danger`; a hovered one's border turns `--wt-color-danger`.
+- **States.** "The main box is not answering." with a **Switch to the spare box** button while
   the spare answers and the button is allowed; the same words without the button on a kitchen
-  display showing its kitchen screen or for a signed-in person without `node.manage`; "No box is answering…" with no button
-  when the spare is silent too; and the refusal in place of those words when a press found the main
-  box answering.
-- **Announcing.** The strip is `role="alert"`.
+  display showing its kitchen screen or for a signed-in person without `node.manage`; "No box is
+  answering…" with no button when the spare is silent too; and the refusal in place of those words
+  when a press found the main box answering. Under the first line, "Last contact: {n} seconds ago."
+  counts up once a second from the main box's last answer, the router's `mainLastAnsweredAt`, or
+  from `mainSilentSince` when the main box has not answered since the till loaded (in minutes from
+  60 seconds), and
+  "If the main box answers again, the till carries on by itself." follows the buttons; neither
+  shows with a refusal.
+- **Announcing.** The strip is `role="alert"`; the counting line is `aria-live="off"`, so it is not
+  read out every second.
 
 Cases: `apps/till/src/widgets/main-server-strip.test.ts`, its `main-server-strip.a11y.test.ts`,
-"main-server strip" in `apps/till/src/till-app.test.ts` and `apps/till/src/screens/till-lock-screen.test.ts`.
+"main-server strip" in `apps/till/src/till-app.test.ts`, `apps/till/src/screens/till-lock-screen.test.ts`
+and its `till-lock-screen.a11y.test.ts`.
 
 ### Box status page (dashboard)
 

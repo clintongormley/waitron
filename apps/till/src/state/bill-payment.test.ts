@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BillPaymentView, TabLine } from "../api/client.js";
+import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import {
   confirmationOf,
   isLatestSend,
@@ -271,6 +272,38 @@ describe("the submission id of a confirmation", () => {
       unconfirmed: true,
     });
   });
+
+  const tillsOwnRefusal = { code: NO_BOX_ANSWERING, status: 503 };
+  const refundOf = () =>
+    refundSubmissionFor(
+      "wo-1",
+      "payment-1",
+      { appliedAmount: "10.00", tipAmount: "0.00", reason: "Wrong bill" },
+      null,
+      () => "refund-1",
+    );
+
+  it.each([
+    ["payment", () => submissionFor("wo-1", tenEuros, null, ids("sub-1"))],
+    ["refund", refundOf],
+  ] as const)(
+    "keeps a %s the till refused itself while no box answered, which reached no box, without holding it as unconfirmed",
+    (_kind, first) => {
+      const sent = first();
+      expect(unansweredAfter(sent, tillsOwnRefusal)).toEqual(sent);
+    },
+  );
+
+  it.each([
+    ["payment", () => submissionFor("wo-1", tenEuros, null, ids("sub-1"))],
+    ["refund", refundOf],
+  ] as const)(
+    "holds a %s as unconfirmed when the till refused it itself after an earlier attempt of the same send got no answer",
+    (_kind, first) => {
+      const sent = first();
+      expect(unansweredAfter(sent, tillsOwnRefusal, true)).toEqual({ ...sent, unconfirmed: true });
+    },
+  );
 
   it("is fresh after the device changed profile, whose refusal fails the payment recorded under the id", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));

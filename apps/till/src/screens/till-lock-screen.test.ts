@@ -15,7 +15,7 @@ import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { codeMessage } from "../i18n/codes.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   blurAll,
   expectChooserFaces,
@@ -1002,6 +1002,161 @@ describe("till-lock-screen", () => {
     const status = el.shadowRoot!.querySelector("[data-server-status]")!;
     expect(status.textContent).not.toContain(t("server.waiting_sales"));
     expect(status.querySelector("[data-check-again]")).not.toBeNull();
+  });
+
+  it("while the main box is silent, fills the screen with the panel in place of the PIN pad, until the main box answers again", async () => {
+    localStorage.setItem("waitron.lastOperator.dev1", "p2");
+    const since = Date.now() - 22_000;
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      deviceId: "dev1",
+      serverWaiting: true,
+    });
+    await flush(el);
+    expect(query(el, "till-numeric-pad")).not.toBeNull();
+    el.mainServerSilent = true;
+    el.spareAnswering = true;
+    el.mainSilentSince = since;
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<
+      HTMLElement & { panel: boolean; silentSince: number | null }
+    >("till-main-server-strip")!;
+    expect(panel.panel).toBe(true);
+    expect(panel.silentSince).toBe(since);
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(query(el, ".operator")).toBeNull();
+    expect(query(el, "wt-language-chooser")).toBeNull();
+    expect(panel.querySelector("[data-check-again]")).not.toBeNull();
+    el.mainServerSilent = false;
+    el.serverWaiting = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-main-server-strip")).toBeNull();
+    expect(query(el, "till-numeric-pad")).not.toBeNull();
+    expect(query(el, ".operator")!.textContent).toContain("Ben");
+  });
+
+  it("hands the panel the time the main box last answered, to count the last contact from", async () => {
+    const answered = Date.now() - 25_000;
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      deviceId: "dev1",
+      serverWaiting: true,
+      mainServerSilent: true,
+      mainSilentSince: Date.now() - 20_000,
+      mainLastAnsweredAt: answered,
+    });
+    const panel = el.shadowRoot!.querySelector<HTMLElement & { lastAnsweredAt: number | null }>(
+      "till-main-server-strip",
+    )!;
+    expect(panel.lastAnsweredAt).toBe(answered);
+    expect(panel.shadowRoot!.textContent).toContain(
+      countText(25, "server.last_contact_seconds", "server.last_contact_seconds_one"),
+    );
+  });
+
+  describe("the full-screen panel", () => {
+    type Updating = HTMLElement & { updateComplete: Promise<unknown> };
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    async function mountPanel(): Promise<{ el: TillLockScreen; panel: Updating }> {
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        serverWaiting: true,
+        mainServerSilent: true,
+        spareAnswering: true,
+        showCloudEmergency: true,
+        mainSilentSince: Date.now() - 22_000,
+      });
+      await flush(el);
+      const panel = el.shadowRoot!.querySelector<Updating>("till-main-server-strip")!;
+      await panel.updateComplete;
+      return { el, panel };
+    }
+
+    async function nativeButton(button: Element): Promise<HTMLButtonElement> {
+      await (button as Updating).updateComplete;
+      return button.shadowRoot!.querySelector("button")!;
+    }
+
+    it("on a short screen, in Spanish, with every control, the heading can be scrolled to", async () => {
+      const before = currentLocale();
+      const oldWidth = innerWidth;
+      const oldHeight = innerHeight;
+      setLocale("es-ES");
+      await page.viewport(320, 256);
+      try {
+        const { panel } = await mountPanel();
+        const strip = panel.shadowRoot!.querySelector<HTMLElement>("[data-main-server-strip]")!;
+        const heading = panel.shadowRoot!.querySelector<HTMLElement>(".heading")!;
+        expect(heading.textContent).toContain(t("server.main_silent"));
+        expect(panel.shadowRoot!.querySelector("[data-switch-to-spare]")).not.toBeNull();
+        expect(panel.shadowRoot!.querySelector("[data-start-in-cloud]")).not.toBeNull();
+        const checkAgain = panel.querySelector("[data-check-again]")!;
+        await nativeButton(checkAgain);
+        for (const button of panel.shadowRoot!.querySelectorAll("wt-button")) {
+          await nativeButton(button);
+        }
+        await frame();
+        // The case only means something while the content is taller than the screen.
+        expect(strip.scrollHeight).toBeGreaterThan(strip.clientHeight);
+        strip.scrollTop = 0;
+        expect(heading.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          strip.getBoundingClientRect().top,
+        );
+        strip.scrollTop = strip.scrollHeight;
+        expect(checkAgain.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          strip.getBoundingClientRect().bottom + 1,
+        );
+      } finally {
+        await page.viewport(oldWidth, oldHeight);
+        setLocale(before);
+      }
+    });
+
+    it("draws Check again like the panel's own buttons: large, filled and worded the other way round", async () => {
+      const { panel } = await mountPanel();
+      const checkAgain = await nativeButton(panel.querySelector("[data-check-again]")!);
+      const switchButton = await nativeButton(
+        panel.shadowRoot!.querySelector("[data-switch-to-spare]")!,
+      );
+      const look = getComputedStyle(checkAgain);
+      const onDanger = tokenColour(panel, "--wt-color-on-danger");
+      const danger = tokenColour(panel, "--wt-color-danger");
+      expect(onDanger).not.toBe(danger);
+      expect(look.backgroundColor).toBe(onDanger);
+      expect(look.color).toBe(danger);
+      expect(look.borderTopColor).toBe(onDanger);
+      const own = getComputedStyle(switchButton);
+      expect([look.fontSize, look.minHeight, look.width]).toEqual([
+        own.fontSize,
+        own.minHeight,
+        own.width,
+      ]);
+    });
+
+    it("gives Check again a hover cue that keeps its label's colours", async () => {
+      const { panel } = await mountPanel();
+      const checkAgain = await nativeButton(panel.querySelector("[data-check-again]")!);
+      const resting = getComputedStyle(checkAgain);
+      const before = [resting.borderTopColor, resting.backgroundColor, resting.color];
+      await userEvent.hover(checkAgain);
+      const hovered = getComputedStyle(checkAgain);
+      expect(hovered.borderTopColor).not.toBe(before[0]);
+      expect(hovered.borderTopColor).toBe(tokenColour(panel, "--wt-color-danger"));
+      expect([hovered.backgroundColor, hovered.color]).toEqual(before.slice(1));
+    });
+
+    it("leaves Check again on the plain waiting line as it was", async () => {
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        serverWaiting: true,
+      });
+      await flush(el);
+      const checkAgain = el.shadowRoot!.querySelector("[data-check-again]")!;
+      expect(checkAgain.getAttribute("size")).toBe("md");
+      const look = getComputedStyle(await nativeButton(checkAgain));
+      expect(look.backgroundColor).toBe(tokenColour(el.shadowRoot!, "--wt-color-surface"));
+    });
   });
 
   it("draws no line while a server takes sales", async () => {

@@ -25,6 +25,18 @@ const STATES: [string, Partial<TillMainServerStrip>][] = [
   ["the switch was refused", { spareAnswering: true, showSwitch: true, refused: true }],
   ["no server answers", { spareAnswering: false, showSwitch: true }],
   ["the spare answers but the switch is not offered", { spareAnswering: true, showSwitch: false }],
+  [
+    "the last contact is counted",
+    { spareAnswering: true, showSwitch: true, silentSince: Date.now() - 22_000 },
+  ],
+  [
+    "it fills the sign-in screen",
+    { spareAnswering: true, showSwitch: true, panel: true, silentSince: Date.now() - 22_000 },
+  ],
+  [
+    "it fills the sign-in screen and no box answers",
+    { spareAnswering: false, showSwitch: true, panel: true, silentSince: Date.now() - 22_000 },
+  ],
 ];
 
 describe.each(["light", "dark"] as const)("till-main-server-strip a11y (%s theme)", (theme) => {

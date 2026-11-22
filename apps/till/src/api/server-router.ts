@@ -29,6 +29,8 @@ export const SERVERS_STORAGE_KEY = "waitron.servers";
 /** How long the main box stays silent before the till offers the spare. */
 export const MAIN_SILENT_MS = 20_000;
 
+export const NO_BOX_ANSWERING = "server.waiting_sales";
+
 /** Reading `localStorage` itself throws in a browser that blocks site data. */
 function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
   try {
@@ -51,6 +53,9 @@ interface Tracked {
   answered: boolean | null;
   /** The first unanswered probe since the latest answered one. */
   silentSince: number | null;
+  /** When a probe last got an HTTP answer from this box, or from the page origin answering as the
+   * box it last said it was. */
+  lastAnsweredAt: number | null;
 }
 
 /** No failure count ends probing (owner decision, 2026-09-05). */
@@ -58,6 +63,9 @@ export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
   #waiting = false;
+  /** Set when the latest round found a box taking sales but an in-flight request kept the till where
+   * it was. */
+  #moveHeld = false;
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #chart: HeldChart | null = null;
@@ -100,9 +108,20 @@ export class ServerRouter extends EventTarget {
     return this.#waiting;
   }
 
+  /** The box requests go to did not answer its latest probe, and either no box took sales in the
+   * latest round or an in-flight request kept the till from moving to the one that did. */
+  get refusesNewRequests(): boolean {
+    if (!this.#waiting && !this.#moveHeld) return false;
+    return this.#servers.find((s) => s.url === this.#current)?.answered === false;
+  }
+
   get mainSilentSince(): number | null {
     const main = this.#withStanding("serving-primary");
     return main === undefined || this.#hidden(main) ? null : main.silentSince;
+  }
+
+  get mainLastAnsweredAt(): number | null {
+    return this.#withStanding("serving-primary")?.lastAnsweredAt ?? null;
   }
 
   get spare(): { url: string; answering: boolean } | undefined {
@@ -279,6 +298,7 @@ export class ServerRouter extends EventTarget {
     );
     const yes = this.#shown().filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
+    this.#moveHeld = false;
     if (yes.length > 0) {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
@@ -309,13 +329,17 @@ export class ServerRouter extends EventTarget {
   }
 
   #move(to: string): void {
-    if (this.#inFlight > 0) return; // a later round recomputes the target once #inFlight hits 0
+    if (this.#inFlight > 0) {
+      this.#moveHeld = true; // a later round recomputes the target once #inFlight hits 0
+      return;
+    }
     const from = this.#current;
     this.#current = to;
     this.dispatchEvent(new CustomEvent("server-changed", { detail: { from, to } }));
   }
 
   async #probe(s: Tracked): Promise<void> {
+    const startedAt = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     let answered = false;
@@ -330,7 +354,9 @@ export class ServerRouter extends EventTarget {
       answered = true;
       s.answered = true;
       s.silentSince = null;
+      s.lastAnsweredAt = Date.now();
       if (!res.ok) {
+        this.#heardThroughOrigin(s);
         this.#forgetOriginNode(s);
         s.state = "unreachable";
         s.term = null;
@@ -343,25 +369,44 @@ export class ServerRouter extends EventTarget {
       };
       if (s.url === this.#origin) {
         this.#originNodeId = typeof body.nodeId === "string" ? body.nodeId : undefined;
+        this.#heardThroughOrigin(s);
       }
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
       this.#handChart(s.url, s.term);
     } catch {
+      if (!answered) {
+        s.answered = false;
+        s.silentSince ??= startedAt;
+      } else {
+        this.#heardThroughOrigin(s);
+      }
       this.#forgetOriginNode(s);
       s.state = "unreachable";
       s.term = null;
-      if (!answered) {
-        s.answered = false;
-        s.silentSince ??= Date.now();
-      }
     } finally {
       clearTimeout(timer);
     }
   }
 
+  #heardThroughOrigin(s: Tracked): void {
+    const own = this.#originNodeId;
+    if (s.url !== this.#origin || own === undefined) return;
+    for (const hidden of this.#servers) {
+      if (hidden.nodeId === own && hidden !== s) hidden.lastAnsweredAt = s.lastAnsweredAt;
+    }
+  }
+
+  /** The entry the origin stood in for inherits the origin's silence, so a silent main box is
+   * counted from the origin's first unanswered probe, not from its own first probe after this. */
   #forgetOriginNode(s: Tracked): void {
-    if (s.url === this.#origin) this.#originNodeId = undefined;
+    if (s.url !== this.#origin) return;
+    const own = this.#originNodeId;
+    this.#originNodeId = undefined;
+    if (own === undefined || s.silentSince === null) return;
+    for (const hidden of this.#servers) {
+      if (hidden.nodeId === own && hidden !== s) hidden.silentSince ??= s.silentSince;
+    }
   }
 
   /** Fire and forget, and never moves the till. A post answered with a 2xx or 4xx status is not sent
@@ -426,6 +471,7 @@ export class ServerRouter extends EventTarget {
           term: null,
           answered: null,
           silentSince: null,
+          lastAnsweredAt: null,
         });
       }
     };
@@ -466,8 +512,14 @@ export class ServerRouter extends EventTarget {
  * exists. */
 export function withServerTarget(fetchImpl: typeof fetch, router: ServerRouter): typeof fetch {
   return async (input, init) => {
-    const target =
-      typeof input === "string" && input.startsWith("/") ? `${router.current}${input}` : input;
+    const relative = typeof input === "string" && input.startsWith("/");
+    // Only a request starting now is refused: one already sent, such as a card payment, keeps waiting.
+    if (relative && router.refusesNewRequests)
+      return new Response(JSON.stringify({ error: { code: NO_BOX_ANSWERING } }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      });
+    const target = relative ? `${router.current}${input}` : input;
     router.beginRequest();
     try {
       return await fetchImpl(target, init);

@@ -41,6 +41,11 @@ it.each([
     "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
   ],
   [
+    "server.waiting_sales",
+    "No box is taking sales right now. The till carries on as soon as one does.",
+    "Ningún servidor acepta ventas ahora mismo. La caja continúa en cuanto uno las acepte.",
+  ],
+  [
     "party.not_found",
     "The table order could not be found.",
     "No se ha encontrado el pedido de la mesa.",
