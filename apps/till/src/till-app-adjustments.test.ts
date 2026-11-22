@@ -1800,7 +1800,7 @@ describe("till-app: service cancellation consent", () => {
     expect(methods.cancelItem).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
     await pinPad(el, "1234");
-    expect(approval(el)?.error?.code).toBe("pin.invalid");
+    expect(approval(el)?.error).toEqual({ code: "pin.invalid", personId: "m-1" });
     emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "5678" });
     await flush(el);
     expect(methods.cancelItem).toHaveBeenCalledTimes(2);
@@ -2793,7 +2793,7 @@ describe("till-app: service cancellation consent", () => {
     await removeCharge(el);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
     await pinPad(el, "1234");
-    expect(approval(el)?.error?.code).toBe("pin.invalid");
+    expect(approval(el)?.error).toEqual({ code: "pin.invalid", personId: "m-1" });
     expect(cancelDialog(el)).not.toBeNull();
     const retry = approval(el)!;
     for (const digit of "5678") {

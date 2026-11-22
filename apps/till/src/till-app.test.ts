@@ -27290,7 +27290,7 @@ describe("A737 post-invoice refund integration", () => {
     emit(approval(el)!, "override-confirm", { personId: "manager", pin: "9999" });
     await flush(el);
     expect(approval(el)).not.toBeNull();
-    expect(approval(el)!.error?.code).toBe("pin.invalid");
+    expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "manager" });
     expect(dialog(el)!.busy).toBe(false);
     emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
     await flush(el);

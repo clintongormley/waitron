@@ -115,8 +115,9 @@ export class TillSupervisorOverrideDialog extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** A freshly-delivered error (the parent nulls then re-sets it per attempt) must always show, even
-   * after the operator dismissed the previous one by typing — so any change to `error` re-arms it. */
+  /** A freshly-delivered refusal for the chosen approver (the parent nulls then re-sets it per
+   * attempt) must show, even after the operator dismissed the previous one by typing — so any
+   * change to `error` re-arms it. */
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("error")) {
       this.dismissed = false;

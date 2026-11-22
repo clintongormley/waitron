@@ -538,7 +538,7 @@ describe("sending a correction", () => {
     await confirmCorrection(el);
     const pin = await pinDialog(el);
     signIn(pin);
-    await vi.waitFor(() => expect(pin.error?.code).toBe("pin.invalid"));
+    await vi.waitFor(() => expect(pin.error).toEqual({ code: "pin.invalid", personId: "manager" }));
     expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
   });
 

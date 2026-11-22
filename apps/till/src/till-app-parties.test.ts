@@ -10855,7 +10855,7 @@ describe("till-app: recording an unpaid departure", () => {
     await flush(el, 5);
 
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
-    expect(approval(el)!.error?.code).toBe("pin.invalid");
+    expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "sup-1" });
     expect(dialog(el)).not.toBeNull();
     expect(tableOrder(el)).not.toBeNull();
   });
@@ -11460,7 +11460,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await flush(el, 6);
 
     expect(server.cancelOrder).toHaveBeenCalledTimes(2);
-    expect(approval(el)!.error?.code).toBe("pin.invalid");
+    expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "sup-1" });
     expect(doneText(el)).toBeNull();
   });
 
@@ -13664,7 +13664,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(first.cancellations[0].refundHandoff).toBe(true);
     emit(approval(el)!, "override-confirm", { personId: "m1", pin: "1111" });
     await flush(el, 8);
-    expect(approval(el)?.error?.code).toBe("pin.invalid");
+    expect(approval(el)?.error).toEqual({ code: "pin.invalid", personId: "m1" });
     expect(api.getTransactionReceipt).not.toHaveBeenCalled();
     emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
     await flush(el, 10);
