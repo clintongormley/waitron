@@ -36,7 +36,7 @@ export const CORRECTIONS_REPORT_WORDS = {
     freeKinds: { comp: "Comp", discount: "Discount to zero" },
     freeColumns: [
       "Date",
-      "Ticket number",
+      "Invoice number",
       "Item",
       "Quantity",
       "Kind",
@@ -85,7 +85,7 @@ export const CORRECTIONS_REPORT_WORDS = {
     freeKinds: { comp: "Invitación", discount: "Descuento hasta cero" },
     freeColumns: [
       "Fecha",
-      "Número de ticket",
+      "Número de factura",
       "Artículo",
       "Cantidad",
       "Tipo",

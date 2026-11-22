@@ -203,7 +203,7 @@ describe("corrections workbook", () => {
   ];
 
   it.each(["en", "es"] as const)(
-    "lists what was given free on a third sheet, with formatted ticket numbers (%s)",
+    "lists what was given free on a third sheet, with formatted invoice numbers (%s)",
     async (language) => {
       const words = CORRECTIONS_REPORT_WORDS[language];
       const { workbook, free } = await sheets(LATE, language, FREE);
