@@ -71,7 +71,7 @@ export function mountProblemReportApi(
       !(await sentFromOwnPage(c, deps.allowOrigin ?? (async () => false))) ||
       !(await managementSession(c, passive)).authority.admin
     )
-      throw new AppError("authorization.not_permitted", {});
+      throw new AppError("authorization.not_permitted", { permission: "admin" });
   }
   const review = "/management-api/problem-reports/descriptions";
   app.get(review, (c) =>
