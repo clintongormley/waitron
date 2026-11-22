@@ -218,7 +218,7 @@ We offered reciprocity in the message. Send it.
 > replace it, which is safe only while no box has started in production. Apart from that
 > replacement, the tax number must not change until A993 lands.
 >
-> **2026-11-22:** the owner decided that 1.0.0's item d) is Q53's draft; the asesor's answer goes
+> **2026-11-22:** the owner decided that 0.1.0's item d) is Q53's draft; the asesor's answer goes
 > into a later version.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
