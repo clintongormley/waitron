@@ -7,6 +7,7 @@ import { departments, devices, drawerEntries, withTransaction } from "@waitron/d
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountReportApi } from "./report-api.js";
+import { readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { randomUUID } from "node:crypto";
 import {
   clockAt,
@@ -209,5 +210,9 @@ describe("reports, a bill closed as a deferred payment", () => {
       { kind: "cash_payment", amount: 1800 },
     ]);
     expect(await get(drawerPath)).toEqual(drawerHistory);
+    const slip = await withTransaction(venue.db, (tx) =>
+      readDrawerCloseForPrint(tx, [venue.cfg.nodeId], done.json.id as string),
+    );
+    expect(slip).toMatchObject({ cashSales: "0.00", cashIn: "10.00" });
   });
 });
