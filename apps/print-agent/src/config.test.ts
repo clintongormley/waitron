@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import * as config from "./config.js";
 import { describe, expect, it } from "vitest";
 import { readEnv } from "./config.js";
 
@@ -136,4 +138,16 @@ describe("readEnv", () => {
     expect(() => readEnv({ WAITRON_SETUP_PORT: "70000" }, "h")).toThrow(/WAITRON_SETUP_PORT/);
     expect(() => readEnv({ WAITRON_SETUP_PORT: "80.5" }, "h")).toThrow(/WAITRON_SETUP_PORT/);
   });
+});
+
+it("declares each Waitron input read by the print agent and its development entry", () => {
+  const inputs = ["config.ts", "dev.ts"].flatMap((file) =>
+    [
+      ...readFileSync(new URL(file, import.meta.url), "utf8").matchAll(
+        /env\.(WAITRON_[A-Z0-9_]+)\b/g,
+      ),
+    ].map((match) => match[1]!),
+  );
+  expect(config.PRINT_AGENT_VARIABLES).toEqual(expect.any(Object));
+  expect(Object.keys(config.PRINT_AGENT_VARIABLES).sort()).toEqual([...new Set(inputs)].sort());
 });

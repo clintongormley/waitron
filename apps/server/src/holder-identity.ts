@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { setVenueHolderIdentity, type VenueHolderKind } from "@waitron/db";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
 import { resolveConfigDir } from "./config.js";
@@ -8,5 +9,9 @@ import { resolveConfigDir } from "./config.js";
  * that reaches this may be one whose configuration does not load.
  */
 export function nameVenueHolder(kind: VenueHolderKind, env: NodeJS.ProcessEnv): void {
-  setVenueHolderIdentity(kind, env, resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT));
+  setVenueHolderIdentity(
+    kind,
+    env,
+    resolveConfigDir(readVariable(env, "WAITRON_STATE_DIR"), DEFAULT_STATE_ROOT),
+  );
 }

@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { LOGS_DIR } from "@waitron/store";
 import { join } from "node:path";
 import {
@@ -23,14 +24,14 @@ export function resolveLogDir(
   env: NodeJS.ProcessEnv,
   stateDir: string | undefined,
 ): string | undefined {
-  const setting = env.WAITRON_LOG_DIR;
+  const setting = readVariable(env, "WAITRON_LOG_DIR");
   if (setting !== undefined && setting !== "") return setting;
   return stateDir === undefined ? undefined : join(stateDir, LOGS_DIR);
 }
 
 /** The version this build reports for itself: the image's build id, then the package version. */
 export function applicationVersion(env: NodeJS.ProcessEnv): string {
-  return env.WAITRON_BUILD_ID ?? env.npm_package_version ?? "development";
+  return readVariable(env, "WAITRON_BUILD_ID") ?? env.npm_package_version ?? "development";
 }
 
 /**

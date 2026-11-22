@@ -28,7 +28,7 @@ import {
   setNodeModeTx,
 } from "@waitron/node-db";
 import { generateKeyRing, inTurn } from "@waitron/provisioning";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable } from "@waitron/shared";
 import {
   connectionPair,
   drizzleNodeSqlite,
@@ -72,11 +72,10 @@ async function keptTradingEnv(stateDir: string): Promise<Record<string, string> 
 
 /** Refuses a kept `trading.env` that names another node or environment, or sets a vault key variable. */
 function assertKeptTradingEnv(trading: Record<string, string>, binding: EmergencyCopyBinding) {
-  if (trading.WAITRON_NODE_ID !== binding.copyNodeId)
+  if (readVariable(trading, "WAITRON_NODE_ID") !== binding.copyNodeId)
     throw new AppError("emergency_copy.trading_node_differs", {});
-  if (deploymentEnvironmentFor(trading.WAITRON_ENV) !== binding.environment)
+  if (deploymentEnvironmentFor(readVariable(trading, "WAITRON_ENV")) !== binding.environment)
     throw new AppError("emergency_copy.trading_environment_differs", {});
-  // Present, not non-empty: `loadBoxEnv` copies an empty file value over `secrets.env`'s too.
   const variables = KEY_RING_VARIABLES.filter((name) => Object.hasOwn(trading, name));
   if (variables.length > 0)
     throw new AppError("emergency_copy.vault_key_in_trading_env", { variables });
@@ -152,9 +151,7 @@ export async function placeEmergencyCopy(deps: {
 
 async function placeHeld(deps: PlacementDeps): Promise<void> {
   const { binding } = deps;
-  // `loadBoxEnv`, which every start reads the ring through, lets a vault key variable set in this
-  // process's environment, `trading.env` or `backup.env` win over `secrets.env`. The first two are
-  // refused here; `backup.env` is not read.
+  // This copy must open with its placed ring, so an environment override cannot win on restart.
   const inEnvironment = Object.keys(keyRingVariables(deps.processEnv));
   if (inEnvironment.length > 0)
     throw new AppError("emergency_copy.vault_key_in_environment", { variables: inEnvironment });

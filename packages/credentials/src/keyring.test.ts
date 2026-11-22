@@ -53,6 +53,16 @@ describe("loadKeyRing", () => {
     expect(hasCode(error, "credentials.key_invalid")).toBe(true);
   });
 
+  it.each([
+    { WAITRON_CREDENTIALS_KEY_PREVIOUS: "" },
+    { WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "" },
+    { WAITRON_CREDENTIALS_KEY_PREVIOUS: "", WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "" },
+  ])("treats empty previous fields as no rotation", (previous) => {
+    expect(loadKeyRing({ WAITRON_CREDENTIALS_KEY: K1, ...previous })).toEqual({
+      current: { key: Buffer.alloc(32, 1), version: 1 },
+    });
+  });
+
   it("rejects a previous key with no version", () => {
     const error = captured(() =>
       loadKeyRing({ WAITRON_CREDENTIALS_KEY: K2, WAITRON_CREDENTIALS_KEY_PREVIOUS: K1 }),

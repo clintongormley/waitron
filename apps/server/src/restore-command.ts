@@ -14,7 +14,7 @@ import {
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "@waitron/recovery-pack";
-import { AppError, diskFullIn, hasCode } from "@waitron/shared";
+import { AppError, diskFullIn, hasCode, readVariable } from "@waitron/shared";
 import {
   createS3ObjectStore,
   type S3FileStore,
@@ -123,7 +123,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   if ("packPath" in args) return runPackRestore(deps, args);
   const { artifactPath, oldBoxGone, soleRecovery } = args;
 
-  const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
+  const recoveryKey = readVariable(deps.env, "WAITRON_BACKUP_RECOVERY_KEY");
   if (isUnset(recoveryKey)) {
     deps.out("WAITRON_BACKUP_RECOVERY_KEY must be set to the backup's recovery key");
     return 1;
@@ -304,20 +304,23 @@ async function resolveRestoreTarget(
   let withModuleOperations = deps.withModuleOperations;
   try {
     environment = deploymentEnvironment(deps.env);
-    const path = deps.env.WAITRON_RECOVERY_OPERATION_FILE;
+    const path = readVariable(deps.env, "WAITRON_RECOVERY_OPERATION_FILE");
     if (!isUnset(path)) {
       withModuleOperations = createRecoveryRestoreRunner(
         ALL_MODULES,
         await readRecoveryOperationFile(path),
-        deps.env.WAITRON_NODE_RECOVERY_KEY,
+        readVariable(deps.env, "WAITRON_NODE_RECOVERY_KEY"),
       );
     }
   } catch (err) {
     deps.out(`restore failed: ${(err as AppError).code}`);
     return 1;
   }
-  const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
-  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const migrationsDir = readVariable(deps.env, "WAITRON_MIGRATIONS_DIR");
+  const stateDir = resolveConfigDir(
+    readVariable(deps.env, "WAITRON_STATE_DIR"),
+    DEFAULT_STATE_ROOT,
+  );
   const venueDir = venueDirOf(deps.env, stateDir);
   const setupRefusal = (error: unknown) =>
     deps.out(
@@ -375,7 +378,7 @@ async function archiveRecoveryRunner(
   recoveryKey: string,
   oldBoxGone: boolean,
 ): Promise<RestoreOperationRunner> {
-  const path = deps.env.WAITRON_RECOVERY_OPERATION_FILE;
+  const path = readVariable(deps.env, "WAITRON_RECOVERY_OPERATION_FILE");
   const operation = await readRecoveryOperationFile(path ?? "");
   const copy = await validateArtifactFile({ ...target, artifactPath, recoveryKey });
   try {
@@ -397,7 +400,7 @@ async function selectedRecoveryRunner(
     ...target,
     copy,
     operation,
-    secret: deps.env.WAITRON_NODE_RECOVERY_KEY,
+    secret: readVariable(deps.env, "WAITRON_NODE_RECOVERY_KEY"),
     context: { selectedSourceId: sourceId, oldBoxGone, soleRecovery: true },
     readBoot: deps.readBoot,
   });
@@ -561,7 +564,9 @@ async function runBucketRestore(
                   deps,
                   target,
                   copy,
-                  await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
+                  await readRecoveryOperationFile(
+                    readVariable(deps.env, "WAITRON_RECOVERY_OPERATION_FILE") ?? "",
+                  ),
                   oldBoxGone,
                   sourceId,
                 ),

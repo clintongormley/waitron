@@ -16,7 +16,7 @@ import { requireNodeOperationHttps } from "./node-operation-https.js";
 import "./errors.js";
 import { lockVenueDatabase } from "@waitron/db";
 import { NODE_FILE, openBackupQuery, VENUE_FILE } from "@waitron/store";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, readVariable } from "@waitron/shared";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { CloudInstallationCredentials } from "./cloud-client.js";
 import { fetchEmergencyCopyStatus } from "./cloud-emergency.js";
@@ -387,7 +387,7 @@ export async function startLockedCopy(
 
 /** Read before any folder lock; this payload must never enter saved environment files. */
 export function readLockedTotpKeys(env: NodeJS.ProcessEnv): KeyEntry[] {
-  const raw = env.WAITRON_LOCKED_TOTP_KEYS;
+  const raw = readVariable(env, "WAITRON_LOCKED_TOTP_KEYS");
   delete env.WAITRON_LOCKED_TOTP_KEYS;
   const refuse = (): never => {
     throw new AppError("cloud.request_invalid", {});

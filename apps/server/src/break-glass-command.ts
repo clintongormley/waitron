@@ -9,7 +9,7 @@ import {
   withTransaction,
   withFoldedPersonChanges,
 } from "@waitron/db";
-import { hasCode, isAppError } from "@waitron/shared";
+import { hasCode, isAppError, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import {
   assertPasswordLength,
   deleteSignInRows,
@@ -64,7 +64,7 @@ export async function runBreakGlassReset(deps: {
     }
     throw err;
   }
-  const newPin = deps.env.WAITRON_BREAKGLASS_PIN;
+  const newPin = readVariable(deps.env, "WAITRON_BREAKGLASS_PIN");
   const resetPin = newPin !== undefined && newPin !== "";
   if (resetPin) {
     // A PIN below the floor the till enforces would lock the operator out again.
@@ -87,7 +87,10 @@ export async function runBreakGlassReset(deps: {
   }
   const personArg = parsedPerson.id;
 
-  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(
+    readVariable(deps.env, "WAITRON_STATE_DIR"),
+    DEFAULT_STATE_ROOT,
+  );
   // The same resolution `config.ts` does for `venueDir`.
   const venueDir = venueDirOf(deps.env, stateDir);
 
@@ -177,10 +180,10 @@ export async function runBreakGlassReset(deps: {
 /** A blank value counts as unset (CLAUDE.md §3). */
 function requireEnv(
   deps: { env: Env; out: (line: string) => void },
-  key: string,
+  key: EnvironmentVariableName,
   message: string,
 ): string | undefined {
-  const value = deps.env[key];
+  const value = readVariable(deps.env, key);
   if (value === undefined || value === "") {
     deps.out(message);
     return undefined;

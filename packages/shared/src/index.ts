@@ -624,3 +624,16 @@ export {
   type PlacementResult,
   type SetMenuCopy,
 } from "./set-menu-bill.js";
+
+export {
+  BOX_FILE_VARIABLES,
+  ENVIRONMENT_VARIABLES,
+  PRINT_AGENT_ONLY_NAMES,
+  readVariable,
+  unknownVariables,
+  type BoxFile,
+  type EnvironmentVariableName,
+  type VariableKind,
+  type VariableSource,
+  type VariableSpec,
+} from "./environment-variables.js";

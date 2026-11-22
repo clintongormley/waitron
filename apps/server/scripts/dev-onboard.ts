@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { venueDirOf } from "@waitron/store";
 // Local-dev bootstrap for setup mode: migrate a local venue directory and write a venue-less
 // `apps/server/.env`, or the file `WAITRON_DEV_ENV_FILE` names, so `pnpm dev` boots the server
@@ -13,11 +14,11 @@ import { deploymentEnvironment, resolveConfigDir } from "../src/config.js";
 import { inspectVenues, renderEnvFileLines, resetVenueDir } from "./dev-setup.js";
 import type { DevSetupOptions } from "./dev-setup.js";
 
-export interface SetupEnv {
+export type SetupEnv = {
   WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;
   WAITRON_HTTP_PORT: string;
-}
+};
 
 const SETUP_ENV_KEYS: readonly (keyof SetupEnv)[] = [
   "WAITRON_VENUE_DIR",
@@ -81,11 +82,15 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
 async function main(): Promise<void> {
   refuseProduction(process.env);
   const envPath =
-    process.env.WAITRON_DEV_ENV_FILE?.trim() || fileURLToPath(new URL("../.env", import.meta.url));
+    readVariable(process.env, "WAITRON_DEV_ENV_FILE")?.trim() ||
+    fileURLToPath(new URL("../.env", import.meta.url));
 
   // Resolved exactly as `config.ts` does, so this migrates the directory `pnpm dev` opens.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
-  const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(
+    readVariable(process.env, "WAITRON_STATE_DIR"),
+    DEFAULT_STATE_ROOT,
+  );
   const venueDir = venueDirOf(process.env, stateDir);
 
   if (process.argv.includes("--reset")) {
@@ -96,13 +101,13 @@ async function main(): Promise<void> {
   const result = await devOnboard({
     venueDir,
     envPath,
-    httpPort: process.env.WAITRON_HTTP_PORT,
+    httpPort: readVariable(process.env, "WAITRON_HTTP_PORT"),
     environment: process.env,
     log: (line) => void console.log(line),
   });
 
-  const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
-  const serverPort = result.env.WAITRON_HTTP_PORT;
+  const setupPort = readVariable(process.env, "WAITRON_SETUP_VITE_PORT")?.trim() || "5192";
+  const serverPort = readVariable(result.env, "WAITRON_HTTP_PORT");
 
   console.log("");
   console.log("dev-onboard: migrated an UNPROVISIONED database — the box will boot in SETUP MODE.");

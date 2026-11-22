@@ -5,7 +5,7 @@ import { backupVerificationInventory } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { deploymentEnvironmentFor } from "@waitron/db";
 import { BackupVerificationUnsupported, type WaitronModule } from "@waitron/module";
-import { isAppError } from "@waitron/shared";
+import { isAppError, readVariable } from "@waitron/shared";
 import { type BackupQuery, type BackupRow } from "@waitron/store";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -312,7 +312,8 @@ async function reconcileModules(
   const trading = parseEnvFile(
     Buffer.from(entries.get("secrets/trading.env")!.bytes).toString("utf8"),
   );
-  if (deploymentEnvironmentFor(trading.WAITRON_ENV) !== manifest.environment) refuse("unsupported");
+  if (deploymentEnvironmentFor(readVariable(trading, "WAITRON_ENV")) !== manifest.environment)
+    refuse("unsupported");
   if (tables.has("deployment")) {
     const stamps = await rows(before, "select id, environment from deployment");
     if (

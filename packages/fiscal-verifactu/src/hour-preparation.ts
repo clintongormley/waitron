@@ -6,7 +6,7 @@ import {
   type ModuleOperationHost,
   type InitialSetupContext,
 } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import {
@@ -162,7 +162,8 @@ export function createHostedHourPreparation(
   });
   const admission = (context: InitialSetupContext) => ({
     boxClockAlone:
-      host.environment.WAITRON_ENV === "dev" && context.environment === "preproduction",
+      readVariable(host.environment, "WAITRON_ENV") === "dev" &&
+      context.environment === "preproduction",
   });
   const kept = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({

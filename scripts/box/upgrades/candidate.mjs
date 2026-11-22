@@ -152,8 +152,6 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       ...healthArgs,
       "--label",
       `waitron.upgrade.directory=${directory}`,
-      "--env",
-      "WAITRON_SERVER_URL=https://127.0.0.1",
       "--mount",
       `type=bind,src=${join(work, "agent")},dst=/var/lib/waitron-print-agent`,
       marker.images.candidate["print-agent"],

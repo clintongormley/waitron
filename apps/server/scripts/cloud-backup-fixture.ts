@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import {
   VENUE_DIR_NAME,
   TRADING_ENV_FILE,
@@ -79,8 +80,10 @@ if (request.command === "capture") {
   try {
     let artifact: Uint8Array | undefined;
     await runOnce({
-      nodeId: parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"))
-        .WAITRON_NODE_ID!,
+      nodeId: readVariable(
+        parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")),
+        "WAITRON_NODE_ID",
+      )!,
       backends: [
         {
           id: "cloud-test-capture",
@@ -135,7 +138,7 @@ if (request.command === "capture") {
         JSON.stringify({
           networkDenied,
           manifest: checked.manifest,
-          sourceNodeId: identity.WAITRON_NODE_ID,
+          sourceNodeId: readVariable(identity, "WAITRON_NODE_ID"),
           venueName: venue.name,
           entries: checked.secretEntries.map((entry) => entry.name),
         }),
@@ -159,7 +162,7 @@ if (request.command === "capture") {
     const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
     assert(trading);
     assert.equal(
-      parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
+      readVariable(parseEnvFile(Buffer.from(trading.bytes).toString()), "WAITRON_NODE_ID"),
       request.sourceNodeId,
     );
     assert(!checked.secretEntries.some((entry) => entry.name.startsWith("secrets/cloud/")));

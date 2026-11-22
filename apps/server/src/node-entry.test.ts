@@ -29,7 +29,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { attachmentPath } from "./restore-flow.js";
 import { sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { openVenueDatabase, type VenueHolder } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -44,6 +44,7 @@ import {
 import { escapeHtml } from "./html-page.js";
 import { OPERATOR_WORDS } from "./i18n/recovery-page.js";
 import { recoveryApp } from "./recovery-surface.js";
+import { loadBoxEnv } from "./box-env.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import {
   assertNotAhead,
@@ -112,6 +113,63 @@ function recoveryVolume(initial: RecoveryState) {
 }
 
 describe("runEntry", () => {
+  it("warns once about unknown process variable names without including their values", async () => {
+    const log = vi.fn<EntryDeps["log"]>();
+    await runEntry(deps({ baseEnv: { WAITRON_NOT_A_THING: "synthetic-private-value" }, log }));
+    expect(log.mock.calls.filter(([, code]) => code === "config.unknown_variables")).toEqual([
+      ["warn", "config.unknown_variables", { unknown: ["WAITRON_NOT_A_THING"] }],
+    ]);
+  });
+
+  it("reports misplaced settings and keeps stray lines private", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-env-"));
+    onTestFinished(() => rm(stateDir, { recursive: true, force: true }));
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_ENV=production\n");
+    const strayKey = Buffer.alloc(32, 7).toString("base64");
+    await writeFile(join(stateDir, "secrets.env"), `${strayKey}\n`);
+    const log = vi.fn<EntryDeps["log"]>();
+    await runEntry(deps({ loadBoxEnv, stateDir, log }));
+    expect(log.mock.calls.filter(([, code]) => code === "config.unknown_variables")).toEqual([
+      [
+        "warn",
+        "config.unknown_variables",
+        {
+          unknown: [],
+          ignoredInBoxFiles: { "backup.env": ["WAITRON_ENV"] },
+        },
+      ],
+    ]);
+  });
+
+  it("accepts the deployed app and development slot settings without a warning", async () => {
+    const [dockerfile, compose] = await Promise.all([
+      readFile(new URL("../../../deploy/Dockerfile", import.meta.url), "utf8"),
+      readFile(new URL("../../../deploy/compose.yml", import.meta.url), "utf8"),
+    ]);
+    const runtimeEnv = dockerfile.split(/^ENV /m).at(-1)!;
+    const appEnvironment = compose.split("    environment:\n")[1]!.split("    volumes:\n")[0]!;
+    const names = [...(runtimeEnv + appEnvironment).matchAll(/^\s*(WAITRON_[A-Z0-9_]+)[=:]/gm)].map(
+      (match) => match[1]!,
+    );
+    expect(names).toContain("WAITRON_PRODUCER_NAME");
+    expect(names).toContain("WAITRON_INSTALLATION_ORIGIN");
+    for (const baseEnv of [
+      Object.fromEntries(names.map((name) => [name, ""])),
+      {
+        WAITRON_SETUP_PORT: "9111",
+        WAITRON_TILL_VITE_PORT: "5194",
+        WAITRON_DASHBOARD_VITE_PORT: "5195",
+        WAITRON_SETUP_VITE_PORT: "5196",
+        WAITRON_HTTP_PORT: "8081",
+        WAITRON_MANAGEMENT_ORIGIN: "http://localhost:5195",
+      },
+    ]) {
+      const log = vi.fn<EntryDeps["log"]>();
+      await runEntry(deps({ baseEnv, loadBoxEnv, log }));
+      expect(log.mock.calls.filter(([, code]) => code === "config.unknown_variables")).toEqual([]);
+    }
+  });
+
   it("marks a completed managed restore and reports that snapshot after boot", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-entry-cloud-"));
     const origin = "https://cloud.example.test";

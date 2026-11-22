@@ -14,7 +14,7 @@ import {
   rootRelativePath,
   type StartAgainSurvey,
 } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -252,12 +252,15 @@ async function resolutionApp(
     const pair = await host.store.readResumable().catch(() => null);
     const frozenEnvironment = pair?.state.frozen.environment;
     const selectedEnvironment =
-      frozenEnvironment ?? deploymentEnvironmentFor(environment.WAITRON_ENV) ?? "preproduction";
+      frozenEnvironment ??
+      deploymentEnvironmentFor(readVariable(environment, "WAITRON_ENV")) ??
+      "preproduction";
     return c.json(
       {
         provisioned: false,
         environment: selectedEnvironment,
-        ...(environment.WAITRON_ENV === "dev" && selectedEnvironment === "preproduction"
+        ...(readVariable(environment, "WAITRON_ENV") === "dev" &&
+        selectedEnvironment === "preproduction"
           ? { developmentMode: true }
           : {}),
         needs: ["first-setup-resolution"],
@@ -289,7 +292,7 @@ async function resolutionApp(
     ...(spare === undefined ? {} : { restartDeletesLogs: () => restartDeletesLogs(spare) }),
     ...(requestRestart === undefined ? {} : { requestRestart }),
   });
-  if (!isUnset(environment.WAITRON_SETUP_APP_DIR))
-    mountSetupSpa(app, environment.WAITRON_SETUP_APP_DIR!, log);
+  if (!isUnset(readVariable(environment, "WAITRON_SETUP_APP_DIR")))
+    mountSetupSpa(app, readVariable(environment, "WAITRON_SETUP_APP_DIR")!, log);
   return { app };
 }

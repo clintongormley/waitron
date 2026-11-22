@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { nodes } from "@waitron/db";
-import { AppError, nodeId } from "@waitron/shared";
+import { AppError, nodeId, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import type { InitialSetupContext, InitialSetupContribution } from "@waitron/module";
 import {
   validateAllocationEnvelope,
@@ -366,9 +366,9 @@ function createInitialSetup(
     },
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
-      const paths = (names: readonly string[]) =>
+      const paths = (names: readonly EnvironmentVariableName[]) =>
         names
-          .map((name) => host.environment[name])
+          .map((name) => readVariable(host.environment, name))
           .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
       return createInitialSetup(() => configuredCloudTrust(host.environment), {
         files: paths([

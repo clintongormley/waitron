@@ -26,7 +26,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { planVenue } from "@waitron/provisioning";
 import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
-import { nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId, readVariable } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
 import { writeModuleConfig } from "../src/module-config.js";
@@ -70,7 +70,7 @@ export function resolveDeveloperDemo(value: string | undefined): CountryDemoDeve
 }
 
 export function resolveSeedLocale(): SeedLocale {
-  return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es" : "en";
+  return readVariable(process.env, "WAITRON_SEED_LOCALE") === "es-ES" ? "es" : "en";
 }
 
 /**
@@ -78,12 +78,12 @@ export function resolveSeedLocale(): SeedLocale {
  * non-numeric value falls back to the default rather than propagating `NaN`.
  */
 export function resolveSalesDays(): number {
-  const n = Number(process.env.WAITRON_SEED_SALES_DAYS ?? "28");
+  const n = Number(readVariable(process.env, "WAITRON_SEED_SALES_DAYS") ?? "28");
   return Number.isFinite(n) && n >= 0 ? n : 28;
 }
 
 /** The exact env contract `apps/server` boots against (config.ts + till-config.ts), in write order. */
-export interface DevEnv {
+export type DevEnv = {
   WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;
   WAITRON_ONBOARDING_INTENT: string;
@@ -91,7 +91,7 @@ export interface DevEnv {
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
   WAITRON_NODE_ID: string;
-}
+};
 
 const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_VENUE_DIR",
@@ -351,11 +351,13 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   // Before the directory is read or migrated: the seed's own guard fires only after `applyVenue`
   // has committed, which leaves a directory only `pnpm dev:reset` recovers.
   demoSeedEnvironment(process.env);
-  const preset = resolveDeveloperDemo(process.env.WAITRON_DEMO_REGION);
+  const preset = resolveDeveloperDemo(readVariable(process.env, "WAITRON_DEMO_REGION"));
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
   const expectedNodeId =
-    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_NODE_ID : null;
+    existing !== undefined && isCompleteDevEnv(existing)
+      ? readVariable(existing, "WAITRON_NODE_ID")!
+      : null;
   const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedNodeId);
 
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
@@ -415,12 +417,16 @@ export function resetVenueDir(venueDir: string): void {
 async function main(): Promise<void> {
   demoSeedEnvironment(process.env);
   const envPath =
-    process.env.WAITRON_DEV_ENV_FILE?.trim() || fileURLToPath(new URL("../.env", import.meta.url));
+    readVariable(process.env, "WAITRON_DEV_ENV_FILE")?.trim() ||
+    fileURLToPath(new URL("../.env", import.meta.url));
 
   // Resolved exactly as boot does. Imported dynamically so a test importing this module does not
   // pull the whole `boot.ts` graph.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
-  const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(
+    readVariable(process.env, "WAITRON_STATE_DIR"),
+    DEFAULT_STATE_ROOT,
+  );
   const venueDir = venueDirOf(process.env, stateDir);
 
   if (process.argv.includes("--reset")) {
@@ -432,7 +438,7 @@ async function main(): Promise<void> {
     venueDir,
     envPath,
     stateDir,
-    httpPort: process.env.WAITRON_HTTP_PORT,
+    httpPort: readVariable(process.env, "WAITRON_HTTP_PORT"),
     log: (line) => void console.log(line),
   });
 
@@ -443,10 +449,12 @@ async function main(): Promise<void> {
       : "dev-setup: provisioned a fresh preproduction venue.",
   );
   console.log("");
-  const tillPort = process.env.WAITRON_TILL_VITE_PORT?.trim() || "5190";
-  const dashboardPort = process.env.WAITRON_DASHBOARD_VITE_PORT?.trim() || "5191";
-  const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
-  const serverPort = process.env.WAITRON_HTTP_PORT?.trim() || result.env.WAITRON_HTTP_PORT;
+  const tillPort = readVariable(process.env, "WAITRON_TILL_VITE_PORT")?.trim() || "5190";
+  const dashboardPort = readVariable(process.env, "WAITRON_DASHBOARD_VITE_PORT")?.trim() || "5191";
+  const setupPort = readVariable(process.env, "WAITRON_SETUP_VITE_PORT")?.trim() || "5192";
+  const serverPort =
+    readVariable(process.env, "WAITRON_HTTP_PORT")?.trim() ||
+    readVariable(result.env, "WAITRON_HTTP_PORT");
   console.log(`  till       http://localhost:${tillPort}/till/`);
   console.log(`  dashboard  http://localhost:${dashboardPort}/`);
   console.log(

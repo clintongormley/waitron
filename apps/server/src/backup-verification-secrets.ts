@@ -2,7 +2,7 @@ import { createPrivateKey, X509Certificate } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { posix } from "node:path";
 import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
-import { isAppError } from "@waitron/shared";
+import { isAppError, readVariable } from "@waitron/shared";
 import { decryptArtifactAsync } from "./artifact-cipher.js";
 import { unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { loadRecoveryKey } from "./backup-config.js";
@@ -41,7 +41,10 @@ export async function verifyBackupKeyPlacement(
     const original = keys(inputs(captured));
     const placedEnv = await loadBoxEnv({}, placedStateDir);
     const retained = inputs(captured.filter((entry) => entry.name !== "secrets/backup.env"));
-    if (!retained.WAITRON_CREDENTIALS_KEY && !placedEnv.WAITRON_CREDENTIALS_KEY)
+    if (
+      !readVariable(retained, "WAITRON_CREDENTIALS_KEY") &&
+      !readVariable(placedEnv, "WAITRON_CREDENTIALS_KEY")
+    )
       return "unsupported";
     const placed = keys(placedEnv);
     return isDeepStrictEqual(original, placed) ? "passed" : "unsupported";

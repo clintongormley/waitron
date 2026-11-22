@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import "./errors.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { AppError } from "@waitron/shared";
+import { AppError, readVariable } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { parseEmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { readLockedTotpKeys, startLockedCopy } from "./cloud-locked-start.js";
@@ -9,7 +9,7 @@ import { createLogger } from "./logger.js";
 
 try {
   const totpPurposeKeys = readLockedTotpKeys(process.env);
-  const raw = process.env.WAITRON_LOCKED_COPY;
+  const raw = readVariable(process.env, "WAITRON_LOCKED_COPY");
   delete process.env.WAITRON_LOCKED_COPY;
   type Launch = Omit<
     Parameters<typeof startLockedCopy>[0],

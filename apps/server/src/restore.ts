@@ -34,7 +34,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
 import { eq, inArray } from "drizzle-orm";
-import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, isAppError, nodeId as brandNodeId, readVariable } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
@@ -920,11 +920,12 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   }
   const env = parseEnvFile(Buffer.from(entry.bytes).toString("utf8"));
   for (const key of IDENTITY_KEYS) {
-    if (isUnset(env[key])) throw new AppError("restore.identity_incomplete", { missing: key });
+    if (isUnset(readVariable(env, key)))
+      throw new AppError("restore.identity_incomplete", { missing: key });
   }
   return {
     node: {
-      nodeId: brandNodeId(env.WAITRON_NODE_ID!),
+      nodeId: brandNodeId(readVariable(env, "WAITRON_NODE_ID")!),
     },
   };
 }

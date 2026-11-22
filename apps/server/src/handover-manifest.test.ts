@@ -334,14 +334,16 @@ describe("buildNodeLocalManifest", () => {
       expect(await backupSettingsRead(other)).toContain("k".repeat(40));
     });
 
-    it("limit: an empty value that hides another file's setting digests as no line, though the box reads them differently", async () => {
+    it("a rotation date in trading.env affects neither the backup digest nor the loaded settings", async () => {
       for (const folder of [stateDir, other]) {
         await writeFile(join(folder, "trading.env"), "WAITRON_BACKUP_KEY_ROTATED_AT=5\n");
       }
       await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_KEY_ROTATED_AT=\n`);
       await writeFile(join(other, "backup.env"), SETTINGS);
       expect(await digests(stateDir, "backup.env")).toBe(await digests(other, "backup.env"));
-      expect(await backupSettingsRead(stateDir)).not.toBe(await backupSettingsRead(other));
+      const settings = await backupSettingsRead(stateDir);
+      expect(await backupSettingsRead(other)).toBe(settings);
+      expect(settings).toBe(JSON.stringify({ recoveryKey: "k".repeat(40) }));
     });
 
     it("the same module overrides in another order or spacing digest alike", async () => {

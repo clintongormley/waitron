@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { loadConfig, resolveConfigDir } from "./config.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -15,7 +16,7 @@ export async function runUpgradeChecks(
   mode: "readiness" | "sale" | "capture" | "trial" = "readiness",
   output?: string,
 ) {
-  const stateDir = resolveConfigDir(base.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const stateDir = resolveConfigDir(readVariable(base, "WAITRON_STATE_DIR"), DEFAULT_STATE_ROOT);
   const env = await loadBoxEnv(base, stateDir);
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   if (mode === "capture") {

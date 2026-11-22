@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import {
   BACKUP_STAGING_DIR,
   CLOUD_CONNECTION_FILE,
@@ -79,7 +80,7 @@ else if (request.command === "schedule") {
     const points: CloudCapturePoint[] = [];
     const target = createCloudArchiveTarget({
       stateDir,
-      sourceNodeId: identity.WAITRON_NODE_ID!,
+      sourceNodeId: readVariable(identity, "WAITRON_NODE_ID")!,
       connection: {
         ...client,
         async publishCapture(...args) {
@@ -97,10 +98,12 @@ else if (request.command === "schedule") {
     const now = new Date();
     const signal = new AbortController().signal;
     const readClock = () =>
-      withTransaction(store.venue, (tx) => resolveVenueClock(tx, identity.WAITRON_NODE_ID!));
+      withTransaction(store.venue, (tx) =>
+        resolveVenueClock(tx, readVariable(identity, "WAITRON_NODE_ID")!),
+      );
     let uploadErrorCode: string | null | undefined;
     const schedule = createBackupSchedule({
-      nodeId: identity.WAITRON_NODE_ID!,
+      nodeId: readVariable(identity, "WAITRON_NODE_ID")!,
       backends: [],
       cloud: {
         target: {
@@ -127,7 +130,7 @@ else if (request.command === "schedule") {
       schedule: { kind: "interval", ms: 86_400_000 },
       retain: 1,
       retainDays: 1,
-      jitterSeed: identity.WAITRON_NODE_ID!,
+      jitterSeed: readVariable(identity, "WAITRON_NODE_ID")!,
       readClock,
       signal,
       destinationTimeoutMs: 15 * 60_000,

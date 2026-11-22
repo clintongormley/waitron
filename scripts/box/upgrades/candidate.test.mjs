@@ -94,6 +94,7 @@ it("checks data, observes the contained agent, stops it and then sells without l
   expect(starts[0]).toContain("host");
   expect(starts[1]).toContain("none");
   expect(starts[2].find((arg) => arg.startsWith("container:"))).toBeDefined();
+  expect(starts[2]).not.toContain("--env");
   expect(starts.flat().some((arg) => /\/live\/|\/dev:|dbus|SYNTHETIC-secret/.test(arg))).toBe(
     false,
   );

@@ -1,3 +1,4 @@
+import { readVariable } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
@@ -14,8 +15,8 @@ export async function withUnfinishedJoinEnvironment(
   env: Record<string, string | undefined>,
   defaultStateRoot: string,
 ): Promise<Record<string, string | undefined>> {
-  if (!isUnset(env.WAITRON_ENV)) return env;
-  const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, defaultStateRoot);
+  if (!isUnset(readVariable(env, "WAITRON_ENV"))) return env;
+  const stateDir = resolveConfigDir(readVariable(env, "WAITRON_STATE_DIR"), defaultStateRoot);
   const record = await createSetupOperationStore(stateDir)
     .read()
     .catch(() => null);

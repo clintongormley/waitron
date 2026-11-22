@@ -70,8 +70,7 @@ docs/handoffs/
 apps/server/src/state/
 
 # Product images the demo seed writes into the from-source DEFAULT_MEDIA_ROOT on `pnpm dev:setup`
-# (~44 content-addressed PNGs). Same from-source/dist split as state/ above; deployment sets
-# WAITRON_MEDIA_DIR to a served path. Never let the dev seed pollute the working tree.
+# Demo seed output lives in the development media directory.
 apps/server/src/media/
 
 # A development copy of the declaration folder (`src/testing/declaration-folder.ts`).

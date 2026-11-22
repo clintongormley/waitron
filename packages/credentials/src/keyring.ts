@@ -1,11 +1,12 @@
-import { AppError } from "@waitron/shared";
+import { AppError, isUnset, readVariable, type EnvironmentVariableName } from "@waitron/shared";
 import "./errors.js";
 
 const KEY_BYTES = 32;
-const CURRENT = "WAITRON_CREDENTIALS_KEY";
-const CURRENT_VERSION = "WAITRON_CREDENTIALS_KEY_VERSION";
-const PREVIOUS = "WAITRON_CREDENTIALS_KEY_PREVIOUS";
-const PREVIOUS_VERSION = "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION";
+const CURRENT = "WAITRON_CREDENTIALS_KEY" satisfies EnvironmentVariableName;
+const CURRENT_VERSION = "WAITRON_CREDENTIALS_KEY_VERSION" satisfies EnvironmentVariableName;
+const PREVIOUS = "WAITRON_CREDENTIALS_KEY_PREVIOUS" satisfies EnvironmentVariableName;
+const PREVIOUS_VERSION =
+  "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION" satisfies EnvironmentVariableName;
 
 /** Every variable `loadKeyRing` reads. */
 export const KEY_RING_VARIABLES = [CURRENT, CURRENT_VERSION, PREVIOUS, PREVIOUS_VERSION] as const;
@@ -20,10 +21,14 @@ export function singleLineKeyRingVariables(
   env: Readonly<Record<string, string>>,
 ): Record<string, string> {
   const out = { ...env };
-  for (const name of [CURRENT, PREVIOUS])
-    if (env[name] !== undefined) out[name] = Buffer.from(env[name], "base64").toString("base64");
-  for (const name of [CURRENT_VERSION, PREVIOUS_VERSION])
-    if (env[name] !== undefined && env[name] !== "") out[name] = String(Number(env[name]));
+  for (const name of [CURRENT, PREVIOUS] as const) {
+    const value = readVariable(env, name);
+    if (value !== undefined) out[name] = Buffer.from(value, "base64").toString("base64");
+  }
+  for (const name of [CURRENT_VERSION, PREVIOUS_VERSION] as const) {
+    const value = readVariable(env, name);
+    if (!isUnset(value)) out[name] = String(Number(value));
+  }
   return out;
 }
 
@@ -85,9 +90,9 @@ export function loadKeyRing(env: Record<string, string | undefined>): KeyRing {
     version: readVersion(env, CURRENT_VERSION, 1),
   };
 
-  const previousRaw = env[PREVIOUS];
-  const previousVersionRaw = env[PREVIOUS_VERSION];
-  if (previousRaw === undefined && previousVersionRaw === undefined) return { current };
+  const previousRaw = readVariable(env, PREVIOUS);
+  const previousVersionRaw = readVariable(env, PREVIOUS_VERSION);
+  if (isUnset(previousRaw) && isUnset(previousVersionRaw)) return { current };
   // Both or neither: a key with no version cannot be matched to a row, and a version with no key
   // cannot decrypt one. Either alone is a half-finished rotation setup, and failing now beats
   // discovering it when a row on the old version is read.
@@ -123,8 +128,11 @@ export function keyForVersion(ring: KeyRing, version: number): Buffer | null {
   return null;
 }
 
-function readKey(env: Record<string, string | undefined>, variable: string): Buffer {
-  const raw = env[variable];
+function readKey(
+  env: Record<string, string | undefined>,
+  variable: EnvironmentVariableName,
+): Buffer {
+  const raw = readVariable(env, variable);
   if (raw === undefined || raw === "") throw new AppError("credentials.key_missing", { variable });
   const key = Buffer.from(raw, "base64");
   if (key.length !== KEY_BYTES) {
@@ -136,10 +144,10 @@ function readKey(env: Record<string, string | undefined>, variable: string): Buf
 /** `fallback` null means the variable is required. */
 function readVersion(
   env: Record<string, string | undefined>,
-  variable: string,
+  variable: EnvironmentVariableName,
   fallback: number | null,
 ): number {
-  const raw = env[variable];
+  const raw = readVariable(env, variable);
   if (raw === undefined || raw === "") {
     if (fallback !== null) return fallback;
     throw new AppError("credentials.key_version_invalid", { variable, reason: "empty" });

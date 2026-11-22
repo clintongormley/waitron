@@ -702,6 +702,12 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
   one does (`isUnset`, `apps/server/src/env-value.ts`); a path never goes through `resolve("")`; and a reader with no default refuses `""`
   explicitly.
+- **Every `WAITRON_*` variable a program reads is declared in
+  [environment-variables.ts](packages/shared/src/environment-variables.ts) or the print agent's
+  [config.ts](apps/print-agent/src/config.ts).** TypeScript server and package readers use
+  `readVariable`. At startup the box logs unknown names and ignores names in the wrong box file.
+  Guard: `scripts/environment-variables.test.ts`, weaker than its name. It scans tracked text.
+  [Detail](docs/developers/conventions-data.md#environment-variables-have-one-inventory).
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Until then
   any installation may be reset at any time instead of carrying its data forward (owner,
   2026-10-03). This rule expires the day a real venue is live; add its replacement in the same
