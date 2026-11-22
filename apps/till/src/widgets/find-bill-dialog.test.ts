@@ -204,6 +204,28 @@ it("decimal input cash collection shows Spanish and refuses grouped or over-prec
   ]);
 });
 
+for (const locale of ["en", "es"]) {
+  it(`draws the euro sign inside the cash box on the side ${locale} writes it`, async () => {
+    setLocale(locale);
+    const el = await mount();
+    const paid: unknown[] = [];
+    el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+    const control = input(el, "cash-received");
+    await control.updateComplete;
+    const box = control.shadowRoot!;
+    expect(box.querySelector('[part="currency"]')?.textContent?.trim()).toBe("€");
+    expect(
+      box.querySelector(".amount-box")!.classList.contains(locale === "es" ? "after" : "before"),
+    ).toBe(true);
+    expect(box.querySelector('[part="unit"]')).toBeNull();
+    await type(el, "cash-received", locale === "es" ? "40,50" : "40.50");
+    await click(el, "[data-collect]");
+    expect(paid).toEqual([
+      { workingOrderId: "wo-1", tender: { method: "cash", amount: "40.50" }, invoiced: true },
+    ]);
+  });
+}
+
 it("a selected collector has no search, and clean Back closes to the page", async () => {
   const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
     bill: debt,

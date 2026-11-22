@@ -362,10 +362,9 @@ export class TillFindBillDialog extends LitElement {
         this.method === "cash"
           ? html`<wt-price-input
               name="cash-received"
-              decimal-locale=${currentLocale()}
+              fixed-unit
+              .locale=${currentLocale()}
               .label=${t("find_bill.cash_received")}
-              unit="€"
-              .fixedUnit=${true}
               .value=${live(this.cash)}
               .disabled=${this.busy || this.unconfirmed}
               .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}

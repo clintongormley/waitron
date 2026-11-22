@@ -213,6 +213,28 @@ it("previews the typed amount and shows the server's split, keeping only the lat
   expect(text(confirm(el))).toBe(t("invoice_correction.confirm").replace("{amount}", "€6.05"));
 });
 
+for (const locale of ["en", "es"]) {
+  it(`draws the euro sign inside the money-back box on the side ${locale} writes it`, async () => {
+    setLocale(locale);
+    const { el, api } = await mount();
+    const field = grossField(el);
+    await field.updateComplete;
+    const box = field.shadowRoot!;
+    expect(box.querySelector('[part="currency"]')?.textContent?.trim()).toBe("€");
+    expect(
+      box.querySelector(".amount-box")!.classList.contains(locale === "es" ? "after" : "before"),
+    ).toBe(true);
+    expect(box.querySelector('[part="unit"]')).toBeNull();
+    await type(el, locale === "es" ? "2,50" : "2.50");
+    await vi.waitFor(() =>
+      expect(api.previewInvoiceCorrection).toHaveBeenLastCalledWith(
+        "sale-1",
+        expect.objectContaining({ gross: "2.50" }),
+      ),
+    );
+  });
+}
+
 it("previews the picked dishes and stops offering dishes at another VAT rate", async () => {
   const { el, api } = await mount();
 

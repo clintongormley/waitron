@@ -618,9 +618,8 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     return html`${this.#lines(loaded, errors.get("lines") ?? "")}
       <wt-price-input
         name="gross"
-        decimal-locale=${currentLocale()}
-        unit="€"
-        .fixedUnit=${true}
+        fixed-unit
+        .locale=${currentLocale()}
         .label=${t("invoice_correction.gross")}
         .required=${true}
         .value=${live(this.draft.gross)}
