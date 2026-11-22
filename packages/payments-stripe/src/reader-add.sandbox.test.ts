@@ -23,17 +23,23 @@ const unheldId = `tmr_${Array.from(randomBytes(24), (b) => ALPHANUMERIC[b % ALPH
 d("Stripe test-mode sandbox: adding a reader by an id no account holds", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 120_000 });
 
+  // The answers test-mode Stripe gave on 2026-11-22 (GitHub run 45001837367).
   it.each([
-    ["a well-formed id no account holds", unheldId],
-    ["an id without the tmr_ prefix", "not-a-reader"],
-    ["an id holding a slash and a space", "tmr_ab/../cd ef"],
-    ["the empty string", ""],
-  ])("refuses %s as reader.reference_unknown", async (_label, reference) => {
+    ["a well-formed id no account holds", unheldId, 404, "resource_missing"],
+    ["an id without the tmr_ prefix", "not-a-reader", 400, undefined],
+    [
+      "an id holding a slash and a space",
+      "tmr_ab/../cd ef",
+      400,
+      "wsp_400_blocked_path_traversal_request",
+    ],
+    ["the empty string", "", 404, undefined],
+  ])("refuses %s as reader.reference_unknown", async (_label, reference, statusCode, code) => {
     const stripeError = await new Stripe(KEY!).terminal.readers
       .retrieve(reference)
       .catch((e: unknown) => e);
     expect(stripeError).toBeInstanceOf(Stripe.errors.StripeInvalidRequestError);
-    expect(stripeError).toMatchObject({ statusCode: 404, code: "resource_missing" });
+    expect(stripeError).toMatchObject({ statusCode, code });
 
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
