@@ -185,12 +185,21 @@ async function serviceActions(db: Database, personId: string) {
   );
 
   return {
-    orderEvents: events.sort(byTime).map(({ id: _id, actor, from, to, ...event }) => ({
-      ...event,
+    orderEvents: events.sort(byTime).map((event) => ({
+      kind: event.kind,
+      at: event.at,
+      partyId: event.partyId,
+      groupId: event.groupId,
+      draftId: event.draftId,
+      lineId: event.lineId,
+      fromOrderId: event.fromOrderId,
+      toOrderId: event.toOrderId,
+      fromOrderNumber: event.fromOrderNumber,
+      toOrderNumber: event.toOrderNumber,
       yourPart: actionTimes(personId, [
-        ["actor", actor, event.at],
-        ["from", from, event.at],
-        ["to", to, event.at],
+        ["actor", event.actor, event.at],
+        ["from", event.from, event.at],
+        ["to", event.to, event.at],
       ]).map(({ action }) => action),
     })),
     groups: groups
@@ -212,8 +221,14 @@ async function serviceActions(db: Database, personId: string) {
       )
       .sort(byTime)
       .map(({ id, ...action }) => ({ partyId: id, ...action })),
-    dishMoves: dishMoves.sort(byTime).map(({ id: _id, ...move }) => move),
-    amendments: amendments.sort(byTime).map(({ id: _id, ...amendment }) => amendment),
+    dishMoves: dishMoves.sort(byTime).map(({ lineId, order, fromStationId, toStationId, at }) => ({
+      lineId,
+      order,
+      fromStationId,
+      toStationId,
+      at,
+    })),
+    amendments: amendments.sort(byTime).map(({ order, kind, at }) => ({ order, kind, at })),
     cancellations: cancellations.sort(byTime).map(({ id, ...row }) => ({ lineId: id, ...row })),
     lateConfirmations: lateConfirmations.sort(byTime).map(({ id, order, at }) => ({
       lineId: id,
