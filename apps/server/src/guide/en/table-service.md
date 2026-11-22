@@ -228,11 +228,11 @@ Adding a recognised reader again keeps your choice. See [Card readers](printers.
 to delete a reader or add it again. A configuration export carries payment policy, not card readers
 or this setting.
 
-## Trust the server before opening the till {#certificate-trust}
+## Trust the box before opening the till {#certificate-trust}
 
 The till's **This device hasn't trusted the till yet** page follows your browser's preferred
 supported language, with English as the fallback. Choose **Open the setup page for instructions**
-to install the server's certificate on this device, then reopen the till.
+to install the box's certificate on this device, then reopen the till.
 
 ## Refund all or part of a payment {#refund-payment}
 
@@ -405,7 +405,7 @@ If the window says an earlier request got no answer, choose **Send again**.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
-If the till says the server is out of disk space, wait until a manager clears the stop before refunding
+If the till says the box is out of disk space, wait until a manager clears the stop before refunding
 on the terminal: Waitron cannot record the refund while the stop holds.
 
 For a card payment keyed from a separate terminal, Waitron asks you to refund it on that terminal

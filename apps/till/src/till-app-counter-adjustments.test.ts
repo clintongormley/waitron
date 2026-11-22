@@ -1383,7 +1383,7 @@ describe("till-app: comping a stored counter order", () => {
   });
 
   it.each([
-    ["en", "The server did not answer. Send again: the station will not get the order twice."],
+    ["en", "The box did not answer. Send again: the station will not get the order twice."],
     [
       "es",
       "El servidor no respondió. Vuelve a enviarlo: la estación no recibirá el pedido dos veces.",

@@ -117,9 +117,7 @@ it.each(
     );
     await flush(el);
     expectRefused(el);
-    expect(banner(el)?.textContent).toMatch(
-      locale === "es-ES" ? /servidor principal/ : /main server/,
-    );
+    expect(banner(el)?.textContent).toMatch(locale === "es-ES" ? /servidor principal/ : /main box/);
     expect(write).toHaveBeenCalledOnce();
   },
 );
@@ -157,9 +155,7 @@ it.each(["en-GB", "es-ES"])("says a whole table payment was refused in %s", asyn
   emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "120.00" });
   await flush(el);
   expectRefused(el);
-  expect(banner(el)?.textContent).toMatch(
-    locale === "es-ES" ? /servidor principal/ : /main server/,
-  );
+  expect(banner(el)?.textContent).toMatch(locale === "es-ES" ? /servidor principal/ : /main box/);
 });
 
 it.each(["en-GB", "es-ES"])("says a bill payment was refused in %s", async (locale) => {
@@ -174,7 +170,7 @@ it.each(["en-GB", "es-ES"])("says a bill payment was refused in %s", async (loca
   await flush(el);
   expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage(refusal.code));
   expect(inDialog(el, "wt-form-actions")!.error).toMatch(
-    locale === "es-ES" ? /servidor principal/ : /main server/,
+    locale === "es-ES" ? /servidor principal/ : /main box/,
   );
   expect(write).toHaveBeenCalledOnce();
 });

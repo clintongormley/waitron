@@ -93,7 +93,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     expect(staffNoticeText(notice, true)).toEqual({
       main: {
         "en-GB":
-          "The tax agency refused a sale because the server's date was ahead. Payments wait until someone checks the time.",
+          "The tax agency refused a sale because the box's date was ahead. Payments wait until someone checks the time.",
         "es-ES":
           "Hacienda rechazó una venta porque la fecha del servidor iba adelantada. Los cobros esperan hasta que alguien compruebe la hora.",
       }[locale],

@@ -2137,7 +2137,7 @@ describe("a round the server adds to another tab", () => {
 
 describe("a round that got no answer while the party moved on to its next tab", () => {
   const unconfirmed =
-    "The server did not answer, so the items may have been added. Check the tab before sending them again.";
+    "The box did not answer, so the items may have been added. Check the tab before sending them again.";
 
   const shownParty = (el: TillApp) =>
     (tableScreen(el) as unknown as { party: { id: string } | null }).party?.id;

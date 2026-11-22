@@ -974,7 +974,7 @@ describe("till-lock-screen", () => {
       `${t("server.waiting_sales")} ${t("server.check_again")}`,
     );
     expect(t("server.waiting_sales", "en")).toBe(
-      "No server is taking sales right now. The till carries on as soon as one does.",
+      "No box is taking sales right now. The till carries on as soon as one does.",
     );
     const again = vi.fn();
     el.addEventListener("check-again", again);

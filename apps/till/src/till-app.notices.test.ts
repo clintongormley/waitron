@@ -665,7 +665,7 @@ describe("a till or handheld at the PIN screen", () => {
     expect(clockLine(el)).toBeNull();
     await poll(el);
     expect(clockLine(el)).toBe(
-      "Payments wait: the server is waiting for devices to connect and agree with its time (1 of 2 so far)",
+      "Payments wait: the box is waiting for devices to connect and agree with its time (1 of 2 so far)",
     );
     getDeviceEquipment.mockResolvedValue(withNotices([]));
     await poll(el);

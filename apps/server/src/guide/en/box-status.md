@@ -210,7 +210,7 @@ database, server key, backup encryption key and saved backups.
 ## When the box is out of space {#out-of-space}
 
 When the disk is full, nothing can be saved: tills cannot save orders, payments or other changes,
-and they show **Nothing can be saved: the server is out of space**. On this page, **Sales** and
+and they show **Nothing can be saved: the box is out of space**. On this page, **Sales** and
 **Disk space** turn red.
 
 While the disk is full, a red bar at the top of every dashboard page starts **Disk full: the tills
@@ -250,7 +250,7 @@ give it time to reopen on the old version.
 Box administration, held by Admin by default, lets you set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
-server's clock is wrong**, and the bell says so too, with the date the box's clock reads.
+box's clock is wrong**, and the bell says so too, with the date the box's clock reads.
 Nothing can confirm the clock then. The way out is to set the
 clock right. If the box's [time service](box-status.md#clock-service) is running, it puts the clock
 right once it reaches a time server over the internet; until then, or if the service is not running,
@@ -318,10 +318,10 @@ till can press it; it needs no permission. The [till notices guide](till-notices
 what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, **This device** sets the
-box's clock to it, and **The server** keeps the box's clock whatever the till's time while the box
+box's clock to it, and **The box** keeps the box's clock whatever the till's time while the box
 waits for its time to be confirmed and payments are not also stopped because the clock
 reads before 28 October 2024; otherwise **The
-server** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
+box** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
 box's clock. Each of these the box accepts restarts payments. When the box sets its clock, the bell and the email name the
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 

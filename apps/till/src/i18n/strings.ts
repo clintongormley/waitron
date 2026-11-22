@@ -16,14 +16,13 @@ export const en = {
   "problem_report.download_failed": "Could not create the download. Try again.",
 
   "recovery.open": "Open recovery",
-  "recovery.issuance_stopped":
-    "New invoices are stopped. Open recovery with the current server key.",
+  "recovery.issuance_stopped": "New invoices are stopped. Open recovery with the current box key.",
   "recovery.charged": "Card charged. Do not charge again.",
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
   "trust.title": "This device hasn't trusted the till yet",
   "trust.explanation":
-    "The till is served over HTTPS with the venue server's own certificate, which this device does not recognise yet. Install the server's certificate, then reopen the till.",
+    "The till is served over HTTPS with the box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
   "trust.open_setup": "Open the setup page for instructions",
 
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
@@ -201,7 +200,7 @@ export const en = {
     "Correction closed without a corrective invoice. The {amount} given back stays given back.",
   "invoice_correction.discarded": "Correction discarded. Nothing was given back.",
   "invoice_correction.unknown":
-    "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
+    "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "invoice_correction.close": "Close",
   "invoice_correction.saved":
     "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
@@ -211,9 +210,9 @@ export const en = {
     "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
   "invoice_correction.resend": "Send again",
   "invoice_correction.still_lost":
-    "Still no answer. Check this till's connection to the server, then send again.",
+    "Still no answer. Check this till's connection to the box, then send again.",
   "invoice_correction.unknown_end":
-    "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
+    "The box's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "invoice_correction.approvers_failed": "Could not read who can approve this. Try again.",
   "tender_refund.left": "{amount} left to refund from another payment",
 
@@ -1406,9 +1405,9 @@ export const en = {
   "adjust.do_cancel": "Cancel it",
   "adjust.reasons_error": "Could not load the reasons, try again",
   "adjust.unconfirmed":
-    "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
+    "No answer from the box. The bill has been read again: check whether the change was made before trying again.",
   "adjust.unconfirmed_unread":
-    "No answer from the server: the change may already have been made. Park the order, then retrieve it, and check whether the change was made before trying again.",
+    "No answer from the box: the change may already have been made. Park the order, then retrieve it, and check whether the change was made before trying again.",
   "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
@@ -1420,12 +1419,12 @@ export const en = {
   "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
   "table.change_not_saved_named": "Your change to {line} on {table} was not saved. {reason}",
   "table.change_unconfirmed":
-    "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
+    "The box did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
   "table.change_unconfirmed_named":
-    "The server did not answer your change to {line} on {table}. Open that table and check whether it was saved.",
+    "The box did not answer your change to {line} on {table}. Open that table and check whether it was saved.",
   "table.change_not_saved_no_table": "Your change to {line} was not saved. {reason}",
   "table.change_unconfirmed_no_table":
-    "The server did not answer your change to {line}. Open its table and check whether it was saved.",
+    "The box did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
   "table.whole_table": "Whole table",
@@ -1568,7 +1567,7 @@ export const en = {
   "make_now.title": "Make now",
   "make_now.dismiss": "Done",
   "table.round_unconfirmed":
-    "The server did not answer, so the items may have been added. Check the tab before sending them again.",
+    "The box did not answer, so the items may have been added. Check the tab before sending them again.",
   "table.draft_changed_elsewhere": "Your order on this table was changed on another device.",
   "table.draft_replaced_groups":
     "{groups} changed. The affected dishes have been re-arranged. Check New order and press Send again.",
@@ -1660,31 +1659,31 @@ export const en = {
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
-    "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up. If you already charged a card on the terminal, refund it there.",
+    "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
   // Their "tell a manager" is the owner's stated exception to never sending the person elsewhere: a
   // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "sale.disk_full":
-    "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager.",
+    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager.",
   "sale.disk_full_manual_card":
-    "Sale not recorded: the server is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
+    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
   "sale.charged_disk_full":
-    "Card charged, but the sale is not recorded: the server is out of space. Do not charge again; tell a manager.",
+    "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
   "sale.chain_handed_over_manual_card":
-    "This server is no longer the main server, so it cannot record this payment. If you already charged a card on the terminal, refund it there. Wait for the till to move to the main server, then try again.",
+    "This box is no longer the main box, so it cannot record this payment. If you already charged a card on the terminal, refund it there. Wait for the till to move to the main box, then try again.",
   "sale.clock_unusable":
-    "Payment not recorded: the server's clock is wrong (it reads {date}). It can be checked in the dashboard, under Box status. If you already charged a card on the terminal, refund it there.",
+    "Payment not recorded: the box's clock is wrong (it reads {date}). It can be checked in the dashboard, under Box status. If you already charged a card on the terminal, refund it there.",
   "sale.clock_unusable_check":
-    "Payment not recorded: the server's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
+    "Payment not recorded: the box's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
   "sale.charged_clock_unusable":
-    "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
+    "Card charged, but the payment is not recorded: the box's clock is wrong. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
   "sale.clock_unconfirmed":
-    "Payment not recorded: the server is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
+    "Payment not recorded: the box is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
   "sale.charged_clock_unconfirmed":
-    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
+    "Card charged, but the payment is not recorded: the box is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
   "bill_pay.charged_clock_unconfirmed":
-    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
+    "Card charged, but the payment is not recorded: the box is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
   "bill_pay.charged_clock_unusable":
-    "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, the payment is recorded automatically.",
+    "Card charged, but the payment is not recorded: the box's clock is wrong. Don't charge again. Once it is fixed, the payment is recorded automatically.",
   "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "reprint_language.title": "Reprint receipt",
@@ -1778,10 +1777,10 @@ export const en = {
     "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
   "place.error": "Could not send the order, try again",
   "place.unconfirmed":
-    "The server did not answer. Send again: the station will not get the order twice.",
+    "The box did not answer. Send again: the station will not get the order twice.",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
-    "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up.",
+    "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
   // key after a write that SUCCEEDED, when only the list refresh behind it failed.
   "refresh.held": "The list of parked orders could not refresh.",
@@ -1879,7 +1878,7 @@ export const en = {
     "At the Counter only a simplified invoice can be closed as a deferred payment. Take payment here instead.",
   "deferred_close.payment_unconfirmed":
     "A payment on this bill could not be confirmed and may have gone through. Look at the bill's payments, then take what is still owed here instead.",
-  "deferred_close.unanswered": "The server did not answer. Confirm again to try once more.",
+  "deferred_close.unanswered": "The box did not answer. Confirm again to try once more.",
   "deferred_close.ticket_unread":
     "Bill closed as a deferred payment. The receipt could not be loaded. You can continue serving.",
   "deferred_close.already_closed":
@@ -1960,15 +1959,15 @@ export const en = {
     "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unanswered_title": "Payment not confirmed",
   "bill_pay.recheck": "Check again",
-  "bill_pay.sending_title": "Waiting for the server",
+  "bill_pay.sending_title": "Waiting for the box",
   "bill_pay.sending":
-    "A payment on this bill is still waiting for the server. Wait for its answer before taking anything else on this bill.",
+    "A payment on this bill is still waiting for the box. Wait for its answer before taking anything else on this bill.",
   "bill_pay.reader_not_held":
     "This phone no longer has that card reader. Choose the reader in your hand. No card was charged.",
   "bill_pay.reader_not_held_unknown":
     "This phone no longer has that card reader. Choose the reader in your hand. The first payment may have gone through: look at the bill’s payments before taking it again.",
   "bill_pay.not_checked":
-    "The server could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
+    "The box could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
   "bill_pay.ticket_unread":
     "Payment recorded. The receipt could not be loaded. You can continue serving.",
   "bill_pay.card_recovery":
@@ -2197,13 +2196,13 @@ export const en = {
   "basket.blocked.server": "Not available now",
   // Server status
   "server.waiting_sales":
-    "No server is taking sales right now. The till carries on as soon as one does.",
+    "No box is taking sales right now. The till carries on as soon as one does.",
   "server.check_again": "Check again",
-  "server.switched": "Moved to another server. Enter your PIN.",
-  "server.main_silent": "The main server is not answering",
-  "server.none_answering": "No server is answering. Check this device's network connection.",
+  "server.switched": "Moved to another box. Enter your PIN.",
+  "server.main_silent": "The main box is not answering",
+  "server.none_answering": "No box is answering. Check this device's network connection.",
   "cloud_emergency.start": "Start the venue in the cloud",
-  "cloud_emergency.main_answering": "The main server is answering again.",
+  "cloud_emergency.main_answering": "The main box is answering again.",
   "cloud_emergency.requirements":
     "Have the emergency code you saved from Cloud services on the dashboard. You will need your Waitron password and a code from an authenticator app set up beforehand, or a recovery code.",
   "cloud_emergency.next":
@@ -2212,31 +2211,31 @@ export const en = {
   "cloud_emergency.qr": "Scan to open the emergency address",
   "cloud_emergency.open": "Open here",
   "cloud_emergency.close": "Close",
-  "server.switch_to_spare": "Switch to the spare server",
+  "server.switch_to_spare": "Switch to the spare box",
   "server.main_still_answering":
-    "The main server is still answering. To move to the spare, hand over from Servers on the dashboard.",
+    "The main box is still answering. To move to the spare, hand over from the Servers page on the dashboard.",
   "update.message": "Waitron was updated.",
   "update.reload": "Reload",
   "sale.unconfirmed":
-    "The server did not answer. Check whether the sale went through before trying again.",
-  "staff_notice.storage.disk_full": "Nothing can be saved: the server is out of space",
-  "staff_notice.clock.unusable": "Sales can't be recorded: the server's clock is wrong",
-  "staff_notice.storage.space_low": "The server is nearly out of space",
-  "staff_notice.clock.check_time": "The server's time needs checking",
+    "The box did not answer. Check whether the sale went through before trying again.",
+  "staff_notice.storage.disk_full": "Nothing can be saved: the box is out of space",
+  "staff_notice.clock.unusable": "Sales can't be recorded: the box's clock is wrong",
+  "staff_notice.storage.space_low": "The box is nearly out of space",
+  "staff_notice.clock.check_time": "The box's time needs checking",
   "staff_notice.clock.device_wrong": "This device's time is wrong",
   "staff_notice.clock.unconfirmed":
-    "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
+    "Payments wait: the box is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
   "staff_notice.clock.unconfirmed_jumped":
-    "Payments wait: the server's clock jumped and it cannot check the time over the internet. Waiting for devices to agree with its time ({agreed} of 2 so far)",
+    "Payments wait: the box's clock jumped and it cannot check the time over the internet. Waiting for devices to agree with its time ({agreed} of 2 so far)",
   "staff_notice.clock.unconfirmed_future_date":
-    "The tax agency refused a sale because the server's date was ahead. Payments wait until someone checks the time.",
+    "The tax agency refused a sale because the box's date was ahead. Payments wait until someone checks the time.",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.printer.jobs_waiting": "Printer “{printer}” not printing",
   "staff_notice.printer.ticket_failed": "Printer “{printer}” could not print a ticket",
   "staff_notice.reprint": "Reprint it",
   "staff_notice.since": "since {time}",
-  "staff_notice.unknown": "The server needs attention",
+  "staff_notice.unknown": "The box needs attention",
   "staff_notice.tell_manager": "Tell a manager",
   "staff_notice.see_box_status": "See Box status in the dashboard",
   "staff_notice.check_time": "Check the time",
@@ -2245,53 +2244,53 @@ export const en = {
   "payments_paused.order_open": "The order stays open.",
   "payments_paused.close": "Close",
   "box_time.title": "Check the time",
-  "box_time.loading": "Reading the server's time…",
-  "box_time.important": "It is very important that the time on the server is correct.",
-  "box_time.server_says": "The server's clock says the current date and time is:",
+  "box_time.loading": "Reading the box's time…",
+  "box_time.important": "It is very important that the time on the box is correct.",
+  "box_time.server_says": "The box's clock says the current date and time is:",
   "box_time.device_says": "This device's clock says the current date and time is:",
   "box_time.which_correct": "Which is correct:",
-  "box_time.server": "The server",
+  "box_time.server": "The box",
   "box_time.device": "This device",
   "box_time.both_wrong": "Both times are wrong",
   "box_time.is_correct": "Is this time correct:",
   "box_time.no": "No",
   "box_time.yes": "Yes",
   "box_time.correct_device":
-    "Please correct the time on this device and then reconnect to the server.",
-  "box_time.set_to": "The server's clock is set to {after}.",
-  "box_time.confirmed": "The server's time is confirmed.",
+    "Please correct the time on this device and then reconnect to the box.",
+  "box_time.set_to": "The box's clock is set to {after}.",
+  "box_time.confirmed": "The box's time is confirmed.",
   "box_time.close": "Close",
   "box_time.check_again": "Check again",
   "box_time.admin": "Administrator sign-in",
   "box_time.admin_refused.pin_invalid": "Wrong PIN. Sign in again to try once more.",
   "box_time.admin_refused.pin_throttled": "Too many wrong PINs. Wait a moment, then sign in again.",
   "box_time.admin_refused.not_permitted":
-    "The person who signed in is no longer an administrator, so they cannot set the server's clock. Another administrator can sign in.",
-  "box_time.refused.not_stopped": "The server's clock no longer needs checking.",
+    "The person who signed in is no longer an administrator, so they cannot set the box's clock. Another administrator can sign in.",
+  "box_time.refused.not_stopped": "The box's clock no longer needs checking.",
   "box_time.refused.not_start_up":
-    "The server has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
+    "The box has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
   "box_time.refused.target_invalid":
     "This device's clock reads {till}, which cannot be right. Correct this device's date and time in its settings, then check again.",
   "box_time.refused.synchronised":
-    "The server keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
+    "The box keeps its clock in time over the internet, so it does not take a time from a device. Check this device's own clock.",
   "box_time.refused.host_unavailable":
-    "This server cannot read or set its own clock: the part of the server that does that is not answering. If the server can reach the internet, its own time service may still put the clock right by itself.",
-  "box_time.refused.stale": "The server's clock changed while this was being checked.",
-  "box_time.refused.moved": "The server's time has changed since it was shown here.",
+    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself.",
+  "box_time.refused.stale": "The box's clock changed while this was being checked.",
+  "box_time.refused.moved": "The box's time has changed since it was shown here.",
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
-    "This screen is the server itself, so its clock is the server's own. Check from a till or handheld instead.",
+    "This screen is the box itself, so its clock is the box's own. Check from a till or handheld instead.",
   "box_time.refused.not_admitted":
     "This device's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a device whose profile admits you.",
-  "box_time.refused.set_failed_refused": "The server could not set its clock. Nothing was changed.",
+  "box_time.refused.set_failed_refused": "The box could not set its clock. Nothing was changed.",
   "box_time.refused.set_failed_unverified":
-    "The server asked for its clock to be set but could not confirm it took.",
+    "The box asked for its clock to be set but could not confirm it took.",
   "box_time.refused.stopped":
-    "Payments are stopped because of the server's clock, so the server cannot keep its own time. Check again and choose “This device” if this device's time is right; if it is not, correct this device's time first.",
+    "Payments are stopped because of the box's clock, so the box cannot keep its own time. Check again and choose “This device” if this device's time is right; if it is not, correct this device's time first.",
   "box_time.refused.pending_step":
-    "The server has not finished saving its last clock change. Check again in a minute.",
+    "The box has not finished saving its last clock change. Check again in a minute.",
   "box_time.refused.other":
-    "The server's time could not be checked. Check again to see where it stands.",
+    "The box's time could not be checked. Check again to see where it stands.",
   "staff_notice.retried": "Retried automatically",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} more notices",
