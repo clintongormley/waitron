@@ -114,6 +114,8 @@ async function mount(
     takeGate?: Promise<void>;
     /** Each preview sent after a take waits for this before answering. */
     previewGate?: Promise<void>;
+    /** Each preview sent with a passkey answer waits for this before answering. */
+    passkeyPreviewGate?: Promise<void>;
     joinedAtMs?: null;
     /** After a refused take the old process answers one more preview before it goes down. */
     lateRestart?: boolean;
@@ -260,6 +262,11 @@ async function mount(
     }
     if (path.endsWith("/preparation")) await options.preparationGate?.();
     if (path.endsWith("/emergency/backup")) await options.backupGate?.();
+    if (
+      path.endsWith("/emergency/preview") &&
+      (body.signIn as { passkey?: unknown } | undefined)?.passkey !== undefined
+    )
+      await options.passkeyPreviewGate;
     const proofRefusal = proof && switchSignIn(proof, path, body.signIn, take);
     if (proofRefusal) return proofRefusal;
     if (path.endsWith("/emergency/backup")) {
@@ -500,12 +507,15 @@ interface SwitchProof {
   /** When each challenge was issued; one is live for two minutes. */
   issued: Map<string, number>;
   used: Set<string>;
+  givenBack: Set<string>;
   /**
    * Codes the next passkey answers are refused with, in turn, after their challenge is taken:
    * `passkey.verification_failed` as for a wrong key, or `passkey.not_registered` as for a passkey
-   * the copy checked does not hold.
+   * the copy checked does not hold, which leaves the challenge live for the next step, once.
    */
   refusals: string[];
+  /** A challenge refused as unknown has lapsed by the next step, as one kept past two minutes. */
+  unknownLapses?: boolean;
 }
 const refusal = (code: string, status: number) =>
   new Response(JSON.stringify({ error: { code } }), { status });
@@ -531,8 +541,14 @@ function switchSignIn(
     if (issuedAt === undefined || proof.used.has(challenge) || Date.now() - issuedAt >= 120_000)
       return refusal("passkey.challenge_expired", 400);
     if (take?.includes(".")) return undefined;
-    proof.used.add(challenge);
     const refused = proof.refusals.shift();
+    if (
+      refused === "passkey.not_registered" &&
+      !proof.unknownLapses &&
+      !proof.givenBack.has(challenge)
+    )
+      proof.givenBack.add(challenge);
+    else proof.used.add(challenge);
     if (refused !== undefined) return refusal(refused, 401);
     proof.cookie = true;
     return undefined;
@@ -544,6 +560,7 @@ const newProof = (): SwitchProof => ({
   cookie: false,
   issued: new Map(),
   used: new Set(),
+  givenBack: new Set(),
   refusals: [],
 });
 /**
@@ -3163,34 +3180,97 @@ it("with no internet time, a passkey switch confirms the time, and a proof lapse
   expect(get).toHaveBeenCalledTimes(2);
 });
 
-it.each(["passkey.not_registered", "passkey.verification_failed"])(
-  "a passkey the held copy refuses with %s goes on to the take with a fresh answer",
-  async (code) => {
-    const get = stubPasskey();
-    const proof = newProof();
-    proof.refusals = [code];
-    const { el, posts } = await mount({ proof, takes: ["restarting"] });
-    await choosePasskey(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
-    );
-    const sent = posts
-      .filter(({ body }) => body.signIn !== undefined)
-      .map(({ path, body }) => {
-        const { clientDataJSON } = (
-          body.signIn as { passkey: { response: { clientDataJSON: string } } }
-        ).passkey.response;
-        const client = clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
-        return [
-          path.split("/").at(-1),
-          (JSON.parse(atob(client)) as { challenge: string }).challenge,
-        ];
-      });
-    expect(sent.map(([step]) => step)).toEqual(["preview", "followed"]);
-    expect(sent[0]![1]).not.toBe(sent[1]![1]);
-    expect(get).toHaveBeenCalledTimes(2);
-  },
-);
+/** Each step a passkey answer was sent to, with the challenge it answered. */
+const passkeySteps = (posts: { path: string; body: Record<string, unknown> }[]) =>
+  posts
+    .filter(({ body }) => body.signIn !== undefined)
+    .map(({ path, body }) => {
+      const { clientDataJSON } = (
+        body.signIn as { passkey: { response: { clientDataJSON: string } } }
+      ).passkey.response;
+      const client = clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
+      return [
+        path.split("/").at(-1),
+        (JSON.parse(atob(client)) as { challenge: string }).challenge,
+      ];
+    });
+
+it("a passkey the held copy does not know goes on to the take with the same answer", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  const { el, posts } = await mount({ proof, takes: ["restarting"] });
+  await choosePasskey(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  const sent = passkeySteps(posts);
+  expect(sent.map(([step]) => step)).toEqual(["preview", "followed"]);
+  expect(sent[0]![1]).toBe(sent[1]![1]);
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("a passkey answer the held copy does not know, refused after the page was left, is not kept", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  let release!: () => void;
+  const passkeyPreviewGate = new Promise<void>((resolve) => (release = resolve));
+  const { el, posts } = await mount({ proof, passkeyPreviewGate, takes: ["restarting"] });
+  await choosePasskey(el);
+  try {
+    await vi.waitFor(() => expect(passkeySteps(posts)).toEqual([["preview", "chal0000"]]));
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  } finally {
+    release();
+  }
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  await vi.waitFor(() => expect(Reflect.get(el, "busy")).toBe(false));
+  expect(posts.some(({ path }) => path.endsWith("/followed"))).toBe(false);
+  const next = posts.length;
+  // A restored page explains the switch again, then goes back to the sign-in's methods.
+  await vi.waitFor(() => expect(q(el, "[data-test=start-switching]")).not.toBeNull());
+  q(el, "[data-test=start-switching]").click();
+  const again = () => q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
+  await vi.waitFor(() => expect(again()?.disabled).toBe(false));
+  again().click();
+  await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(passkeySteps(posts.slice(next))[0]).toEqual(["preview", "chal0001"]),
+  );
+});
+
+it("a passkey the held copy refuses as a wrong key goes on to the take with a fresh answer", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.verification_failed"];
+  const { el, posts } = await mount({ proof, takes: ["restarting"] });
+  await choosePasskey(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  const sent = passkeySteps(posts);
+  expect(sent.map(([step]) => step)).toEqual(["preview", "followed"]);
+  expect(sent[0]![1]).not.toBe(sent[1]![1]);
+  expect(get).toHaveBeenCalledTimes(2);
+});
+
+it("a kept passkey answer the take refuses as lapsed is asked for once more", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  proof.unknownLapses = true;
+  const { el, posts } = await mount({ proof, takes: ["restarting"] });
+  await choosePasskey(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  const sent = passkeySteps(posts);
+  expect(sent.map(([step]) => step)).toEqual(["preview", "followed", "followed"]);
+  expect(sent[1]![1]).toBe(sent[0]![1]);
+  expect(sent[2]![1]).not.toBe(sent[0]![1]);
+  expect(get).toHaveBeenCalledTimes(2);
+});
 
 it.each(["passkey.not_registered", "passkey.verification_failed"])(
   "a passkey the take also refuses with %s says the passkey did not sign in",
@@ -3201,7 +3281,10 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
     const { el, posts } = await mount({ proof, takes: ["restarting"] });
     await choosePasskey(el);
     await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
-    expect(posts.filter(({ path }) => path.endsWith("/followed"))).toHaveLength(2);
+    // The held copy's unknown answer goes on to the take; a wrong key's is asked for afresh.
+    expect(posts.filter(({ path }) => path.endsWith("/followed"))).toHaveLength(
+      code === "passkey.not_registered" ? 1 : 2,
+    );
   },
 );
 
@@ -3216,15 +3299,15 @@ it("a passkey answer that lapses while the spare catches up says so, and checkin
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   await choosePasskey(el);
   await vi.waitFor(() => catchingUp(el));
-  // One take without a sign-in, 66 that wait while catching up, then the one caught up.
-  while (followedTakes(posts) < 68) {
+  // The held copy's answer goes on to 66 takes that wait while catching up, then the one caught up.
+  while (followedTakes(posts) < 67) {
     const sent = followedTakes(posts);
     await vi.advanceTimersByTimeAsync(2000);
     await vi.waitFor(() => expect(followedTakes(posts)).toBeGreaterThan(sent));
   }
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_lapsed")));
   expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
-  expect(get).toHaveBeenCalledTimes(2);
+  expect(get).toHaveBeenCalledTimes(1);
   vi.useRealTimers();
   const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
   await vi.waitFor(() => expect(again.disabled).toBe(false));
@@ -3232,7 +3315,7 @@ it("a passkey answer that lapses while the spare catches up says so, and checkin
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
   );
-  expect(get).toHaveBeenCalledTimes(4);
+  expect(get).toHaveBeenCalledTimes(2);
 });
 
 it("a passkey take the held copy refused, then sent to the held copy, keeps the take's explanation", async () => {

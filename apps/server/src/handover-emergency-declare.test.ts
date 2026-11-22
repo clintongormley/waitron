@@ -893,6 +893,19 @@ describe("the switch's passkey and proof", () => {
     expect(answer.setCookie).toBeNull();
   });
 
+  it("a passkey answer refused for lacking node.manage is used up", async () => {
+    const passkey = await enrolledPasskey();
+    await setBuiltInRoleForTest(placed.venue, ADMIN, "staff");
+    const s = service();
+    const signIn = { passkey: passkey.assert(await challenge(s), "https://spare.example") };
+    expect((await s.post({ signIn }, true, "preview")).body.error?.code).toBe(
+      "authorization.not_permitted",
+    );
+    expect((await s.post({ signIn }, true, "preview")).body.error?.code).toBe(
+      "passkey.challenge_expired",
+    );
+  });
+
   it.each([
     ["a passkey that is not an object", { passkey: "answer" }],
     ["an empty sign-in, even beside a proof", {}],

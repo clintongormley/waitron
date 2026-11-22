@@ -8,7 +8,7 @@ import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { verifyEnvelope } from "@waitron/handover";
 import { holds, persons, readPersonAuthority, verifyPasskeyAssertion } from "@waitron/identity";
 import { readNodeMode } from "@waitron/node-db";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
@@ -28,7 +28,7 @@ export const SWITCH_SIGN_IN_STATUS = {
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
 } as const;
-// Anyone may ask for a challenge, so the oldest go first past this many.
+// Anyone may ask for a challenge, so past this many the earliest made or given back go first.
 const MAX_SWITCH_CHALLENGES = 32;
 
 export interface SwitchProofDeps {
@@ -131,32 +131,48 @@ export function readSwitchProofCookie(c: Context): string | null {
   return getCookie(c, SWITCH_PROOF_COOKIE) ?? null;
 }
 
+interface HeldChallenge {
+  /** When the challenge was made. */
+  at: number;
+  givenBack: boolean;
+}
+
 /**
  * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
- * streams with the copy a spare follows (A947 4d plan D9). Each is taken once.
+ * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once.
  */
 export function createSwitchChallenges() {
-  const made = new Map<string, number>();
+  const made = new Map<string, HeldChallenge>();
   const live = (challenge: string) => {
-    const at = made.get(challenge);
-    return at !== undefined && Date.now() - at < SWITCH_CHALLENGE_TTL_MS;
+    const held = made.get(challenge);
+    return held !== undefined && Date.now() - held.at < SWITCH_CHALLENGE_TTL_MS;
+  };
+  const prune = () => {
+    for (const challenge of made.keys())
+      if (made.size >= MAX_SWITCH_CHALLENGES || !live(challenge)) made.delete(challenge);
   };
   return {
     live,
     async make(rpId: string) {
-      for (const challenge of made.keys())
-        if (made.size >= MAX_SWITCH_CHALLENGES || !live(challenge)) made.delete(challenge);
+      prune();
       const options = await generateAuthenticationOptions({
         rpID: rpId,
         userVerification: "required",
       });
-      made.set(options.challenge, Date.now());
+      made.set(options.challenge, { at: Date.now(), givenBack: false });
       return options;
     },
-    take(challenge: string): boolean {
-      const ok = live(challenge);
+    /** The challenge as it was held, if it is live; either way it is no longer held. */
+    take(challenge: string): HeldChallenge | undefined {
+      const held = live(challenge) ? made.get(challenge) : undefined;
       made.delete(challenge);
-      return ok;
+      return held;
+    },
+    /** Holds a taken challenge again, once, keeping the time it was made. */
+    giveBack(challenge: string, held: HeldChallenge): void {
+      if (held.givenBack) return;
+      prune();
+      made.set(challenge, { at: held.at, givenBack: true });
     },
   };
 }
@@ -219,15 +235,26 @@ async function checkSwitchSignIn(
     return personId;
   }
   const { challenge, response } = signIn;
-  const live =
-    challenge !== undefined &&
-    (db === undefined ? sw.challenges.live(challenge) : sw.challenges.take(challenge));
-  if (!live) throw new AppError("passkey.challenge_expired", {});
-  if (db === undefined) return undefined;
-  const site = await passkeyVerifySite(c, sw, venuePasskeyOrigins(db, sw.origin));
-  const { personId } = await withTransaction(db, (tx) =>
-    verifyPasskeyAssertion(tx, { challenge, response, ...site }),
-  );
+  if (challenge === undefined) throw new AppError("passkey.challenge_expired", {});
+  if (db === undefined) {
+    if (!sw.challenges.live(challenge)) throw new AppError("passkey.challenge_expired", {});
+    return undefined;
+  }
+  const held = sw.challenges.take(challenge);
+  if (held === undefined) throw new AppError("passkey.challenge_expired", {});
+  let personId: string;
+  try {
+    const site = await passkeyVerifySite(c, sw, venuePasskeyOrigins(db, sw.origin));
+    ({ personId } = await withTransaction(db, (tx) =>
+      verifyPasskeyAssertion(tx, { challenge, response, ...site }),
+    ));
+  } catch (error) {
+    // A copy that does not know the passkey has checked nothing, so the challenge is held again,
+    // once, for the catch-up step to check the same answer against a newer copy.
+    if (isAppError(error) && error.code === "passkey.not_registered")
+      sw.challenges.giveBack(challenge, held);
+    throw error;
+  }
   if (!holds(await readPersonAuthority(db, personId), "node.manage"))
     throw new AppError("authorization.not_permitted", { permission: "node.manage" });
   setSwitchProofCookie(c, await makeSwitchProof({ ...sw, db }, personId));

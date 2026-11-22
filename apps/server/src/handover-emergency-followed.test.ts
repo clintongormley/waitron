@@ -238,15 +238,19 @@ it("a refused sign-in leaves nothing staged and restarts", async () => {
   await restarted(s);
 });
 
-it("a passkey take signs in against the staged copy's passkey rows, and writes no challenge row", async () => {
-  const passkey = signingPasskey("spare.example");
-  const followed = new DatabaseSync(followedVenue());
-  followed
+function enrol(file: string, passkey: ReturnType<typeof signingPasskey>): void {
+  const copy = new DatabaseSync(file);
+  copy
     .prepare(
       "insert into webauthn_credentials (id, person_id, credential_id, public_key, counter, created_at) values (?, ?, ?, ?, 0, ?)",
     )
     .run(randomUUID(), ADMIN, passkey.credentialId, passkey.publicKey, new Date().toISOString());
-  followed.close();
+  copy.close();
+}
+
+it("a passkey take signs in against the staged copy's passkey rows, and writes no challenge row", async () => {
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
   const s = service();
   const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
   const answer = await s.post({
@@ -259,6 +263,65 @@ it("a passkey take signs in against the staged copy's passkey rows, and writes n
   expect(staged.prepare("select * from sign_in_challenges").all()).toEqual([]);
   staged.close();
   await restarted(s);
+});
+
+it("a passkey answer the joined copy does not know is accepted by the take, once", async () => {
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const s = service();
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.not_registered");
+  expect((await s.post({ signIn })).body).toEqual({ state: "restarting" });
+  await restarted(s);
+  expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.challenge_expired");
+});
+
+it("a passkey answer refused as unknown a second time is used up", async () => {
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const s = service();
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  for (let check = 0; check < 2; check++)
+    expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.not_registered");
+  expect((await s.post({ signIn })).body.error?.code).toBe("passkey.challenge_expired");
+  expect(s.stopForSwitch).not.toHaveBeenCalled();
+});
+
+it("a passkey answer the joined copy refuses for another reason is used up", async () => {
+  const passkey = signingPasskey("spare.example");
+  enrol(join(dirs().spareVenue, VENUE_FILE), passkey);
+  const s = service();
+  for (const answer of [
+    (challenge: string) => passkey.assert(challenge, "https://elsewhere.example"),
+    (challenge: string) => {
+      const signed = passkey.assert(challenge, "https://spare.example");
+      return { ...signed, response: { ...signed.response, signature: "AAAA" } };
+    },
+  ]) {
+    const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+    const signIn = { passkey: answer(challenge) };
+    expect((await s.post({ signIn }, "preview")).body.error?.code).toBe(
+      "passkey.verification_failed",
+    );
+    expect((await s.post({ signIn }, "preview")).body.error?.code).toBe(
+      "passkey.challenge_expired",
+    );
+  }
+});
+
+it("a passkey answer refused as unknown still lapses two minutes after its challenge was made", async () => {
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const s = service();
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  vi.setSystemTime(Date.now() + 90_000);
+  expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.not_registered");
+  vi.setSystemTime(Date.now() + 31_000);
+  expect((await s.post({ signIn })).body.error?.code).toBe("passkey.challenge_expired");
+  expect(s.stopForSwitch).not.toHaveBeenCalled();
 });
 
 it.each([
