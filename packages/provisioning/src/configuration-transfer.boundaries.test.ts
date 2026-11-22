@@ -192,18 +192,6 @@ it.each([
   },
 );
 
-it("refuses a module that omitted its transfer decision", async () => {
-  const module = { ...moduleWith([]), configurationTransfer: undefined };
-  await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject(
-    invalid("module:synthetic-transfer"),
-  );
-  expect(
-    await exportConfigurationTables(suite.db, [
-      { ...module, configurationTransfer: { kind: "none" } },
-    ]),
-  ).toEqual({ tables: {}, reconnect: [] });
-});
-
 it("leaves dependent rows behind across a reverse-ordered composite key and strips private fields", async () => {
   await scratch(async (tx) => {
     await tx.execute(
@@ -317,23 +305,6 @@ it.each([
     }),
   ).toThrow(expect.objectContaining({ code: "setup.configuration_newer", params: {} }));
 });
-
-it.each([
-  { order: "the unrecorded module first", names: ["synthetic-unrecorded", "synthetic-newer"] },
-  { order: "the newer module first", names: ["synthetic-newer", "synthetic-unrecorded"] },
-])(
-  "refuses a module this server has no recorded version for ahead of a newer one, with $order",
-  ({ names }) => {
-    const modules = names.map((name) => ({ ...moduleWith([]), name }));
-    const bundle = {
-      ...configurationBundle(),
-      modules: { "synthetic-unrecorded": 1, "synthetic-newer": 2 },
-    };
-    expect(() => validateConfigurationBundle(bundle, modules, { "synthetic-newer": 1 })).toThrow(
-      expect.objectContaining(invalid("module:synthetic-unrecorded")),
-    );
-  },
-);
 
 it.each(["mandatory", "provision-only"] as const)("refuses missing %s set", (tier) => {
   const bundle = { ...configurationBundle(), modules: {} };

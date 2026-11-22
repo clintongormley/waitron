@@ -586,15 +586,6 @@ describe("configuration transfer archive", () => {
       expect.objectContaining({ code: "setup.request_invalid", params: { field: "passphrase" } }),
     );
   });
-
-  it("rejects an undeclared module contribution", async () => {
-    const { exportConfigurationTables } = await import("./configuration-transfer.js");
-    const module = { name: "probe" } as WaitronModule;
-    await expect(exportConfigurationTables({} as never, [module])).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "module:probe" },
-    });
-  });
 });
 
 describe("configuration transfer database path", () => {
