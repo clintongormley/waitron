@@ -281,6 +281,14 @@ it.each([
       },
     }),
   ],
+  [
+    "an enabled language no language name exists for",
+    job(pinta, { languages: { default: "ca", enabled: ["ca", "zz"] } }),
+  ],
+  [
+    "the undetermined language enabled",
+    job(pinta, { languages: { default: "ca", enabled: ["ca", "und"] } }),
+  ],
   ["no items", job([])],
   [
     "a member's ref over 128 characters",
@@ -333,6 +341,14 @@ it("accepts a context head listed before its member, and counts only items with 
       status: 200,
       json: { version: 1, state: "queued", total: 1 },
     });
+  }));
+
+it("accepts an enabled language tag with a variant, as Cloud does", () =>
+  withCloud(async (f) => {
+    const body = job([item("product:1", "PINTA", ["ca-ES-valencia"])], {
+      languages: { default: "ca", enabled: ["ca", "ca-ES-valencia"] },
+    });
+    expect(await submit(f, body)).toMatchObject({ status: 200, json: { state: "queued" } });
   }));
 
 it("over 1,000 valid items is 413 translation_job_too_large", () =>

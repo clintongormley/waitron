@@ -166,7 +166,7 @@ function readJob(body: string): FakeJobBody | null {
     !Array.isArray(l.enabled) ||
     l.enabled.length < 1 ||
     l.enabled.length > 20 ||
-    !l.enabled.every((t) => typeof t === "string" && /^[a-z]{2,3}(-[A-Z]{2})?$/.test(t)) ||
+    !l.enabled.every(languageTag) ||
     new Set(l.enabled).size !== l.enabled.length ||
     !l.enabled.includes(l.default)
   )
@@ -237,6 +237,18 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
   };
 }
 
+// Cloud's rule, `language` in waitron-cloud's packages/translation/src/job-body.ts.
+const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
+function languageTag(tag: unknown): boolean {
+  if (typeof tag !== "string" || tag === "und" || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag))
+    return false;
+  try {
+    return languageNames.of(tag) !== tag;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Where the contract is silent, this fake chooses:
  * - for status, collect and release, `permission_denied` comes after the signed-body check and
@@ -244,7 +256,6 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  * - `revoked` (403) comes after the envelope, proof and lease checks, for all four actions: before
  *   submit's fingerprint check and the other three's signed-body check;
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
- * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
  * - `expire()` expires a job in any state, a `collected` one included.
  * Where this fake differs from Cloud:
  * - `pageItems(n)` caps a collect page at `n` entries, which Cloud does not; the byte budget
