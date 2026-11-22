@@ -17,7 +17,11 @@ import {
   splitBusinessDayChanges,
   type BusinessDayClock,
 } from "@waitron/shared";
-import { clockTransitionAt, planBusinessDayStart } from "./business-day-changeover.js";
+import {
+  clockTransitionAt,
+  planBusinessDayStart,
+  type BusinessDayStartPlan,
+} from "./business-day-changeover.js";
 import type {
   BusinessDayClockModel,
   BusinessDayStartInput,
@@ -92,8 +96,13 @@ export async function readBusinessDayClockModel(
   const startsAt = businessDayBoundaryAt(clock, pending.effectiveBusinessDay);
   return { ...base, currentBusinessDay, pending: { ...pending, startsAt } };
 }
-function refuseClockTransition(clock: BusinessDayClock, dayCutover: string, at: Date): void {
-  const transition = clockTransitionAt(clock, dayCutover, at);
+function refuseClockTransition(
+  clock: BusinessDayClock,
+  dayCutover: string,
+  at: Date,
+  plan: BusinessDayStartPlan,
+): void {
+  const transition = clockTransitionAt(clock, dayCutover, at, plan);
   if (transition !== null)
     throw new AppError("venue.business_day_invalid", {
       field: "dayCutover",
@@ -146,8 +155,8 @@ export async function previewBusinessDayStart(
   const start = startOf(input);
   const model = await readBusinessDayClockModel(tx, at);
   assertRevision(model, start.expectedClockRevision);
-  refuseClockTransition(model.clock, start.dayCutover, at);
   const plan = planBusinessDayStart(model.clock, start.dayCutover, at);
+  refuseClockTransition(model.clock, start.dayCutover, at, plan);
   const effectiveDay = plan.effectiveBusinessDay;
   await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
@@ -196,7 +205,7 @@ export async function writeBusinessDayStart(
   const effectiveDay = plan.effectiveBusinessDay;
   if (proposal.effectiveBusinessDay !== effectiveDay) invalid("dayCutover", "changeover_passed");
   if (sameChanges(plan.candidate, model.clock)) return unchanged();
-  refuseClockTransition(model.clock, proposal.dayCutover, at);
+  refuseClockTransition(model.clock, proposal.dayCutover, at, plan);
   for (const removed of plan.removed)
     await protectHistory(tx, model.clock, plan.candidate, removed);
   await protectHistory(tx, model.clock, plan.candidate, effectiveDay);

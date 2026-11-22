@@ -76,10 +76,6 @@ code, not run again here.
   `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
   already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
   code.
-- **A872, repeated work.** A preview or a Save (`apps/server/src/business-day-start.ts`) works the
-  plan out with `planBusinessDayStart`, and `clockTransitionAt`
-  (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
-  to 20 moments when it looks for when a Save refused across a clocks change can be made.
 - **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
   hours, a season range past the 24th hour is cut at it when any special day is painted on that
   date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
