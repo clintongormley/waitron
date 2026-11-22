@@ -520,11 +520,11 @@ Filters opens full screen at 767 px and that the rows beside it retain their wid
 768 px. The row assertion catches a sizing change that makes the rows switch to their narrow
 layout at 768 px. Smaller changes can still leave enough room for the wide layout.
 
-- **Sales by category is its own report, never part of the daily close** (owner, 2026-09-25,
+- **Sales by category is its own report** (owner, 2026-09-25,
   [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
-  §10.6). The daily close stays frozen and hash-chained; the category analysis is a separate report
-  for the same business day. The owner also wanted it printable alongside the close; no daily-close
-  print exists yet.
+  §10.6). In Sales, choose a receipt printer to print the category report or a finished drawer
+  close. On 22 November 2026, A1325 retired the saved day report and its chain.
+  [Retirement slice](../superpowers/plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md)
 
 - **"Patch live menu" is an emergency tool and stays plain** (owner, 2026-10-27, A1151). It
   corrects only the live version of one menu and puts the patch live at once: no scheduling, no

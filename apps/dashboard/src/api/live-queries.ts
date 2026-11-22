@@ -173,7 +173,6 @@ export const QUERY_DEPENDENCIES = {
     "sale_lines",
     "settings.business_day",
     "settings.venue",
-    "daily_closes",
     "sales",
     "sale_voids",
     "tenders",
@@ -420,7 +419,6 @@ export const QUERY_DEPENDENCIES = {
     "taxpayer",
     "sales",
     "working_orders",
-    "daily_closes",
 
     "day_cutover_changes",
   ],

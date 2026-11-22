@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -8,6 +9,7 @@ import {
   sales,
   tenders,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -274,6 +276,28 @@ describe("computeDailyClose", () => {
     });
     expect(refundDay.counts).toEqual({ sales: 0, corrections: 0, voids: 0 });
     expect(await facts()).toEqual(original);
+  });
+
+  it("includes a late sale dated to the reported day", async () => {
+    const day = { ...input(), nodeIds: [venue.nodeId] };
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    await suite.db
+      .update(workingOrders)
+      .set({ trustedOpenedAt: "2026-08-04T10:00:00.000Z" })
+      .where(eq(workingOrders.id, orderId));
+    expect((await run(day)).counts.sales).toBe(0);
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      source: "business_day_close",
+      workingOrderId: orderId,
+      issuedAt: "2026-08-05T10:00:00.000Z",
+      total: "11.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+    });
+    const figures = await run(day);
+    expect(figures.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    expect(figures.vat.grossTotal).toBe("11.00");
+    expect((await run({ ...day, businessDay: "2026-08-05" })).counts.sales).toBe(0);
   });
 
   it("validates inputs before touching the database", async () => {

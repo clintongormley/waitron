@@ -238,7 +238,7 @@ describe("a running venue's account email clock", () => {
         const model = (await (
           await request("/management-api/venue-details")
         ).json()) as VenueDetailsModel;
-        expect(model.hasSales || model.hasOrderHistory || model.hasDailyClose).toBe(false);
+        expect(model.hasSales || model.hasOrderHistory).toBe(false);
         const previewPath =
           "/management-api/venue-details/clock-preview?timeZone=Atlantic%2FCanary&dayCutover=05%3A00";
         let retainedDeadline: string | null = null;

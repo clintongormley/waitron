@@ -24,7 +24,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   "packages/fiscal-verifactu/src/chain.ts": { count: 1, reason: savepoint },
   "packages/fiscal-verifactu/src/handover-return.ts": { count: 1, reason: savepoint },
   "packages/payments/src/reconciliation-schedule/store.ts": { count: 1, reason: savepoint },
-  "packages/reporting/src/record-daily-close.ts": { count: 1, reason: savepoint },
   "packages/workforce/src/chain.ts": { count: 1, reason: savepoint },
 };
 const excluded = (path: string) =>

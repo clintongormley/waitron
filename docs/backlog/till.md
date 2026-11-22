@@ -427,8 +427,8 @@ and builds on the completed refund flow (#3971). Sales and the daily email keep 
 existing reporting date, including later writes dated to that day. A saved drawer close keeps its
 count and withdrawal, and later cash movement belongs to the next close. Sales shows drawer counts
 and withdrawals and can reprint a finished close. Staff count and close a drawer from **More**
-on the till and record cash top-ups and withdrawals there. The next slice switches Sales to the
-recorded figures for the selected date.
+on the till and record cash top-ups and withdrawals there. The remaining slice warns when a drawer
+was due for a close and adds the drawer figures to the daily email.
 
 ## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
@@ -1121,10 +1121,9 @@ Printer identity is separate from the till route inventory.
 
 2 entries, size L.
 
-- **A1325. Close the day: count the cash and save the day's close — OPEN, design approved
-  2026-11-06, planned.** The north star's "closing". A close is a counted withdrawal from one
-  drawer. Staff can also record cash in and out. Sales still needs to drop the saved day report,
-  and the daily warning and email remain.
+- **A1325. Warn about missing drawer closes and include the counts in the daily email.**
+  Warn when a drawer had cash movement and missed its close. Include counts and differences in the
+  daily summary.
   [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
   A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Part of A1325’s design (owner, 2026-11-04).

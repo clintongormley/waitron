@@ -1,8 +1,9 @@
+import { seedFinishedDrawer } from "./testing/drawer-history-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dailyCloseChain, dailyCloses, sales, withTransaction, readVenueClock } from "@waitron/db";
+import { sales, withTransaction, readVenueClock } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
@@ -11,8 +12,6 @@ import {
   computeDailyClose,
   computeTopSellers,
   computeVatSummaryForPeriod,
-  recordDailyClose,
-  verifyDailyCloseChain,
 } from "@waitron/reporting";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -127,8 +126,7 @@ async function frozen() {
       "refunds",
       "invoice_series",
       "registros_facturacion",
-      "daily_closes",
-      "daily_close_chain",
+      "drawer_entries",
       "adjustments",
       "working_orders",
       "kitchen_notices",
@@ -168,28 +166,10 @@ describe("dated business-day reporting through real storage", () => {
     await billlessSale(venue);
     await parked(venue, "Caña");
     await inTx((tx) =>
-      recordDailyClose(tx, {
+      seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
-        businessDay: "2026-11-02",
-        timeZone: "Europe/Madrid",
-        closedBy: venue.adminId,
-        cashCounts: [
-          {
-            deviceId: venue.cfg.origin.deviceId,
-            openingFloat: "0.00",
-            payouts: "0.00",
-            countedCash: "12.10",
-          },
-        ],
-      }),
-    );
-    await inTx((tx) =>
-      recordDailyClose(tx, {
-        nodeId: venue.cfg.nodeId,
-        businessDay: "2026-11-01",
-        timeZone: "Europe/Madrid",
-        closedBy: venue.adminId,
-        cashCounts: [],
+        personId: venue.adminId,
+        recordedAt: "2026-11-02T12:00:00.000Z",
       }),
     );
     vi.setSystemTime(new Date("2026-11-03T12:00:00.000Z"));
@@ -283,8 +263,12 @@ describe("dated business-day reporting through real storage", () => {
     ])
       expect((rows[table] as unknown[]).length).toBeGreaterThan(0);
     expect((rows.registros_facturacion as unknown[]).length).toBeGreaterThan(0);
-    expect((await suite.db.select().from(dailyCloses)).length).toBe(2);
-    expect((await suite.db.select().from(dailyCloseChain))[0]!.sequenceNo).toBe(2);
+    expect(rows.drawer_entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "count", amount: 800 }),
+        expect.objectContaining({ kind: "finish", amount: 800 }),
+      ]),
+    );
     const before = await derived("2026-11-02");
     expect(before.close.vat.grossTotal).toBe("12.10");
     expect(before.close.cash.tenderTotal).toBe("12.10");
@@ -294,9 +278,6 @@ describe("dated business-day reporting through real storage", () => {
     expect(await derived("2026-11-02")).toEqual(before);
     expect(await derived("2026-11-03")).toEqual(mixedBefore);
     expect(await report("daily-close?businessDay=2026-11-02")).toEqual(httpBefore);
-    expect(await inTx((tx) => verifyDailyCloseChain(tx, venue.cfg.nodeId))).toMatchObject({
-      ok: true,
-    });
   });
   it.each(["03:00", "07:00"])(
     "reads close, period, overview and order filters at the %s boundary",
@@ -348,87 +329,20 @@ describe("dated business-day reporting through real storage", () => {
       });
     },
   );
-  it("resolves the recorded close from its node rather than a caller's scalar", async () => {
-    await schedule("07:00");
-    vi.setSystemTime(new Date("2026-11-04T05:30:00.000Z"));
-    await billlessSale(venue);
-    const record = await inTx((tx) =>
-      recordDailyClose(tx, {
-        nodeId: venue.cfg.nodeId,
-        businessDay: "2026-11-03",
-        timeZone: "Europe/Madrid",
-        closedBy: venue.adminId,
-        cashCounts: [
-          {
-            deviceId: venue.cfg.origin.deviceId,
-            openingFloat: "0.00",
-            payouts: "0.00",
-            countedCash: "12.10",
-          },
-        ],
-      }),
-    );
-    expect(record.snapshot.close.vat.grossTotal).toBe("12.10");
-    expect(record.snapshot.close.cash.tenderTotal).toBe("12.10");
-  });
-  it("refuses a supplied zone which disagrees with the node's stored zone before creating a chain", async () => {
-    await expect(
-      inTx((tx) =>
-        recordDailyClose(tx, {
-          nodeId: venue.cfg.nodeId,
-          businessDay: "2026-11-03",
-          timeZone: "UTC",
-          closedBy: venue.adminId,
-          cashCounts: [],
-        }),
-      ),
-    ).rejects.toThrow(/time zone.*match/i);
-    expect(await suite.db.select().from(dailyCloseChain)).toEqual([]);
-    expect(await suite.db.select().from(dailyCloses)).toEqual([]);
-    expect(
-      (
-        await Promise.resolve(
-          suite.db.all<{
-            id: string;
-            bumpMode: string;
-            menuId: string | null;
-            timeZone: string;
-            dayCutover: string;
-          }>(
-            sql`select (select id from menus where is_default) as menuId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from (select doc from settings where module = 'business_day') b join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-          ),
-        )
-      )[0]!.dayCutover,
-    ).toBe("05:00:00");
-  });
 });
 
 describe("recorded facts refuse retrospective boundary changes", () => {
-  it("refuses a close dated on the transitional day and preserves its complete chain", async () => {
+  it("schedules a new start after a drawer close while keeping the saved count and withdrawal", async () => {
     await inTx((tx) =>
-      recordDailyClose(tx, {
+      seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
-        businessDay: "2026-11-03",
-        timeZone: "Europe/Madrid",
-        closedBy: venue.adminId,
-        cashCounts: [],
+        personId: venue.adminId,
+        recordedAt: "2026-11-03T12:00:00.000Z",
       }),
     );
     const before = await frozen();
-    vi.setSystemTime(SAVE_BEFORE_NOV_4_CHANGEOVER);
-    const response = await app.request("/management-api/venue-details/business-day-start", {
-      method: "PUT",
-      headers: { Cookie: await managerCookie(), "content-type": "application/json" },
-      body: JSON.stringify({
-        effectiveBusinessDay: "2026-11-04",
-        dayCutover: "07:00",
-        expectedClockRevision: 1,
-      }),
-    });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: { code: "venue.business_day_locked", params: { reason: "daily_close" } },
-    });
+    expect(before.drawer_entries).toHaveLength(2);
+    await schedule("07:00");
     expect(await frozen()).toEqual(before);
   });
   it("refuses future issuance without rewriting any sale, filing, number or close", async () => {

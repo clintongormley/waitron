@@ -1,5 +1,9 @@
 # Ventas
 
+Al consultar un día anterior, las cifras de **Ventas** pueden cambiar si se registra un movimiento
+con esa fecha. En **Historial de cierres de caja**, cada cierre terminado conserva el recuento y la
+retirada que guardaste.
+
 ## Consulta y reimprime un cierre de caja {#drawer-close-history}
 
 En el panel, abre **Ventas** y elige las fechas en **Desde** y **Hasta**. En **Historial de cierres

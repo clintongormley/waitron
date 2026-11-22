@@ -47,7 +47,6 @@
   "src/schema/credentials/index.ts": 0.1,
   "src/schema/credentials/venue-credentials.ts": 33.4,
   "src/schema/custom-themes.ts": 52.3,
-  "src/schema/daily-closes.ts": 55,
   "src/schema/day-cutover-changes.ts": 14.3,
   "src/schema/deferred-closures.ts": 85.2,
   "src/schema/deployment.ts": 15.7,

@@ -584,24 +584,6 @@ describe("closeBillDeferredTx compares the staged invoice choice", () => {
   });
 });
 
-describe("closeBillDeferredTx on a frozen day", () => {
-  // Freezes today's business day, so it runs last.
-  it("refuses new work on a business day this node has frozen", async () => {
-    const billId = await t.counterOrder("placed");
-    const request = await counterRequest(billId);
-    const sameDay = t.depsWith({ clock: t.sameDayClock() });
-    const businessDay = (
-      await t.close(await counterRequest(await t.counterOrder("placed")), sameDay)
-    ).businessDay;
-    await t.freezeDay(businessDay);
-
-    const error = await refusedWithNothingWritten(() => t.close(request, sameDay));
-
-    expect(error.code).toBe("deferred_close.day_frozen");
-    expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay });
-  });
-});
-
 function diskNoted(noted: boolean) {
   return {
     noteRefused: () => {},

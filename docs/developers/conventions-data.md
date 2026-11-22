@@ -1235,9 +1235,8 @@ whenever a money column is added:
   (`apps/server/src/configuration-transfer.test.ts`, 2026-11). Whether that was
   the only one in the tree is not established; what was run was a hand sweep, not a check anything
   re-runs.
-- Money held as strings inside a JSON document — `sales.vat_breakdown` and the hashed
-  `daily_closes.snapshot`. Both are above the line and stay decimal strings, so a reader applying the
-  cents rule to them would break working code. **The grouping and the summing moved out of SQL
+- Money inside the `sales.vat_breakdown` JSON document stays in decimal strings. A reader
+  applying the cents rule there would change the amounts. **The grouping and the summing moved out of SQL
   altogether**, because this engine has no exact decimal type and summing filed cuotas in SQL would
   sum them as binary floating point. `packages/reporting/src/vat-summary.ts` reads one row per
   breakdown ELEMENT and folds them with `@waitron/shared`'s Decimal arithmetic at the money scale,

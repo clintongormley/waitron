@@ -1075,11 +1075,6 @@ it.each([
     "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
     "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
   ],
-  [
-    "deferred_close.day_frozen",
-    "This business day already has its daily close. Close the bill as a deferred payment once the next business day starts",
-    "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta como pago aplazado cuando empiece el siguiente día de trabajo",
-  ],
 ])("explains close-deferred refusal %s in English and Spanish", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);

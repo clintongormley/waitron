@@ -32,6 +32,19 @@ function salesIn(dir: string): number {
   }
 }
 
+function finishesIn(dir: string): number {
+  const db = new DatabaseSync(join(dir, "venue.db"), { readOnly: true });
+  try {
+    return (
+      db.prepare("select count(*) as n from drawer_entries where kind = 'finish'").get() as {
+        n: number;
+      }
+    ).n;
+  } finally {
+    db.close();
+  }
+}
+
 interface TimingLine {
   day: number;
   date: string;
@@ -83,7 +96,7 @@ describe("buildYear", () => {
         databaseBytes: number;
       };
       expect(volume.rows.sales).toBe(3 * BILLS);
-      expect(volume.rows.daily_closes).toBe(3);
+      expect(finishesIn(join(out, WORKING_DIR))).toBe(3);
       expect(volume.seed).toBe(1);
       expect(volume.totalRows).toBe(Object.values(volume.rows).reduce((a, b) => a + b, 0));
       expect(volume.databaseBytes).toBeGreaterThan(0);
@@ -134,7 +147,7 @@ describe("buildYear", () => {
         rows: Record<string, number>;
       };
       expect(volume.rows.sales).toBe(2);
-      expect(volume.rows.daily_closes).toBe(2);
+      expect(finishesIn(join(out, WORKING_DIR))).toBe(2);
     },
     CASE_TIMEOUT_MS,
   );

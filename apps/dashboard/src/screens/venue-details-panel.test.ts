@@ -447,7 +447,7 @@ it("keeps the opening read generation separate from a reopened panel", async () 
   complete(venueDetailsFixture({ name: "Old generation" }));
   await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
-  expect(api.liveData!.interests).toHaveLength(7);
+  expect(api.liveData!.interests).toHaveLength(6);
   el.remove();
   expect(api.liveData!.interests).toEqual([]);
 });
@@ -1221,7 +1221,6 @@ it.each([
   ["es", "business_day_history"],
   ["en-GB", "sales"],
   ["en-GB", "orders"],
-  ["en-GB", "daily_close"],
 ] as const)("explains the %s %s lock beneath its own row", async (locale, reason) => {
   setLocale(locale);
   const locked = venueDetailsFixture();

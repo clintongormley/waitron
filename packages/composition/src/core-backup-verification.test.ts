@@ -84,36 +84,5 @@ describe("core backup contribution", () => {
       { id: "host_first_start", kind: "activation", check: null },
     ]);
     expect(suite.db.all(`select * from invoice_series`)).toEqual([]);
-    expect(suite.db.all(`select * from daily_close_chain`)).toEqual([]);
-  });
-  it("refuses preserved but broken close history through the registered core owner", async () => {
-    suite.db.run(
-      `insert into taxpayer (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
-    );
-    suite.db.run(
-      `insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"privacyNoticeUrl":null,"privacyEmail":null,"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common"}', '2026-10-20T00:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00.000Z') on conflict (module) do nothing`,
-    );
-    suite.db.run(
-      "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
-    );
-    suite.db.run(
-      `insert into nodes (id, name, created_at) values ('source', 'Source node', '2026-10-20T00:00:00Z')`,
-    );
-    suite.db.run(
-      `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
-    );
-    expect(await verify()).toEqual({
-      status: "passed",
-      checks: [{ code: "data", status: "passed" }],
-    });
-    suite.db.run(`insert into daily_closes
-      (id, node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_at, closed_by, snapshot)
-      values ('close', 'source', '2026-10-19', 1, '', 'invalid', '2026-10-20T00:00:00Z', 'actor',
-        '{"close":{},"cashReconciliation":{"byDevice":[],"nodeVariance":"0.00"}}')`);
-    suite.db.run(`insert into daily_close_chain values ('source', 1, 'invalid')`);
-    expect(await verify()).toEqual({
-      status: "invalid",
-      checks: [{ code: "data", status: "invalid" }],
-    });
   });
 });

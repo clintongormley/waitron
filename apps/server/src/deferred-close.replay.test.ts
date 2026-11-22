@@ -293,19 +293,4 @@ describe("closeBillDeferredTx, replay", () => {
     expect(await t.close(request, stopped)).toEqual(result);
     expect((await refusal(t.close(fresh, stopped))).code).toBe("storage.disk_full");
   });
-
-  // Freezes today's business day, so it runs last.
-  it("answers an exact replay once the day is frozen, and refuses new work on that day", async () => {
-    const sameDay = t.depsWith({ clock: t.sameDayClock() });
-    const { request, result } = await closedCounterBill(sameDay);
-    const fresh = await t.requestFor(await t.counterOrder("placed"), "18.00", null);
-    await t.freezeDay(result.businessDay);
-    const before = await t.ledger();
-
-    expect(await t.close(request, sameDay)).toEqual(result);
-    const error = await refusal(t.close(fresh, sameDay));
-    expect(error.code).toBe("deferred_close.day_frozen");
-    expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay: result.businessDay });
-    expect(await t.ledger()).toEqual(before);
-  });
 });

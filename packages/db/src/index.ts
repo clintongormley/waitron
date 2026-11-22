@@ -221,8 +221,6 @@ export { appendDrawerEntry } from "./drawer-entries.js";
 export { drawerEntries } from "./schema/drawer-entries.js";
 export { drawerOpens } from "./schema/drawer-opens.js";
 export type { DrawerOpenReason } from "./schema/drawer-opens.js";
-export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";
-export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
 export {

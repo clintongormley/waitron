@@ -634,7 +634,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "submission.id_reused": 409,
   "deferred_close.ineligible": 409,
   "deferred_close.conflict": 409,
-  "deferred_close.day_frozen": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,
   "draft.out_of_date": 409,

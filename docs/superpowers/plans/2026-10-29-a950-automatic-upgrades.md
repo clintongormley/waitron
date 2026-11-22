@@ -1,5 +1,9 @@
 > **2026-11-09:** The owner adopted a shorter route, including a real test sale on a disposable copy. The [new eight-step plan](2026-11-09-a950-shorter-upgrades.md) supersedes this twelve-cut route and was approved at 22:04 for Lane F after A739 and A840/A842/A848. This page retains the earlier decisions and receipts; it supplies no current build authority or runtime qualification.
 
+_2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
+saved day report and its chain described below are historical. See the
+[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+
 > 2026-10-29, A1206: the start-again note and its floor are retired, so the note-floor overlay this plan builds (`floor.mjs`, `upgrade-floor-entry.ts`) must be re-planned before anyone builds it.
 
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.

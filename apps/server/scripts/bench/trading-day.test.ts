@@ -91,7 +91,24 @@ describe("tradeDay", () => {
       expect(counts.order_groups).toBeGreaterThanOrEqual(20);
       expect(counts.order_groups).toBeLessThanOrEqual(30);
       expect(counts.staff_activity).toBeGreaterThan(0);
-      expect(counts.daily_closes).toBe(1);
+      const [cash] = rows(
+        venue,
+        sql`
+        select sum(amount) as total from drawer_entries where kind = 'cash_payment'
+      `,
+      );
+      expect(cash!.total).toBeGreaterThan(0);
+      expect(
+        rows(
+          venue,
+          sql`
+        select bank.amount as withdrawal, counted.amount as counted,
+          json_extract(bank.facts, '$.amountLeft') as left
+        from drawer_entries bank join drawer_entries counted on counted.id = bank.first_count_id
+        where bank.kind = 'finish' and counted.kind = 'count'
+      `,
+        ),
+      ).toEqual([{ counted: cash!.total, withdrawal: cash!.total, left: "0.00" }]);
       for (const route of PAYMENT_ROUTES) expect(result.routes[route], route).toBeGreaterThan(0);
       const filingStates = rows(
         venue,
@@ -241,7 +258,9 @@ describe("tradeDay", () => {
         expect(Date.parse(issued!.last as string)).toBeLessThan(at + 2 * 60 * 60_000);
       }
       expect(countRows(venue).sales).toBe(10);
-      expect(countRows(venue).daily_closes).toBe(2);
+      expect(
+        rows(venue, sql`select count(*) as n from drawer_entries where kind = 'finish'`),
+      ).toEqual([{ n: 2 }]);
     },
     CASE_TIMEOUT_MS,
   );
@@ -257,7 +276,9 @@ describe("tradeDay", () => {
         await tradeDay(venue, "2025-11-04", 6);
 
         expect(countRows(venue).sales).toBe(12);
-        expect(countRows(venue).daily_closes).toBe(2);
+        expect(
+          rows(venue, sql`select count(*) as n from drawer_entries where kind = 'finish'`),
+        ).toEqual([{ n: 2 }]);
         const gaps = ticks.slice(1).map((at, index) => at - ticks[index]!);
         // The watchdog kills the process after 120 s without a timer turn, so a kill would end
         // the run before any assertion; the longest gap between turns is what shows starvation.

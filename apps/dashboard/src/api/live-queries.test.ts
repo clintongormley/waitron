@@ -643,7 +643,7 @@ it("leaves the category report at time of sale alone when the menu is edited", a
   }
 });
 
-it.each(["settings.business_day", "taxpayer", "sales", "working_orders", "daily_closes"])(
+it.each(["settings.business_day", "taxpayer", "sales", "working_orders"])(
   "refreshes venue details passively after %s changes, retaining active PATCH activity",
   async (type) => {
     const model = venueDetailsFixture();
@@ -672,7 +672,6 @@ it.each(["settings.business_day", "taxpayer", "sales", "working_orders", "daily_
       { type: "taxpayer" },
       { type: "sales" },
       { type: "working_orders" },
-      { type: "daily_closes" },
       { type: "day_cutover_changes" },
     ]);
     const observed = api.liveData.observe(query, () => {});

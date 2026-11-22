@@ -1592,28 +1592,6 @@ CREATE TABLE `deferred_closures` (
 CREATE INDEX `deferred_closures_node_day_idx` ON `deferred_closures` (`node_id`,`business_day`,`closed_at`,`id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `deferred_closures_working_order_key` ON `deferred_closures` (`working_order_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `deferred_closures_sale_key` ON `deferred_closures` (`sale_id`);--> statement-breakpoint
-CREATE TABLE `daily_close_chain` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`sequence_no` integer DEFAULT 0 NOT NULL,
-	`last_entry_hash` text DEFAULT '' NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE TABLE `daily_closes` (
-	`id` text PRIMARY KEY NOT NULL,
-	`node_id` text NOT NULL,
-	`business_day` text NOT NULL,
-	`sequence_no` integer NOT NULL,
-	`prev_entry_hash` text NOT NULL,
-	`entry_hash` text NOT NULL,
-	`closed_at` text NOT NULL,
-	`closed_by` text NOT NULL,
-	`snapshot` text NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `daily_closes_business_day_key` ON `daily_closes` (`node_id`,`business_day`);--> statement-breakpoint
-CREATE UNIQUE INDEX `daily_closes_sequence_key` ON `daily_closes` (`node_id`,`sequence_no`);--> statement-breakpoint
 CREATE TABLE `incidents` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
@@ -3969,18 +3947,6 @@ END;
 CREATE TRIGGER day_cutover_changes_no_update
 BEFORE UPDATE ON day_cutover_changes
 FOR EACH ROW
-BEGIN
-  SELECT raise(abort, 'day start history cannot change');
-END;
-
---> statement-breakpoint
--- Weaker than its name: without a daily close, code protects past days using the venue's zone.
--- A1325 replaces daily_closes and changes this trigger in the same pull request.
-CREATE TRIGGER day_cutover_changes_keep_closed
-BEFORE DELETE ON day_cutover_changes
-FOR EACH ROW
-WHEN exists (SELECT 1 FROM daily_closes c
-             WHERE c.business_day >= date(old.effective_business_day, '-1 day'))
 BEGIN
   SELECT raise(abort, 'day start history cannot change');
 END;

@@ -1,5 +1,8 @@
 # Sales
 
+When you review a past day, its Sales figures can change if a new entry is dated to that day.
+In **Drawer close history**, each finished close keeps the count and withdrawal you saved.
+
 ## Find and reprint a drawer close {#drawer-close-history}
 
 On the dashboard, open **Sales** and choose the dates in **From** and **To**. Under **Drawer close

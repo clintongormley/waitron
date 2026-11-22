@@ -15,7 +15,6 @@
       "document_page_reprints",
       "invoice_pdf_downloads",
       "drawer_entries",
-      "daily_closes",
       "bill_payment_lines",
       "bill_advances",
       "invoice_correction_refunds",

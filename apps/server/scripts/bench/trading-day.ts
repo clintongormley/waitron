@@ -1,11 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { ticketItems, withTransaction, workingOrders, workingOrderLines } from "@waitron/db";
+import {
+  devices,
+  finishDrawerClose,
+  readDrawerClose,
+  saveDrawerCount,
+  ticketItems,
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+} from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
 import { quoteIdent } from "@waitron/provisioning";
-import { computeDailyClose, recordDailyClose, resolveVenueClock } from "@waitron/reporting";
-import { addDecimal, businessDayBounds, decimal, PERSON_HEADER } from "@waitron/shared";
+import { computeDailyClose, resolveVenueClock } from "@waitron/reporting";
+import { businessDayBounds, decimal, PERSON_HEADER, sumDecimals } from "@waitron/shared";
 import { createFakeAeat, type FakeAeat } from "@waitron/verifactu/testing";
 import { runAttendancePass } from "../../src/attendance-loop.js";
 import { readBillEditState, readPartyBillIds } from "../../src/bill-editing.js";
@@ -18,7 +27,6 @@ import { BENCH_PROFILE, paymentRoutesFor, type PaymentRoute } from "./profile.js
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
-const OPENING_FLOAT = "150.00";
 const NO_ALLERGY = { party: { answer: "none", guests: [] }, ticks: [] };
 const INVOICE_RECIPIENT = {
   taxId: "B12345674",
@@ -119,7 +127,7 @@ const fakes = new WeakMap<BenchVenue, FakeAeat>();
 /**
  * Trades `bills` bills on business day `day` through the routes a till sends, then runs what boot
  * would run in the background overnight: filing to a fake AEAT, the attendance passes, and the
- * daily close. Every step is dated by the bench clock, which this moves forward.
+ * drawer close. Every step is dated by the bench clock, which this moves forward.
  */
 export async function tradeDay(
   venue: BenchVenue,
@@ -478,25 +486,28 @@ async function closeDay(venue: BenchVenue, day: string, at: Date) {
       businessDay: day,
       ...(await resolveVenueClock(tx, venue.nodeId)),
     });
-    // Every drawer that took cash is counted, and holds exactly its float and its takings.
-    const cashCounts = close.cash.byOrigin.flatMap((row) =>
-      row.deviceId === null || !row.byMethod.some((entry) => entry.method === "cash")
-        ? []
-        : [
-            {
-              deviceId: row.deviceId,
-              openingFloat: OPENING_FLOAT,
-              payouts: "0.00",
-              countedCash: addDecimal(decimal(OPENING_FLOAT), row.cashTakings),
-            },
-          ],
-    );
-    await recordDailyClose(tx, {
+    // All simulated tills share the same drawer, which the benchmark empties each day.
+    const deviceId = venue.tills[0]!.id;
+    const [device] = await tx
+      .select({ printerId: devices.cashDrawerPrinterId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    if (device?.printerId == null) throw new Error("bench: the till has no drawer");
+    const actor = {
+      printerId: device.printerId,
+      deviceId,
       nodeId: venue.nodeId,
-      businessDay: day,
-      timeZone: BENCH_PROFILE.timeZone,
-      closedBy: venue.manager.id,
-      cashCounts,
+      personId: venue.manager.id,
+      recordedAt: now.toISOString(),
+    };
+    const state = await readDrawerClose(tx, actor.printerId);
+    if (state.state !== "new") throw new Error("bench: the drawer has an unfinished count");
+    const counted = sumDecimals(close.cash.byOrigin.map((row) => row.cashTakings));
+    const count = await saveDrawerCount(tx, actor, { counted, startSequence: state.startSequence });
+    await finishDrawerClose(tx, actor, {
+      firstCountId: count.first.id,
+      confirmSequence: count.confirmSequence,
+      amountLeft: decimal("0.00"),
     });
   });
   return {

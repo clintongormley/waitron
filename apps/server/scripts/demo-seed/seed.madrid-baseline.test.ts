@@ -829,6 +829,10 @@ for (const locale of ["en", "es"] as const) {
         billRefundRows.foreignKeys.find((key) => key.from === "bill_payment_id")!,
       ].map((key, id) => ({ ...key, id }));
       delete expected[phase].tables.bill_payment_refunds;
+      for (const table of ["daily_closes", "daily_close_chain"]) {
+        expect(expected[phase].tables[table]?.rows).toEqual({});
+        delete expected[phase].tables[table];
+      }
     }
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
@@ -937,6 +941,8 @@ for (const locale of ["en", "es"] as const) {
         { ...venueMetadata, module: "business_day", revision: 1, mode: "business-day" },
       );
       delete phases[phase]!.location_business_day_settings;
+      delete phases[phase]!.daily_closes;
+      delete phases[phase]!.daily_close_chain;
       delete phases[phase]!.location_day_cutover_changes;
       phases[phase]!.day_cutover_changes = Object.keys(
         expected[phase].tables.day_cutover_changes!.rows,

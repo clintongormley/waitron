@@ -1,5 +1,9 @@
 # Closing a drawer (A1325 and A239)
 
+_2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
+saved day report and its chain described below are historical. See the
+[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+
 The last member of staff can count a drawer, take out what is needed for the bank and leave the rest.
 The owner can see both counts, who made them and what was withdrawn. The owner said “a close is
 really just a withdrawal” at 15:34 on 6 November and “Give cash.drawer to all staff yes” at 15:46 in

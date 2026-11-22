@@ -44,7 +44,6 @@ export * from "./sales.js";
 export * from "./sale-voids.js";
 export * from "./unpaid-departures.js";
 export * from "./deferred-closures.js";
-export * from "./daily-closes.js";
 export * from "./incidents.js";
 export * from "./change-log.js";
 export * from "./deployment.js";
