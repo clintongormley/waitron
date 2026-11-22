@@ -282,12 +282,13 @@ function unreviewedTypes(
   return [...new Set(unreviewed)];
 }
 
-function staleTypes(
-  found: readonly RegistryType[],
-  reviewed: ReadonlyMap<string, string>,
-): string[] {
-  const named = new Set(found.map(({ name }) => name));
-  return [...reviewed.keys()].filter((name) => !named.has(name));
+function typeNames(found: readonly RegistryType[]): string[] {
+  return found.map(({ name }) => name);
+}
+
+function staleEntries(used: Iterable<string>, allowed: ReadonlyMap<string, string>): string[] {
+  const inUse = new Set(used);
+  return [...allowed.keys()].filter((entry) => !inUse.has(entry));
 }
 
 function registryKeys(source: Source): RegistryKey[] {
@@ -307,6 +308,10 @@ function judgedPairs(keys: readonly RegistryKey[]): RegistryKey[] {
   return keys.filter(({ key }) => isJudgedKey(key));
 }
 
+function judgedPairNames(keys: readonly RegistryKey[]): string[] {
+  return judgedPairs(keys).map(({ code, key }) => `${code}.${key}`);
+}
+
 function refusedPairs(
   keys: readonly RegistryKey[],
   notPersonal: ReadonlyMap<string, string>,
@@ -317,14 +322,6 @@ function refusedPairs(
     )
     .map(({ code, key }) => `${code}.${key}`);
   return [...new Set(refused)];
-}
-
-function stalePairs(
-  keys: readonly RegistryKey[],
-  notPersonal: ReadonlyMap<string, string>,
-): string[] {
-  const judged = new Set(judgedPairs(keys).map(({ code, key }) => `${code}.${key}`));
-  return [...notPersonal.keys()].filter((pair) => !judged.has(pair));
 }
 
 function sourceFiles(dir: string): string[] {
@@ -402,14 +399,8 @@ function refusedLogFields(
   return [...new Set(refused)];
 }
 
-function staleLogFields(
-  fields: readonly LogField[],
-  harmless: ReadonlyMap<string, string>,
-): string[] {
-  const judged = new Set(
-    fields.filter(({ key }) => isJudgedKey(key)).map(({ event, key }) => `${event}.${key}`),
-  );
-  return [...harmless.keys()].filter((entry) => !judged.has(entry));
+function judgedLogFieldNames(fields: readonly LogField[]): string[] {
+  return fields.filter(({ key }) => isJudgedKey(key)).map(({ event, key }) => `${event}.${key}`);
 }
 
 function treeSourceFiles(): string[] {
@@ -466,7 +457,7 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(files).toContain("packages/payments-sumup/src/errors.ts");
     const keys = sources.flatMap((source) => registryKeys(source));
     expect(refusedPairs(keys, NOT_PERSONAL)).toEqual([]);
-    expect(stalePairs(keys, NOT_PERSONAL)).toEqual([]);
+    expect(staleEntries(judgedPairNames(keys), NOT_PERSONAL)).toEqual([]);
   });
 
   it("refuses a guest's name", () => {
@@ -509,7 +500,7 @@ describe("error-code details that name a person are masked in the log", () => {
       ["x.l.gone", "the name of a thing"],
     ]);
     expect(refusedPairs(keys, notPersonal)).toEqual([]);
-    expect(stalePairs(keys, notPersonal)).toEqual(["x.gone.label", "x.l.gone"]);
+    expect(staleEntries(judgedPairNames(keys), notPersonal)).toEqual(["x.gone.label", "x.l.gone"]);
   });
 
   it("ends the registry at the interface's closing brace", () => {
@@ -557,7 +548,7 @@ describe("named types in an error registry are reviewed", () => {
     const found = registrySources().flatMap((source) => typesIn(source.file, source));
     expect(found.map(({ name }) => name)).toContain("BillEditState");
     expect(unreviewedTypes(found, REVIEWED_TYPES)).toEqual([]);
-    expect(staleTypes(found, REVIEWED_TYPES)).toEqual([]);
+    expect(staleEntries(typeNames(found), REVIEWED_TYPES)).toEqual([]);
   });
 
   it("refuses a type nobody has reviewed, naming it and its file", () => {
@@ -572,7 +563,7 @@ describe("named types in an error registry are reviewed", () => {
       ["GoneType", "holds no person"],
     ]);
     expect(unreviewedTypes(found, reviewed)).toEqual([]);
-    expect(staleTypes(found, reviewed)).toEqual(["GoneType"]);
+    expect(staleEntries(typeNames(found), reviewed)).toEqual(["GoneType"]);
   });
 
   it("reads no type name in a string literal or a comment", () => {
@@ -589,7 +580,7 @@ describe("log calls' fields that name a person are masked", () => {
     const fields = treeSources().flatMap((source) => logFields(source.file, source));
     expect(fields).toContainEqual({ event: "staff_notice.duplicate_key", key: "owner" });
     expect(refusedLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
-    expect(staleLogFields(fields, HARMLESS_LOG_FIELDS)).toEqual([]);
+    expect(staleEntries(judgedLogFieldNames(fields), HARMLESS_LOG_FIELDS)).toEqual([]);
   });
 
   it("refuses a person-named field, nested or not, in any call form", () => {
@@ -637,6 +628,6 @@ describe("log calls' fields that name a person are masked", () => {
       ["x.gone.hostname", "the box's own host name"],
     ]);
     expect(refusedLogFields(fields, harmless)).toEqual([]);
-    expect(staleLogFields(fields, harmless)).toEqual(["x.gone.hostname"]);
+    expect(staleEntries(judgedLogFieldNames(fields), harmless)).toEqual(["x.gone.hostname"]);
   });
 });
