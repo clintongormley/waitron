@@ -385,13 +385,6 @@ at the real box with the owner present, alongside **The displays and the printer
 the real box** (_What to work on next_), after the owner is back on 2 November (owner,
 2026-10-17).
 
-## Loose ends left by A343 (a menu's Price overrides tab tidied, #1368)
-
-- The Price overrides tab's save message comes after the whole table in tab order, so a keyboard
-  user cannot reach Undo from a field within its 5 seconds (decided as built, not tested with a
-  user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
-  field it saved.
-
 ## Bundle: Dishes sold by measure and their extras
 
 1 entry, needs the owner.

@@ -3543,6 +3543,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-menus-screen
           .api=${this.api}
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
+          .reportLatePriceSave=${this.#lateSaveReporter("menus.price_not_saved")}
         ></dashboard-menus-screen>`;
       case "products":
         return html`<dashboard-products-screen .api=${this.api}></dashboard-products-screen>`;

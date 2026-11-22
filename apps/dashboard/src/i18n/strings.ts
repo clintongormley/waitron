@@ -3716,9 +3716,6 @@ export const en = {
   "menu_prices.candidate_undecided": "no single price in {place}",
   "menu_prices.variant_clash_lead": "Variant prices disagree.",
   "menu_prices.variant_clash": "{variant}: {candidates}.",
-  "menu_prices.saved": "Saved {name}'s price override: {price}.",
-  "menu_prices.cleared": "{name} now uses the inherited price.",
-  "menu_prices.undo": "Undo",
   "menus.tree_heading": "What is on this menu",
   "menus.structure_empty": "Nothing is on this menu yet.",
   "menus.structure_loading": "Loading the menu…",
@@ -3785,6 +3782,8 @@ export const en = {
     "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
   "menus.schedule_not_saved":
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
+  "menus.price_not_saved":
+    "The price change for {name} was not saved. Open Price overrides to try again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
   "menus.guest_sharing_unavailable":
     "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it.",
@@ -8473,9 +8472,6 @@ export const es: Record<StringKey, string> = {
   "menu_prices.candidate_undecided": "sin un precio único en {place}",
   "menu_prices.variant_clash_lead": "Los precios de las variantes discrepan.",
   "menu_prices.variant_clash": "{variant}: {candidates}.",
-  "menu_prices.saved": "Guardado el precio propio de {name}: {price}.",
-  "menu_prices.cleared": "{name} usa ahora el precio heredado.",
-  "menu_prices.undo": "Deshacer",
   "menus.tree_heading": "Qué hay en esta carta",
   "menus.structure_empty": "Todavía no hay nada en esta carta.",
   "menus.structure_loading": "Cargando la carta…",
@@ -8541,6 +8537,8 @@ export const es: Record<StringKey, string> = {
     "Se ha guardado tu cambio en {name}, pero entretanto otro cambio la ha quitado de donde la estabas editando.",
   "menus.schedule_not_saved":
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
+  "menus.price_not_saved":
+    "No se ha guardado el cambio de precio de {name}. Abre Precios propios para volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
   "menus.guest_sharing_unavailable":
     "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",

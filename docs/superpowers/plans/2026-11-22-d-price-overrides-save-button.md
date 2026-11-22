@@ -24,20 +24,24 @@ The watcher assigned this tab's Undo removal at 19:41 after the owner's 19:16 re
   refresh if anything saved. Refused edits remain available to retry. The routes save separately,
   so one refusal can leave other prices saved. Keep a refresh error separate. A refusal after
   leaving goes to the Menus notice or the existing session-scoped late notice in
-  `apps/dashboard/src/dashboard-app.ts`, with price wording. The set-menu surcharge editor
+  `apps/dashboard/src/dashboard-app.ts` through a separate price reporter. The set-menu surcharge editor
   (`set-menu-dishes.ts`) owns its own save handler.
 - [ ] First run failing browser cases in `menus-screen.test.ts` for no writes on blur or tab change,
   exact payloads on Save including blank-as-clear, retry after partial refusal, and a failed refresh
   after success. In `menu-prices-table.test.ts`, test equal prices, Enter through Save, malformed
-  and hidden fields, Cancel, and the bar and focused field during a long scroll. Preserve price
+  and hidden fields, Cancel, and the bar above the sticky table header when scrolling, with the old
+  outcome spacing removed. Preserve price
   rendering and refusal assertions when retiring autosave and Undo tests. Add
   `screens/menus-screen.prices.unsaved.test.ts` for tab click, menu breadcrumb and browser Back
   with Keep and Discard. Update `widgets/menu-prices-table.a11y.test.ts` for the footer. Run these
   files and `menus-screen.a11y.test.ts` with dashboard Vitest. Inspect EN/ES, both themes, phone and desktop.
 - [ ] In `apps/dashboard/src/i18n/strings.ts`, retire `menu_prices.saved`, `menu_prices.cleared` and
-  `menu_prices.undo`. Update both `apps/server/src/guide/*/products.md` variant sections to tell
+  `menu_prices.undo` and add the late price notice in English and Spanish. Update both `apps/server/src/guide/*/products.md` variant sections to tell
   readers to edit prices and choose Save, or Cancel to discard. Update both Price overrides
   exceptions in `docs/developers/design-system.md`. Delete the A343 Undo entry in
   `docs/backlog/menu.md` and its `docs/backlog.md` pointer. Run the guide content and link tests.
+
+Claude reviewed the plan at `9d462272c5`. The watcher cleared `33a26ae2f3` on 2026-11-22 at
+20:36, with the separate late price reporter and the narrower scroll test recorded above.
 
 Estimate: +180–270 and −250–380 product lines, +230–370 and −450–700 test lines.

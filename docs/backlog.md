@@ -538,11 +538,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
-- **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).** The Price overrides
-  tab's save message comes after the whole table in tab order, so a keyboard user cannot reach Undo
-  from a field within its 5 seconds (decided as built, not tested with a user).
-  [Detail](backlog/menu.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
-
 - **A1373 — The Preview credits a product's own price change seen through an include to the
   included menu**, not the shared product, when no menu sets a price of its own; telling it apart
   from an included menu clearing its price needs the published menu document to record where each

@@ -5,14 +5,18 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   belongsToComposition,
+  draftScopeFor,
+  FormFeedback,
+  saveActionState,
+  submitOnEnter,
+  type DraftScope,
   formatDecimalInput,
   visuallyHiddenStyles,
   type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-toast.js";
-import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
@@ -46,22 +50,18 @@ import { byLabel, categoryAncestors, categoryPath, PATH_SEPARATOR } from "./cate
 import { priceText } from "./form-fields.js";
 import { placeName } from "./price-source.js";
 
-/** One field's value to write. `previous` is the value it replaces in the order writes are made,
- * which Undo writes back. */
 export interface PriceSave {
   key: string;
   menuItemId: string;
   variantId: string | null;
-  /** The product's staff name, or "<product> — <variant>", for a message away from the field. */
   name: string;
   price: string | null;
-  previous: string | null;
-  undo?: boolean;
 }
 
-/** What the floating outcome message says. */
-export type PriceOutcome =
-  { kind: "saved"; save: PriceSave } | { kind: "refused"; save: PriceSave; reason: string };
+export interface PriceSaveResult {
+  saved: ReadonlySet<string>;
+  refused: Record<string, { reason: string; namesField: boolean }>;
+}
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
@@ -138,15 +138,6 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
 const placeholderOf = (span: Span): string =>
   spanText(span, (amount) => formatDecimalInput(amount, currentLocale()));
 
-/**
- * One menu's price overrides: a row per Active product the menu reaches, with its Active variants
- * under it, each showing whether it is Available and a field for the price this menu sets for it.
- * A field asks for its own save on Enter or on leaving it, through `wt-price-save`; the host
- * performs the writes and says which are out (`saving`), which were refused for the price typed
- * (`refusals`) and the outcome of the last save (`outcome`), which floats over the page: a save for
- * 5 s, with its Undo; a refusal until it is closed or another outcome replaces it, as it may be
- * said nowhere else.
- */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
   static override styles = [
@@ -205,16 +196,10 @@ export class MenuPricesTable extends LitElement {
       /* Wide enough that a range placeholder shows whole rather than clipped into one price: the
          widest range the table shows is measured, in the placeholder's own font, into
          --range-text-width. Phone width sizes it below. Its positioned box holds the field's hidden
-         hint, which otherwise escapes the table's scroller and widens the page. Its end margin
-         clears the outcome message floating at the bottom, whose height is measured into
-         --outcome-height because a long sentence wraps it. */
+         hint, which otherwise escapes the table's scroller and widens the page. */
       wt-data-table::part(override-field) {
         position: relative;
         --wt-price-field-width: max(var(--wt-price-range-field-width), var(--range-field-width));
-        scroll-margin-block-end: max(
-          var(--wt-tap-min) + 2 * var(--wt-space-2),
-          var(--outcome-height, 0px) + var(--wt-space-3)
-        );
       }
       wt-data-table::part(clash) {
         color: var(--wt-color-danger);
@@ -229,17 +214,9 @@ export class MenuPricesTable extends LitElement {
         padding-inline: var(--wt-space-4);
         font-size: var(--wt-font-size-sm);
       }
-      /* Above wt-data-table's sticky header (3). */
-      wt-toast {
-        position: fixed;
-        inset-block-end: var(--wt-space-3);
-        inset-inline-end: var(--wt-space-3);
-        z-index: 4;
-        max-width: calc(100% - 2 * var(--wt-space-3));
-      }
-      /* Room for the open message after the table, so the page can scroll the last row clear of it. */
-      wt-toast[open] + .outcome-room {
-        block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
+      /* Keep the sticky column headers below the Save bar. */
+      wt-data-table {
+        isolation: isolate;
       }
       /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
          the note under it, is capped at the room the price column and the pinned row-menu column
@@ -295,12 +272,6 @@ export class MenuPricesTable extends LitElement {
           max-inline-size: calc(max(var(--name-floor), var(--name-room)) - var(--wt-space-2));
         }
       }
-      @media (max-width: 48rem) {
-        wt-toast {
-          inset-inline: var(--wt-space-2);
-          max-width: none;
-        }
-      }
     `,
   ];
 
@@ -314,25 +285,21 @@ export class MenuPricesTable extends LitElement {
   /** The products with their variants, for each variant's name. */
   @property({ attribute: false }) products: Product[] = [];
   @property() menuName = "";
-  /** Row keys with a save queued or out. */
-  @property({ attribute: false }) saving: ReadonlySet<string> = new Set();
-  /** Row key to message, for refusals that name the price typed. */
-  @property({ attribute: false }) refusals: Readonly<Record<string, string>> = {};
-  @property({ attribute: false }) outcome: PriceOutcome | null = null;
+  @property({ attribute: false }) savePrices?: (
+    saves: readonly PriceSave[],
+  ) => Promise<PriceSaveResult>;
+  @property({ attribute: false }) refreshPrices?: () => Promise<void>;
 
-  /** Text typed into a field and not yet settled: unsent, sent and waiting, or refused. */
   @state() private drafts: ReadonlyMap<string, string> = new Map();
-  /** Fields showing their own check's message. */
-  @state() private invalid: ReadonlySet<string> = new Set();
-  /** Refusals hidden since their field changed. */
-  @state() private hiddenRefusals: ReadonlySet<string> = new Set();
-  /** Whether the table's price filter is on Clashes, read from the table once it has drawn, since
-   * it restores a remembered choice itself. */
+  @state() private saving = false;
+  @state() private refusals: PriceSaveResult["refused"] = {};
+  @state() private hiddenErrors: ReadonlySet<string> = new Set();
+  /** The table restores its own remembered filter. */
   @state() private filterOnClashes = true;
-  /** Fields whose last Enter or leaving failed their own check, so each change checks them again. */
-  readonly #checking = new Set<string>();
-  /** The text each field last sent, so a second commit of it sends nothing. */
-  readonly #sent = new Map<string, string>();
+  readonly #feedback = new FormFeedback(this);
+  #scope?: DraftScope<boolean>;
+  // Keep confirmed prices on screen until the next read supplies their rows.
+  readonly #saved = new Map<string, string | null>();
 
   #sectionNames: ReadonlyMap<string, string> = new Map();
   /** Each row's sections, every placement's together, for the section filter. */
@@ -379,6 +346,7 @@ export class MenuPricesTable extends LitElement {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     if (changed.has("categories")) this.#readCategories();
     if (changed.has("rows")) {
+      this.#saved.clear();
       this.#reached = new Map(this.rows.map((row) => [row, row.placements.flat()]));
       this.#productInheritance = new Map(
         this.rows.map((row) => [
@@ -403,23 +371,6 @@ export class MenuPricesTable extends LitElement {
       this.#startOnClashes !== startedOnClashes
     )
       this.#columns = this.#buildColumns();
-    if (changed.has("refusals")) {
-      const before = changed.get("refusals") ?? {};
-      // A refusal sent anew shows again under a field changed since the last one.
-      this.hiddenRefusals = new Set(
-        [...this.hiddenRefusals].filter((key) => before[key] === this.refusals[key]),
-      );
-    }
-    if (changed.has("outcome") && this.outcome?.kind === "refused") {
-      const refused = this.outcome.save.key;
-      this.hiddenRefusals = new Set([...this.hiddenRefusals].filter((key) => key !== refused));
-    }
-    if (changed.has("saving")) this.#settle(changed.get("saving") ?? new Set());
-    if (changed.has("refusals") || changed.has("outcome"))
-      this.#unrefuse(
-        changed.has("refusals") ? (changed.get("refusals") ?? {}) : this.refusals,
-        changed.has("outcome") ? (changed.get("outcome") ?? null) : this.outcome,
-      );
   }
 
   #readClashes(): void {
@@ -449,35 +400,6 @@ export class MenuPricesTable extends LitElement {
     else if (this.#startOnClashes !== false) this.#startOnClashes = this.#clashing.size > 0;
   }
 
-  /** A refused price nothing says was refused any longer would read as stored and be sent again
-   * on leaving, so its field goes back to the stored price, unless it was changed since. */
-  #unrefuse(refusals: MenuPricesTable["refusals"], outcome: PriceOutcome | null): void {
-    const before = Object.keys(refusals);
-    if (outcome?.kind === "refused") before.push(outcome.save.key);
-    for (const key of before) {
-      if (this.#refused(key) || this.saving.has(key) || !this.drafts.has(key)) continue;
-      if (this.drafts.get(key) !== this.#sent.get(key)) continue;
-      this.#forget(key);
-      this.hiddenRefusals = new Set([...this.hiddenRefusals].filter((hidden) => hidden !== key));
-    }
-  }
-
-  /** A save answered without a refusal leaves its field to the re-read that followed it, unless
-   * the field was changed again meanwhile. */
-  #settle(before: ReadonlySet<string>): void {
-    const drafts = new Map(this.drafts);
-    for (const key of before) {
-      if (this.saving.has(key) || this.#refused(key)) continue;
-      if (drafts.get(key) !== this.#sent.get(key)) continue;
-      drafts.delete(key);
-      this.#sent.delete(key);
-    }
-    if (drafts.size !== this.drafts.size) this.drafts = drafts;
-  }
-
-  /** Watched, not only measured on each outcome, so a narrower window that wraps the message onto
-   * another row still keeps a field clear of it. */
-  readonly #outcomeSize = new ResizeObserver(() => this.#fitOutcome());
   /** The table resizes when the window does and when a redraw changes its columns' words. Measured
    * a frame later, never inside the observer's callback, which the names' new widths would
    * re-trigger. */
@@ -486,11 +408,6 @@ export class MenuPricesTable extends LitElement {
     this.#actionsFrame = requestAnimationFrame(() => this.#fitActions());
   });
   #actionsFrame = 0;
-  #outcomeFitted: Promise<void> = Promise.resolve();
-
-  #toast(): WtToast {
-    return this.renderRoot.querySelector("wt-toast")!;
-  }
 
   #fitActions(): void {
     const head = this.#table()?.shadowRoot?.querySelector("thead");
@@ -537,43 +454,26 @@ export class MenuPricesTable extends LitElement {
     else this.style.setProperty(property, width);
   }
 
-  #fitOutcome(): void {
-    this.style.setProperty("--outcome-height", `${this.#toast().getBoundingClientRect().height}px`);
-  }
-
-  /** Shown anew for each outcome, so an equal sentence still restarts its countdown, and measured
-   * once it and its Undo have drawn, which decides whether the message wraps. */
-  async #showOutcome(): Promise<void> {
-    const toast = this.#toast();
-    if (this.outcome !== null) toast.show();
-    await toast.updateComplete;
-    await this.renderRoot.querySelector<LitElement>('[data-test="price-undo"]')?.updateComplete;
-    this.#fitOutcome();
-  }
-
   override connectedCallback(): void {
     super.connectedCallback();
-    if (!this.hasUpdated) return;
-    this.#outcomeSize.observe(this.#toast());
-    this.#tableSize.observe(this.#table()!);
+    this.#scope = draftScopeFor(this, {
+      id: this,
+      current: () => this.#changes().length > 0,
+      snapshot: (dirty) => dirty,
+      equal: (before, after) => before === after,
+      restore: () => this.#cancel(),
+    }).scope;
+    if (this.hasUpdated) this.#tableSize.observe(this.#table()!);
   }
 
   override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#outcomeSize.disconnect();
+    this.#scope?.dispose();
     this.#tableSize.disconnect();
+    super.disconnectedCallback();
   }
 
   protected override firstUpdated(): void {
-    this.#outcomeSize.observe(this.#toast());
     this.#tableSize.observe(this.#table()!);
-  }
-
-  /** Resolves once the outcome message's new height is measured too. */
-  protected override async getUpdateComplete(): Promise<boolean> {
-    const done = await super.getUpdateComplete();
-    await this.#outcomeFitted;
-    return done;
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -594,22 +494,20 @@ export class MenuPricesTable extends LitElement {
           table.chooseFilter("override", ["clash"]);
         }
         this.#readFilter();
-        if (reshaped) this.#fitActions();
-        else if (this.#ranges.join("\n") !== this.#measuredRanges) this.#fitRanges();
+        if (reshaped) {
+          this.#fitActions();
+          if (this.drafts.size > 0) void this.#readHiddenErrors();
+        } else if (this.#ranges.join("\n") !== this.#measuredRanges) this.#fitRanges();
       });
-    if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
-    // The cells read these, and the table redraws only when its own properties change.
+    // Cells read widget state, while the table renders them on its own update.
     if (
-      ["invalid", "hiddenRefusals", "saving", "refusals"].some((name) => changed.has(name)) ||
+      changed.has("saving") ||
+      changed.has("refusals") ||
       (changed.has("drafts") &&
         this.#draftsRedraw(changed.get("drafts") as MenuPricesTable["drafts"]))
     )
-      this.#table()?.requestUpdate();
-    if (changed.has("refusals")) {
-      const before = (changed.get("refusals") ?? {}) as MenuPricesTable["refusals"];
-      const key = Object.keys(this.refusals).find((key) => before[key] !== this.refusals[key]);
-      if (key !== undefined) void this.#focusField(key);
-    }
+      table?.requestUpdate();
+    if (changed.has("rows")) this.#scope?.changed();
   }
 
   #draftsRedraw(before: MenuPricesTable["drafts"]): boolean {
@@ -621,6 +519,7 @@ export class MenuPricesTable extends LitElement {
       const field = this.#field(key);
       if (field !== null && field.value !== (now ?? this.#stored(line) ?? "")) return true;
       if (this.#holds(line, was) !== this.#holds(line, now)) return true;
+      if (field !== null && field.error !== this.#error(key)) return true;
       if (
         line.item.variants.length > 0 &&
         line.variant === null &&
@@ -704,7 +603,8 @@ export class MenuPricesTable extends LitElement {
 
   /** The price this menu stores for the row, or null. */
   #stored({ item, variant }: Line): string | null {
-    return variant ? variant.price : item.override;
+    const key = keyOf({ item, variant });
+    return this.#saved.has(key) ? this.#saved.get(key)! : variant ? variant.price : item.override;
   }
 
   /** Whether this menu stores a price for the row, or, on a product, for any of its variants. */
@@ -715,7 +615,10 @@ export class MenuPricesTable extends LitElement {
   /** What depends on the row's product's field, worked out again only once that field reads
    * another price. */
   #withParent(line: Line) {
-    const parent = parentPriceOf(this.drafts.get(line.item.menuItemId));
+    const keyOfProduct = line.item.menuItemId;
+    const saved = this.#saved.get(keyOfProduct);
+    const staged = parentPriceOf(this.drafts.get(keyOfProduct));
+    const parent = staged === undefined ? saved : staged;
     const key = keyOf(line);
     const known = this.#underParent.get(key);
     if (known !== undefined && known.parent === parent) return known;
@@ -863,6 +766,7 @@ export class MenuPricesTable extends LitElement {
         data-row=${key}
         hide-label
         fixed-unit
+        ?readonly=${this.saving}
         locale=${currentLocale()}
         label=${fill(labelKey, { name: this.#lineName(line) })}
         ?overriding=${this.#holds(line, this.drafts.get(key))}
@@ -872,7 +776,6 @@ export class MenuPricesTable extends LitElement {
         hint=${hint}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#type(event, key)}
         @keydown=${(event: KeyboardEvent) => this.#onKeydown(event, line)}
-        @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
       >${
         clash !== null || variantsSetOne
@@ -892,120 +795,140 @@ export class MenuPricesTable extends LitElement {
     >`;
   }
 
-  #error(key: string): string {
-    if (this.invalid.has(key)) return t("editor.price_invalid");
-    return this.hiddenRefusals.has(key) ? "" : (this.refusals[key] ?? "");
+  #invalid(key: string): boolean {
+    const price = blankToNull(this.drafts.get(key) ?? "");
+    return this.#feedback.attempted && price !== null && !isProductPrice(price);
   }
 
-  /** Whether the field's last save was refused, under it or in the outcome message alone. */
-  #refused(key: string): boolean {
-    return (
-      key in this.refusals || (this.outcome?.kind === "refused" && this.outcome.save.key === key)
-    );
+  #error(key: string): string {
+    if (this.#invalid(key)) return t("editor.price_invalid");
+    const refusal = this.refusals[key];
+    return refusal?.namesField && this.#feedback.shows(key) ? refusal.reason : "";
   }
 
   #type(event: CustomEvent<{ value: string }>, key: string): void {
     event.stopPropagation();
-    const text = event.detail.value;
-    this.drafts = new Map(this.drafts).set(key, text);
-    if (!this.hiddenRefusals.has(key)) this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
-    if (this.#checking.has(key)) this.#mark(key, !this.#valid(text));
-  }
-
-  #valid(text: string): boolean {
-    const price = blankToNull(text);
-    return price === null || isProductPrice(price);
-  }
-
-  #mark(key: string, invalid: boolean): void {
-    if (this.invalid.has(key) === invalid) return;
-    const next = new Set(this.invalid);
-    if (invalid) next.add(key);
-    else next.delete(key);
-    this.invalid = next;
+    if (this.saving) return;
+    this.drafts = new Map(this.drafts).set(key, event.detail.value);
+    if (this.refusals[key]?.namesField) this.#feedback.dismiss(key);
+    this.#scope?.changed();
+    void this.#readHiddenErrors();
   }
 
   #onKeydown(event: KeyboardEvent, line: Line): void {
-    if ((event.key !== "Enter" && event.key !== "Escape") || belongsToComposition(event)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === "Enter") this.#commit(line, "enter");
-    else this.#restore(keyOf(line));
+    if (this.saving) return;
+    if (event.key === "Escape" && !belongsToComposition(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = keyOf(line);
+      const drafts = new Map(this.drafts);
+      drafts.delete(key);
+      this.drafts = drafts;
+      if (this.refusals[key]?.namesField) this.#feedback.dismiss(key);
+      this.#scope?.changed();
+      void this.#readHiddenErrors();
+    } else submitOnEnter(event, this.renderRoot.querySelector('[data-test="prices-save"]'));
   }
 
-  #commit(line: Line, via: "enter" | "leave"): void {
-    const key = keyOf(line);
-    const text = this.drafts.get(key);
-    if (text === undefined) return;
-    // A refused price is sent again only on Enter, or once the field has changed.
-    if (via === "leave" && this.#refused(key) && !this.hiddenRefusals.has(key)) return;
-    if (!this.#valid(text)) {
-      this.#checking.add(key);
-      this.#mark(key, true);
+  #changes(): PriceSave[] {
+    const saves: PriceSave[] = [];
+    for (const [key, text] of this.drafts) {
+      const line = this.#lineOf.get(key);
+      const price = blankToNull(text);
+      if (
+        line !== undefined &&
+        ((price !== null && !isProductPrice(price)) || !samePrice(price, this.#stored(line)))
+      )
+        saves.push({
+          key,
+          menuItemId: line.item.menuItemId,
+          variantId: line.variant?.variantId ?? null,
+          name: this.#lineName(line),
+          price,
+        });
+    }
+    return saves;
+  }
+
+  #cancel(): void {
+    this.drafts = new Map();
+    this.refusals = {};
+    this.#feedback.reset();
+    this.#scope?.changed();
+  }
+
+  async #save(): Promise<void> {
+    if (this.saving || this.loading || !this.savePrices || saveActionState(this.#scope).unchanged)
+      return;
+    const saves = this.#changes();
+    this.#feedback.press();
+    this.refusals = {};
+    const invalid = saves.filter(({ key }) => this.#invalid(key));
+    if (invalid.length > 0) {
+      this.requestUpdate();
+      this.#table()?.requestUpdate();
+      await this.#focusError(invalid.map(({ key }) => key));
       return;
     }
-    this.#checking.delete(key);
-    this.#mark(key, false);
-    const price = blankToNull(text);
-    const waiting = this.saving.has(key);
-    const baseline = waiting ? blankToNull(this.#sent.get(key) ?? "") : this.#stored(line);
-    if (samePrice(price, baseline)) {
-      if (!waiting) this.#forget(key);
-      return;
-    }
-    this.#send(line, text);
-  }
-
-  #send(line: Line, text: string): void {
-    const key = keyOf(line);
-    const sent = this.saving.has(key) ? this.#sent.get(key) : undefined;
-    const previous = sent === undefined ? this.#stored(line) : blankToNull(sent);
-    this.#sent.set(key, text);
-    this.#emit("wt-price-save", {
-      key,
-      menuItemId: line.item.menuItemId,
-      variantId: line.variant?.variantId ?? null,
-      name: this.#lineName(line),
-      price: blankToNull(text),
-      previous,
-    } satisfies PriceSave);
-  }
-
-  /** Writes back the price the saved one replaced, shown in its field while it is out. */
-  #undo(save: PriceSave): void {
-    const text = save.previous ?? "";
-    this.drafts = new Map(this.drafts).set(save.key, text);
-    this.hiddenRefusals = new Set([...this.hiddenRefusals, save.key]);
-    this.#checking.delete(save.key);
-    this.#mark(save.key, false);
-    this.#sent.set(save.key, text);
-    this.#emit("wt-price-save", {
-      ...save,
-      price: save.previous,
-      previous: save.price,
-      undo: true,
-    } satisfies PriceSave);
-  }
-
-  /** Escape: back to the stored price, or, while a save is out, to the text it sent. */
-  #restore(key: string): void {
-    const sent = this.saving.has(key) ? this.#sent.get(key) : undefined;
-    if (sent === undefined) this.#forget(key);
-    else {
-      this.drafts = new Map(this.drafts).set(key, sent);
-      this.#checking.delete(key);
-      this.#mark(key, false);
-    }
-    this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
-  }
-
-  #forget(key: string): void {
+    this.saving = true;
+    const { saved, refused } = await this.savePrices(saves);
+    if (!this.isConnected) return;
     const drafts = new Map(this.drafts);
-    drafts.delete(key);
+    for (const { key, price } of saves) {
+      if (!saved.has(key)) continue;
+      drafts.delete(key);
+      this.#saved.set(key, price);
+    }
     this.drafts = drafts;
-    this.#checking.delete(key);
-    this.#mark(key, false);
-    this.#sent.delete(key);
+    this.saving = false;
+    this.refusals = refused;
+    if (Object.keys(refused).length === 0) this.#feedback.reset();
+    else this.#feedback.newRefusal();
+    this.#scope?.commit(false);
+    const fieldRefusals = saves.map(({ key }) => key).filter((key) => refused[key]?.namesField);
+    if (fieldRefusals.length > 0) await this.#focusError(fieldRefusals);
+    if (saved.size > 0 && this.isConnected) await this.refreshPrices?.();
+  }
+
+  async #focusError(keys: readonly string[]): Promise<void> {
+    await this.updateComplete;
+    for (const key of keys) {
+      await this.#focusField(key);
+      if (this.#field(key) !== null) break;
+    }
+    await this.#readHiddenErrors();
+  }
+
+  async #readHiddenErrors(): Promise<void> {
+    const table = this.#table();
+    if (table === null) return;
+    await table.updateComplete;
+    const hidden = new Set(
+      this.#changes()
+        .map(({ key }) => key)
+        .filter((key) => this.#error(key) && !this.#field(key)),
+    );
+    if (
+      hidden.size !== this.hiddenErrors.size ||
+      [...hidden].some((key) => !this.hiddenErrors.has(key))
+    )
+      this.hiddenErrors = hidden;
+  }
+
+  #formMessage(saves: readonly PriceSave[]): string {
+    const errors: Record<string, string> = {};
+    const fields = new Set<string>();
+    for (const { key, name } of saves) {
+      const fieldError = this.#error(key);
+      const refusal = this.refusals[key];
+      if (fieldError && !this.hiddenErrors.has(key)) fields.add(key);
+      else if (fieldError || (refusal && this.#feedback.shows(key)))
+        errors[key] = fill("menus.change_not_saved", {
+          name,
+          reason: fieldError || refusal!.reason,
+        });
+    }
+    return this.#feedback.message(errors, fields, t("form.fix_fields"));
   }
 
   #variantName(variantId: string): string {
@@ -1180,9 +1103,16 @@ export class MenuPricesTable extends LitElement {
         }),
       ),
     ];
+    const changes = this.#changes();
+    const action = saveActionState(this.#scope);
     return html`${this.#clashMessage()}<wt-data-table
         class=${this.#ranges.length > 0 ? "ranges" : ""}
-        @wt-filter-change=${() => this.#readFilter()}
+        @wt-filter-change=${() => {
+          this.#readFilter();
+          void this.#readHiddenErrors();
+        }}
+        @input=${() => void this.#readHiddenErrors()}
+        @wt-expand-change=${() => void this.#readHiddenErrors()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
@@ -1216,56 +1146,23 @@ export class MenuPricesTable extends LitElement {
         errorMessage=${this.failed ? t("menu_prices.error") : ""}
         emptyMessage=${t("menu_prices.empty")}
       ></wt-data-table>
-      <wt-toast
-        data-test="price-outcome"
-        close-label=${t("action.close")}
-        tone="info"
-        .open=${this.outcome !== null}
-        .message=${this.#outcomeText()}
-        .duration=${this.outcome?.kind === "saved" ? 5000 : 0}
-        @wt-close=${this.#onOutcomeClose}
-        >${this.#undoButton()}</wt-toast
-      >
-      <div class="outcome-room"></div>`;
-  }
-
-  readonly #onOutcomeClose = (event: Event): void => {
-    event.stopPropagation();
-    const key = this.outcome?.save.key;
-    const hadFocus = this.#toast().matches(":focus-within");
-    this.#emit("wt-price-outcome-close", {});
-    if (hadFocus && key !== undefined) void this.#focusField(key);
-  };
-
-  #outcomeText(): string {
-    const outcome = this.outcome;
-    if (outcome === null) return "";
-    const { name, price } = outcome.save;
-    if (outcome.kind === "refused")
-      return fill("menus.change_not_saved", { name, reason: outcome.reason });
-    return price === null
-      ? fill("menu_prices.cleared", { name })
-      : fill("menu_prices.saved", { name, price: priceText(price) });
-  }
-
-  #undoButton() {
-    const outcome = this.outcome;
-    if (outcome?.kind !== "saved" || outcome.save.undo) return nothing;
-    // A pointer press must not blur a price field: leaving it would save its draft and
-    // replace this Undo before the click lands.
-    return html`<wt-button
-      slot="action"
-      variant="secondary"
-      data-test="price-undo"
-      @mousedown=${(event: Event) => event.preventDefault()}
-      @click=${(event: Event) => {
-        event.stopPropagation();
-        const hadFocus = this.#toast().matches(":focus-within");
-        this.#undo(outcome.save);
-        if (hadFocus) void this.#focusField(outcome.save.key);
-      }}
-      >${t("menu_prices.undo")}</wt-button
-    >`;
+      <wt-form-actions .error=${this.#formMessage(changes)}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="prices-cancel"
+          ?disabled=${this.saving || action.unchanged}
+          @click=${() => this.#cancel()}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant=${action.variant}
+          data-test="prices-save"
+          ?disabled=${action.unchanged || this.saving || this.loading || changes.some(({ key }) => this.#invalid(key))}
+          @click=${() => void this.#save()}
+          >${t("action.save")}</wt-button
+        >
+      </wt-form-actions>`;
   }
 }
 
