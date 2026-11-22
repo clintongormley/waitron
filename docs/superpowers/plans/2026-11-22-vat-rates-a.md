@@ -307,7 +307,8 @@ Every place piece A touches. Every task's requirements include this list.
   `product_takeaway_vat_rates_product_day_key` on (`product_id`, `starts_on`) and partial unique
   index `product_takeaway_vat_rates_product_first_key` on (`product_id`) where `starts_on is null`
   (SQLite treats two nulls as distinct; precedent for a partial index `menus.ts:78-80`); check
-  `product_takeaway_vat_rates_rate_ck` (`rate between 0 and 10000`). `state` in
+  `product_takeaway_vat_rates_rate_ck` (`rate between 0 and 10000`) and, as built 2026-11-22,
+  `product_takeaway_vat_rates_starts_on_ck` (`starts_on` null or written `yyyy-mm-dd`). `state` in
   `CORE_OWN_CLASSIFICATION` beside `products` (`classification.ts:128`), which also makes it a live
   change source. Transferred: `{ name: "product_takeaway_vat_rates" }` after `products` in
   `CORE_CONFIGURATION_TRANSFER` (`packages/db/src/configuration-transfer.ts:180`). Writer list (D16).
@@ -558,7 +559,8 @@ Tests: `packages/menu/src/configuration-transfer.test.ts`,
 
 - [ ] **Step 1: Failing tests:** a top-level product with no first row, or two, is refused
   `setup.request_invalid` `{ field: "product_takeaway_vat_rates" }` (as built: the field names the
-  column, `product_takeaway_vat_rates.product_id`, `.starts_on` or `.rate`); a rate outside the importing
+  column, `product_takeaway_vat_rates.product_id`, `.starts_on` or `.rate`; also refused: a `starts_on` that is not a calendar date, a variant whose own
+  rows have none from the beginning, and a row naming a product the bundle does not carry); a rate outside the importing
   venue's `pickable` (a 500 row) is refused the same; a variant without rows is accepted; an
   exported venue round-trips its rows.
 - [ ] **Step 2–4:** run (fails), implement, run both files and `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer`.
