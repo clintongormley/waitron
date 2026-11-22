@@ -49,6 +49,10 @@ const languages: Language[] = [
         item("provider_registration_kept", [sumup]),
         "SumUp isn't connected, so the reader stays registered at SumUp. Remove it there too.",
       ],
+      [
+        item("provider_registration_stays", [sumup]),
+        "The reader stays registered at SumUp. Remove it there too if you no longer use it.",
+      ],
       [item("device_reader", [bar, ana]), "Chosen on 2 devices: Bar till, Handheld Ana"],
       [item("device_reader"), "Chosen on 1 device: Handheld Ana"],
       [item("device_reader_default", [bar, ana]), "Default on 2 devices: Bar till, Handheld Ana"],
@@ -86,6 +90,10 @@ const languages: Language[] = [
       [
         item("provider_registration_kept", [sumup]),
         "SumUp no está conectado, así que el lector sigue registrado en SumUp. Elimínalo también allí.",
+      ],
+      [
+        item("provider_registration_stays", [sumup]),
+        "El lector sigue registrado en SumUp. Elimínalo también allí si ya no lo usas.",
       ],
       [item("device_reader", [bar, ana]), "Elegido en 2 dispositivos: Bar till, Handheld Ana"],
       [item("device_reader"), "Elegido en 1 dispositivo: Handheld Ana"],
@@ -157,6 +165,7 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     const keys = [
       "provider_pairing",
       "provider_registration_kept",
+      "provider_registration_stays",
       "device_reader",
       "device_reader_default",
       "profile_reader",
@@ -166,15 +175,7 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     const named = [{ id: "0b6e-uuid", name: "Named" }];
     const lines = [
       // A pairing's target is the provider, named by its id, never a uuid.
-      ...keys.map((key) =>
-        copy.item(
-          item(
-            key,
-            key === "provider_pairing" || key === "provider_registration_kept" ? [sumup] : named,
-            3,
-          ),
-        ),
-      ),
+      ...keys.map((key) => copy.item(item(key, key.startsWith("provider_") ? [sumup] : named, 3))),
       copy.refusal({
         code: "reader.payment_in_progress",
         params: { readerId: "0b6e-uuid" },

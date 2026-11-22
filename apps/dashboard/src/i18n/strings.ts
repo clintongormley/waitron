@@ -3354,6 +3354,8 @@ export const en = {
   "payments.delete_pairing": "Unpairs it from {provider}",
   "payments.delete_kept_at_provider":
     "{provider} isn't connected, so the reader stays registered at {provider}. Remove it there too.",
+  "payments.delete_stays_at_provider":
+    "The reader stays registered at {provider}. Remove it there too if you no longer use it.",
   "payments.delete_device_reader": "Chosen on {count} devices: {names}",
   "payments.delete_device_reader_one": "Chosen on 1 device: {names}",
   "payments.delete_device_default": "Default on {count} devices: {names}",
@@ -8087,6 +8089,8 @@ export const es: Record<StringKey, string> = {
   "payments.delete_pairing": "Se desvincula de {provider}",
   "payments.delete_kept_at_provider":
     "{provider} no está conectado, así que el lector sigue registrado en {provider}. Elimínalo también allí.",
+  "payments.delete_stays_at_provider":
+    "El lector sigue registrado en {provider}. Elimínalo también allí si ya no lo usas.",
   "payments.delete_device_reader": "Elegido en {count} dispositivos: {names}",
   "payments.delete_device_reader_one": "Elegido en 1 dispositivo: {names}",
   "payments.delete_device_default": "Predeterminado en {count} dispositivos: {names}",

@@ -277,6 +277,11 @@ const kept = {
   count: 1,
   targets: [{ id: "stripe", name: "stripe" }],
 };
+const stays = {
+  key: "provider_registration_stays",
+  count: 1,
+  targets: [{ id: "stripe", name: "stripe" }],
+};
 
 describe("the card reader delete impact", () => {
   it("names every device choice, inherited default, profile list, profile default and holder", async () => {
@@ -349,7 +354,26 @@ describe("the card reader delete impact", () => {
     const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read(seats, v.r);
     expect(impact.refusals).toEqual([]);
-    expect(impact.ends).toEqual([]);
+    expect(impact.ends).toEqual([stays]);
+  });
+
+  it.each([
+    { state: "connected", connect: true },
+    { state: "not connected", connect: false },
+  ])(
+    "says a still-paired reader stays registered at a $state provider that cannot unpair, refusing nothing",
+    async ({ connect }) => {
+      const v = await seedVenueWithReaders({ unpairedAt: null });
+      if (connect) await connectStripe(suite.db);
+      const impact = await read(seats, v.r);
+      expect(impact.refusals).toEqual([]);
+      expect(impact.ends).toEqual([stays]);
+    },
+  );
+
+  it("says nothing stays at the provider for an already unpaired reader", async () => {
+    const v = await seedVenueWithReaders();
+    expect((await read(seats, v.r)).ends).toEqual([]);
   });
 });
 
@@ -513,7 +537,9 @@ describe("deleting a card reader", () => {
 
   it("deletes a still-paired reader whose provider cannot unpair, leaving it marked paired", async () => {
     const v = await seedVenueWithReaders({ unpairedAt: null });
-    await remove(seats, v.r);
+    const impact = await read(seats, v.r);
+    expect(impact.ends).toEqual([stays]);
+    expect(await remove(seats, v.r)).toEqual(impact);
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
     expect(row).toMatchObject({
       deletedAt: NOW.toISOString(),

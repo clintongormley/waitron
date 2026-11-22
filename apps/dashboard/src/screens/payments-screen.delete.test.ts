@@ -279,6 +279,23 @@ describe("Deleting a card reader", () => {
     ]);
   });
 
+  it("says a reader stays registered at a provider that cannot unpair, and Delete sends no acceptance", async () => {
+    const staysImpact = impactOf("counter", "Counter", {
+      ends: [
+        { key: "provider_registration_stays", count: 1, targets: [{ id: "acme", name: "acme" }] },
+      ],
+    });
+    const api = client({ getReaderDeleteImpact: vi.fn().mockResolvedValue(staysImpact) });
+    const el = await mount(api);
+    await openDelete(el, "counter");
+    expect(linesOf(el)).toEqual([
+      "The reader stays registered at Acme Pay. Remove it there too if you no longer use it.",
+    ]);
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteReader).toHaveBeenCalledExactlyOnceWith("counter");
+  });
+
   it("a delete refused because the provider was disconnected after the dialog opened reads the impact again, then accepts the notice it shows", async () => {
     const reread = deferred<DeleteImpact>();
     const getReaderDeleteImpact = vi
