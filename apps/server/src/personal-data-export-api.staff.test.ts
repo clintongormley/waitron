@@ -7,7 +7,12 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
 import { adjustments, recordAdjustment } from "@waitron/adjustments";
-import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  orderEvents,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
@@ -25,6 +30,7 @@ import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
   mountPersonalDataExportApi,
+  personalDataServerParts,
   type PersonalDataExportDeps,
 } from "./personal-data-export-api.js";
 
@@ -365,6 +371,23 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     expect(text).not.toContain(hashSessionToken(marthaToken));
     expect(text).not.toContain(MARTHA.pinHash);
     expect(text).not.toContain(hashSessionToken(tokens.admin));
+  });
+
+  it("puts the target’s service actions in an administrator’s download", async () => {
+    const event = { kind: "dish.cancelled" as const, fromOrderId: "old-bill" };
+    await suite.db.insert(orderEvents).values([
+      { ...event, actorId: ids.admin, lineId: "admin-line" },
+      { ...event, actorId: ids.martha, lineId: "martha-line" },
+    ]);
+    const response = await ask(staffPath(ids.martha), tokens.admin, {
+      serverParts: personalDataServerParts(exportModules, suite.db),
+    });
+    expect(response.status).toBe(200);
+    const files = await unzipped(response);
+    expect(JSON.parse(files["service-actions.json"] ?? "{}")).toHaveProperty("orderEvents", [
+      expect.objectContaining({ lineId: "martha-line", yourPart: ["actor"] }),
+    ]);
+    expect(files["README.txt"]).toContain("- service-actions.json:");
   });
 
   it("gives an admin her adjustments.json, listed in her README in Spanish", async () => {

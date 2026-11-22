@@ -88,17 +88,15 @@ by the answers):
     `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;
     `invoice_deliveries.person_id`; `bill_payments` (`requested_by`, `attested_by`);
     `drawer_entries.person_id`, who asked for the payment or refund;
-    `order_amendments.actor_id`; `ticket_item_moves.moved_by_person_id`; `order_drafts.owner_id`;
-    `order_events` (`actor_id`, `from_person`, `to_person`);
-    `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
-    line counts as; `working_orders.editor_id`, who is editing a bill; `parties` (`opened_by`,
-    `closed_by`, `allergy_answered_by`); `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves and downloads of the file of deferred payments); and `recovery_packs.made_by`, who made a recovery pack. Core's
-    `line_service_cancellations.actor_id` is also not yet in the download: automatic departure
-    stops can name an actor without an adjustment. The guard knows a column by its name;
+    `order_drafts.owner_id`, who holds the current draft; `working_order_lines.credited_to`, whose
+    sale a line counts as; `working_orders.editor_id`, who is editing a bill;
+    `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves
+    and downloads of the file of deferred payments); and `recovery_packs.made_by`, who made a
+    recovery pack. The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
   - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds
-    and resolutions, department transfers and service steps, handover activations
+    and resolutions, department transfer senders, service steps, handover activations
     (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the adjustments
     module's `credited_to`, whose sale the item counted as. The S2c guard reads core's tables only;
     since S2d the adjustments module's columns are held by its own guard,

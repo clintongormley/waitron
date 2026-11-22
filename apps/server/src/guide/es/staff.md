@@ -124,6 +124,9 @@ registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste. P
 `adjustments.json`: las cancelaciones y los descuentos en una cuenta que hiciste indicando un
 motivo, o que autorizaste a otra persona.
 
+Consulta `service-actions.json` para ver tus acciones en pedidos y en el servicio de mesas, y
+`department-transfers.json` para ver los traspasos entre departamentos que resolviste.
+
 Un `README.txt` explica cada archivo, quién más recibe los datos, cuánto tiempo se guardan y tus
 derechos. La copia nunca contiene secretos como tu PIN o tu contraseña. Para cualquier otra cosa
 sobre tus datos, pregunta al local.

@@ -289,6 +289,29 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
       expect(es[name]?.kept?.length ?? 0, `${name} kept`).toBe(en[name]?.kept?.length ?? 0);
     }
   });
+  it.each([
+    ["en", "draft take-overs", "you resolved"],
+    ["es", "tomas de control de borradores", "resolviste"],
+  ] as const)(
+    "describes service actions and resolved transfers in %s",
+    (language, drafts, resolved) => {
+      const readme = personalDataReadme({
+        language,
+        venue: "Venue",
+        person: "Staff",
+        date: "2026-11-21",
+        files: ["service-actions.json", "department-transfers.json"],
+      });
+      const lines = readme.split("\n");
+      expect(lines.find((line) => line.startsWith("- service-actions.json:")) ?? "").toContain(
+        drafts,
+      );
+      expect(lines.find((line) => line.startsWith("- department-transfers.json:")) ?? "").toContain(
+        resolved,
+      );
+    },
+  );
+
   it("has words in both languages for every file the server adds itself", () => {
     const stubDb = {} as Database;
     const names = personalDataServerParts(ALL_MODULES, stubDb).flatMap((p) => p.part.files);

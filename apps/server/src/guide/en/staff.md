@@ -116,6 +116,9 @@ or recorded the outcome of, and the cash-drawer openings you made or authorised.
 `adjustments.json` too: the voids, comps and discounts on a bill that you made giving a reason, or
 approved for someone else.
 
+Check `service-actions.json` for your order and table service actions and
+`department-transfers.json` for the transfers between departments you resolved.
+
 A `README.txt` explains each file, who else receives the data, how long it is kept and your
 rights. The download never holds a secret such as your PIN or password. For anything else about
 your data, ask the venue.
