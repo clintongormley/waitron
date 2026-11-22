@@ -20,6 +20,9 @@ import {
   type LeaveCoordinator,
   type WtButton,
 } from "@waitron/ui";
+import { renderGroupError, renderSwitchGroup } from "../widgets/device-profile-switch-group.js";
+import { renderDeviceProfileWhere } from "../widgets/device-profile-where.js";
+import { renderDeviceProfileWho } from "../widgets/device-profile-who.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -2272,7 +2275,7 @@ export class DeviceProfilesScreen extends LitElement {
             </div>`;
           })}
         </div>
-        ${this.#groupError(list.test, listError)}
+        ${renderGroupError(list.test, listError)}
       </div>
       <wt-combobox
         class="field"
@@ -2325,7 +2328,7 @@ export class DeviceProfilesScreen extends LitElement {
     const choices = equipmentInOrder(this.readers, this.#loadedReaders.readerIds, listed);
     const visible = choices.map(({ id }) => id);
     const error = errors.readerDefault ?? "";
-    return html`${this.#switchGroup(
+    return html`${renderSwitchGroup(
         "profile-readers",
         t("device_profiles.card_readers"),
         undefined,
@@ -2401,7 +2404,7 @@ export class DeviceProfilesScreen extends LitElement {
       heading: string,
     ) => {
       const listed = scope[key];
-      return this.#switchGroup(
+      return renderSwitchGroup(
         `profile-${slug}-${key === "stationIds" ? "stations" : "zones"}`,
         heading,
         errors[field],
@@ -2518,172 +2521,33 @@ export class DeviceProfilesScreen extends LitElement {
       ${selected === undefined ? nothing : this.#renderKindLists(selected, errors)}`;
   }
 
-  #groupError(test: string, error: string | null | undefined): TemplateResult | typeof nothing {
-    return error
-      ? html`<p class="field-error" id="${test}-error" data-test="${test}-error">${error}</p>`
-      : nothing;
-  }
-
-  /** A titled group of switches, described by its hint and, once marked, its error. */
-  #switchGroup(
-    test: string,
-    heading: string,
-    error: string | undefined,
-    switches: TemplateResult | TemplateResult[],
-    hint?: { test: string; text: string },
-  ): TemplateResult {
-    const described = [hint ? `${test}-hint` : "", error ? `${test}-error` : ""]
-      .filter((id) => id !== "")
-      .join(" ");
-    return html`<div
-      class="field"
-      role="group"
-      aria-labelledby="${test}-heading"
-      aria-describedby=${described === "" ? nothing : described}
-      data-test=${test}
-    >
-      <span class="panel-subtitle" id="${test}-heading">${heading}</span>
-      ${
-        hint
-          ? html`<p class="hint" id="${test}-hint" data-test=${hint.test}>${hint.text}</p>`
-          : nothing
-      }
-      <div class="toggles">${switches}</div>
-      ${this.#groupError(test, error)}
-    </div>`;
-  }
-
-  #departmentOptions(): { value: string; label: string }[] {
-    const options = this.scopeChoices.departments
-      .filter((department) => department.active || department.id === this.draftDepartmentId)
-      .map((department) => ({
-        value: department.id,
-        label: department.active
-          ? department.name
-          : `${department.name} (${t("device_profiles.department_disabled_mark")})`,
-      }));
-    return options;
-  }
-
   #renderWhere(errors: FieldErrors): TemplateResult {
-    const department = this.scopeChoices.departments.find(
-      (entry) => entry.id === this.draftDepartmentId,
-    );
-    const zones = this.#departmentZones(this.draftDepartmentId);
-    const everyZoneHint = fill("device_profiles.every_zone_hint", {
-      department: department?.name ?? "",
+    return renderDeviceProfileWhere({
+      departments: this.scopeChoices.departments,
+      departmentId: this.draftDepartmentId,
+      zones: this.#departmentZones(this.draftDepartmentId),
+      allowedZones: this.#allowedZones(),
+      everyZone: this.draftEveryZone,
+      zoneIds: this.draftZoneIds,
+      startingZoneId: this.draftStartingZoneId,
+      departmentError: errors.department,
+      zonesError: errors.zones,
+      startingZoneError: errors.startingZone,
+      onDepartment: (event) => this.#onDepartment(event),
+      onEveryZone: (event) => this.#onEveryZone(event),
+      onZone: (event, zoneId) => this.#onZone(event, zoneId),
+      onStartingZone: (event) => this.#onStartingZone(event),
     });
-    return html`
-      <h2 class="section-title">${t("device_profiles.where_heading")}</h2>
-      <wt-combobox
-        class="field"
-        data-test="profile-department"
-        name="departmentId"
-        required
-        label=${t("device_profiles.department")}
-        search="auto"
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${this.#departmentOptions()}
-        .value=${this.draftDepartmentId}
-        .error=${errors.department ?? ""}
-        .invalid=${Boolean(errors.department)}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDepartment(e)}
-      >
-        <wt-help-tooltip
-          slot="help"
-          mode="help-mode"
-          aria-label=${t("device_profiles.department_help_label")}
-          >${t("device_profiles.department_hint")}</wt-help-tooltip
-        >
-      </wt-combobox>
-      ${
-        this.draftDepartmentId === ""
-          ? nothing
-          : html`<div class="field">
-                <wt-switch
-                  data-test="profile-every-zone"
-                  name="everyZone"
-                  label=${t("device_profiles.every_zone")}
-                  description=${this.draftEveryZone ? everyZoneHint : ""}
-                  .checked=${this.draftEveryZone}
-                  @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onEveryZone(e)}
-                ></wt-switch>
-                ${
-                  this.draftEveryZone
-                    ? html`<p class="hint" data-test="profile-zones-hint" aria-hidden="true">
-                          ${everyZoneHint}
-                        </p>
-                        ${this.#groupError("profile-zones", errors.zones)}`
-                    : nothing
-                }
-              </div>
-              ${
-                this.draftEveryZone
-                  ? nothing
-                  : this.#switchGroup(
-                      "profile-zones",
-                      t("device_profiles.zones"),
-                      errors.zones,
-                      zones.map(
-                        (zone) =>
-                          html`<wt-switch
-                            data-test="profile-zone-${zone.id}"
-                            name="allowedZoneIds"
-                            label=${zone.name}
-                            .checked=${this.draftZoneIds.includes(zone.id)}
-                            @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                              this.#onZone(e, zone.id)}
-                          ></wt-switch>`,
-                      ),
-                    )
-              }`
-      }
-      <wt-combobox
-        class="field"
-        data-test="profile-starting-zone"
-        name="startingZoneId"
-        required
-        label=${t("device_profiles.starting_zone")}
-        search="auto"
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${this.#allowedZones().map((zone) => ({ value: zone.id, label: zone.name }))}
-        .value=${this.draftStartingZoneId}
-        .error=${errors.startingZone ?? ""}
-        .invalid=${Boolean(errors.startingZone)}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onStartingZone(e)}
-      >
-        <wt-help-tooltip
-          slot="help"
-          mode="help-mode"
-          aria-label=${t("device_profiles.starting_zone_help_label")}
-          >${t("device_profiles.starting_zone_hint")}</wt-help-tooltip
-        >
-      </wt-combobox>
-    `;
   }
 
   #renderWho(errors: FieldErrors): TemplateResult {
-    return html`
-      <h2 class="section-title">${t("device_profiles.who_heading")}</h2>
-      ${this.#switchGroup(
-        "profile-roles",
-        t("device_profiles.roles"),
-        errors.roles,
-        this.jobRoles.map(
-          (role) =>
-            html`<wt-switch
-              data-test=${`profile-role-${role.id}`}
-              name="admittedStaffRoleIds"
-              label=${role.name}
-              .checked=${this.draftRoles.includes(role.id)}
-              @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onRole(e, role.id)}
-            ></wt-switch>`,
-        ),
-      )}
-      ${this.jobRolesRead && this.draftRoles.length === 0 ? html`<p class="hint" data-test="admitted-people" aria-live="polite">${t("device_profiles.admitted_nobody")}</p>` : nothing}
-    `;
+    return renderDeviceProfileWho({
+      roles: this.jobRoles,
+      roleIds: this.draftRoles,
+      rolesRead: this.jobRolesRead,
+      rolesError: errors.roles,
+      onRole: (event, roleId) => this.#onRole(event, roleId),
+    });
   }
 
   #capabilitySwitch(flag: CapabilityFlag): TemplateResult {
@@ -2700,7 +2564,7 @@ export class DeviceProfilesScreen extends LitElement {
     const kds = !this.#ordering();
     const actions = PROFILE_ACTIONS.filter((flag) => !kds || sharedDisplayMay(flag));
     return html`<div class="capability-columns">
-      ${this.#switchGroup(
+      ${renderSwitchGroup(
         "profile-actions",
         t("device_profiles.actions"),
         errors.actions,
@@ -2712,7 +2576,7 @@ export class DeviceProfilesScreen extends LitElement {
           ),
         },
       )}
-      ${this.#switchGroup(
+      ${renderSwitchGroup(
         "profile-screens",
         t("device_profiles.screens"),
         undefined,
