@@ -2454,7 +2454,7 @@ CREATE TABLE `departments` (
 	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered')),
 	CONSTRAINT "departments_dining_ck" CHECK("departments"."dining" in ('eat_in', 'takeaway', 'till_choice')),
 	CONSTRAINT "departments_dining_starts_as_ck" CHECK("departments"."dining_starts_as" in ('eat_in', 'takeaway')),
-	CONSTRAINT "departments_estimated_margin_ck" CHECK("departments"."estimated_margin_bp" is null or "departments"."estimated_margin_bp" between 0 and 10000)
+	CONSTRAINT "departments_estimated_margin_ck" CHECK("departments"."estimated_margin_bp" is null or (typeof("departments"."estimated_margin_bp") = 'integer' and "departments"."estimated_margin_bp" between 0 and 10000))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint

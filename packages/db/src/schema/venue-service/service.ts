@@ -57,7 +57,7 @@ export const departments = table(
     check("departments_dining_starts_as_ck", enumCheck(t.diningStartsAs)),
     check(
       "departments_estimated_margin_ck",
-      sql`${t.estimatedMarginBp} is null or ${t.estimatedMarginBp} between 0 and 10000`,
+      sql`${t.estimatedMarginBp} is null or (typeof(${t.estimatedMarginBp}) = 'integer' and ${t.estimatedMarginBp} between 0 and 10000)`,
     ),
     foreignKey({
       columns: [t.transferDeskProfileId],

@@ -231,4 +231,10 @@ describe("department estimated margin", () => {
       "CHECK constraint failed: departments_estimated_margin_ck",
     );
   });
+  it("refuses a fraction of a basis point by its constraint", async () => {
+    await seedTaxpayer(suite.db);
+    await expect(insertWithMargin("Fraction", 3000.5)).rejects.toThrow(
+      "CHECK constraint failed: departments_estimated_margin_ck",
+    );
+  });
 });
