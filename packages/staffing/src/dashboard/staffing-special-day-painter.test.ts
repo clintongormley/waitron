@@ -1002,7 +1002,7 @@ it("titles the special day '<name>: special day, <dates>'", async () => {
   expect(frame(spanish).heading).toBe("Christmas: día especial, 24–⁠25 dic");
 });
 
-it("with no areas the heading still names the dates; with no dates it is '<name>: special day'", async () => {
+it("with no areas the heading names the dates; with no dates it is '<name>: special day'", async () => {
   const noAreas = (
     await mount({ read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }) })
   ).painter;

@@ -990,6 +990,7 @@ it("A724 returns empty guide maps for a special day with no dates", async () => 
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(Object.values(read.guides)).toEqual([{}, {}, {}]);
   expect(read.areas.every((a) => a.dates.length === 0)).toBe(true);
+  expect(read.dates).toEqual([]);
 });
 
 it("A724 adjacent periods with the same colour keep their own names and endpoints", async () => {

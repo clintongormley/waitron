@@ -167,6 +167,8 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
 6. **The staffing special-day painter reads its dates from `read.areas[0].dates`** (every area
    carries the same dates, `special-day-staffing-fixture.ts`); with no areas the heading is
    "<name>: special day". Why: no server read changes.
+   _2026-11-22: superseded by A711: the painter reads the read's top-level `dates`, and with no
+   areas the heading names them; Task 7's heading line describes the earlier read._
 7. **When the band shows:** a special-day painter from the moment it opens (it is a special day
    even while loading); a staffing season painter once its read names the season's colour; a viewer
    sees the band too.

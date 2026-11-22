@@ -254,9 +254,6 @@ the season painter continues saving through the season-week route._
 - **Only the season painters have a line under the bar (A762 plan, Decision 5; plan default).** A
   special-day heading already names its dates.
 
-- **The staffing special-day painter reads its dates from its read's first area (A762 plan,
-  Decision 6; plan default)**, as every area carries the same dates; no server read changed.
-
 - **When the band shows (A762 plan, Decision 7; plan default).** A special-day painter's from the
   moment it opens; a staffing season painter's once its read names the season's colour; a viewer's
   too.
