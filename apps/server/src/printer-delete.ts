@@ -1,13 +1,15 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   AppError,
-  type DeleteImpact,
+  type PrinterDeleteImpact,
   type DeleteImpactItem,
   type DeleteTarget,
 } from "@waitron/shared";
 import {
   deviceNotDeleted,
+  deviceProfiles,
   devices,
+  drawerNeedsClose,
   invoiceDeliveries,
   kitchenStations,
   isReceiptPrinter,
@@ -21,6 +23,7 @@ import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printin
 import {
   PRINTER_ROLE_COLUMNS,
   clearDeletedPrinter,
+  profileAllows,
   readPrinterEquipment,
   readProfilesListingPrinter,
   type ProfilePrinterRole,
@@ -28,12 +31,12 @@ import {
 import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 
-type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
+type Rules = { impact: PrinterDeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
 
 /** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
 async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   const [printer] = await tx
-    .select({ id: printers.id, name: printers.name })
+    .select({ id: printers.id, name: printers.name, hasCashDrawer: printers.hasCashDrawer })
     .from(printers)
     .where(and(isReceiptPrinter(), eq(printers.id, id), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id });
@@ -94,11 +97,25 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   const defaults = listed
     .filter(({ lists }) => PRINTER_ROLE_COLUMNS.some(({ role }) => lists[role]?.defaultId === id))
     .map((profile) => profile.id);
+  const needsClose = await drawerNeedsClose(tx, id);
   const candidates = await tx
-    .select({ id: devices.id, name: devices.label })
+    .select({
+      id: devices.id,
+      name: devices.label,
+      formFactor: deviceProfiles.formFactor,
+      capabilities: deviceProfiles.capabilities,
+    })
     .from(devices)
+    .innerJoin(deviceProfiles, eq(devices.deviceProfileId, deviceProfiles.id))
     .where(
-      and(inArray(devices.deviceProfileId, defaults), eq(devices.active, true), deviceNotDeleted()),
+      and(
+        or(
+          inArray(devices.deviceProfileId, defaults),
+          needsClose ? eq(devices.cashDrawerPrinterId, id) : undefined,
+        ),
+        eq(devices.active, true),
+        deviceNotDeleted(),
+      ),
     );
   const equipment = await readPrinterEquipment(
     tx,
@@ -106,13 +123,30 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     { lists: false },
   );
   const inheritingTargets = (role: string): DeleteTarget[] =>
-    candidates.filter((device) =>
-      equipment.roles
-        .get(device.id)
-        ?.some(
-          (state) => state.role === role && state.chosenId === null && state.resolvedId === id,
-        ),
-    );
+    candidates
+      .filter((device) =>
+        equipment.roles
+          .get(device.id)
+          ?.some(
+            (state) => state.role === role && state.chosenId === null && state.resolvedId === id,
+          ),
+      )
+      .map(({ id: deviceId, name }) => ({ id: deviceId, name }));
+  const closeDevices =
+    needsClose && printer.hasCashDrawer
+      ? candidates
+          .filter(
+            (device) =>
+              profileAllows(
+                { ...device, capabilities: device.capabilities as string[] },
+                "open-cash-drawer",
+              ) &&
+              equipment.roles
+                .get(device.id)
+                ?.some((state) => state.role === "cash_drawer" && state.resolvedId === id),
+          )
+          .map(({ id: deviceId, name }) => ({ id: deviceId, name }))
+      : [];
 
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
@@ -142,6 +176,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     impact: {
       target: { id: printer.id, name: printer.name },
       refusals: [],
+      ...(needsClose ? { drawerClose: { devices: closeDevices } } : {}),
       ends: ends.filter((item) => item.count > 0),
       removes: removes.filter((item) => item.count > 0),
     },
@@ -151,7 +186,10 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
 }
 
 /** What deleting the printer would end and remove now; `printer.not_found` once it is deleted. */
-export async function readPrinterDeleteImpact(tx: Transaction, id: string): Promise<DeleteImpact> {
+export async function readPrinterDeleteImpact(
+  tx: Transaction,
+  id: string,
+): Promise<PrinterDeleteImpact> {
   return (await printerDeleteRules(tx, id)).impact;
 }
 
@@ -164,7 +202,7 @@ export async function deletePrinter(
   tx: Transaction,
   id: string,
   now = new Date(),
-): Promise<DeleteImpact> {
+): Promise<PrinterDeleteImpact> {
   const rules = await printerDeleteRules(tx, id);
   await endDeletedPrinterJobs(tx, id);
   await endInvoicePrintDeliveries(tx, rules.invoiceJobIds, now);

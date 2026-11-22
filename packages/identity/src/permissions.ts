@@ -25,7 +25,7 @@ export const CORE_PERMISSIONS = [
   { permission: "report.export", defaultHolders: ["manager"] },
   { permission: "report.view", defaultHolders: ["supervisor", "manager"] },
   { permission: "hardware.manage", defaultHolders: ["manager"] },
-  { permission: "cash.drawer", defaultHolders: ["supervisor", "manager"] },
+  { permission: "cash.drawer", defaultHolders: ["staff", "supervisor", "manager"] },
   { permission: "node.manage", defaultHolders: [] },
   { permission: "system.box_admin", defaultHolders: [] },
   { permission: "fiscal.view", defaultHolders: ["manager"] },

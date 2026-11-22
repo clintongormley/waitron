@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import type { DeleteImpact, DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import type { WtModal } from "./wt-modal.js";
@@ -24,6 +24,16 @@ export type DeleteDialogCopy = {
   loading: string;
   item: (item: DeleteImpactItem) => string;
   refusal: (item: DeleteImpactRefusal) => string;
+  alternative?: (impact: DeleteImpact) =>
+    | {
+        warning: string;
+        label: string;
+        guidance: string;
+        link?: { href: string; label: string };
+        confirm: string;
+        cancel: string;
+      }
+    | undefined;
 };
 
 /** Asks before deleting a record, naming it and showing what refuses the delete, the work it ends
@@ -97,6 +107,8 @@ export class WtDeleteDialog extends LitElement {
   @property({ attribute: false }) copy?: DeleteDialogCopy;
   @property({ attribute: false }) opener: HTMLElement | null = null;
 
+  @state() private guidanceShown = false;
+
   @query("wt-modal") private modal!: WtModal;
   @query('[data-test="delete-cancel"]') private cancelButton!: WtButton;
 
@@ -114,6 +126,7 @@ export class WtDeleteDialog extends LitElement {
   override updated(): void {
     const shown = this.open && this.copy !== undefined;
     if (shown && !this.shown) void this.focusCancel();
+    if (!shown) this.guidanceShown = false;
     this.shown = shown;
   }
 
@@ -171,6 +184,7 @@ export class WtDeleteDialog extends LitElement {
     const { copy, impact } = this;
     if (!copy) return nothing;
     const ready = this.ready;
+    const alternative = impact && copy.alternative?.(impact);
     const message = [this.readError, this.actionError].filter((each) => each !== "").join(" ");
     const status = this.loading
       ? html`<wt-spinner size="sm" decorative></wt-spinner>${copy.loading}`
@@ -205,6 +219,23 @@ export class WtDeleteDialog extends LitElement {
                   impact.removes.map((each) => copy.item(each)),
                 )}
                 <p class="irreversible" data-irreversible>${copy.irreversible}</p>
+                ${
+                  alternative
+                    ? html`
+                        <p>${alternative.warning}</p>
+                        <div role="status" data-test="delete-guidance">
+                          ${
+                            this.guidanceShown
+                              ? html`
+                                  ${alternative.guidance}
+                                  ${alternative.link ? html`<a href=${alternative.link.href}>${alternative.link.label}</a>` : nothing}
+                                `
+                              : nothing
+                          }
+                        </div>
+                      `
+                    : nothing
+                }
               `
             : nothing
         }
@@ -215,7 +246,7 @@ export class WtDeleteDialog extends LitElement {
             variant="secondary"
             ?disabled=${this.submitting}
             @click=${this.onCancel}
-            >${copy.cancel}</wt-button
+            >${alternative?.cancel ?? copy.cancel}</wt-button
           >
           ${
             this.readError === ""
@@ -229,13 +260,28 @@ export class WtDeleteDialog extends LitElement {
                   >${copy.retry}</wt-button
                 >`
           }
+          ${
+            alternative && ready
+              ? html`<wt-button
+                  slot="secondary"
+                  data-test="delete-alternative"
+                  variant="secondary"
+                  ?disabled=${this.submitting}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.guidanceShown = true;
+                  }}
+                  >${alternative.label}</wt-button
+                >`
+              : nothing
+          }
           <wt-button
             data-test="delete-confirm"
             variant=${this.submitting || ready ? "danger" : "secondary"}
             ?disabled=${this.submitting || !ready}
             ?loading=${this.submitting}
             @click=${this.onConfirm}
-            >${copy.confirm}</wt-button
+            >${alternative?.confirm ?? copy.confirm}</wt-button
           >
         </wt-form-actions>
       </wt-modal>

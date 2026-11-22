@@ -121,9 +121,13 @@ export function resolveDrawerAssignment(
   return drawerPrinter(printers, true);
 }
 
-/** The device has a drawer it may open, by the same resolution the drawer paths use. */
-export async function deviceOpensDrawer(tx: Transaction, deviceId: string): Promise<boolean> {
-  return (await drawerPrinter(printerLookup(tx, deviceOrigin(deviceId)))) !== undefined;
+export async function deviceDrawer(tx: Transaction, deviceId: string) {
+  const lookup = printerLookup(tx, deviceOrigin(deviceId));
+  const assigned = await resolveDrawerAssignment(lookup);
+  return {
+    drawerPrinterId: assigned?.id ?? null,
+    opensDrawer: assigned !== undefined && (await lookup("cash_drawer")) !== undefined,
+  };
 }
 
 /**

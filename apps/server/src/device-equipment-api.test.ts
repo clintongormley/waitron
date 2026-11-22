@@ -28,6 +28,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { removeBuiltInPermissionForTest } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import type { ProfilePrinterLists } from "@waitron/layouts";
@@ -412,8 +413,16 @@ describe("whether the device opens a drawer", () => {
     const res = await choose(venue.cookie, "cash_drawer", { id: dr }, "list");
 
     expect(res.status).toBe(200);
-    expect((res.json as { opensDrawer?: unknown }).opensDrawer).toBe(true);
+    expect(res.json).toMatchObject({ opensDrawer: true, drawerPrinterId: dr });
     expect(await opensDrawerOf(venue.cookie)).toBe(true);
+  });
+
+  it("shows the assigned drawer when its switched-off printer cannot kick it", async () => {
+    expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, dr));
+
+    const res = await send(deviceApp, venue.cookie, "GET", "/api/device/equipment");
+    expect(res.json).toMatchObject({ opensDrawer: false, drawerPrinterId: dr });
   });
 
   it("a profile that allows the drawer but lists no drawer printer opens none", async () => {
@@ -1832,6 +1841,7 @@ describe("GET /api/device/equipment's notices", () => {
       ).toBe(true);
       const before = await suite.db.select().from(printJobs).where(eq(printJobs.id, id));
       const audit = await suite.db.select().from(drawerOpens);
+      await inTx((tx) => removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"));
       const refused = await send(venue.app, venue.cookie, "POST", "/api/drawer/open", {});
       expect(refused).toMatchObject({ status: 403, json: { code: "authorization.not_permitted" } });
       expect(await suite.db.select().from(drawerOpens)).toEqual(audit);

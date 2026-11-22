@@ -76,6 +76,11 @@ Si una impresora Bluetooth sigue en Waitron pero ha perdido el emparejamiento, p
 emparejamiento. Abre **Añadir impresora** y elige **Emparejar** junto a ella, o usa **Emparejar de
 nuevo** si aparece en sus detalles.
 
+Si al elegir **Eliminar** aparece **Cerrar primero**, vacía el cajón antes de quitar la impresora.
+Elige **Cerrar cajón** en el terminal indicado y deja el cajón vacío. Si no aparece un terminal,
+asigna el cajón en **Dispositivos**. **Eliminar de todos modos** conserva el saldo y el recuento
+pendiente si añades una impresora en la misma dirección y Waitron recupera su registro.
+
 ## Cola de impresión {#print-queue}
 
 Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora

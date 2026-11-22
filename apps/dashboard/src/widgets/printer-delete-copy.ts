@@ -1,4 +1,4 @@
-import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
+import type { DeleteImpactItem, DeleteImpactRefusal, PrinterDeleteImpact } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
@@ -71,5 +71,21 @@ export function printerDeleteCopy(page = false, bluetooth = false): DeleteDialog
     loading: t("printers.delete_loading"),
     item: itemLine,
     refusal: refusalLine,
+    alternative: (impact: PrinterDeleteImpact) => {
+      const drawer = impact.drawerClose;
+      if (!drawer) return undefined;
+      return {
+        warning: t("printers.drawer_delete_retained"),
+        label: t("printers.drawer_delete_close_first"),
+        guidance: drawer.devices.length
+          ? fill("printers.drawer_delete_use_till", { names: deleteTargetNames(drawer.devices) })
+          : t("printers.drawer_delete_assign"),
+        ...(drawer.devices.length === 0
+          ? { link: { href: "/devices", label: t("printers.drawer_delete_devices") } }
+          : {}),
+        confirm: t("printers.drawer_delete_anyway"),
+        cancel: t("printers.drawer_delete_stop"),
+      };
+    },
   };
 }

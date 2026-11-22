@@ -68,6 +68,11 @@ the printer's name identifies an A4 printer.
 If a Bluetooth printer still appears in Waitron but lost its pairing, put it in pairing mode.
 Open **Add a printer** and choose **Pair** beside it, or use **Pair again** if its details offer it.
 
+If **Delete** offers **Close first**, empty the drawer before removing the printer. Choose
+**Close drawer** on the named till and leave zero cash. If no till is listed, assign the drawer
+in **Devices** first. **Delete anyway** keeps the balance and any pending count if you later add
+a printer at the same address and Waitron restores its registration.
+
 ## Print Queue {#print-queue}
 
 Open **Print Queue** to see why a job is waiting. To add or remove a computer that prints, see [Print agents](printers.md#print-agents). If no print agent sees a USB or Bluetooth

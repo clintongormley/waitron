@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, kitchenStations, withTransaction, floorZones } from "@waitron/db";
+import { devices, kitchenStations, withTransaction, floorZones, personRoles } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
@@ -1087,11 +1087,19 @@ describe("the person's permission and the profile's action are both needed", () 
     expect(paid).toMatchObject({ status: 200, body: { balance: { status: "settled" } } });
   });
 
-  it("refuses a staff member the drawer on a profile that opens it, for want of cash.drawer", async () => {
+  it("refuses the drawer when the person lacks its grant, even on a profile that opens it", async () => {
+    const personId = await person("staff");
     const { cookie } = await signIn(CAPABILITY_FLAGS, "staff");
-    const open = await send(cookie, "POST", "/api/drawer/open", {});
-    expect(open.status).toBe(403);
-    expect(open.body.error?.code).toBe("authorization.not_permitted");
+    const memberships = await withTransaction(suite.db, (tx) =>
+      tx.delete(personRoles).where(eq(personRoles.personId, personId)).returning(),
+    );
+    try {
+      const open = await send(cookie, "POST", "/api/drawer/open", {});
+      expect(open.status).toBe(403);
+      expect(open.body.error?.code).toBe("authorization.not_permitted");
+    } finally {
+      await withTransaction(suite.db, (tx) => tx.insert(personRoles).values(memberships));
+    }
   });
 
   it("refuses an admin, who holds cash.drawer, the drawer on a profile that does not open it", async () => {

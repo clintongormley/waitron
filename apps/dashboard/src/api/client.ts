@@ -1,3 +1,4 @@
+import type { PrinterDeleteImpact } from "@waitron/shared";
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
@@ -1359,7 +1360,7 @@ export interface BluetoothCommandStatus {
   expiresInMs?: number;
 }
 
-export interface PrinterDeleteResult extends DeleteImpact {
+export interface PrinterDeleteResult extends PrinterDeleteImpact {
   bluetoothUnpair?: {
     commands: { agentId: string; agentName: string; command: BluetoothCommandStatus }[];
     warnings: { agentName: string | null }[];
@@ -4674,7 +4675,7 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
   }
 
-  getPrinterDeleteImpact(id: string): Promise<DeleteImpact> {
+  getPrinterDeleteImpact(id: string): Promise<PrinterDeleteImpact> {
     return this.#request(`/management-api/printers/${id}/delete-impact`, "GET");
   }
 

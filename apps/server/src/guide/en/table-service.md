@@ -31,6 +31,17 @@ Add an item before paying or sending an order.
 If cash is refused while you pay an edited parked order, your edits stay in the basket.
 Correct the payment amount and try again, or park the order to save the edits without paying.
 
+## Close a cash drawer {#close-drawer}
+
+On a till assigned to the drawer, open **More** and choose **Close drawer**. Open it with the key
+if it stays shut. Count the cash and choose **Save count**. Waitron then shows any difference, and
+you can choose **Recount** once to check it. If you leave after saving a count, choose **Close drawer**
+again from any till assigned to it to pick up where you left off.
+
+Enter the cash you want to leave and check **For the bank** before taking the rest out. Choose
+**Finish close**. If you need another slip, you can reprint it from
+[Sales](sales.md#drawer-close-history).
+
 ## Use another card machine {#outside-card}
 
 Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**.

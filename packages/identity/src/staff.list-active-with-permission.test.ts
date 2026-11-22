@@ -26,7 +26,7 @@ async function seedPerson(
 }
 
 describe("listActivePersonsWithPermission", () => {
-  it("returns active persons whose role holds the permission — supervisor/manager/admin in, staff and inactive out, name-sorted", async () => {
+  it("returns active persons whose role holds the permission — all active roles in, inactive out, name-sorted", async () => {
     await seedTaxpayer(suite.db);
     // Insert out of alphabetical order so a sorted result proves the orderBy, not insertion order.
     const mgr = await seedPerson(suite.db, "Carla", "manager");
@@ -44,10 +44,10 @@ describe("listActivePersonsWithPermission", () => {
       { personId: adm, displayName: "Ada" },
       { personId: sup, displayName: "Bea" },
       { personId: mgr, displayName: "Carla" },
+      { personId: staff, displayName: "Dora" },
     ]);
     expect(Object.keys(rows[0]!)).toEqual(["personId", "displayName"]);
     const ids = new Set(rows.map((r) => r.personId));
-    expect(ids.has(staff)).toBe(false);
     expect(ids.has(goneSup)).toBe(false);
   });
 });
@@ -65,7 +65,7 @@ it("lists active managers for a registered module permission, excluding staff an
   ).toEqual([{ personId: managerId, displayName: "Manager" }]);
 });
 
-it("uses one select for a supervisor picker with 50 people", async () => {
+it("uses one select for a refund approver picker with 50 people", async () => {
   const people = await seedPersons(
     suite.db,
     Array.from({ length: 50 }, (_, index) => ({
@@ -77,7 +77,7 @@ it("uses one select for a supervisor picker with 50 people", async () => {
   await withTransaction(suite.db, async (tx) => {
     const reads = vi.spyOn(tx, "select");
     try {
-      expect(await listActivePersonsWithPermission(tx, "cash.drawer")).toEqual(
+      expect(await listActivePersonsWithPermission(tx, "sale.refund")).toEqual(
         people
           .filter((_, index) => index % 2 === 0)
           .map((person) => ({

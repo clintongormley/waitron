@@ -369,6 +369,7 @@ it.each([
     ["p1"],
     [
       "printers",
+      "drawer_entries",
       "print_jobs",
       "invoice_deliveries",
       "devices",

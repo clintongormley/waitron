@@ -2031,6 +2031,16 @@ export const en = {
   "printers.delete_removes": "Settings that are removed",
   "printers.delete_irreversible": "This can't be undone.",
   "printers.delete_assignments": "Assignments that are removed",
+  "printers.drawer_delete_retained":
+    "This drawer has a balance or an unfinished count. Adding a printer at the same address keeps it when Waitron restores the same registration.",
+  "printers.drawer_delete_close_first": "Close first",
+  "printers.drawer_delete_use_till":
+    "On {names}, open More, choose Close drawer and leave zero cash.",
+  "printers.drawer_delete_assign":
+    "Assign the drawer to a till, then use Close drawer on that till.",
+  "printers.drawer_delete_devices": "Open Devices",
+  "printers.drawer_delete_anyway": "Delete anyway",
+  "printers.drawer_delete_stop": "Stop",
   "printers.delete_retained":
     "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
   "printers.delete_retry": "Try again",
@@ -6727,6 +6737,16 @@ export const es: Record<StringKey, string> = {
   "printers.delete_removes": "Configuración que se elimina",
   "printers.delete_irreversible": "Esta acción no se puede deshacer.",
   "printers.delete_assignments": "Asignaciones que se eliminan",
+  "printers.drawer_delete_retained":
+    "Este cajón tiene saldo o un recuento pendiente. Se conserva si al añadir una impresora en la misma dirección Waitron recupera el mismo registro.",
+  "printers.drawer_delete_close_first": "Cerrar primero",
+  "printers.drawer_delete_use_till":
+    "En {names}, abre Más, elige Cerrar cajón y deja el cajón vacío.",
+  "printers.drawer_delete_assign":
+    "Asigna el cajón a un terminal y elige Cerrar cajón en ese terminal.",
+  "printers.drawer_delete_devices": "Abrir Dispositivos",
+  "printers.drawer_delete_anyway": "Eliminar de todos modos",
+  "printers.drawer_delete_stop": "Detener",
   "printers.delete_retained":
     "Se conservan el historial y los ajustes de la impresora. Las asignaciones y el trabajo finalizado no se restauran. Para usarla, añádela de nuevo.",
   "printers.delete_retry": "Reintentar",

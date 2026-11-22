@@ -211,6 +211,7 @@ export { CORE_ALERTS } from "./alerts.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export {
+  drawerNeedsClose,
   readDrawerClose,
   saveDrawerCount,
   recountDrawer,

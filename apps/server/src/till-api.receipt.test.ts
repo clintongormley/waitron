@@ -7,7 +7,7 @@ import {
   type PaymentResult,
 } from "@waitron/payments";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedDeviceProfiles,
   seedVenueSettings,
@@ -189,8 +189,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 
 /** Stand up a fresh chained venue + a one-`each`-product menu (1.50 gross, general/21 %), a
  *  staff person ("Cashier") and a supervisor ("Supervisor"), both with PIN "5555". The supervisor
- *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
- *  against. */
+ *  holds `cash.drawer`; the fixture removes the grant from the cashier’s role. */
 async function setupVenue(): Promise<{
   cfg: TradingContext;
   each: AvailableProduct & { menuItemId: string; menuId: string };
@@ -255,6 +254,7 @@ async function setupVenue(): Promise<{
       stationId: null,
       noPreparation: true,
     });
+    await removeBuiltInPermissionForTest(tx, "staff", "cash.drawer");
     const [staff] = await seedPersons(tx, {
       displayName: "Cashier",
       pinHash: fixturePinHash("5555"),
