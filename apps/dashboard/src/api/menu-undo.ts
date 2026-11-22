@@ -97,8 +97,6 @@ function refusalSentence(
         };
       if (code === "menu_section.member_duplicate" && command.method !== "removeSectionMember")
         return { key: "menu_preview.undo_product_already_in_list", values };
-      if (code === "menu_section.membership_invalid" && command.method === "addSectionMember")
-        return { key: "menu_preview.undo_product_inactive", values };
       return null;
     }
     case "setHomeDisplay":

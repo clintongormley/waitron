@@ -3909,8 +3909,6 @@ export const en = {
   "menu_preview.undo_product_list_gone": "The list {name} was in has been deleted.",
   "menu_preview.undo_product_placement_gone": "The section is gone or {name} is no longer in it.",
   "menu_preview.undo_product_already_in_list": "That list already contains {name}.",
-  "menu_preview.undo_product_inactive":
-    "{name} is inactive, so it can't be put back. Make it active in Products, then try again.",
   "menu_preview.undo_include_gone":
     "{name} is no longer included in this menu, so how it showed cannot be restored.",
   "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be restored.",
@@ -8663,8 +8661,6 @@ export const es: Record<StringKey, string> = {
   "menu_preview.undo_product_placement_gone":
     "La sección ya no existe o {name} ya no está en ella.",
   "menu_preview.undo_product_already_in_list": "Esa lista ya contiene {name}.",
-  "menu_preview.undo_product_inactive":
-    "{name} está inactivo y no se puede volver a añadir. Actívalo en Productos y vuelve a intentarlo.",
   "menu_preview.undo_include_gone":
     "{name} ya no se incluye en esta carta, así que no se puede mostrar como antes.",
   "menu_preview.undo_section_gone":

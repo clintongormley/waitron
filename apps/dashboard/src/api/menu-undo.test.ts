@@ -201,8 +201,8 @@ describe("undoRefusalText", () => {
     [
       addMember,
       "menu_section.membership_invalid",
-      "Soup is inactive, so it can't be put back. Make it active in Products, then try again.",
-      "Soup está inactivo y no se puede volver a añadir. Actívalo en Productos y vuelve a intentarlo.",
+      "Some of the chosen items cannot be used. Refresh the list and try again.",
+      "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
     ],
   ] as const)("words a placement refusal for %o and %s", (command, code, english, spanish) => {
     expect(undoRefusalText(refused(code), command)).toBe(english);

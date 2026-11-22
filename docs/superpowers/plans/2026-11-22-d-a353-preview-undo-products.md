@@ -15,7 +15,8 @@ When you add, move or remove a product in a menu's own lists, use **Undo** on Pr
 | `menu_section.not_found` | Add | The list {name} was in has been deleted. | Se ha eliminado la lista en la que estaba {name}. |
 | `menu_section.not_found` | Remove, move | The section is gone or {name} is no longer in it. | La sección ya no existe o {name} ya no está en ella. |
 | `menu_section.member_duplicate` | Add, move | That list already contains {name}. | Esa lista ya contiene {name}. |
-| `menu_section.membership_invalid` | Add | {name} is inactive, so it can't be put back. Make it active in Products, then try again. | {name} está inactivo y no se puede volver a añadir. Actívalo en Productos y vuelve a intentarlo. |
+
+At 09:36, the watcher kept the existing refresh instruction for `menu_section.membership_invalid`.
 
 ## Checks
 

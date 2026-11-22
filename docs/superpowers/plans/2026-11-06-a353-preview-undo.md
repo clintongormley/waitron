@@ -273,14 +273,13 @@ PR 2 refusal, wording settled by the Lane D watcher on 2026-11-22 at 04:45.
 | --- | --- | --- | --- |
 | `menu_preview.undo_include_gone` | `menu_section.not_found` or `menu_section.wrong_role`, an included menu's presentation | {name} is no longer included in this menu, so how it showed cannot be restored. | {name} ya no se incluye en esta carta, así que no se puede mostrar como antes. |
 
-PR 3 refusals, wording settled by the Lane D watcher on 2026-11-22 at 09:16.
+PR 3 refusals, wording settled by the Lane D watcher on 2026-11-22 at 09:16. At 09:36, the watcher retained the existing refresh instruction for `menu_section.membership_invalid`.
 
 | Key | Code it answers, and from which Undo | English | Spanish |
 | --- | --- | --- | --- |
 | `menu_preview.undo_product_list_gone` | `menu_section.not_found`, add | The list {name} was in has been deleted. | Se ha eliminado la lista en la que estaba {name}. |
 | `menu_preview.undo_product_placement_gone` | `menu_section.not_found`, remove or move | The section is gone or {name} is no longer in it. | La sección ya no existe o {name} ya no está en ella. |
 | `menu_preview.undo_product_already_in_list` | `menu_section.member_duplicate`, add or move | That list already contains {name}. | Esa lista ya contiene {name}. |
-| `menu_preview.undo_product_inactive` | `menu_section.membership_invalid`, add | {name} is inactive, so it can't be put back. Make it active in Products, then try again. | {name} está inactivo y no se puede volver a añadir. Actívalo en Productos y vuelve a intentarlo. |
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
 mano", "Till" / "Caja registradora"). An Undo refused while its bullet is not drawn with its
