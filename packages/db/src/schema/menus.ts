@@ -131,8 +131,8 @@ export const products = table(
     unitId: id("unit_id").references(() => units.id, { onDelete: "restrict" }),
     unitPrice: money("unit_price"),
     vatClass: label("vat_class"),
-    // The class charged when the product is taken away; how a blank resolves:
-    // `effectiveProductColumns`.
+    // Not written: a product line taken away files at its product's takeaway rate
+    // (`product_takeaway_vat_rates`).
     takeawayVatClass: label("takeaway_vat_class"),
     // `active` is whether the product exists for the venue — deleting makes it false and removes no
     // row — and `available` is "sold out for now". The till sells a product only when both are

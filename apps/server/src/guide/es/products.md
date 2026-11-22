@@ -14,17 +14,20 @@ que lo corriges.
 
 ## Elige la clase de IVA {#vat}
 
-El IVA de un producto empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
+El IVA de un producto cuando se consume en el local empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
 publicó la carta. Para corregir la clase en la carta publicada sin volver a publicar desde los productos, consulta
-[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
+[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Si se consume en el local, una línea que ya
 está en un pedido conserva la clase con la que se añadió.
 
-Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda la clase de este
-producto para un pedido vendido como **Para llevar** en la caja. Si lo dejas vacío, ese pedido se
-cobra con la clase que muestra el campo vacío.
+Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda el tipo con el
+que se cobra este producto cuando se lo llevan. Elígelo de la lista. Un producto nuevo empieza con
+**Los productos nuevos empiezan con (IVA para llevar)**, en la tarjeta **Valores
+predeterminados** de la pestaña **Datos del local**. Una variante puede conservar el tipo de su
+producto. Un cambio se aplica a todos los tickets para llevar desde entonces, también a los pedidos
+ya abiertos; no hace falta publicar la carta.
 
 ## Decide cómo se vende un producto {#selling}
 
@@ -375,10 +378,6 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
 - Una opción de una lista de opciones, y el nombre de una lista de extras o de opciones: sus tres
   nombres.
 - Una sección: su nombre interno, su nombre para el cliente y su imagen.
-
-Si tu región grava de otra forma la comida para llevar, un plato, una variante y un extra también
-muestran **IVA para llevar**, con la clase que la carta publicada guarda para cuando se lo llevan.
-Corrige cada clase por separado: cambiar una nunca cambia la otra.
 
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
 Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al

@@ -331,7 +331,7 @@ it.each([
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
-  ["listLibraryProducts", [], ["products"]],
+  ["listLibraryProducts", [], ["products", "product_takeaway_vat_rates"]],
   ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
   ["getMenuStructures", [], ["sections", "section_members", "menus"]],
   [
@@ -790,13 +790,44 @@ it("subscribes menu defaults to their stored settings and the rows that decide t
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced", takeawayVat: true });
 });
 
-it("subscribes the venue defaults to the clock document, venue document and menu settings", () => {
+it("subscribes the venue defaults to the clock document, venue document, menu settings and the taxpayer row that decides takeaway VAT", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },
     { type: "settings.venue" },
     { type: "settings.menu" },
+    { type: "taxpayer" },
   ]);
+});
+
+// Of the live queries, only the products route's answer carries a takeaway rate (`listProducts`,
+// packages/menu/src/operations.ts).
+it.each([
+  ["listProducts", true],
+  ["listLibraryProducts", true],
+  ["getMenuHome", false],
+  ["getMenuPrices", false],
+  ["getMenuStatus", false],
+  ["getMenuPreview", false],
+  ["getSalesOverview", false],
+  ["getSalesPeriod", false],
+  ["getCategorySales", false],
+  ["getFolderRouting", false],
+  ["getCourseDeleteImpact", false],
+  ["getContentTranslationGaps", false],
+] as const)("%s subscribes to takeaway rates: %s", (name, rated) => {
+  expect(QUERY_DEPENDENCIES[name]).toContain("products");
+  expect(
+    (QUERY_DEPENDENCIES[name] as readonly string[]).includes("product_takeaway_vat_rates"),
+  ).toBe(rated);
+});
+
+it("subscribes to takeaway rates only from the products route's reads", () => {
+  expect(
+    Object.entries(QUERY_DEPENDENCIES)
+      .filter(([, types]) => (types as readonly string[]).includes("product_takeaway_vat_rates"))
+      .map(([name]) => name),
+  ).toEqual(["listLibraryProducts", "listProducts"]);
 });
 
 it("subscribes the venue's privacy contact to its venue settings document alone", () => {

@@ -1066,12 +1066,16 @@ describe("seedDemoRestaurant", () => {
       const { rows: registros } = await tx.execute<{ count: number }>(
         sql`select count(*) as count from registros_facturacion`,
       );
+      const { rows: takeawayRates } = await tx.execute<{ rate: number }>(
+        sql`select distinct rate from product_takeaway_vat_rates`,
+      );
       return {
         languages,
         gaps,
         customerName: JSON.parse(products[0]!.customer_name) as object,
         backends: backends.map((row) => row.fiscal_backend),
         registros: registros[0]!.count,
+        takeawayRates: takeawayRates.map((row) => row.rate),
       };
     });
     expect(read.languages).toEqual({ defaultLanguage: "en", languages: ["en"] });
@@ -1080,5 +1084,7 @@ describe("seedDemoRestaurant", () => {
     expect(read.backends.length).toBeGreaterThan(0);
     expect(new Set(read.backends)).toEqual(new Set(["none"]));
     expect(read.registros).toBe(0);
+    // Spain's 4% and 21% are not offered here, so every product takes the area's 0%.
+    expect(read.takeawayRates).toEqual([0]);
   });
 });

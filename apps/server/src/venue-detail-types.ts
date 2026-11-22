@@ -46,6 +46,12 @@ export interface VenueDefaults {
   /** The one language the law gives the venue's region, if any. */
   fixedReceiptLanguage: string | null;
   defaultProductVatClass: VatClass;
+  /** The rate a new product's takeaway VAT starts at. */
+  defaultTakeawayVatRate: string;
+  /** Whether the venue's region charges takeaway VAT at its own rate. */
+  takeawayVat: boolean;
+  /** The takeaway rates a person may pick. */
+  vatRates: string[];
 }
 
 export interface VenueClockView {

@@ -33,7 +33,7 @@ const product = (
   pricingUnit: "each",
   unitPrice: "2.00",
   vatClass: "reduced",
-  takeawayVatClass: "reduced",
+  takeawayVatRate: "10.00",
   available: true,
   ordering: "public",
   allergens: null,

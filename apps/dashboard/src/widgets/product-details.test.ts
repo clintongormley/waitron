@@ -27,7 +27,7 @@ const value: ProductEditorValue = {
   unitId: "cup",
   unitPrice: "3.00",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   active: false,
   available: true,
   ordering: "public",
@@ -182,7 +182,7 @@ describe("archived product details", () => {
         unitPrice: "2.00",
         unitId: "cup",
         vatClass: "general",
-        takeawayVatClass: "general",
+        takeawayVatRate: "21.00",
         primaryCategoryId: "drinks",
         description: null,
         image: null,
@@ -207,40 +207,32 @@ describe("archived product details", () => {
       ])
       .filter(([label]) => label!.startsWith("VAT"));
 
-  it("shows the class charged taken away beside the served one where the region charges it", async () => {
-    const { el } = await mount({ takeawayVatClass: "general" }, true);
+  it("shows the rate charged taken away, as a percentage, beside the served class where the region charges it", async () => {
+    const { el } = await mount({ takeawayVatRate: "21.00" }, true);
     expect(vatPairs(el)).toEqual([
       ["VAT", "Reduced"],
-      ["VAT when taken away", "General"],
-    ]);
-  });
-
-  it("shows an empty takeaway class as the served class it charges", async () => {
-    const { el } = await mount({}, true);
-    expect(vatPairs(el)).toEqual([
-      ["VAT", "Reduced"],
-      ["VAT when taken away", "Reduced"],
+      ["VAT when taken away", "21%"],
     ]);
   });
 
   it.each([
-    ["its own served class", "super_reduced", "Super-reduced"],
-    ["its product's takeaway class", null, "No tax"],
-  ] as const)("shows a variant's empty takeaway class as %s", async (_case, vatClass, takeaway) => {
+    ["its own rate", "7.50", "7.5%"],
+    ["its product's rate when it has none", null, "4%"],
+  ] as const)("shows a variant's takeaway rate as %s", async (_case, takeawayVatRate, shown) => {
     const { el } = await mount(
       {
         parentId: "parent",
         unitId: null,
         unitPrice: null,
-        vatClass,
-        takeawayVatClass: null,
+        vatClass: "super_reduced",
+        takeawayVatRate,
         primaryCategoryId: null,
         inherited: {
           name: "Parent staff",
           unitPrice: "2.00",
           unitId: "cup",
           vatClass: "general",
-          takeawayVatClass: "zero",
+          takeawayVatRate: "4.00",
           primaryCategoryId: "drinks",
           description: null,
           image: null,
@@ -253,13 +245,13 @@ describe("archived product details", () => {
       true,
     );
     expect(vatPairs(el)).toEqual([
-      ["VAT", vatClass === null ? "General" : "Super-reduced"],
-      ["VAT when taken away", takeaway],
+      ["VAT", "Super-reduced"],
+      ["VAT when taken away", shown],
     ]);
   });
 
-  it("shows no takeaway class where the region does not charge one", async () => {
-    const { el } = await mount({ takeawayVatClass: "general" });
+  it("shows no takeaway rate where the region does not charge one", async () => {
+    const { el } = await mount({ takeawayVatRate: "21.00" });
     expect(vatPairs(el)).toEqual([["VAT", "Reduced"]]);
   });
 

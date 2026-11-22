@@ -7,7 +7,7 @@ import {
   refreshProductDeclarations,
 } from "./menu-refresh.js";
 import { menuOfferToTillProduct, type TillMenuOffer } from "../api/client.js";
-import { WorkingOrderStore, type OrderLine } from "./working-order.js";
+import type { OrderLine } from "./working-order.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
@@ -927,7 +927,7 @@ describe("refreshBasket", () => {
     });
   });
 
-  it("keeps a line whose quantity the live unit cannot hold out of adoption, so the preview still reads it", () => {
+  it("keeps a line whose quantity the live unit cannot hold out of adoption", () => {
     const widened = menuOfferToTillProduct(burger, "v1");
     const line: OrderLine = {
       product: { ...widened, unit: { ...unit, precision: 3 } },
@@ -935,11 +935,7 @@ describe("refreshBasket", () => {
       blocked: "unit_changed",
     };
     const outcome = refreshBasket([line], [burger], live);
-    const store = new WorkingOrderStore();
-    store.loadFrom("draft-1", [line]);
-    store.adoptLines(outcome.adopted);
 
-    expect(() => store.vatBreakdown).not.toThrow();
     expect(outcome.blocked).toEqual([{ lineNo: 1, name: "burger", reason: "unit_changed" }]);
     expect(outcome.adopted.has(0)).toBe(false);
   });

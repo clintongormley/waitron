@@ -22,7 +22,7 @@ const inherited: InheritedValues = {
   name: "Bread $& <large>",
   unitPrice: "3.00",
   vatClass: "reduced",
-  takeawayVatClass: "reduced",
+  takeawayVatRate: "10.00",
   unitId: null,
   primaryCategoryId: null,
   courseId: null,

@@ -282,7 +282,9 @@ export class SetMenuTermsForm extends LitElement {
     );
     const action = saveActionState(this.#scope);
     const taxes = VAT_CLASSES.map((value) => ({ value, label: vatClassLabel(value) }));
-    const same = fill("editor.takeaway_vat_same", { tax: vatClassLabel(this.draft.setVatClass) });
+    const same = fill("menus.set_takeaway_vat_same", {
+      tax: vatClassLabel(this.draft.setVatClass),
+    });
     const actions = html`<wt-form-actions
       slot=${this.creating ? "footer" : nothing}
       .error=${this.#feedback.message(errors, fieldKeys, t("form.fix_fields"))}

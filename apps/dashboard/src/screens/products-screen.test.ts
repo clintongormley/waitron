@@ -128,7 +128,7 @@ const products: Product[] = [
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
+    takeawayVatRate: "10.00",
     active: true,
     available: true,
     ordering: "public",
@@ -156,7 +156,7 @@ const value: ProductEditorValue = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: "c1",
   color: null,
@@ -359,6 +359,17 @@ describe("menu-screen", () => {
     expect(list(el).products).toEqual(products);
     expect(list(el).courses).toEqual([oneCourse]);
     expect(el.shadowRoot!.querySelector('select[name="product-menu"]')).toBeNull();
+  });
+
+  it("shows a product's new takeaway rate when its rates change", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const changed = products.map((product) => ({ ...product, takeawayVatRate: "21.00" }));
+    vi.mocked(api.listProducts).mockResolvedValue(changed);
+    api.liveData.invalidate([{ type: "product_takeaway_vat_rates" }]);
+    await vi.waitFor(() => expect(list(el).products).toEqual(changed));
+    expect(api.listProducts).toHaveBeenCalledTimes(2);
   });
 
   it("keeps products available when the optional folder routing read is refused", async () => {
@@ -2756,7 +2767,7 @@ describe("menu-screen", () => {
               allergens: null,
               unitPrice: "8.50",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "c1",
               courseId: null,
             },
@@ -2786,7 +2797,7 @@ describe("menu-screen", () => {
         image: null,
         unitPrice: "8.50",
         vatClass: "reduced",
-        takeawayVatClass: "reduced",
+        takeawayVatRate: "10.00",
         unitId: "u1",
         primaryCategoryId: "c1",
         courseId: null,
@@ -3559,13 +3570,17 @@ it("closing a guarded linked product retires its field query before opening anot
 it("waits for the venue's VAT default before enabling Add product", async () => {
   let resolve!: (value: {
     defaultProductVatClass: "reduced";
+    defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
+    vatRates: string[];
   }) => void;
   const pending = new Promise<{
     defaultProductVatClass: "reduced";
+    defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
+    vatRates: string[];
   }>((yes) => {
     resolve = yes;
   });
@@ -3582,7 +3597,13 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
-  resolve({ defaultProductVatClass: "reduced", defaultColor: null, takeawayVat: false });
+  resolve({
+    defaultProductVatClass: "reduced",
+    defaultTakeawayVatRate: "10.00",
+    defaultColor: null,
+    takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
+  });
   await pending;
   await flush(el);
   expect((await add()).disabled).toBe(false);
@@ -3636,8 +3657,10 @@ it("paints All products' square, an uncategorised product and a new product's in
 
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "general",
+    defaultTakeawayVatRate: "10.00",
     defaultColor: "#256bb1",
     takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
   });
   liveData.refresh();
   await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
@@ -3673,8 +3696,10 @@ it("reads the venue's default into a new editor without replacing an open draft"
   await editor(el).updateComplete;
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "reduced",
+    defaultTakeawayVatRate: "10.00",
     defaultColor: null,
     takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
   });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
@@ -3746,7 +3771,7 @@ describe("archived product entry", () => {
                   allergens: null,
                   unitPrice: "8.50",
                   vatClass: "reduced",
-                  takeawayVatClass: "reduced",
+                  takeawayVatRate: "10.00",
                   primaryCategoryId: "c1",
                 },
               },

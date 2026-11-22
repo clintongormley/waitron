@@ -574,7 +574,7 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
   const preview = (line: OrderLine) => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft-1", [line]);
-    return { vatBreakdown: store.vatBreakdown, total: store.total };
+    return { total: store.total };
   };
 
   it("keeps a weighed dish no longer offered at its exact quantity, and the preview reads it", () => {

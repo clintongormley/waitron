@@ -26,6 +26,7 @@ import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT } from "./units.js";
 import { selectMenuVariant } from "./variants.js";
+import { setTakeawayVatRate } from "./takeaway-vat-rates.js";
 import {
   effectiveProductColumns,
   INHERITED_KEYS,
@@ -113,6 +114,7 @@ beforeEach(async () => {
       unitId: glass.id,
       unitPrice: "4.00",
       vatClass: "reduced",
+      takeawayVatRate: "21.00",
       allergens: PARENT_ALLERGENS,
       dietOverride: { vegan: "yes" },
       dietaryDeclarations: ["vegan"],
@@ -123,7 +125,6 @@ beforeEach(async () => {
       .set({
         courseId: course!.id,
         color: "#256bb1",
-        takeawayVatClass: "general",
       })
       .where(eq(products.id, parent.id));
     // Every inherited field null — dietary declarations as an EXPLICIT null, which is what makes
@@ -152,7 +153,6 @@ beforeEach(async () => {
 
         unitPrice: 550,
         vatClass: "general",
-        takeawayVatClass: "zero",
         dietaryDeclarations: ["vegetarian"],
         image: libraryImageName("large.jpg"),
         courseId: ownCourse!.id,
@@ -163,6 +163,7 @@ beforeEach(async () => {
       })
       .returning({ id: products.id });
     await tx.update(products).set({ unitId: largeGlass.id }).where(eq(products.id, wine175!.id));
+    await setTakeawayVatRate(tx, wine175!.id, "0.00");
     await assignMenuToVenue(tx, menu.id);
     return {
       menuId: menu.id,
@@ -212,7 +213,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
-          takeawayVatClass: "general",
+          takeawayVatRate: "21.00",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
           courseId: f.courseId,
@@ -232,7 +233,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
-          takeawayVatClass: "zero",
+          takeawayVatRate: "0.00",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
           courseId: f.ownCourseId,
@@ -253,7 +254,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
-          takeawayVatClass: "general",
+          takeawayVatRate: "21.00",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
           courseId: f.courseId,
@@ -265,7 +266,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
-          takeawayVatClass: "zero",
+          takeawayVatRate: "0.00",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
           courseId: f.ownCourseId,
@@ -584,9 +585,12 @@ describe("effectiveProductColumns, entry by entry", () => {
   });
 });
 
-/** Each inherited column's STORED value, keyed like {@link effectiveProductColumns}. */
+/** Each inherited column's STORED value, keyed like {@link effectiveProductColumns}. A copy's
+ * takeaway class is read from the served-class column. */
 function pickRaw() {
-  return Object.fromEntries(INHERITED_KEYS.map((key) => [key, products[key]])) as {
+  const source = (key: (typeof INHERITED_KEYS)[number]) =>
+    key === "takeawayVatClass" ? "vatClass" : key;
+  return Object.fromEntries(INHERITED_KEYS.map((key) => [key, products[source(key)]])) as {
     [K in (typeof INHERITED_KEYS)[number]]: (typeof products)[K];
   };
 }
@@ -712,11 +716,10 @@ describe("dietary declarations on a variant", () => {
   }
 });
 
-describe("a variant's takeaway VAT class", () => {
-  // Its own takeaway class, else its own main class, else the parent's takeaway class, else the
-  // parent's main class: a variant that changes only its main class is taxed that way taken away
-  // too.
-  it("reads its own, then its own main class, then the parent's takeaway class", async () => {
+describe("a copy's takeaway VAT class", () => {
+  // The served class, its own else its parent's: a product line taken away files at its product's
+  // takeaway rate, so the label a copy carries is the served one, whatever the column holds.
+  it("is its own main class, else the parent's, never the stored takeaway class", async () => {
     const ids = await run(async (tx) => {
       const cola = await createProduct(tx, {
         categoryId: f.bottles,
@@ -743,19 +746,9 @@ describe("a variant's takeaway VAT class", () => {
           })
           .returning({ id: products.id })
           .then(([row]) => row!.id);
-      const water = await createProduct(tx, {
-        categoryId: f.bottles,
-        name: "Water",
-        unitId: null,
-        unitPrice: "1.20",
-        vatClass: "super_reduced",
-      });
-      for (const productId of [cola.id, water.id]) {
-        await addProductToMenu(tx, { menuId: f.menuId, productId, grossPrice: null });
-      }
+      await addProductToMenu(tx, { menuId: f.menuId, productId: cola.id, grossPrice: null });
       return {
         cola: cola.id,
-        water: water.id,
         plain: await variant("Can", 0, {}),
         ownMain: await variant("Bottle", 1, { vatClass: "super_reduced" }),
         ownTakeaway: await variant("Jug", 2, { takeawayVatClass: "zero" }),
@@ -763,29 +756,21 @@ describe("a variant's takeaway VAT class", () => {
     });
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
     const cola = offers.find((o) => o.productId === ids.cola)!;
-    expect(cola.takeawayVatClass).toBe("general");
+    expect(cola.takeawayVatClass).toBe("reduced");
     const takeaway = (id: string) => cola.variants.find((v) => v.id === id)!.takeawayVatClass;
-    expect(takeaway(ids.plain)).toBe("general");
+    expect(takeaway(ids.plain)).toBe("reduced");
     expect(takeaway(ids.ownMain)).toBe("super_reduced");
-    expect(takeaway(ids.ownTakeaway)).toBe("zero");
+    expect(takeaway(ids.ownTakeaway)).toBe("reduced");
     expect(selectMenuVariant(cola, ids.ownMain)).toMatchObject({
       vatClass: "super_reduced",
       takeawayVatClass: "super_reduced",
     });
-    expect(selectMenuVariant(cola, ids.ownTakeaway)).toMatchObject({
-      vatClass: "reduced",
-      takeawayVatClass: "zero",
-    });
-
-    const water = offers.find((o) => o.productId === ids.water)!;
-    expect(water.takeawayVatClass).toBe("super_reduced");
-    expect(selectMenuVariant(water, null).takeawayVatClass).toBe("super_reduced");
   });
 });
 
 describe("INHERITED_KEYS", () => {
-  // Every key below is read from the parent when a variant leaves it blank (a blank takeaway class
-  // reads the variant's own VAT class first); the three names never are.
+  // Every key below is read from the parent when a variant leaves it blank (the takeaway class is
+  // the served one); the three names never are.
   // Pinned whole, so a key added or dropped is a decision somebody makes here rather than by accident.
   it("inherits exactly this set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(

@@ -6,6 +6,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { ResourceIdentity } from "@waitron/shared";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { MENU_CHANGE_SOURCES } from "./classification.js";
 import { saveMenuDefaultColor } from "./settings.js";
@@ -13,6 +14,8 @@ import { saveMenuDefaultColor } from "./settings.js";
 const fx = useMenuDb();
 
 it("announces each saved default colour to live subscribers, so open screens repaint", async () => {
+  // A save answers the effective takeaway default, which the venue's area names.
+  await seedVenue(fx.db);
   await installChangeFeed(fx.db, [...CORE_CHANGE_SOURCES, ...MENU_CHANGE_SOURCES]);
   const announced: ResourceIdentity[] = [];
   const unsubscribe = subscribeToChanges((change) => {

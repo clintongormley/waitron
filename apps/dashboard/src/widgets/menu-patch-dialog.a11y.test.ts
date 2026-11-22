@@ -114,36 +114,6 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("renders a dish's two VAT class fields accessibly where the region charges a takeaway class", async () => {
-    const document = structuredClone(LIVE.document);
-    document.offers["mi-soup"]!.takeawayVatClass = "zero";
-    const api = {
-      getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
-      getMenuPublications: vi.fn(async () => ({
-        timeZone: "Europe/Madrid",
-        live: null,
-        editions: [],
-      })),
-      imageLibraryRequest: vi.fn(),
-    } as unknown as DashboardApi;
-    const { el, host } = await mountWidget<MenuPatchDialog>(
-      "dashboard-menu-patch-dialog",
-      { api, menuId: "menu-lunch", menuName: "Lunch Menu", takeawayVat: true, open: true },
-      theme,
-    );
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
-    );
-    await pick(el, "Soup");
-    // Without this the scan could pass on a form that drew no takeaway field.
-    expect(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        'wt-combobox[name="takeaway-tax"]',
-      )!.value,
-    ).toBe("zero");
-    await expectNoA11yViolations(host);
-  });
-
   it("renders a name an included folder fixes accessibly", async () => {
     const document = structuredClone(LIVE.document);
     const starters = document.root.members[0] as { names: unknown; fixed: unknown };

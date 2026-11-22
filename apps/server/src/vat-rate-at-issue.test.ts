@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   diningTables,
+  productTakeawayVatRates,
   saleLines,
   sales,
   withTransaction,
@@ -190,14 +191,14 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const burger = await product("Hamburguesa", "10.00", "reduced");
     const cheese = await product("Queso", "0.75", "reduced");
     const wine = await product("Vino", "3.63", "general");
-    // Served here at `general`, taken away at `reduced`: the class whose rate the release changes.
+    // Served here at `general`; its takeaway rates are set by the takeaway case.
     const juice = await createProduct(tx, {
       categoryId: null,
       name: "Juice",
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "general",
-      takeawayVatClass: "reduced",
+      takeawayVatRate: "10.00",
     });
     const extras = await createExtraList(
       tx,
@@ -491,9 +492,18 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
   });
 });
 
-describe("a takeaway order's class is rated on the day its invoice is issued", () => {
-  it("a takeaway order parked on the eve files its takeaway class's rate of the day it is paid", async () => {
+describe("a takeaway order's product rate is taken on the day its invoice is issued", () => {
+  it("a takeaway order parked on the eve files its product's takeaway rate of the day it is paid", async () => {
     const v = await setupVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .delete(productTakeawayVatRates)
+        .where(eq(productTakeawayVatRates.productId, v.products.juice));
+      await tx.insert(productTakeawayVatRates).values([
+        { productId: v.products.juice, startsOn: null, rate: 1000 },
+        { productId: v.products.juice, startsOn: "2027-01-01", rate: 400 },
+      ]);
+    });
     at(EVE);
     const eve = await park(v, one(v, v.products.juice));
     const newYear = await park(v, one(v, v.products.juice));

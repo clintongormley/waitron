@@ -26,6 +26,7 @@ import {
   type ShownFolderCounts,
   menuExists,
   readMenuSettings,
+  readVenueVatRates,
   saveMenuDefaultColor,
   type MenuDefaults,
   readContentLanguages,
@@ -129,14 +130,17 @@ import { setProductCourse } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 
-/** The menu's defaults, and whether the venue's region charges a product a second VAT class when
- * it is taken away: it travels here so anyone who may edit products reads it. */
+/** The menu's defaults, whether the venue's region charges a product a second VAT class when it
+ * is taken away, and the takeaway rates a person may pick: they travel here so anyone who may edit
+ * products reads them. */
 async function readMenuSettingsAnswer(
   tx: Transaction,
-): Promise<MenuDefaults & { takeawayVat: boolean }> {
+): Promise<MenuDefaults & { takeawayVat: boolean; vatRates: string[] }> {
+  const rates = await readVenueVatRates(tx);
   return {
-    ...(await readMenuSettings(tx)),
+    ...(await readMenuSettings(tx, rates)),
     takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
+    vatRates: [...rates.pickable],
   };
 }
 
@@ -500,7 +504,13 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
 // Products are shared; menu_items own their offers. Ignoring a retired field would answer success
 // without saving what the caller asked for.
 function refuseRetiredFields(body: Record<string, unknown>): void {
-  for (const retired of ["modifierIds", "optionGroupIds", "soldAlone", "menuId"])
+  for (const retired of [
+    "modifierIds",
+    "optionGroupIds",
+    "soldAlone",
+    "menuId",
+    "takeawayVatClass",
+  ])
     if (body[retired] !== undefined)
       throw new AppError("management.request_invalid", { field: retired });
 }
@@ -1616,7 +1626,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         pricingUnit?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
-        takeawayVatClass?: unknown;
+        takeawayVatRate?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;
@@ -1676,8 +1686,10 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
-        // `createProduct` refuses a value that is not a VAT class.
-        takeawayVatClass: (body.takeawayVatClass ?? null) as never,
+        // `createProduct` refuses a rate the area does not offer; omitted takes the venue's default.
+        ...(body.takeawayVatRate === undefined
+          ? {}
+          : { takeawayVatRate: body.takeawayVatRate as string }),
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
         ...(body.dietOverride === undefined
           ? {}

@@ -1,7 +1,14 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, products, settings, VENUE_SETTINGS, withTransaction } from "@waitron/db";
+import {
+  kitchenCourses,
+  products,
+  productTakeawayVatRates,
+  settings,
+  VENUE_SETTINGS,
+  withTransaction,
+} from "@waitron/db";
 import { seedBusinessDay, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -10,6 +17,7 @@ import { createCategory } from "./categories.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
+import { readTakeawayVatSchedules } from "./takeaway-vat-rates.js";
 import {
   countingSettingsReads,
   plantStoredCategory,
@@ -50,7 +58,7 @@ beforeEach(async () => {
     active: true,
     available: false,
     vatClass: "reduced",
-    takeawayVatClass: "general",
+    takeawayVatRate: "21.00",
     image: null,
     variants: [
       {
@@ -206,18 +214,170 @@ it("saves and reads the canonical editor shape with independent content and vari
   });
 });
 
-it("saves a product's takeaway class and clears it to none", async () => {
-  const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
-  expect(saved.takeawayVatClass).toBe("general");
-  const cleared = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, saved.id, { ...saved, takeawayVatClass: null }, "en"),
-  );
-  expect(cleared.takeawayVatClass).toBeNull();
-  const [row] = await fx.db
-    .select({ takeawayVatClass: products.takeawayVatClass })
-    .from(products)
-    .where(eq(products.id, saved.id));
-  expect(row!.takeawayVatClass).toBeNull();
+describe("a product's and a variant's takeaway VAT rate", () => {
+  const saveNew = (body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, null, body, "en"));
+  const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
+  const save = (id: string, body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, body, "en"));
+  const listedVariant = async (parentId: string, variantId: string) =>
+    (await withTransaction(fx.db, (tx) => listProducts(tx)))
+      .find((product) => product.id === parentId)!
+      .variants.find((variant) => variant.id === variantId)!;
+
+  it("round-trips a product's rate, stored as one row from the beginning of time", async () => {
+    const saved = await saveNew({ ...input, takeawayVatRate: "4.00" });
+    expect(saved.takeawayVatRate).toBe("4.00");
+    expect((await read(saved.id)).takeawayVatRate).toBe("4.00");
+    const schedules = await withTransaction(fx.db, (tx) =>
+      readTakeawayVatSchedules(tx, [saved.id]),
+    );
+    expect(schedules.get(saved.id)).toEqual([{ from: null, rate: "4.00" }]);
+    expect(await save(saved.id, { ...saved, takeawayVatRate: "10.00" })).toMatchObject({
+      takeawayVatRate: "10.00",
+    });
+  });
+
+  it("reads a variant without a rate of its own as null, carrying its parent's", async () => {
+    const saved = await saveNew({ ...input, takeawayVatRate: "4.00" });
+    const variantId = saved.variants[0]!.id;
+    const variant = await read(variantId);
+    expect(variant.takeawayVatRate).toBeNull();
+    expect(variant.inherited!.takeawayVatRate).toBe("4.00");
+    expect((await listedVariant(saved.id, variantId)).effective.takeawayVatRate).toBe("4.00");
+  });
+
+  it("reads a variant set to its own rate as its own, and a blank gives it back its parent's", async () => {
+    const saved = await saveNew({ ...input, takeawayVatRate: "4.00" });
+    const variantId = saved.variants[0]!.id;
+    const value = await read(variantId);
+    expect(await save(variantId, { ...value, takeawayVatRate: "21.00" })).toMatchObject({
+      takeawayVatRate: "21.00",
+      inherited: { takeawayVatRate: "4.00" },
+    });
+    expect((await listedVariant(saved.id, variantId)).effective.takeawayVatRate).toBe("21.00");
+    const listedParent = (await withTransaction(fx.db, (tx) => listProducts(tx))).find(
+      (product) => product.id === saved.id,
+    )!;
+    expect(listedParent.takeawayVatRate).toBe("4.00");
+    expect(await save(variantId, value)).toEqual(value);
+    expect((await listedVariant(saved.id, variantId)).effective.takeawayVatRate).toBe("4.00");
+  });
+
+  it("lists the rate in force on the venue's date today", async () => {
+    await seedBusinessDay(fx.db);
+    const saved = await saveNew({ ...input, takeawayVatRate: "10.00" });
+    await fx.db.insert(productTakeawayVatRates).values([
+      { productId: saved.id, startsOn: "2000-01-01", rate: 400 },
+      { productId: saved.id, startsOn: "2999-01-01", rate: 2100 },
+    ]);
+    const listed = (await withTransaction(fx.db, (tx) => listProducts(tx))).find(
+      (product) => product.id === saved.id,
+    )!;
+    expect(listed.takeawayVatRate).toBe("4.00");
+    expect((await read(saved.id)).takeawayVatRate).toBe("4.00");
+  });
+
+  const ownRows = (productId: string) =>
+    fx.db
+      .select({ startsOn: productTakeawayVatRates.startsOn, rate: productTakeawayVatRates.rate })
+      .from(productTakeawayVatRates)
+      .where(eq(productTakeawayVatRates.productId, productId))
+      .orderBy(productTakeawayVatRates.startsOn);
+  const datedRows = [
+    { startsOn: null, rate: 1000 },
+    { startsOn: "2000-01-01", rate: 400 },
+    { startsOn: "2999-01-01", rate: 2100 },
+  ];
+
+  it("keeps a product's and a variant's dated rows when a save leaves today's rate as it was", async () => {
+    await seedBusinessDay(fx.db);
+    const saved = await saveNew({ ...input, takeawayVatRate: "10.00" });
+    const variantId = saved.variants[0]!.id;
+    await save(variantId, { ...(await read(variantId)), takeawayVatRate: "10.00" });
+    await fx.db
+      .delete(productTakeawayVatRates)
+      .where(sql`${productTakeawayVatRates.productId} in (${saved.id}, ${variantId})`);
+    await fx.db
+      .insert(productTakeawayVatRates)
+      .values([
+        ...datedRows.map((row) => ({ productId: saved.id, ...row })),
+        ...datedRows.map((row) => ({ productId: variantId, ...row })),
+      ]);
+    const product = await read(saved.id);
+    expect(product.takeawayVatRate).toBe("4.00");
+    await save(saved.id, { ...product, name: "Coffee renamed" });
+    expect(await ownRows(saved.id)).toEqual(datedRows);
+    const variant = await read(variantId);
+    expect(variant.takeawayVatRate).toBe("4.00");
+    await save(variantId, { ...variant, name: "Small renamed" });
+    expect(await ownRows(variantId)).toEqual(datedRows);
+    expect(await ownRows(saved.id)).toEqual(datedRows);
+  });
+
+  it("keeps a variant taking its parent's rate without rows when a save sends none", async () => {
+    const saved = await saveNew({ ...input, takeawayVatRate: "4.00" });
+    const variantId = saved.variants[0]!.id;
+    const variant = await read(variantId);
+    expect(variant.takeawayVatRate).toBeNull();
+    await save(variantId, { ...variant, name: "Small renamed" });
+    expect(await ownRows(variantId)).toEqual([]);
+    expect(await ownRows(saved.id)).toEqual([{ startsOn: null, rate: 400 }]);
+  });
+
+  it("replaces a product's dated rows with one from the beginning of time when today's rate changes", async () => {
+    await seedBusinessDay(fx.db);
+    const saved = await saveNew({ ...input, takeawayVatRate: "10.00" });
+    await fx.db
+      .insert(productTakeawayVatRates)
+      .values(datedRows.slice(1).map((row) => ({ productId: saved.id, ...row })));
+    const product = await read(saved.id);
+    expect(product.takeawayVatRate).toBe("4.00");
+    await save(saved.id, { ...product, takeawayVatRate: "10.00" });
+    expect(await ownRows(saved.id)).toEqual([{ startsOn: null, rate: 1000 }]);
+  });
+
+  it("refuses a product with no rate, or a blank one", async () => {
+    for (const body of [
+      { ...input, takeawayVatRate: undefined },
+      { ...input, takeawayVatRate: null },
+    ])
+      await expect(saveNew(body)).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "takeawayVatRate" },
+      });
+  });
+
+  it("refuses a rate the area does not offer", async () => {
+    await expect(saveNew({ ...input, takeawayVatRate: "5.00" })).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "takeawayVatRate" },
+    });
+  });
+
+  it("refuses a rate the area does not offer on an existing product", async () => {
+    const saved = await saveNew(input);
+    await expect(save(saved.id, { ...saved, takeawayVatRate: "5.00" })).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "takeawayVatRate" },
+    });
+  });
+
+  it("refuses a rate the area does not offer on a variant", async () => {
+    const saved = await saveNew(input);
+    const variantId = saved.variants[0]!.id;
+    await expect(
+      save(variantId, { ...(await read(variantId)), takeawayVatRate: "5.00" }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });
+  });
+
+  it("refuses a body still naming the retired takeaway VAT class", async () => {
+    for (const takeawayVatClass of ["general", null])
+      await expect(saveNew({ ...input, takeawayVatClass })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "takeawayVatClass" },
+      });
+  });
 });
 
 it("saves a product's own colour, lists it, and clears it", async () => {
@@ -668,7 +828,7 @@ describe("a variant's own page", () => {
       unitId: null,
       unitPrice: "2.00",
       vatClass: null,
-      takeawayVatClass: null,
+      takeawayVatRate: null,
       primaryCategoryId: null,
       color: null,
       allergens: null,
@@ -682,7 +842,7 @@ describe("a variant's own page", () => {
         image: libraryImageName("coffee.webp"),
         unitPrice: "9.00",
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatRate: "21.00",
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
         courseId: routing.courseId,
@@ -695,30 +855,25 @@ describe("a variant's own page", () => {
     expect(parent.inherited).toBeNull();
   });
 
-  it("reads its parent's main class as the takeaway class it inherits when the parent has none", async () => {
-    await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { takeawayVatClass: null }));
-    expect((await read(variantId)).inherited).toMatchObject({
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
-    });
-  });
-
-  it("stores a variant's own takeaway class, and a blank clears it", async () => {
+  it("stores a variant's own takeaway rate, and a blank clears it", async () => {
     const value = await read(variantId);
-    expect(await save(variantId, { ...value, takeawayVatClass: "zero" })).toMatchObject({
-      takeawayVatClass: "zero",
+    expect(await save(variantId, { ...value, takeawayVatRate: "0.00" })).toMatchObject({
+      takeawayVatRate: "0.00",
       inherited: value.inherited,
     });
     const stored = async () =>
       (
         await fx.db
-          .select({ takeawayVatClass: products.takeawayVatClass })
-          .from(products)
-          .where(eq(products.id, variantId))
-      )[0]!.takeawayVatClass;
-    expect(await stored()).toBe("zero");
+          .select({
+            startsOn: productTakeawayVatRates.startsOn,
+            rate: productTakeawayVatRates.rate,
+          })
+          .from(productTakeawayVatRates)
+          .where(eq(productTakeawayVatRates.productId, variantId))
+      ).map((row) => [row.startsOn, row.rate]);
+    expect(await stored()).toEqual([[null, 0]]);
     expect(await save(variantId, value)).toEqual(value);
-    expect(await stored()).toBeNull();
+    expect(await stored()).toEqual([]);
   });
 
   it("reads the parent's current staff name after a rename", async () => {

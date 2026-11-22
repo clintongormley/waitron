@@ -99,7 +99,6 @@ function checkedValue(change: number, field: string, value: unknown): unknown {
       if (typeof value !== "string" || !isProductPrice(value)) throw invalid(change, field);
       return value;
     case "vatClass":
-    case "takeawayVatClass":
       if (!(VAT_CLASSES as readonly unknown[]).includes(value)) throw invalid(change, field);
       return value;
     default:

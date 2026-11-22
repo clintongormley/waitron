@@ -112,6 +112,11 @@ function vatClass(value: unknown, field: string): VatClass {
   if (!VAT_CLASSES.includes(value as VatClass)) invalid(field);
   return value as VatClass;
 }
+/** Whether the rate is one the area offers is checked in the transaction, which reads the area. */
+function rate(value: unknown, field: string): string {
+  if (typeof value !== "string") invalid(field);
+  return value;
+}
 /** A variant has no variants or attached lists of its own, so only an empty one is taken. */
 function emptyOnVariant<T>(values: T[], field: string, isVariant: boolean): T[] {
   if (isVariant && values.length > 0) invalid(field);
@@ -161,8 +166,9 @@ export function parseProductEditorInput(
   // A variant's colour is always its parent's.
   if (isVariant && color !== null) invalid("color");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
-  const takeawayTax =
-    body.takeawayVatClass === null ? null : vatClass(body.takeawayVatClass, "takeawayVatClass");
+  // `takeawayVatRate` replaced it. Refused rather than ignored, as `soldAlone` is.
+  if (body.takeawayVatClass !== undefined) invalid("takeawayVatClass");
+  const takeawayRate = inheritable(body.takeawayVatRate, "takeawayVatRate", isVariant, rate);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
   const seen = new Set<string>();
@@ -210,7 +216,7 @@ export function parseProductEditorInput(
     active: boolean(body.active, "active"),
     ...(body.available === undefined ? {} : { available: boolean(body.available, "available") }),
     vatClass: tax,
-    takeawayVatClass: takeawayTax,
+    takeawayVatRate: takeawayRate,
     variants,
     primaryCategoryId,
     color,

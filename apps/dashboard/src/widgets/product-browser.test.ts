@@ -59,7 +59,7 @@ const product = (
   pricingUnit: "each",
   unitPrice: "2.00",
   vatClass: "reduced",
-  takeawayVatClass: "reduced",
+  takeawayVatRate: "10.00",
   available: true,
   ordering: "public",
   allergens: null,
@@ -1172,7 +1172,7 @@ it("searches a folder's own name and a product's variant names, never a product'
               allergens: null,
               unitPrice: "2.00",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
             },
@@ -1515,7 +1515,11 @@ it.each([
   async (locale, heading) => {
     setLocale(locale);
     const el = await mountBrowser({ defaultColor: "#b12525" });
-    let finish!: (value: { defaultProductVatClass: "general"; defaultColor: string }) => void;
+    let finish!: (value: {
+      defaultProductVatClass: "general";
+      defaultTakeawayVatRate: "10.00";
+      defaultColor: string;
+    }) => void;
     vi.mocked(el.api.saveMenuDefaultColor).mockImplementationOnce(
       () => new Promise((resolve) => (finish = resolve)),
     );
@@ -1533,7 +1537,11 @@ it.each([
     await el.updateComplete;
     expect(vi.mocked(el.api.saveMenuDefaultColor).mock.calls).toStrictEqual([["#256bb1"]]);
     expect(chooserClosed(el)).toBe(false);
-    finish({ defaultProductVatClass: "general", defaultColor: "#256bb1" });
+    finish({
+      defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: "#256bb1",
+    });
     await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
     expect(el.api.updateCategory).not.toHaveBeenCalled();
   },
@@ -1747,7 +1755,7 @@ it("keeps a variant match on its parent until the manager expands it", async () 
               allergens: null,
               unitPrice: "2.00",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
             },
@@ -1842,7 +1850,7 @@ it("selects folders and products but never variants", async () => {
               allergens: null,
               unitPrice: "2.00",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
             },
@@ -4425,7 +4433,7 @@ it("A462 Products root reopening leaves product variants closed", async () => {
               allergens: null,
               unitPrice: "2.00",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
             },
@@ -4721,7 +4729,7 @@ it("names active descendant and variant extras only when deleting folder content
         allergens: null,
         unitPrice: "2.00",
         vatClass: "reduced",
-        takeawayVatClass: "reduced",
+        takeawayVatRate: "10.00",
         primaryCategoryId: "b",
         courseId: null,
       },
@@ -4741,7 +4749,7 @@ it("names active descendant and variant extras only when deleting folder content
         allergens: null,
         unitPrice: "2.00",
         vatClass: "reduced",
-        takeawayVatClass: "reduced",
+        takeawayVatRate: "10.00",
         primaryCategoryId: "b",
         courseId: null,
       },

@@ -1140,6 +1140,8 @@ export const en = {
   "printers.seen_on": "Seen on",
   "menu_settings.default_vat": "VAT class for new products",
   "menu_settings.invalid": "Choose a VAT class for new products.",
+  "menu_settings.default_takeaway_vat": "New products start at (VAT when taken away)",
+  "menu_settings.takeaway_invalid": "Choose the VAT when taken away for new products.",
   "action.save": "Save",
   ...TABLE_CUSTOMISATION_STRINGS.en,
   "table.filters": "Filters",
@@ -1209,7 +1211,8 @@ export const en = {
     "Cancels archiving this variant. Archiving happens only when you save the product.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
-  "help.products.vat": "The VAT class. Publish the menu again to use a changed class at the tills.",
+  "help.products.vat":
+    "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
   "help.products.course":
     "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
   "help.products.variants":
@@ -2799,8 +2802,9 @@ export const en = {
   "editor.price_invalid": "Enter a nonnegative price with at most two decimal places.",
   "editor.tax_required": "Choose a tax treatment.",
   "editor.takeaway_vat": "VAT when taken away",
-  "editor.takeaway_vat_same": "Same as served here — {tax}",
-  "editor.takeaway_vat_gone": "This class is no longer offered. Choose another, or leave it empty.",
+  "editor.takeaway_vat_same": "Same as {product} — {rate}%",
+  "editor.takeaway_vat_required": "Choose the VAT when taken away.",
+  "editor.rate_percent": "{rate}%",
   "editor.variant_name_required": "Enter a variant name.",
   "editor.variants": "Variants",
   "editor.variant": "Variant",
@@ -3585,6 +3589,7 @@ export const en = {
   "menus.set_menu_help":
     "The set price covers the dishes and quantities you include. Set a surcharge on a dish or variant to charge extra for it. Place the set menu in a full menu and publish that menu to send changes to the tills.",
   "menus.set_menu_terms": "Name, price and VAT",
+  "menus.set_takeaway_vat_same": "Same as served here — {tax}",
   "menus.set_menu_price": "Price per set menu",
   "menus.set_menu_eat_in_vat": "Eat-in VAT",
   "menus.set_menu_load_error": "The set menu could not be loaded.",
@@ -5846,6 +5851,8 @@ export const es: Record<StringKey, string> = {
   "printers.seen_on": "Detectada en",
   "menu_settings.default_vat": "Clase de IVA para productos nuevos",
   "menu_settings.invalid": "Elige una clase de IVA para productos nuevos.",
+  "menu_settings.default_takeaway_vat": "Los productos nuevos empiezan con (IVA para llevar)",
+  "menu_settings.takeaway_invalid": "Elige el IVA para llevar de los productos nuevos.",
   "action.save": "Guardar",
   ...TABLE_CUSTOMISATION_STRINGS.es,
   "table.filters": "Filtros",
@@ -5916,7 +5923,7 @@ export const es: Record<StringKey, string> = {
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
   "help.products.vat":
-    "La clase de IVA. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
+    "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
@@ -7547,8 +7554,9 @@ export const es: Record<StringKey, string> = {
   "editor.price_invalid": "Introduce un precio no negativo con un máximo de dos decimales.",
   "editor.tax_required": "Elige un tratamiento fiscal.",
   "editor.takeaway_vat": "IVA para llevar",
-  "editor.takeaway_vat_same": "Igual que en el local — {tax}",
-  "editor.takeaway_vat_gone": "Esta clase ya no se ofrece. Elige otra o déjalo vacío.",
+  "editor.takeaway_vat_same": "Igual que {product} — {rate} %",
+  "editor.takeaway_vat_required": "Elige el IVA para llevar.",
+  "editor.rate_percent": "{rate} %",
   "editor.variant_name_required": "Introduce un nombre de variante.",
   "editor.variants": "Variantes",
   "editor.variant": "Variante",
@@ -8337,6 +8345,7 @@ export const es: Record<StringKey, string> = {
   "menus.set_menu_help":
     "El precio fijo cubre los platos y las cantidades que incluyas. Añade un suplemento a un plato o variante para cobrar un extra. Inserta la carta a precio fijo en una carta completa y publícala para enviar los cambios a las cajas.",
   "menus.set_menu_terms": "Nombre, precio e IVA",
+  "menus.set_takeaway_vat_same": "Igual que en el local — {tax}",
   "menus.set_menu_price": "Importe por carta a precio fijo",
   "menus.set_menu_eat_in_vat": "IVA para comer aquí",
   "menus.set_menu_load_error": "No se ha podido cargar la carta a precio fijo.",

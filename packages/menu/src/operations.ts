@@ -20,7 +20,6 @@ import {
   type DietOverride,
   validateDietaryDeclarations,
   type DietaryLabel,
-  VAT_CLASSES,
 } from "@waitron/shared";
 import {
   menus,
@@ -35,10 +34,14 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
+import { readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
   insertFirstTakeawayVatRate,
+  readTakeawayVatSchedules,
   readVenueVatRates,
+  setTakeawayVatRate,
+  takeawayVatRatesToday,
 } from "./takeaway-vat-rates.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
@@ -135,9 +138,8 @@ export interface CreateProductInput {
   pricingUnit?: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
-  /** Omitted or null leaves it empty. */
-  takeawayVatClass?: VatClass | null;
-  /** One of the area's pickable rates ("10.00"); omitted takes the area's takeaway default. */
+  /** One of the area's pickable rates ("10.00"); omitted takes the venue's default for new
+   * products. */
   takeawayVatRate?: string;
   /** Omitted leaves it null (unreviewed). */
   allergens?: ProductAllergens;
@@ -165,8 +167,9 @@ export interface UpdateProductInput {
    * product with no parent, as it does a blank `vatClass` and `dietaryDeclarations`. */
   unitPrice?: string | null;
   vatClass?: VatClass | null;
-  /** `null` empties it, on a product or a variant. */
-  takeawayVatClass?: VatClass | null;
+  /** Replaces the product's takeaway rates with this one from the beginning of time
+   * (`setTakeawayVatRate`); `null` clears a variant's, which then takes its parent's. */
+  takeawayVatRate?: string | null;
   /** `null` clears the unit (a product then reads as Each); a real id sets it, on a product with no
    * parent only; omitted leaves it unchanged unless the legacy `pricingUnit` is supplied. */
   unitId?: string | null;
@@ -218,7 +221,6 @@ const PRODUCT_BASE_COLUMNS = {
   ordering: products.ordering,
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
-  takeawayVatClass: products.takeawayVatClass,
   active: products.active,
   available: products.available,
   allergens: effective.allergens,
@@ -262,7 +264,6 @@ interface RawProduct {
   /** Cents, as the column stores it; `toProduct` is where it becomes the amount callers see. */
   unitPrice: number;
   vatClass: string;
-  takeawayVatClass: string | null;
   active: boolean;
   available: boolean;
   allergens: ProductAllergens | null;
@@ -281,7 +282,11 @@ interface RawProduct {
   courseId: string | null;
 }
 
-function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
+function toProduct(
+  row: RawProduct,
+  takeawayVatRate: string,
+  variants: ListedVariant[] = [],
+): Product {
   const {
     unitName,
     unitAbbreviation,
@@ -312,7 +317,7 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
     unitId: unit.id,
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     vatClass: row.vatClass as VatClass,
-    takeawayVatClass: row.takeawayVatClass as VatClass | null,
+    takeawayVatRate,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
     variants,
@@ -963,8 +968,8 @@ export async function deactivateMenu(
     });
 }
 
-/** A caller creating several products passes `rates` from one {@link readVenueVatRates}; without
- * it the area is read here. */
+/** A caller creating several products passes `rates` from one {@link readNewProductVatRates},
+ * whose `defaultTakeaway` an omitted `takeawayVatRate` takes; without it they are read here. */
 export async function createProduct(
   tx: Transaction,
   input: CreateProductInput,
@@ -1015,9 +1020,6 @@ async function insertProduct(
   const unitAction = await resolveUnitAction(tx, input.unitId, input.pricingUnit);
   if (unitAction.kind === "keep") throw new AppError("product.invalid", { field: "unitId" });
   const selectedUnit = unitAction.kind === "set" ? unitAction.unit : null;
-  const takeawayVatClass = input.takeawayVatClass ?? null;
-  if (takeawayVatClass !== null && !VAT_CLASSES.includes(takeawayVatClass))
-    throw new AppError("product.invalid", { field: "takeawayVatClass" });
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
@@ -1029,7 +1031,6 @@ async function insertProduct(
     dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
     unitPrice: stringToCents(input.unitPrice),
     vatClass: input.vatClass,
-    takeawayVatClass,
     active: input.active ?? true,
     available: input.available ?? true,
     ordering: input.ordering ?? "public",
@@ -1040,7 +1041,11 @@ async function insertProduct(
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
-  const areaRates = rates ?? (await readVenueVatRates(tx, venue));
+  const areaRates =
+    rates ??
+    (input.takeawayVatRate === undefined
+      ? await readNewProductVatRates(tx, venue)
+      : await readVenueVatRates(tx, venue));
   const takeawayVatRate = checkPickableTakeawayVatRate(
     input.takeawayVatRate === undefined ? areaRates.defaultTakeaway : input.takeawayVatRate,
     areaRates,
@@ -1054,7 +1059,7 @@ async function insertProduct(
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
     .where(eq(products.id, row!.id));
-  return toProduct(created!);
+  return toProduct(created!, takeawayVatRate);
 }
 
 export async function listProducts(tx: Transaction): Promise<Product[]> {
@@ -1071,23 +1076,26 @@ export async function listProducts(tx: Transaction): Promise<Product[]> {
     rows.map((row) => row.id),
   );
   // A variant is listed under its parent, never on its own; Inactive ones too, for the dashboard.
-  const variantsByProduct = await listedVariantsOfProducts(
+  const variantRows = await listedVariantRows(
     tx,
     rows.map((row) => row.id),
   );
+  const ids = [...rows.map((row) => row.id), ...variantRows.map((row) => row.id)];
+  const schedules = await readTakeawayVatSchedules(tx, ids);
+  // An empty list makes `takeawayVatRatesToday` refuse a product with no rows (plan D3).
+  for (const id of ids) if (!schedules.has(id)) schedules.set(id, []);
+  const rates = await takeawayVatRatesToday(tx, schedules);
+  const variantsByProduct = groupListedVariants(variantRows, rates);
   return rows.map((row) => ({
-    ...toProduct(row, variantsByProduct.get(row.id) ?? []),
+    ...toProduct(row, rates.get(row.id)!, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }
 
 /** Every variant of each product in `productIds`, Inactive ones included, in variant order, with
  * the values it carries once its blanks read as its parent's. */
-async function listedVariantsOfProducts(
-  tx: Transaction,
-  productIds: readonly string[],
-): Promise<Map<string, ListedVariant[]>> {
-  const rows = await tx
+async function listedVariantRows(tx: Transaction, productIds: readonly string[]) {
+  return tx
     .select({
       parentId: products.parentId,
       id: products.id,
@@ -1102,7 +1110,6 @@ async function listedVariantsOfProducts(
       active: products.active,
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
-      takeawayVatClass: effective.takeawayVatClass,
       primaryCategoryId: effective.categoryId,
       courseId: products.courseId,
       effectiveCourseId: effective.courseId,
@@ -1111,6 +1118,13 @@ async function listedVariantsOfProducts(
     .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.parentId, [...productIds]))
     .orderBy(products.parentId, products.variantOrder, products.id);
+}
+
+/** {@link listedVariantRows} grouped by parent, each carrying its takeaway rate today from `rates`. */
+function groupListedVariants(
+  rows: Awaited<ReturnType<typeof listedVariantRows>>,
+  rates: ReadonlyMap<string, string>,
+): Map<string, ListedVariant[]> {
   const grouped = new Map<string, ListedVariant[]>();
   for (const {
     parentId,
@@ -1119,7 +1133,6 @@ async function listedVariantsOfProducts(
     allergens,
     unitPrice,
     vatClass,
-    takeawayVatClass,
     primaryCategoryId,
     effectiveCourseId,
     ...row
@@ -1133,7 +1146,7 @@ async function listedVariantsOfProducts(
         allergens,
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
-        takeawayVatClass,
+        takeawayVatRate: rates.get(row.id)!,
         primaryCategoryId,
         courseId: effectiveCourseId,
       },
@@ -1193,6 +1206,7 @@ async function patchProduct(
     unitId,
     pricingUnit,
     unitPrice,
+    takeawayVatRate,
     ...rest
   } = patch;
   const assertColor = () => {
@@ -1233,6 +1247,7 @@ async function patchProduct(
     .where(eq(products.id, id));
   if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
   else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
+  if (takeawayVatRate !== undefined) await setTakeawayVatRate(tx, id, takeawayVatRate);
 }
 
 export async function deactivateProduct(

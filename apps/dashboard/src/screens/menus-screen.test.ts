@@ -120,7 +120,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     pricingUnit: "each",
     unitPrice: "2.00",
     vatClass: "general",
-    takeawayVatClass: "general",
+    takeawayVatRate: "21.00",
     active: true,
     available: true,
     ordering: "public",
@@ -355,7 +355,7 @@ function variantProducts(): Product[] {
       allergens: null,
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
-      takeawayVatClass: "general" as const,
+      takeawayVatRate: "21.00",
       primaryCategoryId: "c-drinks",
       courseId: null,
     },
@@ -10436,22 +10436,21 @@ describe("patching the live menu", () => {
     expect(dialog(el).open).toBe(true);
   });
 
-  it.each([true, false])(
-    "tells the patch dialog whether the region charges a takeaway class (%s)",
-    async (takeawayVat) => {
-      const el = await mountLunch(
-        currentLunch({
-          getMenuSettings: vi.fn().mockResolvedValue({
-            defaultProductVatClass: "general",
-            defaultColor: null,
-            takeawayVat,
-          }),
+  it("hands the patch dialog no takeaway VAT switch, since a live menu's patch offers no takeaway VAT", async () => {
+    const el = await mountLunch(
+      currentLunch({
+        getMenuSettings: vi.fn().mockResolvedValue({
+          defaultProductVatClass: "general",
+          defaultTakeawayVatRate: "10.00",
+          defaultColor: null,
+          takeawayVat: true,
+          vatRates: ["0.00", "4.00", "10.00", "21.00"],
         }),
-      );
-      await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-      expect(dialog(el).takeawayVat).toBe(takeawayVat);
-    },
-  );
+      }),
+    );
+    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    expect("takeawayVat" in dialog(el)).toBe(false);
+  });
 
   it("does not reopen the patch dialog on coming back to a menu left while it was open", async () => {
     const el = await mountLunch(currentLunch());

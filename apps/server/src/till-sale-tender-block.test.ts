@@ -34,7 +34,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { readTenderBlock } from "./till-sale.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder, priceStoredOrderForIssuance } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -170,14 +170,10 @@ async function seedSale(
 ): Promise<{ saleId: ReturnType<typeof brandSaleId>; workingOrderId: string }> {
   const workingOrderId = randomUUID();
   const settledAt = new Date();
-  const { gross } = await createOpenOrder(
-    tx,
-    cfg,
-    workingOrderId,
-    [{ menuItemId, quantity: "1" }],
-    null,
-    { zoneId },
-  );
+  await createOpenOrder(tx, cfg, workingOrderId, [{ menuItemId, quantity: "1" }], null, {
+    zoneId,
+  });
+  const { gross } = await priceStoredOrderForIssuance(tx, workingOrderId);
   const priced = rateLines(gross, "2026-09-27");
   const { saleId } = await recordSale(tx, backend, {
     operationDescription: "Venta en establecimiento",
@@ -341,14 +337,10 @@ describe("readTenderBlock", () => {
 
     const { block, written } = await withTransaction(suite.db, async (tx) => {
       const workingOrderId = randomUUID();
-      const { gross } = await createOpenOrder(
-        tx,
-        cfg,
-        workingOrderId,
-        [{ menuItemId, quantity: "1" }],
-        null,
-        { zoneId },
-      );
+      await createOpenOrder(tx, cfg, workingOrderId, [{ menuItemId, quantity: "1" }], null, {
+        zoneId,
+      });
+      const { gross } = await priceStoredOrderForIssuance(tx, workingOrderId);
       const priced = rateLines(gross, "2026-09-27");
       const { saleId } = await recordSale(tx, backend, {
         operationDescription: "Venta en establecimiento",

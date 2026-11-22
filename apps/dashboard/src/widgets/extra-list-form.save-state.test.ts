@@ -51,7 +51,7 @@ function product(id: string, name: string, unitPrice: string, unit = EACH): Prod
     pricingUnit: "each",
     unitPrice,
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
+    takeawayVatRate: "10.00",
     active: true,
     available: true,
     ordering: "not_sold_separately",

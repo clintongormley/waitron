@@ -22,15 +22,17 @@ import {
   customerPresentationText,
   listMenuOffers,
   priceBasket,
+  readTakeawayVatSchedules,
   selectMenuVariant,
   setProductVariants,
+  setTakeawayVatRate,
   type BasketItem,
   type MenuOffer,
 } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
+import type { DatedRate, DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -755,6 +757,108 @@ describe("a variant line is filed at its own effective VAT rate", () => {
     const desglose = await withTransaction(pg.db, async (tx) => {
       const { offer, wine125, wine175 } = await wineOffer(tx);
       const priced = priceBasket([lineFor(offer, wine125), lineFor(offer, wine175)]);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({
+          nodeId,
+          seriesId,
+          total: priced.total,
+          lines: priced.lines,
+          vatBreakdown: priced.vatBreakdown,
+          settlement: { kind: "deferred" },
+        }),
+      );
+      const [row] = await tx
+        .select({ desglose: registrosFacturacion.desglose })
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.saleId, saleId));
+      return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
+    });
+
+    expect(
+      desglose.map(({ TipoImpositivo, BaseImponibleOimporteNoSujeto }) => ({
+        TipoImpositivo,
+        BaseImponibleOimporteNoSujeto,
+      })),
+    ).toEqual([
+      { TipoImpositivo: "10.00", BaseImponibleOimporteNoSujeto: "4.09" },
+      { TipoImpositivo: "21.00", BaseImponibleOimporteNoSujeto: "4.55" },
+    ]);
+  });
+});
+
+describe("a takeaway variant line is filed at its own effective takeaway VAT rate", () => {
+  async function wineOffer(tx: Transaction) {
+    const menu = await createMenu(tx, { name: "Barra" });
+    const parent = await createProduct(tx, {
+      categoryId: null,
+      name: "Wine by the glass",
+      customerName: { "es-ES": "Vino de la casa" },
+      kitchenName: "VINO",
+      unitId: null,
+      unitPrice: "4.00",
+      vatClass: "general",
+      takeawayVatRate: "10.00",
+    });
+    const [wine125, wine175] = await setProductVariants(
+      tx,
+      parent.id,
+      [
+        {
+          name: "Wine 125",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "4.50",
+          available: true,
+        },
+        {
+          name: "Wine 175",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "5.50",
+          available: true,
+        },
+      ],
+      "es-ES",
+    );
+    await setTakeawayVatRate(tx, wine175!.id, "21.00");
+    await addProductToMenu(tx, { menuId: menu.id, productId: parent.id, grossPrice: null });
+    const [offer] = await listMenuOffers(tx, [menu.id]);
+    // The basket's rates come from `readTakeawayVatSchedules`, as `readLineVatRates` reads them.
+    const schedules = await readTakeawayVatSchedules(tx, [wine125!.id, wine175!.id]);
+    return { offer: offer!, wine125: wine125!.id, wine175: wine175!.id, schedules };
+  }
+
+  function lineFor(
+    offer: MenuOffer,
+    variantId: string,
+    schedules: Map<string, readonly DatedRate[]>,
+  ): BasketItem {
+    const vatRates = schedules.get(variantId);
+    if (vatRates === undefined) throw new Error(`no takeaway VAT schedule for ${variantId}`);
+    const selected = selectMenuVariant(offer, variantId);
+    const text = customerPresentationText(selected, "es-ES");
+    return {
+      product: {
+        ...selected,
+        descriptions: text.product,
+        variantDescriptions: text.variant,
+        vatRates,
+      },
+      quantity: "1",
+    };
+  }
+
+  it("files a 10% line for the variant taking its parent's takeaway VAT and a 21% line for the one setting its own", async () => {
+    const desglose = await withTransaction(pg.db, async (tx) => {
+      const { offer, wine125, wine175, schedules } = await wineOffer(tx);
+      const priced = priceBasket([
+        lineFor(offer, wine125, schedules),
+        lineFor(offer, wine175, schedules),
+      ]);
       const { saleId } = await recordSale(
         tx,
         backend,

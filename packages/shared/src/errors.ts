@@ -131,6 +131,8 @@ export interface ErrorParams {
   /** The venue's tax area has no VAT rates: there is no taxpayer (`country` null), no pack or
    * territory the packs know, or the territory lacks its dine-in or pickable rates, or its takeaway default. */
   "vat_rate.area_unsupported": { country: string | null; territory: string };
+  /** Line `lineNo` reached rating with no rates to rate it from. */
+  "vat_rate.unavailable": { lineNo: number };
   /** The dated rate list handed to `caller` is empty, starts with a dated entry, or is not dated
    * oldest first. */
   "vat_rate.schedule_invalid": {

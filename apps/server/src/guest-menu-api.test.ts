@@ -599,6 +599,7 @@ it("keeps guest sharing separate from saved menu defaults", async () => {
   expect((await saved.json()).enabled).toBe(true);
   expect(await readMenuSettings(suite.db)).toEqual({
     defaultProductVatClass: "reduced",
+    defaultTakeawayVatRate: "10.00",
     defaultColor: null,
   });
 });

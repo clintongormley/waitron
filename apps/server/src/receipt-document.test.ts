@@ -740,7 +740,6 @@ describe("the simplified receipt's price each is the price the line was sold at"
   const locked = (overrides: Partial<LockedLine>): LockedLine => ({
     grossUnitPrice: "1.00",
     quantity: "1",
-    vatClass: "reduced",
     name: "Jamón",
     descriptions: { "es-ES": "Jamón" },
     category: null,

@@ -47,7 +47,9 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
+  VAT_RATE_TABLE,
   workingOrderId as brandWorkingOrderId,
+  type DatedRate,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
@@ -75,6 +77,9 @@ export interface SeedSalesProduct {
   takeawayVatClass?: VatClass | null;
 }
 
+/** A deli product always names the takeaway rate its lines file at. */
+export type SeedSalesDeliProduct = SeedSalesProduct & { takeawayVatRate: string };
+
 export interface BackDatingClock {
   clock: TrustedClock;
   set: (instant: Date, offsetMinutes: number) => void;
@@ -92,7 +97,7 @@ export interface SeedSalesInput {
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
   products: readonly SeedSalesProduct[];
   /** The deli's pool; when non-empty, a share of sales are deli takeaway sales drawn from it. */
-  deliProducts?: readonly SeedSalesProduct[];
+  deliProducts?: readonly SeedSalesDeliProduct[];
   clock?: BackDatingClock;
 }
 
@@ -196,7 +201,7 @@ export async function seedSales(
   const now = Date.now();
   const inputs: {
     instant: Date;
-    chosen: SeedSalesProduct[];
+    chosen: { product: SeedSalesProduct; vatRates: readonly DatedRate[] }[];
     method: string;
     takeaway: boolean;
   }[] = [];
@@ -229,10 +234,17 @@ export async function seedSales(
       }
 
       const takeaway = deliProducts.length > 0 && rng() < DELI_SHARE;
-      const pool = takeaway ? deliProducts : products;
       const lineCount = randInt(rng, 1, 4);
-      const chosen: SeedSalesProduct[] = [];
-      for (let l = 0; l < lineCount; l += 1) chosen.push(pool[randInt(rng, 0, pool.length - 1)]!);
+      const chosen: { product: SeedSalesProduct; vatRates: readonly DatedRate[] }[] = [];
+      for (let l = 0; l < lineCount; l += 1) {
+        if (takeaway) {
+          const product = deliProducts[randInt(rng, 0, deliProducts.length - 1)]!;
+          chosen.push({ product, vatRates: [{ from: null, rate: product.takeawayVatRate }] });
+        } else {
+          const product = products[randInt(rng, 0, products.length - 1)]!;
+          chosen.push({ product, vatRates: VAT_RATE_TABLE[product.vatClass] });
+        }
+      }
       const method = rng() < 0.6 ? "cash" : "card";
       inputs.push({ instant, chosen, method, takeaway });
     }
@@ -246,7 +258,7 @@ export async function seedSales(
       const backend = await nodeBackend(db, tx, venue.nodeId, clock, environment);
       const on = localCalendarDate(instant, clock.now().offsetMinutes);
       const grossLines: GrossLine[] = [];
-      for (const product of chosen) {
+      for (const { product, vatRates } of chosen) {
         const price = toScale(decimal(product.unitPrice), MONEY_SCALE);
         grossLines.push({
           lineNo: grossLines.length + 1,
@@ -267,7 +279,7 @@ export async function seedSales(
             defaultLanguage,
           ),
           quantity: "1",
-          vatClass: takeaway ? (product.takeawayVatClass ?? product.vatClass) : product.vatClass,
+          vatRates,
           grossUnitPrice: price,
           lineGross: price,
         });
@@ -304,8 +316,8 @@ export async function seedSales(
           descriptions: line.descriptions,
           quantity: stringToThousandths(line.quantity),
           unitPriceGross: decimalToCents(line.grossUnitPrice),
-          vatClass: chosen[i]!.vatClass,
-          takeawayVatClass: chosen[i]!.takeawayVatClass ?? chosen[i]!.vatClass,
+          vatClass: chosen[i]!.product.vatClass,
+          takeawayVatClass: chosen[i]!.product.takeawayVatClass ?? chosen[i]!.product.vatClass,
           lineTotal: decimalToCents(line.lineGross),
         })),
       );

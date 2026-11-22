@@ -38,7 +38,7 @@ async function fixture(tx: Transaction) {
     unitId: null,
     unitPrice: "6.00",
     vatClass: "reduced",
-    takeawayVatClass: "general",
+    takeawayVatRate: "21.00",
   });
   const sirloin = await createProduct(tx, {
     name: "Sirloin",

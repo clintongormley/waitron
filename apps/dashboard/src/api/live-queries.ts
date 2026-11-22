@@ -310,10 +310,11 @@ export const QUERY_DEPENDENCIES = {
   getMenuHome: ["sections", "section_members", "products", "menus"],
   listCategories: ["categories"],
   getCategory: ["categories"],
-  listLibraryProducts: ["products"],
+  listLibraryProducts: ["products", "product_takeaway_vat_rates"],
   listUnits: ["units"],
   listProducts: [
     "products",
+    "product_takeaway_vat_rates",
     "categories",
     // A product's attached extras and options lists, read from `product_modifiers` alone
     // (`readProductModifiers`, packages/menu/src/product-modifiers.ts) — it names no list
@@ -424,7 +425,7 @@ export const QUERY_DEPENDENCIES = {
     "day_cutover_changes",
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
-  getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
+  getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu", "taxpayer"],
   getVenuePrivacy: ["settings.venue"],
   getProfile: ["persons", "webauthn_credentials"],
   // The taxpayer's legal name; the language list itself is fixed.

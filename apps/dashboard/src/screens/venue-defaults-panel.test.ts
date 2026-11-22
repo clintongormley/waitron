@@ -19,13 +19,20 @@ const MADRID: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "reduced",
+  defaultTakeawayVatRate: "10.00",
+  takeawayVat: false,
+  vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
 const BARCELONA: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["ca-ES"],
   fixedReceiptLanguage: "ca-ES",
   defaultProductVatClass: "reduced",
+  defaultTakeawayVatRate: "10.00",
+  takeawayVat: false,
+  vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
+const TAKEAWAY: VenueDefaults = { ...MADRID, takeawayVat: true };
 const text = (node: Element | null | undefined) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const q = (el: Panel, selector: string) => el.shadowRoot!.querySelector(selector);
@@ -242,7 +249,7 @@ async function pick(el: Panel, name: string, value: string) {
   await el.updateComplete;
 }
 
-it("Edit opens both fields, required and without search, with Save quiet and disabled", async () => {
+it("where the region charges no takeaway VAT, Edit opens the receipt language and the VAT class, required and without search, with Save quiet and disabled", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
   await edit(el);
@@ -274,6 +281,102 @@ it("Edit opens both fields, required and without search, with Save quiet and dis
   expect(saveButton(el).variant).toBe("secondary");
   const cancel = q(el, "[data-test=cancel]")!;
   expect(cancel.getAttribute("slot")).toBe("cancel");
+});
+
+it.each([
+  ["en-GB", "New products start at (VAT when taken away): 10%"],
+  ["es", "Los productos nuevos empiezan con (IVA para llevar): 10 %"],
+])(
+  "shows the takeaway rate new products start at where the region charges takeaway VAT (%s)",
+  async (locale, row) => {
+    setLocale(locale);
+    const el = await mount(rig(TAKEAWAY).api);
+    expect(rows(el)).toHaveLength(3);
+    expect(rows(el)[2]).toBe(row);
+    expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe(row.split(": ")[1]);
+  },
+);
+
+it("shows no takeaway rate, viewing or editing, where the region charges no takeaway VAT", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig().api);
+  expect(rows(el)).toHaveLength(2);
+  expect(q(el, "[data-test=saved-defaultTakeawayVatRate]")).toBeNull();
+  await edit(el);
+  expect(combo(el, "defaultTakeawayVatRate")).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(2);
+});
+
+it("Edit offers the pickable takeaway rates as percentages, required and without search", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig({ ...TAKEAWAY, vatRates: ["0.00", "4.00", "7.50", "10.00"] }).api);
+  await edit(el);
+  const away = combo(el, "defaultTakeawayVatRate")!;
+  expect(away.label).toBe("New products start at (VAT when taken away)");
+  expect(away.required).toBe(true);
+  expect(away.search).toBe("never");
+  expect(away.value).toBe("10.00");
+  expect(away.options).toEqual([
+    { value: "0.00", label: "0%" },
+    { value: "4.00", label: "4%" },
+    { value: "7.50", label: "7.5%" },
+    { value: "10.00", label: "10%" },
+  ]);
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("offers a stored takeaway rate outside the pickable rates, so the field shows what is stored", async () => {
+  setLocale("en-GB");
+  const el = await mount(
+    rig({ ...TAKEAWAY, vatRates: ["0.00", "4.00", "10.00"], defaultTakeawayVatRate: "7.50" }).api,
+  );
+  await edit(el);
+  const away = combo(el, "defaultTakeawayVatRate")!;
+  expect(away.options).toEqual([
+    { value: "0.00", label: "0%" },
+    { value: "4.00", label: "4%" },
+    { value: "10.00", label: "10%" },
+    { value: "7.50", label: "7.5%" },
+  ]);
+  expect(away.value).toBe("7.50");
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("sends only the changed takeaway rate, and changing it back quiets Save", async () => {
+  setLocale("en-GB");
+  const r = rig(TAKEAWAY);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "defaultTakeawayVatRate", "4.00");
+  expect(saveButton(el).disabled).toBe(false);
+  expect(saveButton(el).variant).toBe("primary");
+  await pick(el, "defaultTakeawayVatRate", "10.00");
+  expect(saveButton(el).disabled).toBe(true);
+  await pick(el, "defaultTakeawayVatRate", "21.00");
+  saveButton(el).click();
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(r.api.putVenueDefaults.mock.calls).toEqual([[{ defaultTakeawayVatRate: "21.00" }]]);
+  expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe("21%");
+});
+
+it("puts a refused takeaway rate beside its field, with the generic sentence at the bottom", async () => {
+  setLocale("en-GB");
+  const r = rig(TAKEAWAY);
+  r.api.putVenueDefaults.mockRejectedValueOnce({
+    code: "product.invalid",
+    params: { field: "defaultTakeawayVatRate" },
+  });
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "defaultTakeawayVatRate", "4.00");
+  saveButton(el).click();
+  await expect.poll(() => combo(el, "defaultTakeawayVatRate")!.error).not.toBe("");
+  expect(combo(el, "defaultTakeawayVatRate")!.error).toBe(
+    "Choose the VAT when taken away for new products.",
+  );
+  expect(combo(el, "defaultProductVatClass")!.error).toBe("");
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("4.00");
 });
 
 it("offers a stored language outside the choices, so the field shows what is stored", async () => {
@@ -1013,6 +1116,9 @@ it.each([
       receiptLanguageChoices: [],
       fixedReceiptLanguage: "B $& {stored}",
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
+      takeawayVat: false,
+      vatRates: ["0.00", "4.00", "10.00", "21.00"],
     }).api,
   );
   expect(text(q(el, "[data-test=stored-differs]"))).toBe(sentence);

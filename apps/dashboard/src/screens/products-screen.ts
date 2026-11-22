@@ -751,6 +751,8 @@ export class ProductsScreen extends LitElement {
         .initialField=${this.editorInitialField}
         .defaultVatClass=${this.menuSettings?.defaultProductVatClass ?? "general"}
         .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
+        .vatRates=${this.menuSettings?.vatRates ?? []}
+        .defaultTakeawayVatRate=${this.menuSettings?.defaultTakeawayVatRate ?? ""}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}

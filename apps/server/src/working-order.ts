@@ -32,14 +32,15 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type DatedRate,
   type Dining,
-  appliedVatClass,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
   worstBand,
 } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
+import { readLineVatRates } from "./line-vat-rates.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import {
@@ -294,12 +295,7 @@ import {
 } from "./bill-advances.js";
 import type { AdvanceCredit } from "./advance-deduction.js";
 import { VENUE_SERVICE } from "./modules.js";
-import {
-  readOrderDinings,
-  requireOrderDining,
-  storedOrderDining,
-  type DiningChoice,
-} from "./order-dining.js";
+import { readOrderDinings, requireOrderDining, type DiningChoice } from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -650,16 +646,13 @@ const STORED_SET_MENU_OFFER = Symbol("storedSetMenuOffer");
 type StoredSetMenuOffer = NonNullable<ReturnType<SetMenuOfferLookup["offerFor"]>>;
 
 /**
- * Return insertable snapshots and their gross lines together, so a caller filing
- * the same basket rates those rather than pricing it twice. The stored gross unit price and
- * classification are what the line files, at its class for the order's way of selling.
+ * Return insertable snapshots and their gross lines together. The gross lines total but carry no
+ * rates, so they cannot be rated: an order is filed from its stored lines, rated at issue.
  */
 export async function priceOrderLines(
   tx: Transaction,
   cfg: TradingContext,
   workingOrderId: string,
-  /** The gross lines are priced at this way's classes; the rows store both. */
-  dining: Dining,
   // `courseId` absent or null = the offer's default course; a string is an override.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
@@ -952,7 +945,9 @@ export async function priceOrderLines(
       unitPrice: selection.unitPrice,
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
-      vatClass: appliedVatClass(dining, classes),
+      vatClass: classes.vatClass,
+      // Empty, so rating these lines refuses: a line's rate is read when its order is issued.
+      vatRates: [] as readonly DatedRate[],
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -1013,7 +1008,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: appliedVatClass(dining, child),
+        vatRates: [] as readonly DatedRate[],
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -1115,8 +1110,6 @@ export async function priceOrderLines(
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // Read off the gross line, so this row and a walk-up's sale filed from the same `gross`
-      // result cannot describe different answers.
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
@@ -1200,7 +1193,7 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // A line files at the class for its order's way of selling, so both readers join the order.
+  // The label for the order's way of selling, so both readers join the order.
   vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
     when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
     else ${workingOrderLines.vatClass} end`,
@@ -1251,11 +1244,19 @@ async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
   refuseSetMenus: boolean,
-): Promise<{ lines: (StoredOrderLine & { payable: boolean })[]; grouped: StoredOrderLine[] }> {
+): Promise<{
+  lines: (StoredOrderLine & { payable: boolean })[];
+  grouped: StoredOrderLine[];
+  /** Each grouped line's dated rates, at its index. */
+  rates: (readonly DatedRate[])[];
+}> {
   const rows = await tx
     .select({
       ...storedLineColumns,
       ...portionColumns,
+      dining: workingOrders.dining,
+      eatInVatClass: workingOrderLines.vatClass,
+      takeawayVatClass: workingOrderLines.takeawayVatClass,
       setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
@@ -1268,13 +1269,28 @@ async function readLockedLinesForIssuance(
     .orderBy(workingOrderLines.lineNo);
   if (refuseSetMenus) await refuseSetMenuMoney(tx, workingOrderId, rows);
   const stored = toStoredLines(rows);
+  const grouped = groupedByPortion(rows, stored);
+  const rowRates = await readLineVatRates(
+    tx,
+    rows[0]!.dining,
+    rows.map((row) => ({
+      productId: row.productId,
+      setMenuRole: row.setMenuRole,
+      vatClass: row.eatInVatClass as VatClass,
+      takeawayVatClass: row.takeawayVatClass as VatClass,
+    })),
+  );
+  // A grouped row carries the id of the first working line it stands for; the lines it stands for
+  // share the product and the label for the order's way of selling, all their rates depend on.
+  const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
   return {
     lines: stored.map((line, i) => ({
       ...line,
       payable:
         line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.active),
     })),
-    grouped: groupedByPortion(rows, stored),
+    grouped,
+    rates: grouped.map((line) => ratesById.get(line.identity.id)!),
   };
 }
 
@@ -1313,6 +1329,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
+    vatClass: line.vatClass as VatClass,
     identity: {
       id: line.id,
       productId: line.productId,
@@ -1324,7 +1341,6 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
       priceQuantity: thousandthsToDecimal(line.priceQuantity),
-      vatClass: line.vatClass as VatClass,
       name: line.name,
       descriptions: line.descriptions,
       optionSnapshots: line.optionSnapshots,
@@ -1341,10 +1357,12 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity and its locked composition. */
+/** A stored working-order line: its identity, its locked composition, and its VAT label for its
+ * order's way of selling, which grouping bound portions compares. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
+  vatClass: VatClass;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */
@@ -1445,7 +1463,7 @@ export async function priceStoredOrderForIssuance(
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<GrossOrder> {
-  const { lines, grouped } = await readLockedLinesForIssuance(
+  const { lines, grouped, rates } = await readLockedLinesForIssuance(
     tx,
     workingOrderId,
     options.refuseUnsentUnavailable,
@@ -1455,7 +1473,10 @@ export async function priceStoredOrderForIssuance(
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
   return {
-    gross: grossLockedLines(grouped.map(({ locked }) => locked)),
+    gross: grossLockedLines(
+      grouped.map(({ locked }) => locked),
+      rates,
+    ),
     identities: grouped.map(({ identity }) => identity),
   };
 }
@@ -1524,8 +1545,9 @@ export interface ParkOrderResult {
 
 /**
  * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
- * gross lines its rows were built from so a walk-up files its sale from the same lines. Shared so a
- * walk-up order has the same shape as a parked one. The empty-basket refusal stays with each caller.
+ * gross lines its rows were built from, for their totals: they carry no VAT rates, and a sale is
+ * filed from the stored lines. Shared so a walk-up order has the same shape as a parked one. The
+ * empty-basket refusal stays with each caller.
  */
 export async function createOpenOrder(
   tx: Transaction,
@@ -1633,7 +1655,6 @@ export async function createOpenOrder(
     tx,
     cfg,
     id,
-    dining,
     lines,
     effectiveZoneId,
     undefined,
@@ -3203,7 +3224,6 @@ export async function priceTabRound(
     tx,
     cfg,
     tabId,
-    await storedOrderDining(tx, tabId),
     lines,
     context?.zoneId,
     undefined,
@@ -5864,7 +5884,7 @@ interface LineIntent {
   extras: { set: unknown } | null;
 }
 
-type RequestedLine = Parameters<typeof priceOrderLines>[4][number];
+type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
 
 /**
  * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
@@ -6569,7 +6589,6 @@ async function applyLineEdits(
     tx,
     cfg,
     orderId,
-    await storedOrderDining(tx, orderId),
     pricing,
     context?.zoneId,
     snapshot,

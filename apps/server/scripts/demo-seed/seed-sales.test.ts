@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { listOrders, readOrderDetail } from "../../src/orders-list.js";
 import { nodeBackend, seedSales } from "./seed-sales.js";
-import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
+import type { SeedSalesDeliProduct, SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
 import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
@@ -90,8 +90,8 @@ const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
   },
 ];
 
-// One deli dish with a takeaway class of its own and one without.
-const DELI_PRODUCTS: SeedSalesProduct[] = [
+// Two takeaway rates; only the cola keeps a takeaway class for its stored line.
+const DELI_PRODUCTS: SeedSalesDeliProduct[] = [
   {
     id: "p-deli-cola",
     name: "Cola",
@@ -99,6 +99,7 @@ const DELI_PRODUCTS: SeedSalesProduct[] = [
     unitPrice: "2.50",
     vatClass: "reduced",
     takeawayVatClass: "general",
+    takeawayVatRate: "21.00",
   },
   {
     id: "p-deli-ham",
@@ -106,6 +107,7 @@ const DELI_PRODUCTS: SeedSalesProduct[] = [
     customerName: { [LOCALE]: "Jamón" },
     unitPrice: "12.00",
     vatClass: "reduced",
+    takeawayVatRate: "10.00",
   },
 ];
 
@@ -352,26 +354,27 @@ describe("seedSales", () => {
     }
   });
 
-  it("rates a deli sale's lines at their takeaway class, or their served class when they have none", async () => {
+  it("rates a deli sale's lines at their own takeaway rate", async () => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 82_000_000,
       nifFormat: "calculated",
       invoiceLocale: "es-ES",
     })();
-    const cola: SeedSalesProduct = {
+    const cola: SeedSalesDeliProduct = {
       id: "p-cola",
       name: "Cola",
       customerName: { [LOCALE]: "Cola" },
       unitPrice: "2.50",
       vatClass: "reduced",
-      takeawayVatClass: "general",
+      takeawayVatRate: "21.00",
     };
-    const ham: SeedSalesProduct = {
+    const ham: SeedSalesDeliProduct = {
       id: "p-ham",
       name: "Jamón",
       customerName: { [LOCALE]: "Jamón" },
       unitPrice: "12.00",
       vatClass: "reduced",
+      takeawayVatRate: "10.00",
     };
     await seedSales(suite.db, {
       venue: venueFor(venue),

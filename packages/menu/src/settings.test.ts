@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import * as menuModule from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+// The effective takeaway default is read from the area: the taxpayer's country with the venue's
+// fiscal territory.
+beforeEach(async () => {
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
+});
 
 describe("the venue's new-product defaults", () => {
   it("saves product defaults in the menu document with advancing revisions", async () => {
@@ -20,23 +26,33 @@ describe("the venue's new-product defaults", () => {
           revision: settings.revision,
           doc: settings.doc,
         })
-        .from(settings),
+        .from(settings)
+        .where(eq(settings.module, "menu")),
     ).toEqual([
       {
         module: "menu",
         version: 1,
         revision: 1,
-        doc: { defaultProductVatClass: "reduced", defaultColor: null, starterUnitsCreated: false },
+        doc: {
+          defaultProductVatClass: "reduced",
+          defaultTakeawayVatRate: null,
+          defaultColor: null,
+          starterUnitsCreated: false,
+        },
       },
     ]);
     await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#abcdef"));
     expect(
-      await suite.db.select({ revision: settings.revision, doc: settings.doc }).from(settings),
+      await suite.db
+        .select({ revision: settings.revision, doc: settings.doc })
+        .from(settings)
+        .where(eq(settings.module, "menu")),
     ).toEqual([
       {
         revision: 2,
         doc: {
           defaultProductVatClass: "reduced",
+          defaultTakeawayVatRate: null,
           defaultColor: "#abcdef",
           starterUnitsCreated: false,
         },
@@ -47,6 +63,7 @@ describe("the venue's new-product defaults", () => {
   it("uses general before provisioning has stored a preset", async () => {
     expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: null,
     });
   });
@@ -54,7 +71,6 @@ describe("the venue's new-product defaults", () => {
   it.each(["general", "reduced", "super_reduced", "zero"] as const)(
     "saves and reloads %s without changing an existing product",
     async (defaultProductVatClass) => {
-      await seedTaxpayer(suite.db);
       const [product] = await suite.db
         .insert(products)
         .values({
@@ -69,6 +85,7 @@ describe("the venue's new-product defaults", () => {
       );
       expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass,
+        defaultTakeawayVatRate: "10.00",
         defaultColor: null,
       });
       expect(
@@ -96,8 +113,82 @@ describe("the venue's new-product defaults", () => {
       });
       expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass: "zero",
+        defaultTakeawayVatRate: "10.00",
         defaultColor: null,
       });
+    },
+  );
+});
+
+describe("the venue's default takeaway rate for new products", () => {
+  const water = {
+    categoryId: null,
+    name: "Water",
+    pricingUnit: "each",
+    unitPrice: "2",
+    vatClass: "general",
+  } as const;
+  const storedRate = async () =>
+    (
+      await suite.db.select({ doc: settings.doc }).from(settings).where(eq(settings.module, "menu"))
+    )[0]?.doc as { defaultTakeawayVatRate?: unknown } | undefined;
+
+  it("reads the area's default while nothing is saved", async () => {
+    expect((await menuModule.readMenuSettings(suite.db)).defaultTakeawayVatRate).toBe("10.00");
+  });
+
+  it("saves a pickable rate, answers it, and a new product starts at it", async () => {
+    const saved = await withTransaction(suite.db, (tx) =>
+      menuModule.saveMenuDefaultTakeawayVatRate(tx, "4.00", null),
+    );
+    expect(saved).toEqual({
+      defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "4.00",
+      defaultColor: null,
+    });
+    expect((await storedRate())?.defaultTakeawayVatRate).toBe("4.00");
+    expect((await menuModule.readMenuSettings(suite.db)).defaultTakeawayVatRate).toBe("4.00");
+    const schedules = await withTransaction(suite.db, async (tx) => {
+      const product = await menuModule.createProduct(tx, water);
+      const chosen = await menuModule.createProduct(tx, {
+        ...water,
+        name: "Cola",
+        takeawayVatRate: "21.00",
+      });
+      const rates = await menuModule.readTakeawayVatSchedules(tx, [product.id, chosen.id]);
+      return [rates.get(product.id), rates.get(chosen.id)];
+    });
+    expect(schedules).toEqual([[{ from: null, rate: "4.00" }], [{ from: null, rate: "21.00" }]]);
+  });
+
+  it("keeps the colour and the VAT class when it saves the rate", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await menuModule.saveMenuSettings(tx, { defaultProductVatClass: "zero" });
+      await menuModule.saveMenuDefaultColor(tx, "#abcdef");
+      await menuModule.saveMenuDefaultTakeawayVatRate(tx, "21.00", null);
+    });
+    expect(await menuModule.readMenuSettings(suite.db)).toEqual({
+      defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: "21.00",
+      defaultColor: "#abcdef",
+    });
+  });
+
+  it.each(["5.00", "3.00", "2.00", "7.50", "4", "4.0", "", null, 4, undefined, ["4.00"]])(
+    "refuses %j without changing the stored rate",
+    async (value) => {
+      await withTransaction(suite.db, (tx) =>
+        menuModule.saveMenuDefaultTakeawayVatRate(tx, "21.00", null),
+      );
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          menuModule.saveMenuDefaultTakeawayVatRate(tx, value, null),
+        ),
+      ).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "defaultTakeawayVatRate" },
+      });
+      expect((await storedRate())?.defaultTakeawayVatRate).toBe("21.00");
     },
   );
 });
@@ -106,9 +197,14 @@ describe("the venue's default colour", () => {
   it("keeps the VAT default and the colour apart, whichever is saved last", async () => {
     expect(
       await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#b12525")),
-    ).toEqual({ defaultProductVatClass: "general", defaultColor: "#b12525" });
+    ).toEqual({
+      defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: "#b12525",
+    });
     expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
     });
 
@@ -116,15 +212,21 @@ describe("the venue's default colour", () => {
       await withTransaction(suite.db, (tx) =>
         menuModule.saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
       ),
-    ).toEqual({ defaultProductVatClass: "zero", defaultColor: "#b12525" });
+    ).toEqual({
+      defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: "#b12525",
+    });
     expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
     });
 
     await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, "#25b125"));
     expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#25b125",
     });
   });
@@ -134,6 +236,7 @@ describe("the venue's default colour", () => {
     await withTransaction(suite.db, (tx) => menuModule.saveMenuDefaultColor(tx, null));
     expect(await menuModule.readMenuSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: null,
     });
   });
@@ -147,6 +250,7 @@ describe("the venue's default colour", () => {
       ).rejects.toMatchObject({ code: "category.invalid", params: { field: "color" } });
       expect(await menuModule.readMenuSettings(suite.db)).toEqual({
         defaultProductVatClass: "general",
+        defaultTakeawayVatRate: "10.00",
         defaultColor: "#b12525",
       });
     },
@@ -155,6 +259,7 @@ describe("the venue's default colour", () => {
 
 const menuDoc = {
   defaultProductVatClass: "general",
+  defaultTakeawayVatRate: null,
   defaultColor: null,
   starterUnitsCreated: false,
 };
@@ -163,6 +268,13 @@ it.each([
   [[], "doc"],
   [{}, "defaultProductVatClass"],
   [{ ...menuDoc, defaultProductVatClass: "standard" }, "defaultProductVatClass"],
+  [
+    { defaultProductVatClass: "general", defaultColor: null, starterUnitsCreated: false },
+    "defaultTakeawayVatRate",
+  ],
+  [{ ...menuDoc, defaultTakeawayVatRate: 4 }, "defaultTakeawayVatRate"],
+  [{ ...menuDoc, defaultTakeawayVatRate: "4" }, "defaultTakeawayVatRate"],
+  [{ ...menuDoc, defaultTakeawayVatRate: "" }, "defaultTakeawayVatRate"],
   [{ ...menuDoc, defaultColor: "red" }, "defaultColor"],
   [{ ...menuDoc, defaultColor: "#ABCDEF" }, "defaultColor"],
   [{ ...menuDoc, starterUnitsCreated: 1 }, "starterUnitsCreated"],
@@ -173,6 +285,7 @@ it.each([
 it("accepts a complete menu document", () => {
   const doc = {
     defaultProductVatClass: "zero",
+    defaultTakeawayVatRate: "4.00",
     defaultColor: "#abcdef",
     starterUnitsCreated: true,
   };

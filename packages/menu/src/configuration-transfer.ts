@@ -9,11 +9,12 @@ import {
   isCalendarDate,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
-import { menus, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
+import { menus, readSettings, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkSectionMemberRows } from "./include-folder.js";
 import { syncMenuOffers } from "./menu-structure.js";
-import { vatRatesOfArea } from "./takeaway-vat-rates.js";
+import { MENU_SETTINGS } from "./settings.js";
+import { readVenueVatRates, vatRatesOfArea } from "./takeaway-vat-rates.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -355,6 +356,16 @@ export const MENU_CONFIGURATION_TRANSFER = {
     );
   },
   async afterImport(tx: Transaction): Promise<void> {
+    // Settings documents are imported before this runs. A default the area does not pick would
+    // make every new product that relies on it refused, so it gets the venue-defaults save's rule.
+    const { defaultTakeawayVatRate } = (await readSettings(tx, MENU_SETTINGS)).doc;
+    if (
+      defaultTakeawayVatRate !== null &&
+      !(await readVenueVatRates(tx)).pickable.includes(defaultTakeawayVatRate)
+    )
+      throw new AppError("setup.request_invalid", {
+        field: "settings.menu.defaultTakeawayVatRate",
+      });
     const rows = await tx.select({ id: menus.id }).from(menus);
     await syncMenuOffers(
       tx,

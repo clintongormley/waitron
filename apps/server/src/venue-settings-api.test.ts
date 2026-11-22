@@ -579,7 +579,7 @@ describe("venue defaults", () => {
         sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
       await suite.db.execute(
-        sql`update settings set doc = json_set(doc, '$.defaultProductVatClass', ${initialVatClass}) where module = 'menu'`,
+        sql`update settings set doc = json_set(doc, '$.defaultProductVatClass', ${initialVatClass}, '$.defaultTakeawayVatRate', null) where module = 'menu'`,
       );
     }
   }
@@ -593,6 +593,9 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: "ca-ES",
         defaultProductVatClass: initialVatClass,
+        defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
     });
   });
@@ -604,6 +607,9 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
+        defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
     });
   });
@@ -623,6 +629,9 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
+        defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
       expect(await stored()).toEqual({ languages: ["gl-ES"], vatClass: initialVatClass });
     });
@@ -636,6 +645,39 @@ describe("venue defaults", () => {
       expect(await stored()).toEqual({ languages: ["es-ES"], vatClass: "zero" });
     });
   });
+
+  it("saves the takeaway rate for new products alone and leaves the rest", async () => {
+    await at("Madrid", ["es-ES"], async () => {
+      const response = await write({ defaultTakeawayVatRate: "4.00" });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        receiptLanguage: "es-ES",
+        receiptLanguageChoices: SPAIN_RECEIPT,
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: initialVatClass,
+        defaultTakeawayVatRate: "4.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
+      });
+      expect(await stored()).toEqual(untouched());
+      expect((await (await read()).json()).defaultTakeawayVatRate).toBe("4.00");
+    });
+  });
+
+  it.each(["5.00", "3.00"])(
+    "takes back the language it wrote when the takeaway rate %s is refused",
+    async (defaultTakeawayVatRate) => {
+      await at("Madrid", ["es-ES"], async () => {
+        const response = await write({ receiptLanguage: "gl-ES", defaultTakeawayVatRate });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "product.invalid", params: { field: "defaultTakeawayVatRate" } },
+        });
+        expect(await stored()).toEqual(untouched());
+        expect((await (await read()).json()).defaultTakeawayVatRate).toBe("10.00");
+      });
+    },
+  );
 
   it("refuses a non-Catalan language in Barcelona and writes no VAT class", async () => {
     await at("Barcelona", ["ca-ES"], async () => {

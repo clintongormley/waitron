@@ -7,18 +7,7 @@
  * and with it `@waitron/db` and Node builtins. A deep import is safe only while the module it reaches
  * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
-import { type BasketItem, priceBasket } from "@waitron/menu/src/pricing.js";
-import {
-  localToday,
-  customerPresentationText,
-  addDecimal,
-  compareDecimal,
-  decimal,
-  subtractDecimal,
-  sumDecimals,
-} from "@waitron/shared";
-import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
-import { currentContentLanguages } from "@waitron/ui";
+import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import type { Decimal, Dining, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
@@ -32,7 +21,7 @@ import type {
   TillProduct,
   ZoneDining,
 } from "../api/client.js";
-import { productUnit, toPresentation } from "../widgets/product-name.js";
+import { productUnit } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 
 /**
@@ -139,29 +128,7 @@ export type BasketRefusal =
 
 export type WorkingOrderListener = (payload?: unknown) => void;
 
-type Priced = ReturnType<typeof priceBasket>;
-
 const ZERO = decimal("0.00");
-
-/** A priced line wants the CUSTOMER text already resolved. */
-function toPriceable(line: OrderLine): BasketItem {
-  const p = line.product;
-  const config = currentContentLanguages();
-  const text = customerPresentationText(
-    toPresentation(p),
-    config.defaultLanguage,
-    config.languages,
-  );
-  return {
-    ...line,
-    product: {
-      ...p,
-      descriptions: text.product,
-      variantDescriptions: text.variant,
-      unit: prepareUnitSnapshot(productUnit(p), config),
-    },
-  };
-}
 
 /** Refuses a quantity the product's unit cannot take. */
 function newLine(product: TillProduct, quantity: string, selection?: LineSelection): OrderLine {
@@ -272,9 +239,7 @@ export class WorkingOrderStore {
   /** The idempotency key park and pay send, so a retried request settles the order once. */
   #id: string = crypto.randomUUID();
   #label?: string;
-  #priced: Priced | null = null;
   #total: Decimal | null = null;
-  readonly #price: typeof priceBasket;
   /**
    * Whether {@link id} already names an OPEN row server-side. A persisted order must be synced with
    * `updateWorkingOrder`, never re-parked: park is idempotent, so a re-park with the same id discards
@@ -309,10 +274,6 @@ export class WorkingOrderStore {
   /** Whether staff chose this unsaved draft's way, which a till-choice department keeps. */
   #diningChosen = false;
   canSelectProduct: ((product: TillProduct, setMenuId?: string) => boolean) | undefined;
-
-  constructor(price: typeof priceBasket = priceBasket) {
-    this.#price = price;
-  }
 
   #refusesSelection(product: TillProduct, setMenuId?: string): boolean {
     if (this.canSelectProduct?.(product, setMenuId) !== false) return false;
@@ -501,20 +462,7 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  get #pricedOrder(): Priced {
-    if (this.#priced === null) {
-      this.#priced = this.#price(
-        this.#lines.map((line) => toPriceable(line)),
-        localToday(),
-      );
-    }
-    return this.#priced;
-  }
-
-  /**
-   * The previewed VAT-inclusive total, summed from each line's {@link lineGross} because that adds the
-   * extras picks, which `priceBasket` does not see.
-   */
+  /** The previewed VAT-inclusive total, summed from each line's {@link lineGross}. */
   get total(): Decimal {
     if (this.#total === null) {
       this.#total = sumDecimals(this.#lines.map((line) => lineGross(line)));
@@ -522,17 +470,7 @@ export class WorkingOrderStore {
     return this.#total;
   }
 
-  /**
-   * DISH-ONLY: `priceBasket` does not see the extras picks, so these bands do not reconcile with
-   * {@link total}. A VAT preview over a basket with extras would need `rateLines` over
-   * `grossBasketWithOptions`' result, and each pick's VAT class, which {@link SelectedExtra} does not carry.
-   */
-  get vatBreakdown(): Priced["vatBreakdown"] {
-    return this.#pricedOrder.vatBreakdown;
-  }
-
   #invalidatePricing(): void {
-    this.#priced = null;
     this.#total = null;
   }
 

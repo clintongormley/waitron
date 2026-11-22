@@ -22,7 +22,8 @@ export interface MadridSharedProduct {
   /** The captured category's name. */
   category: string;
   vatClass: string;
-  takeawayVatClass: string;
+  /** `null`: none of its own, so its offers take away at `vatClass`. */
+  takeawayVatClass: string | null;
   /** Whole cents, VAT included. */
   unitPrice: number;
   pricingUnit: string;
@@ -169,7 +170,11 @@ export function madridWithSharedOffers(
           ["customerName", product.customerName, offer.customerName],
           ["kitchenName", product.kitchenName, offer.kitchenName],
           ["vatClass", product.vatClass, offer.vatClass],
-          ["takeawayVatClass", product.takeawayVatClass, offer.takeawayVatClass],
+          [
+            "takeawayVatClass",
+            product.takeawayVatClass ?? product.vatClass,
+            offer.takeawayVatClass,
+          ],
           ["unitPrice", (product.unitPrice / 100).toFixed(2), offer.unitPrice],
           ["pricingUnit", product.pricingUnit, offer.pricingUnit],
           ["image", product.image, offer.image],

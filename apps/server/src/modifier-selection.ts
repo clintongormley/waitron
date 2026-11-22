@@ -37,7 +37,8 @@ export interface ExtraChild {
   price: string;
   /** The list the pick was taken from, stored on the child line as `extra_list_id`. */
   listId: string;
-  /** The extra PRODUCT's own classes, served here and taken away, never the dish's. */
+  /** The extra PRODUCT's own labels, never the dish's. Taken away, its line files at the product's
+   * takeaway rate (`product_takeaway_vat_rates`), not `takeawayVatClass`. */
   vatClass: VatClass;
   takeawayVatClass: VatClass;
   /**

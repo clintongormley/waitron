@@ -173,7 +173,7 @@ export function madridWithMenuSettings(
       updatedAt,
       updatedBy: null,
       mode: "row",
-      defaults: { starterUnitsCreated: markers.length === 1 },
+      defaults: { starterUnitsCreated: markers.length === 1, defaultTakeawayVatRate: null },
     },
   );
   delete result.tables.catalogue_settings;

@@ -392,6 +392,7 @@ it("saves the pack defaults and starter-unit history only once", async () => {
     revision: 1,
     doc: {
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: null,
       defaultColor: "#abcced",
       starterUnitsCreated: true,
     },
@@ -417,6 +418,7 @@ it("keeps defaults saved before the first seed and creates its units only once",
     revision: 2,
     doc: {
       defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: null,
       defaultColor: null,
       starterUnitsCreated: true,
     },

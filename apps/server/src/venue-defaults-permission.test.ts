@@ -102,9 +102,12 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     expect(answer.status).toBe(200);
     expect(Object.keys(await answer.json()).sort()).toEqual([
       "defaultProductVatClass",
+      "defaultTakeawayVatRate",
       "fixedReceiptLanguage",
       "receiptLanguage",
       "receiptLanguageChoices",
+      "takeawayVat",
+      "vatRates",
     ]);
     const refused = await write(managerCookie);
     expect(refused.status).toBe(403);

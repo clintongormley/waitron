@@ -4,6 +4,7 @@ import {
   products,
   productTakeawayVatRates,
   readTaxpayer,
+  readVenue,
   readVenueSettings,
   type Transaction,
   type VenueSettings,
@@ -11,7 +12,11 @@ import {
 import {
   AppError,
   basisPointsToDecimal,
+  classifySavedTimeZone,
+  localCalendarDate,
+  rateOn,
   stringToBasisPoints,
+  timeZoneOffsetMinutes,
   type DatedRate,
 } from "@waitron/shared";
 import "./errors.js";
@@ -122,4 +127,63 @@ export async function readTakeawayVatSchedules(
     schedules.set(productId, own.get(productId) ?? inherited.get(productId)!);
   }
   return schedules;
+}
+
+/** Each named product's OWN takeaway rates, oldest first; a product with no rows of its own (a
+ * variant taking its parent's) is absent from the map. */
+export async function readOwnTakeawayVatSchedules(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Map<string, readonly DatedRate[]>> {
+  const schedules = new Map<string, DatedRate[]>();
+  if (productIds.length === 0) return schedules;
+  const rows = await tx
+    .select({
+      productId: productTakeawayVatRates.productId,
+      startsOn: productTakeawayVatRates.startsOn,
+      rate: productTakeawayVatRates.rate,
+    })
+    .from(productTakeawayVatRates)
+    .where(inArray(productTakeawayVatRates.productId, [...productIds]))
+    .orderBy(asc(productTakeawayVatRates.startsOn));
+  for (const row of rows) {
+    const list = schedules.get(row.productId) ?? [];
+    list.push({ from: row.startsOn, rate: basisPointsToDecimal(row.rate) });
+    schedules.set(row.productId, list);
+  }
+  return schedules;
+}
+
+/**
+ * The rate each schedule holds on the venue's local date today (plan D14), keyed as given. The
+ * venue's date is read only when some schedule has a dated row: without one, each schedule is its
+ * one row from the beginning of time.
+ */
+export async function takeawayVatRatesToday(
+  tx: Transaction,
+  schedules: ReadonlyMap<string, readonly DatedRate[]>,
+): Promise<Map<string, string>> {
+  const dated = [...schedules.values()].some((schedule) =>
+    schedule.some((entry) => entry.from !== null),
+  );
+  const today = dated ? await venueToday(tx) : null;
+  const rates = new Map<string, string>();
+  for (const [productId, schedule] of schedules) {
+    // A product with no rows at all, which no venue reaches (plan D3), is refused as `rateOn`
+    // refuses an empty list.
+    if (schedule.length === 0)
+      throw new AppError("vat_rate.schedule_invalid", {
+        caller: "rateOn",
+        reason: "first_entry_missing_or_dated",
+      });
+    rates.set(productId, today === null ? schedule[0]!.rate : rateOn(schedule, today));
+  }
+  return rates;
+}
+
+async function venueToday(tx: Transaction): Promise<string> {
+  const zone = classifySavedTimeZone((await readVenue(tx)).timeZone);
+  if (zone.kind !== "valid") throw new AppError("venue.time_zone_invalid", { reason: zone.kind });
+  const instant = new Date();
+  return localCalendarDate(instant, timeZoneOffsetMinutes(zone.timeZone, instant));
 }

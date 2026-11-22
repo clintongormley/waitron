@@ -5,11 +5,13 @@ import { adjustments } from "@waitron/adjustments";
 import {
   departments,
   parties,
+  products,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { currentBusinessDay, periodDays, resolveVenueClock } from "@waitron/reporting";
 import { createDepartment } from "@waitron/venue-service";
@@ -732,6 +734,41 @@ describe("the estimated cost", () => {
         menuPrice: decimal("11.00"),
         amountTakenOff: decimal("11.00"),
         estimatedCost: decimal("7.00"),
+      }),
+    ]);
+  });
+
+  it("takes a takeaway dish's own product rate, not the label on its line", async () => {
+    await setMargin(departmentId, 3000);
+    const [salad] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Salad")),
+    );
+    await inTx(venue, (tx) => setTakeawayVatRate(tx, salad!.id, "21.00"));
+    onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, salad!.id, "10.00")));
+    const { partyId, billId } = await bill([]);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ dining: "takeaway" })
+        .where(eq(workingOrders.id, billId));
+      await placeGroups(tx, venue.cfg, partyId, {
+        groups: [{ lines: [{ menuItemId: venue.item("Salad"), quantity: "1" }], release: "fire" }],
+        operatorId: venue.staffId,
+        billId,
+      });
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1100, lineTotal: 1100, takeawayVatClass: "reduced" })
+        .where(eq(workingOrderLines.workingOrderId, billId));
+    });
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    // 11.00 ÷ 1.21 × 0.70 = 6.36, where the line's `reduced` label would give 7.00.
+    expect(await freeOn(billId)).toEqual([
+      row({
+        item: "Salad",
+        menuPrice: decimal("11.00"),
+        amountTakenOff: decimal("11.00"),
+        estimatedCost: decimal("6.36"),
       }),
     ]);
   });

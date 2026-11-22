@@ -481,12 +481,9 @@ describe("an extra that is a parent with Active variants", () => {
 });
 
 describe("a variant offered as an extras item", () => {
-  // A variant's takeaway class is its own takeaway class, else its own served class, else its
-  // parent's takeaway class, else its parent's served class. Each item below stops at a different
-  // step, and the first three resolve to something other than their parent's served class.
-  it("carries the takeaway VAT class its variant resolves to, on every path", async () => {
+  it("carries the served class its variant resolves to as its takeaway class, on every path", async () => {
     const items = await run(async (tx) => {
-      const parent = async (name: string, vatClass: "reduced" | "zero", takeaway?: "general") =>
+      const parent = async (name: string, vatClass: "reduced" | "zero") =>
         (
           await createProduct(tx, {
             categoryId: null,
@@ -494,10 +491,9 @@ describe("a variant offered as an extras item", () => {
             name,
             unitPrice: "2.00",
             vatClass,
-            ...(takeaway ? { takeawayVatClass: takeaway } : {}),
           })
         ).id;
-      const cola = await parent("cola staff", "reduced", "general");
+      const cola = await parent("cola staff", "reduced");
       const juice = await parent("juice staff", "zero");
       const variant = (
         parentId: string,
@@ -561,9 +557,9 @@ describe("a variant offered as an extras item", () => {
         const item = list!.kind === "extras" && list!.items.find((i) => i.productId === productId);
         return item ? [item.vatClass, item.takeawayVatClass] : null;
       };
-      expect(classes(items.ownTakeaway), holder).toEqual(["super_reduced", "zero"]);
+      expect(classes(items.ownTakeaway), holder).toEqual(["super_reduced", "super_reduced"]);
       expect(classes(items.ownServed), holder).toEqual(["super_reduced", "super_reduced"]);
-      expect(classes(items.parentsTakeaway), holder).toEqual(["reduced", "general"]);
+      expect(classes(items.parentsTakeaway), holder).toEqual(["reduced", "reduced"]);
       expect(classes(items.parentsServed), holder).toEqual(["zero", "zero"]);
     }
   });

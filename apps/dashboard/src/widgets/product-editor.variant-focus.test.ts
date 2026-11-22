@@ -23,7 +23,7 @@ const product: ProductEditorDraft = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: null,
   color: null,

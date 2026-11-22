@@ -30,14 +30,17 @@ import {
   MONEY_SCALE,
   multiplyDecimal,
   sumDecimals,
+  rateOn,
   thousandthsToDecimal,
-  vatRateOn,
   type BusinessDayClock,
+  type DatedRate,
   type Decimal,
+  type Dining,
   type VatClass,
 } from "@waitron/shared";
 import { addDays } from "@waitron/venue-service";
 import { inIds } from "./kitchen-print.js";
+import { readLineVatRates } from "./line-vat-rates.js";
 
 /** One dish or bill given free: a comp, or a discount that left it at zero. */
 export interface FreeItem {
@@ -152,6 +155,8 @@ export async function listFreeItems(
       workingOrderId: workingOrderLines.workingOrderId,
       dining: workingOrders.dining,
       parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      setMenuRole: workingOrderLines.setMenuRole,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
       vatClass: workingOrderLines.vatClass,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
@@ -173,6 +178,23 @@ export async function listFreeItems(
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));
+  // Each line's rates as read now, taken on the adjustment's day below. A takeaway product line's
+  // are its product's current rows, which may differ from those it was invoiced at.
+  const ratesOf = new Map<(typeof reduced)[number], readonly DatedRate[]>();
+  for (const dining of ["eat_in", "takeaway"] as const satisfies readonly Dining[]) {
+    const lines = reduced.filter((line) => line.dining === dining);
+    const rates = await readLineVatRates(
+      tx,
+      dining,
+      lines.map((line) => ({
+        productId: line.productId,
+        setMenuRole: line.setMenuRole,
+        vatClass: line.vatClass as VatClass,
+        takeawayVatClass: line.takeawayVatClass as VatClass,
+      })),
+    );
+    lines.forEach((line, i) => ratesOf.set(line, rates[i]!));
+  }
   const linesOf = new Map<string, Map<string, typeof reduced>>();
   for (const line of reduced) {
     const byBill = linesOf.get(line.adjustmentId) ?? new Map<string, typeof reduced>();
@@ -237,10 +259,7 @@ export async function listFreeItems(
           thousandthsToDecimal(line.priceQuantity),
           MONEY_SCALE,
         ),
-        rate: vatRateOn(
-          (line.dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass,
-          date,
-        ),
+        rate: rateOn(ratesOf.get(line)!, date),
       }));
       items.push({
         adjustmentId: entry.id,

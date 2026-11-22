@@ -15,6 +15,12 @@ import { archiveProducts } from "./archive.js";
 import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
+import {
+  readOwnTakeawayVatSchedules,
+  readVenueVatRates,
+  setTakeawayVatRate,
+  takeawayVatRatesToday,
+} from "./takeaway-vat-rates.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
 import type { InheritedValues, ProductEditorValue, VatClass } from "@waitron/shared";
 export type { InheritedValues, ProductEditorValue } from "@waitron/shared";
@@ -34,7 +40,6 @@ const columns = {
   active: products.active,
   available: products.available,
   vatClass: products.vatClass,
-  takeawayVatClass: products.takeawayVatClass,
   allergens: products.allergens,
   dietaryDeclarations: products.dietaryDeclarations,
   courseId: products.courseId,
@@ -52,7 +57,6 @@ async function readStored(tx: Transaction, productId: string) {
       ...stored,
       unitPrice: priceOrNull(stored.unitPrice),
       vatClass: stored.vatClass as VatClass | null,
-      takeawayVatClass: stored.takeawayVatClass as VatClass | null,
       dietaryDeclarations:
         stored.dietaryDeclarations === null
           ? null
@@ -63,7 +67,11 @@ async function readStored(tx: Transaction, productId: string) {
 
 /** A parent has no parent of its own, so `products_top_level_owns_ck` sets its price, VAT class
  * and dietary declarations. */
-async function readInherited(tx: Transaction, parentId: string): Promise<InheritedValues> {
+async function readInherited(
+  tx: Transaction,
+  parentId: string,
+  takeawayVatRate: string,
+): Promise<InheritedValues> {
   const { stored: parent } = await readStored(tx, parentId);
   return {
     name: parent.name,
@@ -71,13 +79,27 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     image: parent.image,
     unitPrice: parent.unitPrice!,
     vatClass: parent.vatClass!,
-    takeawayVatClass: parent.takeawayVatClass ?? parent.vatClass!,
+    takeawayVatRate,
     unitId: parent.unitId,
     primaryCategoryId: parent.primaryCategoryId,
     courseId: parent.courseId,
     allergens: parent.allergens,
     dietaryDeclarations: parent.dietaryDeclarations!,
   };
+}
+
+/** Today's takeaway rate of the product's own rows, and of its parent's when it has one. A variant
+ * without rows of its own is absent; a product with no parent always has one. */
+async function takeawayRatesOf(
+  tx: Transaction,
+  productId: string,
+  parentId: string | null,
+): Promise<Map<string, string>> {
+  const topLevel = parentId ?? productId;
+  const own = await readOwnTakeawayVatSchedules(tx, [...new Set([productId, topLevel])]);
+  // An empty list makes `takeawayVatRatesToday` refuse a product with no parent and no rows.
+  if (!own.has(topLevel)) own.set(topLevel, []);
+  return takeawayVatRatesToday(tx, own);
 }
 
 /** A product's editor value, or a variant's: its own stored values, and its parent's beside them.
@@ -87,19 +109,22 @@ export async function readProductEditor(
   productId: string,
 ): Promise<ProductEditorValue> {
   const { stored: row } = await readStored(tx, productId);
+  const rates = await takeawayRatesOf(tx, row.id, row.parentId);
   if (row.parentId !== null) {
     return {
       ...row,
+      takeawayVatRate: rates.get(row.id) ?? null,
       primaryCategoryId: null,
       unitId: null,
       color: null,
-      inherited: await readInherited(tx, row.parentId),
+      inherited: await readInherited(tx, row.parentId, rates.get(row.parentId)!),
       modifiers: [],
       variants: [],
     };
   }
   return {
     ...row,
+    takeawayVatRate: rates.get(row.id)!,
     inherited: null,
     // `readProductModifiers` keys its map by the LOWER-CASED product id, so an upper-cased
     // `productId` argument would find nothing.
@@ -182,7 +207,7 @@ export async function saveProductEditor(
         // The parser refuses a blank on a product with no parent, which every created one is.
         unitPrice: value.unitPrice!,
         vatClass: value.vatClass!,
-        takeawayVatClass: value.takeawayVatClass,
+        takeawayVatRate: value.takeawayVatRate!,
         active: value.active,
         available: value.available ?? true,
         ordering: value.ordering,
@@ -203,7 +228,6 @@ export async function saveProductEditor(
       unitId: value.unitId,
       unitPrice: value.unitPrice,
       vatClass: value.vatClass,
-      takeawayVatClass: value.takeawayVatClass,
       active: value.active,
       ...(value.available === undefined ? {} : { available: value.available }),
       ordering: value.ordering,
@@ -211,6 +235,20 @@ export async function saveProductEditor(
       allergens: value.allergens,
       dietaryDeclarations: value.dietaryDeclarations,
     });
+    // Replacing the list erases its dated rows, so a save that sends back the rate the editor read
+    // leaves them alone.
+    const own = (await readOwnTakeawayVatSchedules(tx, [productId])).get(productId);
+    const today =
+      own === undefined
+        ? null
+        : (await takeawayVatRatesToday(tx, new Map([[productId, own]]))).get(productId)!;
+    if (value.takeawayVatRate !== today)
+      await setTakeawayVatRate(
+        tx,
+        productId,
+        value.takeawayVatRate,
+        await readVenueVatRates(tx, venue.revision === 0 ? undefined : venue.doc),
+      );
   }
   if (isVariant) {
     // A variant's category and colour are always its parent's, so it stores neither.

@@ -22,6 +22,7 @@ import { findPaymentByBillPayment, associatePaymentWithSale } from "@waitron/pay
 import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   ADVANCE_VAT_CLASS,
+  VAT_RATE_TABLE,
   AppError,
   addDecimal,
   centsToDecimal,
@@ -150,7 +151,7 @@ export async function issueAdvance(
           variantKitchenName: null,
           kitchenName: null,
           advanceRole: "payment_on_account",
-          vatClass: ADVANCE_VAT_CLASS,
+          vatRates: VAT_RATE_TABLE[ADVANCE_VAT_CLASS],
           grossUnitPrice: applied,
           lineGross: applied,
         },

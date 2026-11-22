@@ -5837,9 +5837,8 @@ stack where there is no room for both. The tree scrolls inside its own box, at m
 item picked low in it stays in view beside its form. Picking an item also scrolls the dialog to
 the form where that is needed, as it is when the two stack on a short screen; focus stays on the
 item picked. A variant link on a dish's form goes with that form, so following one moves focus to
-the variant form's heading. Each variant link is followed by its price and VAT class, and, where
-the region taxes takeaway differently and the variant's takeaway class differs from its served
-class, its takeaway class, all as putting the patch live would leave them, in `--wt-color-text-muted`, wrapping under the link where there
+the variant form's heading. Each variant link is followed by its price and VAT class, both as putting the patch live would
+leave them, in `--wt-color-text-muted`, wrapping under the link where there
 is no room. Until an item is picked, the form's place reads "Pick an
 item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
 item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
@@ -6126,7 +6125,8 @@ opens the first visible tab. Venue details holds five cards — Business, Venue,
 Defaults and Privacy — and, with the Veri\*Factu module, a sixth: the AEAT certificate, which needs
 `fiscal.view` to read and `system.manage` to install or replace. The other five cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
-receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
+receipt language, the "VAT class for new products" default and, where the venue charges takeaway
+VAT, the "New products start at (VAT when taken away)" default — is shown with `venue.view`, and is
 editable with `venue.configure` and read-only without it. So is the Privacy card — the address of
 the venue's privacy notice web page and its privacy email. Venue settings has no Kitchen tab:
 the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address opens Venue details. Voids and comps

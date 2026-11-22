@@ -13,7 +13,7 @@ import {
 import { setIncludeFolder } from "./include-folder.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn } from "./sections.js";
-import { updateMenuDetails, updateProduct } from "./operations.js";
+import { updateMenuDetails } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { liveVersions, previewMenu, publishMenu } from "./menu-publication.js";
 import { readMenuStructure } from "./menu-structure.js";
@@ -147,7 +147,6 @@ describe("applyMenuPatch", () => {
             image: "soda.jpg",
             price: "9",
             vatClass: "general",
-            takeawayVatClass: "zero",
           }[field],
         })),
       ),
@@ -765,73 +764,16 @@ describe("a section shown through folders fixing different languages", () => {
 });
 
 describe("the takeaway VAT class", () => {
-  const takeawayZero = (tx: Transaction, f: MenusFixture) =>
-    updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" }).then(() => undefined);
-
-  it("patches a dish's takeaway class on that copy only", async () => {
-    const { f, document } = await liveLunch(takeawayZero);
-    const lemonade = await menuItem(f, f.lemonade);
-    const before = document.offers[lemonade]!;
-    expect(before).toMatchObject({ vatClass: "reduced", takeawayVatClass: "zero" });
-    const patched = applyMenuPatch(
-      document,
-      parseMenuPatch([
-        {
-          target: { kind: "offer", menuItemId: lemonade },
-          field: "takeawayVatClass",
-          value: "general",
-        },
-      ]),
-      languages,
-    );
-    expect(patched.offers[lemonade]).toEqual({ ...before, takeawayVatClass: "general" });
-    expect({ ...patched.offers, [lemonade]: null }).toEqual({
-      ...document.offers,
-      [lemonade]: null,
-    });
-  });
-
-  it("patches a variant's and an extra's takeaway class", async () => {
-    const { f, document } = await liveLunch(bothDishesOfferLists);
-    const lemonade = await menuItem(f, f.lemonade);
-    const patched = applyMenuPatch(
-      document,
-      parseMenuPatch([
-        {
-          target: { kind: "variant", menuItemId: lemonade, variantId: f.large },
-          field: "takeawayVatClass",
-          value: "zero",
-        },
-        {
-          target: { kind: "extra", listId: f.extrasList, productId: f.extraLemon },
-          field: "takeawayVatClass",
-          value: "super_reduced",
-        },
-      ]),
-      languages,
-    );
-    const expected = structuredClone(document);
-    expected.offers[lemonade]!.variants.find((v) => v.id === f.large)!.takeawayVatClass = "zero";
-    const items = extrasLists(expected, f.extrasList).map((list) =>
-      list.items.find((item) => item.productId === f.extraLemon)!,
-    );
-    expect(items).toHaveLength(2);
-    for (const item of items) item.takeawayVatClass = "super_reduced";
-    // Everything else, every other copy and both served classes included, is as it was.
-    expect(patched).toEqual(expected);
-  });
-
-  it("refuses a takeaway class that is not a VAT class", () => {
+  it("is no longer patched: a change naming it is refused as a field outside the list", () => {
     const targets = [
       { kind: "offer", menuItemId: "i" },
       { kind: "variant", menuItemId: "i", variantId: "v" },
       { kind: "extra", listId: "l", productId: "p" },
     ];
     for (const target of targets)
-      for (const value of ["nope", null])
-        expect(
-          refusal(() => parseMenuPatch([{ target, field: "takeawayVatClass", value }])),
-        ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "takeawayVatClass" } });
+      expect(
+        refusal(() => parseMenuPatch([{ target, field: "takeawayVatClass", value: "general" }])),
+      ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "field" } });
   });
 
   it("patching only the served class leaves the takeaway class as the live menu holds it", async () => {
@@ -878,7 +820,6 @@ describe("parseMenuPatch", () => {
       image: "a.jpg",
       price: "2",
       vatClass: "zero",
-      takeawayVatClass: "general",
     };
     const body = Object.entries(PATCH_FIELDS).flatMap(([kind, fields]) =>
       fields.map((field) => ({

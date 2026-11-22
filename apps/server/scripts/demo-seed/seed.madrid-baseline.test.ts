@@ -75,6 +75,9 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
     "d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401", // Mahón
   ].map((image) => ({ product: madridProduct(image), old: "reduced", new: "super_reduced" })),
 ];
+const CHEESE_PRODUCTS = VAT_CLASS_CHANGES.filter((change) => change.new === "super_reduced").map(
+  (change) => change.product,
+);
 
 const DRINK_IMAGES = {
   cola: "280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp",
@@ -92,7 +95,7 @@ interface SharedDrinkNames {
   beer: { name: string; kitchenName: string };
 }
 // The restaurant's cola, and its new Coca-Cola Zero and bottled beer, are listed in the deli and
-// take away at the general class; the deli sells to take away and makes its drinks itself.
+// take away at 21%; the deli sells to take away and makes its drinks itself.
 const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
   const menu = (name: string) => `@catalogues:${stable([name])}`;
   const product = (image: string) => `@products:${stable([image])}`;
@@ -112,13 +115,6 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         from: "eat_in",
         to: "takeaway",
       },
-      {
-        table: "products",
-        row: product(DRINK_IMAGES.cola),
-        column: "takeaway_vat_class",
-        from: null,
-        to: "general",
-      },
     ],
     products: [
       {
@@ -127,7 +123,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
         category: names.categories.soft,
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatClass: null,
         unitPrice: 180,
         pricingUnit: "each",
       },
@@ -137,7 +133,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
         category: names.categories.wineAndBeer,
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatClass: null,
         unitPrice: 160,
         pricingUnit: "each",
       },
@@ -181,12 +177,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         `@kitchen_stations:${stable([names.station])}`,
       ]),
     },
-    changedOffers: restaurantMenus.map((name) => ({
-      menuItem: `@menu_items:${stable([menu(name), product(DRINK_IMAGES.cola)])}`,
-      field: "takeawayVatClass",
-      from: "reduced",
-      to: "general",
-    })),
+    changedOffers: [],
   };
 };
 const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
@@ -3043,12 +3034,20 @@ for (const locale of ["en", "es"] as const) {
         (column) => column.name !== "payment_attempt_at",
       );
       for (const row of Object.values(retainedOrders.rows)) delete row.payment_attempt_at;
-      // Every top-level product starts at the area's takeaway rate, 10.00, from the beginning of time.
+      // Every top-level product has one takeaway rate from the beginning of time: the deli's cheeses
+      // 4%, the drinks it lists 21%, and the rest the area's 10%.
       const takeawayRates = expected[phase].tables.product_takeaway_vat_rates!;
+      const ownRates = new Map<unknown, number>([
+        ...CHEESE_PRODUCTS.map((product) => [product, 400] as const),
+        ...Object.values(DRINK_IMAGES).map(
+          (image) => [`@products:${stable([image])}`, 2100] as const,
+        ),
+      ]);
       for (const product of Object.values(expected[phase].tables.products!.rows)) {
         if (product.parent_id !== null) continue;
         const id = `@product_takeaway_vat_rates:${stable([product.id, null])}`;
-        takeawayRates.rows[id] = { id, product_id: product.id, starts_on: null, rate: 1000 };
+        const rate = ownRates.get(product.id) ?? 1000;
+        takeawayRates.rows[id] = { id, product_id: product.id, starts_on: null, rate };
       }
       phases[phase]!.product_takeaway_vat_rates = Object.keys(takeawayRates.rows).length;
       phases[phase] = byName(phases[phase]!);

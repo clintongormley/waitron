@@ -36,12 +36,11 @@ export type StaffLanguage = SeedLocale;
 export type StaffText = Readonly<Record<StaffLanguage, string>>;
 export type SeedProduct<L extends string = string> = Omit<
   CountryDemoProduct<L>,
-  "dietaryDeclarations" | "pricingUnit" | "vatClass" | "takeawayVatClass"
+  "dietaryDeclarations" | "pricingUnit" | "vatClass"
 > & {
   readonly dietaryDeclarations?: readonly DietaryLabel[];
   readonly pricingUnit: PricingUnit;
   readonly vatClass: VatClass;
-  readonly takeawayVatClass?: VatClass;
 };
 export type SeedCategory<L extends string = string> = Omit<
   CountryDemoCategory<L>,

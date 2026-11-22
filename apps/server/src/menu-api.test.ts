@@ -18,7 +18,14 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { addMember, createMenu, menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
+import {
+  addMember,
+  createMenu,
+  menuReleases,
+  menuVersions,
+  readTakeawayVatSchedules,
+  sectionMembers,
+} from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -1723,7 +1730,7 @@ describe("unique category and product names", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
-      takeawayVatClass: null,
+      takeawayVatRate: "21.00",
       variants: [variant(name), variant(name.toLowerCase())],
       primaryCategoryId: null,
       modifiers: [],
@@ -1993,7 +2000,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
-      takeawayVatClass: null,
+      takeawayVatRate: "21.00",
       variants: [
         {
           name: "Double",
@@ -2235,7 +2242,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
-      takeawayVatClass: null,
+      takeawayVatRate: "21.00",
       variants: [],
       primaryCategoryId: null,
       modifiers: [],
@@ -2743,16 +2750,16 @@ describe("mountMenuApi — products", () => {
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
-    // ES double coffee sets its own price (2.40, where the parent's is 2.00) and here its own VAT class,
-    // and holds a stored category of its own, which it never reports; Short ES coffee, added Inactive,
-    // leaves all three blank.
+    // ES double coffee sets its own price (2.40, where the parent's is 2.00) and here its own VAT class
+    // and takeaway rate (4.00, where the parent's is 21.00), and holds a stored category of its own,
+    // which it never reports; Short ES coffee, added Inactive, leaves all four blank.
     const own = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...own, vatClass: "general" },
+          body: { ...own, vatClass: "general", takeawayVatRate: "4.00" },
         })
       ).status,
     ).toBe(200);
@@ -2798,7 +2805,7 @@ describe("mountMenuApi — products", () => {
           allergens: { milk: {} },
           unitPrice: "2.40",
           vatClass: "general",
-          takeawayVatClass: "general",
+          takeawayVatRate: "4.00",
           primaryCategoryId: categoryId,
           courseId: null,
         },
@@ -2812,7 +2819,7 @@ describe("mountMenuApi — products", () => {
           allergens: { milk: {} },
           unitPrice: "2.00",
           vatClass: "reduced",
-          takeawayVatClass: "reduced",
+          takeawayVatRate: "21.00",
           primaryCategoryId: categoryId,
           courseId: null,
         },
@@ -3168,34 +3175,7 @@ describe("mountMenuApi — products", () => {
     expect(await res.json()).toMatchObject({ active: true, available: false });
   });
 
-  it("POST /management-api/products stores a takeaway class, and none when it is omitted", async () => {
-    const app = mountApp();
-    const create = (name: string, extra: Record<string, unknown>) =>
-      send(app, "POST", "/management-api/products", {
-        body: {
-          categoryId: null,
-          name,
-          pricingUnit: "each",
-          unitPrice: "1.50",
-          vatClass: "reduced",
-          ...extra,
-        },
-      });
-    const res = await create("Cola", { takeawayVatClass: "general" });
-    expect(res.status).toBe(201);
-    const product = (await res.json()) as { id: string; takeawayVatClass: string | null };
-    expect(product.takeawayVatClass).toBe("general");
-    const stored = await suite.db.execute<{ takeaway_vat_class: string | null }>(
-      sql`select takeaway_vat_class from products where id = ${product.id}`,
-    );
-    expect(stored.rows[0]!.takeaway_vat_class).toBe("general");
-
-    const omitted = await create("Water", {});
-    expect(omitted.status).toBe(201);
-    expect(((await omitted.json()) as { takeawayVatClass: unknown }).takeawayVatClass).toBeNull();
-  });
-
-  it("POST /management-api/products refuses a takeaway class that is not a VAT class", async () => {
+  it("POST /management-api/products stores a takeaway rate and lists it back", async () => {
     const app = mountApp();
     const res = await send(app, "POST", "/management-api/products", {
       body: {
@@ -3204,12 +3184,56 @@ describe("mountMenuApi — products", () => {
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "reduced",
-        takeawayVatClass: "nope",
+        takeawayVatRate: "21.00",
+      },
+    });
+    expect(res.status).toBe(201);
+    const product = (await res.json()) as { id: string; takeawayVatRate: string };
+    expect(product.takeawayVatRate).toBe("21.00");
+    const stored = await suite.db.execute<{ starts_on: string | null; rate: number }>(
+      sql`select starts_on, rate from product_takeaway_vat_rates where product_id = ${product.id}`,
+    );
+    expect(stored.rows).toEqual([{ starts_on: null, rate: 2100 }]);
+    const listed = (await (await send(app, "GET", "/management-api/products")).json()) as {
+      id: string;
+      takeawayVatRate: string;
+    }[];
+    expect(listed.find((row) => row.id === product.id)!.takeawayVatRate).toBe("21.00");
+  });
+
+  it("POST /management-api/products refuses a takeaway rate the area does not offer", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        categoryId: null,
+        name: "Cola",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "reduced",
+        takeawayVatRate: "5.00",
       },
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
-      error: { code: "product.invalid", params: { field: "takeawayVatClass" } },
+      error: { code: "product.invalid", params: { field: "takeawayVatRate" } },
+    });
+  });
+
+  it("POST /management-api/products refuses the retired takeaway class", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        categoryId: null,
+        name: "Cola",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "reduced",
+        takeawayVatClass: "general",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "takeawayVatClass" } },
     });
   });
 
@@ -5269,7 +5293,7 @@ describe("menu routes whose own checks refuse a negative price", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
-      takeawayVatClass: null,
+      takeawayVatRate: "21.00",
       variants: [variant("A", "2.00"), variant("B", "3.00")],
       primaryCategoryId: null,
       modifiers: [],
@@ -6806,6 +6830,9 @@ it("keeps a shared snapshot's revision with its data when a write commits before
   }
 });
 
+/** Spain's pickable takeaway rates: the ones its VAT return can report. */
+const SPAIN_PICKABLE = ["0.00", "4.00", "10.00", "21.00"];
+
 describe("menu settings routes", () => {
   it("no longer serves a VAT-default write, and still serves the read and the colour write", async () => {
     const app = mountApp();
@@ -6877,8 +6904,10 @@ describe("menu settings routes", () => {
       expect(loaded.status).toBe(200);
       expect(await loaded.json()).toEqual({
         defaultProductVatClass,
+        defaultTakeawayVatRate: "10.00",
         defaultColor: null,
         takeawayVat: true,
+        vatRates: SPAIN_PICKABLE,
       });
     }
     expect(
@@ -6890,6 +6919,62 @@ describe("menu settings routes", () => {
       ).rows,
     ).toEqual([{ updated_by: managerPersonId, person_id: managerPersonId }]);
   });
+
+  it("saves the venue's takeaway rate for new products, and a new product starts at it", async () => {
+    const app = mountWithVenueDefaults();
+    const before = await send(app, "GET", "/management-api/menu-settings");
+    expect(await before.json()).toMatchObject({
+      defaultTakeawayVatRate: "10.00",
+      vatRates: SPAIN_PICKABLE,
+    });
+    try {
+      const saved = await send(app, "PUT", "/management-api/venue-defaults", {
+        body: { defaultTakeawayVatRate: "4.00" },
+      });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).defaultTakeawayVatRate).toBe("4.00");
+      const loaded = await send(app, "GET", "/management-api/menu-settings");
+      expect((await loaded.json()).defaultTakeawayVatRate).toBe("4.00");
+      const created = await send(app, "POST", "/management-api/products", {
+        body: {
+          categoryId: null,
+          name: "Cheese",
+          pricingUnit: "each",
+          unitPrice: "6",
+          vatClass: "general",
+        },
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const schedules = await withTransaction(suite.db, (tx) => readTakeawayVatSchedules(tx, [id]));
+      expect(schedules.get(id)).toEqual([{ from: null, rate: "4.00" }]);
+    } finally {
+      // The save refuses null, so the stored default is cleared directly.
+      await suite.db.execute(
+        sql`update settings set doc = json_set(doc, '$.defaultTakeawayVatRate', null) where module = 'menu'`,
+      );
+    }
+    const stored = await suite.db.execute<{ rate: string | null }>(
+      sql`select json_extract(doc, '$.defaultTakeawayVatRate') as rate from settings where module = 'menu'`,
+    );
+    expect(stored.rows).toEqual([{ rate: null }]);
+  });
+
+  it.each(["5.00", "3.00", "4", null, 4])(
+    "refuses a takeaway rate for new products of %j and keeps the saved one",
+    async (defaultTakeawayVatRate) => {
+      const app = mountWithVenueDefaults();
+      const refused = await send(app, "PUT", "/management-api/venue-defaults", {
+        body: { defaultTakeawayVatRate },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: { code: "product.invalid", params: { field: "defaultTakeawayVatRate" } },
+      });
+      const loaded = await send(app, "GET", "/management-api/menu-settings");
+      expect((await loaded.json()).defaultTakeawayVatRate).toBe("10.00");
+    },
+  );
 
   it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
     const app = mountWithVenueDefaults();
@@ -6923,13 +7008,16 @@ describe("menu settings routes", () => {
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
     });
     const loaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await loaded.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
       takeawayVat: true,
+      vatRates: SPAIN_PICKABLE,
     });
 
     expect(
@@ -6944,12 +7032,18 @@ describe("menu settings routes", () => {
       body: { color: null },
     });
     expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ defaultProductVatClass: "reduced", defaultColor: null });
+    expect(await cleared.json()).toEqual({
+      defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: null,
+    });
     const reloaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await reloaded.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: null,
       takeawayVat: true,
+      vatRates: SPAIN_PICKABLE,
     });
   });
 

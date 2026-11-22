@@ -20,7 +20,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { addDecimal, decimal, sumDecimals, VAT_RATE_TABLE } from "@waitron/shared";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -71,14 +71,12 @@ function locked(
   name: string,
   price: string,
   quantity: string,
-  vatClass: VatClass,
   priceQuantity = "1.000",
 ): LockedLine {
   return {
     grossUnitPrice: price,
     quantity,
     priceQuantity,
-    vatClass,
     name,
     descriptions: { en: name },
     category: null,
@@ -108,7 +106,8 @@ function grouped(dishes: readonly DishSpec[]): StoredOrderLine[] {
     const dishNo = lines.length + 1;
     lines.push({
       identity: identity(newId("line"), `product-${dish.name}`),
-      locked: locked(dish.name, dish.price, `${dish.count}.000`, dish.vatClass ?? "reduced"),
+      locked: locked(dish.name, dish.price, `${dish.count}.000`),
+      vatClass: dish.vatClass ?? "reduced",
     });
     for (const extra of dish.extras ?? []) {
       lines.push({
@@ -118,11 +117,11 @@ function grouped(dishes: readonly DishSpec[]): StoredOrderLine[] {
             extra.name,
             extra.price,
             thousandths(extra.perDish ?? "1", dish.count),
-            extra.vatClass ?? "reduced",
             extra.priceQuantity,
           ),
           parentLineNo: dishNo,
         },
+        vatClass: extra.vatClass ?? "reduced",
       });
     }
   }
@@ -142,7 +141,8 @@ function portions(
       const lineId = newId("line");
       lines.push({
         identity: identity(lineId, `product-${dish.name}`),
-        locked: locked(dish.name, dish.price, "1.000", dish.vatClass ?? "reduced"),
+        locked: locked(dish.name, dish.price, "1.000"),
+        vatClass: dish.vatClass ?? "reduced",
       });
       bindings.set(lineId, { lineId, cohortId, ordinal });
       for (const extra of dish.extras ?? []) {
@@ -153,11 +153,11 @@ function portions(
               extra.name,
               extra.price,
               thousandths(extra.perDish ?? "1", 1),
-              extra.vatClass ?? "reduced",
               extra.priceQuantity,
             ),
             parentLineNo: dishNo,
           },
+          vatClass: extra.vatClass ?? "reduced",
         });
       }
     }
@@ -170,7 +170,13 @@ function portions(
  * with each extra paired to its dish, and the total and VAT breakdown.
  */
 function filed(lines: readonly (StoredOrderLine | ProjectedLine)[]) {
-  const priced = rateLines(grossLockedLines(lines.map((line) => line.locked)), DAY);
+  const priced = rateLines(
+    grossLockedLines(
+      lines.map((line) => line.locked),
+      lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+    ),
+    DAY,
+  );
   const describe = (i: number): string => {
     const row = priced.lines[i]!;
     const parent = row.parentLineNo == null ? "" : ` under ${describe(row.parentLineNo - 1)}`;
@@ -343,6 +349,7 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     bill.lines[1] = {
       identity: { ...comped.identity, listUnitGross: decimal("9.50") },
       locked: { ...comped.locked, grossUnitPrice: "0.00" },
+      vatClass: comped.vatClass,
     };
     const projected = projectPortionSale(bill.lines, bill.bindings);
     expect(rowsOf(projected)).toEqual([
@@ -359,6 +366,7 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     bill.lines[1] = {
       identity: { ...second.identity, listUnitGross: decimal("9.50") },
       locked: { ...second.locked, grossUnitPrice: "9.00" },
+      vatClass: second.vatClass,
     };
     const projected = projectPortionSale(bill.lines, bill.bindings);
     expect(projected.map((line) => line.identity.listUnitGross)).toEqual([null, "9.50"]);
@@ -397,6 +405,7 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
         descriptions: { en: "Bacon" },
         grossUnitPrice: "3.00",
       },
+      vatClass: second.vatClass,
     };
     const projected = projectPortionSale(bill.lines, bill.bindings);
     expect(rowsOf(projected)).toEqual([
@@ -426,6 +435,7 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     bill.lines.splice(2, 0, {
       identity: { ...cheese.identity, id: "line-under-extra" },
       locked: { ...cheese.locked, parentLineNo: 2 },
+      vatClass: cheese.vatClass,
     });
     expect(() => projectPortionSale(bill.lines, bill.bindings)).toThrow(
       "extra line line-under-extra names no dish line",
@@ -589,7 +599,13 @@ describe("A803 monetary comparison: operations on portions through the real path
   ): Promise<string[]> {
     const stored = await readLockedLines(tx, billId);
     const lines = bindings === undefined ? stored : projectPortionSale(stored, bindings);
-    const priced = rateLines(grossLockedLines(lines.map((line) => line.locked)), DAY);
+    const priced = rateLines(
+      grossLockedLines(
+        lines.map((line) => line.locked),
+        lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+      ),
+      DAY,
+    );
     return withReceiptListPrices(
       priced.lines,
       lines.map((line) => line.identity),
@@ -998,7 +1014,13 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
    */
   async function filedOf(tx: Transaction, billId: string) {
     const lines = await readLockedLines(tx, billId);
-    const priced = rateLines(grossLockedLines(lines.map((line) => line.locked)), DAY);
+    const priced = rateLines(
+      grossLockedLines(
+        lines.map((line) => line.locked),
+        lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+      ),
+      DAY,
+    );
     const rows = withReceiptListPrices(
       priced.lines,
       lines.map((line) => line.identity),

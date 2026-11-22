@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sales, withTransaction, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createProduct, updateProduct } from "@waitron/menu";
+import { createProduct, setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining } from "@waitron/shared";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
@@ -48,7 +48,7 @@ useVenueDb({
           pricingUnit: "each",
           unitPrice: "1.80",
           vatClass: "reduced",
-          takeawayVatClass: "general",
+          takeawayVatRate: "21.00",
         })
       ).id;
       counter = await offerProducts(tx, venue.cfg);
@@ -132,6 +132,8 @@ const TAKEAWAY_BANDS = [
   { rate: "21.00", base: "1.49", tax: "0.31" },
   { rate: "4.00", base: "3.85", tax: "0.15" },
 ];
+
+const ICED_TEA_AT_ZERO = [{ rate: "0.00", base: "1.80", tax: "0.00" }];
 
 const EXPECTED_RATES: Record<Dining, number[]> = { takeaway: [2100, 400], eat_in: [1000, 1000] };
 
@@ -218,10 +220,10 @@ describe("a takeaway tab closed by issuing its invoice unpaid", () => {
 });
 
 describe("the menu republished between adding a line and switching the order", () => {
-  it("files the line at the takeaway class frozen on it, not the republished one", async () => {
+  it("files both orders at the product's takeaway rate at issue, not the rate when the line was added", async () => {
     const id = await parked("eat_in", [icedTea]);
     const republished = await inTx(venue, async (tx) => {
-      await updateProduct(tx, icedTea, { takeawayVatClass: "zero" });
+      await setTakeawayVatRate(tx, icedTea, "0.00");
       const offers = await offerProducts(tx, venue.cfg);
       await setDining(tx, id, "takeaway");
       return offers;
@@ -229,9 +231,10 @@ describe("the menu republished between adding a line and switching the order", (
 
     const sold = await cashPayment(venue, venue.cookie, id, "1.80");
     expect(sold.status).toBe(200);
-    expect(filedRates(id)).toEqual([2100]);
+    expect(filedRates(id)).toEqual([0]);
+    expect(await filedBreakdown(id)).toEqual(ICED_TEA_AT_ZERO);
 
-    // The republish did take effect: a line added after it freezes the new class.
+    // A line added after the change files the same rate.
     const fresh = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {
       id: fresh,
@@ -243,5 +246,6 @@ describe("the menu republished between adding a line and switching the order", (
     const freshSold = await cashPayment(venue, venue.cookie, fresh, "1.80");
     expect(freshSold.status).toBe(200);
     expect(filedRates(fresh)).toEqual([0]);
+    expect(await filedBreakdown(fresh)).toEqual(ICED_TEA_AT_ZERO);
   });
 });

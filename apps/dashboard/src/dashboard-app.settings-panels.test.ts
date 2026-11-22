@@ -120,6 +120,9 @@ function stubApi(role = "manager", permissions = ["test.use", "venue.view"]): Da
       receiptLanguageChoices: ["es-ES"],
       fixedReceiptLanguage: null,
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "21.00",
+      takeawayVat: true,
+      vatRates: ["0.00", "4.00", "10.00", "21.00"],
     }),
     getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     listCourses: vi.fn().mockResolvedValue([]),
@@ -280,6 +283,20 @@ it("shows the VAT class for new products in the Defaults card to venue.configure
       () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
     )
     .toBe(vatClassLabel("reduced"));
+});
+
+it("shows the takeaway rate for new products in the Defaults card to venue.configure without menu.manage", async () => {
+  const el = await mount("/venue-settings/view/venue-details", "manager", [
+    "venue.view",
+    "venue.configure",
+  ]);
+  const defaults = () =>
+    page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
+  await expect
+    .poll(
+      () => defaults()?.querySelector('[data-test="saved-defaultTakeawayVatRate"]')?.textContent,
+    )
+    .toBe("21 %");
 });
 
 it("shows a supervisor the Defaults card's values with nothing to edit", async () => {

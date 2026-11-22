@@ -662,7 +662,6 @@ export class MenusScreen extends LitElement {
   @state() private products: Product[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private defaultColor: string | null = null;
-  @state() private takeawayVat = false;
   @state() private loading = true;
   @state() private loadError = false;
 
@@ -1066,7 +1065,6 @@ export class MenusScreen extends LitElement {
         this.#queries.watch("getMenuSettings", [], (value) => {
           this.defaultColor = value.defaultColor;
           this.defaultProductVatClass = value.defaultProductVatClass;
-          this.takeawayVat = value.takeawayVat;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           setContentLanguages(value);
@@ -3546,7 +3544,6 @@ export class MenusScreen extends LitElement {
       .api=${this.api}
       menuId=${menuId}
       menuName=${this.#menuName()}
-      .takeawayVat=${this.takeawayVat}
       .open=${this.patching}
       @wt-close=${(event: Event) => {
         event.stopPropagation();

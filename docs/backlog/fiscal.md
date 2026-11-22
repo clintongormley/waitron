@@ -904,14 +904,14 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
 A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
-requests; the first, storing each product's takeaway rate, landed as #4047 (nothing visible yet); PRs 2 and 3
-(takeaway rates on screens and invoices, then the one eat-in rate) are next, the owner's D10, D11, D17 and D18
+requests; the first, storing each product's takeaway rate, landed as #4047; the second, which files a
+takeaway line at its product's own dated takeaway rate and lets a manager pick that rate as a percentage,
+has landed too; PR 3 (the one eat-in rate) is next, the owner's D10, D11, D17 and D18
 answered "yes" on 2026-11-22; pieces B and C have no plan yet. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
-copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
-a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
+copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it.
 
 ## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
 

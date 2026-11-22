@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { readMenuSettings, saveMenuSettings } from "@waitron/menu";
+import {
+  readMenuSettings,
+  readVenueVatRates,
+  saveMenuDefaultTakeawayVatRate,
+  saveMenuSettings,
+} from "@waitron/menu";
 import {
   readVenue,
   saveVenueFields,
@@ -23,6 +28,7 @@ import {
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import {
   normalizeVenueText,
@@ -119,27 +125,33 @@ async function readVenueDefaults(
   tx: Transaction,
   { venue, rules }: ReceiptLanguageState,
 ): Promise<VenueDefaults> {
-  const { defaultProductVatClass } = await readMenuSettings(tx);
+  const rates = await readVenueVatRates(tx);
+  const { defaultProductVatClass, defaultTakeawayVatRate } = await readMenuSettings(tx, rates);
   return {
     receiptLanguage: venue.invoiceLocales[0]!,
     receiptLanguageChoices: [...rules.choices],
     fixedReceiptLanguage: rules.fixed?.locale ?? null,
     defaultProductVatClass,
+    defaultTakeawayVatRate,
+    takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
+    vatRates: [...rates.pickable],
   };
 }
 
-function venueDefaultsRequest(body: unknown): {
+interface VenueDefaultsRequest {
   receiptLanguage?: unknown;
   defaultProductVatClass?: unknown;
-} {
+  defaultTakeawayVatRate?: unknown;
+}
+
+const VENUE_DEFAULTS_KEYS = ["receiptLanguage", "defaultProductVatClass", "defaultTakeawayVatRate"];
+
+function venueDefaultsRequest(body: unknown): VenueDefaultsRequest {
   const keys =
     typeof body === "object" && body !== null && !Array.isArray(body) ? Object.keys(body) : [];
-  if (
-    keys.length === 0 ||
-    keys.some((key) => key !== "receiptLanguage" && key !== "defaultProductVatClass")
-  )
+  if (keys.length === 0 || keys.some((key) => !VENUE_DEFAULTS_KEYS.includes(key)))
     throw new AppError("management.request_invalid", { field: "body" });
-  return body as { receiptLanguage?: unknown; defaultProductVatClass?: unknown };
+  return body as VenueDefaultsRequest;
 }
 
 interface StoredTaxpayerFields {
@@ -424,6 +436,8 @@ export function mountVenueSettingsApi(
             },
             personId,
           );
+        if ("defaultTakeawayVatRate" in request)
+          await saveMenuDefaultTakeawayVatRate(tx, request.defaultTakeawayVatRate, personId);
         return readVenueDefaults(tx, state ?? (await readReceiptLanguageState(tx)));
       });
       return c.json(answer);
