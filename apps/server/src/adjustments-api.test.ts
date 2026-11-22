@@ -1,5 +1,5 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -70,6 +70,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
+    await inTx(venue, (tx) => removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"));
     approvalReasonId = (
       await inTx(venue, (tx) =>
         createAdjustmentReason(tx, {
