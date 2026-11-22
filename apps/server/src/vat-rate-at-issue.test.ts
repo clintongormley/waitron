@@ -199,7 +199,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "general",
-      takeawayVatClass: "reduced",
+      takeawayVatRate: "10.00",
     });
     const extras = await createExtraList(
       tx,

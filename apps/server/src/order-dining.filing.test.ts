@@ -48,7 +48,6 @@ useVenueDb({
           pricingUnit: "each",
           unitPrice: "1.80",
           vatClass: "reduced",
-          takeawayVatClass: "general",
           takeawayVatRate: "21.00",
         })
       ).id;

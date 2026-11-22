@@ -64,7 +64,6 @@ const labelledReduced = (tx: Transaction, name: string, unitPrice: string, rate:
     pricingUnit: "each",
     unitPrice,
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
     takeawayVatRate: rate,
   });
 

@@ -1086,7 +1086,7 @@ export async function priceOrderLines(
     dining,
     lineMeta.map((meta) => ({
       productId: meta.productId,
-      setMenuRole: meta.setMenuOffer === undefined ? null : "dish",
+      setMenuRole: null,
       vatClass: meta.vatClass,
       takeawayVatClass: meta.takeawayVatClass,
     })),

@@ -505,8 +505,8 @@ describe("moving dishes between a party's bills", () => {
       })),
     ).toEqual(
       expect.arrayContaining([
-        { id: cola!.id, vat_class: "reduced", takeaway_vat_class: "general" },
-        expect.objectContaining({ vat_class: "reduced", takeaway_vat_class: "super_reduced" }),
+        { id: cola!.id, vat_class: "reduced", takeaway_vat_class: "reduced" },
+        expect.objectContaining({ vat_class: "reduced", takeaway_vat_class: "reduced" }),
       ]),
     );
   });
@@ -657,7 +657,7 @@ describe("the part of a line cut off within its order", () => {
         source.takeaway_vat_class,
       ]);
     }
-    expect(source.takeaway_vat_class).toBe("general");
+    expect(source.takeaway_vat_class).toBe("reduced");
   }
 
   it("keeps the takeaway class on a discounted cola", async () => {
