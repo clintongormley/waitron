@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { VatCorrections } from "@waitron/reporting";
 import { decimal } from "@waitron/shared";
 import { renderCorrectionsWorkbook } from "./corrections-report.js";
+import type { FreeItem } from "./free-items.js";
 import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
 import { row } from "./testing/xlsx-rows.js";
 
@@ -18,12 +19,14 @@ function xmlText(text: string): string {
 async function sheets(
   corrections: VatCorrections,
   language: "en" | "es",
-): Promise<{ workbook: string; summary: string; rows: string }> {
-  const files = unzipSync(await renderCorrectionsWorkbook(corrections, language));
+  free: FreeItem[] = [],
+): Promise<{ workbook: string; summary: string; rows: string; free: string }> {
+  const files = unzipSync(await renderCorrectionsWorkbook(corrections, free, language));
   return {
     workbook: strFromU8(files["xl/workbook.xml"]!),
     summary: strFromU8(files["xl/worksheets/sheet1.xml"]!),
     rows: strFromU8(files["xl/worksheets/sheet2.xml"]!),
+    free: strFromU8(files["xl/worksheets/sheet3.xml"]!),
   };
 }
 
@@ -167,4 +170,85 @@ describe("corrections workbook", () => {
       expect(rows.match(/<row /g)).toHaveLength(1);
     },
   );
+
+  const FREE: FreeItem[] = [
+    {
+      adjustmentId: "a",
+      date: "2026-04-03",
+      invoice: { seriesCode: "A", number: 12 },
+      item: "Burger",
+      quantity: decimal("1.000"),
+      kind: "comp",
+      department: "Bar",
+      menuPrice: decimal("11.00"),
+      amountTakenOff: decimal("11.00"),
+      estimatedCost: decimal("7.00"),
+      reason: "Complaint",
+      note: "Cold",
+    },
+    {
+      adjustmentId: "b",
+      date: "2026-04-04",
+      invoice: null,
+      item: null,
+      quantity: null,
+      kind: "discount",
+      department: null,
+      menuPrice: decimal("23.10"),
+      amountTakenOff: decimal("23.10"),
+      estimatedCost: null,
+      reason: "House",
+      note: null,
+    },
+  ];
+
+  it.each(["en", "es"] as const)(
+    "lists what was given free on a third sheet, with formatted ticket numbers (%s)",
+    async (language) => {
+      const words = CORRECTIONS_REPORT_WORDS[language];
+      const { workbook, free } = await sheets(LATE, language, FREE);
+      expect(workbook).toMatch(
+        new RegExp(`<sheet name="${words.rowsSheet}"[^>]*/><sheet name="${words.freeSheet}"`),
+      );
+      expect(row(free, 1)).toEqual(words.freeColumns.map(xmlText));
+      expect(row(free, 2)).toEqual([
+        "2026-04-03",
+        "A/12",
+        "Burger",
+        "1.000",
+        words.freeKinds.comp,
+        "Bar",
+        "11.00",
+        "11.00",
+        "7.00",
+        "Complaint",
+        "Cold",
+      ]);
+      expect(row(free, 3)).toEqual([
+        "2026-04-04",
+        "",
+        words.wholeBill,
+        "",
+        words.freeKinds.discount,
+        "",
+        "23.10",
+        "23.10",
+        "",
+        "House",
+        "",
+      ]);
+      expect(free.match(/<row /g)).toHaveLength(3);
+    },
+  );
+
+  it("names the free sheet's words in English and Spanish", () => {
+    expect(CORRECTIONS_REPORT_WORDS.en.freeSheet).toBe("Given free");
+    expect(CORRECTIONS_REPORT_WORDS.en.wholeBill).toBe("Whole bill");
+    expect(CORRECTIONS_REPORT_WORDS.en.freeKinds).toEqual({
+      comp: "Comp",
+      discount: "Discount to zero",
+    });
+    expect(CORRECTIONS_REPORT_WORDS.es.freeColumns).toHaveLength(11);
+    expect(CORRECTIONS_REPORT_WORDS.es.freeSheet).not.toBe(CORRECTIONS_REPORT_WORDS.en.freeSheet);
+  });
 });

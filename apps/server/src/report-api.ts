@@ -56,6 +56,7 @@ import {
 } from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { renderCorrectionsWorkbook } from "./corrections-report.js";
+import { listFreeItems } from "./free-items.js";
 import { workbookDownloadHeaders } from "./xlsx-workbook.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
@@ -338,11 +339,19 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const year = requireYear(c.req.query("year"));
       const { period } = requireLiquidationPeriod(c.req.query("period"));
-      const corrections = await gated(sessionId, REPORT_EXPORT_PERMISSION, (tx) =>
-        computeVatCorrections(tx, { year, period }),
+      const { corrections, free } = await gated(
+        sessionId,
+        REPORT_EXPORT_PERMISSION,
+        async (tx) => ({
+          corrections: await computeVatCorrections(tx, { year, period }),
+          free: await listFreeItems(tx, await resolveVenueClock(tx, deps.cfg.nodeId), {
+            year,
+            period,
+          }),
+        }),
       );
       return c.body(
-        await renderCorrectionsWorkbook(corrections, toLanguage(deps.venueLocale)),
+        await renderCorrectionsWorkbook(corrections, free, toLanguage(deps.venueLocale)),
         200,
         workbookDownloadHeaders(`corrections-${corrections.madeIn}.xlsx`),
       );

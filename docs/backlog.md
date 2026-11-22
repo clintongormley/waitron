@@ -372,11 +372,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   2026-11-18, question 6 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 
-- **A report for the accountant: wrong VAT rates and free meals**
-  (owner, D6 and D12, 2026-11-16; owner, 2026-11-18, questions 5 and 6 of the
-  [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details). A rate set too low or too high, and meals given
-  free, go on a report the accountant acts on; later corrections of earlier periods are on the VAT
-  return screen's corrections workbook. Fiscal: the owner lands it. [Detail](backlog/fiscal.md#a-report-for-the-accountant-wrong-vat-rates-and-free-meals)
+- **A report for the accountant: wrong VAT rates**
+  (owner, D6 and D12, 2026-11-16; owner, 2026-11-18, question 5 of the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details). A rate set too low or too high goes on a report the
+  accountant acts on; later corrections of earlier periods, and what was given free, are on the VAT
+  return screen's corrections workbook. Fiscal: the owner lands it. [Detail](backlog/fiscal.md#a-report-for-the-accountant-wrong-vat-rates)
 
 - **Probe a replacement R5 "S", and an R4 "S", on AEAT's test service (go-live; watcher, 2026-11-14 18:22; the R4 "S", watcher, 2026-11-15 01:52).** Run
   before the first real R5 'S': a simplified invoice refused for a future date (`1112`), then a
