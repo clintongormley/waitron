@@ -5,7 +5,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `taxpayer`, `nodes` and
- * `deployment`, `settings`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances` and `product_takeaway_vat_rates`, and node.db's `box`, `node_pair_link`, `node_take_failures`,
+ * `deployment`, `settings`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles` and `product_takeaway_vat_rates`, and node.db's `box`, `node_pair_link`, `node_take_failures`,
  * `node_handover_operations`, `node_handover_events` and `node_handover_restriction`.
  *
  * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes

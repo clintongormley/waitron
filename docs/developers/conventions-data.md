@@ -1087,7 +1087,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds` and `bill_advances`, and `node.db`'s `box`, `node_pair_link`, `node_take_failures`, `node_handover_operations`,
+`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles` and `product_takeaway_vat_rates`, and `node.db`'s `box`, `node_pair_link`, `node_take_failures`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
@@ -1101,7 +1101,10 @@ that would refuse the write anyway.
 `apps/server/src/invoice-corrections.ts`. `invoice_correction_refunds` is written only in
 `apps/server/src/invoice-correction-legs.ts`, where `linkRefundToCorrection` links a refund to its
 correction; `reserveTenderRefund` calls it. `bill_advances` is written only in
-`apps/server/src/bill-advances.ts`.
+`apps/server/src/bill-advances.ts`. `product_takeaway_vat_rates` is written in
+`packages/menu/src/takeaway-vat-rates.ts` and by the configuration import's table-by-table copy in
+`packages/provisioning/src/configuration-transfer.ts`, which builds the table's name at run time
+and so is outside the guard (plan D16 of `docs/superpowers/plans/2026-11-22-vat-rates-a.md`).
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`

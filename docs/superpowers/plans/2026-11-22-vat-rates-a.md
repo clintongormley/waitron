@@ -217,7 +217,8 @@ before the tasks that depend on them start** (each task names its gate).
   issue reads it (`readIssueZone` + `localCalendarDate`). *Recommended.*
 - **D15. Error codes** in `packages/shared/src/errors.ts`: `vat_rate.area_unsupported`
   `{ country: string | null; territory: string }`, `vat_rate.unavailable` `{ lineNo: number }`,
-  `vat_rate.schedule_invalid` `{ reason: "empty" | "first_entry_missing_or_dated" | "not_oldest_first" }`.
+  `vat_rate.schedule_invalid` `{ caller: "rateOn"; reason: "first_entry_missing_or_dated" | "not_oldest_first" }`
+  (an empty list reports `first_entry_missing_or_dated`).
   No till words: after D2 no venue can reach either refusal, and the till's table already degrades a
   code it does not list to its generic sentence (`apps/till/src/i18n/codes.ts:5-6`). *Recommended.*
 - **D16. `product_takeaway_vat_rates` is listed in `scripts/write-path-tables.json` with one writer,

@@ -129,7 +129,7 @@ export interface ErrorParams {
     reason: "first_entry_missing_or_dated" | "not_oldest_first";
   };
   /** The venue's tax area has no VAT rates: there is no taxpayer (`country` null), no pack or
-   * territory the packs know, or the territory lacks one of its four VAT rate lists. */
+   * territory the packs know, or the territory lacks its dine-in, accepted or pickable rates, or its takeaway default. */
   "vat_rate.area_unsupported": { country: string | null; territory: string };
   /** The dated rate list handed to `caller` is empty, starts with a dated entry, or is not dated
    * oldest first. */
