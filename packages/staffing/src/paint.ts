@@ -27,6 +27,7 @@ import type {
   StaffingArea,
   StaffingGuideRange,
 } from "./staffing-types.js";
+import { assertBlockFitsDay } from "./paint-rules.js";
 import "./errors.js";
 
 export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
@@ -76,7 +77,7 @@ async function readPaint(
   tx: Transaction,
   areas: readonly StaffingArea[],
   days: SQL | undefined,
-  cutover: string,
+  cutoverFor: (dayKey: string) => string,
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
   const rows = await tx
     .select({
@@ -121,7 +122,8 @@ async function readPaint(
       });
   }
   for (const byDay of paint.values())
-    for (const blocks of byDay.values())
+    for (const [dayKey, blocks] of byDay) {
+      const cutover = cutoverFor(dayKey);
       blocks.sort((a, b) => {
         const x = blockSpan(a, cutover);
         const y = blockSpan(b, cutover);
@@ -132,6 +134,7 @@ async function readPaint(
           a.headcount - b.headcount
         );
       });
+    }
   return paint;
 }
 
@@ -293,7 +296,7 @@ export async function readSeasonStaffing(
   const context = await readSeasonStaffingContext(tx, seasonId, month);
   const { cutover, seasons: all } = context;
   const areas = await listStaffingAreas(tx);
-  const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
+  const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), () => cutover);
   const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "season",
     seasonId,
@@ -354,10 +357,15 @@ export async function readSpecialDayStaffing(
   const found = await readSpecialDayPlan(tx, specialDayId);
   if (found === null) throw new AppError("special_day.not_found", { specialDayId });
   const { name: specialDayName, plan } = found;
-  const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
   const areas = await listStaffingAreas(tx);
   const clock = await readVenueClock(tx);
   const cutover = clock.dayCutover;
+  const dates = found.dates.map(({ dateId, storedDate }) => ({
+    dateId,
+    date: storedDate,
+    cutover: cutoverForBusinessDay(clock, storedDate),
+  }));
+  const starts = new Map(dates.map(({ dateId, cutover }) => [dateDayKey(dateId), cutover]));
   const seasonIds = [...new Set(dates.flatMap(({ date }) => plan.seasonIdOn.get(date) ?? []))];
   const paint = await readPaint(
     tx,
@@ -369,7 +377,7 @@ export async function readSpecialDayStaffing(
       ),
       inArray(staffingDays.seasonId, seasonIds),
     ),
-    cutover,
+    (key) => starts.get(key) ?? cutover,
   );
   const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "dates",
@@ -413,9 +421,19 @@ export async function saveSpecialDayStaffing(
   specialDayId: string,
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
-  const dateIds = new Set((await readSpecialDayDates(tx, specialDayId)).map((d) => d.dateId));
-  const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
-  if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
+  const dates = await readSpecialDayDates(tx, specialDayId);
+  const clock = await readVenueClock(tx);
+  const starts = new Map(
+    dates.map(({ dateId, date }) => [dateId, cutoverForBusinessDay(clock, date)]),
+  );
+  edits.forEach(({ dateId, blocks }, index) => {
+    const cutover = starts.get(dateId);
+    if (cutover === undefined)
+      throw new AppError("staffing.invalid", { field: `edits.${index}.dateId` });
+    blocks?.forEach((block, blockIndex) =>
+      assertBlockFitsDay(block, `edits.${index}.blocks.${blockIndex}`, cutover),
+    );
+  });
   await assertEditTargets(tx, edits);
   for (const edit of edits) {
     await tx
@@ -459,7 +477,7 @@ export async function resolveStaffing(
     tx,
     areas,
     or(inArray(staffingDays.seasonId, seasonIds), inArray(staffingDays.specialDayDateId, dateIds)),
-    cutover,
+    () => cutover,
   );
   for (const day of businessDays) {
     const special = plan.special.get(day);

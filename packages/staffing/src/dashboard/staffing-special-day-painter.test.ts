@@ -119,8 +119,8 @@ it("titles the special day and draws one column per date, which may follow the s
   expect(frame(painter).open).toBe(true);
   expect(frame(painter).heading).toBe("Christmas: special day, 24–⁠25 Dec");
   expect(grid(painter).columns).toEqual([
-    { key: "eve", label: "Thu 24 Dec" },
-    { key: "day", label: "Fri 25 Dec" },
+    { key: "eve", label: "Thu 24 Dec", cutover: "06:00" },
+    { key: "day", label: "Fri 25 Dec", cutover: "06:00" },
   ]);
   expect(grid(painter).followable).toBe(true);
   expect(grid(painter).days.get("eve")).toEqual([headChef]);
@@ -133,6 +133,26 @@ it("titles the special day and draws one column per date, which may follow the s
     undefined,
     { passive: true },
   );
+});
+
+it("draws each date's scale and inherited blocks from its own business-day start", async () => {
+  const read = specialDayStaffing();
+  read.dates[1]!.cutover = "08:15";
+  read.areas[0]!.dates[1]!.seasonBlocks = [headChef];
+  read.guides["department:dep-restaurant"]!.day = [{ ...LUNCH_GUIDE, startsAt: "09:00" }];
+  const { painter } = await mount({ read: async () => read });
+  const root = grid(painter).shadowRoot!;
+  const rulers = [...root.querySelectorAll(".times")];
+  expect(rulers.map((ruler) => ruler.querySelector(".hour")?.textContent)).toEqual([
+    "06:00",
+    "09:00",
+  ]);
+  const day = root.querySelector('.day[data-column="day"]')!;
+  const box = day.getBoundingClientRect();
+  const nine = box.top + box.height / 32;
+  for (const selector of [".inherited", ".guide", ".line"]) {
+    expect(day.querySelector(selector)!.getBoundingClientRect().top, selector).toBeCloseTo(nine, 0);
+  }
 });
 
 it("shows inherited blocks only while the date follows, with no edit controls", async () => {
@@ -1103,7 +1123,7 @@ it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Can
     const { painter } = await mount({
       read: async () => {
         const read = specialDayStaffing();
-        read.dates = scattered.map((date) => ({ dateId: date, date }));
+        read.dates = scattered.map((date) => ({ dateId: date, date, cutover: "06:00" }));
         for (const area of read.areas)
           area.dates = scattered.map((date) => ({
             dateId: date,

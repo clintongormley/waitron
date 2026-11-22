@@ -1051,7 +1051,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 
-- **Staffing reads the day start in force on each date** (bundle of 2, size M, needs the owner). Holds A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
+- **A644. Staffing slots stop at minute 1440 on a business day longer than a day** (needs the owner). Decide whether a block may run to the day's real end. [Detail](backlog/workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
 
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).
@@ -1066,11 +1066,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
 - **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
-
-- **A712. A special date in the staffing painter needs its own business-day start.** Use it for
-  each column’s clock scale, strokes and server validation. When copying blocks, name the first date
-  they cannot fit and leave the chooser open without copying. This uses the Opening hours painter’s
-  shared column and copy checks.
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.

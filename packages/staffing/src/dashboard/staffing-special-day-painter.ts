@@ -169,11 +169,15 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
   /** Kept while the dates and the language stay, so the grid sees the same columns. */
   private columns(read: SpecialDayStaffing): readonly StaffingColumn[] {
     const { dates } = read;
-    const key = `${currentLocale()} ${dates.map(({ dateId, date }) => `${dateId}=${date}`).join(",")}`;
+    const key = `${currentLocale()} ${dates.map(({ dateId, date, cutover }) => `${dateId}=${date}/${cutover}`).join(",")}`;
     if (this.dateColumns?.key !== key)
       this.dateColumns = {
         key,
-        columns: dates.map(({ dateId, date }) => ({ key: dateId, label: dateLabel(date) })),
+        columns: dates.map(({ dateId, date, cutover }) => ({
+          key: dateId,
+          label: dateLabel(date),
+          cutover,
+        })),
       };
     return this.dateColumns.columns;
   }

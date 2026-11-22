@@ -65,6 +65,11 @@ export function blockSpan(
   };
 }
 
+export function blockFitsDay(block: StaffingBlock, cutover: string): boolean {
+  const { start, end } = blockSpan(block, cutover);
+  return block.startsAt !== block.endsAt && start < end;
+}
+
 export const areaKey = (area: AreaRef): string => `${area.kind}:${area.id}`;
 
 export function slotsForDay(

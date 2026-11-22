@@ -59,7 +59,9 @@ In **Calendar** → **Staffing**, select a date to see how many people each area
 
 To plan staffing for a season, open the season from the month you want to plan. Check any dated change to the business-day start above the grid. In a Staffing painter, select **Opening hours** to see the timetable for the same season or special day. Close it to return to Opening hours for the same month.
 
-On a special day, a date that follows its season shows the season’s staffing in faint blocks. Drawing a block starts an override with those blocks already in place. Use the date’s **⋯** menu to **Follow the season** again or **Clear** staffing for that date. If you copy a date that follows the season, the selected dates follow their own seasons.
+On a special day, a date that follows its season shows the season’s staffing in faint blocks. Drawing a block starts an override with the staffing you see on that date already in place. Use the date’s **⋯** menu to **Follow the season** again or **Clear** staffing for that date. If you copy a date that follows the season, the selected dates follow their own seasons.
+
+When special dates have different business-day starts, use the clock scale beside each date. **Copy to…** keeps the clock times of your blocks. If a block crosses the start on a selected date, remove that date from the selection and paint it separately.
 
 Open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
 
