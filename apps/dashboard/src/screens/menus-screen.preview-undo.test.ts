@@ -590,7 +590,10 @@ it("runs a price Undo after a save of the same row that is out, and leaves the r
   expect(prices()!.saving.has("mi-soup")).toBe(false);
 });
 
-it("restores a product after its published sibling once a Structure reorder finishes", async () => {
+it.each([
+  ["restores a product after its published sibling", false],
+  ["refuses to restore the product if the new order cannot be read", true],
+] as const)("%s once a Structure reorder finishes", async (_description, readFails) => {
   const id = "soup-removed";
   const reorder = held<SectionMember[]>();
   const restored = held<SectionMember>();
@@ -619,7 +622,8 @@ it("restores a product after its published sibling once a Structure reorder fini
   );
   published.offers["mi-soup"]!.placements = [[]];
 
-  const fake = fakeApi({ moveSectionMember, addSectionMember });
+  const liveData = new LiveData();
+  const fake = fakeApi({ moveSectionMember, addSectionMember, liveData });
   fake.state.preview = {
     ...previewOf([
       rename,
@@ -661,7 +665,18 @@ it("restores a product after its published sibling once a Structure reorder fini
 
     const ordered = [burger, { ...salad, position: 1 }, { ...chips, position: 2 }];
     fake.state.structure = { ...structure, nodes: nodes(ordered) };
+    if (readFails) {
+      fake.state.structureReadFails = true;
+      liveData.invalidate([{ type: "menus" }]);
+      await vi.waitFor(() => expect(undoButton(panel(), id)).toBeNull());
+    }
     reorder.answer(ordered);
+    if (readFails) {
+      await vi.waitFor(() => expect(memberError(el)).toContain("This menu could not be loaded."));
+      expect(addSectionMember).not.toHaveBeenCalled();
+      expect(resultLine(panel())).toBeNull();
+      return;
+    }
     await vi.waitFor(() =>
       expect(addSectionMember).toHaveBeenCalledExactlyOnceWith("root", soup.ref, 3),
     );
