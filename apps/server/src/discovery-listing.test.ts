@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { DISCOVERED_TTL_MS, isListed, withinTtl } from "./discovery-listing.js";
+import { isListed } from "./discovery-listing.js";
 
-const DAY = 86_400_000;
+describe("discovery report freshness", () => {
+  it("leaves a device without a report unlisted", () => {
+    expect(isListed(undefined, 1_000, 90_000)).toBe(false);
+  });
 
-describe("a report's freshness across a backward clock step", () => {
-  it.each([
-    ["400 days ahead", 1_000 + 400 * DAY, false],
-    ["its limit ahead exactly", 1_000 + DISCOVERED_TTL_MS, true],
-    ["a millisecond past its limit ahead", 1_000 + DISCOVERED_TTL_MS + 1, false],
-  ])(
-    "lists a report stamped ahead of the clock only within its limit (%s)",
-    (_case, at, listed) => {
-      expect(isListed(at, 1_000, 0)).toBe(listed);
-      expect(withinTtl(at, 1_000, DISCOVERED_TTL_MS)).toBe(listed);
-    },
-  );
+  it("lists a report through fifteen seconds with the window closed", () => {
+    expect(isListed(1_000, 16_000, 0)).toBe(true);
+    expect(isListed(1_000, 16_001, 0)).toBe(false);
+  });
 
-  it("an open window's longer limit also bounds a report stamped ahead", () => {
-    expect(isListed(1_000 + DISCOVERED_TTL_MS + 1, 1_000, 2_000)).toBe(true);
-    expect(isListed(1_000 + 400 * DAY, 1_000, 2_000)).toBe(false);
+  it("lists a report through forty-five seconds with the window open", () => {
+    expect(isListed(1_000, 46_000, 90_000)).toBe(true);
+    expect(isListed(1_000, 46_001, 90_000)).toBe(false);
+  });
+
+  it("uses the shorter age limit as soon as the window closes", () => {
+    expect(isListed(1_000, 21_000, 21_001)).toBe(true);
+    expect(isListed(1_000, 21_001, 21_001)).toBe(false);
   });
 });

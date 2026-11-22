@@ -25,8 +25,9 @@ Multiple guards in one file share a row. The original first slice accounted for
 `pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`, and
 the printing slice for `printer-probes.ts`, `printer-bluetooth-commands.ts`,
 `apps/print-agent/src/server-ca.ts` and `linux-devices.ts`, and the pairing slice for
-`pairing-mode.ts`, `page-test-pages.ts` and the discovery window in `print-api.ts`; their open rows
-have been removed. The tables account for the remaining matched files and exclusions.
+`pairing-mode.ts`, `page-test-pages.ts` and the discovery window in `print-api.ts`.
+The server's discovery reports now use the steady clock as well (`discovery-listing.ts`).
+The tables account for the remaining matched files and exclusions.
 This search does not discover every timer: split-line wording and guards with other words can be missed.
 
 Already-steady readers such as `apps/server/src/live-operation-rate-limit.ts` and
@@ -58,7 +59,6 @@ scope and preserve the rules shown here before proposing any conversion.
 | `apps/server/src/bill-refunds.ts:534–546` (refund recovery) | Resend only after lookup says none, outside the background loop, with provider support and age at least zero and strictly below its resend window. A persisted first send ahead of now prevents resending. |
 | `apps/server/src/cloud-archive-target.ts` (`pendingExpired`) | Cloud follows the shared backup schedule since jr10. After a failed publication, abandon a pending capture at age at least one day or more than one day ahead. |
 | `apps/server/src/content-suggestion-runner.ts:163–170` (`step`) | Close a stored job as expired at age at least 24 hours or more than 24 hours ahead; otherwise it can continue to occupy the active run. |
-| `apps/server/src/discovery-listing.ts:1–12` (`withinTtl`, `isListed`) | Keep a report only within its TTL on either side, endpoints included. TTL is 45 seconds during an open discovery window, otherwise 15 seconds. Input is explicitly epoch milliseconds. |
 | `apps/server/src/invoice-delivery.ts` (`invoicePrintDue`, `claimLapsed`) | A receipt or A4 job created at or before now, or more than ten minutes ahead, is due. Its claim has lapsed at 60 seconds old or more than 60 seconds ahead. |
 | `apps/server/src/join-requests.ts:33–58` (`lapsedAt`, `sweepLapsed`) | Delete pending requests strictly older than 15 minutes or strictly more than 15 minutes ahead; endpoints survive. These are persisted request dates. |
 | `apps/server/src/order-drafts.ts:1397–1426` (`takenOverFrom`) | Find latest takeover by append-only event `rowid`, not `created_at`; a backward clock must not reorder ownership history. Ordering, not a timer. |
