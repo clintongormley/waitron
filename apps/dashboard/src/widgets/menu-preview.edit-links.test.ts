@@ -202,10 +202,10 @@ it("sends an extras item's portion change to its extras list", async () => {
   expect(link.hasAttribute("data-own-click")).toBe(false);
 });
 
-it("offers no Edit link on a deleted product or on this menu's own change", async () => {
-  const el = await mount([deleted, ownRename]);
+it("offers no Edit link on a deleted product or on a price changed by this menu", async () => {
+  const el = await mount([deleted, { ...sharedPrice, id: "own-price", source: "this_menu" }]);
   expect(el.shadowRoot!.querySelector(`[data-change-row="deleted"]`)).not.toBeNull();
-  expect(el.shadowRoot!.querySelector(`[data-change-row="own-rename"]`)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector(`[data-change-row="own-price"]`)).not.toBeNull();
   expect(el.shadowRoot!.querySelectorAll("a[data-edit-change]")).toHaveLength(0);
 });
 
@@ -295,6 +295,16 @@ it("links included variants to Price overrides and included structural edits to 
       includedMenu: { id: "m-drinks", name: "Drinks" },
     },
     {
+      id: "included-mixed",
+      targets: { before: [], after: [] },
+      kind: "product_changed",
+      productId: "p-lemonade",
+      name: "Lemonade",
+      fields: ["variants", "names"],
+      source: "included_menu",
+      includedMenu: { id: "m-drinks", name: "Drinks" },
+    },
+    {
       id: "included-section",
       targets: { before: [], after: [] },
       kind: "section_changed",
@@ -319,6 +329,9 @@ it("links included variants to Price overrides and included structural edits to 
   ]);
   expect(editLink(el, "included-variants")?.getAttribute("href")).toBe(
     "/menus/menu/m-drinks/view/prices",
+  );
+  expect(editLink(el, "included-mixed")?.getAttribute("href")).toBe(
+    "/menus/menu/m-drinks/view/structure",
   );
   expect(editLink(el, "included-section")?.getAttribute("href")).toBe(
     "/menus/menu/m-drinks/view/structure",

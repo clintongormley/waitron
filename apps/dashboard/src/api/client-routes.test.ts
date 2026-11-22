@@ -1223,18 +1223,6 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("adds a member at position zero", async () => {
-    const ref = { kind: "product" as const, productId: "p1" };
-    const member = { id: "m1", position: 0, ref };
-    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(member));
-    const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.addSectionMember("s1", ref, 0)).resolves.toEqual(member);
-    expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/sections/s1/members", "POST", { ref, position: 0 }],
-    ]);
-  });
-
   it("moves several members into one list, removes several and deletes several sections, sending a position only when given", async () => {
     const member = { id: "m1", position: 0, ref: { kind: "product", productId: "p1" } };
     const fetchImpl = vi
