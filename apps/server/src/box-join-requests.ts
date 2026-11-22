@@ -371,8 +371,14 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       if (!r) return { refused: "not_found" };
       if (!acceptSeq(r, input.seq)) return { refused: "invalid" };
       // Once a right tap has begun, the approval decides: a cancel answered here never leaves the
-      // chart listing a box that stopped asking.
-      if (r.phase === "building" || r.phase === "approved") return { refused: "approving" };
+      // chart listing a box that stopped asking. A stopped approval listed it, so a waiting new box
+      // is kept polling until it reads that.
+      if (
+        r.phase === "building" ||
+        r.phase === "approved" ||
+        (r.phase === "ended" && r.reason === "stopped")
+      )
+        return { refused: "approving" };
       if (r.phase !== "ended") end(r, "cancelled", steadyNow());
       return { cancelled: true };
     },

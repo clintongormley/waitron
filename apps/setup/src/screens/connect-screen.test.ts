@@ -282,7 +282,7 @@ describe("setup-connect-screen: Start again while the main box approves", () => 
   it.each([
     [
       "en-GB",
-      "The main box is approving this join right now, so it cannot be stopped. Wait a moment: this page then shows the main box's answer.",
+      "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
     ],
     ["es-ES", es["connect.refusal.join_approving"]],
   ])("says so in %s, keeps the code and goes on reading", async (locale, words) => {

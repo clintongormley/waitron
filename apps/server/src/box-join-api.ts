@@ -462,7 +462,7 @@ export function mountBoxJoinPersonApi(
           requests.approve.abandon(requestId);
           throw error;
         }
-        // The chart names the spare now, so a second tap must not follow.
+        // The chart names the spare now, so neither a second tap nor the new box's cancel follows.
         requests.approve.stop(requestId);
         // A full disk keeps its own answer: removing the listing would need the disk too.
         if (diskFullIn(error) || firstCodeInCauseChain(error, (code) => code === "ENOSPC") !== null)

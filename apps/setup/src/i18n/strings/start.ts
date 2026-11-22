@@ -149,7 +149,7 @@ export const startEn = {
   "connect.refusal.join_waiting":
     "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_approving":
-    "The main box is approving this join right now, so it cannot be stopped. Wait a moment: this page then shows the main box's answer.",
+    "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
   "connect.refusal.join_in_use":
     "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
   "connect.refusal.join_handle_invalid":
@@ -393,7 +393,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.join_waiting":
     "Este servidor ya está esperando para unirse. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_approving":
-    "El servidor principal está aprobando esta unión ahora mismo, así que no se puede detener. Espera un momento: esta página mostrará después la respuesta del servidor principal.",
+    "El servidor principal está aprobando esta unión, o acaba de dejar de aprobarla, así que no se puede detener desde aquí. Espera un momento: esta página mostrará después la respuesta del servidor principal.",
   "connect.refusal.join_in_use":
     "La unión de este servidor está abierta ahora en otra página o dispositivo. Termínala o cancélala allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
   "connect.refusal.join_handle_invalid":

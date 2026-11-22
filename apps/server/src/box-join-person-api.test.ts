@@ -524,6 +524,10 @@ describe("the main box's person routes for a joining box", () => {
       "mirror.join_failed",
       expect.objectContaining({ errorCode: "membership.write_contended" }),
     ]);
+    const cancelled = await cancelJoin(app, listed);
+    expect({ status: cancelled.status, body: await cancelled.json() }).toEqual(
+      refusal(409, "mirror.join_approving"),
+    );
     expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).toContain(
       listed.box.hello.newNodeId,
     );

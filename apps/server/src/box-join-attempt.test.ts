@@ -635,6 +635,19 @@ describe("the new box's join attempt", () => {
     },
   );
 
+  it("keeps a waiting join when its approval stopped after listing it, and then shows the stop", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    const shown = await attempt.start(MAIN_URL);
+    const requestId = requests.listed()[0]!.id;
+    requests.approve.begin(requestId, shown.code);
+    requests.approve.stop(requestId);
+
+    await expect(attempt.cancel()).rejects.toMatchObject({ code: "mirror.join_approving" });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual({ state: "ended", reason: "stopped" });
+  });
+
   it("refuses to start while a start runs or an attempt waits", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { holding, release } = holdingHello();
