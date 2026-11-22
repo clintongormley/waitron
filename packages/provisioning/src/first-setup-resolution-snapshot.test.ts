@@ -45,10 +45,15 @@ it("fingerprints both database files without whole-file reads or retaining their
     ["venue.db-wal", Buffer.alloc(128 * 1024 + 1, "w")],
   ] as const;
   for (const [name, bytes] of files) await filesystem.writeFile(join(venueDir, name), bytes);
+  const paths = files.map(([name]) => join(venueDir, name));
   const actual = await vi.importActual<typeof filesystem>("node:fs/promises");
+  vi.mocked(filesystem.readFile).mockImplementation(async (...args) => {
+    if (paths.some((path) => args[0] === path)) throw new Error("whole-file read");
+    return actual.readFile(...args);
+  });
   vi.mocked(filesystem.open).mockImplementation(async (...args) => {
     const file = await actual.open(...args);
-    if (files.some(([name]) => args[0] === join(venueDir, name)))
+    if (paths.some((path) => args[0] === path))
       vi.spyOn(file, "readFile").mockRejectedValue(new Error("whole-file read"));
     return file;
   });
@@ -60,6 +65,7 @@ it("fingerprints both database files without whole-file reads or retaining their
       digest: createHash("sha256").update(bytes).digest("hex"),
     });
     expect(originals.map((original) => original.name)).not.toContain(`venue/${name}`);
+    expect(originals.some(({ bytes: saved }) => saved !== null && bytes.equals(saved))).toBe(false);
   }
 });
 

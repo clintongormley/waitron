@@ -14,7 +14,7 @@ Lane K Codex wrote this plan for the watcher's 2026-11-22 18:20 assignment in La
 
 - Add the failing case in `packages/provisioning/src/first-setup-resolution-snapshot.test.ts`. For both files, forbid whole-file reads, compare digests against the original bytes and check that the snapshot retains neither file's bytes. Refuse a same-size change between the inspections with `setup.attempt_conflict`. Keep the over-limit case in `packages/provisioning/src/first-setup-resolution-inspection.test.ts` and add growth after the initial size check.
 - In `apps/server/src/first-setup-start-again-hour.test.ts`, compare whole snapshots in refusal cases to keep checking unchanged database and WAL digests as well as the buffered evidence. Run Provisioning's inspection, snapshot and deletion suites, plus Server's inspection, recovery-delivery, hour, held-database, held-journal and `first-setup-growth.test.ts` suites. Run Fiscal VeriFactu's `write-path.e2e.test.ts` and `inmutabilidad.test.ts` unedited.
-- In `apps/server/src/first-setup-recovery-delivery.test.ts`, read the database and any present WAL directly in the fixture so they remain covered by the same staged-key, password and PDF checks.
+- In `apps/server/src/first-setup-recovery-delivery.test.ts`, read the database and any present WAL directly in the fixture to add them to the staged-key, password and PDF checks.
 - Close the first-setup snapshot entry in `docs/backlog.md` and `docs/backlog/setup.md`. Keep the separate archive and configuration buffer work under a title that names those transfers. Update both recovery-snapshot references in `docs/developers/conventions-data.md`. A1159 remains separate.
 
 Expected size is about 60–90 production lines and 85–140 test lines, plus plan and backlog edits.
