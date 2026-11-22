@@ -1,40 +1,47 @@
 # Draw special days from each date’s business-day start
 
-In Opening hours, you can read and paint each selected date on its own time scale, even when the
-business-day start changes between dates. The mixed-start notice goes away. The watcher queued
-this as SPECIAL-DAY-OWN-START at 10:51 on 22 November 2026. See the
-[service-periods backlog](../../backlog/service-periods.md#a-special-day-grid-uses-the-first-dates-changeover).
+In Opening hours, you can read and paint a one-off special day on each date’s own time scale. The
+mixed-start notice goes away. The watcher queued SPECIAL-DAY-OWN-START at 10:51 on 22 November
+2026 against the first-date ruler entry in [the service-periods backlog](../../backlog/service-periods.md).
 
-## One change
+## Decisions for the watcher
 
-1. Start with a failing browser case in `packages/venue-service/src/dashboard/special-day-painter.paint.test.ts`.
-   Replace the first-date notice assertion with a two-date case whose starts are 05:00 and 06:10.
-   Check the ruler labels and the position of the same stored hours on both dates. Paint from the
-   second date’s top to its 07:00 mark and check the saved endpoints are 06:10 and 07:00. Cover the
-   second date’s zone overlay at its boundary and retain the shared-ruler check for equal starts.
-   Run the new cases first with
-   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/special-day-painter.paint.test.ts`.
-   The base’s one ruler and first-date stroke conversion must fail the new expectations.
-2. In `special-day-painter.ts`, give each `PaintColumn` its start via the existing `dateCutover(date)`
-   lookup, which uses the business-day clock while the season read is unavailable. Include starts
-   in the column cache. Use each date’s start for zone paint, zone underlays and the two period
-   replacement paths. Where `paint-model.ts` iterates by day in `savedBlocks` and `refill`, accept
-   a date lookup alongside the existing single-start input. Key the zone paint cache by its source
-   and the resolved starts. Remove the mixed-start message and its English and Spanish strings.
-3. In `paint-grid.ts` and `paint-grid-parts.ts`, let a column supply an optional start, with the
-   grid start as the default. Use the column’s start for block positions, hour lines, pointer
-   snapping, preview, release and block menu edits. Reuse the existing hour-label markup for
-   each column when starts differ, reserving room beside the blocks within their CSS grid tracks.
-   Equal starts keep the pinned ruler. Pass the key to the existing `ColumnStroke` lookup so
-   staffing’s single-start callback still works. Keep copied clock times by value and the
-   existing server validation. Check a valid cross-date copy and how the editor handles ranges
-   that cross the destination’s start before settling the layout.
-4. Re-run the painter, paint-grid and paint-model tests and the relevant staffing grid tests as
-   consumers of the shared helpers. Check the unchanged golden invoice hash and immutability
-   tests and the queue’s Review Focus 1 and 2 gates. Open the mixed grid at phone and desktop
-   widths in both themes and languages. Update the opening-hours guides in English and Spanish
-   and the design-system description. Remove both backlog entries with the working fix.
+For **Every year**, use one ruler at the venue’s start in force, matching the existing save rule.
+Season hours still come from each selected date. For **Copy to…**, keep valid ranges at the same
+clock times. If a selected destination cannot take a copied range on its own scale, keep the
+chooser open, name that date and tell the manager to paint it separately. Copy none until all
+selected destinations fit. A range such as 05:30–07:00 from a 05:00 date cannot be shown as one
+block on a 06:10 date. This protects staff from copying hours they cannot see or save.
 
-Allow about 180–250 changed lines of production code and 100–170 of tests. The work stays in
-the Opening hours editor and its drawing helpers. The staffing painter belongs to Lane K’s A712.
-Changes to day length, stored dates, schema and the save API are outside this item.
+## Test and build
+
+1. In `packages/venue-service/src/dashboard/special-day-painter.paint.test.ts`, start with a
+   failing 05:00 and 06:10 one-off case. The same 07:00 block starts 120 and 50 minutes down
+   the two columns. Check both ruler labels, then paint from the second date’s top to 07:00
+   and assert the save sends 06:10–07:00. Add a zone closure at that boundary, a valid and an
+   incompatible copy, and the annual shared-ruler case. Keep the equal-start and all-day
+   checks. Run the named file with `pnpm --filter @waitron/venue-service exec vitest run` first.
+2. In `special-day-painter.ts`, give each `PaintColumn` an optional start. For one-offs use
+   `dateCutover(date)` with its existing clock fallback. For yearly repeats use `model.dayCutover`.
+   Cache columns by the resolved starts. Layer season and zone context with each season day’s
+   start, and normalize zone draft paint on its column’s scale. Give the zone draft cache
+   the source and resolved starts. Use each edited date’s scale in `savedBlocks` and `refill`
+   in `packages/venue-service/src/paint-model.ts`, keeping the existing string argument usable
+   by the season painter. Remove the mixed-start notice and its strings from `strings.ts`.
+   Follow the existing save refusal path for times that fit only a waiting start (A869).
+3. In `paint-grid.ts` and `paint-grid-parts.ts`, apply each column’s start to painted blocks,
+   underlays, hour lines, pointer snapping, preview, release and block menu edits. Reuse the
+   existing ruler labels. For mixed starts, replace the pinned ruler track with a ruler inside
+   each date and give its track enough extra width to keep the current minimum paint area.
+   Keep the single ruler when starts agree. Pass the column key to `ColumnStroke` and keep its
+   existing zero-argument staffing caller. Give the copy chooser only the range check and
+   message it needs for incompatible destinations.
+4. Run the focused painter, grid, paint-model and staffing-grid tests. Run the unchanged fiscal
+   hash and immutability gates and the sell-published and menu-refresh gates from the lane queue.
+   Open the mixed grid at phone and desktop widths in both themes and languages. Update both
+   `opening-hours.md` guides and the design-system description. Remove the finished backlog
+   detail and index, and update the Opening hours reference in `docs/backlog/workforce.md`.
+
+Allow about 220–285 changed production lines and 120–170 test lines. Lane K owns the staffing
+painter. This change uses the current 24-hour drawing scale and existing stored data, save API
+and server rules.
