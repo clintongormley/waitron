@@ -1055,10 +1055,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
 
-- **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
-  that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
-  Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push
-  an address, not replace one.
+- **A712. A special date in the staffing painter needs its own business-day start.** Use it for
+  each column’s clock scale, strokes and server validation. When copying blocks, name the first date
+  they cannot fit and leave the chooser open without copying. This uses the Opening hours painter’s
+  shared column and copy checks.
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.

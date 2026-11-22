@@ -66,8 +66,9 @@ export interface CalendarViewHost {
   /** The address's `<key>/<value>` pairs after `view/<id>`. */
   params: Readonly<Record<string, string>>;
   canWrite: boolean;
-  /** Moves the Calendar to `view/<view>/<key>/<value>…`; `"hours"` returns to Opening hours. */
-  open(view: string, params: Record<string, string>): void;
+  /** Opens a contributed view or an Opening hours view (`hours`, `season`, or `special-day`).
+   *  Pass `replace` to update the current address without adding a history entry. */
+  open(view: string, params: Record<string, string>, options?: { replace?: boolean }): void;
 }
 
 /** The Calendar's own address view words, which no module view may take; `hours` is how a view

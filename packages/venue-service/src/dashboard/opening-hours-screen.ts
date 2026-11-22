@@ -273,6 +273,16 @@ export class OpeningHoursScreen extends LitElement {
       this.moduleView = { id: view!, params: this.moduleParams() };
       return;
     }
+    const month = parseCalendarMonth(this.url.read("month"));
+    if (month && (view === "season" || view === "special-day")) {
+      this.baseHref = this.hoursUrl({ month }).href;
+      this.view = "month";
+      this.requestedMonth = month;
+      this.departmentId = "";
+      this.stationId = "";
+      this.show = "";
+      this.pushedPainter = undefined;
+    }
     this.moduleView = undefined;
     const named = {
       seasonId: this.url.read("season") ?? "",
@@ -359,7 +369,7 @@ export class OpeningHoursScreen extends LitElement {
     const show = this.url.read("show");
     this.show = show === "all" || show === "stations" ? show : "";
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
-    this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
+    this.requestedMonth = month ?? "";
     const week = this.url.read("week");
     this.requestedWeekDate = isLocalDate(week) && weekInRange(week) ? week : "";
   }
@@ -392,11 +402,25 @@ export class OpeningHoursScreen extends LitElement {
       (this.moduleToday() || browserToday()).slice(0, 7)
     );
   }
-  private openCalendarView(view: string, params: Record<string, string>) {
+  private openCalendarView(view: string, params: Record<string, string>, replace?: boolean) {
     if (!this.isConnected) return;
-    if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
+    if (view === "hours") return void this.writeAddress(this.hoursUrl(params), replace);
+    if (view === "season" && params["season"])
+      return void this.writeAddress(
+        this.painterUrl({
+          seasonId: params["season"],
+          departmentId: params["department"] ?? "",
+          zoneId: "",
+        }),
+        replace,
+      );
+    if (view === "special-day" && params["special-day"])
+      return void this.writeAddress(
+        this.specialUrl({ specialDayId: params["special-day"], date: null }),
+        replace,
+      );
     if (!this.calendarView(view)) return;
-    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)));
+    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)), replace);
   }
   private calendarUrl(pathname: string) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
@@ -440,8 +464,8 @@ export class OpeningHoursScreen extends LitElement {
       return this.screen.calendarView(this.id)?.canWrite ?? false;
     }
     /** A field, so a view may hand `host.open` on alone. */
-    readonly open = (view: string, params: Record<string, string>) =>
-      this.screen.openCalendarView(view, params);
+    readonly open: CalendarViewHost["open"] = (view, params, options) =>
+      this.screen.openCalendarView(view, params, options?.replace);
   };
   private viewHandle({ view }: CalendarViewEntry) {
     let handle = this.viewHandles.get(view.id);
@@ -955,9 +979,19 @@ export class OpeningHoursScreen extends LitElement {
     history.replaceState(history.state, "", url);
     this.followUrl();
   }
+  /** The month behind a switched painter belongs to its history entry. */
+  private painterMonth(view: "season" | "special-day") {
+    if (this.moduleView) return this.moduleMonth();
+    return this.url.read("view") === view ? parseCalendarMonth(this.url.read("month")) : null;
+  }
   private painterUrl({ seasonId, departmentId, zoneId }: PainterAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    url.pathname = seasonPainterPath({ seasonId, departmentId, zoneId });
+    url.pathname = seasonPainterPath({
+      seasonId,
+      departmentId,
+      zoneId,
+      month: this.painterMonth("season"),
+    });
     url.searchParams.delete("station");
     return url;
   }
@@ -980,7 +1014,13 @@ export class OpeningHoursScreen extends LitElement {
   }
   private specialUrl({ specialDayId, date, to, dates }: SpecialAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    url.pathname = specialDayPainterPath({ specialDayId, date, to, dates });
+    url.pathname = specialDayPainterPath({
+      specialDayId,
+      date,
+      to,
+      dates,
+      month: this.painterMonth("special-day"),
+    });
     url.searchParams.delete("station");
     return url;
   }

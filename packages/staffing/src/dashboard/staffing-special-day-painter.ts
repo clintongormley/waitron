@@ -188,13 +188,15 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
     if (!read.dates.length)
       return html`<p class="message" data-test="no-dates">${t("staffing.painter.no_dates")}</p>`;
     const columns = this.columns(read);
+    const area = read.areas.find(({ area }) => areaKey(area) === shown)!;
     return html`<staffing-grid
       followable
       .target=${`${this.specialDayId}/${shown}`}
       .columns=${columns}
       .days=${this.draft.get(shown) ?? NOTHING_BY_KEY}
+      .seasonBlocks=${new Map(area.dates.map(({ dateId, seasonBlocks }) => [dateId, seasonBlocks]))}
       .guides=${this.guides(read.guides[shown], columns)}
-      .guideKind=${read.areas.find(({ area }) => areaKey(area) === shown)!.area.kind}
+      .guideKind=${area.area.kind}
       .guideDepartmentIds=${read.areas.filter(({ area }) => area.kind === "department").map(({ area }) => area.id)}
       .staffRoles=${this.staffRoles}
       .chosen=${chosen}
@@ -230,8 +232,11 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
         .refusal=${this.refused?.message ?? [this.refreshError, this.notice].filter(Boolean).join(" ")}
         .readOnly=${this.readOnly}
         @painter-save=${() => void this.save()}
-        @painter-close=${() => this.open("staffing", this.addressParams())}
+        @painter-close=${() => this.closePainter()}
       >
+        ${this.viewSwitch(() =>
+          this.open("special-day", { "special-day": this.specialDayId }, { replace: true }),
+        )}
         ${
           paintable
             ? areaPicker(read.areas, shown, this.saving, (value) => this.pick(value))

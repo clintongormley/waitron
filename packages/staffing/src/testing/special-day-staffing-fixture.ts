@@ -14,8 +14,8 @@ import { bar, kitchen, restaurant } from "./staffing-month-fixture.js";
  *  Day, the rest following the season. */
 export function specialDayStaffing(): SpecialDayStaffing {
   const dates = (eve: StaffingBlock[] | null, day: StaffingBlock[] | null = null) => [
-    { dateId: "eve", date: "2026-12-24", blocks: eve },
-    { dateId: "day", date: "2026-12-25", blocks: day },
+    { dateId: "eve", date: "2026-12-24", blocks: eve, seasonBlocks: [] },
+    { dateId: "day", date: "2026-12-25", blocks: day, seasonBlocks: [] },
   ];
   return {
     cutover: "06:00",

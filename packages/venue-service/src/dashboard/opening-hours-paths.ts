@@ -15,12 +15,14 @@ export function seasonPainterPath(address: {
   seasonId?: string;
   departmentId?: string;
   zoneId?: string;
+  month?: string | null;
 }): string {
   return path([
     ["view", "season"],
     ["season", address.seasonId],
     ["department", address.departmentId],
     ["zone", address.zoneId],
+    ["month", address.month],
   ]);
 }
 
@@ -31,6 +33,7 @@ export function specialDayPainterPath(address: {
   /** A new day's last date; left out when it is `date`. */
   to?: string | null;
   dates?: readonly string[] | null;
+  month?: string | null;
 }): string {
   return path([
     ["view", "special-day"],
@@ -38,6 +41,7 @@ export function specialDayPainterPath(address: {
     ["date", address.dates ? null : address.date],
     ["to", address.dates || address.to === address.date ? null : address.to],
     ["dates", address.dates?.join(",")],
+    ["month", address.month],
   ]);
 }
 

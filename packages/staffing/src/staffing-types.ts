@@ -61,7 +61,12 @@ export interface SpecialDayStaffing {
     area: AreaRef;
     name: string;
     /** `blocks` null: the date follows the season. */
-    dates: { dateId: string; date: string; blocks: StaffingBlock[] | null }[];
+    dates: {
+      dateId: string;
+      date: string;
+      blocks: StaffingBlock[] | null;
+      seasonBlocks: StaffingBlock[];
+    }[];
   }[];
 }
 

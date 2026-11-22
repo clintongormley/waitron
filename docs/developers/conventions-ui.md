@@ -879,7 +879,7 @@ A module adds a view to the Calendar (the page at `/opening-hours`) through
 venue-service importing it. The app hands the page only the views the person may read, each with
 `canWrite` worked out from its `requiresPermission`, and refuses a repeated id or one of the page's
 own view words (`CALENDAR_OWN_VIEW_IDS`). Its `CalendarViewHost` provides the shown `month`, the
-`<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`.
+`<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params, options)`. Pass `{ replace: true }` for a guarded address change that keeps the current browser history entry. The host accepts contributed views and the built-in `hours`, `season` and `special-day` destinations.
 The optional `today` is the venue's business date once the opening-hours read settles, with the
 browser's date as a fallback. The tab carries the shown month by default. Set `carryMonthOnTab: false`
 when the view chooses its own starting date. A switch from a module view with no month in its

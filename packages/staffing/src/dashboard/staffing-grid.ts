@@ -129,6 +129,20 @@ export class StaffingGrid extends LitElement {
       .block[data-colour] {
         border-color: transparent;
       }
+      .block.inherited {
+        background: var(--wt-color-surface);
+        border: 1px dashed var(--wt-color-border);
+        color: var(--wt-color-text);
+        pointer-events: none;
+      }
+      .block.inherited::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--period-fill, var(--wt-color-border));
+        opacity: calc(var(--wt-opacity-disabled) / 2);
+      }
       button.block {
         cursor: pointer;
       }
@@ -203,17 +217,11 @@ export class StaffingGrid extends LitElement {
         font-size: var(--wt-font-size-sm);
         pointer-events: none;
       }
-      .day:has(.guide-empty) .follows {
-        inset-block-start: calc(var(--wt-space-1) + var(--wt-font-size-sm) * 1.5);
-      }
       .follows {
-        position: absolute;
-        inset-block-start: 0;
-        inset-inline: 0;
-        padding: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
+        display: block;
+        font-weight: var(--wt-font-weight-normal);
         color: var(--wt-color-text-muted);
-        pointer-events: none;
+        white-space: normal;
       }
       .menu .fields {
         display: flex;
@@ -239,8 +247,10 @@ export class StaffingGrid extends LitElement {
 
   /** Kept stable between renders: the copy chooser reads them while it is open. */
   @property({ attribute: false }) columns: readonly StaffingColumn[] = [];
-  /** A null day follows the season; painting on it starts from an empty day. */
+  /** A null day follows the season. */
   @property({ attribute: false }) days: ReadonlyMap<string, readonly StaffingBlock[] | null> =
+    new Map();
+  @property({ attribute: false }) seasonBlocks: ReadonlyMap<string, readonly StaffingBlock[]> =
     new Map();
   /** Drawn faintly behind each column's blocks. */
   @property({ attribute: false }) guides: ReadonlyMap<string, readonly StaffingGuideRange[]> =
@@ -378,6 +388,9 @@ export class StaffingGrid extends LitElement {
   #day(key: string): readonly StaffingBlock[] {
     return this.#value(key) ?? [];
   }
+  #shownBlocks(key: string): readonly StaffingBlock[] {
+    return this.#value(key) ?? this.seasonBlocks.get(key) ?? [];
+  }
   #emit(key: string, blocks: StaffingBlock[] | null): void {
     this.dispatchEvent(
       new CustomEvent<StaffingChange>("staffing-change", {
@@ -427,7 +440,7 @@ export class StaffingGrid extends LitElement {
         this.cutover,
       );
     }
-    return addBlock(day, {
+    return addBlock(this.#shownBlocks(stretch.key), {
       staffRoleId: this.chosen!,
       headcount: this.headcount,
       startsAt: clockAt(stretch.start, this.cutover),
@@ -620,6 +633,7 @@ export class StaffingGrid extends LitElement {
     block: StaffingBlock,
     index: number,
     place: { lane: number; lanes: number },
+    inherited: boolean,
   ) {
     const { start, end } = drawnSpan(block, this.cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
@@ -627,9 +641,9 @@ export class StaffingGrid extends LitElement {
     const title = `${column.label}, ${this.#formatBlock(block).spokenText}`;
     // The name ends with the drawn text as one run, so a spoken command naming it matches (WCAG 2.5.3).
     const label = `${title}: ${this.#drawn(block).filter(Boolean).join(" ")}`;
-    if (this.readOnly)
+    if (this.readOnly || inherited)
       return html`<div
-        class="block"
+        class=${inherited ? "block inherited" : "block"}
         role="img"
         aria-label=${label}
         title=${title}
@@ -839,7 +853,16 @@ export class StaffingGrid extends LitElement {
                 data-column=${column.key}
                 ?data-error=${this.columnErrors.has(column.key)}
               >
-                <span>${column.label}</span>${
+                <span>
+                  ${column.label}
+                  ${
+                    this.#value(column.key) === null
+                      ? html`<span class="follows" id=${`follows-${column.key}`}
+                          >${t("staffing.grid.follows_season")}</span
+                        >`
+                      : nothing
+                  } </span
+                >${
                   this.columnErrors.has(column.key)
                     ? html`<span
                         part="column-error"
@@ -871,13 +894,20 @@ export class StaffingGrid extends LitElement {
           )}
           ${timeRuler(this.cutover)}
           ${this.columns.map((column) => {
-            const day = this.#day(column.key);
+            const day = this.#shownBlocks(column.key);
+            const inherited = this.#value(column.key) === null;
             const lanes = laneLayout(day, this.cutover);
             return html`<div
               class="day"
               role="group"
               aria-label=${column.label}
-              aria-describedby=${[this.columnErrors.has(column.key) ? `column-error-${column.key}` : "", `guide-description-${column.key}`].filter(Boolean).join(" ")}
+              aria-describedby=${[
+                this.columnErrors.has(column.key) ? `column-error-${column.key}` : "",
+                inherited ? `follows-${column.key}` : "",
+                `guide-description-${column.key}`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
               data-column=${column.key}
               tabindex="-1"
               @lostpointercapture=${this.#stroke.abort}
@@ -890,12 +920,7 @@ export class StaffingGrid extends LitElement {
               >
               ${(this.guides.get(column.key) ?? []).map((range) => this.#guide(range, guideDepartments))}
               ${!this.guides.get(column.key)?.length ? html`<span class="guide-empty">${this.#guideSummary(column.key)}</span>` : nothing}
-              ${
-                this.#value(column.key) === null
-                  ? html`<div class="follows">${t("staffing.grid.follows_season")}</div>`
-                  : nothing
-              }
-              ${day.map((block, index) => this.#block(column, block, index, lanes[index]!))}
+              ${day.map((block, index) => this.#block(column, block, index, lanes[index]!, inherited))}
               ${this.#preview(column)}
             </div>`;
           })}

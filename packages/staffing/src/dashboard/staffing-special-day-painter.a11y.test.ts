@@ -86,7 +86,9 @@ const states: Record<string, () => Promise<void>> = {
     await el.updateComplete;
   },
   "a date that follows the season": async () => {
-    const el = await painter();
+    const read = specialDayStaffing();
+    read.areas[1]!.dates[0]!.seasonBlocks = [headChef];
+    const el = await painter({ read: async () => read });
     shadow(el)
       .querySelector("wt-combobox")!
       .dispatchEvent(
@@ -100,6 +102,7 @@ const states: Record<string, () => Promise<void>> = {
     const grid = shadow(el).querySelector("staffing-grid")!;
     await grid.updateComplete;
     expect(grid.days.get("eve")).toBeNull();
+    expect(grid.shadowRoot!.querySelector('.day[data-column="eve"] [role=img]')).not.toBeNull();
   },
   "staff role dialog": async () => {
     const el = await painter();

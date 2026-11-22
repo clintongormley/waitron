@@ -1,6 +1,12 @@
-import { LitElement, nothing } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
-import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
+import {
+  QueryController,
+  codeMessage,
+  codeOf,
+  t as tKit,
+  type CalendarViewHost,
+} from "@waitron/dashboard-kit";
 import {
   draftScopeFor,
   saveActionState,
@@ -11,7 +17,7 @@ import { areaKey, type AreaRef } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { columnErrorsKeeper, guidesKeeper, staffRoleDialog } from "./painter-parts.js";
-import { tf } from "./strings.js";
+import { t, tf } from "./strings.js";
 
 interface Refused {
   message: string;
@@ -32,7 +38,33 @@ export abstract class StaffingPainterBase<
   @property() month = "";
   @property({ type: Boolean }) readOnly = false;
   /** Moves the Calendar's address. */
-  @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
+  @property({ attribute: false }) open!: CalendarViewHost["open"];
+
+  protected viewSwitch(openHours: () => void) {
+    return html`<wt-segmented-control
+      slot="picker"
+      name="calendarView"
+      hide-label
+      .label=${tKit("nav.calendar")}
+      .options=${[
+        { value: "hours", label: tKit("opening.title") },
+        { value: "staffing", label: t("staffing.view.tab") },
+      ]}
+      value="staffing"
+      ?disabled=${this.saving}
+      @wt-change=${(event: Event) => {
+        event.stopPropagation();
+        const control = event.currentTarget as HTMLElementTagNameMap["wt-segmented-control"];
+        // Staffing stays selected until the guarded navigation actually leaves it.
+        control.value = "staffing";
+        openHours();
+      }}
+    ></wt-segmented-control>`;
+  }
+
+  protected closePainter() {
+    this.open("staffing", this.addressParams(), { replace: true });
+  }
 
   @state() protected read?: R;
   @state() protected loadError?: string;
