@@ -167,7 +167,7 @@ export const venueEn = {
   "review.error_reports_detail":
     "Help fix Waitron by sending error codes, sources, the Waitron version, times and counts. Reports are linked to this box’s Cloud registration. You can change this choice in Cloud services.",
   "review.heading": "Review and provision",
-  "review.intro": "Check the details below, then provision this server.",
+  "review.intro": "Check the details below, then provision this box.",
   "review.demo_defaults":
     "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
   "review.country": "Country",
@@ -202,7 +202,7 @@ export const venueEn = {
   "review.cert_attached": "attached",
   "review.cert_not_attached": "not attached",
   "review.back": "Back",
-  "review.provision": "Provision this server",
+  "review.provision": "Provision this box",
 
   "cert.heading": "AEAT certificate",
   "cert.intro":
@@ -210,7 +210,7 @@ export const venueEn = {
   "cert.file_label": "Certificate file (.pfx or .p12)",
   "cert.file_help_label": "Help with certificate file",
   "cert.file_help":
-    "Choose the exported signing certificate, including its private key, so this server can sign fiscal records.",
+    "Choose the exported signing certificate, including its private key, so this box can sign fiscal records.",
   "cert.file_required": "Choose the certificate file.",
   "cert.loaded": "Certificate loaded.",
   "cert.loaded_named": "Certificate loaded — {name}.",

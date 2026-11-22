@@ -8,7 +8,7 @@ export const initialSetupStrings = {
     block: "Confirm before selecting an hour or making your recovery pack.",
     activation: "Confirm before activation.",
     reissue:
-      "Make the pack again with a new server key. Older backups still need the pack holding their matching key.",
+      "Make the pack again with a new box key. Older backups still need the pack holding their matching key.",
     confirm: "Confirm",
     cancel: "Cancel",
     next: "Review",
@@ -37,6 +37,6 @@ export const initialSetupStrings = {
     reload: "Reconectar",
     download: "Descargar herramienta sin conexión",
     outside:
-      "Usa la herramienta descargada sin conexión en el ordenador separado del custodio. No introduzcas en este equipo su clave, contraseña ni papel secreto de recuperación.",
+      "Usa la herramienta descargada sin conexión en el ordenador separado del custodio. No introduzcas en este servidor su clave, contraseña ni papel secreto de recuperación.",
   },
 } as const;

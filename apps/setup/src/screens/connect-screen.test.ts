@@ -583,17 +583,17 @@ describe("setup-connect-screen: the words of every refusal of Join", () => {
     ],
     [
       { code: "setup.owner_required" },
-      "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+      "This box did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
       JOIN_ONLY,
     ],
     [
       { code: "setup.already_provisioning" },
-      "Setup is already in progress on this server.",
+      "Setup is already in progress on this box.",
       JOIN_ONLY,
     ],
     [
       { code: "setup.not_ready" },
-      "The server isn't ready yet. Wait a moment, then try again.",
+      "The box isn't ready yet. Wait a moment, then try again.",
       JOIN_ONLY,
     ],
     [

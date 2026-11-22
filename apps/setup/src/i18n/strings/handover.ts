@@ -13,7 +13,7 @@ export const handoverEn = {
   "handover.space":
     "The last attempt found too little room on this box. Make room, then keep this page open to try again.",
   "handover.source":
-    "The last attempt could not complete this handover step. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    "The last attempt could not complete this handover step. Check both boxes’ power, connections and free disk space, and the old box’s entry in the list of boxes.",
   "handover.done": "This box has taken over the venue.",
   "handover.restarting": "The venue has started here; this box is restarting.",
   "handover.continue": "Continue to this box",

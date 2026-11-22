@@ -692,3 +692,29 @@ describe("createSetupApp — GET /status.json", () => {
     );
   });
 });
+
+describe("createSetupApp — the word for the venue's Waitron machine", () => {
+  // The owner's word is "box" (2026-11-22). Attribute values such as `name="serverUrl"` are not read.
+  const visibleText = (html: string): string => html.replace(/<[^>]*>/g, " ");
+  const page = async (overrides: Partial<SetupDeps>, path = "/", init?: RequestInit) =>
+    visibleText(
+      await (await request(createSetupApp(deps(overrides)), path, init, "127.0.0.1")).text(),
+    );
+
+  it("calls it the box, never the server, on every page it draws", async () => {
+    const unreachable: AgentStatus = { phase: "unreachable", serverUrl: null, current: null };
+    const unauthorized: AgentStatus = { phase: "unauthorized", serverUrl: null, current: null };
+    const pages = [
+      await page({}),
+      await page({ envLocked: true, snapshot: async () => snapshot({ config: CONFIG }) }),
+      await page({ snapshot: async () => snapshot({ status: unreachable, config: CONFIG }) }),
+      await page({ snapshot: async () => snapshot({ status: unauthorized, config: CONFIG }) }),
+      await page({
+        snapshot: async () =>
+          snapshot({ status: unreachable, config: CONFIG, joined: true, outOfTouch: true }),
+      }),
+      await page({ envLocked: true }, "/setup", { method: "POST" }),
+    ];
+    expect(pages.filter((text) => /\bservers?\b/i.test(text))).toEqual([]);
+  });
+});

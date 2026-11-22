@@ -37,28 +37,28 @@ afterEach(() => {
 describe("setup-reset-screen", () => {
   it("says what the reset does to this server and that it changes nothing on the primary", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this server");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this box");
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain("half-finished join");
-    expect(text).toContain("Nothing on the primary server is changed");
+    expect(text).toContain("Nothing on the primary box is changed");
   });
 
   it("says how to take this server off the primary's list", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain(
-      "To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list.",
+      "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove, then open the row menu again and choose Clear from list.",
     );
     expect(text).toContain("If its row already says Removed, only Clear from list is needed.");
     expect(text).toContain(
-      "Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+      "Do this before you join this box again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
     );
   });
 
   it.each([
     [
       "en-GB",
-      "To take it off that list, open the primary's Servers page and, in this server's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this server again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+      "To take it off that list, open the primary's Servers page and, in this box's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
       "Servers page",
     ],
     [
@@ -109,16 +109,16 @@ describe("setup-reset-screen", () => {
 
   it("shows a routed-back message as one alert above the reset button, leaving it working", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      errorMessage: "The server could not be reset.",
+      errorMessage: "The box could not be reset.",
     });
-    expect(await bottomOf(el)).toBe("The server could not be reset.");
+    expect(await bottomOf(el)).toBe("The box could not be reset.");
     expect(await alerts(el)).toHaveLength(1);
     expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("drops a routed-back message when the reset is asked for again, and shows a new refusal", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      errorMessage: "The server could not be reset.",
+      errorMessage: "The box could not be reset.",
       refusal: {},
     });
     const events = collect(host);
@@ -128,7 +128,7 @@ describe("setup-reset-screen", () => {
     expect(await bottomOf(el)).toBe("");
     el.refusal = {};
     await el.updateComplete;
-    expect(await bottomOf(el)).toBe("The server could not be reset.");
+    expect(await bottomOf(el)).toBe("The box could not be reset.");
   });
 
   it("steps back to the provisioning message without resetting", async () => {
@@ -145,7 +145,7 @@ describe("setup-reset-screen", () => {
   it("replaces the form with the restart message and a Reload once the reset is staged", async () => {
     const reload = vi.fn();
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
-      outcome: { kind: "resetting", message: "The server is resetting and will restart." },
+      outcome: { kind: "resetting", message: "The box is resetting and will restart." },
       reload,
     });
     const status = q(el, "[data-test=outcome]")!;
@@ -191,7 +191,7 @@ describe("setup-reset-screen", () => {
 
   it("redraws in Spanish on a live language switch", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this server");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this box");
     setLocale("es-ES");
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");

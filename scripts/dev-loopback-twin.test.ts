@@ -12,7 +12,7 @@ const { createLogger, createServer } = (await import(
 const PAGES = {
   till: ["/till/", "<title>Waitron Till</title>"],
   dashboard: ["/", "<title>Waitron Dashboard</title>"],
-  setup: ["/setup/", "<title>Waitron — set up your server</title>"],
+  setup: ["/setup/", "<title>Waitron — set up your box</title>"],
 } as const;
 type App = keyof typeof PAGES;
 

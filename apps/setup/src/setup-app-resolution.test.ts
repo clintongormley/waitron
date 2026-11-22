@@ -215,7 +215,7 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
     "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is.",
   );
   expect(es.wipeUnavailable).toBe(
-    "Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
+    "Este servidor no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
   );
   expect(en.heldChanged).toBe("The setup changed after this page read it. Try again.");
   expect(es.heldChanged).toBe(
@@ -1764,19 +1764,19 @@ it("the stop confirmation says it cannot be undone and ends the setup for whoeve
     "The box did not accept a stop from this page, so nothing changed. It stops a setup only from its own page over a secure connection, so from this page Start again and Recover from backup are refused the same way. Reconnect keeps everything as it is.",
   );
   expect(es.stopNotAccepted).toBe(
-    "El equipo no aceptó detener la configuración desde esta página, así que no cambió nada. Solo la detiene desde su propia página con una conexión segura, así que desde esta página Empezar de nuevo y Recuperar desde una copia se rechazan igual. Reconectar lo deja todo como está.",
+    "El servidor no aceptó detener la configuración desde esta página, así que no cambió nada. Solo la detiene desde su propia página con una conexión segura, así que desde esta página Empezar de nuevo y Recuperar desde una copia se rechazan igual. Reconectar lo deja todo como está.",
   );
   expect(en.stopReadUnanswered).toBe(
     "This page got no answer it could read from the box, so nothing was stopped. Start again and Recover from backup ask the box again; Reconnect reads the setup again and shows where it stands.",
   );
   expect(es.stopReadUnanswered).toBe(
-    "Esta página no recibió una respuesta que pudiera leer del equipo, así que no se ha detenido nada. Empezar de nuevo y Recuperar desde una copia vuelven a preguntar al equipo; Reconectar vuelve a leer la configuración y muestra en qué punto está.",
+    "Esta página no recibió una respuesta que pudiera leer del servidor, así que no se ha detenido nada. Empezar de nuevo y Recuperar desde una copia vuelven a preguntar al servidor; Reconectar vuelve a leer la configuración y muestra en qué punto está.",
   );
   expect(en.stopUnanswered).toBe(
     "This page got no answer it could read from the stop. The box may have restarted: Reconnect reads the setup again and shows where it stands.",
   );
   expect(es.stopUnanswered).toBe(
-    "Esta página no recibió una respuesta que pudiera leer al detener la configuración. Puede que el equipo se haya reiniciado: Reconectar vuelve a leer la configuración y muestra en qué punto está.",
+    "Esta página no recibió una respuesta que pudiera leer al detener la configuración. Puede que el servidor se haya reiniciado: Reconectar vuelve a leer la configuración y muestra en qué punto está.",
   );
 });
 

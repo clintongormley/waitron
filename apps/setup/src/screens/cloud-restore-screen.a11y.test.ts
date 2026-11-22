@@ -155,13 +155,13 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
           },
         },
         liveUnknown: true,
-        errorMessage: "Check your answer about the old server.",
+        errorMessage: "Check your answer about the old box.",
         invalidField: "oldBoxGone",
       },
       theme,
     );
     expect(el.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
-      "Check your answer about the old server.",
+      "Check your answer about the old box.",
     );
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(375);
     await expectNoA11yViolations(host);

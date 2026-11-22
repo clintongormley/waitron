@@ -33,7 +33,7 @@ describe("setup-role-screen", () => {
     [
       "en-GB",
       "A mirror can take over only after it has joined a running primary.",
-      "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. A new server cannot join a primary that is already gone: to recover then, choose Restore from backup or Restore from my bucket.",
+      "This box joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. A new box cannot join a primary that is already gone: to recover then, choose Restore from backup or Restore from my bucket.",
     ],
     [
       "es-ES",

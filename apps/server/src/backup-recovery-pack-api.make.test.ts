@@ -580,7 +580,7 @@ describe("a made pack", () => {
       expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
       const bytes = await response.arrayBuffer();
       const text = await pdfText(bytes);
-      expect(text.includes("The server key was not replaced.")).toBe(ticked);
+      expect(text.includes("The box key was not replaced.")).toBe(ticked);
       expect(text).toContain("still works");
       expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
       expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
@@ -608,7 +608,7 @@ describe("a made pack", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
       const text = await pdfText(await response.arrayBuffer());
-      expect(text).toContain("The server key was not replaced.");
+      expect(text).toContain("The box key was not replaced.");
       expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBe(verifier);
       expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
       expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
@@ -675,9 +675,7 @@ describe("a made pack", () => {
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
-    expect(await pdfText(await response.arrayBuffer())).toContain(
-      "This box has no server key yet.",
-    );
+    expect(await pdfText(await response.arrayBuffer())).toContain("This box has no box key yet.");
     expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
     expect(record!.parts[3]).toEqual({ part: "server-key", state: "not-set-up" });

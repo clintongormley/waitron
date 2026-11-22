@@ -435,7 +435,7 @@ it.each(["en", "es"])(
 it.each([
   [
     "en-GB",
-    "The last attempt could not complete this handover step. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    "The last attempt could not complete this handover step. Check both boxes’ power, connections and free disk space, and the old box’s entry in the list of boxes.",
   ],
   ["es-ES", handoverEs["handover.source"]],
 ])("describes a failed source attempt before and after acceptance in %s", async (locale, words) => {

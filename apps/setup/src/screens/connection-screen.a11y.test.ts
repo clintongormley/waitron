@@ -13,13 +13,13 @@ const STATES: { name: string; props: Partial<SetupConnectionScreen> }[] = [
   {
     name: "a failure worth retrying",
     props: {
-      errorMessage: "We could not reach the server. Check its power and your network connection.",
+      errorMessage: "We could not reach the box. Check its power and your network connection.",
     },
   },
   {
     name: "a server that cannot be set up from here",
     props: {
-      errorMessage: "This server is already set up. Reload to open it.",
+      errorMessage: "This box is already set up. Reload to open it.",
       setupUnavailable: true,
     },
   },

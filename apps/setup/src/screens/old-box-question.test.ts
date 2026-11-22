@@ -33,11 +33,11 @@ afterEach(() => {
 it("asks about the old server in English by default", () => {
   const host = mount();
   expect(text(host.querySelector("[data-test=live-warning]")!)).toBe(
-    "Whether the old server is still writing to its bucket could not be checked. If it is still running, two servers would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
+    "Whether the old box is still writing to its bucket could not be checked. If it is still running, two boxes would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
   );
-  expect(text(host.querySelector("label")!)).toBe("The old server is switched off for good.");
+  expect(text(host.querySelector("label")!)).toBe("The old box is switched off for good.");
   expect(text(host.querySelector("#old-box-gone-error")!)).toBe(oldBoxProblem());
-  expect(oldBoxProblem()).toBe("Confirm that the old server is switched off for good.");
+  expect(oldBoxProblem()).toBe("Confirm that the old box is switched off for good.");
 });
 
 it("asks about the old server in Spanish", () => {
@@ -66,9 +66,9 @@ it("writes the time the old server wrote in the wizard's language", () => {
 });
 
 it("shows the server's refusal under the checkbox and points the checkbox at it", () => {
-  const host = mount({ invalid: false, refusal: "Check your answer about the old server." });
+  const host = mount({ invalid: false, refusal: "Check your answer about the old box." });
   expect(text(host.querySelector("#old-box-gone-error")!)).toBe(
-    "Check your answer about the old server.",
+    "Check your answer about the old box.",
   );
   const box = host.querySelector("[data-test=old-box-gone]")!;
   expect(box.getAttribute("aria-invalid")).toBe("true");
@@ -76,6 +76,6 @@ it("shows the server's refusal under the checkbox and points the checkbox at it"
 });
 
 it("says the question is unanswered rather than repeating the server's refusal", () => {
-  const host = mount({ invalid: true, refusal: "Check your answer about the old server." });
+  const host = mount({ invalid: true, refusal: "Check your answer about the old box." });
   expect(text(host.querySelector("#old-box-gone-error")!)).toBe(oldBoxProblem());
 });

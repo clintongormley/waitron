@@ -42,7 +42,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           expect(window.innerWidth).toBe(width);
           expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
             locale === "en-GB"
-              ? "Server key 15 Oct 2026 · K7QF"
+              ? "Box key 15 Oct 2026 · K7QF"
               : "Clave del servidor 15 oct 2026 · K7QF",
           );
           await expectNoA11yViolations(host);
@@ -138,7 +138,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     );
     await vi.waitFor(() =>
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
-        "The server is ready. Open it here:",
+        "The box is ready. Open it here:",
       ),
     );
     await expectNoA11yViolations(host);
@@ -270,7 +270,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     );
     await vi.waitFor(() =>
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
-        "The server is ready. Open it here:",
+        "The box is ready. Open it here:",
       ),
     );
     await expectNoA11yViolations(host);

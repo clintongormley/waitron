@@ -433,7 +433,7 @@ describe("setup-review-screen", () => {
 
     const withError = await mountWidget<SetupReviewScreen>("setup-review-screen", {
       draft: fullDraft(),
-      errorMessage: "The server rejected the details (field: taxId). Check your entries.",
+      errorMessage: "The box rejected the details (field: taxId). Check your entries.",
     });
     const banner = withError.el.shadowRoot!.querySelector<HTMLElement>("[data-test=error]")!;
     expect(banner.getAttribute("role")).toBe("alert");

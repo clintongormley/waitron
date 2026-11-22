@@ -20,15 +20,15 @@ export const shellEn = {
   "shell.first_setup.attempt_uncertain":
     "The setup on this box may already have used its invoice series, so the box does not repeat or replace it.",
   "shell.setup_not_accepted":
-    "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+    "This box did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
   "shell.setup_conflict":
-    "Another setup on this server is in the way, so the server did not do this. Reload shows where setup on this server stands and what can be done next.",
+    "Another setup on this box is in the way, so the box did not do this. Reload shows where setup on this box stands and what can be done next.",
   "shell.provisioning.first_setup_held":
-    "This server holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
   "shell.restore.first_setup_held":
-    "This server holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
   "shell.reset.first_setup_held":
-    "This server holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
   "shell.first_setup.attempt_invalid":
     "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything.",
   "shell.first_setup.start_again_incomplete": "Deletion interrupted. Reload the page to continue.",
@@ -41,11 +41,11 @@ export const shellEn = {
   "shell.first_setup.configuration_unreadable":
     "The box can no longer read the configuration export imported earlier. Export it again from the box you exported from, then set up this box again and import the new export.",
   "shell.first_setup.clock_step_unsaved":
-    "The server's time was set from this device, but the server could not save a note of that change, so setup cannot finish yet. Reconnect, then provision this server again: the server tries to save the note first.",
+    "The box's time was set from this device, but the box could not save a note of that change, so setup cannot finish yet. Reconnect, then provision this box again: the box tries to save the note first.",
   "shell.clock_step_unsaved":
-    "The server's time was set from this device, but the server could not save a note of that change, so it cannot finish yet. Try again: the server tries to save the note first.",
+    "The box's time was set from this device, but the box could not save a note of that change, so it cannot finish yet. Try again: the box tries to save the note first.",
 
-  "shell.document_title": "Waitron — set up your server",
+  "shell.document_title": "Waitron — set up your box",
   "shell.reload": "Reload",
   "shell.reload_open_till": "Reload to open the till",
   "shell.theme.label": "Theme",
@@ -55,18 +55,18 @@ export const shellEn = {
   "shell.about.title": "About Waitron",
   "shell.about.close": "Close",
 
-  "shell.connection.already_set_up": "This server is already set up. Reload to open it.",
-  "shell.connection.server_problem": "This server reported a problem. Try again in a moment.",
+  "shell.connection.already_set_up": "This box is already set up. Reload to open it.",
+  "shell.connection.server_problem": "This box reported a problem. Try again in a moment.",
   "shell.connection.provision_secure":
-    "Setup needs a secure connection to show your server key. Follow the instructions above before continuing.",
+    "Setup needs a secure connection to show your box key. Follow the instructions above before continuing.",
   "shell.connection.unreachable":
-    "We could not reach the server. Check its power and your network connection.",
+    "We could not reach the box. Check its power and your network connection.",
 
-  "shell.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "shell.not_ready": "The box isn't ready yet. Wait a moment, then try again.",
   "shell.operation_conflict":
-    "This server holds saved setup work that does not match this request, so it did not do this one.",
-  "shell.already_provisioning": "Setup is already in progress on this server.",
-  "shell.already_provisioned": "This server is already set up.",
+    "This box holds saved setup work that does not match this request, so it did not do this one.",
+  "shell.already_provisioning": "Setup is already in progress on this box.",
+  "shell.already_provisioned": "This box is already set up.",
 
   "shell.venue_error.territory_country_mismatch": "The country must match the fiscal territory.",
   "shell.venue_error.invalid_locales": "Choose the receipt language.",
@@ -75,9 +75,9 @@ export const shellEn = {
     "The venue details were rejected — please review and correct them. ({code})",
 
   "shell.review.request_invalid":
-    "The server rejected the details. Check your entries, then provision again.",
+    "The box rejected the details. Check your entries, then provision again.",
   "shell.review.request_invalid_field":
-    "The server rejected the details (field: {field}). Check your entries, then provision again.",
+    "The box rejected the details (field: {field}). Check your entries, then provision again.",
   "shell.review.email_invalid":
     "The admin email address is invalid. Check it, then provision again.",
 
@@ -88,42 +88,42 @@ export const shellEn = {
   "shell.provision.usb_demo_refused":
     "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Start a new restaurant or Join or recover a restaurant.",
   "shell.provision.throwaway_refused":
-    "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+    "This box is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
 
   "shell.provision.failed":
-    "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
+    "Provisioning failed. Check that the box is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
   "shell.adopt.vault_not_empty":
-    "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
+    "This box already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this box would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this box as it is.",
   "shell.adopt.vault_key_differs":
-    "This server's own settings give a WAITRON_CREDENTIALS_KEY setting a value that is not the primary server's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
+    "This box's own settings give a WAITRON_CREDENTIALS_KEY setting a value that is not the primary box's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this box, or set them to the primary box's, then restart it and join again.",
   "shell.adopt.setting_missing":
-    "This server's own settings leave out {variable}, which it needs to start after joining this primary server. Nothing was changed. Set {variable} on this server, then restart it and join again.",
+    "This box's own settings leave out {variable}, which it needs to start after joining this primary box. Nothing was changed. Set {variable} on this box, then restart it and join again.",
   "shell.adopt.setting_unusable":
-    "This server's own {variable} setting has a value it could not start with after joining this primary server. Nothing was changed. Correct {variable} on this server, then restart it and join again.",
+    "This box's own {variable} setting has a value it could not start with after joining this primary box. Nothing was changed. Correct {variable} on this box, then restart it and join again.",
   "shell.adopt.unreleased_build":
-    "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary server is for real sales. Nothing was changed. Install a released version on this server, then join again.",
+    "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary box is for real sales. Nothing was changed. Install a released version on this box, then join again.",
   "shell.adopt.environment_mismatch":
-    "This server's WAITRON_ENV setting names a different mode from the primary server's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this server, or set it to the primary server's mode, then restart it and join again.",
+    "This box's WAITRON_ENV setting names a different mode from the primary box's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this box, or set it to the primary box's mode, then restart it and join again.",
   "shell.adopt.generic":
-    "This server could not finish joining just now. Check that it is switched on and connected, then try again.",
+    "This box could not finish joining just now. Check that it is switched on and connected, then try again.",
   "shell.adopt.incomplete":
-    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this server clears what the stopped join left on this server and restarts setup from the first page. If the main box's Servers page lists this server, choose Remove in its row there, then Clear from list.",
+    "A previous attempt to join this box to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this box clears what the stopped join left on this box and restarts setup from the first page. If the main box's Servers page lists this box, choose Remove in its row there, then Clear from list.",
 
-  "shell.reset.generic": "The server could not be reset. Check the connection and try again.",
+  "shell.reset.generic": "The box could not be reset. Check the connection and try again.",
   "shell.reset.resetting":
-    "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
+    "The box is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this box again.",
   "shell.reset.unavailable":
-    "There is no half-finished join to reset on this server. Reload to start setup again.",
+    "There is no half-finished join to reset on this box. Reload to start setup again.",
 
   "shell.restore.upload_interrupted":
     "The backup upload did not finish. Connect this device by cable or to the venue’s network, then try again.",
   "shell.restore.archive_resource_limit":
     "The box cannot receive or open this backup within its size and temporary-space limits, or could not measure its free space. Choose a smaller backup or free disk space on this box and try again.",
   "shell.restore.staging_failed":
-    "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.restore.staging_failed_code":
-    "The backup could not be staged. Check the file, key and environment. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The backup could not be staged. Check the file, key and environment. ({code}) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.restore.administrator_password_missing":
     "This backup has no active administrator with a password. Choose another backup.",
   "shell.restore.environment_mismatch":
@@ -133,12 +133,12 @@ export const shellEn = {
   "shell.restore.manifest_unsupported":
     "This backup uses an unsupported format. Install a Waitron version that supports it, then try again.",
   "shell.restore.other_version":
-    "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
+    "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
 
   "shell.bucket.no_answer":
-    "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.bucket.refused_code":
-    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.bucket.kit_damaged":
     "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
   "shell.bucket.kit_invalid":
@@ -148,10 +148,10 @@ export const shellEn = {
   "shell.bucket.unopenable":
     "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
   "shell.bucket.other_version":
-    "The copy in the bucket was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
+    "The copy in the bucket was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
   "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
   "shell.bucket.pointer_unverified":
-    "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+    "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
   "shell.bucket.key_or_access":
     "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
   "shell.bucket.venue_mismatch":
@@ -161,26 +161,26 @@ export const shellEn = {
   "shell.bucket.pointer_invalid":
     "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
   "shell.bucket.integrity_failed":
-    "The downloaded copy did not pass its checks. Try again, or choose another backup. Nothing on this server was changed.",
+    "The downloaded copy did not pass its checks. Try again, or choose another backup. Nothing on this box was changed.",
   "shell.bucket.state_missing":
-    "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+    "The copy in the bucket does not hold the old box's locked settings, so it cannot be rebuilt from.",
   "shell.bucket.identity_unknown":
-    "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this server was changed.",
+    "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this box was changed.",
   "shell.bucket.restore_failed":
-    "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
+    "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
   "shell.bucket.request_failed":
-    "The bucket did not answer, or refused the key in this kit. Check this server's internet connection and that the bucket and its key still exist, then try again.",
+    "The bucket did not answer, or refused the key in this kit. Check this box's internet connection and that the bucket and its key still exist, then try again.",
   "shell.bucket.disk_full":
-    "This server's disk filled while the copy was downloading. Nothing on this server was changed. Free some space and try again.",
+    "This box's disk filled while the copy was downloading. Nothing on this box was changed. Free some space and try again.",
   "shell.bucket.environment_mismatch":
     "The copy comes from the other environment. Choose the environment it came from.",
   "shell.bucket.already_provisioning":
-    "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
+    "Setup is already in progress on this box. Wait for it to finish, then reload this page.",
   "shell.bucket.request_invalid":
-    "The server rejected the details. Check your entries, then try again.",
+    "The box rejected the details. Check your entries, then try again.",
 
   "shell.cloud.other_version":
-    "The snapshot was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
+    "The snapshot was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
   "shell.cloud.unopenable":
     "This snapshot could not be opened. It is damaged, or the backup encryption key Waitron Cloud holds for it does not open it.",
   "shell.cloud.environment_mismatch":
@@ -188,14 +188,14 @@ export const shellEn = {
   "shell.cloud.unavailable":
     "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
   "shell.cloud.restore_unavailable":
-    "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.cloud.request_invalid":
-    "The server rejected the details. Check your entries, then try again.",
+    "The box rejected the details. Check your entries, then try again.",
 
   "shell.configuration.outdated":
     "This configuration export is from an older format. Export it again from a current box.",
   "shell.configuration.newer":
-    "This export comes from a newer version of Waitron. Update the software on this server then load the export again.",
+    "This export comes from a newer version of Waitron. Update the software on this box then load the export again.",
   "shell.configuration.passphrase_invalid":
     "This passphrase does not open the export. Check it and try again.",
   "shell.configuration.could_not_open":
@@ -341,7 +341,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.restore.upload_interrupted":
     "La carga de la copia de seguridad no ha terminado. Conecta este dispositivo por cable o a la red del local y vuelve a intentarlo.",
   "shell.restore.archive_resource_limit":
-    "El equipo no puede recibir o abrir esta copia dentro de sus límites de tamaño y espacio temporal, o no ha podido medir el espacio libre. Elige una copia más pequeña o libera espacio en el disco de este equipo y vuelve a intentarlo.",
+    "El servidor no puede recibir o abrir esta copia dentro de sus límites de tamaño y espacio temporal, o no ha podido medir el espacio libre. Elige una copia más pequeña o libera espacio en el disco de este servidor y vuelve a intentarlo.",
   "shell.restore.staging_failed":
     "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.restore.staging_failed_code":

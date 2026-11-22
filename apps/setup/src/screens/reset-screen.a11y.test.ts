@@ -30,11 +30,11 @@ describe.each(["light", "dark"] as const)("setup-reset-screen a11y (%s theme)", 
   it("has no violations with a routed-back message shown", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>(
       "setup-reset-screen",
-      { errorMessage: "The server could not be reset. Check the connection and try again." },
+      { errorMessage: "The box could not be reset. Check the connection and try again." },
       theme,
     );
     expect(await bottomOf(el)).toBe(
-      "The server could not be reset. Check the connection and try again.",
+      "The box could not be reset. Check the connection and try again.",
     );
     await expectNoA11yViolations(host);
   });
@@ -53,7 +53,7 @@ describe.each(["light", "dark"] as const)("setup-reset-screen a11y (%s theme)", 
     async (kind) => {
       const { host } = await mountWidget<SetupResetScreen>(
         "setup-reset-screen",
-        { outcome: { kind, message: "The server is resetting and will restart." } },
+        { outcome: { kind, message: "The box is resetting and will restart." } },
         theme,
       );
       await expectNoA11yViolations(host);

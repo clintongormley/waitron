@@ -5,7 +5,7 @@ export const finishEn = {
   "mode_pill.prepare": "Preparation",
   "mode_pill.live": "Live",
 
-  "provisioning.heading": "Provisioning this server",
+  "provisioning.heading": "Provisioning this box",
   "provisioning.setting_up": "Setting up {legalName}",
   "provisioning.keep_open": "Keep this page open.",
   "provisioning.busy": "Provisioning…",
@@ -15,21 +15,21 @@ export const finishEn = {
   "provisioning.trust_help_link": "open certificate and connection help",
   "provisioning.trust_help_after":
     "in a new tab. Your entries stay in this tab until you close or reload it.",
-  "provisioning.reset": "Reset this server",
+  "provisioning.reset": "Reset this box",
   "provisioning.retry": "Try again",
 
-  "reset.heading": "Reset this server",
-  "reset.heading_resetting": "Resetting this server",
+  "reset.heading": "Reset this box",
+  "reset.heading_resetting": "Resetting this box",
   "reset.explanation":
-    "This removes what the half-finished join left on this server and restarts it at a fresh setup. Nothing on the primary server is changed, so the primary may still list this server.",
+    "This removes what the half-finished join left on this box and restarts it at a fresh setup. Nothing on the primary box is changed, so the primary may still list this box.",
   "reset.remove_plain":
-    "To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this box again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.remove_before": "To take it off that list, open the primary's",
   "reset.servers_link": "Servers page",
   "reset.remove_after":
-    "and, in this server's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this server again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "and, in this box's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.back": "Back",
-  "reset.submit": "Reset this server",
+  "reset.submit": "Reset this box",
   "reset.busy": "Resetting…",
   "reset.reload": "Reload",
 
@@ -39,25 +39,24 @@ export const finishEn = {
   "done.cloud_staff_email_help": "About staff email",
   "done.heading_rebuilt": "Rebuilt from your bucket",
   "done.heading_restored": "Restored from your backup",
-  "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
-  "done.ready": "The server is ready. Open it here:",
-  "done.start_failed":
-    "The server did not start. Open it to see what went wrong and what you can do:",
+  "done.restarting": "The box is restarting to finish setup. Once it is back, open it here:",
+  "done.ready": "The box is ready. Open it here:",
+  "done.start_failed": "The box did not start. Open it to see what went wrong and what you can do:",
   "done.waiting_for_clock":
-    "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.",
-  "done.clock_confirmed": "Time confirmed. This page shows when the server is ready.",
-  "done.clock.server_time": "The server's time:",
+    "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.",
+  "done.clock_confirmed": "Time confirmed. This page shows when the box is ready.",
+  "done.clock.server_time": "The box's time:",
   "done.clock.device_time": "This device's time:",
   "done.clock.confirm": "Confirm the time",
   "done.clock.this_device": "This device",
   "done.clock.on_box":
-    "This screen is on the server itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
+    "This screen is on the box itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
   "done.clock.set_refused":
-    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
   "done.clock.key_refused":
-    "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the selected backup's server key there.",
+    "The box did not accept the box key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's box key there.",
   "done.clock.unanswered":
-    "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
+    "This page could not get the two times from the box, so Confirm the time and This device stay off. Keep this page open: it asks the box again by itself.",
   "done.description.dashboard":
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
@@ -65,62 +64,62 @@ export const finishEn = {
   "done.description.server": "Its page has a button to try starting it again.",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
-  "done.link.server": "Server",
+  "done.link.server": "Box",
   "done.link.email": "Email inbox",
   "done.devices.intro": "Devices depend on how each was set up:",
   "done.devices.local":
     "Tills, handhelds and station screens that were opened at https://waitron.local reconnect by themselves.",
   "done.devices.ip":
-    "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this server, scan its QR code, and set the device up again.",
+    "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this box, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
-    "A print agent on this server reconnects by itself. One on another computer that was given an IP address needs its Box address changed on its own page, at port 9110 on that computer.",
-  "done.break_glass.heading": "Save your server key now",
-  "done.break_glass.key_name": "Server key {date} · {code}",
+    "A print agent on this box reconnects by itself. One on another computer that was given an IP address needs its Box address changed on its own page, at port 9110 on that computer.",
+  "done.break_glass.heading": "Save your box key now",
+  "done.break_glass.key_name": "Box key {date} · {code}",
   "done.break_glass.backups":
-    "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
+    "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
   "done.break_glass.warning":
     "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
-  "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
+  "done.break_glass.promote": "You need it to promote this box if the primary is unreachable.",
   "done.break_glass.restore":
     "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
   "done.break_glass.save": "Save as a file",
   "done.break_glass.download_pack": "Download recovery pack (PDF)",
   "done.break_glass.pack_keep":
-    "The recovery pack contains the server key. Keep it away from this server. You need the key to restore this venue from its bucket.",
+    "The recovery pack contains the box key. Keep it away from this box. You need the key to restore this venue from its bucket.",
   "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
-  "done.break_glass.file_title": "Waitron server key",
+  "done.break_glass.file_title": "Waitron box key",
   "done.break_glass.file_purpose": "You need it to restore this venue from its bucket.",
   "done.break_glass.file_keep":
     "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
-    "The server key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new server key before taking your first bucket copy.",
+    "The box key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new box key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
   "done.break_glass.take_over":
-    "You will need it if this server ever has to take over from the primary.",
-  "done.joining.heading": "This server is joining",
-  "done.joined.heading": "This server has joined",
+    "You will need it if this box ever has to take over from the primary.",
+  "done.joining.heading": "This box is joining",
+  "done.joined.heading": "This box has joined",
   "done.joining.status": "Joining. This can take a few minutes.",
   "done.joining.copy_waiting":
     "Joining. Waiting for the primary to send its copy of the restaurant's data.",
   "done.joining.copy_restoring": "Joining. Copying the restaurant's data from the primary.",
-  "done.joining.copy_ready": "Joining. The copy is complete and this server is restarting.",
+  "done.joining.copy_ready": "Joining. The copy is complete and this box is restarting.",
   "done.joining.lost_before":
-    "This page can no longer reach this server. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
+    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
   "done.joining.lost_link": "Servers page",
-  "done.joining.lost_after": "and look at this server's row.",
-  "done.joined.status": "Joined. This server is now the standby.",
+  "done.joining.lost_after": "and look at this box's row.",
+  "done.joined.status": "Joined. This box is now the standby.",
   "done.task.done": "Done",
   "done.task.in_progress": "In progress",
   "done.task.to_do": "To do",
   "done.task.join": "Join the restaurant",
   "done.task.join_detail": "Taking its first copy from the primary, which keeps selling.",
-  "done.task.key": "Save the server key",
+  "done.task.key": "Save the box key",
   "done.task.key_confirm": "I have saved the key",
   "done.task.label": "Print the switch labels",
-  "done.task.label_before": "Once this server has joined, open the primary's",
+  "done.task.label_before": "Once this box has joined, open the primary's",
   "done.task.label_link": "Servers page",
   "done.task.label_after":
-    "and choose Print switch label in each server's row menu. Stick each label on its server.",
+    "and choose Print switch label in each box's row menu. Stick each label on its box.",
   "done.task.label_confirm": "I have stuck on the labels",
 } as const;
 

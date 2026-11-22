@@ -450,7 +450,7 @@ describe("the server key part", () => {
       state: "failed",
       failure: {
         what: cause.what,
-        todo: `${cause.todo} The server key was not replaced. The current key, on recovery pack 2 made on 2 September 2026, still works.`,
+        todo: `${cause.todo} The box key was not replaced. The current key, on recovery pack 2 made on 2 September 2026, still works.`,
       },
     });
     expect(built.record).toEqual({
@@ -476,7 +476,7 @@ describe("the server key part", () => {
   it.each([
     [
       { kind: "pack" as const, number: 4, madeOn: "2026-10-01", received: false },
-      "The current server key is on recovery pack 4, made on 1 October 2026, but when this pack was made the box had not been told that pack 4 arrived. If you do not have pack 4, make a new pack with Also make a new box key ticked.",
+      "The current box key is on recovery pack 4, made on 1 October 2026, but when this pack was made the box had not been told that pack 4 arrived. If you do not have pack 4, make a new pack with Also make a new box key ticked.",
     ],
     [
       { kind: "sheet" as const, keyName: "2026-09-02 · OLD", madeOn: "2026-09-02" },
@@ -522,7 +522,7 @@ describe("the server key part", () => {
     );
     expect(built.part.failure).toEqual({
       what: cause.what,
-      todo: `${cause.todo} The server key was not replaced. The current key, on recovery pack 2 made on 2 September 2026, still works.`,
+      todo: `${cause.todo} The box key was not replaced. The current key, on recovery pack 2 made on 2 September 2026, still works.`,
     });
     expect(built.record).toEqual({
       part: "server-key",
@@ -613,7 +613,7 @@ describe("the server key's page number on the other pages", () => {
       "en",
     );
     expect(bucket!.part.page!.intro).toBe(
-      "Intro. It also needs the server key: page 4, or the pack it names.",
+      "Intro. It also needs the box key: page 4, or the pack it names.",
     );
     expect(archives!.part.page!.intro).toBe(bucket!.part.page!.intro);
   });
