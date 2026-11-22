@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createProduct } from "./operations.js";
 import { createExtraList, deleteExtraList } from "./extras.js";
 import { createOptionList, deleteOptionList } from "./options.js";
@@ -25,6 +26,8 @@ let dish = "";
 let topping = "";
 
 beforeEach(async () => {
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const make = async (name: string, unitPrice: string) =>
       (

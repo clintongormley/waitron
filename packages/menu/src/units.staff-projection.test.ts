@@ -20,6 +20,11 @@ it.each(["products", "available", "offers"] as const)(
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Deli" });
+      await seedVenue(tx, {
+        name: "Room",
+        defaultMenuId: menu.id,
+        invoiceLocales: ["en-GB"],
+      });
       const unit = await createUnit(
         tx,
         {
@@ -44,11 +49,6 @@ it.each(["products", "available", "offers"] as const)(
         unitId: null,
         unitPrice: "1.00",
         vatClass: "general",
-      });
-      await seedVenue(tx, {
-        name: "Room",
-        defaultMenuId: menu.id,
-        invoiceLocales: ["en-GB"],
       });
       await addProductToMenu(tx, { menuId: menu.id, productId: weighed.id, grossPrice: "3.00" });
       await addProductToMenu(tx, { menuId: menu.id, productId: each.id, grossPrice: "1.00" });

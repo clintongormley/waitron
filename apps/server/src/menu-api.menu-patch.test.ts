@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -26,6 +26,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTaxpayer(db);
+    await seedVenueSettings(db);
     await seedLegacySellingUnits(db);
     await seedPhotoMetadata(db, { filename: PHOTO, names: { es: "Sopa" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
