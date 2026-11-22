@@ -834,6 +834,7 @@ it("asks where a refused line edit should be made and retries with the chosen st
     { quantity: "2", makeAt: "kitchen" },
     0,
     tableOrder(el)!.billEdit,
+    undefined,
   );
 });
 
@@ -6964,6 +6965,7 @@ describe("line-edit unsaved station choice", () => {
           { quantity: "2", makeAt: "kitchen" },
           0,
           original,
+          undefined,
         );
       }
       expect(api.saveDraft).not.toHaveBeenCalled();
@@ -7001,6 +7003,7 @@ describe("line-edit unsaved station choice", () => {
       { quantity: "2", makeAt: "kitchen" },
       0,
       tableOrder(el)!.billEdit,
+      undefined,
     );
     oldDiscard.click();
     await flush(el);
@@ -8340,6 +8343,7 @@ describe("direct line editing authority", () => {
       { quantity: "2" },
       0,
       ask.expectedEdit,
+      undefined,
     );
   });
 

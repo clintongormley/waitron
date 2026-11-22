@@ -4295,7 +4295,14 @@ describe("till-app: a change refused on a bill that holds money", () => {
     });
     await flush(el);
 
-    expect(updateOrderLine).toHaveBeenCalledWith("wo-4", 1, { quantity: "2" }, 0, order.billEdit);
+    expect(updateOrderLine).toHaveBeenCalledWith(
+      "wo-4",
+      1,
+      { quantity: "2" },
+      0,
+      order.billEdit,
+      undefined,
+    );
     expect(text(banner(el))).toBe(codeMessage("bill.line_paid"));
     expectReadAgain(reads);
   });

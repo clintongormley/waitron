@@ -2404,14 +2404,17 @@ describe("till-app counter: the guests the receipt prints", () => {
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
     expect(call[2]).toBe(c.store.id);
-    expect(call).toHaveLength(10);
+    expect(call.slice(10)).toStrictEqual([undefined, undefined]);
     expect(call[7]).toBeNull();
   });
 
   it("identifies a zero-total Counter completion as having no table editor", async () => {
     const { el } = await counterWithCoffee();
     await payCash(el);
-    expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(10);
+    expect(vi.mocked(api.recordSale).mock.calls[0]!.slice(10)).toStrictEqual([
+      undefined,
+      undefined,
+    ]);
     expect(vi.mocked(api.recordSale).mock.calls[0]![8]).toBeNull();
   });
 
@@ -2479,6 +2482,8 @@ describe("till-app counter: the guests the receipt prints", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 

@@ -7851,8 +7851,6 @@ export class TillApp extends LitElement {
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
-      const change: [lateSend?: LateSend, edit?: typeof edit] =
-        edit !== undefined ? [lateSend, edit] : lateSend === undefined ? [] : [lateSend];
       const result = await this.api.recordSale(
         basket,
         tender,
@@ -7864,7 +7862,8 @@ export class TillApp extends LitElement {
         guestCount,
         this.#counterExpectedEdit(id),
         this.#store.dining,
-        ...change,
+        lateSend,
+        edit,
       );
       this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
@@ -17827,7 +17826,7 @@ export class TillApp extends LitElement {
           patch,
           revision,
           change.expectedEdit,
-          ...(lateSend === undefined ? [] : [lateSend]),
+          lateSend,
         ),
       };
     } catch (error) {
@@ -22392,16 +22391,15 @@ export class TillApp extends LitElement {
       await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guestCount);
       return;
     }
-    const guestCount = detail.guestCount === undefined ? {} : { guestCount: detail.guestCount };
     const tender: ConfirmPaymentDetail =
       detail.method === "cash"
-        ? { method: "cash", amount: detail.tendered, ...guestCount }
+        ? { method: "cash", amount: detail.tendered, guestCount: detail.guestCount }
         : {
             method: "card",
             amount: bill.outstanding,
             ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
             ...outsideCardValues(detail),
-            ...guestCount,
+            guestCount: detail.guestCount,
           };
     const paid = await this.#payWholeTab(tender, (error, earlierUnanswered) => {
       if (this.#presentedNow(open.id) === null) return false;
@@ -22430,7 +22428,7 @@ export class TillApp extends LitElement {
     this.presentedPaying = { ...open, refusal: null };
     const manualCard = held.tender.method === "card";
     const paid = await this.#payWholeTab(
-      { ...held.tender, ...(held.guestCount === undefined ? {} : { guestCount: held.guestCount }) },
+      { ...held.tender, guestCount: held.guestCount },
       (error, earlierUnanswered) => {
         if (this.#presentedNow(open.id) === null) return false;
         if (!isNetworkFailure(error) && !unknownAfterHandover(error, earlierUnanswered))

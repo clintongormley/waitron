@@ -1993,6 +1993,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -3852,6 +3854,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
     // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
     // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
@@ -3925,6 +3929,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -4444,6 +4450,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -4541,6 +4549,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -4585,6 +4595,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -4639,6 +4651,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -4707,6 +4721,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
     expect(ticket(el)).not.toBeNull();
 
@@ -4949,6 +4965,8 @@ describe("till-app", () => {
         undefined,
         null,
         "eat_in",
+        undefined,
+        undefined,
       );
     });
 
@@ -5185,6 +5203,8 @@ describe("till-app", () => {
         undefined,
         null,
         "eat_in",
+        undefined,
+        undefined,
       );
     });
 
@@ -6958,6 +6978,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
@@ -7046,6 +7068,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
     // The order was retrieved but NOT edited, so it must NOT be re-synced: an unedited retrieve→pay
     // files from the stored lines (recordSale straight through).
@@ -7817,6 +7841,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
 
     emit(counter, "new-sale");
@@ -8162,6 +8188,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 
@@ -19915,6 +19943,8 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       undefined,
       null,
       "eat_in",
+      undefined,
+      undefined,
     );
   });
 

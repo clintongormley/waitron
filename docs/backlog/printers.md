@@ -297,9 +297,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
   amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-- `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
-  shapes only so older tests that pin the exact argument count keep passing; one call per path
-  sends the same request.
 
 ## Loose ends left by A661 (#1745)
 

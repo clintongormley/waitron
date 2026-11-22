@@ -1642,12 +1642,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
-      billId: "wo-7",
-      editorVersion: 0,
-      draftId: null,
-      draftRevision: null,
-    });
+    expect(api.updateOrderLine).toHaveBeenCalledWith(
+      "wo-7",
+      5,
+      { note: "no onions" },
+      7,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      undefined,
+    );
     const fallback = await sentFallbackFor(tableOrder(el)!);
     const row = fallback.querySelector('[data-sent-fallback-line="line-5"]')!;
     expect(
@@ -1729,12 +1731,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", change);
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
-      billId: "wo-7",
-      editorVersion: 0,
-      draftId: null,
-      draftRevision: null,
-    });
+    expect(api.updateOrderLine).toHaveBeenCalledWith(
+      "wo-7",
+      5,
+      { note: "no onions" },
+      7,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      undefined,
+    );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)!.textContent).toContain(t("held.changed_elsewhere"));
   });
@@ -1849,6 +1853,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         { note: "no onions", portionLineNos: [] },
         7,
         { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        undefined,
       );
       await expect.poll(() => dialog.open).toBe(true);
       await expect.poll(() => windowSentence(dialog)).toBe(started[language]);
@@ -2989,12 +2994,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", { ...change, patch: { quantity: "2" } });
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7, {
-      billId: "wo-7",
-      editorVersion: 0,
-      draftId: null,
-      draftRevision: null,
-    });
+    expect(api.updateOrderLine).toHaveBeenCalledWith(
+      "wo-7",
+      5,
+      { quantity: "2" },
+      7,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      undefined,
+    );
     expect(banner(el)!.textContent).toContain(codeMessage("extras.unsupported_product"));
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
