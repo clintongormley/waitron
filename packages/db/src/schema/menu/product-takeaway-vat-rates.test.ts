@@ -88,7 +88,7 @@ describe("product_takeaway_vat_rates", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("deletes a product's rows with the product", async () => {
+  it("removes a product's rows when the product row is removed", async () => {
     const id = await product();
     const other = await product();
     await rateRow(id, null, 1000);

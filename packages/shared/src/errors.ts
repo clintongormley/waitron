@@ -128,6 +128,9 @@ export interface ErrorParams {
     vatClass: "general" | "reduced" | "super_reduced" | "zero";
     reason: "first_entry_missing_or_dated" | "not_oldest_first";
   };
+  /** The venue's tax area (the taxpayer's `country`, null with no taxpayer, and the venue's
+   * `territory`) has no VAT rate lists in its country pack. */
+  "vat_rate.area_unsupported": { country: string | null; territory: string };
   /** The dated rate list handed to `caller` is empty, starts with a dated entry, or is not dated
    * oldest first. */
   "vat_rate.schedule_invalid": {
