@@ -18,11 +18,10 @@ their full text.
   `payWorkingOrder`'s duplicate-key catch; nothing checks that a location or status foreign-key
   refusal in `tables.ts` is not reported as a zone fault.
 
-## Till widget points from #616 that were read but not run
+## The table screen's redundant exit configuration was not audited
 
-- Found by #616 (`apps/till/src/widgets`). Read, not run: `ReaderOption.online` is never set
-  outside tests; the table screen still needs its redundant exit
-  configuration audited.
+- Found by #616 (`apps/till/src/widgets`). Read, not run: the table screen still needs its
+  redundant exit configuration audited.
 
 ## The table-order screen's `#lineGross` comment was not restored
 

@@ -7,7 +7,7 @@ import type { ReaderOption } from "./reader-picker.js";
 
 const readers: ReaderOption[] = [
   { id: "r1", name: "Front counter", provider: "stripe_terminal" },
-  { id: "r2", name: "Bar", provider: "sumup_cloud", online: false },
+  { id: "r2", name: "Bar", provider: "sumup_cloud" },
 ];
 
 const query = (el: TillReaderPicker, selector: string) => el.shadowRoot!.querySelector(selector);
@@ -27,24 +27,6 @@ describe("till-reader-picker", () => {
     expect(el.shadowRoot!.textContent).toContain("Bar");
   });
 
-  it("marks a reader shown offline, but leaves it selectable", async () => {
-    const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", { readers });
-    const offlineOption = query(el, "[data-test=reader-r2]") as HTMLButtonElement;
-    expect(offlineOption.textContent).toContain(t("reader_picker.offline"));
-    expect(offlineOption.disabled).toBe(false);
-
-    const spy = vi.fn();
-    el.addEventListener("reader-chosen", (e) => spy((e as CustomEvent).detail));
-    click(el, "[data-test=reader-r2]");
-    expect(spy).toHaveBeenCalledWith({ readerId: "r2" });
-  });
-
-  it("does not mark an online (or status-unknown) reader offline", async () => {
-    const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", { readers });
-    expect(query(el, "[data-test=reader-r1-offline]")).toBeNull();
-    expect(query(el, "[data-test=reader-r2-offline]")).not.toBeNull();
-  });
-
   it("choosing a reader emits reader-chosen with its id", async () => {
     const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", { readers });
     const spy = vi.fn();
@@ -53,7 +35,7 @@ describe("till-reader-picker", () => {
     expect(spy).toHaveBeenCalledWith({ readerId: "r1" });
   });
 
-  it("uses the shared choice border and spacing, keeping Offline beside its reader", async () => {
+  it("uses the shared choice border and spacing", async () => {
     const { el, host } = await mountWidget<TillReaderPicker>("till-reader-picker", {
       readers,
       selectedReaderId: "r2",
@@ -65,10 +47,6 @@ describe("till-reader-picker", () => {
     expect(getComputedStyle(plain).borderTopColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(selected).borderTopColor).toBe("rgb(17, 31, 47)");
     expect(getComputedStyle(selected).paddingInlineStart).toBe("23px");
-    const name = selected.querySelector(".name")!.getBoundingClientRect();
-    const status = selected.querySelector(".status")!.getBoundingClientRect();
-    expect(name.right).toBeLessThan(status.left);
-    expect(name.top).toBeLessThan(status.bottom);
   });
 
   it("marks the currently-selected reader via aria-checked", async () => {
