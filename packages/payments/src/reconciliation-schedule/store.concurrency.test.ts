@@ -16,7 +16,8 @@ const NOW = new Date("2026-07-25T04:00:00Z");
  * Runners arriving at once on one venue file. `withTransaction` serialises them, so the second sees
  * the first's committed state rather than racing it, and nothing here observes two runners holding
  * one row at the same moment. Serialised, `enqueueSuccessor`'s guard refuses before its insert can
- * collide, so its unique-violation catch is reached below only through a stub.
+ * collide, so its unique-violation catch is reached below only by faking the guard's read: twice with
+ * a stub transaction whose insert also refuses, once on the real transaction.
  *
  * Each case claims a distinct period, so rows accumulating under `resetPerTest: false` never collide.
  */
@@ -76,8 +77,8 @@ describe("two runners starting together on one failed row", () => {
 
 describe("enqueueSuccessor's duplicate-key catch", () => {
   it("reads a genuine SQLite unique violation as already-enqueued, not as an error", async () => {
-    // Passes the `unfinished > 0` guard and makes the nested insert refuse, so `enqueueSuccessor`'s
-    // own catch decides what happens.
+    // Passes the `unfinished > 0` guard and makes the insert refuse, so `enqueueSuccessor`'s own
+    // catch decides what happens.
     const refusal = refusalError({
       unique: { table: "reconciliation_runs", columns: ["duty", "period_from", "generation"] },
     });
@@ -89,10 +90,7 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
           where: () => Promise.resolve([{ unfinished: 0, highest: 0 }]),
         }),
       }),
-      transaction: (body: (attempt: Transaction) => Promise<unknown>) =>
-        body({
-          insert: () => ({ values: () => Promise.reject(refusal) }),
-        } as unknown as Transaction),
+      insert: () => ({ values: () => Promise.reject(refusal) }),
     } as unknown as Transaction;
 
     const period = dayPeriod(new Date("2026-07-18T00:00:00Z"));
@@ -108,8 +106,7 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
       select: () => ({
         from: () => ({ where: () => Promise.resolve([{ unfinished: 0, highest: 0 }]) }),
       }),
-      transaction: (body: (attempt: Transaction) => Promise<unknown>) =>
-        body({ insert: () => ({ values: () => Promise.reject(other) }) } as unknown as Transaction),
+      insert: () => ({ values: () => Promise.reject(other) }),
     } as unknown as Transaction;
 
     const period = dayPeriod(new Date("2026-07-17T00:00:00Z"));
@@ -118,60 +115,45 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
     ).rejects.toBe(other);
   });
 
-  it("leaves the transaction usable after a refusal inside it", async () => {
-    // Pins the outcome — work either side of a refusal commits — not the savepoint's necessity:
-    // SQLite backs out only the refused statement, so this passes with a bare `tx.insert` too.
-    const first = dayPeriod(new Date("2026-07-16T00:00:00Z"));
-    const second = dayPeriod(new Date("2026-07-15T00:00:00Z"));
+  it("returns false for its own insert's real collision and leaves the transaction usable", async () => {
+    const collided = dayPeriod(new Date("2026-07-14T00:00:00Z"));
+    const second = dayPeriod(new Date("2026-07-13T00:00:00Z"));
     const dueAt = new Date("2026-07-26T00:00:00Z");
+    const periodRows = (period: typeof collided) =>
+      suite.db
+        .select()
+        .from(reconciliationRuns)
+        .where(
+          and(
+            eq(reconciliationRuns.duty, DUTY),
+            eq(reconciliationRuns.periodFrom, period.from.toISOString()),
+          ),
+        );
 
-    const kept = await withTransaction(suite.db, async (tx) => {
-      const enqueued = await enqueueSuccessor(tx, { duty: DUTY, period: first, dueAt });
-      let refused = false;
-      try {
-        await tx.transaction(async (attempt) => {
-          await attempt.insert(reconciliationRuns).values({
-            duty: DUTY,
-            periodFrom: first.from.toISOString(),
-            periodTo: first.to.toISOString(),
-            // The generation `enqueueSuccessor` just used, so this collides on
-            // `reconciliation_runs_key` rather than inserting a second row.
-            generation: 0,
-            state: "pending",
-            attempts: 0,
-            nextAttemptAt: dueAt.toISOString(),
-          });
-        });
-      } catch {
-        refused = true;
-      }
-      // The refusal has to have HAPPENED, or everything below is vacuous.
-      expect(refused).toBe(true);
+    const results = await withTransaction(suite.db, async (tx) => {
+      const first = await enqueueSuccessor(tx, { duty: DUTY, period: collided, dueAt });
+      // The real transaction, but its guard read reports no rows, so the insert reuses generation
+      // 0 and SQLite refuses it on `reconciliation_runs_key`.
+      let guardFaked = false;
+      const blindGuard = new Proxy(tx, {
+        get: (target, property) => {
+          if (property === "select") {
+            guardFaked = true;
+            return () => ({
+              from: () => ({ where: () => Promise.resolve([{ unfinished: 0, highest: -1 }]) }),
+            });
+          }
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+        },
+      });
+      const duplicate = await enqueueSuccessor(blindGuard, { duty: DUTY, period: collided, dueAt });
       const after = await enqueueSuccessor(tx, { duty: DUTY, period: second, dueAt });
-      return { enqueued, after };
+      return { first, duplicate, after, guardFaked };
     });
 
-    expect(kept).toEqual({ enqueued: true, after: true });
-
-    const rows = await suite.db
-      .select()
-      .from(reconciliationRuns)
-      .where(
-        and(
-          eq(reconciliationRuns.duty, DUTY),
-          eq(reconciliationRuns.periodFrom, first.from.toISOString()),
-        ),
-      );
-    expect(rows).toHaveLength(1);
-    const later = await suite.db
-      .select()
-      .from(reconciliationRuns)
-      .where(
-        and(
-          eq(reconciliationRuns.duty, DUTY),
-          eq(reconciliationRuns.periodFrom, second.from.toISOString()),
-        ),
-      );
-    expect(later).toHaveLength(1);
+    expect(results).toEqual({ first: true, duplicate: false, after: true, guardFaked: true });
+    expect(await periodRows(collided)).toHaveLength(1);
+    expect(await periodRows(second)).toHaveLength(1);
   });
 });

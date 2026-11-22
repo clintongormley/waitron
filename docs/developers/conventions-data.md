@@ -2782,26 +2782,13 @@ of rows 1, 2 and 3 where 2 already existed failed with errcode 2067 and the tran
 and after an insert of 4 and `commit` the table held 1, 2 and 4; a column declared
 `unique on conflict fail` gave the same. Control, `insert or abort`: 2 and 4.
 
-**So what a savepoint can still buy here is confinement, and the sites named below say whether they
-need it.** Among the nested calls, `enqueueSuccessor` (`packages/payments/src/reconciliation-schedule/store.ts`), the two
+**So what a savepoint can still buy here is confinement.** Among the nested calls, the two
 `appendToChain` functions (`packages/fiscal-verifactu/src/chain.ts`,
-`packages/workforce/src/chain.ts`) and `insertClose`
-([source before A1325](https://github.com/clintongormley/waitron/blob/26adc685d3c7061795f1ce7da169f0cd8a713d47/packages/reporting/src/record-daily-close.ts)) wrap a statement that may be refused in a nested
+`packages/workforce/src/chain.ts`) wrap a statement that may be refused in a nested
 `tx.transaction(...)`, which the adapter emits as `savepoint` / `release` / `rollback to` whenever a
 transaction is already open (`packages/store/src/node-sqlite-adapter.ts` — SQLite refuses a `begin`
 inside a `begin`). What that buys is CONFINEMENT: a losing attempt's own partial writes are backed
-out with it rather than left for the enclosing transaction to commit. In `enqueueSuccessor` and
-`insertClose` the nested body is one insert, which SQLite backs out by itself when refused, so there
-it confines nothing today. #581's review replaced `enqueueSuccessor`'s nested call with a bare
-insert and reported `store.test.ts` and `store.concurrency.test.ts` passing, 24 tests, without
-mentioning stubs. Re-run 2026-09-24 alongside the `insertClose` check below, the same replacement
-gave 22 passed and 2 failed, because two stubs in `store.concurrency.test.ts` offer `insert` only
-inside `transaction`; once those two stubs offered it outside too, all 24 passed. With
-`insertClose`'s nested call replaced by a plain insert on `tx`, `@waitron/reporting`'s whole suite
-passed (220 tests), and a probe run on that same modified copy refused a second close of the same
-day inside a transaction that then committed and left the row count of every table unchanged, where
-the control, a close for a new day, moved `daily_closes` from 1 to 2 — the table's only triggers are
-its append-only pair, on update and delete (2026-09-24).
+out with it rather than left for the enclosing transaction to commit.
 
 Since 2026-09-21 `withTransaction` ends every transaction with a drain of `change_log`
 (`packages/db/src/tenancy.ts`). On this engine the drain is there for the change feed alone.
