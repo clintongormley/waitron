@@ -79,6 +79,7 @@ export interface FirstSetupProvisionBody {
   firstSetup: { attemptId: string; revision: number };
   aeatCert?: AeatCertDraft;
   email?: EmailSettingsDraft;
+  errorReportsEnabled?: boolean;
 }
 
 export function firstSetupHeaders(owner: FirstSetupOwner): Record<string, string> {

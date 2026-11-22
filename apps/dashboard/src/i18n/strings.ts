@@ -694,6 +694,13 @@ export const en = {
 
   "cloud.remote": "Remote access",
   "cloud.remote_local": "Remote access on this box",
+  "cloud.error_reports": "Automatic error reports",
+  "cloud.error_reports_help":
+    "Help fix Waitron by sending error codes, sources, the Waitron version, times and counts. Reports are linked to this box’s Cloud registration.",
+  "cloud.error_reports_on": "Reporting is on",
+  "cloud.error_reports_off": "Reporting is off",
+  "cloud.error_reports_turn_on": "Turn on error reports",
+  "cloud.error_reports_turn_off": "Turn off error reports",
   "cloud.remote_on": "On in Cloud services · connection not checked here",
   "cloud.remote_off": "Off in Cloud services · disconnection not checked here",
   "cloud.remote_help":
@@ -5377,6 +5384,13 @@ export const es: Record<StringKey, string> = {
 
   "cloud.remote": "Acceso remoto",
   "cloud.remote_local": "Acceso remoto en este servidor",
+  "cloud.error_reports": "Informes automáticos de errores",
+  "cloud.error_reports_help":
+    "Ayuda a corregir Waitron enviando códigos de error, orígenes, la versión de Waitron, fechas y recuentos. Los informes se vinculan al registro de este servidor en Cloud.",
+  "cloud.error_reports_on": "Envío activado",
+  "cloud.error_reports_off": "Envío desactivado",
+  "cloud.error_reports_turn_on": "Activar los informes de errores",
+  "cloud.error_reports_turn_off": "Desactivar los informes de errores",
   "cloud.remote_on": "Activado en Servicios Cloud · conexión sin comprobar aquí",
   "cloud.remote_off": "Desactivado en Servicios Cloud · desconexión sin comprobar aquí",
   "cloud.remote_help":

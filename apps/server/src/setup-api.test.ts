@@ -336,6 +336,24 @@ const CERT = {
   certKind: "sello",
 } as const;
 
+it.each([true, undefined, null])("handles the Prepare error-report choice %s", async (choice) => {
+  const initialiseErrorReports = vi.fn(async () => {});
+  const { deps, provision } = makeDeps({ devMode: true, initialiseErrorReports });
+  const app = new Hono();
+  mountSetup(app, deps, noopLog);
+  const response = await postProvision(app, { ...prepareBody(), errorReportsEnabled: choice });
+  if (choice === null) {
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "errorReportsEnabled" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  } else {
+    expect(response.status).toBe(200);
+  }
+  expect(initialiseErrorReports.mock.calls).toEqual(choice === true ? [["preproduction"]] : []);
+});
+
 it("refuses an unusable certificate before calling any legacy provision step", async () => {
   const { deps, calls } = makeDeps();
   const app = new Hono();

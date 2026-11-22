@@ -14,6 +14,7 @@ interface SavedOwner {
   tabLockId: string;
   claimPending: boolean;
   owner?: FirstSetupOwner;
+  errorReportsEnabled?: true;
 }
 const token = (value: unknown): value is string =>
   typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -97,11 +98,14 @@ function readSaved(text: string): SavedOwner {
     !token(value.tabLockId) ||
     typeof value.claimPending !== "boolean" ||
     Object.keys(value).some(
-      (key) => !["version", "tabLockId", "claimPending", "owner"].includes(key),
+      (key) =>
+        !["version", "tabLockId", "claimPending", "owner", "errorReportsEnabled"].includes(key),
     )
   )
     failure("setup.attempt_invalid");
   const owner = value.owner;
+  if (value.errorReportsEnabled !== undefined && (value.errorReportsEnabled !== true || !owner))
+    failure("setup.attempt_invalid");
   if (
     owner !== undefined &&
     (!object(owner) ||
@@ -147,6 +151,9 @@ export class FirstSetupSession {
   }
   get state(): FirstSetupState | undefined {
     return this.#state === undefined ? undefined : structuredClone(this.#state);
+  }
+  get errorReportsEnabled(): true | undefined {
+    return this.#saved?.errorReportsEnabled;
   }
   /** Whether the last refresh found the box refusing this tab's saved key; the key is then dropped. */
   get keyRefused(): boolean {
@@ -572,10 +579,17 @@ export class FirstSetupSession {
   ) {
     return this.#run(async (current) => {
       const owner = this.#owner();
+      if (settings.errorReportsEnabled !== undefined) {
+        this.#saved!.errorReportsEnabled = settings.errorReportsEnabled ? true : undefined;
+        this.#save();
+      }
       try {
         const result = await this.#api.provisionFirstSetup(
           owner,
-          this.#publicationBody(owner, settings),
+          this.#publicationBody(owner, {
+            ...settings,
+            errorReportsEnabled: this.errorReportsEnabled,
+          }),
           locale,
           ...cloudSignInArgs,
         );
@@ -597,6 +611,7 @@ export class FirstSetupSession {
       firstSetup: { attemptId: owner.attemptId, revision: owner.revision },
       ...(settings.aeatCert === undefined ? {} : { aeatCert: settings.aeatCert }),
       ...(settings.email === undefined ? {} : { email: settings.email }),
+      ...(settings.errorReportsEnabled === true ? { errorReportsEnabled: true } : {}),
     };
   }
 }

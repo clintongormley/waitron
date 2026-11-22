@@ -60,6 +60,8 @@ import {
   collectTranslation,
   type OnRefusal,
   releaseTranslation,
+  refusalOf,
+  serviceExchange,
   submitTranslation,
   translationStatus,
 } from "./cloud-translation.js";
@@ -1272,6 +1274,35 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       authorize: () => Promise<string>,
       signal?: AbortSignal,
     ) => ownerRecovery(authorize, { action, request }, signal),
+    async errorReportRegistration(): Promise<string | undefined> {
+      return registrationOf(await read());
+    },
+    async sendErrorReport(
+      registration: string,
+      operationId: string,
+      body: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      const state = await leaseState(signal);
+      if (registrationOf(state) !== registration || signal?.aborted)
+        throw new AppError("cloud.unavailable", {});
+      const reply = await serviceExchange(
+        state,
+        "error-report",
+        operationId,
+        body,
+        {},
+        signal,
+        recordRefusal,
+        {
+          requireVersion: false,
+          refusal: (status, value) =>
+            status === 409 ? new AppError("cloud.unavailable", {}) : refusalOf(status, value),
+        },
+      );
+      if (reply.accepted !== true || Object.keys(reply).length !== 1)
+        throw new AppError("cloud.unavailable", {});
+    },
     async guestMenuStatus(signal?: AbortSignal) {
       const deadline = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(8000)])

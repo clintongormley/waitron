@@ -614,6 +614,10 @@ export const ALERT_WORDS: Readonly<
         es: "la conexión con Waitron Cloud",
       },
       housekeeping: { en: "the daily tidy-up", es: "la limpieza diaria" },
+      "cloud.error_reports": {
+        en: "sending automatic error reports",
+        es: "el envío de informes automáticos de errores",
+      },
       "cloud.suggestions": {
         en: "translation suggestions from Waitron Cloud",
         es: "las sugerencias de traducción de Waitron Cloud",

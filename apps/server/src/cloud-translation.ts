@@ -13,6 +13,7 @@ import "./errors.js";
 export type MachineServiceAction =
   | TranslationAction
   | "address-lookup"
+  | "error-report"
   | "staff-certificate-submit"
   | "staff-certificate-status"
   | "guest-menu-status"
@@ -94,6 +95,7 @@ export type OnRefusal = (
 ) => Promise<void>;
 const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
   "address-lookup": { reply: 16384, ms: 8000 },
+  "error-report": { reply: 4096, ms: 8000 },
   "owner-recovery-read": { reply: 65536, ms: 8000 },
   "owner-recovery-approve": { reply: 65536, ms: 8000 },
   "owner-recovery-refuse": { reply: 65536, ms: 8000 },

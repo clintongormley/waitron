@@ -46,6 +46,25 @@ function fullDraft(): DeepPartial<ProvisionBody> {
 
 afterEach(cleanupWidgets);
 
+it.each(["prepare", "live"] as const)(
+  "asks for error reporting with the box unticked in %s",
+  async (mode) => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: { ...fullDraft(), mode },
+    });
+    const changes: unknown[] = [];
+    el.addEventListener("setup-patch", (event) =>
+      changes.push((event as CustomEvent).detail.patch),
+    );
+    const choice = page.getByRole("checkbox", {
+      name: "Send automatic error reports to Waitron Cloud",
+    });
+    await expect.element(choice).not.toBeChecked();
+    await choice.click();
+    expect(changes).toEqual([{ errorReportsEnabled: true }]);
+  },
+);
+
 it.each(["en", "es"] as const)(
   "shows the explicit %s working language separately from receipts",
   async (staffLanguage) => {

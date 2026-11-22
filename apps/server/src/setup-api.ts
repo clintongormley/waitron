@@ -184,6 +184,7 @@ export interface SetupDeps {
    * still cannot be. A finish that restarts into the full start calls it first, since the step
    * lives only in this process until it is noted. */
   writeClockSteps?: () => Promise<void>;
+  initialiseErrorReports?: (environment: DeploymentEnvironment) => Promise<void>;
   /** The built setup-wizard SPA directory, or `undefined` to serve the inline
    * `SETUP_PLACEHOLDER_HTML` shell instead. */
   setupAppDir?: string;
@@ -652,6 +653,7 @@ async function parseProvisionPayload(
   secret: FiscalContribution["provisioningSecret"];
   secretExpected: boolean;
   rawSecret: unknown;
+  errorReportsEnabled: boolean;
 }> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     invalidRequest("body");
@@ -664,6 +666,9 @@ async function parseProvisionPayload(
   if (initialOperations === null) invalidRequest("initialOperations");
   const mode = body.mode;
   if (mode !== "demo" && mode !== "prepare" && mode !== "live") invalidRequest("mode");
+  const errorReports = body.errorReportsEnabled;
+  if (errorReports !== undefined && (mode === "demo" || typeof errorReports !== "boolean"))
+    invalidRequest("errorReportsEnabled");
   if (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") {
     invalidRequest("configurationImport");
   }
@@ -734,6 +739,7 @@ async function parseProvisionPayload(
     secret,
     secretExpected,
     rawSecret: body.aeatCert,
+    errorReportsEnabled: errorReports === true,
   };
 }
 
@@ -1010,6 +1016,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       )
         throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
+      if (payload.errorReportsEnabled && !deps.initialiseErrorReports)
+        throw new AppError("setup.not_ready", {});
       if (rawStaffEmail !== undefined && typeof rawStaffEmail !== "boolean")
         invalidRequest("cloudStaffEmail");
       const staffEmail =
@@ -1081,6 +1089,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (email !== undefined) {
           await withTransaction(db, (tx) => saveSmtpSettings(tx, ring, email, null));
         }
+        if (payload.errorReportsEnabled) await deps.initialiseErrorReports!(environment);
         await operation?.advance("secret_sealed");
       }
 

@@ -125,6 +125,7 @@ export interface ProvisionBody {
   aeatCert?: AeatCertDraft;
   email?: EmailSettingsDraft;
   cloudStaffEmail?: boolean;
+  errorReportsEnabled?: boolean;
 }
 
 export interface ProvisionResult {

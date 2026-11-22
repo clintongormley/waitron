@@ -43,6 +43,70 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it("changes error reporting offline and reports the local choice", async () => {
+  const manager = await person("manager");
+  const app = new Hono();
+  let enabled = false;
+  mountCloudApi(
+    app,
+    {
+      db: suite.db,
+      managementOrigin: "https://venue.test",
+      isPrimary: () => true,
+      errorReports: {
+        enabled: async () => enabled,
+        setEnabled: async (next) => (enabled = next),
+      },
+    },
+    () => {},
+  );
+  const response = await app.request("/management-api/cloud/error-reports", {
+    method: "POST",
+    headers: {
+      cookie: manager.cookie,
+      origin: "https://venue.test",
+      "content-type": "application/json",
+    },
+    body: '{"enabled":true}',
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ enabled: true });
+  const status = await app.request("/management-api/cloud/status", {
+    headers: { cookie: manager.cookie },
+  });
+  expect(await status.json()).toMatchObject({ errorReportsEnabled: true });
+});
+
+it("refuses error reporting changes without Manage the system", async () => {
+  const staff = await person("staff");
+  const app = new Hono();
+  const setEnabled = vi.fn(async () => true);
+  mountCloudApi(
+    app,
+    {
+      db: suite.db,
+      managementOrigin: "https://venue.test",
+      isPrimary: () => true,
+      errorReports: { enabled: async () => false, setEnabled },
+    },
+    () => {},
+  );
+  const response = await app.request("/management-api/cloud/error-reports", {
+    method: "POST",
+    headers: {
+      cookie: staff.cookie,
+      origin: "https://venue.test",
+      "content-type": "application/json",
+    },
+    body: '{"enabled":true}',
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
+  });
+  expect(setEnabled).not.toHaveBeenCalled();
+});
+
 it.each([
   ["start", "https://other.test", true, 403, "authorization.not_permitted"],
   ["return", "https://other.test", true, 403, "authorization.not_permitted"],

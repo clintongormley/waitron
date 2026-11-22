@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, backupOrigin, deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, Origin, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -445,6 +445,38 @@ describe("recordIncidentOnce", () => {
       ],
     });
   }
+
+  it.each([
+    ["recordIncident", recordIncident],
+    ["recordIncidentOnce", recordIncidentOnce],
+  ] as const)(
+    "%s keeps the release that first recorded an open incident",
+    async (_name, record) => {
+      const input: RecordIncidentInput = {
+        origin: jobOrigin("payment_check"),
+        error: chainFailed(),
+        severity: "error",
+        detectedAt: BASE,
+      };
+      try {
+        vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.10.0" });
+        await withTransaction(suite.db, (tx) => record(tx, input));
+        vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.11.0" });
+        await withTransaction(suite.db, (tx) => record(tx, input));
+        vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.12.0-rc.1" });
+        await withTransaction(suite.db, (tx) =>
+          record(tx, { ...input, origin: jobOrigin("fiscal_filing") }),
+        );
+        const { rows } = await suite.db.execute(sql`select * from incidents order by source`);
+        expect(rows.map((row) => [row.source, row.release_version])).toEqual([
+          ["fiscal_filing", null],
+          ["payment_check", "1.10.0"],
+        ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   it("inserts the first time and returns true", async () => {
     await withTransaction(suite.db, async (tx) => {

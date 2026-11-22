@@ -332,6 +332,19 @@ Cloud services stay in place. Choose **Turn on remote access** to let the box re
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate stop for all Cloud services.
 
+## Send automatic error reports {#error-reports}
+
+You can opt in on **Review and provision** during setup or in **System → Cloud
+services**. Choose **Turn on error reports** to help Waitron identify errors in a
+release. Your choice takes effect on this server. A new or replacement server
+starts with reporting off.
+
+Once the server is connected to Waitron Cloud, it sends error codes, their
+sources, the Waitron version, times and incident counts under this server’s Cloud
+registration. If the same open incident repeats, it counts once. The server holds
+reports while it cannot reach Cloud. Choose **Turn off error reports** to discard
+the reports still waiting to be sent.
+
 ## Approve Cloud owner recovery {#cloud-owner-recovery}
 
 If you are recovering a Cloud owner account, verify your email on Cloud’s recovery page first.

@@ -41,6 +41,31 @@ it.each([
   }
 });
 
+it("can turn automatic error reports on and off before Cloud is connected", async () => {
+  const calls: unknown[] = [];
+  const api = new DashboardApi("", async (url, request) => {
+    if (String(url).endsWith("/error-reports")) {
+      const choice = JSON.parse(String(request?.body));
+      calls.push(choice);
+      return Response.json(choice);
+    }
+    return Response.json({
+      state: "not_connected",
+      configured: false,
+      isPrimary: true,
+      errorReportsEnabled: false,
+    });
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  const button = () => el.shadowRoot!.querySelector<HTMLElement>("#error-reports-toggle");
+  await expect.poll(() => button()).not.toBeNull();
+  button()!.click();
+  await expect.poll(() => button()?.textContent).toContain("Turn off");
+  button()!.click();
+  await expect.poll(() => button()?.textContent).toContain("Turn on");
+  expect(calls).toEqual([{ enabled: true }, { enabled: false }]);
+});
+
 it("uses fresh local confirmation for Cloud sign-in and keeps the tab across that retry", async () => {
   const calls: unknown[] = [];
   const key = "waitron-cloud-sign-in-tab";

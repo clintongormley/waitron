@@ -3,7 +3,7 @@ import "./errors.js";
 import { and, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { devices, incidents, newId, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError, isAppError, readIncidentOrigin } from "@waitron/shared";
+import { AppError, builtRelease, isAppError, readIncidentOrigin } from "@waitron/shared";
 import type {
   DeviceId,
   ErrorCode,
@@ -74,6 +74,16 @@ export async function withIssuanceTransaction<T>(
 
 export type IncidentSeverity = "warning" | "error";
 
+function incidentRelease(): string | null {
+  const release = builtRelease();
+  return release.bundled &&
+    release.version !== null &&
+    !release.version.includes("-") &&
+    release.version.split(".").every((part) => Number(part) <= 2_147_483_647)
+    ? release.version
+    : null;
+}
+
 export interface RecordIncidentInput {
   /** The device the problem arose on, or the job that found it. */
   origin: IncidentOrigin;
@@ -111,6 +121,7 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
       params: input.error.params,
       severity: input.severity,
       detectedAt: input.detectedAt.toISOString(),
+      releaseVersion: incidentRelease(),
     })
     .onConflictDoNothing();
 }
@@ -138,10 +149,10 @@ export async function recordIncidentOnce(
   // `id` and `params` are supplied by hand because a raw insert runs neither the `$defaultFn`
   // generator nor the column's JSON encoder — `newId` is the same generator the column declares.
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into incidents (id, source, device_id, sale_id, code, params, severity, detected_at)
+    insert into incidents (id, source, device_id, sale_id, code, params, severity, detected_at, release_version)
     values (${newId()}, ${input.origin.source}, ${input.origin.deviceId}, ${saleId},
             ${input.error.code}, ${JSON.stringify(input.error.params)}, ${input.severity},
-            ${input.detectedAt.toISOString()})
+            ${input.detectedAt.toISOString()}, ${incidentRelease()})
     on conflict (source, case when device_id is null then '' else device_id end, code,
                  case when sale_id is null then '' else sale_id end)
       where acknowledged_at is null

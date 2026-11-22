@@ -1623,6 +1623,7 @@ CREATE TABLE `incidents` (
 	`params` text DEFAULT '{}' NOT NULL,
 	`severity` text NOT NULL,
 	`detected_at` text NOT NULL,
+	`release_version` text,
 	`acknowledged_at` text,
 	`acknowledged_by` text,
 	`acknowledged_note` text,

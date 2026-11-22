@@ -13,7 +13,7 @@ function canonical(value: unknown): unknown {
 }
 export function firstSetupPublicationDigest(
   state: FirstSetupState,
-  settings: { aeatCert?: unknown; email?: unknown },
+  settings: { aeatCert?: unknown; email?: unknown; errorReportsEnabled?: boolean },
 ) {
   const digest = createHash("sha256")
     .update(
@@ -30,6 +30,7 @@ export function firstSetupPublicationDigest(
           mode: "live",
           aeatCert: settings.aeatCert ?? null,
           email: settings.email ?? null,
+          ...(settings.errorReportsEnabled ? { errorReportsEnabled: true } : {}),
         }),
       ),
     )

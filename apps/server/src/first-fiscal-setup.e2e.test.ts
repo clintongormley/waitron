@@ -1,4 +1,4 @@
-import { STATE_LAYOUT } from "@waitron/store";
+import { CLOUD_ERROR_REPORTS_FILE, STATE_LAYOUT } from "@waitron/store";
 import { dirname, join } from "node:path";
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -421,7 +421,11 @@ it.each([
         });
       }
       time.clock.advance(provisionAfterMs ?? 0);
-      const activated = await post("/setup-api/provision", live);
+      const optedIn = staffLanguage === "en";
+      const activated = await post("/setup-api/provision", {
+        ...live,
+        ...(optedIn ? { errorReportsEnabled: true } : {}),
+      });
       if (change !== "none") {
         expect(activated).toMatchObject({
           status: change === "replacement" ? 409 : 400,
@@ -449,6 +453,12 @@ it.each([
         return;
       }
       expect(activated).toMatchObject({ status: 200, body: { provisioned: true } });
+      if (optedIn) {
+        const localChoice = JSON.parse(
+          await readFile(join(stateDir, CLOUD_ERROR_REPORTS_FILE), "utf8"),
+        );
+        expect(localChoice).toMatchObject({ enabled: true, cursor: null });
+      }
       await server!.close();
       server = undefined;
       const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
