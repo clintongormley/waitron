@@ -138,6 +138,10 @@ If the till behaves unexpectedly, choose **Report a problem** from **☰**. Befo
 the clock or attendance page is open, use the button above the page. Open the till over HTTPS if
 the button is missing.
 
-Describe what happened, check the preview, then choose **Download report**. Keep passwords,
-payment details and personal information out of your description. The file contains this browser's
-recent activity; nothing is sent or stored on the box. You keep the file to share when you choose.
+If **Send to Waitron Cloud** is available, review the Cloud attachment before sending it. It
+contains error codes, the Waitron version and basic details about the installation. The box tells
+you when Cloud receives it or when it has saved the report to try again later.
+
+To keep a file yourself, describe what happened, check the download preview, then choose
+**Download report**. Your description and this browser's recent activity go into that file only.
+Keep passwords, payment details and personal information out of your description.

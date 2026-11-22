@@ -24,6 +24,7 @@ import {
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { mountDeviceLiveApi } from "./device-live-api.js";
+import { mountProblemReportApi } from "./problem-report-api.js";
 import { LiveEvents } from "./live-api.js";
 import { clockStartUp } from "./clock-start-up.js";
 import { mountScheduleApi } from "./schedule-api.js";
@@ -784,6 +785,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "Request proof: till-api.request-device.test.ts. A person changes only their own screen language; no selling action applies.",
     routes: ["PUT /api/session/locale"],
   },
+  {
+    proof: "matching request (tested)",
+    actions: [],
+    basis:
+      "Request proof: problem-report-api.test.ts. Any signed-in staff member can report a problem.",
+    routes: ["GET /api/problem-reports/preview", "POST /api/problem-reports/:id/send"],
+  },
 ];
 
 function routeKey(method: string, path: string): string {
@@ -840,6 +848,7 @@ it("classifies every mounted till, device and schedule route and checks its decl
     { db: suite.db, bus: new LiveEvents(), resourceTypes: ["printers"] },
     noopLog,
   );
+  mountProblemReportApi(inventory, { db: suite.db }, noopLog);
   const mounted = new Set(
     inventory.routes
       .filter(({ method, path }) => method !== "ALL" && path.startsWith("/api/"))

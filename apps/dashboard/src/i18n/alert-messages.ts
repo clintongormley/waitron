@@ -626,6 +626,10 @@ export const ALERT_WORDS: Readonly<
         en: "sending automatic error reports",
         es: "el envío de informes automáticos de errores",
       },
+      "cloud.problem_reports": {
+        en: "sending problem reports",
+        es: "el envío de informes de problemas",
+      },
       "cloud.suggestions": {
         en: "translation suggestions from Waitron Cloud",
         es: "las sugerencias de traducción de Waitron Cloud",

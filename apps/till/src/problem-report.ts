@@ -13,6 +13,7 @@ import {
   reportDescriptionValid,
   type ClientReportSnapshot,
 } from "@waitron/diagnostics";
+import type { ReportDialogCloud } from "@waitron/ui/src/components/wt-report-dialog.js";
 import "@waitron/ui/src/components/wt-report-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -39,6 +40,7 @@ export class TillProblemReport extends LitElement {
     }
   `;
   @property({ type: Boolean }) triggerVisible = true;
+  @property({ attribute: false }) api?: ReportDialogCloud;
   @state() private snapshot?: ClientReportSnapshot;
   @state() private description = "";
   @state() private downloadError = "";
@@ -161,6 +163,7 @@ export class TillProblemReport extends LitElement {
         ${trackDialog()}
         .open=${this.snapshot !== undefined}
         .description=${this.description}
+        .cloud=${this.api}
         .preview=${file?.text ?? ""}
         .validationError=${file ? "" : t("problem_report.description_invalid")}
         .downloadError=${this.downloadError}
@@ -175,6 +178,15 @@ export class TillProblemReport extends LitElement {
           invalid: t("problem_report.invalid"),
           cancel: t("action.cancel"),
           download: t("problem_report.download"),
+          cloud: {
+            scope: t("problem_report.cloud_scope"),
+            localDescription: t("problem_report.local_description"),
+            preview: t("problem_report.cloud_preview"),
+            send: t("problem_report.send"),
+            sent: t("problem_report.sent"),
+            queued: t("problem_report.queued"),
+            refused: t("problem_report.refused"),
+          },
         }}
         @wt-description-change=${this.edited}
         @wt-report-download=${this.download}

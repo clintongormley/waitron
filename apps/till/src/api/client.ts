@@ -1,3 +1,4 @@
+import type { ReportDialogCloud } from "@waitron/ui/src/components/wt-report-dialog.js";
 import type { BillSetMenuState, DishMove, ServedSetMenuCopy } from "@waitron/shared";
 import { rememberInvoiceEvidence } from "./invoice-evidence.js";
 import type { InvoiceEvidence } from "./invoice-evidence.js";
@@ -2993,6 +2994,22 @@ export class TillApi {
       this.#fetchImpl,
       onEvent,
       options.signal,
+    );
+  }
+
+  previewProblemReport(signal: AbortSignal): ReturnType<ReportDialogCloud["previewProblemReport"]> {
+    return this.#request("/api/problem-reports/preview", "GET", undefined, signal);
+  }
+
+  sendProblemReport(
+    id: string,
+    signal: AbortSignal,
+  ): ReturnType<ReportDialogCloud["sendProblemReport"]> {
+    return this.#request(
+      `/api/problem-reports/${encodeURIComponent(id)}/send`,
+      "POST",
+      undefined,
+      signal,
     );
   }
 

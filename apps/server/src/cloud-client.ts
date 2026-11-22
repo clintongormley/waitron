@@ -66,6 +66,7 @@ import {
   translationStatus,
 } from "./cloud-translation.js";
 import {
+  createHash,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -1298,6 +1299,61 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       if (reply.accepted !== true || Object.keys(reply).length !== 1)
         throw new AppError("cloud.unavailable", {});
     },
+    async sendStaffReport(
+      registration: string,
+      operationId: string,
+      body: string,
+      signal?: AbortSignal,
+    ): Promise<StaffReportDelivery> {
+      const bytes = Buffer.from(body, "utf8");
+      if (bytes.length === 0 || bytes.length > 16_384) return "stop";
+      let time: unknown;
+      try {
+        time = JSON.parse(body)?.time;
+      } catch {
+        return "stop";
+      }
+      const deadline = AbortSignal.any([AbortSignal.timeout(8000), ...(signal ? [signal] : [])]);
+      try {
+        const state = await leaseState(deadline);
+        if (registrationOf(state) !== registration || deadline.aborted) return "retry";
+        const signedBody = JSON.stringify({
+          version: 1,
+          bodySha256: createHash("sha256").update(bytes).digest("hex"),
+          bodyBytes: bytes.length,
+        });
+        const reply = await serviceExchange(
+          state,
+          "staff-report",
+          operationId,
+          signedBody,
+          { body },
+          deadline,
+          recordRefusal,
+          {
+            requireVersion: false,
+            refusal: (status, value, headers) => {
+              // The body keeps its original time even after the box corrects its clock.
+              const cloudTime = Date.parse(headers.get("date") ?? "");
+              if (
+                status === 400 &&
+                (value as { error?: string } | null)?.error === "invalid_input" &&
+                typeof time === "number" &&
+                time > cloudTime + 60_000
+              )
+                return new AppError("cloud.unavailable", {});
+              if (status === 409) return new AppError("cloud.request_invalid", {});
+              return refusalOf(status, value);
+            },
+          },
+        );
+        return reply.received === true && Object.keys(reply).length === 1 ? "sent" : "retry";
+      } catch (error) {
+        return error instanceof AppError && error.code === "cloud.request_invalid"
+          ? "stop"
+          : "retry";
+      }
+    },
     async guestMenuStatus(signal?: AbortSignal) {
       const deadline = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
@@ -1680,4 +1736,6 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     },
   };
 }
+export type StaffReportDelivery = "sent" | "retry" | "stop";
+
 export type CloudConnection = ReturnType<typeof createCloudConnection>;

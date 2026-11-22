@@ -70,14 +70,11 @@ separate follow-ups.
 
 ## A1047. Send a problem report to Waitron Cloud
 
-(owner, 2026-10-24). The follow-up A982
-leaves open. Cloud's approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 11) has its triage agent
-sort reports by urgency. A report's errors, version and installation details go at once; the
-typed description goes only when someone with the venue's admin permission sends it (owner:
-"make it an admin decision to send", keeping A980's O9). A box that cannot reach Cloud keeps
-the report and sends it later, and the sender sees which. Before reports are sent, add Waitron as a
-recipient to the venue privacy-notice checklist and update both language guides (adviser privacy
-research, Q57-3).
+On 2026-10-24 the owner said to “make it an admin decision to send”. The watcher confirmed
+on 2026-11-22 at 21:11 that staff descriptions wait on the box for an administrator to read and
+send or discard. Administrators can send their own descriptions directly. See
+[Cloud’s monitoring design §11](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md).
+Update both guides and the privacy-notice checklist before sending descriptions.
 
 ## Decisions and deliberate limits
 

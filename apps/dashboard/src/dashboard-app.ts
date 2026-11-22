@@ -2616,6 +2616,7 @@ export class DashboardApp extends LitElement {
                 <dashboard-problem-report
                   data-test="problem-report"
                   .compact=${this.narrow}
+                  .api=${this.api}
                 ></dashboard-problem-report>
                 <wt-row-actions
                   icon="person"

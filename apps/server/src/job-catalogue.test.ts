@@ -11,6 +11,7 @@ describe("job catalogue", () => {
       "clock.watch",
       "cloud.connection",
       "cloud.error_reports",
+      "cloud.problem_reports",
       "cloud.suggestions",
       "demo.printer",
       "fiscal.certificate_reminders",

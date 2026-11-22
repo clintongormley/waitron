@@ -18,6 +18,7 @@ import { PERSON_HEADER } from "@waitron/shared";
 import { LiveEvents } from "./live-api.js";
 import { clockStartUp } from "./clock-start-up.js";
 import { mountScheduleApi } from "./schedule-api.js";
+import { mountProblemReportApi } from "./problem-report-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { acceptDeviceJoinRequest, createJoinRequest } from "./join-requests.js";
@@ -29,7 +30,7 @@ import { offerOnProfile } from "./testing/enrol.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { leaveSessionAlone } from "./testing/tab-person.js";
 
-// Weaker than its name: it walks only the routes the till, device and schedule mount functions add,
+// Weaker than its name: it walks only the routes mounted below,
 // compares status and error code (never bodies, so `GET /api/device/me` has its own tests), and
 // sends `"{}"` to any route not in `BODIES`, so it sees nothing past a route's refusal of that body.
 
@@ -104,7 +105,6 @@ const BODIES: Readonly<Record<string, () => unknown>> = {
   "POST /api/session": () => ({ personId: randomUUID(), pin: "1234" }),
 };
 
-/** The owner's named routes, and the kitchen screens, that must be among the refused. */
 const NAMED_REFUSED = [
   "POST /api/parties/:id/drafts/:did/discard",
   "POST /api/parties/:id/drafts/:did/submit",
@@ -113,6 +113,8 @@ const NAMED_REFUSED = [
   "POST /api/working-orders/:id/adjustments",
   "POST /api/working-orders/:id/adjustments/preview",
   "GET /api/stations",
+  "GET /api/problem-reports/preview",
+  "POST /api/problem-reports/:id/send",
   "GET /api/stations/:id/queue",
   "GET /api/device/station-screen",
   "GET /api/device/pass-board",
@@ -294,6 +296,7 @@ beforeAll(async () => {
     noopLog,
   );
   mountScheduleApi(app, { db: suite.db }, noopLog);
+  mountProblemReportApi(app, { db: suite.db }, noopLog);
   anna = await person("Anna", "staff");
   ben = await person("Ben", "admin");
   const [station] = await suite.db

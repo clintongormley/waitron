@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Database } from "@waitron/db";
@@ -6,7 +6,11 @@ import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { AppError, INCIDENT_SOURCES } from "@waitron/shared";
 import { CLOUD_ERROR_REPORTS_FILE } from "@waitron/store";
 import { sql } from "drizzle-orm";
-import { venueDbIdentity } from "./backup-room-note.js";
+import {
+  cloudReportBinding,
+  sameCloudReportBinding,
+  type CloudReportBinding,
+} from "./cloud-report-binding.js";
 import type { CloudConnection } from "./cloud-client.js";
 import { errnoOf } from "./errno.js";
 import type { JobDefinition } from "./job-runner.js";
@@ -22,13 +26,9 @@ interface Options {
 type Cursor = { row: string; id: string };
 type Occurrence = Cursor & { code: string; source: string; version: string; time: string };
 type Pending = { end: Cursor; operationId: string; body: string };
-type State = {
-  venue: string;
-  database: string;
+type State = CloudReportBinding & {
   enabled: boolean;
   cursor: Cursor | null;
-  // Absent before the first registration. Null after a registration was lost.
-  registration?: string | null;
   pending?: Pending;
 };
 
@@ -45,6 +45,9 @@ export function createCloudErrorReports({
   connection,
 }: Options) {
   const file = join(stateDir, CLOUD_ERROR_REPORTS_FILE);
+  const binding = cloudReportBinding(db, venueDir, environment, async () =>
+    connection?.errorReportRegistration(),
+  );
   let tail = Promise.resolve();
   let active: AbortController | undefined;
   function turn<T>(action: () => Promise<T>): Promise<T> {
@@ -54,17 +57,6 @@ export function createCloudErrorReports({
       () => {},
     );
     return result;
-  }
-  function venue(): string | undefined {
-    const taxpayer = db.get<{ country: string; tax_id: string; created_at: string }>(sql`
-      select country, tax_id, created_at from taxpayer where id = 1
-    `);
-    if (!taxpayer) return undefined;
-    // The original taxpayer row survives a backup restore. A new setup for the same taxpayer
-    // has a different creation time. The binding stays on the box and is never part of a report.
-    return createHash("sha256")
-      .update(JSON.stringify([environment, taxpayer.country, taxpayer.tax_id, taxpayer.created_at]))
-      .digest("hex");
   }
   async function read(): Promise<State | undefined> {
     let value: unknown;
@@ -76,7 +68,9 @@ export function createCloudErrorReports({
     }
     if (!value || typeof value !== "object") return undefined;
     const state = value as State;
-    return typeof state.enabled === "boolean" && state.venue === venue() ? state : undefined;
+    return typeof state.enabled === "boolean" && state.venue === binding.venue()
+      ? state
+      : undefined;
   }
   async function save(state: State): Promise<void> {
     await mkdirDurable(dirname(file), 0o700);
@@ -88,9 +82,6 @@ export function createCloudErrorReports({
         sql`select cast(rowid as text) as row, id from incidents order by rowid desc limit 1`,
       ) ?? null
     );
-  }
-  async function database(): Promise<string> {
-    return JSON.stringify(await venueDbIdentity(venueDir));
   }
   function cursorMatches(cursor: Cursor | null): boolean {
     return (
@@ -104,14 +95,10 @@ export function createCloudErrorReports({
     if (!connection) return undefined;
     const state = await read();
     if (!state?.enabled) return undefined;
-    const currentDatabase = await database();
-    const registration = await connection.errorReportRegistration();
-    if (
-      state.database !== currentDatabase ||
-      !cursorMatches(state.cursor) ||
-      (state.registration !== undefined && state.registration !== (registration ?? null))
-    ) {
-      state.database = currentDatabase;
+    const current = await binding.current();
+    const { registration } = current;
+    if (!sameCloudReportBinding(state, current) || !cursorMatches(state.cursor)) {
+      state.database = current.database;
       state.cursor = latest();
       if (state.registration !== undefined || registration !== undefined)
         state.registration = registration ?? null;
@@ -176,15 +163,13 @@ export function createCloudErrorReports({
       turn(async () => {
         const current = await read();
         if (current && (initialiseOnly || current.enabled === enabled)) return current.enabled;
-        const binding = venue();
-        if (!binding) throw new AppError("cloud.not_configured", {});
-        const registration = enabled ? await connection?.errorReportRegistration() : undefined;
+        const currentBinding = await binding.current(enabled);
+        if (!currentBinding.venue) throw new AppError("cloud.not_configured", {});
         await save({
-          venue: binding,
-          database: await database(),
+          ...currentBinding,
+          venue: currentBinding.venue,
           enabled,
           cursor: enabled ? latest() : null,
-          registration,
         });
         if (!enabled) active?.abort();
         return enabled;

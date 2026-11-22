@@ -13,10 +13,13 @@ superior. También puedes hacerlo antes de iniciar sesión. Abre el panel por HT
 el botón.
 Durante la configuración, elige **Informar de un problema** en la cabecera de la página. Puedes
 guardar un informe aunque el servidor no responda o esta página ya abierta pierda la conexión.
-Describe qué ha pasado, revisa la vista previa y elige **Descargar informe**. El archivo
-incluye la actividad reciente de este navegador, en lugar del registro del servidor. No se envía
-nada ni se guarda en el servidor. No incluyas contraseñas, datos de pago ni información personal
-en tu descripción.
+Si aparece **Enviar a Waitron Cloud**, revisa el informe adjunto antes de enviarlo. Incluye
+códigos de error, la versión de Waitron y datos básicos de la instalación. El servidor te indica
+si Cloud lo ha recibido o si volverá a intentar enviarlo.
+
+Para conservar un archivo, describe qué ha pasado, revisa la vista previa de la descarga y elige
+**Descargar informe**. Tu descripción y la actividad reciente de este navegador quedan solo en el
+archivo descargado. No incluyas contraseñas, datos de pago ni información personal en tu descripción.
 
 En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
 

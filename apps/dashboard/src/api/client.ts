@@ -1,3 +1,4 @@
+import type { ReportDialogCloud } from "@waitron/ui/src/components/wt-report-dialog.js";
 import type { PrinterDeleteImpact } from "@waitron/shared";
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
@@ -3028,6 +3029,25 @@ export class DashboardApi {
       sessionGeneration: options.sessionGeneration,
     });
     this.#request = options.freshSignIn?.wrap(request, passive) ?? request;
+  }
+
+  previewProblemReport(signal: AbortSignal): ReturnType<ReportDialogCloud["previewProblemReport"]> {
+    return this.#request("/management-api/problem-reports/preview", "GET", undefined, {
+      passive: true,
+      signal,
+    });
+  }
+
+  sendProblemReport(
+    id: string,
+    signal: AbortSignal,
+  ): ReturnType<ReportDialogCloud["sendProblemReport"]> {
+    return this.#request(
+      `/management-api/problem-reports/${encodeURIComponent(id)}/send`,
+      "POST",
+      undefined,
+      { signal },
+    );
   }
 
   getStaffRoster(): Promise<RosterEntry[]> {

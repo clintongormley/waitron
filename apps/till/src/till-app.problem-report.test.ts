@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseTheme, type WtButton, type WtTextarea } from "@waitron/ui";
 import { clockApp, signIn, working } from "../test/clock-app.js";
+import type { TillApi } from "./api/client.js";
 import { cleanupWidgets, resetPage } from "./widgets/test-helpers.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -183,4 +184,37 @@ it("leaves the build empty until setReportBuild gives it one, then names it in t
   setReportBuild("v1.4.0");
   const after = await openStrip((await clockApp()).el);
   expect(data(preview(after)).client.build).toBe("v1.4.0");
+});
+
+it("shows that the box will retry a confirmed Cloud report", async () => {
+  const sendProblemReport = vi
+    .fn<TillApi["sendProblemReport"]>()
+    .mockResolvedValue({ delivery: "queued" });
+  const { el } = await clockApp({
+    enabled: false,
+    api: {
+      previewProblemReport: async () => ({
+        available: true as const,
+        id: "preview",
+        attachment: '{"version":"1.2.3"}',
+      }),
+      sendProblemReport,
+    },
+  });
+  await signIn(el);
+  await working(el);
+  const shell = el.shadowRoot!.querySelector("till-shell")!;
+  await shell.updateComplete;
+  const menu = shell.shadowRoot!.querySelector("[data-test=more-menu]")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await userEvent.click(menu.querySelector<WtButton>("[data-report-problem]")!);
+  const dialog = dialogOf(el);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
+    .toBe('{"version":"1.2.3"}');
+  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+    .toBe("Saved on this box. It will try sending again.");
+  expect(sendProblemReport.mock.calls[0]?.[0]).toBe("preview");
 });
