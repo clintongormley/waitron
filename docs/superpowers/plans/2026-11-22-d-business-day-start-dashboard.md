@@ -1,12 +1,52 @@
 # Business-day start dashboard checks
 
-Source: Lane D queue, BDS-DASHBOARD, assigned by the watcher at 01:24 on 22 November 2026. The three observations are in [Loose ends left by A788](../../backlog/service-periods.md#loose-ends-left-by-a788). Build on #3990.
+Source: Lane D queue, BDS-DASHBOARD, assigned by the watcher at 01:24 on 22 November 2026. See
+[Loose ends left by A788](../../backlog/service-periods.md#loose-ends-left-by-a788). The branch
+starts after #3990, which gives the preview its unlisted clash count.
 
-- **A863, find the clashing hours.** In `packages/venue-service/src/dashboard/clock-change-conflict.ts`, use the first conflict's department alongside its zone or period, and include the season when supplied. Reuse `weekdayLabel` from `season-week-view.ts` for weekly hours. Use the special day's name and month/day for dated hours, since a repeating date can fall on a different weekday. Keep the new start, its effective moment and the clash reason distinct from the range. Add localized wording in sibling `strings.ts` where needed. In `clock-change-conflict.test.ts`, first show a failing EN/ES case with different clash and changeover weekdays, named departments and the same period name. Cover a dated special day and a zone or department range. Check the shared `../testing/clock-change-conflict.ts` fixture and run its consuming tests if the expected sentence changes.
-- **A873, recover when the editor becomes stale.** In `apps/dashboard/src/screens/business-day-start-editor.ts`, show the existing close-and-reopen instruction when the open draft's clock identity differs from the current model. Preserve the Save refusal in the footer. The instruction can use its current footer spot on its own and appear inside the dialog above the footer when a write refusal already occupies it. Discard a stale preview and its read errors, including a preview field refusal. Extend the existing refused-write test in `business-day-start-editor.test.ts` to fail on the missing instruction while still checking the refusal, draft and disabled Save. Keep the existing test for a stale preview field refusal.
-- **A874, verify the existing recovery.** The timing mismatch is real: `#scheduleReread` subtracts browser `Date.now()` from the scheduled instant and only retries a past instant once. The box decides what is in force from its clock in `apps/server/src/business-day-start.ts` via `venue-settings-api.ts`. The card also watches `getVenueDetails`, whose existing 60-second passive refresh stays on when live updates are connected (`apps/dashboard/src/api/live-queries.ts`, `packages/dashboard-kit/src/live-data.ts`). Recommend keeping both reads if the skewed-clock control confirms that the existing refresh clears the waiting row without navigation. Add that control beside the same-clock case in `apps/dashboard/src/screens/venue-details-business-day.test.ts`: independently set the browser and box clocks, keep live updates connected, return pending from the two early reads and then let the box reach the boundary. Assert passive recovery at the next regular refresh and no new active read. Bring contrary results back to the watcher before changing refresh policy.
-- Add a shared heading to both `apps/server/src/guide/{en,es}/opening-hours.md` twins. Explain how to find the hours a refusal names and how to reopen and review a stale start-time edit. Link the editor's existing help from `apps/dashboard/src/help-guide.ts`. Remove A863 and A873 from `docs/backlog/service-periods.md` when verified. Move A874 to that area's decisions if the recommendation is cleared and the control passes. The parent bundle still covers other open items.
+- **A863, find the clashing hours.** In `packages/venue-service/src/dashboard/clock-change-conflict.ts`,
+  use the editor's order for the first range: department, zone, weekday or date, period, then hours.
+  Include the season when supplied. Reuse `weekdayLabel` from `season-week-view.ts` for weekly
+  hours. Use the special day's name and month/day for dated hours, since a repeating date can fall
+  on a different weekday. Keep the new start, its effective moment and the clash reason distinct
+  from the range. Use the sibling `strings.ts` for new wording. First extend
+  `clock-change-conflict.test.ts` to fail on the missing department and weekday in English and
+  Spanish. Use the same period name and differing clash and changeover weekdays, and cover a
+  dated special day and a zone or department range. Update the shared
+  `../testing/clock-change-conflict.ts` fixture and run its consumers if its sentence changes.
+- **A873, recover when the editor becomes stale.** In
+  `apps/dashboard/src/screens/business-day-start-editor.ts`, retain the Save refusal and show the
+  existing close-and-reopen instruction when the draft's clock identity differs from the model.
+  Put the instruction in the footer on its own and above it when a refusal already occupies it.
+  A `venue.business_day_changed` Save refusal already tells people to reopen, so show it once.
+  A locked-change refusal still needs the instruction after a clock update. Clear the stale
+  preview, its Retry and its field refusal. First extend `business-day-start-editor.test.ts`
+  to fail on the missing instruction after a refused Save and on a stale Retry. Keep the
+  assertions for the Save refusal, draft, disabled Save and stale field refusal.
+- **A874, verify the existing recovery.** The timing mismatch is real: `#scheduleReread` subtracts
+  browser `Date.now()` from the scheduled instant and retries a past instant once. The box decides
+  what is in force in `apps/server/src/business-day-start.ts` via `venue-settings-api.ts`. With the
+  page active and reads succeeding, the next scheduled 60-second refresh after the box's boundary
+  corrects the display, subject to request and browser scheduling delays.
+  `apps/dashboard/src/api/live-queries.ts` and `packages/dashboard-kit/src/live-data.ts` keep that
+  passive refresh on even while live updates are connected. Recommend keeping both reads.
+  In `apps/dashboard/src/screens/venue-details-business-day.test.ts`, fake intervals as well as
+  timeouts and Date, set live data connected and give the box a separate clock in the response
+  fixture. Test a browser ahead enough to get both early reads and a browser behind enough that
+  the regular refresh beats its boundary timer. Advance to the tick measured from mount. Assert
+  that the row clears and that only the opening read was active. Temporarily quiet the query
+  while connected to show the skew control catches the lost refresh. Bring contrary results
+  back to the watcher before changing refresh policy.
+- Add the shared `{#business-day-start}` heading to
+  `apps/server/src/guide/{en,es}/opening-hours.md`. Explain how to find the named hours and reopen
+  a stale edit. Add the key `opening-hours.business-day-start` in `apps/dashboard/src/help-guide.ts`
+  and point the editor's help tooltip there. Remove A863 and A873 from
+  `docs/backlog/service-periods.md` once verified. Move A874 to decisions if the watcher clears
+  this recommendation and the control passes. The parent bundle still covers other open items.
 
-Finish line: a manager can find the hours that block a change and knows to reopen a stale draft even after Save has failed. A waiting row clears on the active page when the box confirms the change. Scope stays with the dashboard formatter, editor, verification and guides. Estimated 45–75 added and 15–30 removed production lines, 60–105 added and 10–20 removed test lines, and 20–30 guide and backlog lines.
-
-Run the named Vitest files in the owning packages, the editor's accessibility and unsaved-draft files, and the guide-content and guide-link checks. Inspect the affected wording and dialog in Chromium at phone and desktop sizes in both themes and languages.
+Finish line: a manager can locate the hours that block a change and knows to reopen a stale draft
+even after Save fails. The waiting row clears on the active page after the box reaches the boundary.
+Estimated 45–75 added and 15–30 removed production lines, 65–110 added and 10–20 removed test
+lines, and 20–30 guide and backlog lines. Run the named Vitest files, the editor's accessibility
+and unsaved-draft files, and the guide-content and guide-link checks. Inspect the wording and
+dialog in Chromium at phone and desktop sizes in both themes and languages.
