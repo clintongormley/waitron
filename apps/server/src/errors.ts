@@ -745,8 +745,8 @@ declare module "@waitron/shared" {
     /** The invoice already has a correction that is still open. */
     "invoice_correction.already_open": { saleId: string; correctionId: string };
     /** The invoice's payments hold less money still refundable than the correction would give back.
-     * `advanceInvoiceNumbers` are the advances the invoice took off whose payments still hold money
-     * Refund a payment on their own tickets could give back. */
+     * `advanceInvoiceNumbers` are the advances the invoice took off whose payments still hold, tips
+     * aside, money Refund a payment on their own tickets could give back. */
     "invoice_correction.money_short": {
       saleId: string;
       moneyLeft: string;

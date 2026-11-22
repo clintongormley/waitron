@@ -306,7 +306,8 @@ voids, who asked for or authorised refunds, and who opened the cash drawer or au
   outcome of a refund, who opened the cash drawer or authorised it, and when; and who confirmed or
   set the box's clock from a till, kept in a table whose rows cannot be changed or deleted.
 - Who receives it: _anyone you share it with_. **Download for accountant (XLSX)** in **Sales &
-  takings** includes who asked for and authorised each refund that filed no corrective invoice.
+  takings** includes who asked for and authorised each completed refund of a receipt's payment that filed no
+  corrective invoice.
 - How long: _set with your adviser_. Waitron never changes or deletes a recorded sale.
 - Security: as for every entry.
 

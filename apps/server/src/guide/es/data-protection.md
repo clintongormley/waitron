@@ -330,8 +330,8 @@ o lo autorizó.
   confirmó o puso la hora del servidor desde una caja, guardado en una tabla cuyas filas no pueden
   modificarse ni borrarse.
 - Destinatarios: _cualquiera con quien los compartas_. **Descargar para tu gestor (XLSX)** en
-  **Ventas y recaudación** incluye quién pidió y quién autorizó cada devolución sin factura
-  rectificativa.
+  **Ventas y recaudación** incluye quién pidió y quién autorizó cada devolución completada
+  del pago de un ticket sin factura rectificativa.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una venta registrada.
 - Seguridad: como en todas las entradas.
 

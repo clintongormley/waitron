@@ -78,7 +78,7 @@ export async function advancesTakenOff(
 
 /**
  * The invoice numbers of the advances the invoice `finalSaleId` took off ({@link advancesTakenOff})
- * whose payments still hold money a plain refund could give back, as Refund a payment's cap reads
+ * whose payments still hold money, tips aside, that a plain refund could give back, as Refund a payment's cap reads
  * it ({@link readRefundableTenders}), in its lines' order; none for a corrective or substitution,
  * which only copy the deduction lines.
  */

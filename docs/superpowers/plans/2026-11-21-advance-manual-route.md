@@ -185,7 +185,8 @@ guard against the outstanding figure rising.
 reason, who asked and approved (names read at export time), the ticket refunded, for a part
 payment the table's ticket that took it off, and **the VAT left declared**: one row per VAT rate of
 the refunded ticket, with that rate, base and VAT of the refund's share. The share is pro rata to
-the ticket's VAT breakdown by gross, rounded to the cent, the last rate taking the remainder; within
+the ticket's VAT breakdown by gross, in whole cents: each rate takes its share rounded down, and the
+cents left over go to the rates with the largest remainders, ties to the earlier rate; within
 a rate, VAT is the share less the share divided by (1 + rate), rounded to the cent, and base is the
 share less that VAT. Example: €20 given back on a €30 part payment at 10% shows base €18.18 and VAT
 €1.82, the VAT that stays filed. A sheet note says this VAT stays declared until the accountant acts.
@@ -290,7 +291,7 @@ recommend the owner lands both.
    one per VAT rate with rate, base and VAT as (d); a two-rate ticket's rounding case.
 8. **Server, refusal parameters.** `advance.taken_off_final_invoice` gains `finalMoneyLeft`;
    `invoice_correction.money_short` gains `advanceInvoiceNumbers`, the part payments its table's
-   ticket took off (decision 3). No new refusal code anywhere. Changes the `toEqual` of the refusal
+   ticket took off that still hold money Refund a payment could give back (decision 3). No new refusal code anywhere. Changes the `toEqual` of the refusal
    in `advance-corrections.test.ts:526`, `:550` and `:1015` by the new key; list them.
 9. **Till, words and button.** The EN/ES wording for `advance.taken_off_final_invoice` (both forms)
    and `invoice_correction.money_short` pinned in `codes.test.ts`; Refund on a printed bill's part

@@ -134,7 +134,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     ],
     refundSheet: "Devoluciones sin rectificativa",
     refundNote:
-      "Nota: no se emitió factura rectificativa por estos reembolsos, así que el IVA indicado sigue declarado hasta que actúe el gestor",
+      "Nota: no se emitió factura rectificativa por estas devoluciones, así que el IVA indicado sigue declarado hasta que actúe el gestor",
     refundColumns: [
       "Id. de reembolso",
       "Reembolsado el (UTC)",
