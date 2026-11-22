@@ -51,6 +51,22 @@ certs/
 .superpowers/
 docs/handoffs/
 
+# Impeccable's working files: mock-ups are never committed (CLAUDE.md §6). Its config.json,
+# surfaces/, design.json, live/config.json and critique/ignore.md are shared, so stay tracked.
+.impeccable/questions/
+.impeccable/questions.tracked-notice
+.impeccable/wiring/
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/build/
+.impeccable/critique/*
+!.impeccable/critique/ignore.md
+.impeccable/live/*
+!.impeccable/live/config.json
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json
+.impeccable/config.local.json
+
 # The box's self-signed cert + generated secrets, materialised on first setup boot.
 # The dev default is apps/server/src/state (from-source) / apps/server/dist/state (built, already
 # covered by dist/). Never commit secrets. Deployment sets WAITRON_STATE_DIR to a protected path.
