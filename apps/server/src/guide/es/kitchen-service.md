@@ -186,8 +186,10 @@ La cola sigue visible. Cuando usas **Cambiar de estación…**, la estación de 
 en la tarjeta del plato.
 
 Pulsa **Cerrar sesión** cuando dejes la pantalla a otra persona. Si dejas tu sesión abierta,
-los traslados de la siguiente persona llevarán tu nombre.
-La pantalla ofrece **Entrar** cuando su [perfil admite a alguien](staff.md#device-profile-sign-in).
+los traslados de la siguiente persona llevarán tu nombre hasta que se cierre la sesión. Si tu
+responsable configura un [tiempo de inactividad](staff.md#device-profile-sign-in), la sesión se
+cierra cuando pasa ese tiempo sin tocar la pantalla ni pulsar una tecla. La cola sigue visible
+y puedes volver a entrar al regresar. La pantalla ofrece **Entrar** cuando su perfil admite a alguien.
 
 ## Trabaja con la pantalla de estación {#kitchen-screen}
 

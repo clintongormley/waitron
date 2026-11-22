@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "95a6cf6c-fb2c-46a8-8568-c26df71a67fb",
+  "id": "1d2a74a9-ad6f-4571-963b-4b87b199b8bc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8355,10 +8355,6 @@
         "device_profiles_card_readers_ck": {
           "name": "device_profiles_card_readers_ck",
           "value": "json_valid(\"device_profiles\".\"card_readers\") and json_type(\"device_profiles\".\"card_readers\") = 'object'"
-        },
-        "device_profiles_kds_timeout_ck": {
-          "name": "device_profiles_kds_timeout_ck",
-          "value": "\"device_profiles\".\"form_factor\" <> 'kds' or \"device_profiles\".\"inactivity_timeout_seconds\" is null"
         },
         "device_profiles_order_scope_ck": {
           "name": "device_profiles_order_scope_ck",

@@ -55,18 +55,17 @@ it.each([
   expect(engineErrorMessage(error)).toBe(`CHECK constraint failed: ${constraint}`);
 });
 
-it("refuses an inactivity timeout on a kitchen display and keeps one on a till", async () => {
+it("stores and clears an inactivity timeout on a kitchen display", async () => {
   const [display] = await seedDeviceProfiles(suite.db, {
     name: "Kitchen display",
     formFactor: "kds",
   });
-  const timeout = (id: string) =>
+  const saveTimeout = (seconds: number | null) =>
     suite.db
       .update(deviceProfiles)
-      .set({ inactivityTimeoutSeconds: 300 })
-      .where(eq(deviceProfiles.id, id))
+      .set({ inactivityTimeoutSeconds: seconds })
+      .where(eq(deviceProfiles.id, display!.id))
       .returning({ seconds: deviceProfiles.inactivityTimeoutSeconds });
-  expect(await timeout(profileId)).toEqual([{ seconds: 300 }]);
-  const error = await captureError(() => timeout(display!.id));
-  expect(engineErrorMessage(error)).toBe("CHECK constraint failed: device_profiles_kds_timeout_ck");
+  expect(await saveTimeout(1_800)).toEqual([{ seconds: 1_800 }]);
+  expect(await saveTimeout(null)).toEqual([{ seconds: null }]);
 });

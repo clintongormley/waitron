@@ -928,27 +928,41 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
-  it("a KDS draft hides the inactivity-timeout input and saves a null timeout", async () => {
-    const kdsProfile: DeviceProfile = { ...profiles[0], formFactor: "kds" };
-    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
-    const el = await mount(api);
-    await profileAction(el, "edit-p1");
-    await flush(el);
-    // No timeout input for a kitchen display.
-    expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeNull();
-    rename(el, "Kitchen counter");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
-    await flush(el);
-    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
-      "p1",
-      "Kitchen counter",
+  it.each([
+    [null, "30", 1_800],
+    [1_800, "", null],
+  ])(
+    "saves kitchen idle sign-out from %s seconds to %s minutes",
+    async (stored, minutes, seconds) => {
+      const kdsProfile: DeviceProfile = {
+        ...profiles[0],
+        formFactor: "kds",
+        inactivityTimeoutSeconds: stored,
+      };
+      const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(kdsProfile) });
+      const el = await mount(api);
+      await profileAction(el, "edit-p1");
+      await flush(el);
 
-      [],
-      "kds",
-      null,
-      NO_PRINTERS,
-    );
-  });
+      const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        "[data-test=profile-inactivity]",
+      );
+      expect(input?.value).toBe(stored === null ? "" : "30");
+      change(el, "profile-inactivity", minutes);
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      await flush(el);
+
+      expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+        "p1",
+        "Front counter",
+        [],
+        "kds",
+        seconds,
+        NO_PRINTERS,
+      );
+    },
+  );
 
   it("Edit seeds the inactivity-timeout input in minutes from the stored seconds (300 → 5)", async () => {
     const phone: DeviceProfile = {

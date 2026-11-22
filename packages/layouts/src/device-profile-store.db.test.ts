@@ -295,7 +295,7 @@ describe("device-profile store against a real migrated database", () => {
     expect(listed).toEqual([created]);
   });
 
-  it("round-trips a phone-portrait inactivity timeout through create → get, and forces null for kds", async () => {
+  it("round-trips phone and kitchen inactivity timeouts through create and get", async () => {
     await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const handheld = await inTx((tx) =>
@@ -318,10 +318,11 @@ describe("device-profile store against a real migrated database", () => {
         formFactor: "kds",
 
         capabilities: ["act-as-kds"],
-        inactivityTimeoutSeconds: 600, // ignored — kds is exempt
+        inactivityTimeoutSeconds: 1_800,
       }),
     );
-    expect(kds.inactivityTimeoutSeconds).toBeNull();
+    expect(kds.inactivityTimeoutSeconds).toBe(1_800);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, kds.id))).toEqual(kds);
   });
 
   it("lists a taxpayer's device profiles by name", async () => {

@@ -3273,6 +3273,7 @@ export const en = {
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Prep station display",
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
+  "device_profiles.kitchen_inactivity_hint": "For example, 30. Leave blank for never.",
   "device_profiles.err_inactivity":
     "Enter minutes with one decimal mark, or leave blank for never.",
   "device_profiles.where_heading": "Where it serves",
@@ -8052,6 +8053,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de estación",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
+  "device_profiles.kitchen_inactivity_hint": "Por ejemplo, 30. Deja el campo vacío para nunca.",
   "device_profiles.err_inactivity":
     "Introduce minutos con un solo separador decimal, o deja el campo vacío para nunca.",
   "device_profiles.where_heading": "Dónde sirve",

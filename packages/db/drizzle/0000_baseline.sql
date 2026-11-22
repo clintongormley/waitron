@@ -1293,7 +1293,6 @@ CREATE TABLE `device_profiles` (
 	CONSTRAINT "device_profiles_printer_lists_ck" CHECK(json_valid("device_profiles"."printer_lists") and json_type("device_profiles"."printer_lists") = 'object'),
 	CONSTRAINT "device_profiles_kitchen_views_ck" CHECK(json_valid("device_profiles"."kitchen_views") and json_type("device_profiles"."kitchen_views") = 'object'),
 	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object'),
-	CONSTRAINT "device_profiles_kds_timeout_ck" CHECK("device_profiles"."form_factor" <> 'kds' or "device_profiles"."inactivity_timeout_seconds" is null),
 	CONSTRAINT "device_profiles_order_scope_ck" CHECK(("device_profiles"."order_department_id" is null) = ("device_profiles"."order_starting_zone_id" is null)
           and ("device_profiles"."order_department_id" is not null or "device_profiles"."order_zone_ids" is null)),
 	CONSTRAINT "device_profiles_order_zone_ids_ck" CHECK(json_valid("device_profiles"."order_zone_ids") and json_type("device_profiles"."order_zone_ids") = 'array')

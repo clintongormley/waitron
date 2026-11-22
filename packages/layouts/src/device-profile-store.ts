@@ -171,7 +171,6 @@ export async function createDeviceProfile(
   const startingScreen = validateStartingScreen(input.startingScreen ?? null, capabilities);
   const inactivityTimeoutSeconds = validateInactivityTimeout(
     input.inactivityTimeoutSeconds ?? null,
-    input.formFactor,
   );
   let created: StoredProfile;
   try {
@@ -230,7 +229,6 @@ export async function updateDeviceProfile(
   );
   const inactivityTimeoutSeconds = validateInactivityTimeout(
     input.inactivityTimeoutSeconds ?? null,
-    input.formFactor,
   );
   let updated: StoredProfile[];
   try {

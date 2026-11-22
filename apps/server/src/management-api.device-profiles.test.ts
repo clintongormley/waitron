@@ -287,7 +287,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       formFactor: "kds",
 
       capabilities: ["act-as-kds"],
-      // A `kds` profile always coerces the timeout to null in the store, regardless of the body.
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
@@ -452,9 +451,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     }
   });
 
-  it("POST a kds profile coerces inactivityTimeoutSeconds to null even when a value is sent", async () => {
+  it("creates a kitchen profile with an idle sign-out", async () => {
     const app = mountApp();
-    // A kds display has no operator session to log out, so the store stores null whatever the body.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -463,11 +461,11 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         formFactor: "kds",
 
         capabilities: ["act-as-kds"],
-        inactivityTimeoutSeconds: 300,
+        inactivityTimeoutSeconds: 1_800,
       }),
     });
     expect(created.status).toBe(201);
-    expect(((await created.json()) as ProfileRow).inactivityTimeoutSeconds).toBeNull();
+    expect(((await created.json()) as ProfileRow).inactivityTimeoutSeconds).toBe(1_800);
   });
 
   it("GET by an unknown (well-formed) id → 404 device_profile.not_found", async () => {

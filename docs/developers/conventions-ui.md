@@ -2120,7 +2120,9 @@ stops it" in the same file.
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values.
 A signed-in till whose menu check has no zone to ask about, and a kitchen screen in device mode,
 read `/api/till` itself every 15 seconds (`#followSetup`) and apply it the same way when its
-revision moved. The venue's values are:
+revision moved. In device mode, a kitchen profile's changed idle timeout also takes effect
+on that read. An unchanged timeout keeps its existing deadline.
+The venue's values are:
 receipt languages and invoice language, venue name and tax id, onboarding intent,
 courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices, and an open Cloud emergency entrance's address and role labels. Those entrance facts are retained across failed reads and sign-out, and cleared on a server change; the PIN-screen poll does not refresh setup. Every read of the setup is numbered when sent, and an answer is skipped

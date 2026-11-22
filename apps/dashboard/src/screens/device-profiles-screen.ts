@@ -404,7 +404,6 @@ export const profileSettingFields: readonly ProfileSetting[] = [
     "inactivityTimeout",
     "device_profiles.inactivity_timeout_label",
     FIELD_TAB.inactivity,
-    orderingProfile,
   ),
   profileField(
     "startingScreen",
@@ -859,8 +858,8 @@ export class DeviceProfilesScreen extends LitElement {
         .filter((flag) => ordering || sharedDisplayMay(flag))
         .sort(),
       formFactor: this.draftFormFactor,
-      inactivityMinutes: ordering ? this.draftInactivityMinutes : null,
-      invalidInactivityText: ordering ? this.invalidInactivityText : null,
+      inactivityMinutes: this.draftInactivityMinutes,
+      invalidInactivityText: this.invalidInactivityText,
       printerLists: structuredClone(this.draftPrinterLists),
       kitchenScreens: comparableScreens(this.draftKitchenScreens),
       departmentId: ordering ? this.draftDepartmentId : "",
@@ -1092,7 +1091,6 @@ export class DeviceProfilesScreen extends LitElement {
     });
     return FIELDS.filter((field) => {
       if (kds && FIELD_TAB[field] === "equipment") return false;
-      if (field === "inactivity") return !kds;
       if (KITCHEN_LIST_FIELDS.includes(field)) return listsShown.includes(field);
       if (["department", "zones", "startingZone", "startingScreen"].includes(field)) return !kds;
       if (field === "readerDefault") return !kds && this.#readersShown();
@@ -1114,9 +1112,9 @@ export class DeviceProfilesScreen extends LitElement {
     if (!this.#feedback.attempted) return {};
     const errors: FieldErrors = {};
     if (this.draftName.trim() === "") errors.name = t("form.name_required");
+    if (this.invalidInactivityText !== null)
+      errors.inactivity = t("device_profiles.err_inactivity");
     if (this.#ordering()) {
-      if (this.invalidInactivityText !== null)
-        errors.inactivity = t("device_profiles.err_inactivity");
       if (this.#decidesScope()) {
         const departmentHasZones = this.#departmentZones(this.draftDepartmentId).length > 0;
         if (this.draftDepartmentId === "")
@@ -1880,12 +1878,8 @@ export class DeviceProfilesScreen extends LitElement {
     const capabilities = this.draftCapabilities.filter(
       (flag) => !isSharedDisplay(formFactor) || sharedDisplayMay(flag),
     );
-    // Minutes → seconds at the wire edge. A `kds` profile always sends null, whatever minutes are left
-    // in the draft: the input is hidden for kds.
     const inactivityTimeoutSeconds =
-      isSharedDisplay(formFactor) || this.draftInactivityMinutes == null
-        ? null
-        : this.draftInactivityMinutes * 60;
+      this.draftInactivityMinutes === null ? null : this.draftInactivityMinutes * 60;
     const printerLists: ProfilePrinterLists = {
       receiptPrinterIds: this.#ordering() ? this.draftPrinterLists.receiptPrinterIds : [],
       paymentSlipPrinterIds: this.#ordering() ? this.draftPrinterLists.paymentSlipPrinterIds : [],
@@ -2452,21 +2446,18 @@ export class DeviceProfilesScreen extends LitElement {
               .value=${this.draftFormFactor}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFormFactor(e)}
             ></wt-combobox>
-            ${
-              ordering
-                ? html`<wt-input
-                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
-                    class="field"
-                    decimal-locale=${currentLocale()}
-                    data-test="profile-inactivity"
-                    name="inactivityTimeout"
-                    label=${t("device_profiles.inactivity_timeout_label")}
-                    .value=${this.invalidInactivityText ?? (this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes))}
-                    .error=${errors.inactivity ?? ""}
-                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
-                  ></wt-input>`
-                : nothing
-            }
+            <wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
+              class="field"
+              decimal-locale=${currentLocale()}
+              data-test="profile-inactivity"
+              name="inactivityTimeout"
+              label=${t("device_profiles.inactivity_timeout_label")}
+              hint=${ordering ? "" : t("device_profiles.kitchen_inactivity_hint")}
+              .value=${this.invalidInactivityText ?? (this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes))}
+              .error=${errors.inactivity ?? ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
+            ></wt-input>
             ${ordering ? this.#renderStartingScreen(errors) : nothing}
           </section>
           ${

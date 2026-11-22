@@ -82,10 +82,6 @@ export const deviceProfiles = table(
     check("device_profiles_kitchen_views_ck", jsonShapeCheck(t.kitchenViews, "object")),
     check("device_profiles_card_readers_ck", jsonShapeCheck(t.cardReaders, "object")),
     check(
-      "device_profiles_kds_timeout_ck",
-      sql`${t.formFactor} <> 'kds' or ${t.inactivityTimeoutSeconds} is null`,
-    ),
-    check(
       "device_profiles_order_scope_ck",
       sql`(${t.orderDepartmentId} is null) = (${t.orderStartingZoneId} is null)
           and (${t.orderDepartmentId} is not null or ${t.orderZoneIds} is null)`,
