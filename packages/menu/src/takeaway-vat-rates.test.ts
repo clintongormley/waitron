@@ -82,7 +82,7 @@ describe("setTakeawayVatRate", () => {
   it("refuses a rate outside the pick list, accepted or not", async () => {
     await spanishVenue();
     const id = await product();
-    for (const rate of ["5.00", "7.50", "3.00"]) {
+    for (const rate of ["5.00", "7.50", "3.00", "21"]) {
       await expect(app((tx) => setTakeawayVatRate(tx, id, rate))).rejects.toMatchObject({
         code: "product.invalid",
         params: { field: "takeawayVatRate" },
@@ -113,6 +113,41 @@ describe("setTakeawayVatRate", () => {
       params: { field: "takeawayVatRate" },
     });
     expect(await rowsOf(parent)).toEqual([{ startsOn: null, rate: 1000 }]);
+  });
+
+  it("checks before deleting, so a caller that catches a refusal keeps the rows", async () => {
+    await spanishVenue();
+    const id = await product();
+    await rateRow(id, null, 1000);
+    const left = await app(async (tx) => {
+      for (const rate of [null, "5.00"]) {
+        await expect(setTakeawayVatRate(tx, id, rate)).rejects.toMatchObject({
+          code: "product.invalid",
+        });
+      }
+      return tx
+        .select({ rate: productTakeawayVatRates.rate })
+        .from(productTakeawayVatRates)
+        .where(eq(productTakeawayVatRates.productId, id));
+    });
+    expect(left).toEqual([{ rate: 1000 }]);
+  });
+
+  it("checks against the area's rates a caller hands in, without reading the area", async () => {
+    await seedVenueSettings(suite.db, { fiscalTerritory: "ES-common" });
+    const id = await product();
+    const rates = {
+      dineIn: [{ from: null, rate: "10.00" }],
+      accepted: ["5.00"],
+      pickable: ["5.00"],
+      defaultTakeaway: "5.00",
+    };
+    await app((tx) => setTakeawayVatRate(tx, id, "5.00", rates));
+    expect(await rowsOf(id)).toEqual([{ startsOn: null, rate: 500 }]);
+    await expect(app((tx) => setTakeawayVatRate(tx, id, "10.00", rates))).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "takeawayVatRate" },
+    });
   });
 
   it("refuses a product that does not exist", async () => {

@@ -32,12 +32,14 @@ export async function readVenueVatRates(tx: Transaction): Promise<AreaVatRates> 
 /**
  * Replaces the product's takeaway rates with one row from the beginning of time at `rate`, one of
  * the area's pickable rates. Null clears a variant's rows, so it takes its parent's; a top-level
- * product always keeps a rate, so null is refused there.
+ * product always keeps a rate, so null is refused there. A caller saving several products passes
+ * `rates` from one {@link readVenueVatRates}; without it the area is read here.
  */
 export async function setTakeawayVatRate(
   tx: Transaction,
   productId: string,
   rate: string | null,
+  rates?: AreaVatRates,
 ): Promise<void> {
   const [product] = await tx
     .select({ parentId: products.parentId })
@@ -48,7 +50,7 @@ export async function setTakeawayVatRate(
     if (product.parentId === null) {
       throw new AppError("product.invalid", { field: "takeawayVatRate" });
     }
-  } else if (!(await readVenueVatRates(tx)).pickable.includes(rate)) {
+  } else if (!(rates ?? (await readVenueVatRates(tx))).pickable.includes(rate)) {
     throw new AppError("product.invalid", { field: "takeawayVatRate" });
   }
   await tx.delete(productTakeawayVatRates).where(eq(productTakeawayVatRates.productId, productId));

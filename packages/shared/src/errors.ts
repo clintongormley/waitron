@@ -128,8 +128,8 @@ export interface ErrorParams {
     vatClass: "general" | "reduced" | "super_reduced" | "zero";
     reason: "first_entry_missing_or_dated" | "not_oldest_first";
   };
-  /** The venue's tax area (the taxpayer's `country`, null with no taxpayer, and the venue's
-   * `territory`) has no VAT rate lists in its country pack. */
+  /** The venue's tax area has no VAT rates: there is no taxpayer (`country` null), no pack or
+   * territory the packs know, or the territory lacks one of its four VAT rate lists. */
   "vat_rate.area_unsupported": { country: string | null; territory: string };
   /** The dated rate list handed to `caller` is empty, starts with a dated entry, or is not dated
    * oldest first. */
