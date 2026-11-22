@@ -71,13 +71,10 @@ function cash(amount: number, recordedAt = friday) {
   );
 }
 
-it("waits one hour after the last department closes, including an overnight close", async () => {
+async function openingHours(openingWeekday: number, departments: [string, string][]) {
   await withTransaction(store.db, async (tx) => {
     const [menu] = await tx.insert(menus).values({ name: "Dinner menu" }).returning();
-    for (const [name, endsAt] of [
-      ["Restaurant", "22:00"],
-      ["Terrace", "01:30"],
-    ] as const) {
+    for (const [name, endsAt] of departments) {
       const { id: department } = await createDepartment(tx, { name, orderStart: "table" });
       const { id: periodId } = await saveMenuPeriod(tx, department, {
         name: "Dinner",
@@ -89,13 +86,20 @@ it("waits one hour after the last department closes, including an overnight clos
         department,
         Array.from({ length: 7 }, (_, weekday) => ({
           weekday,
-          slots: weekday === 5 ? [{ periodId, startsAt: "18:00", endsAt }] : [],
+          slots: weekday === openingWeekday ? [{ periodId, startsAt: "18:00", endsAt }] : [],
         })),
         new Date(friday),
         1,
       );
     }
   });
+}
+
+it("waits one hour after the last department closes, including an overnight close", async () => {
+  await openingHours(5, [
+    ["Restaurant", "22:00"],
+    ["Terrace", "01:30"],
+  ]);
   await cash(1000);
   expect(await warnings("2026-11-21T01:29:59.999Z")).toEqual([]);
   expect(await warnings("2026-11-21T01:30:00.000Z")).toMatchObject([
@@ -105,6 +109,17 @@ it("waits one hour after the last department closes, including an overnight clos
       since: "2026-11-21T01:30:00.000Z",
       screen: "sales",
     },
+  ]);
+});
+
+it("keeps Friday's reminder visible when Saturday's grace hour crosses the day start", async () => {
+  await openingHours(6, [["Restaurant", "05:30"]]);
+  await cash(1000);
+  const fridayReminder = await warnings(saturdayStart);
+  expect(fridayReminder).toMatchObject([{ since: saturdayStart }]);
+  expect(await warnings("2026-11-22T05:10:00.000Z")).toEqual(fridayReminder);
+  expect(await warnings("2026-11-22T05:30:00.000Z")).toMatchObject([
+    { since: "2026-11-22T05:30:00.000Z" },
   ]);
 });
 

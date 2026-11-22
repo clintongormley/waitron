@@ -4,6 +4,11 @@ Status: approved by the owner on 6 November 2026, after a fresh reviewer read it
 "close the day" framing in [A1325](https://github.com/clintongormley/waitron/blob/e40d2721cd1d8e6b70e203c45a3714a57d803f02/docs/backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 and absorbs [A239](#cash-in-and-out-a239).
 
+_22 November 2026: The [implemented reminder and email plan](../plans/2026-11-21-a1325-close-a-drawer-7-warning.md)
+follows the watcher's clearance of 21 November at 18:02. The dashboard warning repeats daily after
+closing. The daily Sales email keeps its existing schedule and opt-in recipients and includes
+reminders already due when it is queued._
+
 ## Intent
 
 A restaurant ends its night with one job: count the cash, take out what is not needed for tomorrow, and

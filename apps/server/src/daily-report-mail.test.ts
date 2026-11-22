@@ -13,11 +13,12 @@ import { persons } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
+import { decimal } from "@waitron/shared";
 import { dailyReportMail, queueDailyReportMail } from "./daily-report-mail.js";
 import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
 import { runMailPass } from "./mail-sender.js";
+import { DAILY_REPORT_EMAIL_WORDS } from "./i18n/daily-report-email.js";
 import { provisionBillVenue } from "./testing/bill-venue.js";
-import { decimal } from "@waitron/shared";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
 
 const suite = useVenueDb({
@@ -97,7 +98,7 @@ it("queues a report once per day and recipient and rechecks each recipient at se
     },
   ]);
   expect(sent[0]?.text).toContain("Coffee  1,5  ");
-  expect(sent[0]?.text).not.toContain("Cierres de caja");
+  expect(sent[0]?.text).not.toContain(DAILY_REPORT_EMAIL_WORDS.es.drawerCloses);
   expect(sent[0]?.text).toContain("\n0%  ");
   expect(await queued()).toEqual(
     expect.arrayContaining([
@@ -174,13 +175,13 @@ it("emails drawer counts and differences even on a day without sales", async () 
   expect(en).toMatch(
     /Sales +0.*\n[\s\S]*Drawer closes\nHistory drawer.*Counted.*8\.00.*Difference.*-€2\.00/,
   );
-  expect(es).toMatch(
-    /Ventas +0.*\n[\s\S]*Cierres de caja\nHistory drawer.*Recuento.*8,00.*Diferencia.*-2,00/,
+  const spanish = DAILY_REPORT_EMAIL_WORDS.es;
+  expect(es).toContain(`${spanish.sales}  0  `);
+  expect(es).toContain(
+    `\n${spanish.drawerCloses}\nHistory drawer · ${spanish.drawerCounted} 8,00\u00a0€ · ${spanish.drawerDifference} -2,00\u00a0€`,
   );
   expect(en).toContain("Back bar needs a close. Assign it to a till so staff can close it.");
-  expect(es).toContain(
-    "Falta cerrar Back bar. Asígnalo a un TPV para que el personal pueda cerrarlo.",
-  );
+  expect(es).toContain(spanish.drawerNeedsTill("Back bar"));
   expect(en).not.toContain("Later drawer");
   expect(en).toContain("https://box.test/sales");
   expect(es).toContain("https://box.test/sales");
