@@ -1949,7 +1949,6 @@ describe("setup-app", () => {
   it.each([
     ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
     ["provisioning.invalid_locales", "Choose the receipt language."],
-    ["provisioning.duplicate_series_code", "Give each series its own code."],
     ["fiscal.regime_not_implemented", "isn't supported yet"],
   ])(
     "routes venue-data code %s BACK to the venue form with its message",

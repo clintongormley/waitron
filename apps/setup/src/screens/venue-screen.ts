@@ -126,8 +126,6 @@ const SERIES_FIELDS: readonly TextField[] = [
   "fullSeriesCode",
   "correctiveSeriesCode",
 ];
-const isSeriesField = (key: string | undefined): boolean =>
-  SERIES_FIELDS.some((field) => field === key);
 
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold as one field. `taxpayerDomicile`
@@ -679,11 +677,11 @@ export class SetupVenueScreen extends LitElement {
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     // Editing the field the server refused retires that mark: the new value has not been refused.
-    // A repeated series code is mended by changing either code, so any series code retires it.
+    // A repeated series code is mended by changing either of the codes that repeat each other.
     const repeated: ReadonlySet<string | undefined> = this.#repeatedSeriesCodes();
     if (
       this.serverInvalid?.key === key ||
-      (isSeriesField(key) && repeated.has(this.serverInvalid?.key))
+      (repeated.has(key) && repeated.has(this.serverInvalid?.key))
     )
       this.serverInvalid = undefined;
     const value = event.detail.value;

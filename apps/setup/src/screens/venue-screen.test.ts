@@ -986,9 +986,13 @@ describe("setup-venue-screen form errors", () => {
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it.each(["seriesCode", "fullSeriesCode", "correctiveSeriesCode"])(
-    "words a refused repeated series code as the form does, and drops it when %s changes",
-    async (edited) => {
+  it.each([
+    ["seriesCode", true],
+    ["fullSeriesCode", false],
+    ["correctiveSeriesCode", true],
+  ])(
+    "words a refused repeated series code as the form does; editing %s drops it: %s",
+    async (edited, drops) => {
       const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
         draft: { venue: { seriesCode: "FS", correctiveSeriesCode: "FS" } },
         invalidField: "correctiveSeriesCode",
@@ -1002,8 +1006,8 @@ describe("setup-venue-screen form errors", () => {
       expect(errorOf(el, "correctiveSeriesCode")).toBe(t("venue.error.series_codes"));
 
       await type(el, edited, "FT");
-      expect(errorOf(el, "correctiveSeriesCode")).toBe("");
-      expect(await bottomOf(el)).toBe("");
+      expect(errorOf(el, "correctiveSeriesCode")).toBe(drops ? "" : t("venue.error.series_codes"));
+      if (drops) expect(await bottomOf(el)).toBe("");
     },
   );
 

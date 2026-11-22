@@ -360,7 +360,6 @@ const restoreOrResetRefusalWords = (
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
-  "provisioning.duplicate_series_code": "shell.venue_error.duplicate_series_code",
   "fiscal.regime_not_implemented": "shell.venue_error.regime_not_implemented",
 };
 
