@@ -1,6 +1,8 @@
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
+  appendDrawerEntry,
+  drawerEntries,
   finishDrawerClose,
   persons,
   readDrawerClose,
@@ -14,7 +16,13 @@ import { authorize } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveVenueClock } from "@waitron/reporting";
 import { readJsonBody } from "@waitron/server-kit";
-import { AppError, decimal, deviceOrigin, resolveActiveLocale } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  decimalToCents,
+  deviceOrigin,
+  resolveActiveLocale,
+} from "@waitron/shared";
 import "./errors.js";
 import { readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
@@ -30,9 +38,9 @@ function invalidField(field: string): never {
   throw new AppError("drawer.close_invalid_field", { field });
 }
 
-function amount(value: unknown, field: string) {
+function amount(value: unknown, field: string, invalid = invalidField) {
   if (typeof value !== "string" || !/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(value))
-    return invalidField(field);
+    return invalid(field);
   return decimal(value);
 }
 
@@ -49,6 +57,38 @@ function firstCountId(c: Context) {
 }
 
 type Actor = Parameters<typeof saveDrawerCount>[1];
+
+function invalidEntry(field: string): never {
+  throw new AppError("drawer.entry_invalid_field", { field });
+}
+
+async function recordCashEntry(tx: Transaction, actor: Actor, body: Record<string, unknown>) {
+  const printerId = canonicaliseUuid(body.printerId) ?? invalidEntry("printerId");
+  if (printerId !== actor.printerId) throw new AppError("drawer.entry_changed", {});
+  const id = canonicaliseUuid(body.submissionId) ?? invalidEntry("submissionId");
+  const { kind } = body;
+  if (kind !== "cash_in" && kind !== "cash_out") return invalidEntry("kind");
+  const cents = decimalToCents(amount(body.amount, "amount", invalidEntry));
+  if (cents === 0) return invalidEntry("amount");
+  const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+  if (reason.length === 0 || reason.length > 500) return invalidEntry("reason");
+  const signed = kind === "cash_in" ? cents : -cents;
+
+  const [earlier] = await tx.select().from(drawerEntries).where(eq(drawerEntries.id, id));
+  if (earlier === undefined) {
+    await appendDrawerEntry(tx, { ...actor, id, kind, amount: signed, facts: { reason } });
+  } else if (
+    earlier.printerId !== printerId ||
+    earlier.personId !== actor.personId ||
+    earlier.deviceId !== actor.deviceId ||
+    earlier.kind !== kind ||
+    earlier.amount !== signed ||
+    earlier.facts?.reason !== reason
+  ) {
+    throw new AppError("submission.id_reused", { submissionId: id });
+  }
+  return { id };
+}
 
 export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   function onDrawer<T extends object>(
@@ -87,6 +127,8 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
       return c.json(result);
     });
   }
+
+  app.post("/api/drawer/entries", (c) => onDrawer(c, recordCashEntry));
 
   app.get(DRAWER_CLOSE, (c) => onDrawer(c, (tx, actor) => readDrawerClose(tx, actor.printerId)));
   app.post(`${DRAWER_CLOSE}/count`, (c) =>

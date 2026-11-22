@@ -1702,6 +1702,23 @@ export const en = {
   "payment_slip.request": "Print payment slip",
   "payment_slip.queued": "Payment slip sent to the printer.",
   "payment_slip.capture_failed": "Payment received, but the payment slip could not print.",
+  "drawer_entry.title": "Cash in or out",
+  "drawer_entry.direction": "Cash movement",
+  "drawer_entry.in": "Cash in",
+  "drawer_entry.out": "Cash out",
+  "drawer_entry.amount": "Amount",
+  "drawer_entry.reason": "Reason",
+  "drawer_entry.amount_error": "Enter a positive amount with up to two decimal places.",
+  "drawer_entry.reason_error": "Enter a reason of up to 500 characters.",
+  "drawer_entry.saved": "Cash entry saved.",
+  "drawer_entry.save": "Save",
+  "drawer_entry.done": "Done",
+  "drawer_entry.failed": "Could not save the cash entry. Try again.",
+  "drawer_entry.reopen": "The drawer changed. Close this window and open Cash in or out again.",
+  "drawer_entry.reused":
+    "This entry was already submitted with different details. Close this window and open Cash in or out again.",
+  "drawer_entry.permission":
+    "Your role cannot record cash in this drawer. Log out and sign in with the Open cash drawers permission.",
   "drawer_close.title": "Close drawer",
   "drawer_close.permission":
     "Your role cannot close this drawer. Log out and sign in with the Open cash drawers permission.",
@@ -3967,6 +3984,24 @@ export const es: Record<StringKey, string> = {
   "payment_slip.request": "Imprimir justificante de pago",
   "payment_slip.queued": "Justificante de pago enviado a la impresora.",
   "payment_slip.capture_failed": "Pago recibido, pero no se pudo imprimir el justificante de pago.",
+  "drawer_entry.title": "Entrada o salida de efectivo",
+  "drawer_entry.direction": "Movimiento de efectivo",
+  "drawer_entry.in": "Entrada",
+  "drawer_entry.out": "Salida",
+  "drawer_entry.amount": "Importe",
+  "drawer_entry.reason": "Motivo",
+  "drawer_entry.amount_error": "Introduce un importe positivo con hasta dos decimales.",
+  "drawer_entry.reason_error": "Introduce un motivo de hasta 500 caracteres.",
+  "drawer_entry.saved": "Movimiento guardado.",
+  "drawer_entry.save": "Guardar",
+  "drawer_entry.done": "Hecho",
+  "drawer_entry.failed": "No se pudo guardar el movimiento. Inténtalo de nuevo.",
+  "drawer_entry.reopen":
+    "El cajón ha cambiado. Cierra esta ventana y vuelve a abrir Entrada o salida de efectivo.",
+  "drawer_entry.reused":
+    "Este movimiento ya se envió con otros datos. Cierra esta ventana y vuelve a abrir Entrada o salida de efectivo.",
+  "drawer_entry.permission":
+    "Tu rol no permite registrar efectivo en este cajón. Cierra sesión e inicia sesión con el permiso Abrir cajones.",
   "drawer_close.title": "Cerrar cajón",
   "drawer_close.permission":
     "Tu rol no puede cerrar este cajón. Cierra sesión y vuelve a entrar con el permiso Abrir cajones.",

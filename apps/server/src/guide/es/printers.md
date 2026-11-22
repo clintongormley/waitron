@@ -82,6 +82,9 @@ aparece un terminal, asigna el cajón en **Dispositivos**. Si el ajuste del caj�
 actívalo en la calibración. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
+Si el cajón asignado no se abre, puedes usar la llave y
+[registrar el movimiento de efectivo en el terminal](table-service.md#drawer-cash-entry).
+
 ## Cola de impresión {#print-queue}
 
 Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora

@@ -111,7 +111,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 2026-11-17):
 close the day, then A947 and its handover bundles.
 
-- [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
+- [Close the day: finish Sales reporting, reminders and waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 - [Series and module-preparation gaps at handover](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 - [Finish the clock work: a check at every start and every change](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
@@ -827,7 +827,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Nothing covers the order screen's bar** (bundle of 1, size S, needs the owner). Holds A1211. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
-- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06). Staff can close a drawer at the till. Sales shows the counts and can reprint a finished close. Recording cash top-ups and other withdrawals comes next. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
+- **Close the day: count the cash and waiter floats** (bundle of 2, 1 go-live, 1 important, size L, design approved 2026-11-06). Staff can close a drawer and record cash top-ups and withdrawals at the till. Sales shows the counts and can reprint a finished close. Retiring the saved day report comes next. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another

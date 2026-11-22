@@ -1224,7 +1224,8 @@ export class TillShell extends LitElement {
       items["find-bill"],
       items.schedule,
       items.profile,
-      this.#drawerCloseItem(),
+      this.#drawerItem("close"),
+      this.#drawerItem("cash"),
       items["transfer-count"],
       items["transfer-button"],
     ];
@@ -1298,15 +1299,15 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
-  #drawerCloseItem() {
+  #drawerItem(action: "close" | "cash") {
     return this.canCloseDrawer
       ? html`<wt-button
-          class="drawer-close"
+          class=${`drawer-${action}`}
           @click=${(event: Event) =>
-            this.#emit("open-drawer-close", {
+            this.#emit(`open-drawer-${action}`, {
               opener: (event.currentTarget as HTMLElement).closest("wt-row-actions"),
             })}
-          >${t("drawer_close.title")}</wt-button
+          >${t(action === "close" ? "drawer_close.title" : "drawer_entry.title")}</wt-button
         >`
       : nothing;
   }
@@ -1328,7 +1329,7 @@ export class TillShell extends LitElement {
       ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
       ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
       ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
-      ${this.#drawerCloseItem()} ${this.#chooser("group")}
+      ${this.#drawerItem("close")} ${this.#drawerItem("cash")} ${this.#chooser("group")}
       ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
       ${this.#reportOption()}${this.#aboutOption()} ${action("logout", "logout", t("shell.logout"))}
       ${

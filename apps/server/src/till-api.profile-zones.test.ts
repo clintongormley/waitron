@@ -259,9 +259,9 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * board `/api/expo/board` ("A773 pass board: all stations" in `till-api.expo-board.test.ts`)
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;
- * the drawer open and close routes, which use the device's assigned drawer
- * (`drawer-close-api.test.ts` covers continuing on another assigned till and refusing a
- * count from a different drawer), the authorizer and reason lists and
+ * the drawer open, entry and close routes, which use the device's assigned drawer
+ * (`drawer-close-api.test.ts` covers continuing a count on another assigned till and refusing a
+ * count or entry for a different drawer), the authorizer and reason lists and
  * `GET/PUT /api/device/equipment`, which name no zone.
  */
 

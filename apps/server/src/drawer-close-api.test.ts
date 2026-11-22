@@ -40,6 +40,106 @@ function postCount(body: Record<string, unknown>) {
   });
 }
 
+const entriesPath = "/api/drawer/entries";
+
+function postEntry(fields: Record<string, unknown> = {}) {
+  return send(venue.app, venue.cookie, "POST", entriesPath, {
+    submissionId: randomUUID(),
+    printerId,
+    kind: "cash_in",
+    amount: "10.20",
+    reason: "  Change for the till  ",
+    ...fields,
+  });
+}
+
+it("records signed movement once per submission and leaves the drawer mechanism alone", async () => {
+  const submissionId = randomUUID();
+  const first = await postEntry({ submissionId });
+  expect(first).toEqual({ status: 200, json: { id: submissionId, printerId } });
+  expect(await postEntry({ submissionId, amount: "10.2" })).toEqual(first);
+  expect(await postEntry({ submissionId, reason: "A different movement" })).toEqual({
+    status: 409,
+    json: { code: "submission.id_reused", params: { submissionId } },
+  });
+  await inTx(venue, (tx) =>
+    tx.update(printers).set({ active: false }).where(eq(printers.id, printerId)),
+  );
+  expect(
+    await postEntry({ kind: "cash_out", amount: "2.03", reason: "Paid supplier" }),
+  ).toMatchObject({
+    status: 200,
+  });
+  const entries = await store.db.select().from(drawerEntries).orderBy(drawerEntries.sequence);
+  expect(entries).toMatchObject([
+    {
+      id: submissionId,
+      printerId,
+      personId: venue.operatorId,
+      deviceId: venue.deviceId,
+      kind: "cash_in",
+      amount: 1020,
+      facts: { reason: "Change for the till" },
+    },
+    {
+      printerId,
+      personId: venue.operatorId,
+      deviceId: venue.deviceId,
+      kind: "cash_out",
+      amount: -203,
+      facts: { reason: "Paid supplier" },
+    },
+  ]);
+  expect(entries[0]?.recordedAt).toBe(new Date(entries[0]!.recordedAt).toISOString());
+  expect(await store.db.select().from(printJobs)).toEqual([]);
+});
+
+it.each([
+  [{ amount: "0.00" }, "amount"],
+  [{ amount: "-1.00" }, "amount"],
+  [{ amount: "1.001" }, "amount"],
+  [{ amount: 1.2 }, "amount"],
+  [{ kind: ["cash_out"] }, "kind"],
+  [{ reason: "   " }, "reason"],
+  [{ reason: "x".repeat(501) }, "reason"],
+  [{ submissionId: null }, "submissionId"],
+])("refuses an invalid cash entry field %#", async (fields, field) => {
+  expect(await postEntry(fields)).toEqual({
+    status: 400,
+    json: { code: "drawer.entry_invalid_field", params: { field } },
+  });
+  expect(await store.db.select().from(drawerEntries)).toEqual([]);
+});
+
+it("refuses cash entry for a different drawer and for staff without the drawer grant", async () => {
+  expect(await postEntry({ printerId: randomUUID() })).toEqual({
+    status: 409,
+    json: { code: "drawer.entry_changed", params: {} },
+  });
+  await inTx(venue, (tx) =>
+    tx.delete(personRoles).where(eq(personRoles.personId, venue.operatorId)),
+  );
+  expect(await postEntry()).toEqual({
+    status: 403,
+    json: { code: "authorization.not_permitted", params: { permission: "cash.drawer" } },
+  });
+  expect(await store.db.select().from(drawerEntries)).toEqual([]);
+});
+
+it("keeps the audited Open drawer action bound to the drawer the cash-entry form names", async () => {
+  const open = (expectedPrinterId: string) =>
+    send(venue.app, venue.cookie, "POST", "/api/drawer/open", { expectedPrinterId });
+  expect(await open(randomUUID())).toEqual({
+    status: 409,
+    json: { code: "drawer.entry_changed", params: {} },
+  });
+  expect(await store.db.select().from(printJobs)).toEqual([]);
+  expect((await open(printerId)).status).toBe(200);
+  expect(
+    await store.db.select({ printerId: printJobs.printerId, kind: printJobs.kind }).from(printJobs),
+  ).toEqual([{ printerId, kind: "drawer" }]);
+});
+
 it("shows expected cash only after saving a count and lets another assigned till resume it", async () => {
   const order = await tabWith(venue, "Croquettes");
   expect((await cashPayment(venue, venue.cookie, order, "10.00")).status).toBe(200);

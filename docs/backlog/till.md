@@ -445,16 +445,8 @@ and builds on the completed refund flow (#3971). Sales and the daily email keep 
 existing reporting date, including later writes dated to that day. A saved drawer close keeps its
 count and withdrawal, and later cash movement belongs to the next close. Sales shows drawer counts
 and withdrawals and can reprint a finished close. Staff count and close a drawer from **More**
-on the till. The next slice records cash top-ups and other withdrawals.
-
-## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
-
-Now part of [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md) (owner,
-2026-11-06). Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
-recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
-in float cash). The entries replace the two typed totals the daily close takes today (opening float
-and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
-Enter cash counts through **Close drawer** on the till.
+on the till and record cash top-ups and withdrawals there. The next slice switches Sales to the
+recorded figures for the selected date.
 
 ## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
@@ -1146,15 +1138,13 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Close the day: count the cash, record cash in and out, waiter floats
 
-3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size L.
 
 - **A1325. Close the day: count the cash and save the day's close — OPEN, design approved
   2026-11-06, planned.** The north star's "closing". A close is a counted withdrawal from one
-  drawer, built together with A239, and A240 can land after it.
+  drawer. Staff can also record cash in and out. Sales still needs to drop the saved day report,
+  and the daily warning and email remain.
   [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
-- **Recorded cash in and out of a till's drawer (A239) — OPEN, covered by A1325's approved design.**
-  Each top-up or removal of cash from a drawer is a recorded entry: who, how much, why, when.
-  [Detail](till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03)
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
   A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
   (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).

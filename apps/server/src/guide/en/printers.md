@@ -74,6 +74,9 @@ assign the drawer in **Devices** first. If the drawer setting is off, turn it on
 **Delete anyway** keeps the balance and any pending count if you later add a printer at the same
 address and Waitron restores its registration.
 
+If an assigned drawer stays shut, you can use its key to
+[record the cash movement on the till](table-service.md#drawer-cash-entry).
+
 ## Print Queue {#print-queue}
 
 Open **Print Queue** to see why a job is waiting. To add or remove a computer that prints, see [Print agents](printers.md#print-agents). If no print agent sees a USB or Bluetooth

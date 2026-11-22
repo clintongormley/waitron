@@ -1992,6 +1992,14 @@ export type SavedDrawerCount = {
   confirmSequence: number;
 };
 
+export type DrawerEntryRequest = {
+  printerId: string;
+  submissionId: string;
+  kind: "cash_in" | "cash_out";
+  amount: string;
+  reason: string;
+};
+
 export type DrawerCloseRead =
   | { printerId: string; state: "new"; openingCash: string; startSequence: number }
   | SavedDrawerCount;
@@ -3478,7 +3486,7 @@ export class TillApi {
 
   /**
    * Open the cash drawer with no sale → `POST /api/drawer/open`. Authorized and audited server-side; the
-   * device's drawer is resolved there, so it takes no id.
+   * device's drawer is resolved there. A cash-entry form can supply its expected printer id.
    *
    * An operator whose role lacks `cash.drawer` is refused
    * `authorization.not_permitted` (403); the caller then fetches {@link listDrawerAuthorizers} and
@@ -3486,8 +3494,15 @@ export class TillApi {
    * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
    * (401); a device with no drawer `drawer.no_printer` (400).
    */
-  async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
-    await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});
+  async openDrawer(
+    override?: { personId: string; pin: string },
+    expectedPrinterId?: string,
+  ): Promise<void> {
+    await this.#request<void>("/api/drawer/open", "POST", { override, expectedPrinterId });
+  }
+
+  saveDrawerEntry(body: DrawerEntryRequest): Promise<{ id: string; printerId: string }> {
+    return this.#request("/api/drawer/entries", "POST", body);
   }
 
   readDrawerClose(): Promise<DrawerCloseRead> {
