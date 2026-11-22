@@ -28,7 +28,7 @@ import { generateNodeKeyPair, signDocumentBody, type Endorsement } from "@waitro
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { withCapturedStdout } from "./testing/boot-harness.js";
+import { poll, withCapturedStdout } from "./testing/boot-harness.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -186,16 +186,6 @@ afterAll(async () => {
   }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** Up to ~10s: the boot loop's wall clock is not injectable, so passes are observed by polling. */
-async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T | undefined> {
-  for (let i = 0; i < 200; i += 1) {
-    const value = await predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  return undefined;
-}
 
 /** Waits for the background loop to record at least one pass (proof it is live). */
 async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {

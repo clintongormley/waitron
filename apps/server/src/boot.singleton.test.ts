@@ -7,7 +7,6 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
@@ -24,6 +23,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
+import { poll, waitForEvent, withCapturedStdout, type LogLine } from "./testing/boot-harness.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -162,58 +162,6 @@ afterAll(async () => {
   if (primaryVenueDir !== undefined) await rm(primaryVenueDir, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
-
-/** Poll `predicate` up to ~10s for its first defined value. */
-async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
-  for (let i = 0; i < 200; i += 1) {
-    const value = predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  return undefined;
-}
-
-/** `boot.ts` logs to `process.stdout.write`; every chunk is still forwarded to the real writer. */
-async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promise<T> {
-  const original = process.stdout.write.bind(process.stdout);
-  const lines: string[] = [];
-  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
-    lines.push(...String(chunk).split("\n").filter(Boolean));
-    return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
-  }) as typeof process.stdout.write;
-  try {
-    return await fn(lines);
-  } finally {
-    process.stdout.write = original;
-  }
-}
-
-interface LogLine {
-  event: string;
-  [key: string]: unknown;
-}
-
-/** The first captured line naming `event`, waiting for it to arrive rather than assuming it already has. */
-async function waitForEvent(lines: readonly string[], event: string): Promise<LogLine> {
-  const found = await poll(() => {
-    for (const line of lines) {
-      let parsed: LogLine | undefined;
-      try {
-        parsed = JSON.parse(line) as LogLine;
-      } catch {
-        continue;
-      }
-      if (parsed.event === event) return parsed;
-    }
-    return undefined;
-  });
-  if (found === undefined) {
-    throw new Error(
-      `expected a "${event}" log line within the wait window, saw: ${lines.join("\n")}`,
-    );
-  }
-  return found;
-}
 
 /** Exact, not prefix: `backup.disabled` and `backup.disabled_open_failed` must be told apart. */
 function hasEvent(lines: readonly string[], event: string): boolean {

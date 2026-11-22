@@ -67,6 +67,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
+import { POLL_INTERVAL_MS, pollOrThrow } from "./testing/boot-harness.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -341,15 +342,7 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-/** Throws on timeout, so a caller never proceeds on an unmet condition. */
-async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {
-  for (let i = 0; i < 300; i += 1) {
-    const value = await predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  throw new Error("poll: predicate did not become defined within ~15s");
-}
+const POLL_TRIES_15S = 15_000 / POLL_INTERVAL_MS;
 
 async function postPromote(base: string, body: unknown): Promise<Response> {
   return fetch(`${base}/management-api/promote`, {
@@ -423,7 +416,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
 
     let primary: StartedServer | undefined;
     try {
-      await poll(async () => mirror.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => mirror.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
       // The refusals run first, on the still-unpromoted mirror.
       const wrongBg = await postPromote(mirrorBase, {
@@ -492,7 +485,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
         { timings: TIMINGS, boxHost: synchronisedBoxHost() },
       );
       const primaryBase = `http://127.0.0.1:${httpPort()}`;
-      await poll(async () => primary!.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => primary!.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
       const node = await (await fetch(`${primaryBase}/api/node`)).json();
       expect(node.acceptingSales).toBe(true);
@@ -560,12 +553,12 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(mgmtLogin.status).toBe(200);
       const mgmtCookie = mgmtLogin.headers.get("set-cookie")!.split(";")[0]!;
-      const awaiting = await poll(async () => {
+      const awaiting = await pollOrThrow(async () => {
         const status = await (
           await fetch(`${primaryBase}/api/box/status`, { headers: { cookie: mgmtCookie } })
         ).json();
         return status.awaitingFiscalCertificate === true ? status : undefined;
-      });
+      }, POLL_TRIES_15S);
       expect(awaiting.awaitingFiscalCertificate).toBe(true);
 
       expect(await readEnvios(db.main)).toEqual([
@@ -619,7 +612,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      await poll(async () => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => server.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
       const operation = keyFixture.request("promote");
       const res = await postPromote(base, {
@@ -742,7 +735,7 @@ describe("a real offer beside a real promotion on a real start", () => {
       { timings: TIMINGS },
     );
     try {
-      await poll(async () => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => server.health.lastPassAt ?? undefined, POLL_TRIES_15S);
       await body({
         base: `http://127.0.0.1:${httpPort()}`,
         seed,

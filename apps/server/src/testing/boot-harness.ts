@@ -11,11 +11,6 @@ import { Agent } from "undici";
 import { nodes, openVenueDatabase, taxpayer, type Database, type VenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-/**
- * Helpers shared by `boot.test.ts`, `boot.restore.test.ts` and `boot.setup-routes.test.ts`. Each of
- * those files mocks its own modules: `vi.mock` is hoisted per test file, so no mock lives here.
- */
-
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
@@ -107,17 +102,37 @@ export function httpsVia(ca: string | Buffer): {
   };
 }
 
-/** Polls `predicate` for its first defined result, or `undefined` once the budget is spent. */
 export const POLL_TRIES = 200;
 export const POLL_INTERVAL_MS = 50;
 
-export async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
-  for (let i = 0; i < POLL_TRIES; i += 1) {
-    const value = predicate();
+/**
+ * Polls `predicate` for its first defined result, or `undefined` once `tries` are spent. A promise
+ * it returns is awaited, so a promise cannot itself be the found value.
+ */
+export async function poll<T>(
+  predicate: () => T | undefined | Promise<T | undefined>,
+  tries: number = POLL_TRIES,
+): Promise<T | undefined> {
+  for (let i = 0; i < tries; i += 1) {
+    const value = await predicate();
     if (value !== undefined) return value;
     await delay(POLL_INTERVAL_MS);
   }
   return undefined;
+}
+
+/** As `poll`, but throws once `tries` are spent, so a caller never proceeds on an unmet condition. */
+export async function pollOrThrow<T>(
+  predicate: () => T | undefined | Promise<T | undefined>,
+  tries: number = POLL_TRIES,
+): Promise<T> {
+  const value = await poll(predicate, tries);
+  if (value === undefined) {
+    throw new Error(
+      `predicate did not become defined after ${tries} tries (retry delay ${POLL_INTERVAL_MS}ms)`,
+    );
+  }
+  return value;
 }
 
 /**
