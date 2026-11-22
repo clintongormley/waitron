@@ -3,6 +3,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
+import { groupedJoinCode } from "@waitron/shared";
 import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -34,11 +35,6 @@ const JOIN_ENDED = new Set([
   "mirror.join_not_found",
   "mirror.join_stopped_after_listing",
 ]);
-
-/** Six digits in two groups of three, as the new box shows them. */
-function grouped(code: string): string {
-  return `${code.slice(0, 3)} ${code.slice(3)}`;
-}
 
 /** Codes whose shared words serve other screens too, so a join refusal words them here. */
 const JOIN_WORDS: Partial<Record<string, StringKey>> = {
@@ -585,9 +581,9 @@ export class ServersScreen extends LitElement {
                               data-choice=${code}
                               ?disabled=${this.joinBusy !== null}
                               ?loading=${this.joinBusy === code}
-                              aria-label=${fill("servers.join_choice_label", { code: grouped(code) })}
+                              aria-label=${fill("servers.join_choice_label", { code: groupedJoinCode(code) })}
                               @click=${() => void this.#approveJoin(code)}
-                              >${grouped(code)}</wt-button
+                              >${groupedJoinCode(code)}</wt-button
                             >`,
                         )}
                       </div>`

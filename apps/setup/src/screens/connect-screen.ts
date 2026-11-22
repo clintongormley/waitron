@@ -1,5 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { groupedJoinCode } from "@waitron/shared";
 import {
   FormFeedback,
   submitOnEnter,
@@ -40,9 +41,6 @@ function originOf(typed: string): string {
     return typed;
   }
 }
-
-/** "482913" as "482 913", as the main box's Servers page shows it, never broken across lines. */
-const grouped = (code: string) => `${code.slice(0, 3)}\u00a0${code.slice(3)}`;
 
 // A state's words name Start again, the one way on that its view draws; a refusal of Join names Join.
 const ENDED_WORDS: Record<string, StringKey> = {
@@ -436,7 +434,7 @@ export class SetupConnectScreen extends LitElement {
       case "waiting":
         return t("connect.waiting.lead");
       case "approved":
-        return `${format("connect.approved", { code: grouped(view.code) })} ${t("connect.approved.hint")}`;
+        return `${format("connect.approved", { code: groupedJoinCode(view.code) })} ${t("connect.approved.hint")}`;
       case "elsewhere":
         return t("connect.elsewhere");
       case "replaced":
@@ -457,7 +455,7 @@ export class SetupConnectScreen extends LitElement {
       0,
       Math.ceil((view.timeLeftMs - (performance.now() - this.#shownAt)) / 60_000),
     );
-    return html`<p class="code" data-test="code">${grouped(view.code)}</p>
+    return html`<p class="code" data-test="code">${groupedJoinCode(view.code)}</p>
       <p class="detail" data-test="addresses">
         ${format("connect.waiting.addresses", { addresses: view.addresses.join(", ") })}
       </p>

@@ -144,6 +144,7 @@ export type {
   ContentLanguages,
 } from "./content-languages.js";
 export { capitaliseFirst } from "./capitalise.js";
+export { groupedJoinCode } from "./join-code.js";
 export { conjunctionList } from "./list.js";
 export {
   BAND_RANK,

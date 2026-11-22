@@ -122,9 +122,13 @@ describe("a box asking to join, on the Servers screen", () => {
     const label = joinDialog(el).querySelector(`#${group.getAttribute("aria-labelledby")}`)!;
     expect(label.textContent!.trim()).toBe("Tap the code the new box shows");
     const buttons = choiceButtons(el);
-    expect(buttons.map((b) => b.textContent!.trim())).toEqual(["482 913", "105 770", "930 264"]);
+    expect(buttons.map((b) => b.textContent!.trim())).toEqual([
+      "482\u00a0913",
+      "105\u00a0770",
+      "930\u00a0264",
+    ]);
     expect(buttons.every((b) => b.size === "lg")).toBe(true);
-    expect(buttons[0]!.getAttribute("aria-label")).toBe("Code 482 913");
+    expect(buttons[0]!.getAttribute("aria-label")).toBe("Code 482\u00a0913");
     expect(find(el, "join-dialog-address")!.textContent).toContain("192.168.1.23");
   });
 
