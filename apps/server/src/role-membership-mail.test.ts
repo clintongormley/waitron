@@ -18,7 +18,7 @@ import { runMailPass } from "./mail-sender.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const now = new Date("2026-11-13T12:00:00Z");
 const cloudRole = "Night service ".repeat(5) + "Late crew\u{1F37D}";
-const fullRole = cloudRole + " and close";
+const fullRole = cloudRole + "2 and close";
 it.each([
   {
     locale: "en-GB",
@@ -58,7 +58,7 @@ it.each([
   async ({ locale, venueLocale, change, builtInKey, roleName, subject, text }) => {
     await seedVenue(suite.db, { name: "Corner Bistro" });
     const editor = builtInKey === null ? "E".repeat(79) + "\u{1F37D}" : "Editor";
-    const fullEditor = builtInKey === null ? editor + " long name" : editor;
+    const fullEditor = builtInKey === null ? editor + "2 long name" : editor;
     const [person] = await seedPersons(suite.db, {
       displayName: "Waiter",
       email: "old@example.test",

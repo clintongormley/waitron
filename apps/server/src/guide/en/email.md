@@ -33,8 +33,9 @@ In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Ad
 
 In **System → Email**, turn on **Email the daily report**, choose recipients and save. Each
 recipient needs an account email address and access to **Sales & takings**. Set up a mail server
-on the same page so Waitron can deliver the report. To print category sales or
-download the accountant export, open **Sales & takings** and select the day.
+on the same page so Waitron can deliver the report. To get the day's figures yourself, open
+**Sales & takings** and select the day. Choose a printer and select **Print category sales**, or
+select **Download for accountant (XLSX)** if you can export reports.
 
 Waitron emails the most recently ended trading day's report after the automatic close completes.
 You can also receive that report after a box restart. After a closure spanning several days, open

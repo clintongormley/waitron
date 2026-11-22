@@ -33,7 +33,7 @@ it.each([
   async ({ locale, venueLocale, subject, text }) => {
     await seedVenue(suite.db, { name: "Corner Bistro" });
     const editor = locale === null ? "E".repeat(79) + "\u{1F37D}" : "Editor";
-    const fullEditor = locale === null ? editor + " long name" : editor;
+    const fullEditor = locale === null ? editor + "2 long name" : editor;
     const [person] = await seedPersons(suite.db, {
       displayName: "Waiter",
       email: "new@example.test",

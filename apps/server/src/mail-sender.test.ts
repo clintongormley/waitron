@@ -734,9 +734,6 @@ describe("one mail sender", () => {
     "server_saved",
     "unusable_server_saved",
     "already_saved",
-    "daily_report",
-    "invoice",
-    "box_alert",
   ] as const;
   it.each(noticeRelayCases)("routes a staff notice with Cloud %s", async (relay) => {
     await seedVenue(suite.db);
@@ -758,10 +755,8 @@ describe("one mail sender", () => {
       timeZone: "Europe/Madrid",
       expiresAt: "2026-11-09T13:00:00.000Z",
     };
-    const otherMail = relay === "daily_report" || relay === "invoice" || relay === "box_alert";
-    const kind = otherMail ? relay : "security_change";
-    await queue("one", { kind });
-    if (relay === "offline") await queue("second", { kind });
+    await queue("one", { kind: "security_change" });
+    if (relay === "offline") await queue("second", { kind: "security_change" });
     if (relay === "already_saved")
       await withTransaction(suite.db, (tx) =>
         saveSmtpForTest(tx, ring, { url: "smtp://mail.test", from: "from@example.test" }),
@@ -769,14 +764,8 @@ describe("one mail sender", () => {
     deps.owners = [
       {
         ...owner,
-        kind,
-        deliveryRule:
-          relay === "daily_report" ? "venue_smtp" : relay === "invoice" ? "invoice" : "notice",
-        compose: async () => ({
-          subject: "Notice",
-          text: "Message",
-          ...(otherMail ? {} : { staffNotice }),
-        }),
+        kind: "security_change",
+        compose: async () => ({ subject: "Notice", text: "Message", staffNotice }),
       },
     ];
     const noticeRelayAllowed = vi.fn<NonNullable<MailSenderDeps["noticeRelayAllowed"]>>(
@@ -806,9 +795,7 @@ describe("one mail sender", () => {
     } finally {
       writeTurn.mockRestore();
     }
-    expect(resolveAccountRelay).toHaveBeenCalledTimes(
-      otherMail || relay === "already_saved" ? 0 : 1,
-    );
+    expect(resolveAccountRelay).toHaveBeenCalledTimes(relay === "already_saved" ? 0 : 1);
     if (relay === "enabled") {
       expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
         grant,
@@ -824,6 +811,60 @@ describe("one mail sender", () => {
       status: sent ? "sent" : "pending",
       attempts: sent ? 1 : 0,
     });
+  });
+  it("keeps other mail off Cloud even when a due account link obtains a grant", async () => {
+    const otherMail = [
+      { kind: "box_alert", deliveryRule: "notice" },
+      { kind: "daily_report", deliveryRule: "venue_smtp" },
+      { kind: "invoice", deliveryRule: "invoice" },
+    ] as const;
+    for (const { kind } of otherMail) await queue(kind, { kind });
+    const grant = {
+      id: randomUUID(),
+      revision: 1,
+      expiresAt: "2026-11-10T00:00:00.000Z",
+      enabled: true,
+    };
+    const accountEmail = {
+      class: "password_reset" as const,
+      recipient: "private@example.test",
+      displayName: "Recipient",
+      locale: "en-GB",
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-09T13:00:00.000Z",
+      token: Buffer.alloc(32, 7).toString("base64url"),
+    };
+    const resolveAccountRelay = vi.fn(async () => grant);
+    const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+    deps.owners = [
+      ...otherMail.map((mail) => ({ ...owner, ...mail })),
+      {
+        ...owner,
+        kind: "account_action",
+        compose: async () => ({ subject: "Reset", text: "Message", accountEmail }),
+      },
+    ];
+    const sender: MailSenderDeps = {
+      ...deps,
+      resolveAccountRelay,
+      sendCloudEmail,
+      resolveDelivery: async () => ({ mode: "unconfigured" }),
+      noticeRelayAllowed: async () => true,
+    };
+    await runMailPass(sender);
+    expect(resolveAccountRelay).not.toHaveBeenCalled();
+    expect(sendCloudEmail).not.toHaveBeenCalled();
+    await queue("account", { kind: "account_action" });
+    await runMailPass(sender);
+    expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
+      grant,
+      expect.any(String),
+      accountEmail,
+      controller.signal,
+    );
+    for (const { kind } of otherMail)
+      expect(await row(kind)).toMatchObject({ status: "pending", attempts: 0 });
+    expect(await row("account")).toMatchObject({ status: "sent", attempts: 1 });
   });
   it("logs a relay availability failure once until recovery", async () => {
     await queue("account", { kind: "account_action" });
