@@ -872,9 +872,9 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
         }),
       );
       const [row] = await tx
-        .select({ desglose: registrosFacturacion.desglose })
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, saleId));
+        .select({ desglose: verifactuRecords.desglose })
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.saleId, saleId));
       return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
     });
 
