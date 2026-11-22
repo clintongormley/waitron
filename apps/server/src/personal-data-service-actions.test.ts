@@ -71,7 +71,7 @@ it("exports the subject’s recorded service actions and only their roles", asyn
       id: "party",
       state: "closed",
       openedAt: AT,
-      openedBy: "ana",
+      openedBy: "bea",
       closedAt: LATER,
       closedBy: "bea",
       name: "Private party",
@@ -210,10 +210,7 @@ it("exports the subject’s recorded service actions and only their roles", asyn
       { ...draft, yourPart: ["from"] },
     ],
     groups: [{ groupId: "group", action: "submitted", at: AT }],
-    parties: [
-      { partyId: "party", action: "opened", at: AT },
-      { partyId: "party", action: "answeredAllergyQuestion", at: LATER },
-    ],
+    parties: [{ partyId: "party", action: "answeredAllergyQuestion", at: LATER }],
     dishMoves: [
       {
         lineId: "served-line",
@@ -230,7 +227,10 @@ it("exports the subject’s recorded service actions and only their roles", asyn
     ...empty,
     orderEvents: [{ ...draft, yourPart: ["actor", "to"] }],
     groups: [{ groupId: "group", action: "fired", at: LATER }],
-    parties: [{ partyId: "party", action: "closed", at: LATER }],
+    parties: [
+      { partyId: "party", action: "opened", at: AT },
+      { partyId: "party", action: "closed", at: LATER },
+    ],
     cancellations: [{ lineId: "held-line", order: 42, at: LATER }],
     lateConfirmations: [{ lineId: "served-line", order: 42, sentAt: AT }],
   });
@@ -244,7 +244,7 @@ it("reads later pages after a concurrent edit and leaves out rows above the capt
     await tx.run(sql`
       with recursive history(n) as (select 1 union all select n + 1 from history where n < 202)
       insert into parties (id, opened_at, opened_by)
-      select 'party-' || n, ${AT}, case when n = 1 then 'ana' else 'bea' end
+      select 'party-' || n, ${AT}, case when n in (1, 100) then 'ana' else 'bea' end
       from history
     `);
   });
@@ -265,6 +265,7 @@ it("reads later pages after a concurrent edit and leaves out rows above the capt
     ...empty,
     parties: [
       { partyId: "party-1", action: "opened", at: AT },
+      { partyId: "party-100", action: "opened", at: AT },
       { partyId: "party-202", action: "closed", at: LATER },
     ],
   });

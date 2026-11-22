@@ -290,11 +290,11 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
     }
   });
   it.each([
-    ["en", "draft take-overs", "you resolved"],
-    ["es", "tomas de control de borradores", "resolviste"],
+    ["en", "draft take-overs", "department IDs"],
+    ["es", "tomas de control de borradores", "identificadores de los departamentos"],
   ] as const)(
     "describes service actions and resolved transfers in %s",
-    (language, drafts, resolved) => {
+    (language, drafts, departmentIds) => {
       const readme = personalDataReadme({
         language,
         venue: "Venue",
@@ -307,7 +307,7 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
         drafts,
       );
       expect(lines.find((line) => line.startsWith("- department-transfers.json:")) ?? "").toContain(
-        resolved,
+        departmentIds,
       );
     },
   );
