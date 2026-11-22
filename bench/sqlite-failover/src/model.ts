@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
 
 const SCHEMA = `
--- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:23,139).
+-- MODEL of verifactu_records (packages/fiscal-verifactu/src/schema/verifactu-records.ts).
 -- Append-only, hash-chained, keyed (node_id, secuencia). NOT the real ledger.
 CREATE TABLE IF NOT EXISTS records (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,
@@ -32,7 +32,7 @@ BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
 CREATE TABLE IF NOT EXISTS chain_head (
   node_id TEXT PRIMARY KEY, last_secuencia INTEGER NOT NULL, last_huella TEXT NOT NULL
 );
--- MODEL of envios (+ acks folded to \`acked\`). Submission state; child of records.
+-- MODEL of verifactu_submissions (+ acks folded to \`acked\`). Submission state; child of records.
 CREATE TABLE IF NOT EXISTS envios (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,
   estado TEXT NOT NULL CHECK (estado IN ('pendiente','enviando','enviado')),

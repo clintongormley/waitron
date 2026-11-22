@@ -1607,7 +1607,7 @@ a card payment's row moving through its states), `cadenas` and `registro_sif`
 and `order_amendments`, which must refuse both, came back with no trigger at all, because it is
 classified `state`. The class is wrong in both directions.
 
-**2026-11-22.** A1308 fiscal 1 renamed the two Veri*Factu tables in this measurement to `verifactu_identities` and `verifactu_submissions`.
+**2026-11-22.** A1308 fiscal 1 renamed `registro_sif` and `envios` to `verifactu_identities` and `verifactu_submissions`.
 
 So the declaration is its own marker: `appendOnly(table, class, reason)` beside `classify()` in
 `@waitron/sync-enrolment`, read by `orderedMigrationSets` off the descriptor's `classification` seat

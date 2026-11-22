@@ -37,7 +37,7 @@ describe("VeriFactu name map", () => {
     expect(renameSource("packages/fiscal-verifactu/src/query.test.ts", before)).toBe(after);
   });
 
-  it("renames the imported binding while preserving unrelated properties", () => {
+  it("renames the table binding and keeps named summary properties", () => {
     const before = [
       'import { envios } from "./schema/envios.js";',
       'db.select().from(envios).where(eq(envios.estado, "x"));',

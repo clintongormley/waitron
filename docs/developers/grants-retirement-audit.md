@@ -5,6 +5,9 @@
 > are renamed to `till_sessions`, `dashboard_sessions` and `account_actions`. Both session tables
 > now restrict person deletion through their person keys; the old table rows below are historical.
 
+> **2026-11-22, A1308 fiscal 1:** Use the module's current names for the fiscal tables in this
+> audit. See the [fiscal rename map](../../scripts/a1308/fiscal-rename-map.json).
+
 # Retirement of the old table-grants record
 
 You cannot use the old database's grants to decide what today's storage refuses. The A805 audit
