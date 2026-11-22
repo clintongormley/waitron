@@ -1,5 +1,5 @@
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -20,34 +20,12 @@ import { planVenue } from "@waitron/provisioning";
 import { personIdForLoginEmail } from "@waitron/identity";
 import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
-import { ownContactUrl, spareStoreUrl } from "../box-name.js";
-import {
-  JOIN_REVEAL_LABEL,
-  commitmentMatches,
-  joinCode,
-  revealAnswerFields,
-  verifyJoinMessage,
-} from "../box-join-code.js";
-import type { JoinedBox } from "../box-join-attempt.js";
-import type { LockedJoinBundle } from "../box-join-seal.js";
-import { isMirrorBundle } from "../mirror-bundle-fetch.js";
+import { createBoxJoinAttempt, type JoinedBox } from "../box-join-attempt.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
-import { generateStandbyIdentity } from "../reserved-identity.js";
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
-import {
-  approveJoin,
-  boxPost,
-  helloBody,
-  joiningBox,
-  mountBoxJoin,
-  pollJoin,
-  revealBody,
-  signedInCookie,
-  unlockJoin,
-  type HelloAnswer,
-} from "./box-join.js";
+import { appExchange, approveJoin, mountBoxJoin, signedInCookie } from "./box-join.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./membership-doc-fixture.js";
 import { applyWithFirstSetup } from "./minute-first-setup.js";
@@ -131,8 +109,14 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
   return { modules, mainId, mainKey, session, email, bundleApp };
 }
 
-/** The main box's database behind each app {@link mirrorBundleApp} made, for the approver's sign-in. */
-const MAIN_DATABASES = new WeakMap<Hono, Database>();
+/**
+ * The main box behind each app {@link mirrorBundleApp} made: its database, for the approver's
+ * sign-in, the state folder holding the certificate it serves, and its address.
+ */
+const MAIN_BOXES = new WeakMap<
+  Hono,
+  { db: Database; stateDir: string; advertisedOrigin: string }
+>();
 
 /** The real box-join routes of the main box `nodeId`, whose files are `box`'s. */
 export function mirrorBundleApp(
@@ -151,7 +135,7 @@ export function mirrorBundleApp(
     designated: { nodeId },
     wakeSpareJoin: () => {},
   });
-  MAIN_DATABASES.set(bundleApp, box.db);
+  MAIN_BOXES.set(bundleApp, { db: box.db, stateDir: box.stateDir, advertisedOrigin });
   return bundleApp;
 }
 
@@ -171,67 +155,57 @@ async function holdBoxSecrets(stateDir: string): Promise<void> {
 let joinAddresses = 0;
 
 /**
- * A new box at `spareUrl` asks `main` to join by code and the administrator `email` taps its code
- * on the main box; answers what the new box then holds, as Finish joining hands it to
- * `adoptFromPrimary`. It throws where `createBoxJoinAttempt` refuses the main box's answers.
+ * A new box at `spareUrl` asks `main` to join by code, through the real `createBoxJoinAttempt`
+ * answered by `main`'s app, and the administrator `email` taps its code on the main box; answers
+ * what the new box then holds, as Finish joining hands it to `adoptFromPrimary`. It throws where
+ * the attempt refuses the main box's answers.
  */
 export async function collectJoin(
   main: { bundleApp: Hono; email: string },
   { spareUrl = SPARE_URL, storePort = 7443 }: { spareUrl?: string; storePort?: number } = {},
 ): Promise<JoinedBox> {
-  const mainDb = MAIN_DATABASES.get(main.bundleApp);
-  if (mainDb === undefined) throw new Error("collectJoin needs an app from mirrorBundleApp");
-  const identity = generateStandbyIdentity();
-  const contactUrl = ownContactUrl(spareUrl, identity.nodeId);
-  const storeUrl = spareStoreUrl(spareUrl, identity.nodeId, storePort);
+  const mainBox = MAIN_BOXES.get(main.bundleApp);
+  if (mainBox === undefined) throw new Error("collectJoin needs an app from mirrorBundleApp");
   joinAddresses += 1;
-  const box = joiningBox(`10.40.0.${joinAddresses}`, { identity, contactUrl, storeUrl });
-  const cookie = await signedInCookie(mainDb, await personIdForLoginEmail(mainDb, main.email));
-  const app = main.bundleApp;
-  const helloResponse = await boxPost(app, "hello", helloBody(box), box.address);
-  const answer = (await helloResponse.json()) as HelloAnswer;
-  expect(helloResponse.status, JSON.stringify(answer)).toBe(200);
-  const reveal = revealBody(box, answer.requestId);
-  const revealResponse = await boxPost(app, "reveal", reveal, box.address);
-  const revealed = (await revealResponse.json()) as { mainNonce: string; signature: string };
-  expect(revealResponse.status, JSON.stringify(revealed)).toBe(200);
-  box.seq = 1;
-  const mainNonce = Buffer.from(revealed.mainNonce, "base64");
-  if (!commitmentMatches(Buffer.from(answer.commitment, "base64"), answer.requestId, mainNonce))
-    throw new Error("the main box's nonce does not match its commitment");
-  if (
-    !verifyJoinMessage(
-      JOIN_REVEAL_LABEL,
-      answer.requestId,
-      reveal.seq as number,
-      revealAnswerFields(box.hello, box.newNonce, mainNonce),
-      revealed.signature,
-      answer.mainPublicKey,
-    )
-  )
-    throw new Error("the main box's reveal answer is not signed by its hello key");
-  const code = joinCode({
-    ...box.hello,
-    mainNodeId: answer.mainNodeId,
-    mainPublicKey: answer.mainPublicKey,
-    newNonce: box.newNonce,
-    mainNonce,
-    requestId: answer.requestId,
+  const address = `10.40.0.${joinAddresses}`;
+  const cookie = await signedInCookie(
+    mainBox.db,
+    await personIdForLoginEmail(mainBox.db, main.email),
+  );
+  const answers = appExchange({
+    app: () => main.bundleApp,
+    from: address,
+    certificate: await readFile(join(mainBox.stateDir, "tls", "ca.crt"), "utf8"),
   });
-  const listed = { requestId: answer.requestId, code, box, mainPublicKey: answer.mainPublicKey };
-  const approved = await approveJoin(app, answer.requestId, { code }, { cookie });
-  expect(approved.status, JSON.stringify(approved.body)).toBe(202);
-  const polled = (await pollJoin(app, listed)) as { state: string; locked?: LockedJoinBundle };
-  if (polled.state !== "approved" || polled.locked === undefined)
-    throw new Error(`approved join not handed over: ${JSON.stringify(polled)}`);
-  const bundle = unlockJoin(listed, polled.locked);
-  if (
-    !isMirrorBundle(bundle) ||
-    bundle.primaryPublicKey !== answer.mainPublicKey ||
-    bundle.designated.nodeId !== answer.mainNodeId
-  )
-    throw new Error("the collected bundle does not name the main box that answered the hello");
-  return { identity, bundle, storeUrl };
+  let requestId: string | undefined;
+  const attempt = createBoxJoinAttempt({
+    advertisedOrigin: spareUrl,
+    spareStorePort: storePort,
+    now: () => new Date(),
+    addresses: () => [address],
+    pollEveryMs: 50,
+    exchange: async (url, request, maxBytes) => {
+      const answer = await answers(url, request, maxBytes);
+      if (url.pathname.endsWith("/hello") && answer.status === 200)
+        requestId = (JSON.parse(answer.text) as { requestId: string }).requestId;
+      return answer;
+    },
+  });
+  const { code } = await attempt.start(mainBox.advertisedOrigin);
+  try {
+    const approved = await approveJoin(main.bundleApp, requestId!, { code }, { cookie });
+    expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+    for (let waited = 0; attempt.current()?.state === "waiting" && waited < 10_000; waited += 50)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    const joined = attempt.joined();
+    if (joined === null)
+      throw new Error(`approved join not collected: ${JSON.stringify(attempt.current())}`);
+    return joined;
+  } catch (error) {
+    // So a failed join leaves nothing polling the main box for the rest of the file.
+    await attempt.cancel().catch(() => {});
+    throw error;
+  }
 }
 
 /**

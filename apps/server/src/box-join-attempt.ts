@@ -66,6 +66,8 @@ export interface BoxJoinAttemptDeps {
   steadyNow?: () => number;
   /** This box's own network addresses; by default every interface address that is not loopback. */
   addresses?: () => string[];
+  /** How long after the reveal, and after each poll, the next poll is sent; 2 seconds by default. */
+  pollEveryMs?: number;
   /** Every request to the main box, its certificate read included. */
   exchange?: typeof boxExchange;
   lookup?: BoxLookup;
@@ -281,7 +283,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
   }
 
   function schedulePoll(attempt: Attempt): void {
-    attempt.timer = setTimeout(() => void poll(attempt), POLL_EVERY_MS);
+    attempt.timer = setTimeout(() => void poll(attempt), deps.pollEveryMs ?? POLL_EVERY_MS);
     attempt.timer.unref();
   }
 
