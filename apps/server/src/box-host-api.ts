@@ -57,16 +57,20 @@ function personActor(authorizedBy: string): PersonActor {
   return { source: "person", person: authorizedBy };
 }
 
-async function askHost<Value extends object, Refusal extends string>(
+type OwnRefusals<Own extends string> = [Own] extends [never]
+  ? Record<string, never>
+  : Record<Own, OwnRefusalCode>;
+
+export async function askHost<Value extends object, Own extends string = never>(
   places: Places,
-  call: () => Promise<HostAnswer<Value, Refusal>>,
-  own: Record<Exclude<Refusal, ProtocolRefusal>, OwnRefusalCode>,
+  call: () => Promise<HostAnswer<Value, Own | ProtocolRefusal>>,
+  own: NoInfer<OwnRefusals<Exclude<Own, ProtocolRefusal>>>,
   onInvalid: () => Error = () =>
     new Error("the host protocol refused a request the route had checked"),
 ): Promise<Value> {
   if (places.taken >= BOX_HOST_ROUTE_CALLS) throw new AppError("box_host.busy", {});
   places.taken += 1;
-  let result: HostAnswer<Value, Refusal>;
+  let result: HostAnswer<Value, Own | ProtocolRefusal>;
   try {
     result = await call();
   } finally {
@@ -90,16 +94,17 @@ async function askHost<Value extends object, Refusal extends string>(
       throw onInvalid();
     case "refused": {
       const { refusal } = result;
-      if (isOwn(own, refusal)) throw new AppError(own[refusal], {});
-      throw new AppError("box_host.failed", { reason: refusal as ProtocolRefusal });
+      const words: Readonly<Record<string, OwnRefusalCode>> = own;
+      if (isOwn<Own>(words, refusal)) throw new AppError(words[refusal], {});
+      throw new AppError("box_host.failed", { reason: refusal });
     }
   }
 }
 
-function isOwn<Refusal extends string>(
-  own: Record<Exclude<Refusal, ProtocolRefusal>, OwnRefusalCode>,
-  refusal: Refusal,
-): refusal is Exclude<Refusal, ProtocolRefusal> {
+function isOwn<Own extends string>(
+  own: Readonly<Record<string, OwnRefusalCode>>,
+  refusal: Own | ProtocolRefusal,
+): refusal is Own {
   return Object.hasOwn(own, refusal);
 }
 
