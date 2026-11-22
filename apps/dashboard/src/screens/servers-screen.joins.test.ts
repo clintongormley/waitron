@@ -583,7 +583,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "approve",
     { code: "mirror.join_other_approved" },
-    "Another box was approved to join a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+    "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
   ],
   [
     "approve",

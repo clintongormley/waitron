@@ -1650,8 +1650,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ya se está preparando la copia para este servidor. Espera un momento.",
   },
   "mirror.join_other_approved": {
-    en: "Another box was approved to join a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
-    es: "Hace un momento se aprobó la unión de otro servidor. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+    en: "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+    es: "Se está aprobando la unión de otro servidor, o se aprobó hace un momento. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
   },
   "mirror.join_stopped_after_listing": {
     en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
