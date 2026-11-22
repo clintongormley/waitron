@@ -380,7 +380,7 @@ it("a countdown reaching zero imports nothing the server did not select", async 
     vi.useRealTimers();
   }
 });
-it("a reload during a wait shows the server's time left", async () => {
+it("a reload during a wait shows the box's time left", async () => {
   fakeClock();
   try {
     const { el, calls } = await mount({
@@ -2646,7 +2646,7 @@ it("Compare the clocks again with no internet time, once the clocks agree, shows
   );
 });
 it.each(["en", "es"] as const)(
-  "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
+  "%s: clocks that differ show one time per clock, ask which is correct; The box and Both times are wrong send nothing",
   async (locale) => {
     const decision = {
       ...clock,
@@ -2787,7 +2787,7 @@ function settableBox(answer: unknown) {
 }
 const deviceLine = (el: LitElement) =>
   el.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim();
-it("after Proceed on clocks that differ, This device sets the server's clock and the series are made with nobody pressing", async () => {
+it("after Proceed on clocks that differ, This device sets the box's clock and the series are made with nobody pressing", async () => {
   const { el, calls } = await mount({ prepare: settableBox({ status: "set" }).prepare });
   await ready(el);
   await proceed(el);

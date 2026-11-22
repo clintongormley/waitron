@@ -35,7 +35,7 @@ Tick "These details are correct.", then press **Proceed**; once
 the clocks agree, the page asks the box for the invoice series
 (`first-hour.browser.test.ts`, "with the clocks agreeing, ticking the details and pressing Proceed
 makes the series"). When the box's time service is not synchronised and only this device's clock
-agrees, the page shows the server's time and this device's above **Proceed**, with "The server could
+agrees, the page shows the box's time and this device's above **Proceed**, with "The box could
 not check its time over the internet. Check that both times below are right before you press
 Proceed."; check both, because pressing **Proceed** confirms them (the same file's "when only this
 device agrees, the step shows both times above Proceed, and Proceed confirms them"). The tick
@@ -52,14 +52,14 @@ state is the same file's "while %s the page's one button reads %s".
 Each detail sits on its own row, its value beside its label (`first-hour.browser.test.ts`, "Check
 this venue puts each detail on a row of its own, label then value"), and the list shows no clock time
 (the same file's "when only the %s agrees, Check this venue shows no clock rows").
-When the box's time service is not synchronised and the clocks differ, after **Proceed** the page says "It is very important that the server time
-is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row, each one time to the minute (with seconds on every
-row when another clock reads the server's minute), then **The server**, **This device** and
-**Both times are wrong**. **The server** and **Both times are wrong** send nothing and say to correct
+When the box's time service is not synchronised and the clocks differ, after **Proceed** the page says "It is very important that the box's time
+is set correctly. Which time is correct:", then shows a "Box time" row and a "This device" row, each one time to the minute (with seconds on every
+row when another clock reads the box's minute), then **The box**, **This device** and
+**Both times are wrong**. **The box** and **Both times are wrong** send nothing and say to correct
 this device's time and reconnect (the same file's "%s: clocks that differ show one time per clock,
-ask which is correct; The server and Both times are wrong send nothing"). **This device** sets the box's clock
+ask which is correct; The box and Both times are wrong send nothing"). **This device** sets the box's clock
 from the device showing the page, under the owner's pass, and the page then makes the series with
-nobody pressing (the same file's "after Proceed on clocks that differ, This device sets the server's
+nobody pressing (the same file's "after Proceed on clocks that differ, This device sets the box's
 clock and the series are made with nobody pressing"); a refusal says what happened and what to do
 (the same file's "in %s a refusal for %s says what happened and what to do, compares nothing and
 keeps the choices"). Each step
@@ -88,7 +88,7 @@ name, and the page counts down with no button; keep it open
 server at zero"). Taking the tick away stops the page's countdown; ticking again asks nothing until
 **Proceed** is pressed again (the same file's "taking the tick away during the box's wait stops the
 page, and ticking again asks nothing until Proceed"). A reload during the wait shows the time the
-box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the server's time left"),
+box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the box's time left"),
 and at zero the page makes the series by itself, with no tick and no press
 (`first-hour.browser.test.ts`, "a reload during the box's wait makes the series by itself at zero,
 with no press or tick"). If no second clock answers at zero, or the box answers with a new wait, the
@@ -117,8 +117,8 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   internet arrives" and "with no second clock on load it explains itself before the tick, and makes
   the series once Proceed is pressed and a clock answers").
 - **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): after
-  **Proceed** the page shows the server's time and this device's, and asks which is correct; **The
-  server** and **Both times are wrong** say to correct this device's time and reconnect to the box,
+  **Proceed** the page shows the box's time and this device's, and asks which is correct; **The
+  box** and **Both times are wrong** say to correct this device's time and reconnect to the box,
   and **This device** sets the box's clock.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree, except that when the box cannot check its time over the
@@ -168,10 +168,10 @@ you did not report.
 Choose **Download recovery pack**, which makes `waitron-recovery-pack-1.pdf` and downloads it; the
 page then offers it again to download or to print. Both
 actions use the same document within that delivery session. Check the business, venue, server ID
-and key name on its server-key page, then tick **I kept the recovery pack.** before continuing.
+and key name on its box key page, then tick **I kept the recovery pack.** before continuing.
 There is no separate signing key, custodian computer, register or downloadable tool.
 
-Keep the PDF or paper outside the box and its backups. It contains the server key. Pack 1 holds
+Keep the PDF or paper outside the box and its backups. It contains the box key. Pack 1 holds
 only that key: its cover lists the bucket copy and archives as not set up
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
 1 holding only the staged key, in %s"). Your Cloud login, or the downloaded archive's password,
@@ -249,11 +249,11 @@ A732's proposed fresh-workspace action and recovery desk were withdrawn by the o
 
 ## When both credentials are lost
 
-If you have lost both the administrator password and every recovery pack or sheet holding the server key, reinstall the box and set
+If you have lost both the administrator password and every recovery pack or sheet holding the box key, reinstall the box and set
 it up again (owner, 2026-10-21). Reinstallation loses the box's local data. The new setup starts a
 fresh fiscal identity and chain; it does not reopen the old account or continue its history.
 Keep any separately held archive, bucket or managed Cloud copy: recovering one still requires
-its named server key and the [ordinary restore checks](hour-recovery.md). Reinstalling cannot
+its named box key and the [ordinary restore checks](hour-recovery.md). Reinstalling cannot
 replace that key. This documentation change does not authorise a reset or reinstall now.
 
 ## Use the provisioning command

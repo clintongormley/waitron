@@ -10,8 +10,8 @@ import { guideRoot } from "./guide-catalogue.js";
 // "caja" that means the box, or a sentence that names the box some other way, passes.
 const OTHER_SERVERS = [
   /\b(e?mail|SMTP|time)[\s-]+servers?\b/gi,
-  /\bthe\s+Servers\s+page\b/g,
-  /\*\*(System\s+→\s+)?Servers\*\*/g,
+  /\b(the|its)\s+(\*\*)?Servers(\*\*)?\s+page\b/g,
+  /\*\*System\s+→\s+Servers\*\*/g,
   /^# Servers$/gm,
   /\bservers\.md\b/g,
   /\{#[^}]*\}/g,
@@ -48,6 +48,13 @@ function pages(lang: string): [string, string][] {
     .map((file) => [file, readFileSync(join(root, lang, file), "utf8")]);
 }
 
+function serverLines(text: string): string[] {
+  return hits(
+    OTHER_SERVERS.reduce((acc, allowed) => acc.replace(allowed, "~"), text),
+    /\bservers?\b/i,
+  );
+}
+
 function hits(text: string, word: RegExp): string[] {
   return text.split("\n").filter((line) => word.test(line));
 }
@@ -58,8 +65,14 @@ function escaped(phrase: string): RegExp {
 
 describe("the user guides call the Waitron machine the box", () => {
   it.each(pages("en"))("en/%s says box, not server", (_file, text) => {
-    const rest = OTHER_SERVERS.reduce((acc, allowed) => acc.replace(allowed, "~"), text);
-    expect(hits(rest, /\bservers?\b/i)).toEqual([]);
+    expect(serverLines(text)).toEqual([]);
+  });
+
+  it("still sees the machine named beside an allowed phrase", () => {
+    expect(serverLines("Open **Servers** to check the pair.")).not.toEqual([]);
+    expect(serverLines("Ask the mail server, then the main server.")).not.toEqual([]);
+    expect(serverLines("Open **System → Servers** on the main server.")).not.toEqual([]);
+    expect(serverLines("Open the **Servers** page; ask the time server.")).toEqual([]);
   });
 
   it.each(pages("es"))("es/%s says servidor, not equipo", (file, text) => {

@@ -470,7 +470,7 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=clock-confirm]")).not.toBeNull();
   });
 
-  it("This device sets the server's clock with the key, then confirms the set time against a fresh challenge", async () => {
+  it("This device sets the box's clock with the key, then confirms the set time against a fresh challenge", async () => {
     const clock = clockApi();
     const el = await mountWaiting(clock);
     await vi.waitFor(() => expect(q(el, "[data-test=clock-this-device]")).not.toBeNull());

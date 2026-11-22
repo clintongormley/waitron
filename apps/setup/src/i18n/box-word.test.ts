@@ -4,11 +4,14 @@ import { initialSetupStrings } from "../screens/initial-setup-strings.js";
 import { en, es } from "./strings.js";
 
 // Setup calls the Waitron machine "the box" in English and "servidor" in Spanish, never "equipo"
-// (owner, 2026-11-22). "mail server" is the email service, and "the server" beside "sender email"
-// names the email screen's Mail server field; capitalised "Servers" is the dashboard page, whose
-// name the owner kept. Weaker than its name: only the string tables below are read, not English
+// (owner, 2026-11-22). The dashboard page kept its name "Servers", so a sentence names it as a page
+// or by its menu path. Weaker than its name: only the string tables below are read, not English
 // written inline in screens nor the guide pages.
-const ALLOWED_EN = [/\bmail servers?\b/gi, /\bleave the server, sender email\b/g, /\bServers\b/g];
+const ALLOWED_EN = [/\bmail servers?\b/gi, /\bServers page\b/g, /\bSystem(, then | → )Servers\b/g];
+
+function namesTheBoxAServer(text: string): boolean {
+  return /\bservers?\b/i.test(ALLOWED_EN.reduce((left, phrase) => left.replace(phrase, ""), text));
+}
 
 function table(prefix: string, words: Record<string, string>): [string, string][] {
   return Object.entries(words).map(([key, text]) => [`${prefix}.${key}`, text]);
@@ -39,11 +42,18 @@ describe("setup's word for the Waitron machine", () => {
   });
 
   it("calls it the box in English, never the server", () => {
-    const offending = english().filter(([, text]) => {
-      const rest = ALLOWED_EN.reduce((left, phrase) => left.replace(phrase, ""), text);
-      return /\bservers?\b/i.test(rest);
-    });
+    const offending = english().filter(([, text]) => namesTheBoxAServer(text));
     expect(offending).toEqual([]);
+  });
+
+  it("still sees the machine named beside an allowed phrase", () => {
+    expect(namesTheBoxAServer("Open Servers on the main box")).toBe(true);
+    expect(namesTheBoxAServer("Check its address in Servers before trying again.")).toBe(true);
+    expect(namesTheBoxAServer("leave the server, sender email, username and password blank")).toBe(
+      true,
+    );
+    expect(namesTheBoxAServer("Open the Servers page on the main server")).toBe(true);
+    expect(namesTheBoxAServer("Open System → Servers; check the mail server")).toBe(false);
   });
 
   it("calls it servidor in Spanish, never equipo", () => {

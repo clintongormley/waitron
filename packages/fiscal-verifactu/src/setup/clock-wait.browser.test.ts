@@ -601,7 +601,7 @@ describe("the question when the clocks differ", () => {
   });
 });
 
-describe("This device sets the server's clock", () => {
+describe("This device sets the box's clock", () => {
   let updates = 0;
   const host: ReactiveControllerHost = {
     addController: () => undefined,

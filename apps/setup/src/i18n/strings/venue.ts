@@ -7,7 +7,7 @@ export const venueEn = {
   "email.heading": "Set up email",
   "email.cloud_staff_email": "Send staff email through Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "To use Cloud for staff invitations, password resets, email-change codes and selected notices, leave the server, sender email, username and password blank. If you set up your own mail server, Waitron uses it for those messages.",
+    "To use Cloud for staff invitations, password resets, email-change codes and selected notices, leave the mail server, sender email, username and password blank. If you set up your own mail server, Waitron uses it for those messages.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
   "email.intro_optional":

@@ -72,12 +72,12 @@ Cuando no pasa nada, cada fila dice:
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
-- **Servidor de reserva**: cuando el servidor principal copia a una reserva emparejada, esta fila sustituye
+- **Servidor de reserva**: cuando el servidor principal copia a un servidor de reserva emparejado, esta fila sustituye
   a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
   última copia. Deja ambos servidores encendidos cuando veas **Actualización pendiente** o
   **Reconstruyendo la copia**.
-  **Actualización desconocida** significa que la principal no puede confirmar su progreso.
-  Abre **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
+  **Actualización desconocida** significa que el servidor principal no puede confirmar su progreso.
+  Abre la página **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
   servidor de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el servidor de reserva durante dos minutos.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un

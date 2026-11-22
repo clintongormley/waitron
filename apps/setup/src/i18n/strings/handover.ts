@@ -18,7 +18,7 @@ export const handoverEn = {
   "handover.restarting": "The venue has started here; this box is restarting.",
   "handover.continue": "Continue to this box",
   "handover.closed":
-    "This handover ended without activating this box. Open Servers on the main box to see its current state.",
+    "This handover ended without activating this box. Open the Servers page on the main box to see its current state.",
   "handover.sign_in":
     "Sign in as an administrator to confirm the details and start the venue here. Use a fresh authenticator code.",
   "handover.email": "Administrator email",
@@ -86,7 +86,7 @@ export const handoverEn = {
   "handover.emergency.latest_activity": "Latest dated activity:",
   "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "No dated activity was found in this copy.",
-  "handover.emergency.servers": "Open Servers on the old main box",
+  "handover.emergency.servers": "Open the Servers page on the old main box",
   "handover.emergency.warning":
     "Switch off the old main box and keep it off, or both boxes could take payments. Keep it and its data. This cannot be undone.",
   "handover.emergency.sourceSwitchedOff": "I have switched off the old main box.",
@@ -126,7 +126,7 @@ export const handoverEn = {
   "handover.emergency.changed":
     "The venue or handover has changed. Check progress and use the current main box.",
   "handover.emergency.trust":
-    "The old main box’s identity or address could not be checked. Check its connection and address in Servers before trying again.",
+    "The old main box’s identity or address could not be checked. Check its connection and address on the Servers page before trying again.",
   "handover.emergency.failed":
     "This step could not finish. Check this copy again before trying to continue.",
   "handover.emergency.checking_heading": "Checking the main box",
@@ -209,7 +209,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.restarting": "El local se ha iniciado aquí; este servidor se está reiniciando.",
   "handover.continue": "Continuar en este servidor",
   "handover.closed":
-    "Este traspaso terminó sin activar este servidor. Abre Servidores en el servidor principal para consultar su estado actual.",
+    "Este traspaso terminó sin activar este servidor. Abre la página Servidores en el servidor principal para consultar su estado actual.",
   "handover.sign_in":
     "Identifícate como administrador para confirmar los datos e iniciar el local aquí. Usa un código nuevo del autenticador.",
   "handover.email": "Correo del administrador",
@@ -242,7 +242,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.latest_activity": "Última actividad con fecha:",
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
-  "handover.emergency.servers": "Abrir Servidores en el servidor principal anterior",
+  "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
   "handover.emergency.warning":
     "Apaga el servidor principal anterior y mantenlo apagado, o ambos servidores podrían cobrar. Consérvalo con sus datos. Esto no se puede deshacer.",
   "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
@@ -283,7 +283,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.changed":
     "El local o el traspaso ha cambiado. Comprueba el progreso y usa el servidor principal actual.",
   "handover.emergency.trust":
-    "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
+    "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en la página Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
   "handover.emergency.checking_heading": "Comprobando el servidor principal",

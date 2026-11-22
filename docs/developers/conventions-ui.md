@@ -1687,7 +1687,7 @@ The owner's words (2026-11-22): “we've been using server or box interchangably
 change all references to use "box"”, then “box in english, servidor in spanish, not equipo”. The
 dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page".
 
-Seven guards read named string tables or files, and one of them two rendered pages; each is weaker than its name.
+Each guard below reads named string tables or rendered pages, and each is weaker than its name.
 
 - `apps/till/src/i18n/box-word.test.ts` reads English only: `en` in the till's `strings.ts`,
   `helpEn` in `help-strings.ts`, and every `en` string nested in `CODE_TABLES` in `codes.ts`. It
@@ -1708,10 +1708,8 @@ Seven guards read named string tables or files, and one of them two rendered pag
   `export-guides.ts`. In English it allows "time server" (singular or plural, spaced or
   hyphenated), "the Servers page" and the `{server}` placeholder; in Spanish it refuses every
   "equipo" or "equipos".
-
 - `apps/server/src/i18n/box-word.test.ts` reads English and Spanish: every export of every file in
-  `apps/server/src/i18n/` except `declaration-page.ts` (the released declaration, a legal text whose
-  versions never change), walking nested objects and arrays and calling each function export once
+  `apps/server/src/i18n/`, walking nested objects and arrays and calling each function export once
   with placeholder arguments (a function that throws on them is skipped unread, and only the branch
   those arguments reach is read); `holderStalledText` for each holder kind; `CONNECTION_TEXT` and
   `CONNECTION_DEVICE_ES` in `connection-bootstrap-strings.ts`; and the visible text of the trust
@@ -1730,24 +1728,39 @@ Seven guards read named string tables or files, and one of them two rendered pag
   refuses every "equipo". It does not read words written inside a component (the recovery-key
   field's label among them), the series register PDF's or the emergency record's inline
   sentences, or the offline custody tool.
-
 - `apps/server/src/guide-box-word.test.ts` reads English and Spanish: the text of every user guide
   page in `apps/server/src/guide/en/` and `apps/server/src/guide/es/`. In English it allows "mail
   server", "email server", "SMTP server" and "time server" (singular or plural, across a line
-  break or hyphenated), "the Servers page", the bold page name (`**Servers**`, `**System →
-  Servers**`), the `# Servers` title, `servers.md` link targets and `{#id}` anchors. In Spanish it
-  refuses "equipo" or "equipos" except the phrases it lists per page, each meaning a staff team or
-  a piece of equipment and each allowed once; a phrase the page no longer holds fails the run. It
-  does not read "caja" (a till, and in places the box), nor any other way of naming the box.
+  break or hyphenated), "the Servers page" or "its Servers page" (with or without the page name in
+  bold), `**System → Servers**`, the `# Servers` title, `servers.md` link targets and `{#id}`
+  anchors; a bold `**Servers**` with no "page" after it is refused. In Spanish it refuses "equipo"
+  or "equipos" except the phrases it lists per page, each meaning a staff team or a piece of
+  equipment and each allowed once; a phrase the page no longer holds fails the run. It does not
+  read "caja" (a till, and in places the box), nor any other way of naming the box.
+- `apps/setup/src/i18n/box-word.test.ts` reads English and Spanish: `en` and `es` in setup's
+  `strings.ts`, and the `en` and `es` tables of `initialOwnerStrings` and `initialSetupStrings`. In
+  English it allows "mail server" (singular or plural), every "Servers page" (a link's name, "the
+  Servers page", "the main box's Servers page") and the menu paths "System → Servers" and "System, then Servers"; "Open
+  Servers" with no "page" is refused. In Spanish it refuses every "equipo". It does not read words
+  written inline in setup's screens, such as the saved key file's name.
+- `packages/recovery-pack/src/i18n/box-word.test.ts` reads English and Spanish: `PACK_WORDS` and
+  `PART_WORDS` in `pack-words.ts`, nested tables included, calling each function once with sample
+  arguments, so only the branch those arguments reach is read. It refuses "server" in English and
+  "equipo" in Spanish with no exceptions.
+- The box-word case in `apps/print-agent/src/setup-page.test.ts` reads English only: the visible
+  text of the print agent's setup page before joining, locked by its environment, unable to reach
+  the box, refused by the box, out of touch, printing, on the venue's spare, and the answer to a
+  setup request while locked. It refuses "server" with no exceptions. It does not read the agent's
+  logs or other output.
 - The box-word case in `scripts/box/installer-presentation.test.mjs` reads English and Spanish:
   every value of `INSTALLER_WORDS` in `scripts/box/i18n/installer.mjs`, refusing "server" in
   English and "equipo" in Spanish with no exceptions. It does not read the box scripts' other
   output.
 
-None of them reads setup's own screens, the recovery pack's other pages, the print
-agent's setup page, emails other than those in `apps/server/src/i18n/`, another module's dashboard
-strings (`packages/*/src/dashboard/strings.ts` other than fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
-component or a message function, such as the sentences `codes.ts`'s `codeMessage` builds inline.
+Apart from the rendered pages named above, none of them reads words written inline in a screen, a
+component or a message function (setup's screens, the sentences `codes.ts`'s `codeMessage` builds inline among them), emails other than
+those in `apps/server/src/i18n/`, another module's dashboard strings (`packages/*/src/dashboard/strings.ts`
+other than fiscal-verifactu's), or the name tables in the dashboard's `domain.ts`.
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 

@@ -10,7 +10,7 @@ export const DECLARATION_PAGE_WORDS = {
   es: {
     noneTitle: "Esta compilación no tiene declaración responsable",
     none: "Solo las versiones publicadas de Waitron llevan una, y esta compilación no lo es.",
-    damagedTitle: "La declaración responsable de este equipo no se puede mostrar",
+    damagedTitle: "La declaración responsable de este servidor no se puede mostrar",
     damaged: "Falta uno de sus archivos o está dañado.",
     notFoundTitle: "Página no encontrada",
   },

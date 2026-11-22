@@ -288,8 +288,10 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   dashboard page keeps its name "Servers"** (owner, 2026-11-22). Guards, weaker than their names:
   `apps/till/src/i18n/box-word.test.ts`, `apps/dashboard/src/i18n/box-word.test.ts`,
   `packages/fiscal-verifactu/src/dashboard/box-word.test.ts`, `apps/server/src/i18n/box-word.test.ts`,
-  `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts`, `apps/server/src/guide-box-word.test.ts`
-  and the box-word case in `scripts/box/installer-presentation.test.mjs` read named tables and pages only.
+  `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts`, `apps/server/src/guide-box-word.test.ts`,
+  `apps/setup/src/i18n/box-word.test.ts`, `packages/recovery-pack/src/i18n/box-word.test.ts` and the
+  box-word cases in `apps/print-agent/src/setup-page.test.ts` and
+  `scripts/box/installer-presentation.test.mjs` read named tables and pages only.
   [Limits](docs/developers/conventions-ui.md#the-waitron-machine-is-box-and-servidor).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a fixture gives the three DIFFERENT text**. Which surface reads which: [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.**

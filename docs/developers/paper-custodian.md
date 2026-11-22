@@ -201,7 +201,7 @@ The output combines the signed block with the custodian's public key and fingerp
 private signing key with the custodian. This command signs the reserved block again; it does not
 allocate another block or clear any entry's consumption history.
 
-In the dashboard, open **Backups**, enter the current **Server key**, choose
+In the dashboard, open **Backups**, enter the current **Box key**, choose
 `recovery-register.json`, and select **Create pack**. You need management permission and the node
 key you already hold. You do not need bucket settings or a subscription. A wrong node key or a
 register for a different taxpayer, environment, venue or series set is refused.
@@ -209,7 +209,7 @@ register for a different taxpayer, environment, venue or series set is refused.
 Download the JSON pack and the **Printable copy**. Open the downloaded HTML file in your browser
 and print it using the browser's Print action. It has no external assets. It includes the node
 key's stored name and secret, the signed register and the custodian's public fingerprint. Keep
-both downloads and the paper outside the server and its backups. Choose **Clear pack** to remove
+both downloads and the paper outside the box and its backups. Choose **Clear pack** to remove
 the screen's download links; this does not delete files you already downloaded.
 
 The printed register is a snapshot. Compare its custodian fingerprint with the current outside

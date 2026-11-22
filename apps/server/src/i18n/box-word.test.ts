@@ -11,8 +11,7 @@ import { holderStalledText } from "./recovery-page.js";
 // 2026-11-22). Weaker than its name: it reads every export of the tables in this folder (calling a
 // function export with placeholder arguments, and skipping one that throws), the connection page's
 // tables, the trust page's and the setup placeholder's visible text; not other pages written
-// inline, nor log lines and command-line output. The released declaration is a legal text that
-// never changes, so it is not read.
+// inline, nor log lines and command-line output.
 const OTHER_SERVERS = [
   /\b(mail|SMTP|time)[- ]servers?\b/gi,
   /\bthe Servers page\b/g,
@@ -27,7 +26,7 @@ const tables: Record<string, Record<string, unknown>> = {};
 beforeAll(async () => {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const file of readdirSync(here).sort())
-    if (file.endsWith(".ts") && !file.endsWith(".test.ts") && file !== "declaration-page.ts")
+    if (file.endsWith(".ts") && !file.endsWith(".test.ts"))
       tables[`./${file}`] = (await import(`./${file.replace(/\.ts$/, ".js")}`)) as Record<
         string,
         unknown

@@ -681,14 +681,14 @@ export const RESTORE_DISCARD_WORDS = {
     move: "Descartar esta restauración",
     stop: "Parar",
     before:
-      "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en esta caja.",
+      "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en este servidor.",
     after:
-      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar esta caja.",
+      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar este servidor.",
     wrong: "La contraseña no coincide con la de un administrador activo de la copia seleccionada.",
     unavailable: "Ahora no se puede descartar esta restauración.",
     notFinished:
-      "No se ha podido descartar por completo la restauración. La caja sigue detenida. Vuelve a intentarlo.",
-    done: "Se ha descartado esta restauración. Puedes restaurar otra copia o configurar esta caja.",
+      "No se ha podido descartar por completo la restauración. El servidor sigue detenido. Vuelve a intentarlo.",
+    done: "Se ha descartado esta restauración. Puedes restaurar otra copia o configurar este servidor.",
     stopped: "Nada ha cambiado. Esta restauración sigue pendiente.",
   },
 } as const;

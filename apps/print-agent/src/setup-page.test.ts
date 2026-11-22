@@ -694,7 +694,8 @@ describe("createSetupApp — GET /status.json", () => {
 });
 
 describe("createSetupApp — the word for the venue's Waitron machine", () => {
-  // The owner's word is "box" (2026-11-22). Attribute values such as `name="serverUrl"` are not read.
+  // The owner's word is "box" (2026-11-22). Weaker than its name: English only, and only the pages
+  // the case below lists, not the agent's logs or other output. Attribute values are not read.
   const visibleText = (html: string): string => html.replace(/<[^>]*>/g, " ");
   const page = async (overrides: Partial<SetupDeps>, path = "/", init?: RequestInit) =>
     visibleText(
@@ -714,6 +715,18 @@ describe("createSetupApp — the word for the venue's Waitron machine", () => {
           snapshot({ status: unreachable, config: CONFIG, joined: true, outOfTouch: true }),
       }),
       await page({ envLocked: true }, "/setup", { method: "POST" }),
+      await page({
+        snapshot: async () => snapshot({ status: RUNNING, config: CONFIG, joined: true }),
+      }),
+      await page({
+        snapshot: async () =>
+          snapshot({
+            status: { ...RUNNING, phase: "spare_box", lastError: undefined },
+            config: CONFIG,
+            joined: true,
+            outOfTouch: true,
+          }),
+      }),
     ];
     expect(pages.filter((text) => /\bservers?\b/i.test(text))).toEqual([]);
   });

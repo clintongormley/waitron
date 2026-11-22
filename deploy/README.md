@@ -854,11 +854,11 @@ command against it treat that entrypoint differently:
   printed text, where a long code wraps. It restores nothing and prints one line when the pack
   holds no bucket copy code (the box had no bucket copy when the pack was made), when the PDF is not
   a Waitron recovery pack, or when the file attached inside the pack is damaged or was changed after
-  it was made. The pack may also hold the server key: keep it locked away, off the box.
+  it was made. The pack may also hold the box key: keep it locked away, off the box.
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
-  backup's server key, a fresh allocation and current outside evidence. The source examples below
+  backup's box key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
@@ -901,11 +901,11 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older server keys.** Restoring an older backup also restores the server key
+  **Keep older box keys.** Restoring an older backup also restores the box key
   from that time. A replaced key can work again on the restored box, while its replacement
   can be refused. Keep the older key until every backup made before the replacement has
   been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the key you need. The server key authenticates recovery; the separate recovery key opens
+  names the key you need. The box key authenticates recovery; the separate recovery key opens
   the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place

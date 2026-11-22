@@ -2482,7 +2482,7 @@ it.each(["", "E1"])(
     expect(detailRows(el, "venue-review")).toContainEqual(["Country", country]);
   },
 );
-it("clocks that differ show one time per clock and ask which is correct; The server and Both times are wrong send nothing", async () => {
+it("clocks that differ show one time per clock and ask which is correct; The box and Both times are wrong send nothing", async () => {
   const decision = {
     ...clock,
     usable: [
@@ -2642,7 +2642,7 @@ const choices = (el: LitElement) =>
   );
 const deviceLine = (el: LitElement) =>
   el.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim();
-it("a restore on clocks that differ sets the server's clock from This device and makes the series with nobody pressing", async () => {
+it("a restore on clocks that differ sets the box's clock from This device and makes the series with nobody pressing", async () => {
   const answer = settable({ status: "set" });
   const prepare = vi.fn(async (request: { proposal: unknown }) => answer(request.proposal));
   const { el } = await mount(prepare);

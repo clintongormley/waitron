@@ -67,7 +67,7 @@ When nothing is wrong, each row says:
 - **Spare box**: when your main box copies to a paired spare, this replaces **Bucket copy**.
   It shows the measured delay in seconds and when the spare last applied an update.
   Keep both boxes on when you see **Update pending** or **Rebuilding the copy**.
-  **Freshness unknown** means the main box cannot confirm its progress. Open **Servers** to check the pair.
+  **Freshness unknown** means the main box cannot confirm its progress. Open the **Servers** page to check the pair.
   A switch first brings this spare's copy up to date. The bell warns above a minute of pending changes and after two minutes without reaching the spare.
 - **Printers**: **No problems reported**, and the names of the printers set up.
 - **Card readers**: **No problems reported**, and the names of the readers set up. A reader its

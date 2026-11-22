@@ -76,7 +76,7 @@ describe("wizard Email step", () => {
     expect(button(el, "next").disabled).toBe(true);
     const detail = el.shadowRoot!.getElementById(checkbox!.getAttribute("aria-describedby")!);
     expect(detail?.textContent).toContain(
-      "leave the server, sender email, username and password blank",
+      "leave the mail server, sender email, username and password blank",
     );
     await test(el);
     expect(runEmailTest).toHaveBeenCalledExactlyOnceWith(email, "admin@example.com", "prepare");
