@@ -4474,9 +4474,10 @@ difference would reveal whether the account exists or has a passkey.
 
 On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as
 the heading. Show the address as wrapping text under **Email**, with a pencil and a visible
-**Change** action beside it. The watcher cleared this layout after the owner's 2026-11-22 request
-to make the address look non-editable, superseding A189's read-only field. **Change** clears the
-current attempt and the saved email and method, then focuses the blank email field.
+**Change** action beside it, spoken as **Change email address**. The watcher cleared this layout
+after the owner's 2026-11-22 request to make the address look non-editable, superseding A189's
+read-only field. **Change** clears the current attempt and the saved email and method, then focuses
+the blank email field.
 The reset and account-setup page and the passkey offer after sign-in show the same address text.
 The password step, the code step and the reset and account-setup page keep a hidden semantic
 username input for password managers. Ordinary login has no separate Cancel or Forget button.

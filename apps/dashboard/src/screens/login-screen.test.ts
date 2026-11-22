@@ -2,7 +2,7 @@ import type { FetchLike } from "@waitron/dashboard-kit";
 import { createFreshSignInGate } from "../api/fresh-sign-in.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -737,7 +737,7 @@ describe("login-screen", () => {
     expect(navigator.credentials.get).not.toHaveBeenCalled();
 
     const changeAction = el.shadowRoot!.querySelector("wt-button[data-test=change-account]")!;
-    const changeName = "Cambiar correo electrónico";
+    const changeName = t("login.change_email");
     expect(changeAction.shadowRoot!.querySelector("button")!.ariaLabel).toBe(changeName);
     expect(changeAction.textContent?.trim()).toBe(t("action.change"));
     const change = page.getByRole("button", { name: changeName, exact: true });
@@ -4006,13 +4006,9 @@ describe("login-screen: a passkey Waitron no longer holds", () => {
 });
 
 describe("login-screen: chosen email", () => {
-  let restoreViewport: [number, number];
-  beforeEach(() => {
-    restoreViewport = [window.innerWidth, window.innerHeight];
-  });
-  afterEach(() => page.viewport(...restoreViewport));
-
   it("wraps a long address within the sign-in card on a phone", async () => {
+    const viewport = [window.innerWidth, window.innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
     await page.viewport(320, 800);
     const email = "a.very.long.address.for.an.account@example.restaurant.test";
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
