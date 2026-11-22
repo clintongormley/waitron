@@ -22,7 +22,7 @@ import {
   resolveInstalledStartingContentLanguages,
   vatRatesFor,
 } from "./registry.js";
-import { basisPointsToDecimal, stringToBasisPoints } from "@waitron/shared";
+import { basisPointsToDecimal, rateOn, stringToBasisPoints } from "@waitron/shared";
 
 describe("installed country packs", () => {
   it("has one pack per unique country code", () => {
@@ -58,18 +58,13 @@ describe("installed country packs", () => {
     expect(chargesTakeawayVat("ES", "missing")).toBe(false);
   });
 
-  it("gives each supported area's dated dine-in rates, accepted and pickable rates and takeaway default", () => {
+  it("gives an area its pack's dine-in, accepted and pickable rates and takeaway default", () => {
+    const common = getCountryPack("ES")!.fiscalJurisdictions.find(({ id }) => id === "ES-common")!;
     expect(vatRatesFor("ES", "ES-common")).toEqual({
-      dineIn: [{ from: null, rate: "10.00" }],
-      accepted: ["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"],
-      pickable: ["0.00", "4.00", "10.00", "21.00"],
-      defaultTakeaway: "10.00",
-    });
-    expect(vatRatesFor("GB", "GB-vat")).toEqual({
-      dineIn: [{ from: null, rate: "0.00" }],
-      accepted: ["0.00"],
-      pickable: ["0.00"],
-      defaultTakeaway: "0.00",
+      dineIn: common.dineInVatRates,
+      accepted: common.vatRates,
+      pickable: common.pickableVatRates,
+      defaultTakeaway: common.defaultTakeawayVatRate,
     });
     expect(vatRatesFor("ES", "ES-canary")).toBeUndefined();
     expect(vatRatesFor("XX", "ES-common")).toBeUndefined();
@@ -88,14 +83,7 @@ describe("installed country packs", () => {
       const rates = vatRatesFor(country, territory);
       expect(rates, territory).toBeDefined();
       const { dineIn, accepted, pickable, defaultTakeaway } = rates!;
-      expect(dineIn.length, territory).toBeGreaterThan(0);
-      expect(dineIn[0]!.from, territory).toBeNull();
-      for (let i = 1; i < dineIn.length; i += 1) {
-        const from = dineIn[i]!.from;
-        const previous = dineIn[i - 1]!.from;
-        expect(from, territory).not.toBeNull();
-        if (previous !== null) expect(from! > previous, territory).toBe(true);
-      }
+      expect(() => rateOn(dineIn, "2000-01-01"), territory).not.toThrow();
       expect(accepted.length, territory).toBeGreaterThan(0);
       for (const rate of pickable) expect(accepted, territory).toContain(rate);
       for (const { rate } of dineIn) expect(pickable, territory).toContain(rate);

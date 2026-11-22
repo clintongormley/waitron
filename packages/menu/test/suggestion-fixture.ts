@@ -5,14 +5,13 @@ import {
   contentSuggestions,
   CORE_MIGRATIONS,
   products,
-  productTakeawayVatRates,
   withTransaction,
   type Database,
   type SuggestionJobRow,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTakeawayVatRate, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices } from "@waitron/shared";
 import { createMenu, createProduct } from "../src/operations.js";
 import { writeContentLanguages } from "../src/content-languages.js";
@@ -213,9 +212,10 @@ export async function addPlainProducts(
       };
     });
     const inserted = await tx.insert(products).values(rows).returning({ id: products.id });
-    await tx
-      .insert(productTakeawayVatRates)
-      .values(inserted.map(({ id }) => ({ productId: id, startsOn: null, rate: 1000 })));
+    await seedTakeawayVatRate(
+      tx,
+      inserted.map(({ id }) => id),
+    );
     ids.push(...inserted.map((row) => row.id));
   }
   return ids;

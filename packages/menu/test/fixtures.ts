@@ -6,7 +6,6 @@ import {
   categories,
   invoiceSeries,
   products,
-  productTakeawayVatRates,
   units,
   withTransaction,
 } from "@waitron/db";
@@ -14,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTakeawayVatRate, seedVenue } from "@waitron/db/testing/seed.js";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "../src/operations.js";
 import { createUnit } from "../src/units.js";
 
@@ -75,10 +74,7 @@ export async function plantStoredProduct(
         : { dietaryDeclarations: null }),
     })
     .returning({ id: products.id });
-  if (parentId === null)
-    await tx
-      .insert(productTakeawayVatRates)
-      .values({ productId: row!.id, startsOn: null, rate: 1000 });
+  if (parentId === null) await seedTakeawayVatRate(tx, row!.id);
   return row!.id;
 }
 

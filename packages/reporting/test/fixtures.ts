@@ -1,5 +1,5 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedTakeawayVatRate } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -28,7 +28,6 @@ import {
   parties,
   partyTables,
   products,
-  productTakeawayVatRates,
   purchaseInvoiceVat,
   purchaseInvoices,
   saleLines,
@@ -497,9 +496,7 @@ export async function seedFiredLine(
       vatClass: "general",
     })
     .returning({ id: products.id });
-  await db
-    .insert(productTakeawayVatRates)
-    .values({ productId: product!.id, startsOn: null, rate: 1000 });
+  await seedTakeawayVatRate(db, product!.id);
   const [line] = await db
     .insert(workingOrderLines)
     .values({

@@ -160,15 +160,25 @@ export async function seedNode(db: Database | Transaction): Promise<NodeId> {
   return brandNodeId(row!.id);
 }
 
+/** Writes one takeaway rate row per product, in basis points; by default its first, undated row. */
+export async function seedTakeawayVatRate(
+  db: Database | Transaction,
+  productIds: string | readonly string[],
+  opts: { rate?: number; startsOn?: string | null } = {},
+): Promise<void> {
+  const { rate = 1000, startsOn = null } = opts;
+  await db
+    .insert(productTakeawayVatRates)
+    .values([productIds].flat().map((productId) => ({ productId, startsOn, rate })));
+}
+
 export async function seedMenuItem(db: Database | Transaction, id?: string): Promise<string> {
   const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
   const [product] = await db
     .insert(products)
     .values({ name: "Test product", unitPrice: 100, vatClass: "general" })
     .returning({ id: products.id });
-  await db
-    .insert(productTakeawayVatRates)
-    .values({ productId: product!.id, startsOn: null, rate: 1000 });
+  await seedTakeawayVatRate(db, product!.id);
   const [item] = await db
     .insert(menuItems)
     .values({ id, menuId: menu!.id, productId: product!.id })

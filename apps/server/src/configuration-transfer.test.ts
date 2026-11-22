@@ -3,6 +3,7 @@ import {
   readPrinterHoldsForTest,
   holdPrinterForTest,
   seedPerson,
+  seedTakeawayVatRate,
 } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
@@ -113,7 +114,6 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   customThemes,
   products,
-  productTakeawayVatRates,
   sales,
   withTransaction,
   type Transaction,
@@ -928,11 +928,7 @@ describe("configuration transfer database path", () => {
         unitPrice: 150,
         vatClass: "general",
       });
-      await tx.insert(productTakeawayVatRates).values({
-        productId: "22222222-aaaa-aaaa-aaaa-222222222222",
-        startsOn: null,
-        rate: 1000,
-      });
+      await seedTakeawayVatRate(tx, "22222222-aaaa-aaaa-aaaa-222222222222");
       await tx
         .update(products)
         .set({ image: uploaded.image.filename })

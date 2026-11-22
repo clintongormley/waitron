@@ -185,7 +185,6 @@ describe("menu inclusions and owned sections", () => {
 
   it("reports partial customer names for menu roots and owned sections", async () => {
     await seedTaxpayer(fx.db);
-    await seedVenueSettings(fx.db);
     await app(async (tx) => {
       const menu = await createMenu(tx, { name: "Staff menu", names: { en: "Guest menu" } });
       const root = await requireMenuRoot(tx, menu.id);

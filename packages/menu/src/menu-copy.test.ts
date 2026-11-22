@@ -383,7 +383,6 @@ describe("duplicateMenu", () => {
 
   it("keeps stored positions and the source's order where members share a position", async () => {
     await seedTaxpayer(fx.db);
-    await seedVenueSettings(fx.db);
     const source = (await app((tx) => createMenu(tx, { name: "Tied" }))).id;
     const entries = 20;
     await app(async (tx) => {
@@ -446,7 +445,6 @@ describe("duplicateMenu", () => {
 
   it("refuses a menu that does not exist with menu.not_found", async () => {
     await seedTaxpayer(fx.db);
-    await seedVenueSettings(fx.db);
     await expect(
       app((tx) => duplicateMenu(tx, "00000000-0000-4000-8000-000000000000", "Copy")),
     ).rejects.toMatchObject({ code: "menu.not_found" });

@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { vatRatesFor } from "@waitron/country-packs";
 import {
   CORE_MIGRATIONS,
   products,
   productTakeawayVatRates,
   withTransaction,
+  type Database,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTakeawayVatRate, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readTakeawayVatSchedules,
@@ -31,12 +33,10 @@ async function product(parentId: string | null = null): Promise<string> {
   return (await suite.db.insert(products).values(values).returning({ id: products.id }))[0]!.id;
 }
 
-function rateRow(productId: string, startsOn: string | null, rate: number) {
-  return suite.db.insert(productTakeawayVatRates).values({ productId, startsOn, rate });
-}
-
-async function rowsOf(productId: string) {
-  return suite.db
+/** Pass the refusing call's own transaction: a refusal through `app` rolls back, which would hide a
+ * delete that ran before the check. */
+async function rowsOf(productId: string, db: Database | Transaction = suite.db) {
+  return db
     .select({ startsOn: productTakeawayVatRates.startsOn, rate: productTakeawayVatRates.rate })
     .from(productTakeawayVatRates)
     .where(eq(productTakeawayVatRates.productId, productId))
@@ -44,13 +44,9 @@ async function rowsOf(productId: string) {
 }
 
 describe("readVenueVatRates", () => {
-  it("gives a Spanish venue the pack's pick list and the seven accepted rates", async () => {
+  it("gives a Spanish venue its area's rates from the packs", async () => {
     await spanishVenue();
-    const rates = await app((tx) => readVenueVatRates(tx));
-    expect(rates.pickable).toEqual(["0.00", "4.00", "10.00", "21.00"]);
-    expect(rates.accepted).toEqual(["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"]);
-    expect(rates.dineIn).toEqual([{ from: null, rate: "10.00" }]);
-    expect(rates.defaultTakeaway).toBe("10.00");
+    expect(await app((tx) => readVenueVatRates(tx))).toEqual(vatRatesFor("ES", "ES-common"));
   });
 
   it("refuses a venue with no taxpayer", async () => {
@@ -79,23 +75,27 @@ describe("setTakeawayVatRate", () => {
     expect(await rowsOf(id)).toEqual([{ startsOn: null, rate: 2100 }]);
   });
 
-  it("refuses a rate outside the pick list, accepted or not", async () => {
+  it("refuses a rate outside the pick list, accepted or not, before deleting the rows", async () => {
     await spanishVenue();
     const id = await product();
-    for (const rate of ["5.00", "7.50", "3.00", "21"]) {
-      await expect(app((tx) => setTakeawayVatRate(tx, id, rate))).rejects.toMatchObject({
-        code: "product.invalid",
-        params: { field: "takeawayVatRate" },
-      });
-    }
-    expect(await rowsOf(id)).toEqual([]);
+    await seedTakeawayVatRate(suite.db, id);
+    const left = await app(async (tx) => {
+      for (const rate of ["5.00", "7.50", "3.00", "21"]) {
+        await expect(setTakeawayVatRate(tx, id, rate)).rejects.toMatchObject({
+          code: "product.invalid",
+          params: { field: "takeawayVatRate" },
+        });
+      }
+      return rowsOf(id, tx);
+    });
+    expect(left).toEqual([{ startsOn: null, rate: 1000 }]);
   });
 
   it("replaces a list holding a dated row with exactly one first row", async () => {
     await spanishVenue();
     const id = await product();
-    await rateRow(id, null, 1000);
-    await rateRow(id, "2027-01-01", 2100);
+    await seedTakeawayVatRate(suite.db, id);
+    await seedTakeawayVatRate(suite.db, id, { startsOn: "2027-01-01", rate: 2100 });
     await app((tx) => setTakeawayVatRate(tx, id, "4.00"));
     expect(await rowsOf(id)).toEqual([{ startsOn: null, rate: 400 }]);
   });
@@ -104,33 +104,18 @@ describe("setTakeawayVatRate", () => {
     await spanishVenue();
     const parent = await product();
     const variant = await product(parent);
-    await rateRow(parent, null, 1000);
-    await rateRow(variant, null, 2100);
+    await seedTakeawayVatRate(suite.db, parent);
+    await seedTakeawayVatRate(suite.db, variant, { rate: 2100 });
     await app((tx) => setTakeawayVatRate(tx, variant, null));
     expect(await rowsOf(variant)).toEqual([]);
-    await expect(app((tx) => setTakeawayVatRate(tx, parent, null))).rejects.toMatchObject({
-      code: "product.invalid",
-      params: { field: "takeawayVatRate" },
+    const parentLeft = await app(async (tx) => {
+      await expect(setTakeawayVatRate(tx, parent, null)).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "takeawayVatRate" },
+      });
+      return rowsOf(parent, tx);
     });
-    expect(await rowsOf(parent)).toEqual([{ startsOn: null, rate: 1000 }]);
-  });
-
-  it("checks before deleting, so a caller that catches a refusal keeps the rows", async () => {
-    await spanishVenue();
-    const id = await product();
-    await rateRow(id, null, 1000);
-    const left = await app(async (tx) => {
-      for (const rate of [null, "5.00"]) {
-        await expect(setTakeawayVatRate(tx, id, rate)).rejects.toMatchObject({
-          code: "product.invalid",
-        });
-      }
-      return tx
-        .select({ rate: productTakeawayVatRates.rate })
-        .from(productTakeawayVatRates)
-        .where(eq(productTakeawayVatRates.productId, id));
-    });
-    expect(left).toEqual([{ rate: 1000 }]);
+    expect(parentLeft).toEqual([{ startsOn: null, rate: 1000 }]);
   });
 
   it("checks against the area's rates a caller hands in, without reading the area", async () => {
@@ -164,8 +149,8 @@ describe("setTakeawayVatRate", () => {
 describe("readTakeawayVatSchedules", () => {
   it("reads a stored rate back at two places, oldest first", async () => {
     const id = await product();
-    await rateRow(id, "2027-01-01", 2100);
-    await rateRow(id, null, 750);
+    await seedTakeawayVatRate(suite.db, id, { startsOn: "2027-01-01", rate: 2100 });
+    await seedTakeawayVatRate(suite.db, id, { rate: 750 });
     const schedules = await app((tx) => readTakeawayVatSchedules(tx, [id]));
     expect(schedules.get(id)).toEqual([
       { from: null, rate: "7.50" },
@@ -177,8 +162,8 @@ describe("readTakeawayVatSchedules", () => {
     const parent = await product();
     const plain = await product(parent);
     const own = await product(parent);
-    await rateRow(parent, null, 1000);
-    await rateRow(own, null, 2100);
+    await seedTakeawayVatRate(suite.db, parent);
+    await seedTakeawayVatRate(suite.db, own, { rate: 2100 });
     const schedules = await app((tx) => readTakeawayVatSchedules(tx, [plain, own, parent]));
     expect(schedules.get(plain)).toEqual([{ from: null, rate: "10.00" }]);
     expect(schedules.get(own)).toEqual([{ from: null, rate: "21.00" }]);
@@ -188,7 +173,7 @@ describe("readTakeawayVatSchedules", () => {
   it("leaves out a top-level product without rows, and reads nothing for no ids", async () => {
     const bare = await product();
     const rated = await product();
-    await rateRow(rated, null, 400);
+    await seedTakeawayVatRate(suite.db, rated, { rate: 400 });
     const schedules = await app((tx) => readTakeawayVatSchedules(tx, [bare, rated]));
     expect([...schedules.keys()]).toEqual([rated]);
     expect((await app((tx) => readTakeawayVatSchedules(tx, []))).size).toBe(0);
