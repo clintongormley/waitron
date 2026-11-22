@@ -68,7 +68,7 @@ Cuando no pasa nada, cada fila dice:
   **Reconstruyendo la copia**.
   **Actualización desconocida** significa que la principal no puede confirmar su progreso.
   Abre **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
-  equipo de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el equipo de reserva durante dos minutos.
+  servidor de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el equipo de reserva durante dos minutos.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
   lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin

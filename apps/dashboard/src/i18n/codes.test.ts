@@ -341,7 +341,7 @@ it("has English and Spanish copy for a bucket Save refused while the venue has a
   const code = "backup.spare_stream_active";
   expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
   expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
-  expect(codeMessage(code, "en")).toContain("choose Remove on its row under Servers");
+  expect(codeMessage(code, "en")).toContain("choose Remove on its row on the Servers page");
   expect(codeMessage(code, "es")).toContain("elige Retirar en su fila de Servidores");
 });
 
@@ -525,7 +525,7 @@ it("has a sentence in both languages for each refusal of a manager's action on a
   }
 });
 
-it("has a sentence in both languages for each refusal of a server's removal", () => {
+it("has a sentence in both languages for each refusal of a box's removal", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   for (const code of [
@@ -569,7 +569,7 @@ it.each([
     expect(codeMessage(code, language)).not.toMatch(/cannot be removed|no se puede retirar/);
 });
 
-it("has a sentence in both languages for each refusal of clearing a server", () => {
+it("has a sentence in both languages for each refusal of clearing a box", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   for (const code of [
@@ -1049,7 +1049,7 @@ it("has a sentence in both languages for these handover refusals", () => {
   }
 });
 
-it("words a handover a newer list of servers stopped as what happened, not as a fault", () => {
+it("words a handover a newer list of boxes stopped as what happened, not as a fault", () => {
   expect(codeMessage("handover.superseded_during_start", "en")).toBe(
     "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
   );
@@ -1089,7 +1089,7 @@ it.each([
   expect(codeMessage(code, "es")).toBe(spanish);
 });
 
-it("says a standby server cannot be switched on from another device, in English and Spanish", () => {
+it("says a standby box cannot be switched on from another device, in English and Spanish", () => {
   expect(codeMessage("promotion.from_box_only", "en")).toBe(
     "In this version a standby box cannot be switched on from another device. Nothing was changed.",
   );
@@ -1171,7 +1171,7 @@ it.each([
   ],
   [
     "handover.operation_unknown",
-    "That box has no record of this handover. Open Servers on the current main box to check the current handover.",
+    "That box has no record of this handover. Open the Servers page on the current main box to check the current handover.",
     "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
   ],
   [
@@ -1186,12 +1186,12 @@ it.each([
   ],
   [
     "handover.not_a_spare",
-    "This box is not a spare and cannot accept this handover. Open Servers on the main box and choose a joined spare.",
+    "This box is not a spare and cannot accept this handover. Open the Servers page on the main box and choose a joined spare.",
     "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   ],
   [
     "handover.membership_mismatch",
-    "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check Servers on the current main box before trying again.",
+    "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check the Servers page on the current main box before trying again.",
     "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
   ],
   [
@@ -1313,7 +1313,7 @@ it("a source preflight refusal keeps trading and names Stop and the handover gui
   );
 });
 
-it("says how far a month file had got when the server ran short of space, in the language's style", () => {
+it("says how far a month file had got when the box ran short of space, in the language's style", () => {
   const params = { writtenBytes: 1_200_000_000 };
   expect(codeMessage("tax_office.space_ran_out", "en", params)).toBe(
     "The box ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 1.2 GB; free more space than that on the box, for example by keeping fewer backups under Backups, then try again.",

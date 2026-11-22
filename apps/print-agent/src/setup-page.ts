@@ -96,14 +96,14 @@ function formCard(deps: SetupDeps, savedUrl: string, error?: string): string {
   const name = escapeHtml(deps.defaultName);
   if (deps.envLocked) {
     return `<h1>Waitron print agent</h1>
-<p>This agent's server address is set by its container and cannot be changed here.</p>
-<dl><dt>Server address</dt><dd>${escapeHtml(savedUrl)}</dd></dl>`;
+<p>This agent's box address is set by its container and cannot be changed here.</p>
+<dl><dt>Box address</dt><dd>${escapeHtml(savedUrl)}</dd></dl>`;
   }
   return `<h1>Waitron print agent</h1>
-<p>Enter the address of the venue's server to connect this print agent.</p>
+<p>Enter the address of the venue's box to connect this print agent.</p>
 ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
 <form method="post" action="/setup">
-  <label for="serverUrl">Server address</label>
+  <label for="serverUrl">Box address</label>
   <input id="serverUrl" name="serverUrl" type="url" placeholder="https://box.local" value="${escapeHtml(savedUrl)}" required>
   <label for="name">Name</label>
   <input id="name" name="name" type="text" value="${name}">
@@ -112,7 +112,7 @@ ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
 }
 
 function statusCard(status: AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> }): string {
-  const server = escapeHtml(status.current ?? status.serverUrl ?? "the server");
+  const server = escapeHtml(status.current ?? status.serverUrl ?? "the box");
   switch (status.phase) {
     case "pending": {
       const body =
@@ -144,7 +144,7 @@ ${lastError}
     }
     case "unauthorized":
       return `<h1>Waitron print agent</h1>
-<p>This agent was denied or disabled. Save the server address below and approve the new join in the dashboard.</p>`;
+<p>This agent was denied or disabled. Save the box address below and approve the new join in the dashboard.</p>`;
     case "unreachable": {
       const detail =
         status.lastError !== undefined
@@ -175,8 +175,8 @@ function countdown(resetAt: number, now: number): string {
 
 function resetCard(snapshot: AgentSetupSnapshot, now: number): string {
   if (snapshot.resetAt === undefined) {
-    return `<h2>Connect to another venue server</h2>
-<p>This agent cannot reach its venue. Starting a reset gives the current server five minutes to recover before this agent forgets its approval.</p>
+    return `<h2>Connect to another venue box</h2>
+<p>This agent cannot reach its venue. Starting a reset gives the current box five minutes to recover before this agent forgets its approval.</p>
 <form method="post" action="/network/reset"><button type="submit">Join a new network</button></form>`;
   }
   return `<h2>Network reset pending</h2>
@@ -240,7 +240,7 @@ export function createSetupApp(deps: SetupDeps): Hono {
     if (networkRefused(snapshot, c)) return forbidden(c);
     if (snapshot.joined) return c.text("The print agent is already joined.", 409);
     if (deps.envLocked) {
-      return c.text("The server address is fixed by this agent's container.", 405);
+      return c.text("The box address is fixed by this agent's container.", 405);
     }
     const form = await c.req.parseBody();
     const rawUrl = typeof form.serverUrl === "string" ? form.serverUrl.trim() : "";

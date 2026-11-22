@@ -1413,7 +1413,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(confirmation()).not.toContain("VAT belongs to");
   });
 
-  it("keeps Send disabled, saying so under the actions, when the server's date and this device's differ", async () => {
+  it("keeps Send disabled, saying so under the actions, when the box's date and this device's differ", async () => {
     const { screen, request } = await mount(
       replacementServer(futureCase("2026-11-03"), async () => ({}), deviceToday(-2)),
       continuation(["fiscal.remedy"]).value,
@@ -1583,7 +1583,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     }
   });
 
-  it("says in the bottom message that the server cannot date a replacement now, with Send quiet and disabled, when the page could not read the box's day", async () => {
+  it("says in the bottom message that the box cannot date a replacement now, with Send quiet and disabled, when the page could not read the box's day", async () => {
     const request = replacementServer(futureCase("2026-11-03"), async () => ({}), null);
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);

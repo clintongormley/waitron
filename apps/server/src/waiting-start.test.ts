@@ -1021,7 +1021,7 @@ describe("the waiting start", () => {
       expect(await page()).not.toContain(statement);
     });
 
-    it("names its Spanish action as the Servers page's warning quotes it", async () => {
+    it("names its Spanish heading and action «Seguir como servidor principal»", async () => {
       const spanish = await (
         await h
           .app()

@@ -147,7 +147,7 @@ afterEach(() => {
 });
 
 describe("servers screen list", () => {
-  it("names each machine's role in words and marks which one is this server", async () => {
+  it("names each machine's role in words and marks which one is this box", async () => {
     const el = await mount();
     expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(t("servers.standing.primary"));
     expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(t("servers.standing.standby"));
@@ -184,7 +184,7 @@ describe("servers screen list", () => {
     for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
   });
 
-  it("offers a switch label for the main server and the spare, and opens the row's label", async () => {
+  it("offers a switch label for the main box and the spare, and opens the row's label", async () => {
     const el = await mount();
     for (const other of [FORMER, REMOVED]) expect(inTable(el, `switch-label-${other}`)).toBeNull();
     const order = [...rowMenu(el, STANDBY)!.querySelectorAll("wt-button")].map((button) =>
@@ -245,7 +245,7 @@ describe("servers screen list", () => {
     expect(es["servers.remove"]).not.toBe(es["action.remove"]);
   });
 
-  it("paints the this-server tag from the muted text token, inside the table's shadow root", async () => {
+  it("paints the this-box tag from the muted text token, inside the table's shadow root", async () => {
     const el = await mount();
     const tag = inTable(el, `self-${SELF}`)!;
     const address = inTable(el, `address-${SELF}`)!;
@@ -268,7 +268,7 @@ describe("servers screen list", () => {
     expect(getComputedStyle(address).color).not.toBe(muted);
   });
 
-  it("shows the empty message when this server holds no list", async () => {
+  it("shows the empty message when this box holds no list", async () => {
     const el = await mount(
       stubApi({
         listServers: vi.fn().mockResolvedValue({ term: null, nodes: [] }),
@@ -355,7 +355,7 @@ describe("servers screen list", () => {
     expect(body).toContain(`${t("servers.machine")} 55555555`);
   });
 
-  it("says why nothing can be removed when this server is not the primary", async () => {
+  it("says why nothing can be removed when this box is not the primary", async () => {
     const onStandby: ServerListing = {
       term: 3,
       nodes: listing.nodes.map((n) => ({
@@ -372,7 +372,7 @@ describe("servers screen list", () => {
     );
   });
 
-  it("says the same when no listed machine is this server", async () => {
+  it("says the same when no listed machine is this box", async () => {
     const notListed: ServerListing = {
       term: 3,
       nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false, canClear: false })),

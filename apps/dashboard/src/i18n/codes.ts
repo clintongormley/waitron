@@ -1344,7 +1344,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Se ha visto a otro servidor escribiendo la copia de este local en el mismo bucket, así que este servidor no copiará encima. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
   },
   "backup.spare_stream_active": {
-    en: "This venue has a standby box, listed under Servers, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row under Servers, then save again.",
+    en: "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row on the Servers page, then save again.",
     es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar en su fila de Servidores y vuelve a guardar.",
   },
   "backup.stream_config_unsafe": {
@@ -1721,7 +1721,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
   },
   "handover.return_outstanding": {
-    en: "The last handover is still waiting for the former main box to return its invoice records. Switch it on, or choose Will not return for it under Servers. Will not return stops the wait; invoice records the former main box made after the copy this main box started from stay only on it.",
+    en: "The last handover is still waiting for the former main box to return its invoice records. Switch it on, or choose Will not return for it on the Servers page. Will not return stops the wait; invoice records the former main box made after the copy this main box started from stay only on it.",
     es: "El último traspaso sigue esperando a que el antiguo servidor principal devuelva sus registros de facturación. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación que el antiguo servidor principal hizo después de la copia con la que empezó este servidor principal se quedan solo en él.",
   },
   "handover.return_not_outstanding": {
@@ -1755,7 +1755,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El servidor antiguo no ha confirmado que se haya detenido para este traspaso. Mantén ambos servidores conectados y consulta el progreso del traspaso en el servidor antiguo.",
   },
   "handover.operation_unknown": {
-    en: "That box has no record of this handover. Open Servers on the current main box to check the current handover.",
+    en: "That box has no record of this handover. Open the Servers page on the current main box to check the current handover.",
     es: "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
   },
   "handover.final_copy_changed": {
@@ -1767,7 +1767,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor no ha podido completar este paso del traspaso. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   },
   "handover.not_a_spare": {
-    en: "This box is not a spare and cannot accept this handover. Open Servers on the main box and choose a joined spare.",
+    en: "This box is not a spare and cannot accept this handover. Open the Servers page on the main box and choose a joined spare.",
     es: "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   },
   "handover.promotion_running": {
@@ -1775,11 +1775,11 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor está pasando a ser el servidor principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
   },
   "handover.membership_mismatch": {
-    en: "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check Servers on the current main box before trying again.",
+    en: "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check the Servers page on the current main box before trying again.",
     es: "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.not_main_box": {
-    en: "This box is not the main box. Open Servers at the main box’s address to start a handover.",
+    en: "This box is not the main box. Open the Servers page at the main box’s address to start a handover.",
     es: "Este servidor no es el principal. Abre Servidores en la dirección del servidor principal para iniciar un traspaso.",
   },
   "handover.venue_not_supported": {
@@ -1787,7 +1787,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "La forma de presentar facturas de este local aún no admite el traspaso. Elige Parar y sigue usando el servidor principal.",
   },
   "handover.destination_not_spare": {
-    en: "That box is not listed as a spare. Choose Stop and check the current Servers list before choosing a spare.",
+    en: "That box is not listed as a spare. Choose Stop and check the list on the Servers page before choosing a spare.",
     es: "Ese servidor no figura como reserva. Elige Parar y revisa la lista actual de Servidores antes de elegir un servidor de reserva.",
   },
   "handover.destination_not_joined": {
@@ -1803,7 +1803,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El servidor de reserva no ha dado una respuesta verificable. Comprueba su alimentación y su conexión de red y vuelve a intentar el traspaso.",
   },
   "handover.restarted_before_stepdown": {
-    en: "This handover was cancelled before this box handed over. Check the current Servers list, then start a new handover if the spare is still listed.",
+    en: "This handover was cancelled before this box handed over. Check the list on the Servers page, then start a new handover if the spare is still listed.",
     es: "Este traspaso se canceló antes de que este servidor cediera el local. Revisa la lista actual de Servidores e inicia otro traspaso si el servidor de reserva sigue en ella.",
   },
   "handover.superseded_during_start": {
@@ -1811,7 +1811,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Otro servidor ha pasado a llevar el local o ha cambiado la lista de servidores. Abre la dirección del servidor principal actual para continuar.",
   },
   "handover.membership_changed": {
-    en: "The venue’s details or its list of boxes changed during this handover. Check Servers on the current main box before starting a new handover.",
+    en: "The venue’s details or its list of boxes changed during this handover. Check the Servers page on the current main box before starting a new handover.",
     es: "Los datos del local o su lista de servidores han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
@@ -1839,7 +1839,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El servidor de reserva no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
   },
   "handover.settings_changed": {
-    en: "This box’s settings changed during the handover. Check Servers on the current main box before starting a new handover.",
+    en: "This box’s settings changed during the handover. Check the Servers page on the current main box before starting a new handover.",
     es: "Los ajustes de este servidor han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.indicator_untrusted": {
@@ -1984,7 +1984,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
 };
 
-const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
+export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
   setPrice: {
     en: "Enter a set-menu price from 0.00 to 10,000.00.",
     es: "Indica un precio entre 0,00 y 10.000,00 para el menú.",

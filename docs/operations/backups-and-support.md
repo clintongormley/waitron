@@ -52,7 +52,7 @@ network access to its setup page; inspect that page on the agent's host through 
 If it cannot reach the venue, **Join a new network** starts a five-minute wait.
 **Cancel reset** or a successful reconnect cancels it. If the wait ends while still
 disconnected, the agent forgets its approval and saved server list. On a separate agent,
-save the new server address and approve its join in the dashboard. A container-fixed server
+save the new box address and approve its join in the dashboard. A container-fixed box
 address cannot be changed on that page. On the venue's spare box the agent prints through the main
 box. When it cannot reach the main box, the page says so and offers no new reset; it prints again
 once it reaches the main box or this box becomes the main box. If the agent was deleted on the main

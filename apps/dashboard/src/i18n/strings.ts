@@ -1495,9 +1495,9 @@ export const en = {
   "email.settings.prepare_save":
     "Saving a mail server sends invitations and password-reset links to real inboxes.",
   "email.settings.remove_capture":
-    "Remove the saved mail server? Email will be kept in this box's test inbox again. Stop keeps the server settings.",
+    "Remove the saved mail server? Email will be kept in this box's test inbox again. Stop keeps the mail server settings.",
   "email.settings.remove_live":
-    "Remove the saved mail server? Account email cannot be sent and invoices cannot be emailed until you set up another server. Trading continues. Stop keeps the server settings.",
+    "Remove the saved mail server? Account email cannot be sent and invoices cannot be emailed until you set up another mail server. Trading continues. Stop keeps the mail server settings.",
   "email.settings.change": "Change mail server",
   "email.settings.set_up": "Set up mail server",
   "email.settings.unavailable": "Invoices cannot be emailed until you set up a mail server.",
@@ -1625,7 +1625,7 @@ export const en = {
     "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
   "recovery_pack_dialog.make": "Make pack",
   "recovery_pack_dialog.key_failed":
-    "The pack was made, but the box key was {not} replaced. The box key page in the pack says why.",
+    "The pack was made, but the box key was {not} replaced. The pack says why.",
   "recovery_pack_dialog.not": "not",
   "recovery_pack_dialog.key_still_works":
     "The current key, on recovery pack {number} made on {date}, still works.",

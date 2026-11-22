@@ -368,7 +368,7 @@ it("points the disk warning at the Box status page, in three sentences, in both 
   expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
-describe("the copy when it goes to the standby server, not the owner's bucket", () => {
+describe("the copy when it goes to the standby box, not the owner's bucket", () => {
   const CHECK_EN =
     "Check that the standby box is switched on and connected to the restaurant's network.";
   const CHECK_ES =

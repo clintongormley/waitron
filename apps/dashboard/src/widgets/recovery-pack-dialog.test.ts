@@ -231,12 +231,12 @@ describe("the form", () => {
     );
   });
 
-  it("offers the new server key when the card could not read the status, since nothing is known", async () => {
+  it("offers the new box key when the card could not read the status, since nothing is known", async () => {
     const { el } = await open({ at: null });
     expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
   });
 
-  it("offers the new server key when the last pack had a server-key part", async () => {
+  it("offers the new box key when the last pack had a server-key part", async () => {
     const at = status({
       latest: {
         number: 2,
@@ -382,7 +382,7 @@ describe("closing", () => {
   });
 });
 
-describe("the server key was not replaced", () => {
+describe("the box key was not replaced", () => {
   async function failedKey(at: RecoveryPackStatus) {
     const api = stubApi();
     api.makeRecoveryPack.mockResolvedValue({
@@ -739,7 +739,7 @@ describe("the words", () => {
 
   it("says the key was not replaced without claiming its page was not drawn", () => {
     expect(en["recovery_pack_dialog.key_failed"]).toBe(
-      "The pack was made, but the box key was {not} replaced. The box key page in the pack says why.",
+      "The pack was made, but the box key was {not} replaced. The pack says why.",
     );
     expect(es["recovery_pack_dialog.key_failed"]).toBe(
       "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",

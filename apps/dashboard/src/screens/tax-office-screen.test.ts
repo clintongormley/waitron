@@ -634,7 +634,7 @@ it("Save the file on the ready line starts the browser's download, shows the fil
   expect(actionError(el)).toBeUndefined();
 });
 
-it("says the file is no longer on the server when Save finds it gone, and downloads nothing", async () => {
+it("says the file is no longer on the box when Save finds it gone, and downloads nothing", async () => {
   history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const startDownload = vi.fn();
   const el = await mount(
@@ -794,7 +794,7 @@ const ranOut = {
 const nextStep = (el: TaxOfficeScreen, test: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`);
 
-it("says how far the month had got when the server ran short of space, in place of the plain failure", async () => {
+it("says how far the month had got when the box ran short of space, in place of the plain failure", async () => {
   history.replaceState(null, "", "/invoices/from/2026-04-15/to/2026-04-30");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },

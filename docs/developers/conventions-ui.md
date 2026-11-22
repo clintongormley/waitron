@@ -1681,6 +1681,40 @@ country registry carries pinned CLDR translations for those two languages, with 
 `deploy/third-party/unicode-cldr/`. The till displays the country text supplied by the server's
 receipt layout.
 
+## The Waitron machine is box and servidor
+
+The owner's words (2026-11-22): “we've been using server or box interchangably, i think we need to
+change all references to use "box"”, then “box in english, servidor in spanish, not equipo”. The
+dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page".
+
+Three guards read named string tables; each is weaker than its name.
+
+- `apps/till/src/i18n/box-word.test.ts` reads English only: `en` in the till's `strings.ts`,
+  `helpEn` in `help-strings.ts`, and every `en` string nested in `CODE_TABLES` in `codes.ts`. It
+  refuses "server" or "servers" in any case, and allows "mail server" and "the Servers page".
+- `apps/dashboard/src/i18n/box-word.test.ts` reads English and Spanish: `en` and `es` in the
+  dashboard's `strings.ts`; `CODE_MESSAGES` and `SET_MENU_FIELDS` in `codes.ts`; `ALERT_MESSAGES`
+  (with each entry's `items`, `one` and `variants`) and `ALERT_WORDS` in `alert-messages.ts`; and
+  each kind of sentence `diskStopMessage` in `disk-stop-words.ts` builds. In English it allows
+  "mail server", "SMTP server" and "time server" (singular or plural, spaced or hyphenated), "the
+  Servers page", and the two entries whose whole value is the page's title (`nav.servers`,
+  `servers.title`). In Spanish it refuses "equipo" or "equipos" except in the entries it lists,
+  each of which may hold its listed phrases meaning a staff team, a piece of equipment or the
+  computer a printer is plugged into, once each; another "equipo" added to one of those entries is
+  still refused.
+- `packages/fiscal-verifactu/src/dashboard/box-word.test.ts` reads English and Spanish:
+  `AEAT_CERTIFICATE_STRINGS` and `AEAT_CERTIFICATE_CODE_MESSAGES` in `strings.ts`,
+  `CONFLICT_RECOVERY_STRINGS` in `conflict-recovery-strings.ts` and `EXPORT_GUIDE_STRINGS` in
+  `export-guides.ts`. In English it allows "time server" (singular or plural, spaced or
+  hyphenated), "the Servers page" and the `{server}` placeholder; in Spanish it refuses every
+  "equipo" or "equipos".
+
+None of them reads the user guides, setup, the pages `apps/server` renders itself (the recovery,
+waiting and handover pages among them), the print agent's setup page, emails, the recovery pack,
+another module's dashboard strings (`packages/*/src/dashboard/strings.ts` other than
+fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
+component or a message function, such as the sentences `codes.ts`'s `codeMessage` builds inline.
+
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
 Use the shared registry for staged modal, page and credential input, including the supervisor's

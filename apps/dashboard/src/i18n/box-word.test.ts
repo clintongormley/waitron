@@ -1,50 +1,49 @@
 import { expect, it } from "vitest";
 import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
-import { CODE_MESSAGES } from "./codes.js";
+import { CODE_MESSAGES, SET_MENU_FIELDS } from "./codes.js";
+import { diskStopMessage } from "./disk-stop-words.js";
 import { en, es } from "./strings.js";
 
 // The Waitron machine is "the box" in English and "el servidor" in Spanish (owner, 2026-11-22).
-// "Servers" with a capital and a plural is the Servers page's name, which stays.
-const OTHER_SERVERS = /\b([Mm]ail|SMTP|time)[- ]servers?\b|\bServers\b/g;
+// Weaker than its name: reads only the tables below, not domain.ts's name tables, words written
+// inline in codes.ts's message functions or in components, nor other packages' dashboard strings.
+const OTHER_SERVERS = [/\b(mail|SMTP|time)[- ]servers?\b/gi, /\bthe Servers page\b/g];
+// The page's own title, which the owner kept.
+const PAGE_TITLES = new Set(["nav.servers", "servers.title"]);
 const SERVER = /\bservers?\b/i;
-// The mail server's settings.
-const SERVER_MEANS_SOMETHING_ELSE = new Set([
-  "email.settings.remove_capture",
-  "email.settings.remove_live",
-]);
 
 const EQUIPO = /\bequipos?\b/i;
-// Staff team, device equipment, or the computer a printer is plugged into.
-const EQUIPO_MEANS_SOMETHING_ELSE = new Set([
-  "nav.group.team",
-  "printers.agent_host",
-  "printers.address",
-  "printers.host_required",
-  "equipment.label",
-  "equipment.label_title",
-  "equipment.label_hint",
-  "code:device.equipment_held",
-]);
+// Each phrase means a staff team, a piece of equipment, or the computer a printer is plugged into.
+// One occurrence of each is allowed, so another "equipo" added to the entry is still seen.
+const OTHER_EQUIPOS: Record<string, string[]> = {
+  "nav.group.team": ["Equipo"],
+  "printers.agent_host": ["Equipo"],
+  "printers.address": ["Equipo"],
+  "printers.host_required": ["nombre de equipo"],
+  "equipment.label": ["Etiqueta del equipo"],
+  "equipment.label_title": ["Etiqueta del equipo"],
+  "equipment.label_hint": ["pégala en el equipo", "el equipo pasa"],
+  "code:device.equipment_held": ["ese equipo"],
+};
 
-function englishTexts(): [string, string][] {
+function texts(locale: "en" | "es"): [string, string][] {
+  const deleted = { count: 2, date: "2026-11-01", lastDate: "2026-11-02", severalDays: false };
   return [
-    ...Object.entries(en),
+    ...Object.entries(locale === "en" ? en : es),
     ...Object.entries(CODE_MESSAGES).map(([code, words]): [string, string] => [
       `code:${code}`,
-      words.en,
+      words[locale],
     ]),
-    ...alertTexts("en"),
-  ];
-}
-
-function spanishTexts(): [string, string][] {
-  return [
-    ...Object.entries(es),
-    ...Object.entries(CODE_MESSAGES).map(([code, words]): [string, string] => [
-      `code:${code}`,
-      words.es,
+    ...Object.entries(SET_MENU_FIELDS).map(([field, words]): [string, string] => [
+      `set-menu-field:${field}`,
+      words[locale],
     ]),
-    ...alertTexts("es"),
+    ["disk-stop:no-status", diskStopMessage(null, false, locale)],
+    ["disk-stop:none-deleted", diskStopMessage(null, true, locale)],
+    ["disk-stop:one-deleted", diskStopMessage({ ...deleted, count: 1 }, true, locale)],
+    ["disk-stop:deleted", diskStopMessage(deleted, true, locale)],
+    ["disk-stop:several-days", diskStopMessage({ ...deleted, severalDays: true }, true, locale)],
+    ...alertTexts(locale),
   ];
 }
 
@@ -65,25 +64,35 @@ function alertTexts(locale: "en" | "es"): [string, string][] {
   return texts;
 }
 
+function namesTheBoxAServer(key: string, text: string): boolean {
+  if (PAGE_TITLES.has(key) && text === "Servers") return false;
+  return SERVER.test(OTHER_SERVERS.reduce((rest, phrase) => rest.replace(phrase, ""), text));
+}
+
+function namesTheBoxEquipo(key: string, text: string): boolean {
+  const phrases = OTHER_EQUIPOS[key] ?? [];
+  return EQUIPO.test(phrases.reduce((rest, phrase) => rest.replace(phrase, ""), text));
+}
+
 it("calls the Waitron machine the box in English", () => {
-  const offending = englishTexts()
-    .filter(([key]) => !SERVER_MEANS_SOMETHING_ELSE.has(key))
-    .filter(([, text]) => SERVER.test(text.replace(OTHER_SERVERS, "")))
+  const offending = texts("en")
+    .filter(([key, text]) => namesTheBoxAServer(key, text))
     .map(([key, text]) => `${key}: ${text}`);
   expect(offending).toEqual([]);
 });
 
 it("calls the Waitron machine el servidor in Spanish, never el equipo", () => {
-  const offending = spanishTexts()
-    .filter(([key]) => !EQUIPO_MEANS_SOMETHING_ELSE.has(key))
-    .filter(([, text]) => EQUIPO.test(text))
+  const offending = texts("es")
+    .filter(([key, text]) => namesTheBoxEquipo(key, text))
     .map(([key, text]) => `${key}: ${text}`);
   expect(offending).toEqual([]);
 });
 
-it("still sees a server named in a sentence beside the page's name", () => {
-  expect(SERVER.test("Open Servers on the main server".replace(OTHER_SERVERS, ""))).toBe(true);
-  expect(SERVER.test("Check the mail server and the Servers page".replace(OTHER_SERVERS, ""))).toBe(
-    false,
-  );
+it("still sees the machine named beside an allowed phrase", () => {
+  expect(namesTheBoxAServer("x", "Open the Servers page on the main server")).toBe(true);
+  expect(namesTheBoxAServer("x", "Open Servers on the main box")).toBe(true);
+  expect(namesTheBoxAServer("x", "Check the mail server and the Servers page")).toBe(false);
+  expect(namesTheBoxAServer("nav.servers", "Servers on this server")).toBe(true);
+  expect(namesTheBoxEquipo("nav.group.team", "Equipo")).toBe(false);
+  expect(namesTheBoxEquipo("nav.group.team", "Equipo de este equipo")).toBe(true);
 });

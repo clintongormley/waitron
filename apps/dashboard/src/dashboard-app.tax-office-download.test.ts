@@ -319,7 +319,7 @@ describe("the shell's notice for the tax office's month file", () => {
     expect(saveButton(el)).toBeNull();
   });
 
-  it("tells the person the server restarted when a build gives way to nothing, past a refused read", async () => {
+  it("tells the person the box restarted when a build gives way to nothing, past a refused read", async () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())
@@ -476,7 +476,7 @@ describe("the shell's notice for the tax office's month file", () => {
     await expect.poll(() => monthLine(el)).toBeNull();
   });
 
-  it("says how far the file had got when the server ran short of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
+  it("says how far the file had got when the box ran short of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())
