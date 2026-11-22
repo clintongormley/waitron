@@ -2716,7 +2716,7 @@ describe("till-app", () => {
       return el;
     }
 
-    /** The default menu with one shortcut, its Handheld display at 4 columns Menu first and its Till
+    /** The default menu with one shortcut, its Handheld display at 2 columns Menu first and its Till
      * display at 8. */
     const displayedMenus = (): Record<string, unknown> => {
       const served = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
@@ -2728,7 +2728,7 @@ describe("till-app", () => {
             shortcuts: [{ kind: "product" as const, productId: "cafe" }],
             handheld: {
               ...HOME_DISPLAY_DEFAULTS.handheld,
-              columns: 4,
+              columns: 2,
               order: "menu_first" as const,
             },
             till: { ...HOME_DISPLAY_DEFAULTS.till, columns: 8 },
@@ -2775,7 +2775,7 @@ describe("till-app", () => {
       expect(tableOrder(el)).not.toBeNull();
       expect(await menuHome(tableOrder(el)!)).toEqual({
         regions: ["search", "structure", "shortcuts"],
-        columns: ["4", "4"],
+        columns: ["2", "2"],
       });
     });
 
