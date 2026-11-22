@@ -835,7 +835,7 @@ for (const locale of ["en", "es"] as const) {
         delete expected[phase].tables[table];
       }
       // The fixture keeps the series purpose's old stored word; it is spelled without its quotes
-      // so the rename list in this commit's message never rewrites it.
+      // so the rename list in the pull request never rewrites it.
       const series = expected[phase].tables.invoice_series!;
       series.rows = Object.fromEntries(
         Object.entries(series.rows).map(([key, row]) => {

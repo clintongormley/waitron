@@ -41,7 +41,7 @@ export const DAILY_REPORT_EMAIL_WORDS = {
     tips: "Propinas",
     billsClosed: "Cuentas cerradas",
     sales: "Ventas",
-    corrections: "Rectificaciones",
+    corrections: "Rectificativas",
     voids: "Anulaciones",
     vat: "IVA por tipo",
     rate: "Tipo",

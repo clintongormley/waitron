@@ -37,7 +37,7 @@ turns that on.
 about 47 are production code or live docs. PR 2 touches about 40 to 60 files once PR 1 has put the
 tests' whole-set series lists behind one constant: about 36 production files and a few fixtures.
 Generated files in each PR: the core set's starting migration (`packages/db/drizzle/0000_baseline.sql`,
-`meta/0000_snapshot.json`) and `scripts/migration-baseline-epoch.json`.
+`meta/0000_snapshot.json`, `meta/_journal.json`) and `scripts/migration-baseline-epoch.json`.
 
 **Approvals.** The owner asked for both changes (above). When the watcher clears this plan, the
 clearance is recorded in lane L's `questions.md`.
