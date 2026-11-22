@@ -80,7 +80,7 @@ export class BillEditConflictsDialog extends LitElement {
     if (!this.isConnected || this.selected !== null) return;
     const selector =
       focusBill === undefined
-        ? "[data-split-take-over], [data-review-conflicts]"
+        ? "[data-split-take-over], [data-finish-conflicts]"
         : `[data-split-take-over="${CSS.escape(focusBill)}"]`;
     const button =
       this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(selector) ??
@@ -99,6 +99,7 @@ export class BillEditConflictsDialog extends LitElement {
     const { prompt, selected } = this;
     const name = selected?.ownerName ?? "";
     const remaining = prompt.rows.filter((row) => !this.taken.has(row));
+    const hasReview = prompt.moveDishes === true;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -116,7 +117,9 @@ export class BillEditConflictsDialog extends LitElement {
       ${
         selected === null
           ? remaining.length === 0
-            ? nothing
+            ? hasReview
+              ? nothing
+              : html`<p>${t("table.try_action_again")}</p>`
             : html`<p>
                   ${t(prompt.moveDishes ? "table.move_dish_conflicts" : "table.edit_conflicts")}
                 </p>
@@ -151,13 +154,15 @@ export class BillEditConflictsDialog extends LitElement {
         <wt-form-actions>
           ${
             selected === null
-              ? html`<wt-button
-                  slot="cancel"
-                  data-cancel-conflicts
-                  variant="secondary"
-                  @click=${() => this.#close(false)}
-                  >${t("action.cancel")}</wt-button
-                >`
+              ? remaining.length === 0 && !hasReview
+                ? nothing
+                : html`<wt-button
+                    slot="cancel"
+                    data-cancel-conflicts
+                    variant="secondary"
+                    @click=${() => this.#close(false)}
+                    >${t("action.cancel")}</wt-button
+                  >`
               : html`<wt-button
                   slot="cancel"
                   data-back-to-conflicts
@@ -178,10 +183,10 @@ export class BillEditConflictsDialog extends LitElement {
                 >`
               : remaining.length === 0
                 ? html`<wt-button
-                    data-review-conflicts
+                    data-finish-conflicts
                     variant="primary"
-                    @click=${() => this.#close(true)}
-                    >${t("table.review_after_take_over")}</wt-button
+                    @click=${() => this.#close(hasReview)}
+                    >${t(hasReview ? "table.review_after_take_over" : "table.submitted_close")}</wt-button
                   >`
                 : nothing
           }

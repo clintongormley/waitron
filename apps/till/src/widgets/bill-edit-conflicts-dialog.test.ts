@@ -56,7 +56,7 @@ it("identifies each blocked bill and offers Take over only for a known draft", a
     "Take over draft · Table 4 · Bill 2",
   );
   expect(button('[data-split-take-over="b7"]')).toBeNull();
-  expect(button("[data-review-conflicts]")).toBeNull();
+  expect(button("[data-finish-conflicts]")).toBeNull();
 });
 
 it("returns focus to the selected row on Back and dismisses without taking over", async () => {
@@ -80,23 +80,15 @@ it("keeps a refused takeover's message in the confirmation", async () => {
   expect(prompt.close).not.toHaveBeenCalled();
 });
 
-it("does not apply an answer after the dialog has closed", async () => {
-  let complete!: (value: string) => void;
-  const takeOver = vi.fn(
-    () =>
-      new Promise<string>((resolve) => {
-        complete = resolve;
-      }),
-  );
-  const { el, root, button, prompt } = await mount({ takeOver });
+it("after resolving a whole-table conflict, tells staff to try again and offers Close", async () => {
+  const { button, root, prompt } = await mount();
   await userEvent.click(button('[data-split-take-over="b2"]'));
   await userEvent.click(button("[data-confirm-take-over]"));
-  expect(takeOver).toHaveBeenCalledOnce();
-  el.remove();
-  complete("The draft was sent.");
-  await el.updateComplete;
-  expect(root.querySelector('[role="alert"]')).toBeNull();
-  expect(prompt.close).not.toHaveBeenCalled();
+  const close = button("[data-finish-conflicts]");
+  expect(close?.textContent?.trim()).toBe("Close");
+  expect(root.querySelector("p")?.textContent?.trim()).toBe("Try again.");
+  await userEvent.click(close);
+  await vi.waitFor(() => expect(prompt.close).toHaveBeenCalledWith(false));
 });
 
 it("the shared row distinguishes orders taken from this waiter from other held orders", () => {

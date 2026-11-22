@@ -12712,27 +12712,29 @@ describe("till-app: table relocation editing observations", () => {
     },
   );
 
+  const destinationConflict = {
+    billId: "wo-7",
+    editorId: "luis",
+    editorName: "Luis",
+    editorVersion: 6,
+    draftId: "draft-luis",
+    draftRevision: 4,
+  };
+  const destinationRefusal = {
+    code: "draft.taken_over",
+    status: 409,
+    billId: destinationConflict.billId,
+    draftId: destinationConflict.draftId,
+    ownerId: destinationConflict.editorId,
+    ownerName: destinationConflict.editorName,
+    edit: destinationConflict,
+    conflicts: [destinationConflict],
+  };
+
   it.each(commands)("$method offers the other party's draft from its refusal", async (command) => {
-    const { billId } = destinationEdits[0]!;
-    const conflict = {
-      billId,
-      editorId: "luis",
-      editorName: "Luis",
-      editorVersion: 6,
-      draftId: "draft-luis",
-      draftRevision: 4,
-    };
-    const send = vi.fn().mockRejectedValue({
-      code: "draft.taken_over",
-      status: 409,
-      billId,
-      draftId: conflict.draftId,
-      ownerId: conflict.editorId,
-      ownerName: conflict.editorName,
-      edit: conflict,
-      conflicts: [conflict],
-    });
-    const takeOverDraft = vi.fn().mockRejectedValue({ code: "draft.out_of_date", status: 409 });
+    const { billId } = destinationConflict;
+    const send = vi.fn().mockRejectedValue(destinationRefusal);
+    const takeOverDraft = vi.fn().mockRejectedValue({ code: "draft.not_found", status: 404 });
     const { el } = await mountApp({
       listDrafts: observations(),
       [command.method]: send,
@@ -12754,7 +12756,51 @@ describe("till-app: table relocation editing observations", () => {
       },
       { signal: expect.any(AbortSignal) },
     );
+    expect(root.querySelector('[role="alert"]')?.textContent).toBe(t("table.take_over_changed"));
   });
+
+  it.each(["switches bills", "signs out"] as const)(
+    "retires the conflict dialog if the waiter %s while take-over answers",
+    async (action) => {
+      const joinTables = vi.fn().mockRejectedValue(destinationRefusal);
+      let refuse!: (error: unknown) => void;
+      const takeOverDraft = vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            refuse = reject;
+          }),
+      );
+      const { el } = await mountApp({ listDrafts: observations(), joinTables, takeOverDraft });
+      emit(await openPartyTable(el), "join-tables", { tableId: "t7" });
+      const dialog = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+      await vi.waitFor(() => expect(dialog()).not.toBeNull());
+      const root = dialog()!.shadowRoot!;
+      await userEvent.click(root.querySelector<HTMLElement>('[data-split-take-over="wo-7"]')!);
+      await userEvent.click(root.querySelector<HTMLElement>("[data-confirm-take-over]")!);
+      expect(takeOverDraft).toHaveBeenCalledOnce();
+
+      if (action === "switches bills")
+        emit(tableOrder(el)!, "switch-bill", { workingOrderId: "wo-check" });
+      else emit(tableOrder(el)!, "logout");
+      await vi.waitFor(() => expect(dialog()).toBeNull());
+      refuse({ code: "draft.not_found", status: 404 });
+      await flush(el, 6);
+
+      if (action === "switches bills")
+        emit(tableOrder(el)!, "switch-bill", { workingOrderId: "wo-4" });
+      else {
+        emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+        await flush(el, 6);
+        emit(shell(el), "screen-select", { screen: "floor" });
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      }
+      await flush(el, 6);
+      expect(tableOrder(el)?.orderId).toBe("wo-4");
+      expect(dialog()).toBeNull();
+      expect(joinTables).toHaveBeenCalledOnce();
+    },
+  );
 
   it("offers the draft on the bill being merged", async () => {
     const conflict = {

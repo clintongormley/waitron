@@ -978,7 +978,7 @@ describe("A803 move dishes app:", () => {
     expect(controls.textContent).toContain("Luis");
     await userEvent.click(controls.querySelector<HTMLElement>('[data-split-take-over="bill-1"]')!);
     await userEvent.click(controls.querySelector<HTMLElement>("[data-confirm-take-over]")!);
-    const review = () => controls.querySelector<HTMLElement>("[data-review-conflicts]");
+    const review = () => controls.querySelector<HTMLElement>("[data-finish-conflicts]");
     await vi.waitFor(() => expect(review()).not.toBeNull());
     await userEvent.click(review()!);
 

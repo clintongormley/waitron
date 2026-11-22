@@ -1917,6 +1917,23 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.saveDraft).not.toHaveBeenCalled();
   });
 
+  it("sends the confirmed edit when a newer snapshot arrives before take-over sends", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const confirmed = draft.expectedEdit!;
+    const outcome = draft.takeOver(theirs.id, theirs.revision, confirmed);
+    theirs.revision++;
+    draft.applyBillSnapshot(server.snapshot(theirs), draft.generation);
+    expect(draft.expectedEdit?.draftRevision).toBe(theirs.revision);
+
+    expect(await outcome).toEqual({ refused: "draft.out_of_date" });
+    expect(server.takeOverDraft.mock.calls[0]?.[2]).toMatchObject({
+      revision: confirmed.draftRevision,
+      expectedEdit: confirmed,
+    });
+  });
+
   it("reads the drafts again when the take-over got no answer by its limit", async () => {
     const theirs = seed("p2", steak);
     const draft = sync();

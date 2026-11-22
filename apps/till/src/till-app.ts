@@ -19689,6 +19689,13 @@ export class TillApp extends LitElement {
         return null;
       } catch (error) {
         const code = (error as { code?: string } | undefined)?.code;
+        if (
+          code === "draft.taken_over" ||
+          code === "draft.out_of_date" ||
+          code === "draft.not_found" ||
+          code === "draft.already_submitted"
+        )
+          return t("table.take_over_changed");
         return code === undefined ? t("table.error") : codeMessage(code);
       } finally {
         limit.done();
