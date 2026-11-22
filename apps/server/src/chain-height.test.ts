@@ -1,12 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
+import { registerSif, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { nodeId as brandNodeId } from "@waitron/shared";
+import {
+  freshFiscalIds,
+  insertFiscalRegistro,
+  insertFiscalSale,
+} from "./testing/fiscal-fixtures.js";
 import { readChainHeight } from "./chain-height.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -15,7 +22,6 @@ const LOCALE = "es-ES";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
-  resetPerTest: false,
   timeoutMs: 60_000,
 });
 
@@ -57,31 +63,68 @@ async function setupVenue(): Promise<{ nodeId: string }> {
 
 describe("readChainHeight", () => {
   let nodeId: string;
+  const recordedAt = "2026-08-29T10:00:00.000Z";
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     ({ nodeId } = await setupVenue());
   });
 
-  it("returns 0 / null for a node with no cadenas row", async () => {
-    // Provisioning seeds this venue's own chain head at `secuencia = 0`, so the "absent row" branch is
-    // reached only by a node_id with no chain row, such as a random uuid.
-    const result = await withTransaction(suite.db, async (tx) => {
-      return readChainHeight(tx, randomUUID());
+  async function placeRecord() {
+    const [series] = await suite.db
+      .select()
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, nodeId));
+    const [identity] = await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, nodeId));
+    const ids = freshFiscalIds({ nodeId, seriesId: series!.id, sifId: identity!.id });
+    await insertFiscalSale(suite.db, ids);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(recordedAt));
+    try {
+      await insertFiscalRegistro(suite.db, ids, { secuencia: 7 });
+    } finally {
+      vi.useRealTimers();
+    }
+    return identity!;
+  }
+
+  it("returns 0 / null for an unknown node", async () => {
+    expect(await withTransaction(suite.db, (tx) => readChainHeight(tx, randomUUID()))).toEqual({
+      height: 0,
+      lastAt: null,
     });
-    expect(result).toEqual({ height: 0, lastAt: null });
   });
 
-  it("returns the cadenas secuencia + actualizado_en once a chain row exists", async () => {
-    // A fixture write, never a path the product takes. What is under test is the READ below.
-    await suite.db.execute(sql`
-      insert into cadenas (node_id, secuencia, actualizado_en)
-      values (${nodeId}, 7, '2026-08-29T10:00:00Z')
-      on conflict (node_id) do update set secuencia = 7, actualizado_en = '2026-08-29T10:00:00Z'`);
-
-    const result = await withTransaction(suite.db, async (tx) => {
-      return readChainHeight(tx, nodeId);
+  it("returns 0 / null for a provisioned node with no record", async () => {
+    expect(await withTransaction(suite.db, (tx) => readChainHeight(tx, nodeId))).toEqual({
+      height: 0,
+      lastAt: null,
     });
-    expect(result.height).toBe(7);
-    expect(result.lastAt).toBe("2026-08-29T10:00:00.000Z");
+  });
+
+  it("returns the latest record's position and creation time", async () => {
+    await placeRecord();
+    expect(await withTransaction(suite.db, (tx) => readChainHeight(tx, nodeId))).toEqual({
+      height: 7,
+      lastAt: recordedAt,
+    });
+  });
+
+  it("keeps the last record time after registering a fresh identity", async () => {
+    const old = await placeRecord();
+    await withTransaction(suite.db, (tx) =>
+      registerSif(tx, {
+        nodeId: brandNodeId(nodeId),
+        nif: old.nif,
+        idSistemaInformatico: old.idSistemaInformatico,
+        numeroInstalacion: "P000042",
+      }),
+    );
+    expect(await withTransaction(suite.db, (tx) => readChainHeight(tx, nodeId))).toEqual({
+      height: 7,
+      lastAt: recordedAt,
+    });
   });
 });
