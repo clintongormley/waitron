@@ -248,7 +248,7 @@ export async function cancelJoin(app: Hono, listed: ListedJoin): Promise<Respons
 }
 
 /** Opens what an approved poll handed the new box, as the new box does; null when it does not open. */
-export function unlockJoin(listed: ListedJoin, locked: LockedJoinBundle): unknown {
+function unlockJoin(listed: ListedJoin, locked: LockedJoinBundle): unknown {
   const opened = unlockJoinBundle({
     requestId: listed.requestId,
     locked,
