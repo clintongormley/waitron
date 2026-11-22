@@ -231,10 +231,11 @@ it("retires a counter take-over when browser history leaves the counter", async 
     },
     "none",
   );
+  const screenShown = () => el.shadowRoot!.querySelector("till-shell")?.activeScreen;
   for (const screen of ["floor", "counter"]) {
     emit(shell(el), "screen-select", { screen });
     await flush(el);
-    expect(shell(el).activeScreen).toBe(screen);
+    expect(screenShown()).toBe(screen);
   }
   const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
   move();
@@ -247,7 +248,7 @@ it("retires a counter take-over when browser history leaves the counter", async 
     else history.forward();
     await moved;
     await flush(el);
-    expect(shell(el).activeScreen).toBe(screen);
+    expect(screenShown()).toBe(screen);
     expect(prompt()).toBeNull();
   }
 });
