@@ -8,6 +8,9 @@
 > foreign key on `device_approved_profiles` still cascades on a physical delete, superseding the
 > key described in §§1.3 and 5 below. See [the dv10 preflight decision](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-dv10-approved-profile-zones.md).
 
+> **22 November 2026, 19:43.** The watcher retired dv17 and kept drawer history in `drawer_opens`.
+> This supersedes the move to `activity_log` described below. [Build order](../../plans/2026-11-08-a1308-build-order.md#batch-2--area-slices)
+
 # Target design: devices, device profiles and printers
 
 Area: devices, join requests, device profiles and everything hanging off them, print agents,

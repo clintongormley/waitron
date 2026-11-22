@@ -1,8 +1,10 @@
 # A1308 devices and printing package move
 
+**22 November 2026, 19:43.** The watcher retired dv17. See the [build order](2026-11-08-a1308-build-order.md#batch-2--area-slices) for the current sequence.
+
 The watcher assigned this assessment on 22 November at 18:24. The proposed move would give devices and printing their
 own CI selection. Base `84a5ba27c6` includes dv16 (#3823), refunds os12/os13
-(#3962/#3971) and the correction-slip fix (#4077). [Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices) · [dv17 plan](2026-11-08-a1308-dv17-drawer-opens.md)
+(#3962/#3971) and the correction-slip fix (#4077). [Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices) · [dv17 plan](https://github.com/clintongormley/waitron/blob/f1842d0ffdf8f284ac3fb096c4a6a9f70e602de7/docs/superpowers/plans/2026-11-08-a1308-dv17-drawer-opens.md)
 
 ## Package and size
 
@@ -47,4 +49,4 @@ landed in `99a9f19596`. [Bill fixture design](2026-11-21-a1308-orders-sales-firs
 On 22 November at 19:27, the watcher kept the devices move on hold while the shared work is unsized and cleared dv17
 to run first at today's server paths. After dv17, assess the payments move for env3 in one page and stop at the
 assessment if its shared work is also unsized.
-[dv17 writer](2026-11-08-a1308-dv17-drawer-opens.md#L91) · [env3](2026-11-08-a1308-env3-payments-settings.md)
+[dv17 writer](https://github.com/clintongormley/waitron/blob/f1842d0ffdf8f284ac3fb096c4a6a9f70e602de7/docs/superpowers/plans/2026-11-08-a1308-dv17-drawer-opens.md#L91) · [env3](2026-11-08-a1308-env3-payments-settings.md)

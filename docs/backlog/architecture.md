@@ -959,7 +959,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
