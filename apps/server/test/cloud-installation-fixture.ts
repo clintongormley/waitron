@@ -20,6 +20,7 @@ export async function installationFixture(
     guestMenu?: MachineHandler;
     ownerRecovery?: MachineHandler;
     errorReport?: MachineHandler;
+    staffReport?: MachineHandler;
     tunnel?: MachineHandler;
     translationState?: () => ServiceState;
     remoteAccess?: () => { state: ServiceState; configuration: object };
@@ -134,6 +135,10 @@ export async function installationFixture(
             publication: null,
           }),
         );
+      return;
+    }
+    if (values[2] === "staff-report" && options.staffReport) {
+      await options.staffReport(values, saved, req, res, sent);
       return;
     }
     if (values[2] === "error-report" && options.errorReport) {

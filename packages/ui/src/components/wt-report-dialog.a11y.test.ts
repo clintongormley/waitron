@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "../a11y-helpers.js";
 import { WtReportDialog, type ReportDialogCopy } from "./wt-report-dialog.js";
@@ -50,3 +51,63 @@ describe.each(["light", "dark"] as const)("report dialog a11y (%s)", (theme) => 
     await expectNoA11yViolations(host);
   });
 });
+
+test.each(["light", "dark"] as const)(
+  "Cloud confirmation and feedback are accessible in %s",
+  async (theme) => {
+    const el = (await mountThemed(
+      "<wt-report-dialog></wt-report-dialog>",
+      theme,
+    )) as WtReportDialog;
+    const sendProblemReport = vi.fn(async (_id: string) => ({ delivery: "queued" as const }));
+    Object.assign(el, {
+      open: true,
+      preview: "Download-only browser diagnostics",
+      description: "Local description",
+      cloud: {
+        previewProblemReport: async () => ({
+          available: true,
+          id: "preview",
+          attachment: '{"version":"1.2.3"}',
+        }),
+        sendProblemReport,
+      },
+      copy: {
+        ...copy,
+        cloud: {
+          scope: "Send the Cloud attachment or download a separate file.",
+          localDescription: "What happened? (download only)",
+          preview: "Cloud attachment",
+          send: "Send to Waitron Cloud",
+          sent: "Sent to Waitron Cloud.",
+          queued: "The box will try again.",
+          refused: "Could not send. You can download the report instead.",
+        },
+      },
+    });
+    await expect
+      .poll(() => el.shadowRoot!.querySelector('[aria-label="Cloud attachment"]')?.textContent)
+      .toBe('{"version":"1.2.3"}');
+    const attachment = el.shadowRoot!.querySelector<HTMLElement>(
+      '[aria-label="Cloud attachment"]',
+    )!;
+    const description = el.shadowRoot!.querySelector("wt-textarea")!;
+    expect(attachment.getBoundingClientRect().top).toBeLessThan(
+      description.getBoundingClientRect().top,
+    );
+    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-send]")!;
+    await expectNoA11yViolations(host);
+    await userEvent.click(button);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+      .toBe("The box will try again.");
+    expect(
+      el.shadowRoot!.querySelector('[role="status"]')!.closest('wt-form-actions[slot="footer"]'),
+    ).not.toBeNull();
+    expect(sendProblemReport.mock.calls[0]?.[0]).toBe("preview");
+    expect(el.shadowRoot!.querySelector("wt-textarea")!.label).toBe(
+      "What happened? (download only)",
+    );
+    await expectNoA11yViolations(host);
+  },
+);

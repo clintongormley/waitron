@@ -48,6 +48,8 @@ import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { cloudErrorReportsJob, createCloudErrorReports } from "./cloud-error-reports.js";
+import { cloudProblemReportsJob, createCloudProblemReports } from "./cloud-problem-reports.js";
+import { mountProblemReportApi } from "./problem-report-api.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import {
@@ -4147,6 +4149,25 @@ async function bootServer(
     ...cloudReportOptions,
     connection: cloudConnection,
   });
+  const problemReportsWritable = () => cloudPrimary() && diskFull.since() === null;
+  const release = seams.builtRelease ?? builtRelease();
+  const problemReports = cloudConnection
+    ? createCloudProblemReports({
+        ...cloudReportOptions,
+        nodeId: node.nodeId,
+        version: release.bundled ? release.version : null,
+        paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
+        isPrimary: problemReportsWritable,
+        now,
+        log,
+        connection: cloudConnection,
+      })
+    : undefined;
+  mountProblemReportApi(
+    app,
+    { db, devMode: config.devMode, deviceChooserEnabled, reports: problemReports },
+    log,
+  );
   mountCloudApi(
     app,
     {
@@ -4716,6 +4737,7 @@ async function bootServer(
       }),
     );
   if (cloudConnection) jobRunner.add(cloudErrorReportsJob(errorReports, cloudPrimary));
+  if (problemReports) jobRunner.add(cloudProblemReportsJob(problemReports, problemReportsWritable));
   if (suggestionRunner)
     jobRunner.add(
       suggestionsJob(suggestionRunner, cloudPrimary, (error) =>

@@ -14,6 +14,14 @@ export const en = {
     "Use up to 2,000 characters and remove unsupported characters.",
   "problem_report.download": "Download report",
   "problem_report.download_failed": "Could not create the download. Try again.",
+  "problem_report.cloud_scope":
+    "Review the Cloud attachment before sending. The download keeps this browser's activity and your description in a file.",
+  "problem_report.local_description": "What happened? (download only)",
+  "problem_report.cloud_preview": "Cloud attachment",
+  "problem_report.send": "Send to Waitron Cloud",
+  "problem_report.sent": "Sent to Waitron Cloud.",
+  "problem_report.queued": "Saved on this box. It will try sending again.",
+  "problem_report.refused": "Could not send the report. Download it or reopen it to try again.",
 
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped": "New invoices are stopped. Open recovery with the current box key.",
@@ -2323,6 +2331,15 @@ export const es: Record<StringKey, string> = {
     "Usa hasta 2000 caracteres y elimina los caracteres no admitidos.",
   "problem_report.download": "Descargar informe",
   "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
+  "problem_report.cloud_scope":
+    "Revisa el informe adjunto antes de enviarlo a Cloud. La descarga guarda la actividad de este navegador y tu descripción en un archivo.",
+  "problem_report.local_description": "¿Qué ha pasado? (solo para la descarga)",
+  "problem_report.cloud_preview": "Informe adjunto para Cloud",
+  "problem_report.send": "Enviar a Waitron Cloud",
+  "problem_report.sent": "Enviado a Waitron Cloud.",
+  "problem_report.queued": "Guardado en este servidor. Volverá a intentar enviarlo.",
+  "problem_report.refused":
+    "No se ha podido enviar el informe. Descárgalo o vuelve a abrirlo para intentarlo de nuevo.",
 
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":

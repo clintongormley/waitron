@@ -156,7 +156,10 @@ Si la caja se comporta de forma inesperada, elige **Informar de un problema** en
 iniciar sesión o mientras se muestra la página de fichaje o de asistencia, usa el botón situado
 encima de la página. Abre la caja por HTTPS si no aparece el botón.
 
-Describe qué ha pasado, revisa la vista previa y elige **Descargar informe**. No incluyas contraseñas,
-datos de pago ni información personal en la descripción. El archivo contiene la actividad reciente
-de este navegador; no se envía nada ni se guarda en el servidor. Conservas el archivo para
-compartirlo cuando tú decidas.
+Si aparece **Enviar a Waitron Cloud**, revisa el informe adjunto antes de enviarlo. Incluye los
+códigos de error, la versión de Waitron y datos básicos de la instalación. El servidor te avisa
+cuando Cloud lo recibe o cuando lo ha guardado para volver a intentar enviarlo más adelante.
+
+Para conservar un archivo, describe qué ha pasado, revisa la vista previa de la descarga y elige
+**Descargar informe**. Tu descripción y la actividad reciente de este navegador quedan solo en ese
+archivo. No incluyas contraseñas, datos de pago ni información personal en la descripción.

@@ -52,6 +52,7 @@ export const JOB_CATALOGUE = {
   },
   "cloud.connection": stop,
   "cloud.error_reports": stop,
+  "cloud.problem_reports": stop,
   housekeeping: stop,
   "cloud.suggestions": stop,
   "demo.printer": stop,

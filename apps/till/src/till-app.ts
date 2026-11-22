@@ -25693,7 +25693,10 @@ export class TillApp extends LitElement {
               </div>`
             : nothing
         }
-        <till-problem-report .triggerVisible=${shellFormFactor === undefined}></till-problem-report>
+        <till-problem-report
+          .triggerVisible=${shellFormFactor === undefined}
+          .api=${this.operatorName !== "" ? this.api : undefined}
+        ></till-problem-report>
         ${
           this.frontDoor === undefined && (this.attendancePage || this.clockPage)
             ? this.#renderNoticeStrip(

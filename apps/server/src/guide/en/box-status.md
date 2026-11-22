@@ -12,9 +12,13 @@ You can use it before signing in too. Open the dashboard over HTTPS if the butto
 On a phone, use the speech-bubble button with an exclamation mark.
 During setup, choose **Report a problem** in the page header. You can keep a report even if
 the box cannot answer or this already-open page loses its connection.
-Describe what happened, check the preview, then choose **Download report**. The file contains
-this browser's recent activity, rather than the box's log. Nothing is sent or saved on the box.
-Keep passwords, payment details and personal information out of your description.
+If you see **Send to Waitron Cloud**, review the Cloud attachment before sending it. It contains
+error codes, the Waitron version and basic installation details. The box tells you whether Cloud
+received it or the box will try again.
+
+To keep a file, describe what happened, check the download preview and choose **Download report**.
+Your description and this browser's recent activity go into the downloaded file only. Keep
+passwords, payment details and personal information out of your description.
 
 Open **System → Box status**, just above **Diagnostics**. Only people who can manage the system
 see it.

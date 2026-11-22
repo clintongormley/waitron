@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtReportDialog, WtTextarea } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "./api/client.js";
+import { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
+import type { DashboardProblemReport } from "./problem-report.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
@@ -15,13 +16,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   setLocale("en-GB");
 });
-async function fixture() {
+async function fixture(api?: DashboardApi) {
   vi.stubGlobal("isSecureContext", true);
   setLocale("en-GB");
-  const { el } = await mountWidget<HTMLElement & { updateComplete: Promise<boolean> }>(
-    "dashboard-problem-report",
-    {},
-  );
+  const { el } = await mountWidget<DashboardProblemReport>("dashboard-problem-report", { api });
   const trigger = el.shadowRoot?.querySelector<WtButton>("[data-report-problem]");
   expect(trigger).toBeDefined();
   await userEvent.click(trigger!);
@@ -241,4 +239,28 @@ it("retains the editable description after a failed download and retries without
   expect(preview(dialog)).toBe(visible);
   await userEvent.click(button);
   await expect.poll(() => dialog.open).toBe(false);
+});
+
+it("uses its signed-in API to preview and send only the Cloud attachment", async () => {
+  const urls: string[] = [];
+  const api = new DashboardApi("", async (url, init) => {
+    urls.push(`${init.method} ${url}`);
+    if (init.method === "GET")
+      return Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' });
+    expect(init.body).toBeUndefined();
+    return Response.json({ delivery: "sent" });
+  });
+  const { dialog } = await fixture(api);
+  await describeProblem(dialog, "Private staff note");
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
+    .toBe('{"version":"1.2.3"}');
+  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+    .toBe("Sent to Waitron Cloud.");
+  expect(urls).toEqual([
+    "GET /management-api/problem-reports/preview",
+    "POST /management-api/problem-reports/preview/send",
+  ]);
 });

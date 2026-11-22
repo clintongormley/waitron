@@ -259,6 +259,15 @@ function menuNamed(name: string) {
   return suite.db.select().from(menus).where(eq(menus.name, name)).all();
 }
 
+it("offers a local download without a Cloud report preview on an unlinked box", async () => {
+  await withServer({}, async ({ app, venue }) => {
+    const response = await app.request("/management-api/problem-reports/preview", {
+      headers: { cookie: venue.staffCookie },
+    });
+    expect(await answerOf(response)).toEqual({ status: 200, body: { available: false } });
+  });
+});
+
 describe("a management change in the running server", () => {
   it("refuses a change from another port of the box's own address, for a signed-in manager", async () => {
     await withServer({}, async ({ venue, host, restart }) => {

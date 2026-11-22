@@ -184,3 +184,34 @@ it("leaves the build empty until setReportBuild gives it one, then names it in t
   const after = await openStrip((await clockApp()).el);
   expect(data(preview(after)).client.build).toBe("v1.4.0");
 });
+
+it("shows that the box will retry a confirmed Cloud report", async () => {
+  const sendProblemReport = vi.fn(async (_id: string) => ({ delivery: "queued" as const }));
+  const { el } = await clockApp({
+    enabled: false,
+    api: {
+      previewProblemReport: async () => ({
+        available: true as const,
+        id: "preview",
+        attachment: '{"version":"1.2.3"}',
+      }),
+      sendProblemReport,
+    },
+  });
+  await signIn(el);
+  await working(el);
+  const shell = el.shadowRoot!.querySelector("till-shell")!;
+  await shell.updateComplete;
+  const menu = shell.shadowRoot!.querySelector("[data-test=more-menu]")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await userEvent.click(menu.querySelector<WtButton>("[data-report-problem]")!);
+  const dialog = dialogOf(el);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("[data-cloud-preview]")?.textContent)
+    .toBe('{"version":"1.2.3"}');
+  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+    .toBe("Saved on this box. It will try sending again.");
+  expect(sendProblemReport.mock.calls[0]?.[0]).toBe("preview");
+});
