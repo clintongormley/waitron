@@ -64,9 +64,6 @@ code, not run again here.
 
 - **A862.** The special-day painter's season days draw a past day's range uncut where the Calendar cuts it
   (`readSeasonDays`, `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut).
-- **A863.** A clash sentence names a range by its period, zone or department and its times only
-  (`clockChangeConflictText`, `packages/venue-service/src/dashboard/clock-change-conflict.ts`), so
-  a range in another department or on another weekday reads as if it were the one being edited.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.
@@ -89,12 +86,6 @@ code, not run again here.
   plan out with `planBusinessDayStart`, and `clockTransitionAt`
   (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
   to 20 moments when it looks for when a Save refused across a clocks change can be made.
-- **A873.** A refused Save's message in the Business-day start dialog stops "The business-day clock
-  changed. Close and reopen to review it." from appearing when the clock then changes
-  (`business-day-start-editor.ts`, the guard in `willUpdate`).
-- **A874.** The Business day card re-reads at a waiting change's moment by the browser's clock, and
-  once more if that answer still shows the change waiting; a server clock still behind at the
-  second answer leaves the New start row up until the next refresh.
 - **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
   hours, a season range past the 24th hour is cut at it when any special day is painted on that
   date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
@@ -149,6 +140,8 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
 
 ## Decisions and deliberate limits
+
+- **A874, watcher 2026-11-22.** The New start row stays up at most until the next 60-second refresh after the box's boundary, while the page is open and reads succeed.
 
 - **A877, watcher 2026-11-21.** Keep the hours read per waiting change. The Save planner keeps at
   most two changes waiting.

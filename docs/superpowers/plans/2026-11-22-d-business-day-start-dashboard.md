@@ -30,13 +30,13 @@ starts after #3990, which gives the preview its unlisted clash count.
   corrects the display, subject to request and browser scheduling delays.
   `apps/dashboard/src/api/live-queries.ts` and `packages/dashboard-kit/src/live-data.ts` keep that
   passive refresh on even while live updates are connected. Recommend keeping both reads.
-  In `apps/dashboard/src/screens/venue-details-business-day.test.ts`, fake intervals as well as
-  timeouts and Date, set live data connected and give the box a separate clock in the response
-  fixture. Test a browser ahead enough to get both early reads and a browser behind enough that
-  the regular refresh beats its boundary timer. Advance to the tick measured from mount. Assert
-  that the row clears and that only the opening read was active. Temporarily quiet the query
-  while connected to show the skew control catches the lost refresh. Bring contrary results
-  back to the watcher before changing refresh policy.
+  The watcher cleared an ahead-clock case at 01:34. In
+  `apps/dashboard/src/screens/venue-details-business-day.test.ts`, connect live updates and give
+  the box a clock behind the browser so both boundary reads return early. Advance to the 60-second
+  tick measured from mount and check that the row clears and only the opening read was active.
+  Temporarily quiet the query while connected to show the test catches the lost refresh. When the
+  browser clock is behind, the regular refresh can reach the box before the boundary timer fires.
+  Bring contrary results back to the watcher before changing refresh policy.
 - Add the shared `{#business-day-start}` heading to
   `apps/server/src/guide/{en,es}/opening-hours.md`. Explain how to find the named hours and reopen
   a stale edit. Add the key `opening-hours.business-day-start` in `apps/dashboard/src/help-guide.ts`

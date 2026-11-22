@@ -8,6 +8,12 @@ For the period detail, choose **Open this week** in the pop-up. In Week, click a
 
 To change the usual timetable, follow the season's **standard hours** link at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
 
+## Resolve a clash with the business-day start {#business-day-start}
+
+Use the department, day and hours in the message to find the clashing range. Open the named season or special day, then check the zone and period if the message gives them. Adjust the range or choose a different start time.
+
+If the business-day clock changes while you are editing the start time, close and reopen the editor. Check the latest start and preview before you save.
+
 ## Close a department for a special day {#department-closed}
 
 In the special-day editor, choose the department and tick **Closed** under the date. This closes that department all day and leaves the others on their own hours. A full-day Closed stroke also checks this tick. Untick it before painting new hours.

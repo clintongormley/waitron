@@ -89,14 +89,10 @@ it("closes the successful editor before a refresh failure and reports a read fai
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
   expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
 });
-it("re-reads passively at the waiting change's moment and then shows the new start, with no active read", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  vi.setSystemTime(new Date("2026-10-21T00:59:50.000Z"));
+function detailsAt(boxTime: number) {
   const initial = venueDetailsFixture({ timeZone: "Europe/Madrid", dayCutover: "05:00" });
-  let active = 0,
-    passive = 0;
-  const changeover = Date.parse("2026-10-21T01:00:00.000Z");
-  const snapshot = () => ({
+  const startsAt = "2026-10-21T01:00:00.000Z";
+  return {
     ...initial,
     businessDayClock: {
       clock: {
@@ -105,28 +101,35 @@ it("re-reads passively at the waiting change's moment and then shows the new sta
         cutoverChanges: [{ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }],
       },
       revision: 1,
-      ...(Date.now() < changeover
+      ...(boxTime < Date.parse(startsAt)
         ? {
             currentBusinessDay: "2026-10-20",
             pending: {
               effectiveBusinessDay: "2026-10-21",
               dayCutover: "03:00",
-              startsAt: "2026-10-21T01:00:00.000Z",
+              startsAt,
             },
           }
         : { currentBusinessDay: "2026-10-21", pending: null }),
     },
-  });
+  };
+}
+
+it("re-reads passively at the waiting change's moment and then shows the new start, with no active read", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  vi.setSystemTime(new Date("2026-10-21T00:59:50.000Z"));
+  let active = 0,
+    passive = 0;
   const api = {
     liveData: new LiveData(),
     getVenueDetails: async () => {
       active++;
-      return snapshot();
+      return detailsAt(Date.now());
     },
     background: {
       getVenueDetails: async () => {
         passive++;
-        return snapshot();
+        return detailsAt(Date.now());
       },
     },
   } as unknown as DashboardApi;
@@ -149,6 +152,42 @@ it("re-reads passively at the waiting change's moment and then shows the new sta
     expect(read("[data-test=new-start-value]")).toEqual([]);
     expect(active).toBe(1);
   } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps the Venue details read refreshing while live updates are connected", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  vi.setSystemTime(new Date("2026-10-21T00:59:50.000Z"));
+  const liveData = new LiveData();
+  liveData.setConnected(true);
+  const snapshot = () => detailsAt(Date.now() - 10_000);
+  const active = vi.fn(async () => snapshot());
+  const passive = vi.fn(async () => snapshot());
+  const api = {
+    liveData,
+    getVenueDetails: active,
+    background: { getVenueDetails: passive },
+  } as unknown as DashboardApi;
+  try {
+    const { el } = await mountWidget<VenueDetailsPanel>("dashboard-venue-details-panel", { api });
+    await vi.advanceTimersByTimeAsync(10_001);
+    const editor = el.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
+    const waiting = () => editor.shadowRoot!.querySelector("[data-test=saved-new-start]");
+    expect(passive).toHaveBeenCalledTimes(2);
+    expect(waiting()).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(49_998);
+    expect(waiting()).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(waiting()).toBeNull();
+    expect(
+      editor.shadowRoot!.querySelector("[data-test=saved-dayCutover]")?.textContent?.trim(),
+    ).toBe("03:00");
+    expect(active).toHaveBeenCalledTimes(1);
+  } finally {
+    cleanupWidgets();
     vi.useRealTimers();
   }
 });

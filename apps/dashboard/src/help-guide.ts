@@ -11,6 +11,7 @@ export const GUIDE_LINKS = {
   "email.remove": { page: "email", section: "remove" },
   "email.test-results": { page: "email", section: "test-results" },
   "venue.time-zone": { page: "time-zone", section: "confirm" },
+  "opening-hours.business-day-start": { page: "opening-hours", section: "business-day-start" },
   "products.selling-unit": { page: "products", section: "selling-unit" },
   "products.vat": { page: "products", section: "vat" },
   "products.course": { page: "products", section: "course" },

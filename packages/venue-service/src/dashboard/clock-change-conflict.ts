@@ -1,7 +1,8 @@
-import { formatChangeoverMoment } from "@waitron/dashboard-kit";
+import { formatChangeoverMoment, formatDayAndMonth } from "@waitron/dashboard-kit";
 import type { BusinessDayClockConflict } from "@waitron/module";
 import { format } from "./hours-view.js";
 import type { Refusal } from "./refusal.js";
+import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 
 type HoursReason = Exclude<BusinessDayClockConflict["reason"], "kept_open">;
@@ -16,9 +17,23 @@ export function clockChangeConflictText(refusal: Refusal): string | undefined {
     conflicts: readonly BusinessDayClockConflict[];
   };
   const first = params.conflicts[0]!;
-  const name = first.periodName ?? first.zoneName ?? first.departmentName;
+  const day =
+    first.date === undefined
+      ? first.weekday === undefined
+        ? undefined
+        : weekdayLabel(first.weekday)
+      : formatDayAndMonth(first.date);
   return format("hours.clock_change_conflict", {
-    range: `${name} ${first.startsAt}–${first.endsAt}`,
+    range: [
+      first.specialDayName ?? first.seasonName,
+      first.departmentName,
+      first.zoneName,
+      day,
+      first.periodName,
+      `${first.startsAt}–${first.endsAt}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     time: params.dayCutover,
     when: formatChangeoverMoment(params.startsAt, params.timeZone),
     reason: t(`hours.conflict.${first.reason as HoursReason}`),
