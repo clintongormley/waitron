@@ -26,11 +26,12 @@ import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { rowKey, visibleRoutingRows } from "./routing.js";
 import { occurrenceKey } from "./floor-layout-due.js";
 import {
-  parseServiceDay,
+  parseServiceDayWithPositions,
   rangeInForce,
   rangeSpan,
   rangeSpanInDay,
   serviceMomentAt,
+  type AtPosition,
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
@@ -40,7 +41,6 @@ import type {
   DepartmentService,
   OpeningHoursModel,
   MenuPeriodInput,
-  MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext } from "./operations.js";
@@ -127,12 +127,11 @@ export async function requirePeriod(tx: Transaction, periodId: string) {
 /** Refuses a slot naming a period that is not the department's own. */
 function assertOwnPeriods(
   own: ReadonlySet<string>,
-  days: readonly { field: string; slots: readonly MenuSlot[] }[],
+  days: readonly { field: string; slots: readonly AtPosition<ServiceRange>[] }[],
 ): void {
   for (const { field, slots } of days)
-    slots.forEach((slot, index) => {
-      if (!own.has(slot.periodId)) invalidTimetable(`${field}.${index}.periodId`);
-    });
+    for (const slot of slots)
+      if (!own.has(slot.periodId)) invalidTimetable(`${field}.${slot.position}.periodId`);
 }
 
 /** What staging a department week reads, for every listed department at once. */
@@ -472,7 +471,9 @@ export async function stageMenuWeek(
   reads?: DepartmentWeekReads,
 ): Promise<{ changed: boolean; write: () => Promise<void> }> {
   const week = parseMenuWeek(days, (value, field) => {
-    const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
+    const parsed = scheduleCutovers(clock).map((cutover) =>
+      parseServiceDayWithPositions(value, field, cutover),
+    );
     return parsed[0]!;
   });
   const known = reads ?? (await readDepartmentWeekReads(tx, [departmentId], clock));

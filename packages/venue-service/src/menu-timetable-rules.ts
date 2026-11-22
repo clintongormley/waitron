@@ -9,17 +9,17 @@ export function invalidTimetable(
   throw new AppError("menu_timetable.invalid", { field, ...refusal });
 }
 
-export interface ParsedMenuWeek {
-  slots: MenuSlot[][];
+export interface ParsedMenuWeek<T extends MenuSlot> {
+  slots: T[][];
   indexOf: number[];
 }
 
-export function parseMenuWeek(
+export function parseMenuWeek<T extends MenuSlot>(
   value: unknown,
-  parseDay: (value: unknown, field: string) => MenuSlot[],
-): ParsedMenuWeek {
+  parseDay: (value: unknown, field: string) => T[],
+): ParsedMenuWeek<T> {
   if (!Array.isArray(value) || value.length !== 7) invalidTimetable("days");
-  const slots: MenuSlot[][] = [];
+  const slots: T[][] = [];
   const indexOf: number[] = [];
   value.forEach((entry: unknown, index) => {
     if (typeof entry !== "object" || entry === null) invalidTimetable(`days.${index}`);

@@ -25,7 +25,12 @@ import { storedTime, wireTime } from "./operations.js";
 import { readHolidayDates, type HolidayReads } from "./holidays.js";
 import { joinTouching } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
-import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
+import {
+  clockTimeSkippedInDay,
+  parseRanges,
+  type ClosedRange,
+  type AtPosition,
+} from "./service-day.js";
 import "./errors.js";
 
 export interface SpecialDayDateRule {
@@ -420,13 +425,10 @@ const record = (value: unknown, field: string): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
-/** `position` is the range's place in the request, which `parseRanges` reorders. */
-type Placed<T> = T & { position: number };
-
 interface ParsedEntry<T> {
   ownerId: string;
   date: LocalDate;
-  ranges: Placed<T>[];
+  ranges: AtPosition<T>[];
   /** Refuses the entry, or the part of it at `path` (such as `ranges.0.startsAt`). */
   refuse: (path: string, extra: Refusal) => never;
 }
@@ -466,14 +468,14 @@ function parseOwnRanges<T extends ClosedRange>(
   date: LocalDate,
   refuse: (at: string, extra: Refusal) => never,
   read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
-): Placed<T>[] {
+): AtPosition<T>[] {
   return cutoversOf(date).map((cutover) =>
     parseRanges(
       ranges,
       field,
       cutover,
       (at, reason) => refuse(at, reason === undefined ? {} : { reason }),
-      (item, at, range, index): Placed<T> => ({ ...read(item, at, range), position: index }),
+      (item, at, range, index): AtPosition<T> => ({ ...read(item, at, range), position: index }),
     ),
   )[0]!;
 }
