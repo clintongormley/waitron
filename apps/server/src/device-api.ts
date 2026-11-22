@@ -5,7 +5,7 @@ import type { DeviceZoneSelectionInput } from "@waitron/module";
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { AppError, compareStationNames } from "@waitron/shared";
+import { AppError, compareStationNames, PERSON_HEADER } from "@waitron/shared";
 import {
   deviceNotDeleted,
   deviceProfiles,
@@ -729,7 +729,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const answer = await withTransaction(deps.db, async (tx) => {
         const { screen, personId } = await kitchenScreenOf(tx, c, device, "station");
-        return moveDishesToStation(
+        const moved = await moveDishesToStation(
           tx,
           cfg,
           id,
@@ -742,6 +742,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             },
           },
         );
+        return personId === null && c.req.header(PERSON_HEADER) !== undefined
+          ? { ...moved, personNotSignedIn: true }
+          : moved;
       });
       return c.json(answer);
     }),

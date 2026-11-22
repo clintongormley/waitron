@@ -6443,7 +6443,16 @@ it.each([false, true])("direct Kitchen mount requires act-as-kds (%s)", async (a
 });
 
 it("signs in and out on a kitchen display without replacing its station board", async () => {
+  const moves = new TillClient("", async () =>
+    Response.json({
+      revision: 1,
+      stationId: "grill",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
+      personNotSignedIn: true,
+    }),
+  );
   const { el } = await mountApp({
+    namePersonFrom: moves.namePersonFrom.bind(moves),
     getTill: vi.fn().mockResolvedValue({
       ...till,
       formFactor: "kds",
@@ -6495,6 +6504,21 @@ it("signs in and out on a kitchen display without replacing its station board", 
   expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")).toBeNull();
   expect(screen!.shadowRoot!.querySelector("[data-kitchen-sign-in]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
+
+  emit(screen!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [], locale: null });
+  await flush(el);
+  expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")?.textContent?.trim()).toBe(
+    "Ana",
+  );
+  await moves.deviceMoveDishStation("order-1", {
+    submissionId: "move-1",
+    lineIds: ["line-1"],
+    stationId: "grill",
+  });
+  await flush(el);
+  expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
+  expect(api.logout).toHaveBeenCalledOnce();
 });
 
 it("keeps a kitchen pass as a device board when its profile admits staff", async () => {

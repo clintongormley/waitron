@@ -161,7 +161,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     ]);
     expect(await inTx(venue, (tx) => readBillEditState(tx, tabId))).toEqual(saved.edit);
   });
-  it.each([false, true])(
+  it.each(["signed-out", "signed-in", "ended"] as const)(
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
       const screen = await display(stationScreen(bar));
@@ -234,14 +234,14 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     });
   });
 
-  it.each([false, true])(
+  it.each(["signed-out", "signed-in", "ended"] as const)(
     "attributes a move to the display and a signed-in cook when present (%s)",
-    async (signedIn) => {
+    async (session) => {
       const source = await display(stationScreen(bar));
       const receiving = await display(stationScreen(grill));
       const { tabId, item } = await sentDish();
       let cookie = source.cookie;
-      if (signedIn) {
+      if (session !== "signed-out") {
         const login = await app.request("/api/session", {
           method: "POST",
           headers: { cookie, "content-type": "application/json" },
@@ -250,21 +250,29 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
         expect(login.status).toBe(200);
         cookie += `; ${login.headers.get("set-cookie")!.split(";")[0]}`;
       }
+      if (session === "ended") {
+        const logout = await app.request("/api/session", {
+          method: "DELETE",
+          headers: { cookie, [PERSON_HEADER]: venue.operatorId },
+        });
+        expect(logout.status).toBe(200);
+      }
       const answer = await send(
         app,
         cookie,
         "POST",
         `/api/device/working-orders/${tabId}/lines/move-station`,
         { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill },
-        signedIn ? { [PERSON_HEADER]: venue.operatorId } : {},
+        session !== "signed-out" ? { [PERSON_HEADER]: venue.operatorId } : {},
       );
       expect(answer.status).toBe(200);
-      const label = signedIn ? "Grill display" : "Kitchen display";
+      expect(answer.json.personNotSignedIn).toBe(session === "ended" ? true : undefined);
+      const label = `${session} display`;
       await inTx(venue, (tx) => tx.update(devices).set({ label }).where(eq(devices.id, source.id)));
       const [record] = await movesOf(item.workingOrderLineId);
       expect(record).toMatchObject({
         movedByDeviceId: source.id,
-        movedByPersonId: signedIn ? venue.operatorId : null,
+        movedByPersonId: session === "signed-in" ? venue.operatorId : null,
       });
       const screen = await send(app, receiving.cookie, "GET", "/api/device/station-screen");
       expect(screen.status).toBe(200);
@@ -275,7 +283,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
         "lastMove",
         {
           fromStationName: "Bar",
-          personName: signedIn ? "Anna" : null,
+          personName: session === "signed-in" ? "Anna" : null,
           deviceName: label,
           movedAt: record!.movedAt,
         },

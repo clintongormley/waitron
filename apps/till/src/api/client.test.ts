@@ -1833,6 +1833,34 @@ describe("TillApi", () => {
     expect(answer).toEqual(result);
   });
 
+  it("reports the person named by a move that succeeded under the device alone", async () => {
+    const person = { personId: "cook-1" };
+    let current = person;
+    const onRefused = vi.fn();
+    const result = {
+      revision: 3,
+      stationId: "station-2",
+      moved: [{ workingOrderLineId: "line-1", fromStationId: "station-1" }],
+      personNotSignedIn: true,
+    };
+    const fetchStub = vi.fn(async (_path, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get(PERSON_HEADER)).toBe("cook-1");
+      current = { personId: "cook-2" };
+      return jsonResponse(result);
+    });
+    const api = new TillApi("", fetchStub);
+    api.namePersonFrom(() => current, onRefused);
+
+    await expect(
+      api.deviceMoveDishStation("order-1", {
+        submissionId: "sub-1",
+        lineIds: ["line-1"],
+        stationId: "station-2",
+      }),
+    ).resolves.toEqual(result);
+    expect(onRefused).toHaveBeenCalledExactlyOnceWith(person);
+  });
+
   it("deviceMoveDishStation rejects with the route's refusal code", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(
