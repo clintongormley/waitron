@@ -471,6 +471,21 @@ export class TillShell extends LitElement {
         max-height: calc(100dvh - var(--more-top, var(--wt-space-2)) - var(--wt-space-2));
       }
 
+      /* A ::part() takes no attribute selector after it, so the mark sits on the host. An overlay
+         rather than a mask, which would also fade the popup's border and shadow. Its negative margin
+         keeps it out of the scroll height; a sticky box stops at its scroller's padding, so it
+         reaches past the --wt-space-2 that wt-row-actions pads its popup with. */
+      wt-row-actions[data-test="more-menu"][data-overflow="end"]::part(popup)::after {
+        content: "";
+        display: block;
+        position: sticky;
+        bottom: calc(-1 * var(--wt-space-2));
+        height: var(--wt-space-6);
+        margin-block-start: calc(-1 * var(--wt-space-6));
+        pointer-events: none;
+        background: linear-gradient(to bottom, transparent, var(--wt-color-surface));
+      }
+
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
@@ -547,6 +562,7 @@ export class TillShell extends LitElement {
     this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
     this.phone = this.#phoneWidth.matches;
     this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
+    if (this.hasUpdated) this.#watchHiddenBelow();
     if (this.hasUpdated && this.formFactor !== "till") {
       this.#observe();
       this.#retryHiddenLogo();
@@ -566,7 +582,10 @@ export class TillShell extends LitElement {
     this.#watchedBar = undefined;
     this.#watchedStrip = undefined;
     this.#watchedTable = undefined;
+    this.#watchPopup(undefined);
+    this.#watchHiddenBelow();
     this.#overflowFrame.cancel();
+    this.#hiddenBelowFrame.cancel();
     this.#counterObserver?.disconnect();
     this.#counterTargets.clear();
     this.#run += 1;
@@ -593,6 +612,9 @@ export class TillShell extends LitElement {
   #stripObserver?: ResizeObserver;
   #barObserver?: ResizeObserver;
   readonly #overflowFrame = oncePerFrame(() => this.#markOverflow());
+  readonly #hiddenBelowFrame = oncePerFrame(() => this.#markHiddenBelow());
+  #hiddenBelowObserver?: ResizeObserver;
+  #fadedPopup?: Element;
   #counterObserver?: ResizeObserver;
   #counterTargets = new Set<Element>();
   #watchedBar?: Element;
@@ -653,6 +675,8 @@ export class TillShell extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    // More draws its popup after the shell has rendered.
+    void this.#settled().then(() => this.#watchHiddenBelow());
     if (this.formFactor === "till") {
       this.#observeCounter();
       void this.#measureCounterLogo();
@@ -783,14 +807,33 @@ export class TillShell extends LitElement {
     }
     this.#observeStrip();
     this.#observeBar();
-    const popup = this.#popup();
-    if (popup !== this.#watchedPopup) {
-      this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
-      this.#watchedPopup?.removeEventListener("beforetoggle", this.#onPopupOpening);
-      popup?.addEventListener("toggle", this.#onPopupToggle);
-      popup?.addEventListener("beforetoggle", this.#onPopupOpening);
-      this.#watchedPopup = popup;
-    }
+    this.#watchPopup(this.#popup());
+  }
+
+  /** The handheld bar's More only: these handlers cap it as it opens, and step the fit
+   * back once it closes. */
+  #watchPopup(popup: Element | undefined): void {
+    if (popup === this.#watchedPopup) return;
+    this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
+    this.#watchedPopup?.removeEventListener("beforetoggle", this.#onPopupOpening);
+    popup?.addEventListener("toggle", this.#onPopupToggle);
+    popup?.addEventListener("beforetoggle", this.#onPopupOpening);
+    this.#watchedPopup = popup;
+  }
+
+  /** Marks the handheld bar's More again whenever what it hides below can change: a scroll, the
+   * popup's own box (opening, closing, a new cap) or its content's (rows drawn after it opened). */
+  #watchHiddenBelow(): void {
+    const popup = this.isConnected && this.formFactor !== "till" ? this.#popup() : undefined;
+    if (popup === this.#fadedPopup) return;
+    this.#fadedPopup?.removeEventListener("scroll", this.#hiddenBelowFrame.schedule);
+    this.#hiddenBelowObserver?.disconnect();
+    this.#fadedPopup = popup;
+    if (!popup) return;
+    popup.addEventListener("scroll", this.#hiddenBelowFrame.schedule);
+    this.#hiddenBelowObserver ??= new ResizeObserver(this.#hiddenBelowFrame.schedule);
+    this.#hiddenBelowObserver.observe(popup);
+    this.#hiddenBelowObserver.observe(popup.querySelector(".actions")!);
   }
 
   /** A strip that changes width can leave the selected table's button outside it, so its reveal
@@ -872,6 +915,15 @@ export class TillShell extends LitElement {
         .querySelector('wt-row-actions[data-test="more-menu"]')
         ?.shadowRoot?.querySelector("[popover]") ?? undefined
     );
+  }
+
+  #markHiddenBelow(): void {
+    const popup = this.#popup();
+    if (!popup) return;
+    const below = this.#menuOpen() && popup.scrollHeight - popup.clientHeight - popup.scrollTop > 1;
+    const menu = (popup.getRootNode() as ShadowRoot).host as HTMLElement;
+    if (below) menu.dataset.overflow = "end";
+    else delete menu.dataset.overflow;
   }
 
   #menuOpen(): boolean {

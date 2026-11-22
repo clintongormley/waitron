@@ -6332,7 +6332,9 @@ then, while a venue logo is in use and has not failed, `wt-powered-by` with `log
 (A1096). With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours,
 and without the clock the name is drawn alone. Opening More holds its contents steady until it
 closes. More opens under ☰ and, when it is taller than the room below, scrolls rather than moving up
-over the bar (A1123).
+over the bar (A1123). While items lie below what shows, its bottom `--wt-space-6` fades into its
+surface colour, drawn over the items so its border and shadow stay whole; the fade goes once the last
+item is reached, and follows the menu or its rows changing size as well as scrolling.
 Floor, tapped after a table, opens the Floor on that table's zone when the device shows that zone
 (`#floorReturnZone` in `till-app.ts`).
 
