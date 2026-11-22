@@ -64,10 +64,11 @@ periodos anteriores:
   factura, la factura que corrige y el periodo al que corresponde.
 
 Su hoja **Invitaciones** recoge cada invitación y cada descuento hasta cero en las cuentas abiertas
-en el periodo, una fila por plato o por toda la cuenta, con su **Número de factura**,
-**Precio de carta (EUR)** y **Coste estimado (EUR)**. Una fila cuenta solo lo que sigue en una
-cuenta, así que un plato quitado de la cuenta no aparece. El coste estimado es el precio de carta
-sin IVA menos el margen estimado del departamento, y queda en blanco si el departamento no tiene.
+en el periodo, una fila por plato o por toda la cuenta en cada cuenta donde están sus platos, con su
+**Número de factura**, **Precio de carta (EUR)** y **Coste estimado (EUR)**. Una fila cuenta solo lo
+que sigue en una cuenta, así que un plato quitado de la cuenta no aparece. El coste estimado es el
+precio de carta sin IVA menos el margen estimado del departamento, y queda en blanco si el
+departamento no tiene.
 
 Pon el margen de un departamento en **Departamentos y zonas**: abre el departamento y rellena
 **Margen estimado (%)** en su pestaña **Datos**. El libro usa los márgenes guardados cuando lo

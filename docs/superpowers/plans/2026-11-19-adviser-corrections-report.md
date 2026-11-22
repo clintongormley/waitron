@@ -113,10 +113,10 @@ records, their fingerprints, the chain, invoice numbers or the record builders.
 
 **Size.** Two pull requests. PR 1 (the period rule and the corrections list): about 510 lines of
 code and 990 of tests, plus about 55 lines of guide and backlog text, about 33 files, no generated
-files, no database change. PR 2 (the margin setting and the free list): about 310 lines of code and
-620 of tests, plus about
-35 of guide and backlog text and about 25 generated lines (the rebuilt starting database layout),
-about 40 files; it resets the test venues.
+files, no database change. PR 2 (the margin setting and the free list), as built on 2026-11-22,
+adds about 480 lines of code, 1,460 of tests, 35 of guide and backlog text and 18 generated lines
+(the rebuilt starting database layout and its epoch) across 63 files, two of them plans; it resets
+the test venues.
 
 _2026-11-21:_ at the owner's word (lane L `questions.md`, "WATCHER 2026-11-21 19:02") PR 1 also
 adds `sales_supply_day_idx`, so it rebuilds core's starting migration (about 13 generated lines)
@@ -353,24 +353,24 @@ belongs to, rate, base, VAT, reduction or addition), and in PR 2 sheet **Given f
 Kinds: Correction, Void, Date moved out, Date moved in, Issued after its sale's period (an ordinary
 invoice whose own day lies in an earlier period than its issue date). No staff or customer names.
 
-**The Given free sheet** (PR 2). One row per comp or discount whose amount after it is zero (actions
-`comp`, `discount_amount`, `discount_percent`; D3), on a bill opened in the period (D10), told by
-the rows it took money off (`adjustment_lines`) that are still on a bill. A row on an abandoned bill
-(for example one split after printing, cancelled, or merged into another) is not on a bill. A comp
-or discount, of a dish or a whole bill, with none of its rows still on a bill is left out (D3:
-taken off the bill). Columns: date, invoice number (the invoice of the bill the dish is on now, or
-of the discounted bill; for a whole bill whose bill was abandoned, the bill holding its dishes;
-blank when none was issued), item or "Whole bill", quantity, kind (Comp, Discount to zero),
-department, menu price, amount taken off, estimated cost, reason, note. **Quantity** is what is
-still on a bill (comp three glasses, take one off: two). **Menu price** is the list price of those
-rows (so a dish discounted earlier still shows its menu price); **amount taken off** is each row's
-share of what the adjustment took off, by the quantity `adjustment_lines` stored. **Estimated cost**
-(D14) = the price without VAT × (10000 − margin in basis points) ÷ 10000, blank when the department
-has none. Each row still on a bill, extras included, is priced without VAT at its own rate:
-`vatRateOn` of its `vat_class` (or `takeaway_vat_class` when the bill's `dining` is takeaway) on the
-adjustment's civil day in the venue's zone. Those prices are summed exactly, the margin applied
-once, and the result rounded half up to the cent once.
-The department is the dish's line's `offer_department_id`, else the bill's `department_id` (D11).
+**The Given free sheet** (PR 2). For each comp or discount whose amount after it is zero (actions
+`comp`, `discount_amount`, `discount_percent`; D3), on a bill opened in the period (D10), one row
+for each bill that holds rows it took money off (`adjustment_lines`). A row on an abandoned bill
+(one split after printing, or cancelled) is not on a bill; merging moves the rows to the other bill.
+A comp or discount, of a dish or a whole bill, with none of its rows still on a bill is left out
+(D3: taken off the bill). Columns: date, invoice number (that bill's invoice; blank when none was
+issued), item or "Whole bill", quantity, kind (Comp, Discount to zero), department, menu price,
+amount taken off, estimated cost, reason, note. **Quantity** is what is on that bill (comp three
+glasses, take one off: two). **Menu price** is the list price of those rows (so a dish discounted
+earlier still shows its menu price); **amount taken off** is each row's share of what the adjustment
+took off, by the quantity `adjustment_lines` stored. **Estimated cost** (D14) = the price without
+VAT × (10000 − margin in basis points) ÷ 10000, blank when the department has none. Each row still
+on a bill, extras included, is priced without VAT at its own rate: `vatRateOn` of its `vat_class`
+(or `takeaway_vat_class` when the bill's `dining` is takeaway) on the adjustment's civil day in the
+venue's zone. Those prices are summed exactly, the margin applied once, and the result rounded half
+up to the cent once. The department is the dish's line's `offer_department_id`, else the bill's
+`department_id` (D11); for a whole bill, the discounted bill's, or while that bill is abandoned, the
+one its rows are on.
 
 **Where the margin lives.** A nullable column `departments.estimated_margin_bp` (basis points,
 `rate()` from `packages/db/src/schema/columns.ts:71`, CHECK between 0 and 10000), not a settings
@@ -778,11 +778,12 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
   keeps the entries whose action is not `cancel` and whose `afterAmount` is zero, dropping a dish
   entry when neither its `lineId` nor any row its `splits` names still exists in
   `working_order_lines` (D3). _As built, 2026-11-22:_ it checks instead the rows each adjustment
-  took money off, through `adjustment_lines`, leaving out rows on abandoned bills. One query reads, for the kept line ids, whether each exists, its
-  current bill, its `offer_department_id`; one reads each bill's department and its invoice
+  took money off, through `adjustment_lines`: one query reads those rows with their lines, leaving
+  out rows on abandoned bills; one reads each bill's status, opening time, department and invoice
   (series code, number; `sales_working_order_id_key` makes it one); one reads the departments'
-  names and margins. Amounts are the entries' decimals; the estimated cost as Design. Staff names in
-  the entries are not used.
+  names and margins. Each entry gives one free row per bill its rows are on. The menu price and
+  estimated cost are worked out from those rows as Design; the amount taken off is `standingOff`
+  (`@waitron/adjustments`) over them. Staff names in the entries are not used.
 - **Failing tests first:** listed: a comp on a dish that reached the bill; a 100% discount; an
   amount discount to zero on a dish; a whole-bill discount to zero ("Whole bill", the bill's
   department); a comped dish cancelled with its charge kept; a comped dish moved to another bill
