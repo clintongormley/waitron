@@ -48,6 +48,18 @@ const withLongName = (tables: BarTable[], tableId: string): BarTable[] =>
 const fadeOf = (scroller: HTMLElement) =>
   parseFloat(getComputedStyle(scroller).getPropertyValue("--fade-width"));
 
+const popupOf = (menu: HTMLElement) => menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+const faded = (popup: HTMLElement) => {
+  const overlay = getComputedStyle(popup, "::after");
+  return (
+    overlay.content !== "none" &&
+    overlay.display === "block" &&
+    overlay.position === "sticky" &&
+    parseFloat(overlay.height) > 0 &&
+    overlay.backgroundImage.includes("gradient")
+  );
+};
+
 const floorOf = (el: TillShell) => el.shadowRoot!.querySelector<HTMLElement>("header .tab")!;
 const scrollerOf = (el: TillShell) =>
   el.shadowRoot!.querySelector<HTMLElement>("header [data-bar-table]")!.parentElement!;
@@ -259,38 +271,46 @@ describe("a handheld's bar above phone width", () => {
 });
 
 describe("a handheld's More on a short phone", () => {
+  const mountFullMenu = async (
+    theme: "light" | "dark",
+    loadLocales = async () => [
+      { code: "es-ES", label: "Español" },
+      { code: "en-GB", label: "English" },
+    ],
+    operatorName = "Marta Ruiz",
+  ) => {
+    const { el } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        formFactor: "phone-portrait",
+        activeScreen: "floor",
+        operatorName,
+        clockAvailable: true,
+        clockState: {
+          personId: "marta",
+          businessDay: "2026-10-29",
+          state: "working",
+          lastEntryId: "entry",
+          firstClockIn: false,
+        },
+        affordances: ["find-bill", "schedule", "expo"],
+        canSwitchProfile: true,
+        transferAvailable: true,
+        transferCount: 0,
+        loadLocales,
+      },
+      theme,
+    );
+    return el.shadowRoot!.querySelector<HTMLElement>(
+      'header wt-row-actions[data-test="more-menu"]',
+    )!;
+  };
+
   for (const theme of ["light", "dark"] as const) {
     it(`opens below ☰ and scrolls rather than covering it, at 360×640 in ${theme}`, async () => {
       setLocale("es-ES");
       await atViewport(360, 640, async () => {
-        const { el } = await mountWidget<TillShell>(
-          "till-shell",
-          {
-            formFactor: "phone-portrait",
-            activeScreen: "floor",
-            operatorName: "Marta Ruiz",
-            clockAvailable: true,
-            clockState: {
-              personId: "marta",
-              businessDay: "2026-10-29",
-              state: "working",
-              lastEntryId: "entry",
-              firstClockIn: false,
-            },
-            affordances: ["find-bill", "schedule", "expo"],
-            canSwitchProfile: true,
-            transferAvailable: true,
-            transferCount: 0,
-            loadLocales: async () => [
-              { code: "es-ES", label: "Español" },
-              { code: "en-GB", label: "English" },
-            ],
-          },
-          theme,
-        );
-        const menu = el.shadowRoot!.querySelector<HTMLElement>(
-          'header wt-row-actions[data-test="more-menu"]',
-        )!;
+        const menu = await mountFullMenu(theme);
         const trigger = menu.shadowRoot!.querySelector("button")!;
         await userEvent.click(trigger);
         const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -305,7 +325,151 @@ describe("a handheld's More on a short phone", () => {
         expect(popup.getBoundingClientRect().top, "placed under ☰ as it opens").toBe(box.top);
       });
     });
+
+    it(`fades its bottom edge only while more items lie below, at 360×640 in ${theme}`, async () => {
+      setLocale("es-ES");
+      await atViewport(360, 640, async () => {
+        const menu = await mountFullMenu(theme);
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        const popup = popupOf(menu);
+        await vi.waitFor(() => {
+          expect(menu.dataset.overflow).toBe("end");
+          expect(faded(popup)).toBe(true);
+        });
+        popup.scrollTop = popup.scrollHeight;
+        await vi.waitFor(() => {
+          expect(menu.hasAttribute("data-overflow")).toBe(false);
+          expect(faded(popup)).toBe(false);
+        });
+        popup.scrollTop = 0;
+        await vi.waitFor(() => {
+          expect(menu.dataset.overflow).toBe("end");
+          expect(faded(popup)).toBe(true);
+        });
+      });
+    });
   }
+
+  it("fades an open More once the screen grows shorter than it, without a scroll", async () => {
+    setLocale("es-ES");
+    await atViewport(360, 1000, async () => {
+      const menu = await mountFullMenu("light");
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const popup = popupOf(menu);
+      await frame();
+      await frame();
+      expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+      expect(menu.hasAttribute("data-overflow")).toBe(false);
+      await page.viewport(360, 640);
+      await vi.waitFor(() => {
+        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+        expect(menu.dataset.overflow).toBe("end");
+        expect(faded(popup)).toBe(true);
+      });
+      expect(popup.scrollTop).toBe(0);
+    });
+  });
+
+  it("stops fading an open More once the screen grows tall enough for every item, without a scroll", async () => {
+    setLocale("es-ES");
+    await atViewport(360, 640, async () => {
+      const menu = await mountFullMenu("light");
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const popup = popupOf(menu);
+      await vi.waitFor(() => expect(menu.dataset.overflow).toBe("end"));
+      await page.viewport(360, 1000);
+      await vi.waitFor(() => {
+        expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+        expect(menu.hasAttribute("data-overflow")).toBe(false);
+        expect(faded(popup)).toBe(false);
+      });
+    });
+  });
+
+  it("fades More again when languages arrive after it was scrolled to the bottom", async () => {
+    setLocale("es-ES");
+    await atViewport(360, 640, async () => {
+      let arrive!: (locales: { code: string; label: string }[]) => void;
+      const locales = new Promise<{ code: string; label: string }[]>((resolve) => {
+        arrive = resolve;
+      });
+      // A name this long already holds the popup at its widest, so the languages wrap rather than
+      // widen it, and only its content changes size.
+      const menu = await mountFullMenu(
+        "light",
+        () => locales,
+        "María del Carmen Fernández-Villaverde de la Torre y Montalbán",
+      );
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const popup = popupOf(menu);
+      await vi.waitFor(() => expect(menu.dataset.overflow).toBe("end"));
+      popup.scrollTop = popup.scrollHeight;
+      await vi.waitFor(() => expect(menu.hasAttribute("data-overflow")).toBe(false));
+      const height = popup.scrollHeight;
+      const box = popup.getBoundingClientRect();
+      arrive([
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+        { code: "ca-ES", label: "Català" },
+        { code: "fr-FR", label: "Français" },
+      ]);
+      await vi.waitFor(() => {
+        expect(popup.scrollHeight).toBeGreaterThan(height);
+        expect(popup.scrollHeight - popup.clientHeight - popup.scrollTop).toBeGreaterThan(1);
+        expect(menu.dataset.overflow).toBe("end");
+        expect(faded(popup)).toBe(true);
+      });
+      expect(popup.getBoundingClientRect().toJSON()).toEqual(box.toJSON());
+    });
+  });
+
+  it("stops marking More once the shell leaves the page, and marks it again once it is back", async () => {
+    setLocale("es-ES");
+    await atViewport(360, 640, async () => {
+      const menu = await mountFullMenu("light");
+      const shell = (menu.getRootNode() as ShadowRoot).host as TillShell;
+      const parent = shell.parentElement!;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const popup = popupOf(menu);
+      await vi.waitFor(() => expect(menu.dataset.overflow).toBe("end"));
+      shell.remove();
+      popup.dispatchEvent(new Event("scroll"));
+      await frame();
+      await frame();
+      // Marking runs on a closed menu would clear it, so a mark still here means none ran.
+      expect(menu.dataset.overflow).toBe("end");
+      parent.append(shell);
+      await shell.updateComplete;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      expect(popup.matches(":popover-open")).toBe(true);
+      popup.scrollTop = popup.scrollHeight;
+      await vi.waitFor(() => expect(menu.hasAttribute("data-overflow")).toBe(false));
+      popup.scrollTop = 0;
+      await vi.waitFor(() => expect(menu.dataset.overflow).toBe("end"));
+    });
+  });
+});
+
+it("does not fade a handheld's More that fits", async () => {
+  setLocale("en-GB");
+  await atViewport(390, 844, async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      activeScreen: "floor",
+      operatorName: "Ana",
+    });
+    const menu = el.shadowRoot!.querySelector<HTMLElement>(
+      'header wt-row-actions[data-test="more-menu"]',
+    )!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    await frame();
+    await frame();
+    expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+    expect(menu.hasAttribute("data-overflow")).toBe(false);
+    expect(faded(popup)).toBe(false);
+  });
 });
 
 it("re-sizes the fade when the selected button's text grows and shrinks, without scrolling the strip", async () => {
