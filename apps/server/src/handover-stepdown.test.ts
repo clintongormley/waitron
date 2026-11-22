@@ -640,6 +640,9 @@ describe("a stepdown", () => {
     const response = await r.app.request("/superseded", { method: "POST" });
     expect(await response.json()).toEqual({ restarting: true, replayed: false });
     expect(self).toBeDefined();
+    expect(await (await r.app.request("/till/")).text()).toContain(
+      "<p>Another box now runs the venue.</p>",
+    );
     expect(await readHandoverRestriction(suite.node, SOURCE)).toMatchObject({
       kind: "superseded",
       successorNodeId: DESTINATION,
@@ -648,7 +651,7 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
-  it("a supersession naming no successor writes no restriction and still restarts", async () => {
+  it("a supersession naming no successor writes no restriction, names no other box on the page, and still restarts", async () => {
     const r = rig(suite.node);
     r.app.post("/no-successor", async (c) =>
       c.json(
@@ -664,8 +667,30 @@ describe("a stepdown", () => {
     expect(await response.json()).toEqual({ restarting: true, replayed: false });
     expect(r.calls.length).toBeGreaterThan(0);
     expect((await r.app.request("/stepdown", { method: "POST" })).status).toBe(503);
+    const page = await (await r.app.request("/till/")).text();
+    expect(page).toContain("<h1>This box is standing down</h1>");
+    expect(page).not.toContain("Another box now runs the venue.");
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+  });
+
+  it("a supersession from a chart naming a successor tells the till another box runs the venue", async () => {
+    const r = rig(suite.node);
+    r.app.post("/chart-successor", async (c) =>
+      c.json(
+        await stepDown(r.deps, {
+          kind: "superseded",
+          successorNodeId: DESTINATION,
+          membershipTerm: 5,
+          self: c,
+        }),
+      ),
+    );
+    await r.app.request("/chart-successor", { method: "POST" });
+    expect(await (await r.app.request("/till/")).text()).toContain(
+      "<p>Another box now runs the venue.</p>",
+    );
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
   it("lets through only what a stepped-down box still answers", () => {

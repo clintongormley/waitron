@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { corsForVenue } from "./cors.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
+import { STANDING_DOWN_PAGE_WORDS } from "./i18n/restricted-page.js";
 
 function hold() {
   let release!: () => void;
@@ -42,7 +45,7 @@ function rig(): {
       await h.wait;
     }),
   );
-  app.get("/fast", (c) => c.json({ ok: true }));
+  app.get("/api/fast", (c) => c.json({ ok: true }));
   app.get("/health", (c) => c.json({ healthy: true }));
   return { app, gate, holds, contexts };
 }
@@ -97,7 +100,7 @@ describe("createHandoverGate", () => {
     });
     expect(r.gate.isClosed()).toBe(true);
 
-    const refused = await r.app.request("/fast");
+    const refused = await r.app.request("/api/fast");
     expect(refused.status).toBe(503);
     expect(await refused.json()).toEqual({
       error: { code: "handover.stepping_down", params: {} },
@@ -131,7 +134,7 @@ describe("createHandoverGate", () => {
   it("is open until closed", async () => {
     const r = rig();
     expect(r.gate.isClosed()).toBe(false);
-    expect((await r.app.request("/fast")).status).toBe(200);
+    expect((await r.app.request("/api/fast")).status).toBe(200);
   });
 
   it("a request inside before close still completes after it", async () => {
@@ -322,5 +325,176 @@ describe("a closed gate's refusal across origins", () => {
     });
     expect(refused.headers.get("access-control-allow-origin")).toBeNull();
     expect(r.handled()).toBe(0);
+  });
+});
+
+describe("a closed gate's page for a person", () => {
+  function closedApp(close: { successorKnown?: boolean } = {}) {
+    const gate = createHandoverGate();
+    const app = new Hono();
+    app.use("*", gate.middleware);
+    app.get("*", (c) => c.text("app page"));
+    gate.close({ allowed: () => false, ...close });
+    return app;
+  }
+
+  function scriptOf(html: string): string {
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    const asking = scripts.filter((script) => script.includes("location.replace"));
+    expect(asking).toHaveLength(1);
+    return asking[0]!;
+  }
+
+  it.each(["/till/", "/till", "/devices"])(
+    "answers GET %s with a page saying the box is standing down, asking again every 5 seconds",
+    async (path) => {
+      const res = await closedApp().request(path);
+      expect(res.status).toBe(503);
+      expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("refresh")).toBeNull();
+      expect(res.headers.get("vary")).toBe("Accept-Language");
+      const html = await res.text();
+      expect(html).toContain("<h1>This box is standing down</h1>");
+      expect(html).toContain("<p>Another box now runs the venue.</p>");
+      expect(html).toContain("<p>Restarting…</p>");
+      expect(res.headers.get("x-waitron-standing-down")).toBe("1");
+      const script = scriptOf(html);
+      const hash = createHash("sha256").update(script).digest("base64");
+      const policy = res.headers.get("content-security-policy") ?? "";
+      expect(policy).toContain("default-src 'none'");
+      const directives = policy.split("; ");
+      expect(directives).toContain("connect-src 'self'");
+      const scriptSrc = directives
+        .find((directive) => directive.startsWith("script-src "))!
+        .split(" ")
+        .slice(1);
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+      expect(scriptSrc).toHaveLength(2);
+    },
+  );
+
+  type Answer = () => Promise<Response>;
+
+  async function runAsking(answers: Answer[], turns: number) {
+    const html = await (await closedApp().request("/till/")).text();
+    const timers: (() => void)[] = [];
+    const asked: { to: string; init: RequestInit }[] = [];
+    const replaced: string[] = [];
+    runInNewContext(scriptOf(html), {
+      location: {
+        pathname: "/till/",
+        search: "?x=1",
+        replace: (to: string) => replaced.push(to),
+      },
+      fetch: (to: string, init: RequestInit) => (asked.push({ to, init }), answers.shift()!()),
+      setTimeout: (fn: () => void, ms: number) => (expect(ms).toBe(5000), timers.push(fn)),
+      AbortSignal: { timeout: (ms: number) => ({ timeoutMs: ms }) },
+    });
+    for (let turn = 0; turn < turns; turn++) {
+      expect(timers).toHaveLength(1);
+      timers.shift()!();
+      await new Promise((r) => setImmediate(r));
+    }
+    return { timers, asked, replaced };
+  }
+
+  const plain =
+    (status: number): Answer =>
+    () =>
+      Promise.resolve(new Response("", { status }));
+
+  it("keeps asking through a failed request, its own page and a gateway's 502, 503 or 504, then moves on a 200", async () => {
+    const { timers, asked, replaced } = await runAsking(
+      [
+        () => Promise.reject(new TypeError("Failed to fetch")),
+        async () => closedApp().request("/till/?x=1"),
+        plain(502),
+        plain(503),
+        plain(504),
+        plain(200),
+      ],
+      6,
+    );
+    expect(asked.map((a) => a.to)).toEqual(Array(6).fill("/till/?x=1"));
+    expect(asked[0]!.init).toEqual({
+      cache: "no-store",
+      headers: { accept: "text/html" },
+      signal: { timeoutMs: 5000 },
+    });
+    expect(replaced).toEqual(["/till/?x=1"]);
+    expect(timers).toHaveLength(0);
+  });
+
+  it.each([200, 404, 500])(
+    "keeps asking on a %i carrying the standing-down mark",
+    async (status) => {
+      const marked: Answer = () =>
+        Promise.resolve(new Response("", { status, headers: { "X-Waitron-Standing-Down": "1" } }));
+      const { timers, replaced } = await runAsking([marked, plain(200)], 2);
+      expect(replaced).toEqual(["/till/?x=1"]);
+      expect(timers).toHaveLength(0);
+    },
+  );
+
+  it.each([404, 500])(
+    "moves on an unmarked %i, the answer of a box restarted into recovery or a failed restricted page",
+    async (status) => {
+      const { timers, replaced } = await runAsking([plain(status)], 1);
+      expect(replaced).toEqual(["/till/?x=1"]);
+      expect(timers).toHaveLength(0);
+    },
+  );
+
+  it("answers HEAD on a page path with the page's status and headers", async () => {
+    const res = await closedApp().request("/till/", { method: "HEAD" });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+    expect(res.headers.get("refresh")).toBeNull();
+  });
+
+  it("speaks Spanish to a Spanish browser", async () => {
+    const res = await closedApp().request("/till/", { headers: { "Accept-Language": "es" } });
+    const html = await res.text();
+    expect(html).toContain('<html lang="es">');
+    const words = STANDING_DOWN_PAGE_WORDS["es-ES"];
+    expect(html).toContain(`<h1>${words.title}</h1>`);
+    expect(html).toContain(`<p>${words.body}</p>`);
+    expect(html).toContain(`<p>${words.restarting}</p>`);
+  });
+
+  it.each([
+    ["en", "This box is standing down", "Restarting…", "Another box now runs the venue."],
+    [
+      "es",
+      STANDING_DOWN_PAGE_WORDS["es-ES"].title,
+      STANDING_DOWN_PAGE_WORDS["es-ES"].restarting,
+      STANDING_DOWN_PAGE_WORDS["es-ES"].body,
+    ],
+  ])(
+    "names no other box when the gate was closed with no successor known (%s)",
+    async (language, title, restarting, successor) => {
+      const res = await closedApp({ successorKnown: false }).request("/till/", {
+        headers: { "Accept-Language": language },
+      });
+      expect(res.status).toBe(503);
+      const html = await res.text();
+      expect(html).toContain(`<h1>${title}</h1>`);
+      expect(html).toContain(`<p>${restarting}</p>`);
+      expect(html).not.toContain(successor);
+      scriptOf(html);
+    },
+  );
+
+  it.each([
+    ["GET", "/api/orders"],
+    ["GET", "/assets/app.js"],
+    ["POST", "/till/"],
+    ["POST", "/devices"],
+  ])("keeps the JSON refusal for %s %s", async (method, path) => {
+    const res = await closedApp().request(path, { method });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("refresh")).toBeNull();
+    expect(await res.json()).toEqual({ error: { code: "handover.stepping_down", params: {} } });
   });
 });

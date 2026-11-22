@@ -21,7 +21,21 @@ export { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 
 export { GUIDE_THEME_KEY } from "./page-theme.js";
 
-const CSP = `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${createHash("sha256").update(THEME_SCRIPT).digest("base64")}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`;
+const scriptSource = (script: string): string =>
+  `'sha256-${createHash("sha256").update(script).digest("base64")}'`;
+
+/** What a page's inline scripts beyond the theme script need from its policy. */
+export interface BoxPageScripts {
+  /** Allowed by their hashes. */
+  inline: readonly string[];
+  /** Lets them fetch from the page's own origin. */
+  connectSelf: boolean;
+}
+
+const policy = ({ inline, connectSelf }: BoxPageScripts): string =>
+  `default-src 'none'; style-src 'unsafe-inline'; script-src ${[THEME_SCRIPT, ...inline].map(scriptSource).join(" ")}; ${connectSelf ? "connect-src 'self'; " : ""}base-uri 'none'; form-action 'none'; frame-ancestors 'self'`;
+
+const CSP = policy({ inline: [], connectSelf: false });
 
 function tokenDeclarations(): string {
   return Object.entries(GUIDE_PAGE_TOKENS)
@@ -120,10 +134,14 @@ export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: 
 export function boxPageAnswer(
   c: Context,
   html: string,
-  status: 200 | 404 | 500,
+  status: 200 | 404 | 500 | 503,
   cache: "no-cache" | "no-store" = "no-cache",
+  scripts?: BoxPageScripts,
 ): Response {
-  return c.html(html, status, { "Cache-Control": cache, "Content-Security-Policy": CSP });
+  return c.html(html, status, {
+    "Cache-Control": cache,
+    "Content-Security-Policy": scripts === undefined ? CSP : policy(scripts),
+  });
 }
 
 function notFound(c: Context, lang: GuideLanguage): Response {

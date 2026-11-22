@@ -635,9 +635,7 @@ it("applies the supplied main page gates in order before serving staff pages", a
       headers: { Accept: "text/html" },
     });
     expect(stopped.status).toBe(503);
-    expect(await stopped.json()).toEqual({
-      error: { code: "handover.stepping_down", params: {} },
-    });
+    expect(await stopped.text()).toContain("<h1>This box is standing down</h1>");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
