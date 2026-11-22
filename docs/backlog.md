@@ -1039,7 +1039,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 
-- **Staffing reads the day start in force on each date** (bundle of 2, size M, needs the owner). Holds A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
+- **A644. Staffing slots stop at minute 1440 on a business day longer than a day** (needs the owner). Decide whether a block may run to the day's real end. [Detail](backlog/workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
 
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).

@@ -21,17 +21,6 @@ The final policy and any additional required format remain the advisor's decisio
 Ask the gestoría which payroll package and import format it accepts before building a payroll export.
 Keep that separate from the working-time PDF/CSV. Build shift-template and availability features as separate scheduling work.
 
-## A708. Special-day staffing on a date with its own changeover
-
-The special-day staffing painter draws every date's column, and the blocks in it, on the read's one
-`cutover`, which `readSpecialDayStaffing` (`packages/staffing/src/paint.ts`) takes from
-`clock.dayCutover`: the venue's baseline changeover, not necessarily the one in force on each
-date. Each date's opening hours behind the paint (`resolveDepartmentsDays`) and the month's slot
-count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`) use that date's
-own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
-slots it produces. Opening hours draws one-off special days with a ruler in each column when
-the dates' changeovers differ. Staffing special-day saves validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
-
 ## Pay-period changes after closure
 
 A January month closed with 480 minutes keeps that snapshot after the cadence changes to weekly.
@@ -144,18 +133,6 @@ mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broke
 words that say it is the person's preference, not their contract. The `availability` table
 exists unused. Shown in A585's picker and warnings. After A586.
 
-## Bundle: Staffing reads the day start in force on each date
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** Decide whether
-  a block may run to the day's real end.
-  [Detail](workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
-- **A708. The special-day staffing painter draws every date on the venue's baseline changeover,
-  while each date's opening hours and staffing slots use that date's own.** Needs a decision on
-  how one grid shows dates with different changeovers.
-  [Detail](workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover).
-
 ## Bundle: Give the built close step a caller, then its cadence rule
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -174,7 +151,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
   whether it can still be applied. Open shifts, disputed corrections, unanswered questions
   and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
 
-- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Special days and longer-than-day staffing remain A708/A644.
+- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Longer-than-day staffing remains A644.
 
 ### A1268 corrections after a backward clock step
 

@@ -3218,8 +3218,10 @@ role or number differs from the block's, and while a block's staff role no longe
 for a known one. Delete or Backspace anywhere in the editor deletes the block, except inside Staff
 role or How many.
 Each column's ⋮ offers Copy to… and Clear; in the special-day painter it also offers Follow the
-season, and a date that follows the season reads "Follows the season". Behind the staffing blocks,
-a department's opening periods are faint bands in their own colours,
+season, and a date that follows the season reads "Follows the season". Special dates with
+different business-day starts show a clock scale per column. If a copied block crosses the start
+of a selected date, the chooser stays open, names that date and leaves every selected date alone.
+Behind the staffing blocks, a department's opening periods are faint bands in their own colours,
 labelled with their names and times. A prep station shows the sending ranges of the periods whose
 menus route it dishes, ending at the period's end, in one stable lane per sending department. A long
 department name is truncated to one line so it leaves room for the period; the day's accessible
