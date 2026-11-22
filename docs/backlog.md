@@ -1733,7 +1733,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 14, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
 
-- **Printer, reader and device delete wording and tidying** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording-and-tidying)
+- **Printer, reader and device delete wording** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 
 - **Unchecked: pairing a new reader can undo the SumUp registration it just made** when SumUp is
   disconnected during the add (the post-provider compensation branch of the add-reader route,

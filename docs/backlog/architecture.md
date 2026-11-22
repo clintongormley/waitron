@@ -429,9 +429,6 @@ reset and operator gates; this entry does not start that job.
   deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
   shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
   detiene"), and one dialog line per inherited default.
-- Several printer queries that already require an active printer or a live job also filter
-  `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
-  the copies.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
@@ -1070,7 +1067,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   matching `<name>(` with `git grep -c`, counting `asApp`, `printJobsFor`, `drawerOpensFor` and
   `fiscalRecordCount` only in the files whose copy discards `cfg`.
 
-## Bundle: Printer, reader and device delete wording and tidying
+## Bundle: Printer, reader and device delete wording
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
