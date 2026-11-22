@@ -49,6 +49,7 @@ export const view: VenueServiceView = {
   courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
+  estimatedMarginByDepartment: {},
   serviceSteps: [],
   courses: [],
 };

@@ -103,6 +103,7 @@ it("opens a protected department dialog with the narrowed fields in order", asyn
   expect([...form.shadowRoot!.querySelectorAll("wt-input")].map((f) => f.name)).toEqual([
     "name",
     "tradingName",
+    "estimatedMargin",
   ]);
   expect(departmentSave(form).getAttribute("variant")).toBe("secondary");
   expect(writes).toEqual([]);

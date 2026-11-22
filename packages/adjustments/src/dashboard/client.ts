@@ -86,6 +86,8 @@ export interface AdjustmentEntry {
   reasonName: string;
   note: string | null;
   lineName: string | null;
+  /** The bill line this adjusted; null on a discount on the whole bill. */
+  lineId: string | null;
   /** Three decimal places; null on a discount on the whole bill. */
   quantity: string | null;
   percentBp: number | null;

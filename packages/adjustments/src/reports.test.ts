@@ -139,6 +139,8 @@ interface Ask {
   action: AdjustmentAction;
   /** Absent for a discount on the whole bill. */
   line?: {
+    /** The bill line's id; a fresh one when absent. */
+    id?: string;
     name: string;
     quantity?: string;
     list: string;
@@ -171,7 +173,7 @@ async function adjust(ask: Ask): Promise<string> {
           ask.line === undefined
             ? null
             : {
-                id: randomUUID(),
+                id: ask.line.id ?? randomUUID(),
                 name: ask.line.name,
                 quantity: lineQuantity,
                 listUnitPriceGross: decimal(ask.line.list),
@@ -540,6 +542,7 @@ describe("the fixture day (service, ordering and billing plan Task 12)", () => {
         reasonName: "Mistake",
         note: "Wrong table",
         lineName: "Steak",
+        lineId: expect.any(String),
         quantity: "1.000",
         percentBp: null,
         beforeAmount: "25.00",
@@ -1070,6 +1073,36 @@ describe("stages, reasons and guests", () => {
     });
     const [discount] = await entries({ personId: alex });
     expect(discount).toMatchObject({ action: "discount_percent", percentBp: 1000 });
+  });
+
+  it("gives a comp's row the id of the line it adjusted, and a bill discount's none", async () => {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const burgerLine = randomUUID();
+    const base = { bill: visit.id, reason, reasonName: "House", by: alex };
+    await adjust({
+      ...base,
+      action: "comp",
+      line: { id: burgerLine, name: "Burger", list: "12.00", creditedTo: alex, stage: "served" },
+      before: "12.00",
+      after: "0.00",
+      nominal: "12.00",
+      at: "2026-09-15T19:00:00.000Z",
+    });
+    await adjust({
+      ...base,
+      action: "discount_amount",
+      before: "20.00",
+      after: "18.00",
+      nominal: "20.00",
+      at: "2026-09-15T19:30:00.000Z",
+    });
+
+    expect((await entries()).map((row) => [row.action, row.lineId])).toEqual([
+      ["discount_amount", null],
+      ["comp", burgerLine],
+    ]);
   });
 
   it("gives each drill-down row the stage group the totals count it under", async () => {

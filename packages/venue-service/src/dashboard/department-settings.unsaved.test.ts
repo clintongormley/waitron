@@ -115,6 +115,7 @@ const model: VenueServiceView = {
   courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
+  estimatedMarginByDepartment: {},
   serviceSteps: [],
   courses: [],
 };
@@ -1059,4 +1060,38 @@ it("choosing how the department sells dirties the form, choosing the stored way 
   expect(box("diningStartsAs")).toBeNull();
   expect(el.hasUnsavedChanges).toBe(false);
   expect(unload()).toBe(false);
+});
+it("changing the margin dirties the form, typing the saved value back cleans it, and leaving asks to discard", async () => {
+  const el = await mount();
+  const field = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=estimatedMargin]",
+    )!;
+  await expect.poll(() => field()).not.toBeNull();
+  const change = async (value: string) => {
+    field().dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  expect(el.hasUnsavedChanges).toBe(false);
+  await change("25");
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(saveButton().disabled).toBe(false);
+  expect(unload()).toBe(true);
+  await change("");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(unload()).toBe(false);
+  await change("25");
+  const kept = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await kept).toBe(false);
+  expect(field().value).toBe("25");
+  void leave();
+  await choice("discard");
+  await expect.poll(() => field().value).toBe("");
+  expect(el.hasUnsavedChanges).toBe(false);
 });

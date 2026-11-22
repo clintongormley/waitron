@@ -1,4 +1,5 @@
 import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
+import { currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -11,6 +12,7 @@ import {
   leftToBrowser,
   saveActionState,
   submitOnEnter,
+  parseDecimalInput,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -71,13 +73,33 @@ interface ReceiptEditor {
 }
 /** `operationDescription` is the receipt record's, present while the receipt editor offers it; it
  * is saved through that editor, never with the department's settings. */
-type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> &
+type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps" | "estimatedMargin"> &
   Required<
     Pick<DepartmentSettingsInput, "needsClearing" | "lateSendNeedsManager" | "courseSettings">
   > & {
     serviceSteps: ServiceStepDraft[];
     operationDescription?: string;
+    /** The field's text; `""` is none. */
+    estimatedMargin: string;
   };
+/** The route's form of a typed margin: `null` for none, `undefined` when it is not a percentage
+ * from 0 to 100 with at most two decimals. */
+function marginInput(text: string): string | null | undefined {
+  const value = text.trim();
+  if (value === "") return null;
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(parseDecimalInput(value) ?? "");
+  if (!match) return undefined;
+  const whole = String(Number(match[1]));
+  if (Number(whole) > 100 || (Number(whole) === 100 && Number(match[2] ?? 0) > 0)) return undefined;
+  return match[2] === undefined ? whole : `${whole}.${match[2]}`;
+}
+const sameMargin = (a: string, b: string) => {
+  const left = marginInput(a),
+    right = marginInput(b);
+  return left === undefined || right === undefined
+    ? a.trim() === b.trim()
+    : (left === null ? null : Number(left)) === (right === null ? null : Number(right));
+};
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
 const POLICY_FIELDS = ["orderStart", "paidWhen", "collectionNumber"] as const;
 const DINING_FIELDS = ["dining", "diningStartsAs"] as const;
@@ -86,6 +108,7 @@ type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartme
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
+  estimatedMargin: "details",
   operationDescription: "details",
   orderStart: "service",
   paidWhen: "service",
@@ -104,6 +127,7 @@ export const departmentSettingFields = (
   [
     ["name", "venue.name"],
     ["tradingName", "venue.trading_name"],
+    ["estimatedMargin", "venue.estimated_margin"],
     ["operationDescription", "venue.operation_description"],
     ["orderStart", "venue.order_start"],
     ["paidWhen", "venue.counter_paid_when"],
@@ -142,6 +166,7 @@ const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
 const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.name.trim() === b.name.trim() &&
   a.tradingName.trim() === b.tradingName.trim() &&
+  sameMargin(a.estimatedMargin, b.estimatedMargin) &&
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
@@ -433,6 +458,7 @@ export class DepartmentSettings extends LitElement {
     const source: DepartmentDraft = {
       name: row.name,
       tradingName: row.tradingName,
+      estimatedMargin: this.model!.estimatedMarginByDepartment[row.id] ?? "",
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
@@ -528,6 +554,7 @@ export class DepartmentSettings extends LitElement {
       for (const field of [
         "name",
         "tradingName",
+        "estimatedMargin",
         "orderStart",
         "paidWhen",
         "collectionNumber",
@@ -537,9 +564,11 @@ export class DepartmentSettings extends LitElement {
         "lateSendNeedsManager",
       ] as const) {
         const untouched =
-          field === "name" || field === "tradingName"
-            ? draft[field].trim() === baseline[field].trim()
-            : draft[field] === baseline[field];
+          field === "estimatedMargin"
+            ? sameMargin(draft[field], baseline[field])
+            : field === "name" || field === "tradingName"
+              ? draft[field].trim() === baseline[field].trim()
+              : draft[field] === baseline[field];
         if (untouched) {
           Object.assign(draft, { [field]: source[field] });
           Object.assign(baseline, { [field]: source[field] });
@@ -805,6 +834,9 @@ export class DepartmentSettings extends LitElement {
       ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
       ...(description ? { operationDescription: description } : {}),
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
+      ...(this.draft && marginInput(this.draft.estimatedMargin) === undefined
+        ? { estimatedMargin: t("venue.estimated_margin_invalid") }
+        : {}),
       ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
   }
@@ -846,6 +878,7 @@ export class DepartmentSettings extends LitElement {
     const fields: Field[] = [
       "name",
       "tradingName",
+      "estimatedMargin",
       "orderStart",
       "paidWhen",
       "collectionNumber",
@@ -905,7 +938,13 @@ export class DepartmentSettings extends LitElement {
     kept.name = kept.name.trim();
     kept.tradingName = kept.tradingName.trim();
     if (!this.showsTransfers) delete kept.transfers;
-    const { serviceSteps, operationDescription, ...unchanged } = kept;
+    const { serviceSteps, operationDescription, estimatedMargin, ...rest } = kept;
+    const unchanged: DepartmentSettingsInput = sameMargin(
+      estimatedMargin,
+      this.baseline!.estimatedMargin,
+    )
+      ? rest
+      : { ...rest, estimatedMargin: marginInput(estimatedMargin)! };
     if (!this.model?.takeawayVat) delete unchanged.dining;
     if (!this.model?.takeawayVat || unchanged.dining !== "till_choice")
       delete unchanged.diningStartsAs;
@@ -1124,6 +1163,19 @@ export class DepartmentSettings extends LitElement {
             @wt-change=${(e: CustomEvent<{ value: string }>) => {
               e.stopPropagation();
               this.changed("tradingName", e.detail.value);
+            }}
+          ></wt-input>
+          <wt-input
+            name="estimatedMargin"
+            label=${t("venue.estimated_margin")}
+            hint=${t("venue.estimated_margin_hint")}
+            decimal-locale=${currentLocale()}
+            .value=${draft.estimatedMargin}
+            error=${errors.estimatedMargin ?? ""}
+            ?disabled=${disabled}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.changed("estimatedMargin", e.detail.value);
             }}
           ></wt-input>
           ${

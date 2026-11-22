@@ -2380,6 +2380,7 @@ describe("dashboard-app", () => {
           courseSettingsByDepartment: {},
           needsClearingDepartmentIds: [],
           lateSendManagerDepartmentIds: [],
+          estimatedMarginByDepartment: {},
           serviceSteps: [],
           courses: [],
         } as never)
@@ -5575,6 +5576,7 @@ describe("dashboard URL navigation", () => {
             courseSettingsByDepartment: {},
             needsClearingDepartmentIds: [],
             lateSendManagerDepartmentIds: [],
+            estimatedMarginByDepartment: {},
             serviceSteps: [],
             courses: [],
           }
@@ -5650,6 +5652,7 @@ describe("dashboard URL navigation", () => {
             courseSettingsByDepartment: {},
             needsClearingDepartmentIds: [],
             lateSendManagerDepartmentIds: [],
+            estimatedMarginByDepartment: {},
             serviceSteps: [],
             courses: [],
           }
@@ -9586,6 +9589,7 @@ describe("department list links inside dashboard capture", () => {
       courseSettingsByDepartment: {},
       needsClearingDepartmentIds: [],
       lateSendManagerDepartmentIds: [],
+      estimatedMarginByDepartment: {},
       serviceSteps: [],
       courses: [],
     };
@@ -9703,6 +9707,7 @@ describe("mounted public department dialogs", () => {
       courseSettingsByDepartment: {},
       needsClearingDepartmentIds: [],
       lateSendManagerDepartmentIds: [],
+      estimatedMarginByDepartment: {},
       serviceSteps: [],
       courses: [],
     };

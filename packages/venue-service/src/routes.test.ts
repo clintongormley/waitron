@@ -772,6 +772,112 @@ describe("whole service settings saves", () => {
     expect(await lateSendManagerIds(fx)).toEqual([]);
   });
 
+  async function estimatedMargins(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return ((await model.json()) as { estimatedMarginByDepartment: Record<string, string> })
+      .estimatedMarginByDepartment;
+  }
+
+  async function storedMarginBp(departmentId: string) {
+    const [row] = await db
+      .select({ estimatedMarginBp: departments.estimatedMarginBp })
+      .from(departments)
+      .where(eq(departments.id, departmentId));
+    return row!.estimatedMarginBp;
+  }
+
+  it("saves a department's estimated margin as basis points and reads it back with two places", async () => {
+    const fx = await settingsFixture();
+    expect(await estimatedMargins(fx)).toEqual({});
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      estimatedMargin: "30",
+    });
+    expect(saved.status).toBe(200);
+    expect(
+      ((await saved.json()) as { estimatedMarginByDepartment: Record<string, string> })
+        .estimatedMarginByDepartment,
+    ).toEqual({ [fx.departmentId]: "30.00" });
+    expect(await storedMarginBp(fx.departmentId)).toBe(3000);
+    for (const [margin, bp, shown] of [
+      ["30.5", 3050, "30.50"],
+      ["0", 0, "0.00"],
+      ["100", 10000, "100.00"],
+      ["12.34", 1234, "12.34"],
+    ] as const) {
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        estimatedMargin: margin,
+      });
+      expect(response.status).toBe(200);
+      expect(await storedMarginBp(fx.departmentId)).toBe(bp);
+      expect(await estimatedMargins(fx)).toEqual({ [fx.departmentId]: shown });
+    }
+  });
+
+  it("clears a department's estimated margin when the save sends null", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      estimatedMargin: "30",
+    });
+    const cleared = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      estimatedMargin: null,
+    });
+    expect(cleared.status).toBe(200);
+    expect(await storedMarginBp(fx.departmentId)).toBeNull();
+    expect(await estimatedMargins(fx)).toEqual({});
+  });
+
+  it("leaves the estimated margin as it was when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      estimatedMargin: "30",
+    });
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(200);
+    expect(await storedMarginBp(fx.departmentId)).toBe(3000);
+    expect(await estimatedMargins(fx)).toEqual({ [fx.departmentId]: "30.00" });
+  });
+
+  it("refuses an estimated margin outside 0 to 100 or not a two-place dot-decimal string, naming it, and writes nothing", async () => {
+    const fx = await settingsFixture();
+    for (const estimatedMargin of [
+      "101",
+      "100.01",
+      "-1",
+      "30.001",
+      "abc",
+      "",
+      "30,5",
+      " 30",
+      30,
+      true,
+      ["30"],
+    ]) {
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        estimatedMargin,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "estimatedMargin" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    }
+    expect(await storedMarginBp(fx.departmentId)).toBeNull();
+  });
+
   it("saves independent department course choices without changing another department", async () => {
     const fx = await settingsFixture();
     const mains = await seedCourse("Mains");

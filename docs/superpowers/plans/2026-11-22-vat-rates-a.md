@@ -107,11 +107,14 @@ from reading the code, except the commands quoted, which were run.
 
 **Premises checked by running a command:**
 
-- *Nothing after a sale reads a label.* `git grep -n -i "vatclass\|vat_class" packages/reporting packages/core packages/fiscal packages/fiscal-verifactu packages/adjustments packages/payments`
+- *After a sale, only one report reads a label.* `git grep -n -i "vatclass\|vat_class" packages/reporting packages/core packages/fiscal packages/fiscal-verifactu packages/adjustments packages/payments`
   printed only test files and fixtures. The non-test `apps/server` files naming a label are exactly
-  `bill-advances.ts`, `menu-api.ts`, `modifier-selection.ts`, `set-menu-count.ts`, `upgrade-sale.ts`,
-  `venue-detail-types.ts`, `venue-settings-api.ts`, `working-order.ts` and `scripts/`. No correction,
-  refund, report, receipt or export file is among them.
+  `bill-advances.ts`, `free-items.ts`, `menu-api.ts`, `modifier-selection.ts`, `set-menu-count.ts`,
+  `upgrade-sale.ts`, `venue-detail-types.ts`, `venue-settings-api.ts`, `working-order.ts` and
+  `scripts/`. The one report among them is `free-items.ts` (on `feat/adviser-corrections-report-2`,
+  2026-11-22): the corrections workbook's Given free sheet, whose `listFreeItems` rates each line
+  from its `vat_class` (or `takeaway_vat_class` on a takeaway bill) with `vatRateOn` to estimate a
+  free item's cost. No correction, refund, receipt or other export file is among them.
 - *No screen shows the till's `vatBreakdown`.* `git grep -n "\.vatBreakdown" apps/till/src`: outside
   tests only filed figures (`ticket.vatBreakdown`, correction answers); the getter at
   `apps/till/src/state/working-order.ts:530` is read by tests only.
@@ -664,7 +667,9 @@ and `index.ts` (delete `appliedVatClass`, now unused, with its test),
 `testing/takeaway-menu.ts:20-41` (each product gets `takeawayVatRate` equal to its label's rate:
 cola `"21.00"`, cheese `"4.00"`, cheese board `"4.00"`, burger `"21.00"`, lemon soda `"0.00"`),
 `vat-rate-at-issue.test.ts:495-515` (the juice gets rows `{null, 1000}` and `{"2027-01-01", 400}`
-directly instead of the mocked table; same expectations).
+directly instead of the mocked table; same expectations); `apps/server/src/free-items.ts` and
+`free-items.test.ts` (`listFreeItems` rates a takeaway line through `readLineVatRates` on the
+adjustment's day, as issuing does, instead of `vatRateOn` of its `takeaway_vat_class`).
 
 **Interfaces:** `readLineVatRates(tx, dining: Dining, lines: readonly { productId: string | null; setMenuRole: "set_menu" | "dish" | null; vatClass: VatClass; takeawayVatClass: VatClass }[]): Promise<(readonly DatedRate[])[]>`
 — eaten here `VAT_RATE_TABLE[vatClass]`; taken away a set-menu line `VAT_RATE_TABLE[takeawayVatClass]`
@@ -911,7 +916,9 @@ any time after 3.1. Every package typechecks after every task.
 line, set-menu lines included; `vatClass` leaves the input), its two callers; `bill-advances.ts`
 (`vatRates: dineIn`); delete `vat-class-at-line-add.test.ts` (D11(b)) and the eat-in describe at
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts:697-787` (D11(a); Task 2.4's takeaway twin
-stays); create `dine-in-vat-rate.test.ts`.
+stays); create `dine-in-vat-rate.test.ts`; `apps/server/src/free-items.ts` and `free-items.test.ts`
+(`listFreeItems` rates an eaten-in line at the dine-in rate of the adjustment's day, through
+`readLineVatRates`, instead of `vatRateOn` of its `vat_class`).
 Tests also: `advance-money`, `advance-final`, `advance-deduction`.
 
 - [ ] **Step 1: Failing tests** (setup from the deleted file), one per path that rates:

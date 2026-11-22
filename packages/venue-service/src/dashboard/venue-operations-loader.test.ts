@@ -23,6 +23,7 @@ function model(name = "Restaurant"): VenueServiceView {
     courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
+    estimatedMarginByDepartment: {},
     serviceSteps: [],
     courses: [],
   };

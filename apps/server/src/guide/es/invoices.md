@@ -53,8 +53,8 @@ terminar el periodo nunca cambian sus ventas. Aparecen en cambio en las correcci
 que se registraron.
 
 Antes de presentarlo, elige también **Descargar correcciones (XLSX)** para el mismo periodo y
-entrega ambos a tu asesor. El libro recoge lo que se registró en el periodo para periodos
-anteriores:
+entrega ambos a tu asesor. Sus dos primeras hojas recogen lo que se registró en el periodo para
+periodos anteriores:
 
 - **Resumen**: base imponible e IVA de cada periodo anterior, tipo de IVA y si es una reducción o
   un aumento.
@@ -62,3 +62,13 @@ anteriores:
   (**Rectificativa**, **Anulación**, **Fecha trasladada (salida)**,
   **Fecha trasladada (entrada)** o **Emitida después del periodo de su venta**), su número de
   factura, la factura que corrige y el periodo al que corresponde.
+
+Su hoja **Invitaciones** recoge cada invitación y cada descuento hasta cero en las cuentas abiertas
+en el periodo, una fila por plato o por toda la cuenta, con su **Número de factura**,
+**Precio de carta (EUR)** y **Coste estimado (EUR)**. Una fila cuenta solo lo que sigue en una
+cuenta, así que un plato quitado de la cuenta no aparece. El coste estimado es el precio de carta
+sin IVA menos el margen estimado del departamento, y queda en blanco si el departamento no tiene.
+
+Pon el margen de un departamento en **Departamentos y zonas**: abre el departamento y rellena
+**Margen estimado (%)** en su pestaña **Datos**. El libro usa los márgenes guardados cuando lo
+descargas, así que cambiar uno también cambia las estimaciones de periodos anteriores.

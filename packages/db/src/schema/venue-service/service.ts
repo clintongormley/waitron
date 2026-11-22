@@ -2,7 +2,18 @@ import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/share
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { mediaImages } from "../media/images.js";
-import { enumCheck, flag, id, json, label, newId, nowIso, table, tsString } from "../columns.js";
+import {
+  enumCheck,
+  flag,
+  id,
+  json,
+  label,
+  newId,
+  nowIso,
+  rate,
+  table,
+  tsString,
+} from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
 import {
   collectionNumber,
@@ -35,6 +46,7 @@ export const departments = table(
     receiptLogoImageId: id("receipt_logo_image_id"),
     receiptLogoRasters: json<ReceiptLogoRasters>("receipt_logo_rasters"),
     receiptUpdatedAt: tsString("receipt_updated_at"),
+    estimatedMarginBp: rate("estimated_margin_bp"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
@@ -43,6 +55,10 @@ export const departments = table(
     check("departments_collection_number_ck", enumCheck(t.collectionNumber)),
     check("departments_dining_ck", enumCheck(t.dining)),
     check("departments_dining_starts_as_ck", enumCheck(t.diningStartsAs)),
+    check(
+      "departments_estimated_margin_ck",
+      sql`${t.estimatedMarginBp} is null or (typeof(${t.estimatedMarginBp}) = 'integer' and ${t.estimatedMarginBp} between 0 and 10000)`,
+    ),
     foreignKey({
       columns: [t.transferDeskProfileId],
       foreignColumns: [deviceProfiles.id],

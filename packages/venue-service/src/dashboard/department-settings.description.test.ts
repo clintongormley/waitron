@@ -64,7 +64,7 @@ it.each([
       [...form.shadowRoot!.querySelectorAll("[slot=details] wt-input")].map(
         (input) => (input as HTMLElementTagNameMap["wt-input"]).name,
       ),
-    ).toEqual(["name", "tradingName", "operationDescription"]);
+    ).toEqual(["name", "tradingName", "estimatedMargin", "operationDescription"]);
   },
 );
 it("a Details Save with only the description changed sends the description alone and closes", async () => {

@@ -220,6 +220,7 @@ export async function updateDepartment(
     orderStart?: OrderStart;
     needsClearing?: boolean;
     lateSendNeedsManager?: boolean;
+    estimatedMarginBp?: number | null;
   },
 ): Promise<void> {
   await assertDepartment(tx, departmentId);
@@ -229,7 +230,8 @@ export async function updateDepartment(
     input.tradingName !== undefined ||
     input.orderStart !== undefined ||
     input.needsClearing !== undefined ||
-    input.lateSendNeedsManager !== undefined
+    input.lateSendNeedsManager !== undefined ||
+    input.estimatedMarginBp !== undefined
   )
     await tx
       .update(departments)
@@ -241,6 +243,9 @@ export async function updateDepartment(
         ...(input.lateSendNeedsManager === undefined
           ? {}
           : { lateSendNeedsManager: input.lateSendNeedsManager }),
+        ...(input.estimatedMarginBp === undefined
+          ? {}
+          : { estimatedMarginBp: input.estimatedMarginBp }),
       })
       .where(eq(departments.id, departmentId));
 }
@@ -671,6 +676,7 @@ export interface DepartmentEditInput
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
   lateSendNeedsManager?: boolean;
+  estimatedMarginBp?: number | null;
   courseSettings?: readonly DepartmentCourseSetting[];
   serviceSteps?: readonly ServiceStepInput[];
 }
@@ -687,6 +693,9 @@ export async function saveDepartmentEditSettings(
     ...(input.lateSendNeedsManager === undefined
       ? {}
       : { lateSendNeedsManager: input.lateSendNeedsManager }),
+    ...(input.estimatedMarginBp === undefined
+      ? {}
+      : { estimatedMarginBp: input.estimatedMarginBp }),
   });
   const settings = {
     orderStart: input.orderStart,

@@ -25,7 +25,8 @@ are affected (the deli's 4%, 10% and 21%). Asked as
 adviser's answer 1.10 of 15 November; the owner's decision D4 is to build it now. A table given its
 whole meal free is not this entry: the owner's answer of 18 November (owner, 2026-11-18; the adviser
 still to confirm the details) is that it is a self-supply only
-when given in exchange for services, and that it goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals).
+when given in exchange for services, and that it goes on the report for the accountant: the Given
+free sheet of the VAT return screen's corrections workbook.
 Fiscal: the owner lands it.
 
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
@@ -902,7 +903,7 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
 requests; the first, storing each product's takeaway rate, landed as #4047 (nothing visible yet); PRs 2 and 3
 (takeaway rates on screens and invoices, then the one eat-in rate) are next, the owner's D10, D11, D17 and D18
 answered "yes" on 2026-11-22; pieces B and C have no plan yet. From M7v, owner rulings
@@ -960,11 +961,11 @@ Also open, from before A802:
   the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
   the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
-## A report for the accountant: wrong VAT rates and free meals
+## A report for the accountant: wrong VAT rates
 
 Settled by the owner's decisions D6 and D12 of 2026-11-16, after the tax adviser's answers 1.12 and
 1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13), then
-kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5 and 6 of
+kept and widened by the owner's answers of 18 November (owner, 2026-11-18, question 5 of
 the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. Waitron files nothing itself:
 each case goes on a report for the accountant, who decides what to file.
 
@@ -974,13 +975,6 @@ each case goes on a report for the accountant, who decides what to file.
   rate is corrected for future sales.
 - **A VAT rate set too high** (question 5): "we just produce a correction report which goes to
   the accountant", who decides whether to ask for the earlier return to be corrected.
-- **Meals given free** (question 6). A free meal is a self-supply (autoconsumo), taxed at cost,
-  only when given in exchange for services; one given as marketing, to a loyal customer, after a
-  bad experience or to an employee is not, and then the VAT paid on its ingredients may not be
-  recoverable. In the owner's words, "This is way too complex for us to handle automatically in
-  Waitron, instead this should be part of some report that we make available to the accountant to
-  decide what to do." So the report lists what was given free, with its reason; the owner gave
-  a margin as one basis for the cost (a 30% margin makes the cost 70% of the price).
 - How a wrong rate is recorded on the product waits on the design of
   [VAT rates per product](#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68).
 

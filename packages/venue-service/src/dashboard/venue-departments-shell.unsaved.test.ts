@@ -38,6 +38,7 @@ const model: VenueServiceView = {
   courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
+  estimatedMarginByDepartment: {},
   serviceSteps: [],
   courses: [],
 };

@@ -108,6 +108,9 @@ export interface AdjustmentEntry {
   reasonName: string;
   note: string | null;
   lineName: string | null;
+  /** The bill line this adjusted; null on a discount on the whole bill. The rows a comp or
+   * discount took money off are in `adjustment_lines`. */
+  lineId: string | null;
   /** How much of the line was adjusted; null on a discount on the whole bill. */
   quantity: Decimal | null;
   percentBp: number | null;
@@ -328,6 +331,7 @@ async function readEntryRows(tx: Transaction, where: SQL, limit: number) {
       reasonName: adjustments.reasonName,
       note: adjustments.note,
       lineName: adjustments.lineName,
+      lineId: adjustments.lineId,
       quantity: adjustments.quantity,
       percentBp: adjustments.percentBp,
       beforeAmount: adjustments.beforeAmount,

@@ -117,6 +117,7 @@ const model: VenueServiceView = {
   courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
+  estimatedMarginByDepartment: {},
   serviceSteps: [],
   courses: [],
 };
@@ -3155,3 +3156,106 @@ it.each(["dining", "diningStartsAs"] as const)(
     expect(writes[0]!.body).toMatchObject({ name: "Evening restaurant", [setting]: "takeaway" });
   },
 );
+
+it("the estimated margin shows the saved value in the screen's decimal mark, after the trading name", async () => {
+  const view = structuredClone(model);
+  view.estimatedMarginByDepartment = { d1: "30.50" };
+  setLocale("es");
+  const { el } = await mount(view);
+  const margin = field(el, "estimatedMargin");
+  await margin.updateComplete;
+  expect(margin.label).toBe(VENUE_SERVICE_STRINGS.es["venue.estimated_margin"]);
+  expect(margin.required).toBe(false);
+  const native = margin.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  expect(native.value).toBe("30,50");
+  expect(native.placeholder).toBe(VENUE_SERVICE_STRINGS.es["venue.estimated_margin_hint"]);
+  const names = [...el.shadowRoot!.querySelectorAll("[slot=details] wt-input")].map((input) =>
+    input.getAttribute("name"),
+  );
+  expect(names.slice(0, 3)).toEqual(["name", "tradingName", "estimatedMargin"]);
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+});
+
+it("a margin typed with a comma saves its dot-decimal form and clearing it saves none", async () => {
+  const { el, writes } = await mount();
+  const margin = field(el, "estimatedMargin");
+  await margin.updateComplete;
+  const native = margin.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  await userEvent.fill(page.elementLocator(native), "30,5");
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ estimatedMargin: "30.5" });
+  await expect.poll(() => save(el).disabled).toBe(true);
+  expect(el.model!.estimatedMarginByDepartment).toEqual({ d1: "30.50" });
+  await userEvent.fill(page.elementLocator(native), "");
+  await el.updateComplete;
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]!.body).toMatchObject({ estimatedMargin: null });
+  await expect.poll(() => save(el).disabled).toBe(true);
+  expect(el.model!.estimatedMarginByDepartment).toEqual({});
+});
+
+it("a margin with leading zeros is tidied before it is sent", async () => {
+  const { el, writes } = await mount();
+  await change(el, "estimatedMargin", "05");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ estimatedMargin: "5" });
+});
+
+it("a save that leaves the margin alone does not send it", async () => {
+  const view = structuredClone(model);
+  view.estimatedMarginByDepartment = { d1: "30.00" };
+  const { el, writes } = await mount(view);
+  await change(el, "name", "Restaurant revised");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).not.toHaveProperty("estimatedMargin");
+});
+
+it.each(["101", "100.5", "30.555", "-1", "1,2,3"])(
+  "a margin of %s is marked beside the field after Save, and Save waits until it is fixed",
+  async (typed) => {
+    const { el, writes } = await mount();
+    const margin = field(el, "estimatedMargin");
+    await margin.updateComplete;
+    const native = margin.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(page.elementLocator(native), typed);
+    await el.updateComplete;
+    expect(margin.error).toBe("");
+    expect(save(el).disabled).toBe(false);
+    save(el).click();
+    await el.updateComplete;
+    await margin.updateComplete;
+    expect(margin.error).toBe(VENUE_SERVICE_STRINGS.en["venue.estimated_margin_invalid"]);
+    expect(native.getAttribute("aria-invalid")).toBe("true");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(save(el).disabled).toBe(true);
+    expect(writes).toEqual([]);
+    await userEvent.fill(page.elementLocator(native), "100");
+    await el.updateComplete;
+    await margin.updateComplete;
+    expect(margin.error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.body).toMatchObject({ estimatedMargin: "100" });
+  },
+);
+
+it("a margin the server refuses is marked beside the field", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "estimatedMargin" },
+  });
+  await change(el, "estimatedMargin", "40");
+  save(el).click();
+  const margin = field(el, "estimatedMargin");
+  await expect.poll(() => margin.error).toBe(VENUE_SERVICE_STRINGS.en["venue.field_refused"]);
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+});

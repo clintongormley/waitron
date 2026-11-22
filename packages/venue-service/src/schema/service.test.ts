@@ -39,6 +39,7 @@ const EXPECTED: Record<
       "departments_collection_number_ck",
       "departments_dining_ck",
       "departments_dining_starts_as_ck",
+      "departments_estimated_margin_ck",
     ],
     indexes: ["departments_name_key", "departments_one_default_key"],
     uniqueConstraints: [],
@@ -192,5 +193,48 @@ describe("department name storage", () => {
     await seedNamedVenue("Venue");
     await insert("Deli");
     await expect(insert("Deli")).rejects.toThrow("UNIQUE constraint failed:");
+  });
+});
+
+describe("department estimated margin", () => {
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS],
+  });
+  async function insertWithMargin(name: string, estimatedMarginBp: number | null) {
+    return withTransaction(suite.db, async (tx) => {
+      const [row] = await tx
+        .insert(departments)
+        .values({ name, tradingName: name, estimatedMarginBp })
+        .returning();
+      return row!;
+    });
+  }
+  it("takes no margin, 0, 3000 and 10000", async () => {
+    await seedTaxpayer(suite.db);
+    const stored = [];
+    for (const [name, margin] of [
+      ["None", null],
+      ["Zero", 0],
+      ["Typical", 3000],
+      ["Whole", 10000],
+    ] as const) {
+      stored.push((await insertWithMargin(name, margin)).estimatedMarginBp);
+    }
+    expect(stored).toEqual([null, 0, 3000, 10000]);
+  });
+  it("refuses a margin below 0 or above 10000 by its constraint", async () => {
+    await seedTaxpayer(suite.db);
+    await expect(insertWithMargin("Negative", -1)).rejects.toThrow(
+      "CHECK constraint failed: departments_estimated_margin_ck",
+    );
+    await expect(insertWithMargin("Over", 10001)).rejects.toThrow(
+      "CHECK constraint failed: departments_estimated_margin_ck",
+    );
+  });
+  it("refuses a fraction of a basis point by its constraint", async () => {
+    await seedTaxpayer(suite.db);
+    await expect(insertWithMargin("Fraction", 3000.5)).rejects.toThrow(
+      "CHECK constraint failed: departments_estimated_margin_ck",
+    );
   });
 });

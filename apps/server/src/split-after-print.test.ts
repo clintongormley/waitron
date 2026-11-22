@@ -16,7 +16,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { computeAdjustmentReport } from "@waitron/adjustments";
+import { adjustments, computeAdjustmentReport } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import {
   computeCategorySales,
@@ -29,6 +29,7 @@ import { filedSales, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoi
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
+import { listFreeItems } from "./free-items.js";
 import { copyBillDishes } from "./split-after-print.js";
 import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -854,6 +855,115 @@ describe("Cancel and credit on a printed table bill", () => {
 
     expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
     expect(await groups()).toEqual([{ lines: 0, ready: false }]);
+  });
+});
+
+describe("the Given free sheet for a printed bill", () => {
+  async function freeOn(billId: string) {
+    const ids = new Set(
+      (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ id: adjustments.id })
+            .from(adjustments)
+            .where(eq(adjustments.workingOrderId, billId)),
+        )
+      ).map(({ id }) => id),
+    );
+    const listed = await inTx(venue, async (tx) => {
+      const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
+      const day = currentBusinessDay(clock);
+      return listFreeItems(tx, clock, {
+        year: Number(day.slice(0, 4)),
+        period: { kind: "month", month: Number(day.slice(5, 7)) },
+      });
+    });
+    return listed
+      .filter((one) => ids.has(one.adjustmentId))
+      .map(({ item, quantity, invoice, menuPrice, amountTakenOff }) => ({
+        item,
+        quantity,
+        invoice: invoice === null ? null : `${invoice.seriesCode}/${invoice.number}`,
+        menuPrice,
+        amountTakenOff,
+      }));
+  }
+
+  async function removeFrom(billId: string, lineNo: number) {
+    const cancelled = await cancelItemHttp(
+      venue.db,
+      venue.app,
+      venue.supervisorTill,
+      billId,
+      lineNo,
+      undefined,
+      { outcome: "remove_charge", reasonId: await inTx(venue, cancelReasonId) },
+    );
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+  }
+
+  /** A party's printed bill with its wine comped, split after printing; answers the new bill. */
+  async function splitWithWineComped(party: Party): Promise<string> {
+    await seedGivenAwayLine(venue, party.tabId, 1);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId)).status).toBe(200);
+    const answer = await split(party.tabId);
+    expect(answer.status).toBe(200);
+    return answer.json.billId as string;
+  }
+
+  it("names the invoice of the bill a comped dish was copied to, not the credited one", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    const newBill = await splitWithWineComped(party);
+    const credited = await invoiceOf(party.tabId);
+    expect((await printBill(party, newBill)).status).toBe(200);
+    const copy = await invoiceOf(newBill);
+    expect(copy.invoiceNumber).not.toBe(credited.invoiceNumber);
+    const [series] = await inTx(venue, (tx) =>
+      tx
+        .select({ code: invoiceSeries.code })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, copy.seriesId)),
+    );
+    expect(await freeOn(party.tabId)).toEqual([
+      {
+        item: "Red wine bottle",
+        quantity: "1.000",
+        invoice: `${series!.code}/${copy.invoiceNumber}`,
+        menuPrice: "30.00",
+        amountTakenOff: "30.00",
+      },
+    ]);
+  });
+
+  it("leaves out a comped dish taken off the bill it was copied to", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    const newBill = await splitWithWineComped(party);
+
+    await removeFrom(newBill, 1);
+
+    expect((await dishesOf(newBill)).map((line) => line.name)).toEqual(["Tarta"]);
+    expect(await freeOn(party.tabId)).toEqual([]);
+  });
+
+  it("leaves out a comped dish on a printed bill that was cancelled and credited", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    await seedGivenAwayLine(venue, party.tabId, 1);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId)).status).toBe(200);
+    expect(await freeOn(party.tabId)).toHaveLength(1);
+
+    const cancelled = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/working-orders/${party.tabId}/cancel`,
+      { reason: "Wrong table" },
+    );
+
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+    expect(await statusOf(venue, party.tabId)).toBe("abandoned");
+    expect(await freeOn(party.tabId)).toEqual([]);
   });
 });
 

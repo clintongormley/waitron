@@ -30,6 +30,7 @@ function model(count = 2): VenueServiceView {
     courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
+    estimatedMarginByDepartment: {},
     serviceSteps: [],
     courses: [],
   };

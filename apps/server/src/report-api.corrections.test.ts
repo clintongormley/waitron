@@ -74,6 +74,7 @@ describe("corrections download", () => {
       workbook: strFromU8(files["xl/workbook.xml"]!),
       summary: strFromU8(files["xl/worksheets/sheet1.xml"]!),
       rows: strFromU8(files["xl/worksheets/sheet2.xml"]!),
+      free: files["xl/worksheets/sheet3.xml"] && strFromU8(files["xl/worksheets/sheet3.xml"]),
     };
   };
 
@@ -154,6 +155,19 @@ describe("corrections download", () => {
     expect(rows.match(/<row /g)).toHaveLength(2);
     expect(row(rows, 2).slice(0, 6)).toEqual(["2026-04-02", late, "A/3", "", "", "2026-1T"]);
   });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "carries the Given free sheet, its columns alone when nothing was given free (%s)",
+    async (locale) => {
+      const words = CORRECTIONS_REPORT_WORDS[locale === "en-GB" ? "en" : "es"];
+      const response = await send("year=2026&period=3T", managerCookie, locale);
+      expect(response.status).toBe(200);
+      const { workbook, free } = await sheets(response);
+      expect(workbook).toContain(`<sheet name="${words.freeSheet}"`);
+      expect(row(free!, 1)).toEqual(words.freeColumns);
+      expect(free!.match(/<row /g)).toHaveLength(1);
+    },
+  );
 
   it("refuses a person without report.export, a missing session, and a bad year or period", async () => {
     for (const [query, cookie, status, code, field] of [
