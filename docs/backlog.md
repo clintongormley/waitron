@@ -840,8 +840,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - The profile editor also reads people, so it needs `person.manage` beside
     `venue.configure`; no role holds only the latter today.
     [Detail](backlog/till.md#the-profile-editor-reads-people-and-the-venues-departments-and-zones)
-  - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it serves"
-    and "Who can sign in" could become widgets of their own.
+  - The equipment and kitchen-screen lists still live in `apps/dashboard/src/screens/device-profiles-screen.ts`
+    and could become widgets of their own.
 
 
 - **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** Whether WebKit's Linux
