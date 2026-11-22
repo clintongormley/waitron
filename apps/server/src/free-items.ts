@@ -2,6 +2,7 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import {
   listAdjustmentEntries,
   MAX_ENTRY_PAGE_SIZE,
+  standingOff,
   type AdjustmentEntry,
   type EntryCursor,
 } from "@waitron/adjustments";
@@ -43,15 +44,15 @@ export interface FreeItem {
   adjustmentId: string;
   /** The adjustment's civil date in the venue's zone. */
   date: string;
-  /** The invoice of the bill the dish is on now, or of the discounted bill; null when none. */
+  /** The invoice of the bill these rows are on now; null when it has none. */
   invoice: { seriesCode: string; number: number } | null;
   /** The line's name; null for the whole bill. */
   item: string | null;
-  /** How much of the dish is still on a bill; null for the whole bill. */
+  /** How much of the dish is on this bill; null for the whole bill. */
   quantity: Decimal | null;
   kind: "comp" | "discount";
   department: string | null;
-  /** The list value of the rows the adjustment took money off that are still on a bill. */
+  /** The list value of the rows the adjustment took money off that are on this bill. */
   menuPrice: Decimal;
   /** What the adjustment took off those rows. */
   amountTakenOff: Decimal;
@@ -110,8 +111,8 @@ export function estimatedCost(
 /**
  * The period's free dishes and bills, oldest first: the Adjustments report's entries on the bills
  * opened over the period's first to last business day (D10) that are not cancels and left their
- * subject at zero, each told by the rows it took money off that are still on a bill, and left out
- * when none is (D3).
+ * subject at zero, told by the rows each took money off that are still on a bill, one row per bill
+ * those rows are on (earliest opened first), and left out when none is (D3).
  */
 export async function listFreeItems(
   tx: Transaction,
@@ -172,16 +173,17 @@ export async function listFreeItems(
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));
-  const linesOf = new Map<string, typeof reduced>();
+  const linesOf = new Map<string, Map<string, typeof reduced>>();
   for (const line of reduced) {
-    const list = linesOf.get(line.adjustmentId) ?? [];
-    list.push(line);
-    linesOf.set(line.adjustmentId, list);
+    const byBill = linesOf.get(line.adjustmentId) ?? new Map<string, typeof reduced>();
+    byBill.set(line.workingOrderId, [...(byBill.get(line.workingOrderId) ?? []), line]);
+    linesOf.set(line.adjustmentId, byBill);
   }
   const bills = await tx
     .select({
       id: workingOrders.id,
       status: workingOrders.status,
+      openedAt: workingOrders.openedAt,
       departmentId: workingOrders.departmentId,
       seriesCode: invoiceSeries.code,
       number: sales.invoiceNumber,
@@ -212,65 +214,65 @@ export async function listFreeItems(
 
   const items: FreeItem[] = [];
   for (const entry of entries) {
-    const lines = linesOf.get(entry.id) ?? [];
-    if (lines.length === 0) continue;
     const date = civilDateOf(new Date(entry.createdAt), clock.timeZone);
-    const dishes = lines.filter((line) => line.parentLineId === null);
-    const first = dishes[0] ?? lines[0]!;
     const own = billById.get(entry.workingOrderId)!;
-    const bill =
-      entry.lineId === null && own.status !== "abandoned"
-        ? own
-        : billById.get(first.workingOrderId)!;
-    const departmentId =
-      entry.lineId === null ? bill.departmentId : (first.offerDepartmentId ?? bill.departmentId);
-    const department = departmentId === null ? undefined : departmentById.get(departmentId);
-    const prices = lines.map((line) => ({
-      gross: divideDecimal(
-        multiplyDecimal(
-          centsToDecimal(line.listUnitPriceGross ?? line.unitPriceGross),
-          thousandthsToDecimal(line.quantity),
-        ),
-        thousandthsToDecimal(line.priceQuantity),
-        MONEY_SCALE,
-      ),
-      rate: vatRateOn(
-        (line.dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass,
-        date,
-      ),
-    }));
-    items.push({
-      adjustmentId: entry.id,
-      date,
-      invoice:
-        bill.seriesCode === null || bill.number === null
-          ? null
-          : { seriesCode: bill.seriesCode, number: bill.number },
-      item: entry.lineName,
-      quantity:
+    const groups = [...(linesOf.get(entry.id) ?? new Map<string, typeof reduced>())]
+      .map(([billId, lines]) => ({ bill: billById.get(billId)!, lines }))
+      .sort(
+        (a, b) =>
+          a.bill.openedAt.localeCompare(b.bill.openedAt) || a.bill.id.localeCompare(b.bill.id),
+      );
+    for (const { bill, lines } of groups) {
+      const dishes = lines.filter((line) => line.parentLineId === null);
+      const counted = dishes.length > 0 ? dishes : lines;
+      const departmentId =
         entry.lineId === null
-          ? null
-          : thousandthsToDecimal(
-              (dishes.length > 0 ? dishes : lines).reduce((sum, line) => sum + line.quantity, 0),
-            ),
-      kind: entry.action === "comp" ? "comp" : "discount",
-      department: department?.name ?? null,
-      menuPrice: sumDecimals(prices.map(({ gross }) => gross)),
-      // Each row records what was taken off the quantity its line held then; a row split off
-      // since carries the same figures, so a row's part is its share of that quantity.
-      amountTakenOff: sumOfQuotients(
-        lines.map((line) => ({
-          numerator: multiplyDecimal(
-            centsToDecimal(line.reduction),
+          ? (own.status === "abandoned" ? bill : own).departmentId
+          : (counted[0]!.offerDepartmentId ?? bill.departmentId);
+      const department = departmentId === null ? undefined : departmentById.get(departmentId);
+      const prices = lines.map((line) => ({
+        gross: divideDecimal(
+          multiplyDecimal(
+            centsToDecimal(line.listUnitPriceGross ?? line.unitPriceGross),
             thousandthsToDecimal(line.quantity),
           ),
-          denominator: thousandthsToDecimal(line.reducedQuantity),
-        })),
-      ),
-      estimatedCost: estimatedCost(prices, department?.marginBp ?? null),
-      reason: entry.reasonName,
-      note: entry.note,
-    });
+          thousandthsToDecimal(line.priceQuantity),
+          MONEY_SCALE,
+        ),
+        rate: vatRateOn(
+          (line.dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass,
+          date,
+        ),
+      }));
+      items.push({
+        adjustmentId: entry.id,
+        date,
+        invoice:
+          bill.seriesCode === null || bill.number === null
+            ? null
+            : { seriesCode: bill.seriesCode, number: bill.number },
+        item: entry.lineName,
+        quantity:
+          entry.lineId === null
+            ? null
+            : thousandthsToDecimal(counted.reduce((sum, line) => sum + line.quantity, 0)),
+        kind: entry.action === "comp" ? "comp" : "discount",
+        department: department?.name ?? null,
+        menuPrice: sumDecimals(prices.map(({ gross }) => gross)),
+        // Each row records what was taken off the quantity its line held then; a row split off
+        // since carries the same figures, so a row's part is its share of that quantity.
+        amountTakenOff: standingOff(
+          lines.map((line) => ({
+            reduction: centsToDecimal(line.reduction),
+            quantityThen: thousandthsToDecimal(line.reducedQuantity),
+            quantityNow: thousandthsToDecimal(line.quantity),
+          })),
+        ),
+        estimatedCost: estimatedCost(prices, department?.marginBp ?? null),
+        reason: entry.reasonName,
+        note: entry.note,
+      });
+    }
   }
   return items;
 }

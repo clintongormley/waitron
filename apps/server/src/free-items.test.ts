@@ -18,7 +18,7 @@ import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { estimatedCost, listFreeItems, type FreeItem } from "./free-items.js";
 import { cancelItem } from "./line-cancel.js";
-import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { cancelReasonId, ensureOperator, observedCancelItem } from "./testing/cancel-line.js";
 import {
@@ -425,6 +425,50 @@ describe("the free list", () => {
     await pay(billId);
     const invoice = await pay(moved.billId);
     expect(await freeOn(billId)).toEqual([row({ invoice: number(invoice) })]);
+  });
+
+  it("lists a comp whose portions are now on two bills once per bill, each under its own invoice", async () => {
+    const { partyId, billId } = await bill([{ name: "Burger", quantity: "2" }, { name: "Water" }]);
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+    const moved = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await partyRevision(tx, partyId),
+      }),
+    );
+    expect(
+      (await rowsOf(venue, moved.billId)).map(({ name, quantity }) => [name, quantity]),
+    ).toEqual([["Burger", "1.000"]]);
+    const invoice = await pay(billId);
+    expect(await freeOn(billId)).toEqual([row({ invoice: number(invoice) }), row({})]);
+  });
+
+  it("lists a whole bill given free whose dishes are now on two bills once per bill, each under its own invoice", async () => {
+    const { partyId, billId } = await bill([
+      { name: "Burger" },
+      { name: "Salad" },
+      { name: "Water" },
+    ]);
+    const other = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 3 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await partyRevision(tx, partyId),
+      }),
+    );
+    await adjust(billId, { action: "discount_percent", percentBp: 10000 });
+    await inTx(venue, async (tx) =>
+      transferItems(tx, venue.cfg, billId, other.billId, [{ lineNo: 1 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await partyRevision(tx, partyId),
+      }),
+    );
+    expect((await rowsOf(venue, billId)).map(({ name }) => name)).toEqual(["Salad"]);
+    const invoice = await pay(other.billId);
+    const wholeBill = { item: null, quantity: null, kind: "discount" as const };
+    expect(await freeOn(billId)).toEqual([
+      row({ ...wholeBill, menuPrice: decimal("10.00"), amountTakenOff: decimal("10.00") }),
+      row({ ...wholeBill, invoice: number(invoice) }),
+    ]);
   });
 
   it("names, for a whole bill given free and then merged into another, the bill its dishes are on", async () => {
