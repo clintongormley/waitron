@@ -3,7 +3,7 @@
 Status: written 2026-11-19, lane L; revised the same day after one fresh-context read; **revised
 2026-11-21 on main `557b2e2e3c`, the owner's D1–D4 folded in** (D3 and D4 CHANGED), then a second
 fresh-context read of `d47dd30466` folded in the same day. PRs #3398, #3916 and #3890 are on main.
-Not built. FISCAL: the owner lands both PRs. **RAN** = a command was run and its output read; a
+PR 1 landed as #3974; PR 2 is `feat/adviser-corrections-report-2`. FISCAL: the owner lands both PRs. **RAN** = a command was run and its output read; a
 `file:line` citation was read at `557b2e2e3c`, not run. Unmarked reasoning is inference.
 
 Words used below. The **VAT return** is the quarterly tax form (modelo 303) that Waitron's
@@ -97,9 +97,7 @@ records, their fingerprints, the chain, invoice numbers or the record builders.
   charge) is dropped. **How this plan reads "it just disappears" for a comp:** a dish that was
   comped and later taken off the bill is left out of the list, whether the kitchen had made it or
   not; a comped dish that stays on the bill (including one cancelled with its charge kept, which
-  leaves it on the bill) is listed. One limit: if only part of a comped quantity is later taken
-  off (comp three glasses, then take one off), the row still shows the quantity comped. Each row
-  says which kind it is.
+  leaves it on the bill) is listed. Each row says which kind it is.
 - **D4 CHANGED. An estimated margin per department.** Your words, 20 November: "i think we need a
   setting per department for an estimated margin, which we can use for this value" (entry
   "WATCHER 2026-11-20 22:51"). So each department gets an **Estimated margin (%)** field in the
@@ -108,21 +106,15 @@ records, their fingerprints, the chain, invoice numbers or the record builders.
   department has no margin. It carries no VAT figure: whether a free meal owes VAT is the
   accountant's call, as you said. This adds one stored value to each department, so the pull
   request that carries it (PR 2) resets the test venues, and says so in its first line.
-- **D14, a new question for you: is the estimated cost worked out on the price with or without
-  VAT?** Recommended: **without VAT**. You said the margin gives "a basis for working out the VAT to
-  invoice"; a basis that already contains VAT would make that VAT too high. An €11.00 dish at 10%
-  VAT is €10.00 without VAT, so a 30% margin gives an estimated cost of **€7.00**. Waitron does not
-  store a free dish's VAT rate on the bill (`packages/db/src/schema/orders.ts:235-237`), so this
-  looks the rate up from the dish's VAT class, whether it was eaten in or taken away, and the day,
-  as invoices do (`vatRateOn`, `packages/shared/src/menu-document/vat-rates.ts:91-99`): about 40 to
-  50 more lines of code and 60 of tests. A whole bill given free is worked out dish by dish at each
-  dish's own rate. Alternative: on the menu price as listed, VAT included (€7.70 in the same
-  example), which needs no rate lookup.
+- **D14. The estimated cost is worked out on the price without VAT.** Decided by the watcher, not
+  you (`~/waitron-campaign-l/questions.md`, entry "WATCHER 2026-11-21 16:11"); the watcher told you,
+  and you may overrule it. An €11.00 dish at 10% VAT is €10.00 without VAT, so a 30% margin gives an
+  estimated cost of **€7.00**.
 
 **Size.** Two pull requests. PR 1 (the period rule and the corrections list): about 510 lines of
 code and 990 of tests, plus about 55 lines of guide and backlog text, about 33 files, no generated
 files, no database change. PR 2 (the margin setting and the free list): about 310 lines of code and
-620 of tests with D14's recommended answer (about 45 and 60 fewer with its alternative), plus about
+620 of tests, plus about
 35 of guide and backlog text and about 25 generated lines (the rebuilt starting database layout),
 about 40 files; it resets the test venues.
 
@@ -162,8 +154,9 @@ rebuild, one venue reset" is now two of each.
    relayed by the watcher (`~/waitron-campaign-l/questions.md`, entries "WATCHER 2026-11-19 17:05",
    "WATCHER 2026-11-20 22:48", "22:49", "22:51"); I read them there, not from the owner directly.
    D5–D10 were cleared by the watcher at the plan's defaults, not by the owner (same file, entry
-   "WATCHER 2026-11-19 15:55", line 281). D11 and D13 (the watcher's) and D14 (the owner's) are
-   new in this revision and approved by nobody. One fresh-context reviewer read the first version
+   "WATCHER 2026-11-19 15:55", line 281). D11, D13, the D3 reading and D14 were cleared by the
+   watcher (entry "WATCHER 2026-11-21 16:11"), which told the owner of D14; the owner may overrule
+   it. One fresh-context reviewer read the first version
    and re-ran its A/B/C test; a second read `d47dd30466` and ran the void-of-a-replaced-sale case,
    and its findings are folded in here.
 
@@ -361,18 +354,22 @@ Kinds: Correction, Void, Date moved out, Date moved in, Issued after its sale's 
 invoice whose own day lies in an earlier period than its issue date). No staff or customer names.
 
 **The Given free sheet** (PR 2). One row per comp or discount whose amount after it is zero (actions
-`comp`, `discount_amount`, `discount_percent`; D3), on a bill opened in the period (D10), except a
-dish comp or discount whose line no longer exists (D3: taken off the bill). Columns: date, ticket
-number (the invoice of the bill the dish is on now, or of the discounted bill; blank when none was
-issued), item or "Whole bill", quantity, kind (Comp, Discount to zero), department, menu price,
-amount taken off, estimated cost, reason, note. **Menu price** is the entry's `nominalValue` (its
-list value, so a dish discounted earlier still shows its menu price), **amount taken off** is its
-`reduction`. **Estimated cost** (D14, recommended default) = the price without VAT × (10000 − margin
-in basis points) ÷ 10000, exact decimals rounded half up to the cent, blank when the department has
-none. The price without VAT is the menu price ÷ (1 + the dish's rate), the rate being `vatRateOn` of
-the line's `vat_class` (or `takeaway_vat_class` when the bill's `dining` is takeaway) on the
-adjustment's civil day in the venue's zone; for a whole bill, the sum of that over the bill's rows
-the discount took money off that are still on a bill, each at its own rate. Under D14's alternative it is the menu price × the same factor.
+`comp`, `discount_amount`, `discount_percent`; D3), on a bill opened in the period (D10), told by
+the rows it took money off (`adjustment_lines`) that are still on a bill. A row on an abandoned bill
+(for example one split after printing, cancelled, or merged into another) is not on a bill. A comp
+or discount, of a dish or a whole bill, with none of its rows still on a bill is left out (D3:
+taken off the bill). Columns: date, invoice number (the invoice of the bill the dish is on now, or
+of the discounted bill; for a whole bill whose bill was abandoned, the bill holding its dishes;
+blank when none was issued), item or "Whole bill", quantity, kind (Comp, Discount to zero),
+department, menu price, amount taken off, estimated cost, reason, note. **Quantity** is what is
+still on a bill (comp three glasses, take one off: two). **Menu price** is the list price of those
+rows (so a dish discounted earlier still shows its menu price); **amount taken off** is each row's
+share of what the adjustment took off, by the quantity `adjustment_lines` stored. **Estimated cost**
+(D14) = the price without VAT × (10000 − margin in basis points) ÷ 10000, blank when the department
+has none. Each row still on a bill, extras included, is priced without VAT at its own rate:
+`vatRateOn` of its `vat_class` (or `takeaway_vat_class` when the bill's `dining` is takeaway) on the
+adjustment's civil day in the venue's zone. Those prices are summed exactly, the margin applied
+once, and the result rounded half up to the cent once.
 The department is the dish's line's `offer_department_id`, else the bill's `department_id` (D11).
 
 **Where the margin lives.** A nullable column `departments.estimated_margin_bp` (basis points,
@@ -391,8 +388,8 @@ configuration copy; the copy's format number goes up by one, as #3783 did for a 
 **The margin field.** In the department editor's **Details** tab, after the trading name: a
 `wt-input` named `estimatedMargin`, label **Estimated margin (%)** / **Margen estimado (%)**, not
 required, `decimal-locale=${currentLocale()}` (design-system Forms: a percentage takes `2.80` or
-`2,80`, `docs/developers/design-system.md:2947-2962`), hint as the placeholder text ("For the
-estimated cost of free items in the corrections workbook"). Empty means none. A value outside 0 to
+`2,80`, `docs/developers/design-system.md:2947-2962`), hint as the placeholder text ("Used to
+estimate the cost of free items" / "Para estimar el coste de las invitaciones"). Empty means none. A value outside 0 to
 100, or with more than two decimals, is marked beside the field with a localized message once Save
 is pressed, Save stays disabled until fixed, as the editor's other fields behave. The draft, the
 unsaved-changes guard and Save's quiet state follow the editor's existing `draftScopeFor` and
@@ -430,10 +427,9 @@ D13 new):
   returns plus the second quarter's corrections. Alternative: list each corrective in its target's
   period, which keeps a per-quarter identity but moves May's credit note for a February meal into
   the January–March workbook.
-- **D14 is the owner's** (Part 1; there is no plan D12, to keep it apart from the owner's D12 of
-  16 November). Whichever the owner picks, the estimated cost is one column, with the department's
-  name beside it and no VAT figure; an extra column showing the margin used is a further
-  alternative.
+- **D14** (Part 1; there is no plan D12, to keep it apart from the owner's D12 of 16 November):
+  the price without VAT, the watcher's decision of 2026-11-21 16:11, which the owner may overrule.
+  The estimated cost is one column, with the department's name beside it and no VAT figure.
 
 ## Interplay
 
@@ -470,6 +466,9 @@ D13 new):
   `feat/h-a1308-os12-common-refunds` changes two lines of `packages/adjustments/src/reports.ts`,
   which Task 9 edits (RAN `git diff --stat main...<branch>` over this plan's files for every branch
   in `git worktree list`; no other branch touches them).
+- **VAT rates piece A.** `free-items.ts` reads each line's `vat_class` / `takeaway_vat_class` label
+  for its rate; PRs 2 and 3 of `docs/superpowers/plans/2026-11-22-vat-rates-a.md` must move it with
+  the other readers.
 - **A1308 table hold.** Lifted on 7 November (`~/waitron-campaign-shared/a1308-hold.md:3`), so it
   does not apply to PR 2's column. Three backlog entries still say they wait for it
   (`docs/backlog.md:1264`, `:1604`, `:1814`); they belong to other items and are left to the
@@ -778,7 +777,8 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
   over the period's first to last business day (`resolveVenueClock`, as `report-api.ts` does), and
   keeps the entries whose action is not `cancel` and whose `afterAmount` is zero, dropping a dish
   entry when neither its `lineId` nor any row its `splits` names still exists in
-  `working_order_lines` (D3). One query reads, for the kept line ids, whether each exists, its
+  `working_order_lines` (D3). _As built, 2026-11-22:_ it checks instead the rows each adjustment
+  took money off, through `adjustment_lines`, leaving out rows on abandoned bills. One query reads, for the kept line ids, whether each exists, its
   current bill, its `offer_department_id`; one reads each bill's department and its invoice
   (series code, number; `sales_working_order_id_key` makes it one); one reads the departments'
   names and margins. Amounts are the entries' decimals; the estimated cost as Design. Staff names in
@@ -786,14 +786,14 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
 - **Failing tests first:** listed: a comp on a dish that reached the bill; a 100% discount; an
   amount discount to zero on a dish; a whole-bill discount to zero ("Whole bill", the bill's
   department); a comped dish cancelled with its charge kept; a comped dish moved to another bill
-  (the new bill's ticket number). Not listed: a comped dish later taken off the bill, before firing
+  (the new bill's invoice number). Not listed: a comped dish later taken off the bill, before firing
   and after serving; a partial discount; any cancel; an adjustment on a bill opened outside the
-  period. Estimated cost (D14's default, without VAT): an €11.00 dish at 10%, 30% margin, gives
+  period. Estimated cost (D14, without VAT): an €11.00 dish at 10%, 30% margin, gives
   €7.00; a €12.10 dish at 21% at 33.33% gives €6.67 (10.00 × 0.6667, half up); a takeaway bill takes
   the dish's takeaway class; a whole bill of an €11.00 dish at 10% and a €12.10 dish at 21%, 30%
   margin, gives €14.00; a department with no margin, and a bill with no department, leave it blank;
   a dish ordered in the Bar and moved to a Restaurant bill takes the Bar's margin (D11). The
-  workbook's third sheet holds these rows with the formatted ticket number, in both languages.
+  workbook's third sheet holds these rows with the formatted invoice number, in both languages.
 - Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
   src/free-items.test.ts src/corrections-report.test.ts src/report-api.corrections.test.ts`.
 
@@ -803,8 +803,8 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
 
 - The `{#vat-return}` section (Task 6) gains a short paragraph on the Given free sheet (what is on
   it, and that a dish taken off the bill is not) and where to set the margin (Departments and zones
-  › the department › Details › Estimated margin), with how the estimated cost is worked out as D14
-  settles it. Written from the code, in both languages, same heading id.
+  › the department › Details › Estimated margin), with how the estimated cost is worked out (D14).
+  Written from the code, in both languages, same heading id.
 - Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
   src/guide-content.test.ts` and `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run
   scripts/guide-links.test.ts`.
@@ -818,7 +818,6 @@ wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
   owner's decisions speak only of sales corrections, so this plan leaves it as it is.
 - A cross-check that a quarter's file plus later quarters' corrections equal what the chain filed is
   not built; Task 2's "every movement lands once" test covers the arithmetic only.
-- D3's limit: a comp later cut to a smaller quantity shows the quantity comped.
 - Two ways an ended period's sales side can still change: a record stamped by a wrong clock (A1420
   D8), and invoices and voids another box made in that period and returns after a handover, since
   nothing records when they arrived. No column is added for the second.
