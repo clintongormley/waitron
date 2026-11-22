@@ -588,6 +588,39 @@ describe("a basket that spans a publish", () => {
     expect(store.lines[0]!.product.menuVersionId).toBe("v2");
   });
 
+  it("picks up postponed offers when payment clears the basket before another poll", async () => {
+    const offers = Promise.withResolvers<ZoneOffers>();
+    const sale = Promise.withResolvers<typeof saleResult>();
+    const listZoneOffers = vi.fn().mockReturnValueOnce(offers.promise);
+    const { el } = await mountApp({
+      listZoneOffers,
+      recordSale: vi.fn().mockReturnValueOnce(sale.promise),
+      printReceipt: vi.fn().mockResolvedValue(undefined),
+    });
+    const { store } = await toCounter(el);
+    add(el, "Lemonade");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    expect(listZoneOffers).toHaveBeenCalledOnce();
+
+    await pay(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    const v2 = menu("v2", V1.offers);
+    listZoneOffers.mockResolvedValue(v2);
+    offers.resolve(v2);
+    await flush(el);
+    expect(store.lines[0]!.product.menuVersionId).toBe("v1");
+
+    sale.resolve(saleResult);
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
+    await flush(el);
+    expect(store.lines).toEqual([]);
+    expect(
+      counter(el).products.find((product) => product.productId === "Lemonade")!.menuVersionId,
+    ).toBe("v2");
+  });
+
   it("does not read new offers while an empty basket is locked for editing", async () => {
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
