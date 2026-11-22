@@ -5341,12 +5341,16 @@ it("words the takeaway field as staff read it, in English and Spanish", () => {
     expect(t("editor.takeaway_vat")).toBe("VAT when taken away");
     expect(same("Coffee", "10")).toBe("Same as Coffee — 10%");
     expect(t("editor.takeaway_vat_required")).toBe("Choose the VAT when taken away.");
-    expect(t("help.products.vat")).not.toMatch(/publish/i);
+    expect(t("help.products.vat")).toBe(
+      "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
+    );
     setLocale("es-ES");
     expect(t("editor.takeaway_vat")).toBe("IVA para llevar");
     expect(same("Café", "10")).toBe("Igual que Café — 10 %");
     expect(t("editor.takeaway_vat_required")).toBe("Elige el IVA para llevar.");
-    expect(t("help.products.vat")).not.toMatch(/publica/i);
+    expect(t("help.products.vat")).toBe(
+      "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
+    );
   } finally {
     setLocale(before);
   }
@@ -5483,6 +5487,13 @@ it("offers a variant its product's rate first, not required, and saves that choi
   await el.updateComplete;
   await edit(el);
   expect(submittedValue(el).takeawayVatRate).toBeNull();
+});
+
+it("sends a new product's default takeaway rate where the region does not charge it", async () => {
+  const el = await mountTakeaway(null, false, { defaultTakeawayVatRate: "0.00" });
+  expect(combobox(el, "takeaway-tax")).toBeNull();
+  await input(el, "name", "Omelette");
+  expect(submittedValue(el).takeawayVatRate).toBe("0.00");
 });
 
 it("draws no takeaway field where the region does not charge it, and saves the stored rate unchanged", async () => {

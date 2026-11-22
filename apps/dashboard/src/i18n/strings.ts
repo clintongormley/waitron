@@ -1209,7 +1209,8 @@ export const en = {
     "Cancels archiving this variant. Archiving happens only when you save the product.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
-  "help.products.vat": "The VAT class charged when the product is eaten here.",
+  "help.products.vat":
+    "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
   "help.products.course":
     "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
   "help.products.variants":
@@ -5929,7 +5930,8 @@ export const es: Record<StringKey, string> = {
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
-  "help.products.vat": "La clase de IVA que se cobra cuando se consume en el local.",
+  "help.products.vat":
+    "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
