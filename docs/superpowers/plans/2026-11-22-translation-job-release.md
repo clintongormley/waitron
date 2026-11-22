@@ -1,9 +1,9 @@
 # Record what Cloud needs to abandon translation work
 
 The watcher assigned TRANSLATION-JOB-RELEASE in Lane H's queue on 22 November at 03:25.
-This plan proposes a documentation change for [Translate all followups](../../backlog/menu.md#bundle-translate-all-followups),
-with the Cloud change to be routed by the watcher. Claude reviewed the first draft and identified
-the contract restriction below. The revised scope awaits watcher clearance.
+Claude reviewed the first draft and identified the contract restriction below. The watcher cleared
+the [Translate all followups](../../backlog/menu.md#bundle-translate-all-followups) edit at 03:47
+and assigned the Cloud action to Lane G.
 
 ## What this delivers
 

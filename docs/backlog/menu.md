@@ -330,24 +330,18 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 ## Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud can still hold it
 
-- The box ends a job without asking Cloud when the job's own 24-hour
-  clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
-  no longer lists the service `ready`, or the connection is revoked), when a status or collect
-  call is refused as a request Cloud will never accept, and when a job's last page leaves an item
-  unaccounted for or accounts for a number of items other than Cloud's total (both ended
-  `rejected`). Cloud's 24 hours run
-  from its own submit, or from when the job finished, so it can still hold the job, and while that
-  job is queued or running the contract's `translation_job_running` refuses the venue's next
-  submit. A release would not end a queued or running job (Cloud answers 409
-  `translation_not_ready`); it only deletes a finished job's results sooner. Cloud's operator
-  switching the service off answers 503, which the box retries rather than ending the job. A
-  submit Cloud accepted whose reply was lost is the worst case: the box never learned Cloud's job
-  id, so it could not release the job even once Cloud finished it. Pinned by "a job Cloud took but
-  whose reply was lost…", "a running job 24 hours old ends expired without asking Cloud" and "a
-  status Cloud refuses as a request it will never accept…" in
-  `apps/server/src/content-suggestion-runner.test.ts`, and "a last page that leaves a sent item
-  unaccounted ends the job without a release" in
-  `packages/menu/src/content-suggestion-store.test.ts`. What would fix it is open.
+After the box ends a Translate all job, Cloud can still have it queued or running and refuse the
+venue's next submit with `translation_job_running`. If Cloud accepted the submit and the reply was
+lost, the box has the original operation id but never received Cloud's job id. Repeating submit
+can create a job if the first request never arrived.
+[Runner tests](../../apps/server/src/content-suggestion-runner.test.ts).
+[Cloud submit](https://github.com/waitron-io/waitron-cloud/blob/2af67c8495aa03c2c1f3134b6c102ddf49977fe4/packages/translation/src/machine.ts#L71-L101).
+
+Cloud's contract says “Release tells Cloud the box has durably stored every page.” Cloud refuses
+release for a queued or running job with `translation_not_ready`. The box integration waits for a
+Cloud action that abandons an existing job by operation id, even while it is queued or running,
+and creates no job when that id is absent. Lane G owns the Cloud action (TRANSLATION-ABANDON).
+[Cloud release contract](https://github.com/waitron-io/waitron-cloud/blob/2af67c8495aa03c2c1f3134b6c102ddf49977fe4/docs/waitron-integration-contract.md#L1439-L1445).
 
 ## Translate all: open points from the review of A689's second PR
 
@@ -469,8 +463,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 - **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
   notice.**
   [Detail](menu.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)
-- **Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud
-  can still hold it.**
+- **Translate all: the box needs Cloud to abandon an active job by operation id.**
   [Detail](menu.md#translate-all-a-job-the-box-ends-itself-is-marked-released-without-a-call-to-cloud-and-cloud-can-still-hold-it)
 - **Translate all: open points from the review of A689's second PR.**
   [Detail](menu.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
