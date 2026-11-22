@@ -504,7 +504,13 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
 // Products are shared; menu_items own their offers. Ignoring a retired field would answer success
 // without saving what the caller asked for.
 function refuseRetiredFields(body: Record<string, unknown>): void {
-  for (const retired of ["modifierIds", "optionGroupIds", "soldAlone", "menuId"])
+  for (const retired of [
+    "modifierIds",
+    "optionGroupIds",
+    "soldAlone",
+    "menuId",
+    "takeawayVatClass",
+  ])
     if (body[retired] !== undefined)
       throw new AppError("management.request_invalid", { field: retired });
 }
@@ -1620,6 +1626,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         pricingUnit?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
+        takeawayVatRate?: unknown;
         takeawayVatClass?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
@@ -1680,8 +1687,10 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
-        // `createProduct` refuses a value that is not a VAT class.
-        takeawayVatClass: (body.takeawayVatClass ?? null) as never,
+        // `createProduct` refuses a rate the area does not offer; omitted takes the venue's default.
+        ...(body.takeawayVatRate === undefined
+          ? {}
+          : { takeawayVatRate: body.takeawayVatRate as string }),
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
         ...(body.dietOverride === undefined
           ? {}

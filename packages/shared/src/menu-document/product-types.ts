@@ -74,7 +74,8 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
  * One variant as the product list nests it under its parent: the variant as the editor reads it
  * (`unitPrice` and `courseId` its OWN, null where it takes its parent's) and, in `effective`, what
  * it actually carries: its allergens, price and VAT class once its blanks read as its parent's, its
- * parent's main category, and the course it is fired in (`variant-fallback.ts`).
+ * takeaway VAT rate today (its own, else its parent's), its parent's main category, and the course
+ * it is fired in (`variant-fallback.ts`).
  */
 export interface ListedVariant extends ProductVariant {
   allergensInherited: boolean;
@@ -83,7 +84,7 @@ export interface ListedVariant extends ProductVariant {
     allergens: ProductAllergens | null;
     unitPrice: string;
     vatClass: VatClass;
-    takeawayVatClass: VatClass;
+    takeawayVatRate: string;
     primaryCategoryId: string | null;
     courseId: string | null;
   };
@@ -118,8 +119,9 @@ export interface Product {
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
-  /** The class charged taken away, as stored; null charges `vatClass` either way. */
-  takeawayVatClass: VatClass | null;
+  /** The takeaway VAT rate in force on the venue's date today ("10.00"): a variant's own, else its
+   * parent's. */
+  takeawayVatRate: string;
   /** Whether the product exists for the venue; deleting it makes it Inactive. */
   active: boolean;
   /** Whether it can be sold right now: false is "sold out for now", and hides nothing in the
@@ -148,7 +150,7 @@ export interface Product {
  * as {@link ProductEditorBody}. Saves use {@link ProductEditorSaveBody}.
  *
  * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
- * On a product with no parent, `unitPrice`, `vatClass`
+ * On a product with no parent, `unitPrice`, `vatClass`, `takeawayVatRate`
  * and `dietaryDeclarations` are required.
  */
 export interface ProductEditorInput {
@@ -171,9 +173,10 @@ export interface ProductEditorInput {
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
   vatClass: VatClass | null;
-  /** Required in the body; null is empty, on a product or a variant. How an empty one is charged:
-   * `effectiveProductColumns` in `@waitron/menu`. */
-  takeawayVatClass: VatClass | null;
+  /** One of the area's pickable rates ("10.00"), required in the body. Null only on a variant, which
+   * then takes its parent's. Saving it replaces the product's rates with this one from the beginning
+   * of time; read back, it is the rate in force on the venue's date today. */
+  takeawayVatRate: string | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
   /** The main reporting category: any category, or null for Uncategorised. Always null on a variant,
@@ -212,9 +215,8 @@ export interface InheritedValues {
   image: string | null;
   unitPrice: string;
   vatClass: VatClass;
-  /** The parent's takeaway class, or its `vatClass` when it has none. A variant's own `vatClass`
-   * takes precedence over this when the variant has no takeaway class of its own. */
-  takeawayVatClass: VatClass;
+  /** The parent's takeaway rate today, which a variant without one of its own takes. */
+  takeawayVatRate: string;
   /** The parent's unit, which is always the variant's. */
   unitId: string | null;
   /** The parent's category, which is always the variant's. */

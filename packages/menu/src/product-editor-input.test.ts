@@ -20,8 +20,7 @@ const input: ProductEditorInput = {
   active: true,
   available: false,
   vatClass: "zero",
-  // Not `vatClass`, so a parser that copied one into the other fails.
-  takeawayVatClass: "general",
+  takeawayVatRate: "21.00",
   variants: [],
   primaryCategoryId: null,
   modifiers: [],
@@ -40,7 +39,7 @@ const inheriting = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
-  takeawayVatClass: null,
+  takeawayVatRate: null,
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
@@ -185,17 +184,32 @@ it("still rejects a non-null non-uuid unit", () => {
     expect.objectContaining({ code: "product.invalid", params: { field: "unitId" } }),
   );
 });
-it("takes a product's own takeaway class, and null as none, on a product or a variant", () => {
-  expect(parse(input)).toHaveProperty("takeawayVatClass", "general");
-  expect(parse({ ...input, takeawayVatClass: null })).toHaveProperty("takeawayVatClass", null);
-  expect(parseVariant({ ...inheriting, takeawayVatClass: "reduced" })).toHaveProperty(
-    "takeawayVatClass",
-    "reduced",
+it("takes a product's takeaway rate, and a variant's own or null for its parent's", () => {
+  expect(parse(input)).toHaveProperty("takeawayVatRate", "21.00");
+  expect(parseVariant({ ...inheriting, takeawayVatRate: "4.00" })).toHaveProperty(
+    "takeawayVatRate",
+    "4.00",
   );
-  expect(parseVariant(inheriting)).toHaveProperty("takeawayVatClass", null);
+  expect(parseVariant(inheriting)).toHaveProperty("takeawayVatRate", null);
 });
-it.each([undefined, "", "nope", false])(
-  "refuses an unsupported or missing takeaway class %j, on a product or a variant",
+it.each([undefined, null, 21, false])(
+  "refuses a missing or malformed takeaway rate %j on a product",
+  (takeawayVatRate) => {
+    expect(() => parse({ ...input, takeawayVatRate })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field: "takeawayVatRate" } }),
+    );
+  },
+);
+it.each([undefined, 21, false])(
+  "refuses a missing or malformed takeaway rate %j on a variant",
+  (takeawayVatRate) => {
+    expect(() => parseVariant({ ...inheriting, takeawayVatRate })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field: "takeawayVatRate" } }),
+    );
+  },
+);
+it.each(["general", null])(
+  "refuses a body still naming the retired takeaway class %j, on a product or a variant",
   (takeawayVatClass) => {
     for (const run of [
       () => parse({ ...input, takeawayVatClass }),

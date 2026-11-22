@@ -341,22 +341,21 @@ describe("buildMenuDocument", () => {
     expect(JSON.stringify(document)).not.toMatch(/vatRate/);
   });
 
-  it("freezes the effective takeaway class of the dish, each variant and each extras item", async () => {
+  it("freezes each copy's served class as its takeaway class, whatever its takeaway rate", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
-      await updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" });
+      await updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" });
       await updateProduct(tx, f.large, { vatClass: "general" });
-      await updateProduct(tx, f.extraLemon, { takeawayVatClass: "super_reduced" });
+      await updateProduct(tx, f.extraLemon, { takeawayVatRate: "4.00" });
     });
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    expect(offer).toMatchObject({ vatClass: "reduced", takeawayVatClass: "zero" });
-    // The variant has its own served class and no takeaway class: its own served class wins.
+    expect(offer).toMatchObject({ vatClass: "reduced", takeawayVatClass: "reduced" });
     expect(offer.variants[0]).toMatchObject({ vatClass: "general", takeawayVatClass: "general" });
     const extras = offer.offeredModifiers[0]!;
     expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
       vatClass: "reduced",
-      takeawayVatClass: "super_reduced",
+      takeawayVatClass: "reduced",
     });
   });
 
@@ -680,6 +679,10 @@ describe("menuDocumentHash", () => {
       "the extra's diet",
       (tx, f) => updateProduct(tx, f.extraLemon, { dietaryDeclarations: ["vegan"] }),
     ],
+    [
+      "the dish's takeaway VAT rate",
+      (tx, f) => updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" }),
+    ],
   ];
 
   it.each(unchanged)("does not move when %s changes", async (_, change) => {
@@ -696,10 +699,6 @@ describe("menuDocumentHash", () => {
     ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
     ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
     ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
-    [
-      "the dish's takeaway VAT class",
-      (tx, f) => updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" }),
-    ],
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
     [
@@ -1886,40 +1885,15 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names a change to only the takeaway class as a VAT change, wherever it is made", async () => {
+  it("names no change when only a takeaway rate changes, wherever it is made", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
-    await app((tx) => updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" }));
-    const dish = await build(f.dinner);
-    expect(changeBodies(diffMenuDocuments(live, dish))).toEqual([
-      {
-        kind: "product_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        fields: ["vat"],
-        source: "shared_product",
-      },
-    ]);
     await app(async (tx) => {
-      await updateProduct(tx, f.large, { takeawayVatClass: "general" });
-      await updateProduct(tx, f.extraLemon, { takeawayVatClass: "general" });
+      await updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" });
+      await updateProduct(tx, f.large, { takeawayVatRate: "21.00" });
+      await updateProduct(tx, f.extraLemon, { takeawayVatRate: "21.00" });
     });
-    expect(changeBodies(diffMenuDocuments(dish, await build(f.dinner)))).toEqual([
-      {
-        kind: "product_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        fields: ["vat", "variants"],
-        source: "shared_product",
-      },
-      {
-        kind: "product_changed",
-        productId: f.extraLemon,
-        name: "Extra lemon",
-        fields: ["vat"],
-        source: "shared_product",
-      },
-    ]);
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([]);
   });
 
   it("names an extra's photo against the extra, a variant extra reading its parent's", async () => {

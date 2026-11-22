@@ -65,12 +65,10 @@ function parentsAlways<C extends AnyColumn>(
 export const effectiveProductColumns = {
   description: inherited(products.description, parentProducts.description),
   vatClass: owned(products.vatClass, parentProducts.vatClass),
-  // A variant that sets only its main class takes that class taken away too, ahead of the
-  // parent's takeaway class. Non-null for the reason `owned` gives: the parent's `vat_class` is set.
-  takeawayVatClass:
-    sql`coalesce(${products.takeawayVatClass}, ${products.vatClass}, ${parentProducts.takeawayVatClass}, ${parentProducts.vatClass})`.mapWith(
-      products.takeawayVatClass,
-    ) as SQL<VatClass>,
+  // A copy's takeaway label is the eat-in one: a product line taken away files at its product's
+  // takeaway rate (`product_takeaway_vat_rates`), and nothing reads this label for it. It goes with
+  // the label columns (plan PR L).
+  takeawayVatClass: owned(products.vatClass, parentProducts.vatClass) as SQL<VatClass>,
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   color: parentsAlways(products.color, parentProducts.color),

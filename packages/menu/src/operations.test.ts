@@ -14,11 +14,16 @@ import {
   withTransaction,
   readActivityForSubject,
 } from "@waitron/db";
-import { seedTaxpayer, seedPerson, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedTaxpayer,
+  seedPerson,
+  seedTakeawayVatRate,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
-import type { PricingUnit, VatClass } from "@waitron/shared";
+import type { PricingUnit } from "@waitron/shared";
 import {
   overlayDietProfile,
   UNDECLARED_DIET,
@@ -344,6 +349,10 @@ describe("menu operations", () => {
       await tx
         .insert(products)
         .values(row("00000000-0000-4000-8000-000000000002", "written second"));
+      await seedTakeawayVatRate(tx, [
+        "ffffffff-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+      ]);
       expect((await listProducts(tx)).map((p) => p.name)).toEqual([
         "written second",
         "written first",
@@ -521,24 +530,6 @@ describe("menu operations", () => {
       ).rejects.toMatchObject({
         code: "product.invalid",
         params: { field: "pricingUnit" },
-      });
-    });
-  });
-
-  it("rejects a create whose takeaway class is not a VAT class", async () => {
-    await asVenue(async (tx) => {
-      await expect(
-        createProduct(tx, {
-          categoryId: null,
-          name: "cola",
-          pricingUnit: "each",
-          unitPrice: "1.50",
-          vatClass: "reduced",
-          takeawayVatClass: "nope" as VatClass,
-        }),
-      ).rejects.toMatchObject({
-        code: "product.invalid",
-        params: { field: "takeawayVatClass" },
       });
     });
   });
@@ -957,35 +948,6 @@ describe("menu operations", () => {
       await assignMenuToVenue(tx, cat.id);
       const [available] = (await listAvailableProducts(tx)).products;
       expect(available!.allergens).toEqual({ milk: {} });
-    });
-  });
-
-  it("listAvailableProducts carries a product's takeaway VAT class, and its served class when it sets none", async () => {
-    await asVenue(async (tx) => {
-      const cat = await createMenu(tx, { name: "Deli" });
-      const soup = await createProduct(tx, {
-        categoryId: null,
-        name: "soup",
-        unitId: eachUnitId,
-        unitPrice: "4.00",
-        vatClass: "reduced",
-        takeawayVatClass: "general",
-      });
-      const bread = await createProduct(tx, {
-        categoryId: null,
-        name: "bread",
-        unitId: eachUnitId,
-        unitPrice: "1.00",
-        vatClass: "super_reduced",
-      });
-      await assignMenuToVenue(tx, cat.id);
-      const available = (await listAvailableProducts(tx)).products;
-      const classes = (id: string) => {
-        const row = available.find((product) => product.id === id)!;
-        return [row.vatClass, row.takeawayVatClass];
-      };
-      expect(classes(soup.id)).toEqual(["reduced", "general"]);
-      expect(classes(bread.id)).toEqual(["super_reduced", "super_reduced"]);
     });
   });
 

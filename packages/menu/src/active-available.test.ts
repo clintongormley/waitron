@@ -51,7 +51,7 @@ beforeEach(async () => {
       active: true,
       available: true,
       vatClass: "reduced",
-      takeawayVatClass: null,
+      takeawayVatRate: "10.00",
       variants: [],
       primaryCategoryId: null,
       modifiers: [],

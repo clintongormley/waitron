@@ -645,16 +645,13 @@ it("corrects the frozen rates on a copy-only dish and keeps the set menu's rates
       tx,
       f.lunch,
       versionId,
-      [
-        { target, field: "vatClass", value: "general" },
-        { target, field: "takeawayVatClass", value: "super_reduced" },
-      ],
+      [{ target, field: "vatClass", value: "general" }],
       personId,
     ),
   );
   expect(await fromLive()).toMatchObject({
     terms: { vatClass: "reduced", takeawayVatClass: "general" },
-    offers: { [target.menuItemId]: { vatClass: "general", takeawayVatClass: "super_reduced" } },
+    offers: { [target.menuItemId]: { vatClass: "general" } },
   });
 });
 
