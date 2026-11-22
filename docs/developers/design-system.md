@@ -3801,6 +3801,10 @@ the first marked field it can show. The footer names errors in filtered-out rows
 filter. The existing price requests run in sequence, so a refusal can leave other prices saved.
 The edits that were refused stay ready to retry.
 
+A set menu's **Dishes** section stages its dish surcharges across courses and places a sticky
+Save and Cancel bar below the course tables. If a column choice hides a surcharge error, the
+bar names the dish. The **Variants** dialog saves its edits separately.
+
 #### The field box
 
 Every field primitive — `wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`,

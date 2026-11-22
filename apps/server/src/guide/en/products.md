@@ -294,8 +294,9 @@ one. Add customer names in the languages you use, then save.
 
 In **Dishes**, add the dishes you want to offer. Keep dishes sold by weight on the full menu,
 where staff can sell them separately. Use **Variants** to choose which versions are included.
-Enter a surcharge beside any dish or variant that costs extra. Change a dish's **Course** if
-you serve it differently in this set menu. For example, move a tapa to Starters so it counts
+Enter a surcharge beside each dish that costs extra, then choose **Save** under **Dishes**.
+Leave the amount blank for a dish that is included in the set-menu price. Set variant surcharges
+in **Variants**. Change a dish's **Course** if you serve it differently in this set menu. For example, move a tapa to Starters so it counts
 as a starter and goes to the kitchen with that course when ordered from the set menu.
 
 Under **What one set menu includes**, set how many dishes you offer from each course. For example,

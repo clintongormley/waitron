@@ -932,8 +932,8 @@ Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
 lines, and show what to fix before publishing. A full menu’s Preview links to its set menus with changes or publication problems.
 Managers can add and copy dishes in a set-menu draft, give a dish a course for that set menu, and
-edit surcharges and variant choices. The editor shows the inclusion lines added or removed by a
-dish change. The dashboard piece lets managers create a set menu, place it in a full menu
+edit variant choices. The Dishes Save bar stages dish surcharges across courses. The editor
+shows the inclusion lines added or removed by a dish change. The dashboard piece lets managers create a set menu, place it in a full menu
 and publish its current version to the tills. The products guide covers setup in both languages.
 Selecting copy-only dishes in the live correction dialog remains open. Set-menu payments, bill documents and the demo remain. Release set menus to venues only once
 all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).

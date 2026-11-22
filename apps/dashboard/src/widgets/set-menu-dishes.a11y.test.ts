@@ -11,7 +11,7 @@ afterEach(cleanupWidgets);
 it.each(["light", "dark"] as const)(
   "makes course tables and the %s dialog states accessible",
   async (theme) => {
-    const { host, api } = await mountDishes(
+    const { el, host, api } = await mountDishes(
       { ...details, ...wineDetails, dishes: [...details.dishes, ...wineDetails.dishes] },
       theme,
     );
@@ -32,14 +32,23 @@ it.each(["light", "dark"] as const)(
     const add = page.getByRole("dialog", { name: "Add products" });
     await expect.element(page.getByRole("checkbox", { name: "Coffee" })).toBeVisible();
     await expectNoA11yViolations(host);
-    await page.getByRole("button", { name: "Cancel" }).click();
+    const cancelChoices = () =>
+      page
+        .elementLocator(
+          el
+            .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
+            .shadowRoot!.querySelector("dashboard-set-menu-dish-choices")!,
+        )
+        .getByRole("button", { name: "Cancel" })
+        .click();
+    await cancelChoices();
     await expect.element(add).not.toBeInTheDocument();
 
     await page.getByRole("button", { name: "Edit variants for Wine" }).click();
     const variants = page.getByRole("dialog", { name: "Variants for Wine" });
     await expect.element(page.getByRole("switch", { name: "Include Glass" })).toBeVisible();
     await expectNoA11yViolations(host);
-    await page.getByRole("button", { name: "Cancel" }).click();
+    await cancelChoices();
     await expect.element(variants).not.toBeInTheDocument();
 
     await page.getByRole("button", { name: "Copy dishes from another set menu" }).click();

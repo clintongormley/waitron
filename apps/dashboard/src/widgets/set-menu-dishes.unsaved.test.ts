@@ -15,6 +15,7 @@ class SetMenuVariantsLeaveHost extends LitElement {
   readonly api = {
     readSetMenu: vi.fn().mockResolvedValue(wineDetails),
     saveSetMenuVariantChoices: vi.fn(),
+    updateMenuItem: vi.fn(),
   };
 
   override render() {
@@ -54,4 +55,22 @@ it("keeps variant choices on request and discards them without saving", async ()
   expect(el.api.saveSetMenuVariantChoices).not.toHaveBeenCalled();
   await open();
   await expect.element(bottle).toBeChecked();
+});
+
+it("keeps staged surcharges on request and restores them on Discard", async () => {
+  const { el } = await mountWidget<SetMenuVariantsLeaveHost>("set-menu-variants-leave-test", {});
+  const field = page.getByRole("textbox", { name: "Surcharge for Wine" });
+  await field.fill("7.00");
+  expect(el.leave.coordinator.isDirty()).toBe(true);
+  const leave = () =>
+    el.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed: () => {} });
+  const staying = leave();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  expect(await staying).toBe("kept");
+  await expect.element(field).toHaveValue("7.00");
+  const leaving = leave();
+  await page.getByRole("button", { name: "Discard" }).click();
+  expect(await leaving).toBe("proceeded");
+  await expect.element(field).toHaveValue("2.00");
+  expect(el.api.updateMenuItem).not.toHaveBeenCalled();
 });
