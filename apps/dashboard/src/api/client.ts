@@ -4026,12 +4026,8 @@ export class DashboardApi {
   listSectionMembers(id: string): Promise<SectionMember[]> {
     return this.#request(`/management-api/sections/${id}/members`, "GET");
   }
-  addSectionMember(id: string, ref: MemberRef, position?: number): Promise<SectionMember> {
-    return this.#request(
-      `/management-api/sections/${id}/members`,
-      "POST",
-      position === undefined ? { ref } : { ref, position },
-    );
+  addSectionMember(id: string, ref: MemberRef): Promise<SectionMember> {
+    return this.#request(`/management-api/sections/${id}/members`, "POST", { ref });
   }
   /** Appends each product the section does not already hold. */
   addSectionProducts(

@@ -24,7 +24,6 @@ import {
 } from "./menu-document.js";
 import { patchLiveMenu, previewMenu, publishMenu, readLiveMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
-import { menuChangeAction } from "./menu-undo.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { createMenu, updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
@@ -544,7 +543,7 @@ it("names each placement or removal and its list in Preview without a copy edit"
   });
 });
 
-it("shows one surcharge change with the other published menus and no undo", async () => {
+it("shows one surcharge change with the other published menus", async () => {
   await place();
   const weekend = await placeInNewMenu("Weekend");
   await publish();
@@ -563,9 +562,6 @@ it("shows one surcharge change with the other published menus and no undo", asyn
       before: [{ kind: "set_menu", menuId: f.daily, sectionIds: [] }],
       after: [{ kind: "set_menu", menuId: f.daily, sectionIds: [] }],
     },
-  });
-  expect(menuChangeAction({ preview: result, languages: ["en"] }, change!.id)).toEqual({
-    kind: "none",
   });
 });
 

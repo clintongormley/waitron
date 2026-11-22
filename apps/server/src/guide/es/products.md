@@ -349,11 +349,10 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
-Abre **Vista previa** para revisar tus cambios antes de publicar. Si un cambio ofrece
-**Deshacer**, púlsalo para recuperar el valor publicado. En una carta incluida, recuperas
-la presentación directa o la carpeta con los nombres, la foto y el color que tenía al publicarse.
-Si un cambio en las listas propias de esta carta ofrece **Deshacer**, púlsalo para quitar el
-producto de la lista a la que lo añadiste o devolverlo a su lugar en la carta publicada.
+Abre **Vista previa** para revisar tus cambios antes de publicar. Pulsa **Ver** junto a un cambio
+para ver dónde aparece. Para modificar un producto compartido o una carta incluida, sigue
+el enlace **Editar** junto al cambio. Si el precio viene de una carta incluida, ese enlace abre
+su pestaña **Precios propios**.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 

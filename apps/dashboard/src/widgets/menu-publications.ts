@@ -248,8 +248,6 @@ export class MenuPublicationsPanel extends LitElement {
   @property() menuName = "";
   @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) preview: MenuPreview | null = null;
-  /** Set by the screen while an Undo of this menu is out. */
-  @property({ type: Boolean }) blocked = false;
 
   @state() private answer: MenuPublicationsAnswer | null = null;
   @state() private readError: string | null = null;
@@ -920,10 +918,7 @@ export class MenuPublicationsPanel extends LitElement {
               ? html`<wt-button
                   variant="secondary"
                   data-test="schedule-open"
-                  .disabled=${this.blocked}
-                  @click=${() => {
-                    if (!this.blocked) this.#openSchedule(null);
-                  }}
+                  @click=${() => this.#openSchedule(null)}
                   >${t("menu_publications.schedule")}</wt-button
                 >`
               : nothing

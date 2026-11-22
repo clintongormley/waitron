@@ -217,24 +217,6 @@ the 2026-09-30 folders design; what remains:
   `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
   directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
 
-## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
-
-- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
-  2026-10-07: "would it be possible to have an 'Undo' link as well?").** Planned in five pull
-  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). Left for later: PR 4,
-  includes added and removed, own sections moved, and a new own section
-  that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this
-  entry is deleted and the changes left without Undo (the plan's section 2) become their own entry.
-
-## A1377 — A353's Undo: two wordings for the owner
-
-- **A1377 — A353's Undo: two wordings for the owner** (from #2510). (1) If a menu is deleted while
-  its Preview is open, a price Undo is refused `menu_item.not_found` and reads "{name} is no longer
-  on this menu." rather than "This menu has been deleted, so there is nothing to undo.". (2) The
-  success line can carry two colons ("Undone: Tapas and small plates: name, colour."). Both are
-  in `apps/dashboard/src/api/menu-undo.ts` and `apps/dashboard/src/i18n/strings.ts`; ask the owner
-  whether either should change.
-
 ## A1373 — The Preview credits a product's own price change seen through an include to the included menu
 
 - **A1373 — The Preview credits a product's own price change seen through an include to the

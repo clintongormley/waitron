@@ -11,7 +11,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/api/client-translations.test.ts",
   "apps/dashboard/src/api/client.test.ts",
   "apps/dashboard/src/api/department-receipts.test.ts",
-  "apps/dashboard/src/api/menu-undo.test.ts",
   "apps/dashboard/src/dashboard-app.a11y.test.ts",
   "apps/dashboard/src/dashboard-app.backup-unsaved.test.ts",
   "apps/dashboard/src/dashboard-app.disk-stop.test.ts",
