@@ -287,16 +287,14 @@ the 2026-09-30 folders design; what remains:
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-## From #541's review, neither blocking
+## From #541's review, not blocking
 
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](../developers/products.md), under _Variants_.
 
-- **From #541's review, neither blocking:** the product list shows a variant's blank price as its
+- **From #541's review, not blocking:** the product list shows a variant's blank price as its
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call; and the rule that hides screen-reader text is copied into each widget that
-  needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
-  `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
+  the owner's call.
 
 ## Smaller things #379 surfaced and did not take
 

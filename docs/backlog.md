@@ -557,9 +557,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   after a price message reads as the price; a unit-specific sentence needs the owner's wording
   (left open by #1188's review, W66).
 
-- **From #541's review, neither blocking:** the product list shows a variant's blank price as its
+- **From #541's review, not blocking:** the product list shows a variant's blank price as its
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call. [Detail](backlog/menu.md#from-541s-review-neither-blocking)
+  the owner's call. [Detail](backlog/menu.md#from-541s-review-not-blocking)
 
 - **Dishes sold by measure and their extras** (bundle of 1, needs the owner). [Detail](backlog/menu.md#bundle-dishes-sold-by-measure-and-their-extras)
 
