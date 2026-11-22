@@ -385,9 +385,39 @@ it("refuses a takeaway rate the importing venue's area does not offer for pickin
     ),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
-    params: { field: "product_takeaway_vat_rates" },
+    params: { field: "product_takeaway_vat_rates.rate" },
   });
   expect((await suite.db.execute(sql`select * from products`)).rows).toEqual([]);
+});
+
+it("refuses a takeaway rate naming a product the bundle does not carry, writing nothing", async () => {
+  await seedSpanishVenue();
+  const bundle = spanishBundle({
+    products: [
+      {
+        id: "gin",
+        name: "Gin",
+        unit_price: 900,
+        vat_class: "general",
+        created_at: AT,
+        updated_at: AT,
+      },
+    ],
+    product_takeaway_vat_rates: [
+      { id: "r1", product_id: "gin", starts_on: null, rate: 1000 },
+      { id: "r2", product_id: "tonic", starts_on: null, rate: 1000 },
+    ],
+  });
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      importConfigurationTables(tx, bundle, [rateModule], bundle.modules),
+    ),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "product_takeaway_vat_rates.product_id" },
+  });
+  expect((await suite.db.execute(sql`select * from products`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from product_takeaway_vat_rates`)).rows).toEqual([]);
 });
 
 it("accepts the same bundle at a pickable rate", async () => {

@@ -734,10 +734,8 @@ describe("validateMenuConfiguration: takeaway VAT rates", () => {
     { id: "gin", name: "Gin", parent_id: null },
     { id: "single", name: "Single", parent_id: "gin" },
   ];
-  const refused = expect.objectContaining({
-    code: "setup.request_invalid",
-    params: { field: "product_takeaway_vat_rates" },
-  });
+  const refused = (field: string) =>
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } });
 
   it("refuses a top-level product with no row from the beginning", () => {
     expect(() =>
@@ -745,7 +743,19 @@ describe("validateMenuConfiguration: takeaway VAT rates", () => {
         products,
         product_takeaway_vat_rates: [{ product_id: "gin", starts_on: "2027-01-01", rate: 1000 }],
       }),
-    ).toThrowError(refused);
+    ).toThrowError(refused("product_takeaway_vat_rates.product_id"));
+  });
+
+  it("refuses a variant whose own rows have none from the beginning", () => {
+    expect(() =>
+      validateMenuConfiguration({
+        products,
+        product_takeaway_vat_rates: [
+          { product_id: "gin", starts_on: null, rate: 1000 },
+          { product_id: "single", starts_on: "2027-01-01", rate: 2100 },
+        ],
+      }),
+    ).toThrowError(refused("product_takeaway_vat_rates.product_id"));
   });
 
   it("refuses a variant with two rows from the beginning", () => {
@@ -758,7 +768,7 @@ describe("validateMenuConfiguration: takeaway VAT rates", () => {
           { product_id: "single", starts_on: null, rate: 2100 },
         ],
       }),
-    ).toThrowError(refused);
+    ).toThrowError(refused("product_takeaway_vat_rates.starts_on"));
   });
 
   it("refuses a product with two rows from one day", () => {
@@ -771,16 +781,45 @@ describe("validateMenuConfiguration: takeaway VAT rates", () => {
           { product_id: "gin", starts_on: "2027-01-01", rate: 1000 },
         ],
       }),
-    ).toThrowError(refused);
+    ).toThrowError(refused("product_takeaway_vat_rates.starts_on"));
   });
 
-  it("accepts a variant without rows and a dated row after the first", () => {
+  it.each(["2027-02-30", "2027-1-01", "2027-01-01T00:00", "", 20270101])(
+    "refuses a start day of %j, which is not a calendar date",
+    (startsOn) => {
+      expect(() =>
+        validateMenuConfiguration({
+          products,
+          product_takeaway_vat_rates: [
+            { product_id: "gin", starts_on: null, rate: 1000 },
+            { product_id: "gin", starts_on: startsOn, rate: 2100 },
+          ],
+        }),
+      ).toThrowError(refused("product_takeaway_vat_rates.starts_on"));
+    },
+  );
+
+  it("refuses a row naming a product the bundle does not carry", () => {
     expect(() =>
       validateMenuConfiguration({
         products,
         product_takeaway_vat_rates: [
           { product_id: "gin", starts_on: null, rate: 1000 },
-          { product_id: "gin", starts_on: "2027-01-01", rate: 2100 },
+          { product_id: "tonic", starts_on: null, rate: 2100 },
+        ],
+      }),
+    ).toThrowError(refused("product_takeaway_vat_rates.product_id"));
+  });
+
+  it("accepts a variant without rows, a variant with its own first row, and dated rows after the first", () => {
+    expect(() =>
+      validateMenuConfiguration({
+        products: [...products, { id: "double", name: "Double", parent_id: "gin" }],
+        product_takeaway_vat_rates: [
+          { product_id: "gin", starts_on: null, rate: 1000 },
+          { product_id: "gin", starts_on: "2028-02-29", rate: 2100 },
+          { product_id: "double", starts_on: null, rate: 2100 },
+          { product_id: "double", starts_on: "2027-01-01", rate: 1000 },
         ],
       }),
     ).not.toThrow();

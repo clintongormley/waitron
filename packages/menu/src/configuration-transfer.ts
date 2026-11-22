@@ -6,6 +6,7 @@ import {
   HOME_DEVICES,
   MAX_SET_MENU_AMOUNT_CENTS,
   homeDisplayProblem,
+  isCalendarDate,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
 import { menus, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
@@ -94,23 +95,34 @@ function checkMenuShells(tables: Readonly<Record<string, Rows>>): void {
 }
 
 /** Every top-level product has one takeaway rate from the beginning; a variant may have none and
- * takes its parent's. No product has two rates from one day. */
+ * takes its parent's, but one with rows of its own has one from the beginning, since its own rows
+ * replace its parent's. No product has two rates from one day, and every day is a calendar date. */
 function checkTakeawayVatRates(tables: Readonly<Record<string, Rows>>): void {
   const rates = tables.product_takeaway_vat_rates;
   if (rates === undefined) return;
-  const refuse = () => {
-    throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates" });
+  const refuse = (column: string) => {
+    throw new AppError("setup.request_invalid", {
+      field: `product_takeaway_vat_rates.${column}`,
+    });
   };
+  const productIds = new Set((tables.products ?? []).map((row) => row.id));
   const days = new Set<string>();
+  const withRows = new Set<unknown>();
   const withFirstRow = new Set<unknown>();
   for (const row of rates) {
-    const day = JSON.stringify([row.product_id, row.starts_on ?? null]);
-    if (days.has(day)) refuse();
+    if (!productIds.has(row.product_id)) refuse("product_id");
+    const startsOn = row.starts_on ?? null;
+    if (startsOn !== null && (typeof startsOn !== "string" || !isCalendarDate(startsOn)))
+      refuse("starts_on");
+    const day = JSON.stringify([row.product_id, startsOn]);
+    if (days.has(day)) refuse("starts_on");
     days.add(day);
-    if (row.starts_on == null) withFirstRow.add(row.product_id);
+    withRows.add(row.product_id);
+    if (startsOn === null) withFirstRow.add(row.product_id);
   }
   for (const row of tables.products ?? [])
-    if (row.parent_id == null && !withFirstRow.has(row.id)) refuse();
+    if ((row.parent_id == null || withRows.has(row.id)) && !withFirstRow.has(row.id))
+      refuse("product_id");
 }
 
 /** A takeaway rate the importing venue's area does not offer for picking is refused, as a save
@@ -120,7 +132,7 @@ async function checkPickableTakeawayVatRates(tx: Transaction, rows: Rows | undef
   const pickable = new Set((await readVenueVatRates(tx)).pickable.map(stringToBasisPoints));
   for (const row of rows)
     if (!pickable.has(row.rate as number))
-      throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates" });
+      throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates.rate" });
 }
 
 function isSetMenuAmount(cents: unknown): boolean {
