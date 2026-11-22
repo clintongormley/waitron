@@ -179,6 +179,7 @@ it.each(["drag", "Join with"])(
     await vi.waitFor(() => expect(joinTables).toHaveBeenCalledOnce());
     const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
     await vi.waitFor(() => expect(prompt()).not.toBeNull());
+    expect(root.querySelector("[data-floor-refusal]")).toBeNull();
     const buttons = prompt()!.shadowRoot!;
     await userEvent.click(buttons.querySelector<HTMLElement>('[data-split-take-over="b2"]')!);
     await userEvent.click(buttons.querySelector<HTMLElement>("[data-confirm-take-over]")!);

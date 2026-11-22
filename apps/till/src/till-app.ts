@@ -19671,7 +19671,7 @@ export class TillApp extends LitElement {
     const rows = billEditConflictRows(error, [
       {
         partyId: target.id,
-        edits: asked.expectedEdits.filter(({ billId }) => billId !== asked.orderId),
+        edits: asked.expectedEdits,
         label: (billId) => this.#conflictBillLabel(partyOf(this.tables, target.id), billId),
       },
     ]);

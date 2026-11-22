@@ -291,7 +291,7 @@ it("explains what staff can do when the counter order itself has an unsent draft
   move();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(
-      "Someone else has unsent dishes on this counter order. Choose a table with no unsent orders, or leave the order where it is.",
+      "Someone else has unsent dishes on this parked order. Choose a table with no unsent orders, or leave the order where it is.",
     ),
   );
   expect(el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog")).toBeNull();
