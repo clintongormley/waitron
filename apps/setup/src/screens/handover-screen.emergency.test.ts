@@ -2069,6 +2069,8 @@ it.each(["light", "dark"] as const)(
         minHeight: style.minHeight,
       };
     };
+    // The pointer stays where the previous case left it, which can be over this link.
+    await userEvent.hover(q(el, "h1"));
     expect(paint(goBack(el))).toEqual(paint(button));
     await userEvent.hover(button);
     const hoveredButton = paint(button);
