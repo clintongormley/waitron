@@ -5120,56 +5120,89 @@ it("creates a category holding its colour, and refuses a colour of the wrong typ
   expect(await (await send(app, "GET", path)).json()).toMatchObject({ color: "#b12525" });
 });
 
-// A negative MENU price is never a valid one (owner ruling, 2026-09-21) — the scope matters,
-// because a corrective invoice's prices are deliberately negative elsewhere in the tree. This block
-// pins the routes `refuseNegativePrice` screens; the next pins a sample of those that refuse a
-// negative through their own checks.
-describe("a negative price is refused at the menu request boundary", () => {
-  it("POST /management-api/products refuses a negative unitPrice and stores no row", async () => {
+// A menu price is a plain decimal the product editor would accept (`isProductPrice`,
+// `packages/menu/src/modifier-limits.ts`): never negative (owner ruling, 2026-09-21), and never
+// rounded to fit. The scope matters, because a corrective invoice's prices are deliberately
+// negative elsewhere in the tree. This block pins the two routes that screen the body themselves;
+// the next pins a sample of those that refuse through their own checks.
+describe("a menu price outside the product editor's rule is refused at the request boundary", () => {
+  const refusedPrices = ["-1.00", "1.999", "12345678901", "007", "-0.00", "1,00"];
+  const productBody = {
+    categoryId: null,
+    name: "Priced product",
+    pricingUnit: "each",
+    vatClass: "general",
+  };
+
+  it.each(refusedPrices)(
+    "POST /management-api/products refuses unitPrice %s and stores no row",
+    async (unitPrice) => {
+      const app = mountApp();
+      const before = await (await send(app, "GET", "/management-api/products")).json();
+      const res = await send(app, "POST", "/management-api/products", {
+        body: { ...productBody, unitPrice },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "unitPrice" } },
+      });
+      expect(await (await send(app, "GET", "/management-api/products")).json()).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["0", "0.00"],
+    ["0.5", "0.50"],
+    ["9999999999.99", "9999999999.99"],
+  ])("POST /management-api/products still saves unitPrice %s, as %s", async (unitPrice, stored) => {
     const app = mountApp();
-    const body = {
-      categoryId: null,
-      name: "Negative price",
-      pricingUnit: "each",
-      unitPrice: "-1.00",
-      vatClass: "general",
-    };
-    const before = await (await send(app, "GET", "/management-api/products")).json();
-    const res = await send(app, "POST", "/management-api/products", { body });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "unitPrice" } },
+    const res = await send(app, "POST", "/management-api/products", {
+      body: { ...productBody, name: `Edge ${unitPrice}`, unitPrice },
     });
-    const stored = await send(app, "GET", `/management-api/products`);
-    expect(await stored.json()).toEqual(before);
-    // The control that separates "refuses a negative" from "refuses a non-positive": zero is a
-    // legitimate price and still creates the product.
-    expect(
-      (
-        await send(app, "POST", "/management-api/products", {
-          body: { ...body, unitPrice: "0.00" },
-        })
-      ).status,
-    ).toBe(201);
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ unitPrice: stored });
   });
 
-  it("the menu-item write refuses a negative grossPrice with a 400, not a 500", async () => {
+  it.each(refusedPrices)(
+    "the menu-item write refuses grossPrice %s and keeps the stored price",
+    async (grossPrice) => {
+      const app = mountApp();
+      const menuId = await createMenuVia(app, "Refused menu price menu");
+      const productId = await createNamedProductVia(app, `Offered ${crypto.randomUUID()}`);
+      const itemId = await offerVia(app, menuId, productId, "2.50");
+
+      const res = await send(app, "PATCH", `/management-api/menus/${menuId}/items/${itemId}`, {
+        body: { grossPrice },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "grossPrice" } },
+      });
+      expect((await menuPricesVia(app, menuId))[0]).toMatchObject({
+        override: "2.50",
+        effectivePrice: "2.50",
+      });
+    },
+  );
+
+  it.each([
+    ["0", "0.00"],
+    ["0.5", "0.50"],
+    ["9999999999.99", "9999999999.99"],
+  ])("the menu-item write still saves grossPrice %s, as %s", async (grossPrice, stored) => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Negative menu menu");
+    const menuId = await createMenuVia(app, "Edge menu price menu");
     const productId = await createNamedProductVia(app, `Offered ${crypto.randomUUID()}`);
-    const items = `/management-api/menus/${menuId}/items`;
     const itemId = await offerVia(app, menuId, productId);
 
-    const badPatch = await send(app, "PATCH", `${items}/${itemId}`, {
-      body: { grossPrice: "-1.00" },
+    const res = await send(app, "PATCH", `/management-api/menus/${menuId}/items/${itemId}`, {
+      body: { grossPrice },
     });
-    expect(badPatch.status).toBe(400);
-    expect(await badPatch.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    expect(res.status).toBe(204);
+    expect((await menuPricesVia(app, menuId))[0]).toMatchObject({
+      override: stored,
+      effectivePrice: stored,
     });
-    expect(
-      (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: "0.00" } })).status,
-    ).toBe(204);
   });
 
   it("the menu-item write takes a blank grossPrice as the product's own price", async () => {
@@ -5201,36 +5234,6 @@ describe("a negative price is refused at the menu request boundary", () => {
       error: { code: "management.request_invalid", params: { field: "grossPrice" } },
     });
     expect(await offer()).toMatchObject({ override: null, effectivePrice: "1.00" });
-  });
-
-  it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
-    const app = mountApp();
-    // The screen reads the SIGN and nothing else: a value `decimal()` cannot parse falls straight
-    // through to the write's own `decimal()`, which is where `shared.invalid_decimal` comes from.
-    const res = await send(app, "POST", "/management-api/products", {
-      body: {
-        categoryId: null,
-        name: "Decimal comma",
-        pricingUnit: "each",
-        unitPrice: "1,00",
-        vatClass: "general",
-      },
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_decimal" } });
-    // `decimal()` strips the sign from a zero magnitude, so `-0.00` is not below zero and is stored
-    // as plain zero rather than refused.
-    const zero = await send(app, "POST", "/management-api/products", {
-      body: {
-        categoryId: null,
-        name: "Signed zero",
-        pricingUnit: "each",
-        unitPrice: "-0.00",
-        vatClass: "general",
-      },
-    });
-    expect(zero.status).toBe(201);
-    expect(await zero.json()).toMatchObject({ unitPrice: "0.00" });
   });
 });
 

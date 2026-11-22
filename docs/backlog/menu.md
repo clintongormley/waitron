@@ -37,20 +37,6 @@ These are Mac measurements, not box timings. The watcher chose no route split fo
 delays on 2026-11-16. Further optimisation waits for a measured sale delay that warrants it;
 the full scans and translation-gap read remain.
 
-## Two price rules disagree about a value that is not negative
-
-**Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
-`isProductPrice` (`packages/menu/src/modifier-limits.ts:12`) allows at most two decimal places
-and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the
-screened menu writes use allows any number of decimals and twelve whole digits, and ROUNDS the
-excess. So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying
-so, while the product-editor route refuses the same value with `product.invalid`; an eleven-digit
-price splits the same way, and `-0.00` is accepted by one and refused by the other. Widening the
-four routes to `isProductPrice` would start refusing values that save today. **Next action:** decide
-whether one rule should govern every menu price, and if so which — and check each dashboard
-form against it before changing the server, since a server stricter than its own form is the
-failure #485 met.
-
 ## Sold-out tile appearance (A292, #1310): owner review
 
 - A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane

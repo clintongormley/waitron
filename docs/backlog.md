@@ -502,10 +502,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   chose no split after the 2,000-image Mac probe (2026-11-16).
   [Detail](backlog/menu.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
-- **Two price rules disagree about a value that is not negative** — OPEN (found 2026-09-21, task
-  N4).
-  [Detail](backlog/menu.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
-
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
 - **Translate all: notice, release and Cloud followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
