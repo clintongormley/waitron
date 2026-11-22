@@ -61,7 +61,6 @@ failure #485 met.
 
 Left open:
 
-- **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct snapshots in the invalidation cases. These files were outside the branch and left unchanged. Replace those with valid, distinguishable snapshots using columns plus another display field, preserving every revision, read-count and late-answer assertion; do not collapse three distinct observations into two.
 - **A291 DONE (2026-10-06):** removed format-2 preview/republication and silent omission from till
   reads. Unsupported live documents refuse with `menu.reset_required`, localized in dashboard and
   till; the Menus list, selected menu, Preview and Home display the reset instruction. Menu and real management/till route
