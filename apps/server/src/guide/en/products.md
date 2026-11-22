@@ -24,9 +24,9 @@ A line already on an order keeps the class it was added with.
 
 Where your region taxes takeaway food differently, **VAT when taken away** holds the rate this
 product is charged when it is taken away. Pick it from the list. A new product starts at **New
-products start at** in the venue's defaults. A variant can keep its product's rate. A change
-applies to every takeaway ticket from then on, including orders already open; you do not need to
-publish the menu.
+products start at (VAT when taken away)**, on the **Defaults** card of the **Venue details** tab.
+A variant can keep its product's rate. A change applies to every takeaway ticket from then on,
+including orders already open; you do not need to publish the menu.
 
 ## Set how a product is sold {#selling}
 

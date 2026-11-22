@@ -121,8 +121,9 @@ Rescheduling records the old and new activation times and the acting person in
 
 A line freezes its names, its gross price and its eat-in VAT class when it is added and never reads
 them from the menu again, so editing a product does not rewrite yesterday's receipt; the class comes
-from the published menu and its rate from the day the invoice is issued, below. A line taken away
-freezes no rate: it files at its product's takeaway rate, read when the invoice is issued. `working_order_lines` and `sale_lines` each carry:
+from the published menu and its rate from the day the invoice is issued, below. A line taken away,
+other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
+invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been

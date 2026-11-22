@@ -24,9 +24,10 @@ está en un pedido conserva la clase con la que se añadió.
 
 Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda el tipo con el
 que se cobra este producto cuando se lo llevan. Elígelo de la lista. Un producto nuevo empieza con
-**Los productos nuevos empiezan con** de los valores predeterminados del local. Una variante puede
-conservar el tipo de su producto. Un cambio se aplica a todos los tickets para llevar desde entonces,
-también a los pedidos ya abiertos; no hace falta publicar la carta.
+**Los productos nuevos empiezan con (IVA para llevar)**, en la tarjeta **Valores
+predeterminados** de la pestaña **Datos del local**. Una variante puede conservar el tipo de su
+producto. Un cambio se aplica a todos los tickets para llevar desde entonces, también a los pedidos
+ya abiertos; no hace falta publicar la carta.
 
 ## Decide cómo se vende un producto {#selling}
 
