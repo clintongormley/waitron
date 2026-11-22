@@ -35,8 +35,8 @@ import {
   persons,
   readPersonAuthority,
   verifyThrottledCredential,
+  type Override,
   type PinAttempts,
-  type SecretCheck,
 } from "@waitron/identity";
 import {
   AppError,
@@ -118,19 +118,13 @@ export interface AdjustmentArgs extends AdjustmentAsk {
 }
 
 /** An approver's PIN as a request carries it. */
-export interface ApproverPin {
-  personId: string;
-  pin: string;
-}
+export type ApproverPin = Pick<Override, "personId" | "pin">;
 
 /**
- * An approver's PIN with the wrong-PIN limit it counts against, so no approval is checked without
- * one. `checked` is `checkPin`'s result on this person and PIN, taken before the transaction opened.
+ * An approver's PIN with the wrong-PIN limit it counts against, so `applyAdjustment` and
+ * `cancelItem` never check an approver's PIN without one.
  */
-export interface CheckedApprover extends ApproverPin {
-  checked?: SecretCheck;
-  attempts: PinAttempts;
-}
+export type CheckedApprover = Override & { attempts: PinAttempts };
 
 /** What an adjustment would do, answered before it is confirmed (plan D4, D15). */
 export interface AdjustmentPreview {
