@@ -110,7 +110,7 @@ export class FakeSumUp implements SumUpClient {
   resolveOnFirstFind(status: SumUpTransaction["status"]): void {
     this.nextResolveOnFirstFind = status;
   }
-  /** Give the next created checkout these card facts, or `null` for a transaction that carries NO
+  /** Give the next `createCheckout` call these card facts, or `null` for a transaction that carries NO
    * card object (a SUCCESSFUL sale SumUp returned without card fields). One-shot; the default
    * otherwise is the VISA contactless block. */
   cardNext(facts: CardFacts | null): void {
@@ -178,30 +178,29 @@ export class FakeSumUp implements SumUpClient {
     params: Parameters<SumUpClient["createCheckout"]>[0],
   ): Promise<CreateCheckoutOutcome> {
     this.lastCreate = params;
-    if (this.nextCreateThrows) {
-      this.nextCreateThrows = false;
-      return Promise.reject(new Error("sumup unreachable"));
-    }
-    if (this.nextCreateRefused) {
-      this.nextCreateRefused = false;
-      return Promise.resolve({ accepted: false, reason: "Unprocessable Entity" });
-    }
+    const status = this.next;
+    const card = this.nextCard ?? DEFAULT_CARD;
+    const onFirstFind = this.nextResolveOnFirstFind;
+    const throws = this.nextCreateThrows;
+    const refused = this.nextCreateRefused;
+    this.next = "SUCCESSFUL";
+    this.nextResolveOnFirstFind = undefined;
+    this.nextCard = undefined;
+    this.nextCreateThrows = false;
+    this.nextCreateRefused = false;
+    if (throws) return Promise.reject(new Error("sumup unreachable"));
+    if (refused) return Promise.resolve({ accepted: false, reason: "Unprocessable Entity" });
     const clientTransactionId = nextId("ctx");
     this.held.push({
       id: nextId("txn"),
       clientTransactionId,
       foreignTransactionId: params.foreignTransactionId,
-      status: this.next,
+      status,
       amount: params.amount,
       timestamp: this.eventClock().toISOString(),
-      ...(this.nextCard ?? DEFAULT_CARD),
-      ...(this.nextResolveOnFirstFind === undefined
-        ? {}
-        : { onFirstFind: this.nextResolveOnFirstFind }),
+      ...card,
+      ...(onFirstFind === undefined ? {} : { onFirstFind }),
     });
-    this.next = "SUCCESSFUL";
-    this.nextResolveOnFirstFind = undefined;
-    this.nextCard = undefined;
     return Promise.resolve({ accepted: true, checkoutId: nextId("chk"), clientTransactionId });
   }
 

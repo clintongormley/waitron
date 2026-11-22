@@ -178,6 +178,48 @@ describe("FakeSumUp", () => {
     ).toBe("SUCCESSFUL");
   });
 
+  it.each([
+    [
+      "refuseNext",
+      (fake: FakeSumUp) => fake.refuseNext(),
+      (attempt: Promise<unknown>) =>
+        expect(attempt).resolves.toEqual({ accepted: false, reason: "Unprocessable Entity" }),
+    ],
+    [
+      "throwOnCreateNext",
+      (fake: FakeSumUp) => fake.throwOnCreateNext(),
+      (attempt: Promise<unknown>) => expect(attempt).rejects.toThrow("sumup unreachable"),
+    ],
+  ])(
+    "%s's failed checkout uses up declineNext, resolveOnFirstFind and cardNext",
+    async (_label, failNextCreate, expectFailure) => {
+      const fake = new FakeSumUp();
+      fake.declineNext();
+      fake.resolveOnFirstFind("REFUNDED");
+      fake.cardNext({ card: { last4: "0001", type: "MASTERCARD" }, entryMode: "chip" });
+      failNextCreate(fake);
+      await expectFailure(fake.createCheckout(createParams));
+
+      const next = await fake.createCheckout(createParams);
+      if (!next.accepted) throw new Error("expected accepted");
+      const txn = await fake.findTransaction({ clientTransactionId: next.clientTransactionId });
+      expect(txn).toMatchObject({
+        status: "SUCCESSFUL",
+        card: { last4: "5838", type: "VISA" },
+        entryMode: "contactless",
+        authCode: "328600",
+      });
+    },
+  );
+
+  it("throwOnCreateNext's rejected checkout also uses up refuseNext", async () => {
+    const fake = new FakeSumUp();
+    fake.refuseNext();
+    fake.throwOnCreateNext();
+    await expect(fake.createCheckout(createParams)).rejects.toThrow("sumup unreachable");
+    await expect(fake.createCheckout(createParams)).resolves.toMatchObject({ accepted: true });
+  });
+
   it("setStatus throws for an unknown clientTransactionId", () => {
     const fake = new FakeSumUp();
     expect(() => fake.setStatus("ctx_missing", "SUCCESSFUL")).toThrow(

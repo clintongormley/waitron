@@ -24,12 +24,11 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/` and
   `scripts/fake-bluez.py`, which is outside the checker.
 
-## Payments test points and transfer lock cases left by the comment-pruning sweeps
+## Transfer lock cases left by the comment-pruning sweeps
 
-- The fake SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout
-  before them is refused; no test combines the two. The lock-ordering and deadlock cases for
-  transfers, merges and split bills went with PostgreSQL and nothing replaced them (one write
-  transaction per venue file is what serialises those writers now).
+- The lock-ordering and deadlock cases for transfers, merges and split bills went with PostgreSQL
+  and nothing replaced them (one write transaction per venue file is what serialises those writers
+  now).
 
 ## "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too wide
 
@@ -1042,8 +1041,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **Payments test points and transfer lock cases left by the comment-pruning sweeps**
-  [Detail](architecture.md#payments-test-points-and-transfer-lock-cases-left-by-the-comment-pruning-sweeps)
+- **Transfer lock cases left by the comment-pruning sweeps**
+  [Detail](architecture.md#transfer-lock-cases-left-by-the-comment-pruning-sweeps)
 - **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
   wide** — found by #567 while pruning comments. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`.
