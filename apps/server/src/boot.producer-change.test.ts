@@ -17,7 +17,6 @@ import {
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import { cadenas } from "@waitron/fiscal-verifactu";
 import { isAppError } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -97,18 +96,12 @@ beforeAll(async () => {
     ids: { nodeId: NODE_ID, seriesId: SERIES_ID },
     reuseExistingParents: true,
   });
-  const head = await insertFiscalRegistro(db, ids, {
+  await insertFiscalRegistro(db, ids, {
     sistemaInformatico: {
       NombreRazon: "HEAD PRODUCER",
       NIF: HEAD_PRODUCER_NIF,
       NombreSistemaInformatico: "Waitron",
     },
-  });
-  await db.insert(cadenas).values({
-    nodeId: NODE_ID,
-    secuencia: head.secuencia,
-    ultimoRegistroId: head.registroId,
-    ultimaHuella: head.huella,
   });
   await stampDeployment(db, "production");
 }, 180_000);

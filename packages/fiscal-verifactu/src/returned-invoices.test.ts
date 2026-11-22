@@ -39,7 +39,6 @@ async function fixture() {
       "nodes",
       "invoice_series",
       "verifactu_identities",
-      "cadenas",
       "devices",
     ]) {
       for (const row of source.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {

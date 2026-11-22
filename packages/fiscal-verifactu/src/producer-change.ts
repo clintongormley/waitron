@@ -4,7 +4,7 @@ import type { SistemaInformatico } from "@waitron/verifactu";
 import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { cadenas } from "./schema/cadenas.js";
+import { readChainHead } from "./chain.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { PRODUCER_PENDING } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -23,12 +23,13 @@ export async function refuseProducerChange(
   const producer = identity.producer;
   if (typeof producer === "object" && "invalid" in producer) throw producer.invalid;
   if (environment !== "production" || producer === PRODUCER_PENDING) return;
-  const [head] = await tx
+  const { ultimoRegistroId } = await readChainHead(tx, nodeId);
+  if (ultimoRegistroId === null) return;
+  const [record] = await tx
     .select({ software: verifactuRecords.sistemaInformatico })
-    .from(cadenas)
-    .innerJoin(verifactuRecords, eq(verifactuRecords.id, cadenas.ultimoRegistroId))
-    .where(eq(cadenas.nodeId, nodeId));
-  if (head === undefined) return;
-  if ((head.software as SistemaInformatico).NIF !== producer.nif)
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, ultimoRegistroId));
+  if (record === undefined) return;
+  if ((record.software as SistemaInformatico).NIF !== producer.nif)
     throw new AppError("sif.producer_changed", {});
 }

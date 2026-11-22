@@ -525,7 +525,6 @@ async function copyBase() {
       "nodes",
       "invoice_series",
       "verifactu_identities",
-      "cadenas",
       "devices",
       "deployment",
     ]) {

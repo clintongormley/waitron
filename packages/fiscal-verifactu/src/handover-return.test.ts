@@ -25,7 +25,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { inspectReturnedPayments } from "./handover-return.js";
 import { listFilingCases } from "./filing-cases.js";
-import { appendToChain } from "./chain.js";
+import { appendToChain, readChainHead } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
   makeReturnedBatches,
@@ -120,7 +120,10 @@ it("selects only the returning node's originals and keeps their stored bytes", a
   });
   expect(returned.sales.map((row) => row.id)).toEqual([source.saleId]);
   expect(returned.devices.map((row) => row.id)).toEqual([source.deviceId]);
-  expect(returned.heads.map((row) => row.node_id)).toEqual([source.nodeId]);
+  const [batch] = makeReturnedBatches(returned);
+  const payload = JSON.parse(JSON.stringify(batch)) as CanonicalValue;
+  expect(payload).not.toHaveProperty("heads");
+  expect(readReturnedBatch(payload)).toEqual(returned);
   expect(JSON.parse(JSON.stringify(returned))).toEqual(returned);
 });
 
@@ -400,7 +403,6 @@ async function copyBase() {
       "nodes",
       "invoice_series",
       "verifactu_identities",
-      "cadenas",
       "devices",
     ]) {
       for (const row of suite.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {
@@ -561,7 +563,11 @@ it("receives original bytes and delivery evidence once, and advances only the so
   expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
     returned.records,
   );
-  expect(receiver.db.all<ReturnRow>(sql`select * from cadenas`)).toEqual(returned.heads);
+  expect(await withTransaction(receiver.db, (tx) => readChainHead(tx, source.nodeId))).toEqual({
+    secuencia: 1,
+    ultimoRegistroId: source.recordId,
+    ultimaHuella: returned.records[0]!.huella,
+  });
   expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual(
     returned.deliveries,
   );
@@ -950,7 +956,6 @@ it("preflights a different-id record clash before importing its orphan sale", as
   existing.records[0]!.id = "receiver-original";
   existing.records[0]!.sale_id = "receiver-sale";
   existing.sales[0]!.id = "receiver-sale";
-  existing.heads[0]!.ultimo_registro_id = "receiver-original";
   const now = new Date("2026-07-20T17:22:00.000Z");
   await withTransaction(receiver.db, (tx) =>
     receiveReturnedOriginals(tx, source.nodeId, existing, now),
@@ -1000,9 +1005,11 @@ it("rolls back every imported fact when an original's hash does not verify", asy
   expect(receiver.db.all<{ n: number }>(sql`select count(*) n from verifactu_records`)).toEqual([
     { n: 0 },
   ]);
-  expect(receiver.db.all<{ secuencia: number }>(sql`select secuencia from cadenas`)).toEqual([
-    { secuencia: 0 },
-  ]);
+  expect(await withTransaction(receiver.db, (tx) => readChainHead(tx, source.nodeId))).toEqual({
+    secuencia: 0,
+    ultimoRegistroId: null,
+    ultimaHuella: null,
+  });
 });
 
 it("withholds confirmation when a held id has different immutable bytes", async () => {

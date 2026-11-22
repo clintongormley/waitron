@@ -77,14 +77,13 @@ describe("refuseProducerChange", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("passes a node with no chain row, and does not make one", async () => {
+  it("passes a node with no records, and does not create a record", async () => {
     const node = await seedNode(suite.db);
-    suite.db.run(sql`delete from cadenas where node_id = ${node.nodeId}`);
 
     await expect(
       check(node, running({ name: "PRODUCER PERSON", nif: "11111111H" })),
     ).resolves.toBeUndefined();
-    const rows = suite.db.all(sql`select 1 from cadenas where node_id = ${node.nodeId}`);
+    const rows = suite.db.all(sql`select 1 from verifactu_records where node_id = ${node.nodeId}`);
     expect(rows).toHaveLength(0);
   });
 
