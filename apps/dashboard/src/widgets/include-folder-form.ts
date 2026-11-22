@@ -34,6 +34,9 @@ import { optionalTextFields } from "./form-fields.js";
 import type { ImageUploader } from "./image-upload.js";
 import { fill, t } from "../i18n/t.js";
 
+const APPEARANCE_FIELDS = ["color", "image"] as const;
+type AppearanceField = (typeof APPEARANCE_FIELDS)[number];
+
 /** How one include shows the menu it includes: as a folder, with the names, colour and photo it
  * fixes, or with the included menu's sections directly in its place. */
 @customElement("dashboard-include-folder-form")
@@ -50,6 +53,16 @@ export class IncludeFolderForm extends LitElement {
       .fields {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      .appearance {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+      .appearance .field-error:empty {
+        display: none;
+      }
+      .appearance wt-button {
+        justify-self: start;
       }
       .hint {
         margin: var(--wt-space-2) 0 0;
@@ -99,6 +112,7 @@ export class IncludeFolderForm extends LitElement {
   @state() private names: Record<string, string> = {};
   @state() private image: string | null = null;
   @state() private color: string | null = null;
+  @state() private released = new Set<AppearanceField>();
   readonly #feedback = new FormFeedback(this);
   @state() private pickerOpen = false;
   #scope?: DraftScope<IncludeFolderInput>;
@@ -135,6 +149,12 @@ export class IncludeFolderForm extends LitElement {
     for (const locale of this.languages.languages) this.names[locale] ??= "";
     this.image = shown.image;
     this.color = shown.color;
+    this.released = new Set(
+      APPEARANCE_FIELDS.filter(
+        (field) =>
+          overrides[field] === undefined && this.#loaded.stored.overrides[field] !== undefined,
+      ),
+    );
   }
 
   protected override willUpdate(changes: PropertyValues<this>): void {
@@ -208,8 +228,7 @@ export class IncludeFolderForm extends LitElement {
     this.#feedback.dismiss(...Object.keys(this.fieldErrors));
     this.#emit(event, "wt-submit", this.#submissionValue());
   }
-  #placeholderFor(): (locale: string) => string {
-    const overrides = this.#overrides();
+  #placeholderFor(overrides: IncludeFolderOverrides): (locale: string) => string {
     const { names } = folderPresentation(this.#loaded.own, {
       showAsFolder: true,
       overrides: {
@@ -224,11 +243,13 @@ export class IncludeFolderForm extends LitElement {
         .text;
   }
   #overrides(): IncludeFolderOverrides {
+    const stored = { ...this.#loaded.stored.overrides };
+    for (const field of this.released) delete stored[field];
     return folderOverridesFrom(
       this.#loaded.own,
       { names: this.names, image: this.image, color: this.color },
       this.languages.languages,
-      this.#loaded.stored.overrides,
+      stored,
     );
   }
   #submissionValue(): IncludeFolderInput {
@@ -250,7 +271,36 @@ export class IncludeFolderForm extends LitElement {
     if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#emit(event, "wt-cancel", {});
   }
+  #changeAppearance(field: AppearanceField, value: string | null): void {
+    this[field] = value;
+    this.#scope?.changed();
+    this.#feedback.dismiss(field);
+  }
+  async #followMenu(field: AppearanceField, event: Event): Promise<void> {
+    const focused = this.shadowRoot!.activeElement === event.currentTarget;
+    this.released = new Set([...this.released, field]);
+    this.#changeAppearance(field, this.#loaded.own[field]);
+    if (!focused) return;
+    await this.updateComplete;
+    const target = saveActionState(this.#scope).unchanged ? "cancel" : "save";
+    const button = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test="${target}"]`,
+    );
+    await button?.updateComplete;
+    if (this.open) button?.focus();
+  }
+  #followButton(field: AppearanceField, overrides: IncludeFolderOverrides) {
+    if (overrides[field] === undefined) return nothing;
+    return html`<wt-button
+      variant="link"
+      size="sm"
+      .disabled=${this.busy}
+      @click=${(event: Event) => void this.#followMenu(field, event)}
+      >${t(field === "color" ? "menus.include_use_color" : "menus.include_use_image")}</wt-button
+    >`;
+  }
   #folderFields(errors: Record<string, string>) {
+    const overrides = this.#overrides();
     const context = {
       busy: this.busy,
       locales: this.languages.languages,
@@ -273,41 +323,41 @@ export class IncludeFolderForm extends LitElement {
             this.#scope?.changed();
             this.#feedback.dismiss("names", ...changed.map((language) => `names-${language}`));
           },
-          this.#placeholderFor(),
+          this.#placeholderFor(overrides),
         )}
         <span class="field-error">${errors.names ?? nothing}</span>
       </fieldset>
-      ${colorField({
-        color: this.color,
-        busy: this.busy,
-        error: errors.color ?? "",
-        name: "include-color",
-        errorId: "include-color-error",
-        change: (color) => {
-          this.color = color;
-          this.#scope?.changed();
-          this.#feedback.dismiss("color");
-        },
-      })}
-      <dashboard-image-upload
-        name="include-image"
-        .draftParent=${this}
-        aria-describedby="include-image-error"
-        .api=${this.api}
-        .invalid=${Boolean(errors.image)}
-        .image=${this.image}
-        @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-          event.stopPropagation();
-          this.pickerOpen = event.detail.open;
-        }}
-        @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-          event.stopPropagation();
-          this.image = event.detail.image;
-          this.#scope?.changed();
-          this.#feedback.dismiss("image");
-        }}
-      ></dashboard-image-upload>
-      <span class="field-error" id="include-image-error">${errors.image ?? nothing}</span>`;
+      <div class="appearance">
+        ${colorField({
+          color: this.color,
+          busy: this.busy,
+          error: errors.color ?? "",
+          name: "include-color",
+          errorId: "include-color-error",
+          change: (color) => this.#changeAppearance("color", color),
+        })}
+        ${this.#followButton("color", overrides)}
+      </div>
+      <div class="appearance">
+        <dashboard-image-upload
+          name="include-image"
+          .draftParent=${this}
+          aria-describedby="include-image-error"
+          .api=${this.api}
+          .invalid=${Boolean(errors.image)}
+          .image=${this.image}
+          @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+            event.stopPropagation();
+            this.pickerOpen = event.detail.open;
+          }}
+          @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+            event.stopPropagation();
+            this.#changeAppearance("image", event.detail.image);
+          }}
+        ></dashboard-image-upload>
+        <span class="field-error" id="include-image-error">${errors.image ?? nothing}</span>
+        ${this.#followButton("image", overrides)}
+      </div>`;
   }
   override render() {
     const errors = this.#errors();

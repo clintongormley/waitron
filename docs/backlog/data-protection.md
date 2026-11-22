@@ -106,14 +106,6 @@ by the answers):
     table is not one column: a party's bill reaches its tables through its party, a counter order
     names the table it is delivered to in `delivery_table_id`, and the bill's `label` is operator
     text that filing overwrites with the frozen table grouping (S2d decision 9).
-- **An administrator's sign-in that keeps the current session**, offered in place on a permission
-  refusal. Today the dashboard has none (S2c decision 12), so when a person who has lost
-  `personal_data.export` presses **Download their data** on a person, or **Find** or **Download
-  their data** in Orders' **Find a customer by tax number**, the refusal's **Sign in as an
-  administrator** signs them out first. The server already checks an administrator's credentials
-  for one request without replacing the session — `checkManagerPassword`, then `loginManagerById`
-  → `authorizeManager` → `endManagementSession` in one transaction
-  (`apps/server/src/management-api.ts:1065-1078`) — which is the pattern to reuse.
 - **Owner question: the times of the shifts a swap names.** Today a swap in the download carries
   no shift (S2b decision 8). Example: Ana offers Marta her Saturday 18:00–02:00 shift as a
   give-away; Marta accepts and Luis approves. Approving moves no shift, so the shift stays Ana's
@@ -202,6 +194,8 @@ by the answers):
   [Detail](data-protection.md#cairo-built-into-that-libvips-is-listed-under-the-mozilla-public-license-and-appthird-party-carries-neither-its-licence-text-nor-a-source-offer-for-it)
 
 ## Decisions and deliberate limits
+
+- **An administrator's sign-in that keeps the current session** (watcher, 2026-11-22 23:48). The Dashboard hides the actions from people who lack permission. If permission changes while the page is open, signing out lets an administrator sign in and carry on. The watcher retired the one-action sign-in proposal.
 
 - **DB-GROWTH, 2026-11-15:** you chose to prune the activity log after about a month
   ("The activity log may be useful briefly (eg one month max) but we can prune it after that",

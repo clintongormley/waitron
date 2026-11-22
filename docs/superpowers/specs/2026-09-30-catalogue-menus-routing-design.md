@@ -627,6 +627,8 @@ These were not discussed. Each is the default this document takes.
    _2026-11-22 (A322): saving again keeps an unchanged fixed name, photo or colour even when the
    included menu now has the same value. Setting a previously different value back to the menu's
    value makes it follow again._
+   _2026-11-22: the include’s Edit dialog also lets you choose **Use included menu colour** or
+   **Use included menu photo**, then Save, to return a fixed field to following the included menu._
 4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
    nearest claim above, or appear on the unassigned list. Deleting it shows this in the routing
    preview (§5.12).

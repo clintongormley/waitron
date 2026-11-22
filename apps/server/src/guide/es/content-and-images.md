@@ -249,7 +249,8 @@ fotografía propia para su carpeta. La biblioteca muestra ese uso como **Carpeta
 <carta que la incluye>**, y su enlace abre la pestaña **Estructura** de la carta que la incluye:
 elige **Editar** en el ⋮ de esa inclusión, después **Quitar imagen**, y guarda. La fotografía sigue
 bloqueando la eliminación mientras la inclusión muestra sus secciones directamente; activa
-**Mostrar como carpeta** para ver el campo de la foto.
+**Mostrar como carpeta** para ver el campo de la foto. En la misma ventana, elige **Usar la foto de
+la carta incluida** o **Usar el color de la carta incluida** y pulsa **Guardar** para volver a seguir la carta incluida.
 
 Una carta publicada también retiene todas las fotografías que incluye su versión publicada, aunque
 quites la fotografía de un producto o de una sección. La biblioteca muestra esa carta por su nombre,

@@ -14,7 +14,7 @@ describe.each(["light", "dark"] as const)("include folder (%s)", (theme) => {
           own: { names: { en: "Drinks", es: "Bebidas" }, image: null, color: "#aa3300" },
           value: {
             showAsFolder: state !== "off",
-            overrides: { names: { en: "Bar" } },
+            overrides: { names: { en: "Bar" }, image: null, color: "#aa3300" },
           },
           languages: { defaultLanguage: "en", languages: ["en", "es"] },
           busy: state === "busy",

@@ -1876,9 +1876,11 @@ list that holds it. An included menu's row reads "Menu: <name>" with "Shown as a
 "Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
 tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
 "Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
-and photo, each following the included menu until it is changed; and "Remove from this menu". The
-rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
-Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
+and photo, each following the included menu until it is changed. **Use included menu colour** and
+**Use included menu photo** stage a return to the menu’s value when the folder fixes that field.
+The included menu’s row menu (⋮) also holds "Remove from this menu".
+Rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name.
+In Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Select mode, put every grip in one leading column before the tree arrow and indentation.
 Reserve that column on read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot

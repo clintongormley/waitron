@@ -3776,6 +3776,8 @@ export const en = {
   "menus.include_direct": "Sections shown directly",
   "menus.include_edit_heading": "{name} in this menu",
   "menus.include_show_as_folder": "Show as a folder",
+  "menus.include_use_color": "Use included menu colour",
+  "menus.include_use_image": "Use included menu photo",
   "menus.include_direct_hint":
     "Off: its sections and products appear in this list directly, in their own order.",
   "menus.include_names_required":
@@ -8543,6 +8545,8 @@ export const es: Record<StringKey, string> = {
   "menus.include_direct": "Sus secciones se muestran directamente",
   "menus.include_edit_heading": "{name} en esta carta",
   "menus.include_show_as_folder": "Mostrar como carpeta",
+  "menus.include_use_color": "Usar el color de la carta incluida",
+  "menus.include_use_image": "Usar la foto de la carta incluida",
   "menus.include_direct_hint":
     "Desactivado: sus secciones y productos aparecen directamente en esta lista, en su propio orden.",
   "menus.include_names_required":

@@ -241,7 +241,8 @@ another one can hold a photograph of its own for its folder. The library lists t
 **<included menu> folder in <including menu>**, and its link opens the including menu's
 **Structure** tab: choose **Edit** in that include's ⋮, then **Remove image**, and save. The
 photograph still blocks deletion while the include shows its sections directly; turn **Show as a
-folder** on to see the photo field.
+folder** on to see the photo field. In the same Edit window, choose **Use included menu photo**
+or **Use included menu colour**, then **Save**, to follow the included menu again.
 
 A published menu also holds every photograph its live version includes, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by
