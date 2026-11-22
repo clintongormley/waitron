@@ -4213,7 +4213,7 @@ describe("who can approve a refund (GET /api/refund-authorizers)", () => {
   });
 });
 
-describe("a cash refund before the invoice (design §6)", () => {
+describe("a bill refund before the invoice (design §6)", () => {
   it("gives the money back with a manager's PIN, recording who asked, who authorised it and the till", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));

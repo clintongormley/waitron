@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { DashboardApi, PaymentSettingsView } from "../api/client.js";
-import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { PaymentsSettingsPanel } from "./payments-settings-panel.js";
@@ -57,25 +56,35 @@ it("keeps Save quiet until the switches change and excludes the practice switch 
   await expect.element(save).toBeDisabled();
 });
 
-it("keeps the draft tip choice and refreshes the untouched practice switch after a stale save", async () => {
+it.each([
+  {
+    label: "Offer tips at the till",
+    current: { tipsEnabled: false, testProviders: false },
+    submitted: { tipsEnabled: true, testProviders: true },
+  },
+  {
+    label: "Use card providers' test accounts",
+    current: { tipsEnabled: true, testProviders: true },
+    submitted: { tipsEnabled: false, testProviders: false },
+  },
+])("refreshes the untouched switch ($label)", async ({ label, current, submitted }) => {
+  const prepare = { ...initial, testProvidersAvailable: true };
   const getPaymentSettings = vi
     .fn()
-    .mockResolvedValueOnce({ ...initial, testProvidersAvailable: true })
-    .mockResolvedValue({
-      ...initial,
-      testProviders: false,
-      testProvidersAvailable: true,
-      revision: 4,
-    });
+    .mockResolvedValueOnce(prepare)
+    .mockResolvedValue({ ...prepare, ...current, revision: 4 });
   const savePaymentSettings = vi
     .fn()
     .mockRejectedValueOnce({ code: "settings.out_of_date", params: { revision: 4 } })
-    .mockImplementation(async (draft) => ({ ...draft, testProvidersAvailable: true, revision: 5 }));
+    .mockImplementation(async (draft) => ({
+      ...draft,
+      testProvidersAvailable: true,
+      revision: 5,
+    }));
   await mount(true, savePaymentSettings, getPaymentSettings);
   const providers = page.getByRole("switch", { name: "Use card providers' test accounts" });
   const tips = page.getByRole("switch", { name: "Offer tips at the till" });
-  await expect.element(providers).toBeChecked();
-  await tips.click();
+  await page.getByText(label, { exact: true }).click();
   const save = page.getByRole("button", { name: "Save", exact: true });
   await save.click();
   await vi.waitFor(() => expect(getPaymentSettings).toHaveBeenCalledTimes(2), { timeout: 1000 });
@@ -84,7 +93,7 @@ it("keeps the draft tip choice and refreshes the untouched practice switch after
   await expect
     .element(
       page.getByText(
-        "Someone else saved these settings while you were editing. Review the switches before saving.",
+        "Payment settings changed while you were editing. Review the current switches.",
       ),
     )
     .toBeVisible();
@@ -92,7 +101,7 @@ it("keeps the draft tip choice and refreshes the untouched practice switch after
   expect(savePaymentSettings).toHaveBeenCalledTimes(1);
   await save.click();
   expect(savePaymentSettings.mock.calls).toEqual([
-    [{ tipsEnabled: true, testProviders: true, revision: 3 }],
+    [{ ...submitted, revision: 3 }],
     [{ tipsEnabled: true, testProviders: false, revision: 4 }],
   ]);
   await expect.element(save).toBeDisabled();
@@ -108,7 +117,11 @@ it("explains a Prepare-only refusal beside Save and keeps the draft", async () =
   const save = page.getByRole("button", { name: "Save", exact: true });
   await save.click();
   await expect
-    .element(page.getByText(codeMessage("payment.test_providers_prepare_only")))
+    .element(
+      page.getByText(
+        "You can use test accounts on a Prepare box only. Your changes were not saved.",
+      ),
+    )
     .toBeVisible();
   await expect.element(tips).toBeChecked();
   await expect.element(save).toBeEnabled();

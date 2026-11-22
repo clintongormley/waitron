@@ -3299,7 +3299,7 @@ export const en = {
   "payments.settings_heading": "Settings",
   "payments.settings_loading": "Loading payment settings…",
   "payments.settings_refreshed":
-    "Someone else saved these settings while you were editing. Review the switches before saving.",
+    "Payment settings changed while you were editing. Review the current switches.",
   "payments.tips_label": "Offer tips at the till",
   "payments.tips_hint": "Staff can add a tip when taking a payment at the till.",
   "payments.test_providers_label": "Use card providers' test accounts",
@@ -8052,7 +8052,7 @@ export const es: Record<StringKey, string> = {
   "payments.settings_heading": "Ajustes",
   "payments.settings_loading": "Cargando ajustes de pago…",
   "payments.settings_refreshed":
-    "Otra persona guardó estos ajustes mientras los editabas. Revisa las opciones antes de guardar.",
+    "Los ajustes de pago cambiaron mientras los editabas. Revisa las opciones actuales.",
   "payments.tips_label": "Ofrecer propina en la caja",
   "payments.tips_hint": "El personal puede añadir una propina al cobrar en la caja.",
   "payments.test_providers_label": "Usar las cuentas de prueba de los proveedores de tarjetas",

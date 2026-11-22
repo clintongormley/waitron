@@ -190,8 +190,8 @@ dashboard panel and tab 130, client and strings 25) and about 420 lines of tests
 50, routes 110, panel, unsaved and a11y 170, re-pointed fixtures 40). Not counted: deleted
 `till-config.ts` and its test. About 3 hours.
 
-**Measured 2026-11-22.** The final diff adds 480 production lines, 607 test lines and 21
-test-support lines. It removes 92 production lines, 290 test lines and 20 test-support lines.
+**Measured 2026-11-22.** The final diff adds 480 production lines, 621 test lines and 21
+test-support lines. It removes 92 production lines, 291 test lines and 20 test-support lines.
 The two retired files held 182 additional lines. The watcher cleared the earlier measured overage
 at 20:09. The simulator refund case, tips-only transfer and stale-save check account for the
 review changes.
