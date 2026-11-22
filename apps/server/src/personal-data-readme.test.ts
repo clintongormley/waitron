@@ -290,11 +290,17 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
     }
   });
   it.each([
-    ["en", "draft take-overs", "department IDs"],
-    ["es", "tomas de control de borradores", "identificadores de los departamentos"],
+    ["en", "draft take-overs", "station IDs", "you resolved", "department IDs"],
+    [
+      "es",
+      "tomas de control de borradores",
+      "identificadores de las estaciones",
+      "resolviste",
+      "identificadores de los departamentos",
+    ],
   ] as const)(
     "describes service actions and resolved transfers in %s",
-    (language, drafts, departmentIds) => {
+    (language, drafts, stationIds, resolved, departmentIds) => {
       const readme = personalDataReadme({
         language,
         venue: "Venue",
@@ -303,12 +309,12 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
         files: ["service-actions.json", "department-transfers.json"],
       });
       const lines = readme.split("\n");
-      expect(lines.find((line) => line.startsWith("- service-actions.json:")) ?? "").toContain(
-        drafts,
-      );
-      expect(lines.find((line) => line.startsWith("- department-transfers.json:")) ?? "").toContain(
-        departmentIds,
-      );
+      const service = lines.find((line) => line.startsWith("- service-actions.json:")) ?? "";
+      const transfers = lines.find((line) => line.startsWith("- department-transfers.json:")) ?? "";
+      expect(service).toContain(drafts);
+      expect(service).toContain(stationIds);
+      expect(transfers).toContain(resolved);
+      expect(transfers).toContain(departmentIds);
     },
   );
 

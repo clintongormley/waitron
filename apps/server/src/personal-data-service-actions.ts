@@ -229,6 +229,7 @@ export function serviceActionsPersonalData(db: Database): PersonalDataPart[] {
       owner: "server",
       part: {
         files: [FILE],
+        // Scan after the initial write turn so other requests can write between pages.
         prepare:
           async (_tx, { personId }) =>
           async () => {

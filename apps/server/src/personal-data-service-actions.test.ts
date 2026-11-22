@@ -242,9 +242,9 @@ it("reads later pages after a concurrent edit and leaves out rows above the capt
     await seedPerson(tx, { id: "ana", displayName: "Ana" });
     await seedPerson(tx, { id: "bea", displayName: "Bea" });
     await tx.run(sql`
-      with recursive history(n) as (select 1 union all select n + 1 from history where n < 202)
+      with recursive history(n) as (select 1 union all select n + 1 from history where n < 302)
       insert into parties (id, opened_at, opened_by)
-      select 'party-' || n, ${AT}, case when n in (1, 100) then 'ana' else 'bea' end
+      select printf('party-%03d', n), ${AT}, case when n <= 100 then 'ana' else 'bea' end
       from history
     `);
   });
@@ -255,7 +255,7 @@ it("reads later pages after a concurrent edit and leaves out rows above the capt
       await tx
         .update(parties)
         .set({ state: "closed", closedBy: "ana", closedAt: LATER })
-        .where(eq(parties.id, "party-202"));
+        .where(eq(parties.id, "party-302"));
       await tx.insert(parties).values({ id: "new-party", openedAt: LATER, openedBy: "ana" });
     }),
   );
@@ -264,9 +264,12 @@ it("reads later pages after a concurrent edit and leaves out rows above the capt
   expect(JSON.parse(files[0]!.content as string)).toEqual({
     ...empty,
     parties: [
-      { partyId: "party-1", action: "opened", at: AT },
-      { partyId: "party-100", action: "opened", at: AT },
-      { partyId: "party-202", action: "closed", at: LATER },
+      ...Array.from({ length: 100 }, (_, index) => ({
+        partyId: `party-${String(index + 1).padStart(3, "0")}`,
+        action: "opened",
+        at: AT,
+      })),
+      { partyId: "party-302", action: "closed", at: LATER },
     ],
   });
 });
