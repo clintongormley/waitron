@@ -1552,8 +1552,8 @@ that names a person wrote the name or email into stdout, the file and the page, 
 server's refusal did not, because Waitron reduces it to a code first. Its cases are now tests:
 `apps/server/src/recovery-page-personal-data.test.ts` drives the real staff, profile and till routes
 and the real error boundary into the real file, the captured stdout and the real page, each with a
-control that the same tail shows the event's code and the masked value; it pins the invitation, profile and
-attendance email paths as logging no address, with the relay's own reply shown holding it.
+control that the same tail shows the event's code and the masked value; it pins the invitation and profile
+email paths as logging no address, with the relay's own reply shown holding it.
 `apps/server/src/logger.test.ts` and the failed-start case in `apps/server/src/node-entry.test.ts`
 pin the mask itself.
 

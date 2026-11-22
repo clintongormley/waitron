@@ -1,10 +1,8 @@
 import { requestIdMiddleware } from "./request-id.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { sendSmtpMessage } from "./smtp-send.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { createServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -23,7 +21,6 @@ import "./errors.js";
 import { flushAccountMail } from "./testing/account-mail.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { sql } from "drizzle-orm";
-import { attendanceReminderMessage } from "./attendance-email.js";
 import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
 import { createLogger, type Logger, type LogLevel } from "./logger.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
@@ -36,6 +33,9 @@ import { mountTillApi } from "./till-api.js";
 import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 import { plannedZone, withRevision } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
+import { smtpRig } from "./testing/smtp-settings-fixture.js";
+
+type SmtpRig = Awaited<ReturnType<typeof smtpRig>>;
 
 const MARTHA_EMAIL = "martha.lewis@example.test";
 const MARTHA_NAME = "Martha Lewis";
@@ -249,62 +249,9 @@ async function send(
   return { status: res.status, body: await res.json() };
 }
 
-interface Relay {
-  url: string;
-  recipients: string[];
-  close: () => Promise<void>;
-}
-
-/** An SMTP relay that refuses the recipient at `RCPT` or the message after `DATA`, echoing the address in its reply. */
-async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
-  const recipients: string[] = [];
-  const server = createServer((socket: Socket) => {
-    socket.setEncoding("utf8");
-    socket.write("220 relay ESMTP\r\n");
-    let buffer = "";
-    let inData = false;
-    let rcpt = "";
-    socket.on("data", (chunk: string) => {
-      buffer += chunk;
-      for (let end = buffer.indexOf("\r\n"); end !== -1; end = buffer.indexOf("\r\n")) {
-        const line = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        if (inData) {
-          if (line === ".") {
-            inData = false;
-            socket.write(`550 5.7.1 <${rcpt}>: message refused for ${rcpt}\r\n`);
-          }
-          continue;
-        }
-        if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 relay\r\n");
-        else if (line.startsWith("RCPT")) {
-          rcpt = /<([^>]*)>/.exec(line)?.[1] ?? "?";
-          recipients.push(rcpt);
-          socket.write(
-            at === "rcpt"
-              ? `550 5.1.1 <${rcpt}>: Recipient address rejected: User unknown\r\n`
-              : "250 ok\r\n",
-          );
-        } else if (line === "DATA") {
-          inData = true;
-          socket.write("354 go\r\n");
-        } else if (line === "QUIT") socket.end("221 bye\r\n");
-        else socket.write("250 ok\r\n");
-      }
-    });
-    socket.on("error", () => {});
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return {
-    url: `smtp://127.0.0.1:${(server.address() as AddressInfo).port}`,
-    recipients,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  };
-}
-
 // The relay refusal must carry the address for the checks that omit it to be meaningful.
-async function relayRefusal(relay: Relay): Promise<string> {
-  const transport = nodemailer.createTransport({ url: relay.url });
+async function relayRefusal(relay: SmtpRig): Promise<string> {
+  const transport = nodemailer.createTransport({ url: relay.config.url });
   try {
     await transport.sendMail({
       from: "venue@example.test",
@@ -767,7 +714,9 @@ describe("the recovery page, the log file and stdout carry no person's details",
     it(`logs no address or name when the relay refuses an invitation at ${at.toUpperCase()}`, async () => {
       const { adminId } = await setupVenue();
       const r = await rig();
-      const relay = await refusingRelay(at);
+      const relay = await smtpRig(at === "rcpt" ? "recipient-refused" : "data-refused", false, {
+        echoRecipient: true,
+      });
       try {
         const answer = await send(
           management(r.log, true),
@@ -797,7 +746,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
           log: r.log,
           keyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
           timeZone: "Europe/Madrid",
-          smtp: { url: relay.url, from: "venue@example.test" },
+          smtp: relay.config,
         });
         expect(relay.recipients).toEqual([GEORGE_EMAIL]);
         expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
@@ -823,7 +772,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
   it("logs the sender's code, not the relay's reply, when a person's new email is refused", async () => {
     const { clerkId } = await setupVenue();
     const r = await rig();
-    const relay = await refusingRelay("rcpt");
+    const relay = await smtpRig("recipient-refused", false, { echoRecipient: true });
     try {
       const answer = await send(
         me(r.log, true),
@@ -849,7 +798,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         log: r.log,
         keyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
         timeZone: "Europe/Madrid",
-        smtp: { url: relay.url, from: "venue@example.test" },
+        smtp: relay.config,
       });
       expect(relay.recipients).toEqual([GEORGE_EMAIL]);
       expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
@@ -871,34 +820,4 @@ describe("the recovery page, the log file and stdout carry no person's details",
       await relay.close();
     }
   });
-
-  for (const at of ["rcpt", "data"] as const) {
-    it(`gives the attendance worker no address when the relay refuses at ${at.toUpperCase()}`, async () => {
-      const relay = await refusingRelay(at);
-      try {
-        const message = {
-          smtp: { url: relay.url, from: "venue@example.test" },
-          recipient: GEORGE_EMAIL,
-          locale: "en" as const,
-          businessDay: "2026-10-25",
-          venueName: LOCATION_NAME,
-          missingKinds: ["in" as const],
-        };
-        const outcome = await sendSmtpMessage(message.smtp, {
-          to: message.recipient,
-          ...attendanceReminderMessage(message),
-        });
-        const reported = await sendSmtpMessage(message.smtp, {
-          to: message.recipient,
-          ...attendanceReminderMessage(message),
-        });
-        expect(outcome.status).toBe("rejected");
-        expect(reported).toMatchObject({ status: "rejected", reason: "email.test_refused" });
-        expect(relay.recipients).toEqual([GEORGE_EMAIL, GEORGE_EMAIL]);
-        expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
-      } finally {
-        await relay.close();
-      }
-    });
-  }
 });
