@@ -3897,6 +3897,8 @@ export const en = {
   "menu_preview.undo_name_taken": "Another menu called {name} already exists.",
   "menu_preview.undo_menu_gone": "This menu has been deleted, so there is nothing to undo.",
   "menu_preview.undo_item_gone": "{name} is no longer on this menu.",
+  "menu_preview.undo_include_gone":
+    "{name} is no longer included in this menu, so how it showed cannot be restored.",
   "menu_preview.undo_section_gone": "Section {name} has been deleted, so it cannot be restored.",
   "menu_preview.undo_section_invalid": "{name}'s published photo or colour can no longer be used.",
   "menu_preview.undo_language_off":
@@ -8634,6 +8636,8 @@ export const es: Record<StringKey, string> = {
   "menu_preview.undo_name_taken": "Ya existe otra carta llamada {name}.",
   "menu_preview.undo_menu_gone": "Esta carta se ha eliminado, así que no hay nada que deshacer.",
   "menu_preview.undo_item_gone": "{name} ya no está en esta carta.",
+  "menu_preview.undo_include_gone":
+    "{name} ya no se incluye en esta carta, así que no se puede mostrar como antes.",
   "menu_preview.undo_section_gone":
     "La sección {name} se ha eliminado, así que no se puede restaurar.",
   "menu_preview.undo_section_invalid":

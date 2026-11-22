@@ -5918,7 +5918,9 @@ intersecting them with each refreshed change list; leaving the menu forgets them
 Each bullet's action sits after View and before Hide, and depends on where the change came from. A
 change made in this menu gets an Undo button where one existing write puts the whole change back to
 the published version: the menu's name, a Home display setting, an own section's name, photo or
-colour, a dish's price here, or one variant's price here; nothing on a menu never published. A
+colour, a dish's price here, one variant's price here, or how an included menu appears. For an
+include in a single place, Undo restores direct display or the published folder and its fixed
+names, photo and colour. The menu must have a published version. A
 shared product's change links to Edit product, or Edit extras list for an extras item's portion or
 maximum quantity. An included menu's change links to Edit {menu}, on its Price overrides tab for a
 price and its Structure tab otherwise. A deleted product, and every other change, gets none. Undo

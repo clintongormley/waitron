@@ -283,6 +283,9 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+In **Preview**, choose **Undo** beside the change to restore how an included menu appeared in the
+published version, including its folder’s name, photo and colour.
+
 ## Set menus {#set-menus}
 
 To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name

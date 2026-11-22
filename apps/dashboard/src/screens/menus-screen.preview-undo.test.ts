@@ -16,6 +16,9 @@ import type {
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
+  directInclude,
+  includeDisplayChange,
+  includedDrinks,
   documentProduct,
   documentSection,
   menuDocument,
@@ -100,6 +103,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     readFails: false,
     menuName: "Lunch Menu",
     languages: ["en"],
+    structure,
   };
   const home: MenuHome = {
     homeSectionId: "home",
@@ -115,7 +119,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
       parts.map((part) => {
         if (part === "preview" && state.readFails)
           return [part, { status: 409, body: { error: { code: "menu.read_failed" } } }];
-        const bodies = { structure, home, preview: state.preview, status };
+        const bodies = { structure: state.structure, home, preview: state.preview, status };
         return [part, { status: 200, body: bodies[part] }];
       }),
     ),
@@ -126,7 +130,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
     listCategories: async () => [],
     getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: state.languages }),
-    getMenuStructure: async () => structure,
+    getMenuStructure: async () => state.structure,
     getMenuHome: async () => home,
     getMenuStatus: async () => status,
     getMenuPreview: async () => state.preview,
@@ -227,6 +231,58 @@ it("keeps a refused change listed with its sentence beside it, and says nothing 
   ).not.toBeNull();
   expect(resultLine(panel())).toBeNull();
   expect(undoButton(panel(), "mains-colour")!.getAttribute("aria-disabled")).toBeNull();
+});
+
+function includePreview(): MenuPreview {
+  return {
+    ...previewOf([includeDisplayChange, rename]),
+    live: { versionId: "v-2", document: includedDrinks(false) },
+    document: includedDrinks(true),
+  };
+}
+
+it("undoes an include's display with one folder write and refreshes Preview", async () => {
+  const setIncludeFolder = vi.fn(async () => {
+    fake.state.preview = previewOf([rename]);
+    return { showAsFolder: true, overrides: {} };
+  });
+  const fake = fakeApi({ setIncludeFolder });
+  fake.state.preview = includePreview();
+  fake.state.structure = { ...structure, nodes: [directInclude] };
+  const { panel } = await mount(fake.api);
+  await vi.waitFor(() => expect(undoButton(panel(), includeDisplayChange.id)).not.toBeNull());
+  await userEvent.click(undoButton(panel(), includeDisplayChange.id)!);
+
+  await vi.waitFor(() => expect(undoButton(panel(), includeDisplayChange.id)).toBeNull());
+  expect(undoButton(panel(), "own-rename")).not.toBeNull();
+  expect(setIncludeFolder.mock.calls).toEqual([
+    ["root", "include-drinks", { showAsFolder: true, overrides: {} }],
+  ]);
+});
+
+it("keeps the include Undo refusal when a fresh snapshot still offers it", async () => {
+  const live = new LiveData();
+  const setIncludeFolder = async () => {
+    throw { code: "menu_section.not_found" };
+  };
+  const fake = fakeApi({ setIncludeFolder, liveData: live } as Partial<DashboardApi>);
+  fake.state.preview = includePreview();
+  fake.state.structure = { ...structure, nodes: [directInclude] };
+  const { panel } = await mount(fake.api);
+  const id = includeDisplayChange.id;
+  const refusal = () => text(refusalIn(panel(), id));
+  await vi.waitFor(() => expect(undoButton(panel(), id)).not.toBeNull());
+  await userEvent.click(undoButton(panel(), id)!);
+  const expected =
+    "Not undone. Drinks is no longer included in this menu, so how it showed cannot be restored.";
+  await vi.waitFor(() => expect(refusal()).toBe(expected));
+
+  const before = panel().preview;
+  fake.state.preview = includePreview();
+  live.invalidate([{ type: "menus" }]);
+  await vi.waitFor(() => expect(panel().preview).not.toBe(before));
+  await panel().updateComplete;
+  expect(refusal()).toBe(expected);
 });
 
 it("reports a failed read after a stored Undo as a load failure, keeping the success line", async () => {

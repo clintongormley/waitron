@@ -295,6 +295,9 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+En **Vista previa**, pulsa **Deshacer** junto al cambio para recuperar cómo se mostraba una carta
+incluida en la versión publicada, incluido el nombre, la foto y el color de su carpeta.
+
 ## Cartas a precio fijo {#set-menus}
 
 Para ofrecer varios platos por un precio único, elige **Añadir carta** y después

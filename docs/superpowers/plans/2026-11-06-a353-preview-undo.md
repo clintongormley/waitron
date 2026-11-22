@@ -267,6 +267,12 @@ Owner approved 2026-11-06 via the watcher; reason sentences are the owner's own.
 | `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been disabled since, so its name cannot be restored. | Se ha desactivado un idioma en el que se publicó {name}, así que no se puede restaurar su nombre. |
 | `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. | El ajuste de pantalla publicado para {device} ya no se ofrece. |
 
+PR 2 refusal, wording settled by the Lane D watcher on 2026-11-22 at 04:45.
+
+| Key | Code it answers, and from which Undo | English | Spanish |
+| --- | --- | --- | --- |
+| `menu_preview.undo_include_gone` | `menu_section.not_found` or `menu_section.wrong_role`, an included menu's presentation | {name} is no longer included in this menu, so how it showed cannot be restored. | {name} ya no se incluye en esta carta, así que no se puede mostrar como antes. |
+
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
 mano", "Till" / "Caja registradora"). An Undo refused while its bullet is not drawn with its
 Undo (the person has left this menu's Preview tab or hidden the change, or the preview can no

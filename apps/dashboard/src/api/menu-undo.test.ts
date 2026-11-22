@@ -16,6 +16,7 @@ function recordingApi() {
     updateMenuItem: record("updateMenuItem"),
     setMenuVariantPrice: record("setMenuVariantPrice"),
     updateSection: record("updateSection"),
+    setIncludeFolder: record("setIncludeFolder"),
     setHomeDisplay: record("setHomeDisplay"),
   } as unknown as MenuUndoApi;
   return { api, calls };
@@ -43,6 +44,13 @@ const section: MenuUndoCommand = {
   patch: { color: null },
   name: "Mains",
 };
+const folder: MenuUndoCommand = {
+  method: "setIncludeFolder",
+  listId: "root",
+  memberId: "include-drinks",
+  input: { showAsFolder: true, overrides: { color: null } },
+  name: "Drinks",
+};
 const display: MenuUndoCommand = {
   method: "setHomeDisplay",
   menuId: "m1",
@@ -56,6 +64,11 @@ describe("sendMenuUndo", () => {
     [dishPrice, "updateMenuItem", ["m1", "i1", { grossPrice: null }]],
     [variantPrice, "setMenuVariantPrice", ["m1", "i1", "v1", "0.00"]],
     [section, "updateSection", ["s1", { color: null }]],
+    [
+      folder,
+      "setIncludeFolder",
+      ["root", "include-drinks", { showAsFolder: true, overrides: { color: null } }],
+    ],
     [display, "setHomeDisplay", ["m1", "handheld", { columns: 3 }]],
   ] as const)(
     "sends %o as one %s call with its arguments and no display name",
@@ -122,8 +135,20 @@ describe("undoRefusalText", () => {
     expect(undoRefusalText(refused(code, params), command)).toBe(expected);
   });
 
+  it.each(["menu_section.not_found", "menu_section.wrong_role"])(
+    "uses the include refusal for %s",
+    (code) => {
+      expect(undoRefusalText(refused(code), folder)).toBe(
+        "Drinks is no longer included in this menu, so how it showed cannot be restored.",
+      );
+    },
+  );
+
   it("words a refusal in Spanish when the screen is in Spanish", () => {
     setLocale("es");
+    expect(undoRefusalText(refused("menu_section.not_found"), folder)).toBe(
+      "Drinks ya no se incluye en esta carta, así que no se puede mostrar como antes.",
+    );
     expect(undoRefusalText(refused("menu.home_display_invalid"), tillDisplay)).toBe(
       "El ajuste de pantalla publicado para Caja registradora ya no se ofrece.",
     );

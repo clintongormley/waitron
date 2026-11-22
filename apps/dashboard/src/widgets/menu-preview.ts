@@ -7,7 +7,11 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import type { MenuView, MenuTarget, SetMenuChangeField } from "@waitron/shared";
 import { menuTargetKey } from "@waitron/menu/src/menu-navigation.js";
-import { menuChangeActions, type MenuChangeAction } from "@waitron/menu/src/menu-undo.js";
+import {
+  menuChangeActions,
+  type MenuChangeAction,
+  type MenuUndoInput,
+} from "@waitron/menu/src/menu-undo.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { MenuDocumentTree } from "./menu-document-tree.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -310,6 +314,7 @@ export class MenuPreviewPanel extends LitElement {
   @property({ attribute: false }) status: MenuStatus | null = null;
   /** Null while the changes are being worked out, or when that failed. */
   @property({ attribute: false }) preview: MenuPreview | null = null;
+  @property({ attribute: false }) structure: MenuUndoInput["structure"] = null;
   /** The preview could not be read. */
   @property({ type: Boolean }) failed = false;
   @property() failureReason = "";
@@ -467,10 +472,16 @@ export class MenuPreviewPanel extends LitElement {
     }
     const languages = currentContentLanguages().languages;
     const languagesKey = languages.join(" ");
-    if (changed.has("preview") || languagesKey !== this.#actionsLanguages) {
+    if (
+      changed.has("preview") ||
+      changed.has("structure") ||
+      languagesKey !== this.#actionsLanguages
+    ) {
       this.#actionsLanguages = languagesKey;
       this.#actions =
-        this.preview === null ? new Map() : menuChangeActions({ preview: this.preview, languages });
+        this.preview === null
+          ? new Map()
+          : menuChangeActions({ preview: this.preview, languages, structure: this.structure });
     }
     if (changed.has("preview")) {
       this.confirmingPreview = null;
