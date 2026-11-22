@@ -51,21 +51,18 @@ certs/
 .superpowers/
 docs/handoffs/
 
-# Impeccable's working files: mock-ups are never committed (CLAUDE.md §6). Its config.json,
-# surfaces/, design.json, live/config.json and critique/ignore.md are shared, so stay tracked.
-.impeccable/questions/
-.impeccable/questions.tracked-notice
-.impeccable/wiring/
-.impeccable/mocks/
-.impeccable/review/
-.impeccable/build/
-.impeccable/critique/*
-!.impeccable/critique/ignore.md
+# Impeccable's working files: mock-ups are never committed (CLAUDE.md §6). Everything under
+# .impeccable/ is ignored except the files Impeccable says to share.
+.impeccable/*
+!.impeccable/config.json
+!.impeccable/design.json
+!.impeccable/surfaces/
+!.impeccable/live/
 .impeccable/live/*
 !.impeccable/live/config.json
-.impeccable/hook.cache.json
-.impeccable/hook.pending.json
-.impeccable/config.local.json
+!.impeccable/critique/
+.impeccable/critique/*
+!.impeccable/critique/ignore.md
 
 # The box's self-signed cert + generated secrets, materialised on first setup boot.
 # The dev default is apps/server/src/state (from-source) / apps/server/dist/state (built, already
