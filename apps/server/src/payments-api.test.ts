@@ -203,6 +203,10 @@ function fakeStripeFor(secretKey: string): unknown {
 const fakeMakeStripe = ((secretKey: string) => fakeStripeFor(secretKey)) as unknown as MakeStripe;
 const stripeSeat: CardProviderContribution = createStripeCardProvider(fakeMakeStripe);
 const PROVIDERS: readonly CardProviderContribution[] = [stripeSeat];
+const PAIRING_POLL: CardProviderContribution["readerAdd"] = {
+  kind: "pairing-poll",
+  codeLabelKey: "payments.sumup.pairing_code",
+};
 
 const evicted: string[] = [];
 const pool: CardProviderPool = {
@@ -2057,6 +2061,7 @@ describe("screens and unknown ids", () => {
     const received: (string | undefined)[] = [];
     const refusing: CardProviderContribution = {
       ...stripeSeat,
+      readerAdd: PAIRING_POLL,
       readers: {
         ...stripeSeat.readers,
         add: async (_deps, input) => {
@@ -2134,6 +2139,7 @@ describe("screens and unknown ids", () => {
     const calls: unknown[] = [];
     const seat: CardProviderContribution = {
       ...stripeSeat,
+      readerAdd: PAIRING_POLL,
       readers: {
         ...stripeSeat.readers,
         add: async (_deps, input) => {
@@ -2150,6 +2156,88 @@ describe("screens and unknown ids", () => {
     });
     expect(res.status).toBe(201);
     expect(calls).toEqual([{ name: "Barra 2", code: "PAIR-123" }]);
+  });
+
+  async function refusedAdd(
+    readerAdd: CardProviderContribution["readerAdd"],
+    body: Record<string, unknown>,
+    field: string,
+  ): Promise<void> {
+    const venue = await seedVenueWithStaff();
+    const added: unknown[] = [];
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readerAdd,
+      readers: {
+        ...stripeSeat.readers,
+        add: async (_deps, input) => {
+          added.push(input);
+          return { providerRef: nextRef(), status: "paired" as const };
+        },
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+
+    const response = await send(app, "POST", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+      body: { providerId: "stripe", ...body },
+    });
+
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field } } },
+    });
+    expect(added).toEqual([]);
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
+  }
+
+  it.each(["", "   "])(
+    "refuses reference %j with management.request_invalid before asking the provider",
+    (reference) => refusedAdd(stripeSeat.readerAdd, { name: "Barra 1", reference }, "reference"),
+  );
+
+  it("refuses a reference-kind add with no reference before asking the provider", () =>
+    refusedAdd(stripeSeat.readerAdd, { name: "Barra 1" }, "reference"));
+
+  it.each([{}, { reference: "tmr_given" }])(
+    "refuses a pairing-poll add with no code (%j) before asking the provider",
+    (extra) => refusedAdd(PAIRING_POLL, { name: "Barra 1", ...extra }, "code"),
+  );
+
+  it.each(["", "   "])(
+    "refuses code %j with management.request_invalid before asking the provider",
+    (code) => refusedAdd(PAIRING_POLL, { name: "Barra 1", code }, "code"),
+  );
+
+  it.each(["", "   "])(
+    "refuses name %j with management.request_invalid before asking the provider",
+    (name) => refusedAdd(stripeSeat.readerAdd, { name, reference: "tmr_named" }, "name"),
+  );
+
+  it("stores and hands the provider a padded name trimmed", async () => {
+    const venue = await seedVenueWithStaff();
+    const calls: { name: string }[] = [];
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async (_deps, input) => {
+          calls.push(input);
+          return { providerRef: nextRef(), status: "paired" as const };
+        },
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+
+    const response = await addReader(app, venue, "tmr_padded", "  Barra 3  ");
+
+    expect(response.status).toBe(201);
+    expect(calls.map((call) => call.name)).toEqual(["Barra 3"]);
+    expect(await suite.db.select({ name: cardReaders.name }).from(cardReaders)).toEqual([
+      { name: "Barra 3" },
+    ]);
   });
 
   it("still refuses a mid-add disconnect when the best-effort vendor unpair itself fails", async () => {
