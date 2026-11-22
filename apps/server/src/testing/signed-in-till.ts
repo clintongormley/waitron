@@ -89,7 +89,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
         timeZone: "Europe/Madrid",
         dayCutover: options.dayCutover,
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),

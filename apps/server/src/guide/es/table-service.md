@@ -401,7 +401,7 @@ consultar** para ver su respuesta.
 
 Cuando una devolución a la tarjeta termina una rectificación más tarde, su recibo rectificativo no
 se imprime solo. Para darlo al cliente, ábrelo en **Buscar cuenta**, en la pestaña
-**Transacciones**, donde su tipo es **Rectificación**, e imprímelo desde ahí.
+**Transacciones**, donde su tipo es **Rectificativa**, e imprímelo desde ahí.
 
 Si cierras la ventana antes de devolver todo el dinero, la rectificación sigue abierta. **Buscar
 cuenta** la muestra en **Rectificaciones en curso**; elígela para seguir y después elige una de

@@ -37,6 +37,7 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./hour-test-clock.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 // Load this fixture before recovery-key consumers so they receive its memoised verifier.
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -76,11 +77,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
     monotonicFinishedMs: performance.now(),
   })),
 }));
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 export async function stagedHourRestore(
   { db, node: nodeDb }: { db: Database; node: NodeDatabase },
   kind: "archive" | "stream",

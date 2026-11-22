@@ -701,7 +701,7 @@ it("exports the venue's own fields and the default flag in its menu rows", async
       "taxpayerDomicile",
       "seriesCode",
       "fullSeriesCode",
-      "rectificativeSeriesCode",
+      "correctiveSeriesCode",
     ].sort(),
   );
   expect(bundle).not.toHaveProperty("defaultMenuId");

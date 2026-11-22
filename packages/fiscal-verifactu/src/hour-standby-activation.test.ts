@@ -24,7 +24,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 
 function fixture(action = "promote", identity = "0CNPG", eventId = "promotion") {
@@ -131,7 +131,7 @@ it("activates all next-hour bases without an advance reservation and preserves o
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-0CNPG", purpose: "standard" },
     { code: "FF-0CNPG", purpose: "full" },
-    { code: "R-0CNPG", purpose: "rectificative" },
+    { code: "R-0CNPG", purpose: "corrective" },
     { code: "a/B_1.2-3-0CNPG", purpose: "standard" },
   ]);
   const after = await snapshot();

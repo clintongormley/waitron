@@ -35,7 +35,7 @@ const GOOD = {
   legalName: "Waitron SL",
   seriesCode: "FS",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "FR",
+  correctiveSeriesCode: "FR",
 };
 
 function boundaryRefuses(validate: () => void): boolean {

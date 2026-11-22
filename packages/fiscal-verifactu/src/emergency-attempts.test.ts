@@ -15,6 +15,7 @@ import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { withEmergencyAttempt } from "./emergency-attempt.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -26,11 +27,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const approval = {
   version: 1,
   eventId: binding.eventId,

@@ -15,7 +15,7 @@ export function configurationBundle(): ConfigurationBundle {
       taxpayerDomicile: null,
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       name: "Synthetic source",
       invoiceLocales: ["en-GB"],
       fiscalTerritory: "GB-vat",

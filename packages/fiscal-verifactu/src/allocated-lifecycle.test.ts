@@ -40,14 +40,11 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { establishDormantAllocation } from "./standby-allocation.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -224,7 +221,7 @@ it("the setup seed creates exactly the supplied SIF and every purpose without sc
   ).toEqual([
     { code: "A-S000001", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000001", purpose: "full", nextNumber: 1 },
-    { code: "R-S000001", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-S000001", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
@@ -262,7 +259,7 @@ it.each(["restore"])(
     ).toEqual([
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-      { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
     ]);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   },
@@ -471,7 +468,7 @@ it("promotes a retained dormant reservation once, without resetting counters on 
   expect(active.map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))).toEqual([
     { code: "A-P000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-    { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
   ]);
   await suite.db
     .update(invoiceSeries)

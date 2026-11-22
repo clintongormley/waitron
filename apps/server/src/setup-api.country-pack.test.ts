@@ -97,7 +97,7 @@ function venue(country: string, overrides: Record<string, unknown> = {}) {
     ...overrides,
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Admin",
       pin: "1357",

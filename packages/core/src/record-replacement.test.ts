@@ -25,7 +25,7 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordSubstitution } from "./record-substitution.js";
 import { recordVoid } from "./record-void.js";
-import { seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -44,7 +44,7 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+  rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   supervisorSessionId = await openSession(supervisorId);
   staffSessionId = await openSession(await seedPerson("staff"));
@@ -420,7 +420,7 @@ describe("recordReplacement — refusals use no number", () => {
     await expectRefused(backend, saleId, {}, { code: "sale.voided", params: { saleId } });
   });
 
-  it("refuses a series that is not a rectificative one", async () => {
+  it("refuses a series that is not a corrective one", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await expectRefused(
@@ -429,16 +429,16 @@ describe("recordReplacement — refusals use no number", () => {
       { seriesId },
       {
         code: "sale.series_wrong_purpose",
-        params: { seriesId, expected: "rectificative", actual: "standard" },
+        params: { seriesId, expected: "corrective", actual: "standard" },
       },
     );
   });
 
-  it("refuses another node's rectificative series", async () => {
+  it("refuses another node's corrective series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTaxpayer(suite.db);
-    const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
+    const otherRect = await seedCorrectiveSeries(suite.db, other.nodeId, "R2");
     await expect(replace(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
       params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },

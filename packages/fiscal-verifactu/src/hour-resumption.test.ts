@@ -3,6 +3,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { compareHourClocks } from "./hour-clock.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import type { HourSelectionFacts } from "./hour-selection.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
@@ -32,11 +33,7 @@ function fixture() {
   const history: unknown[] = [];
   let facts: HourSelectionFacts = {
     scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-    bases: [
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
-    ],
+    bases: SERIES_BASES,
     contextKey: "owner-1",
     waitKey: "identical-frozen-context",
     // Two minutes before `at`, so the name taken after the setup's settle wait is `at`'s.

@@ -1,4 +1,5 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -63,11 +64,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const fingerprint = paperCustodianFingerprint(publicKey)!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const allocation = {
   version: 1 as const,
   allocationId: "standby-host-allocation",
@@ -78,7 +75,7 @@ const allocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -383,7 +380,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   ).toEqual([
     { code: "A-P000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-    { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(live.allocations[0]?.approval.operatorId).toEqual({
     kind: "recovery-key",

@@ -9,6 +9,7 @@ import {
   validateInitialPaperCandidates,
   readInitialPaperCandidates,
 } from "./initial-paper-candidates.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 vi.mock("@waitron/verifactu", { spy: true });
 
@@ -26,11 +27,7 @@ const context: InitialSetupContext = {
   taxId: "89890001K",
   environment: "production",
   recipientVenueId: "first-setup:attempt1",
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
-  ],
+  bases: SERIES_BASES,
 };
 const invalid = expect.objectContaining({ code: "sif.allocation_invalid" });
 
@@ -51,7 +48,7 @@ describe("host initial paper candidate validation", () => {
         series: [
           { code: "A-S000001", purpose: "standard" },
           { code: "FF-S000001", purpose: "full" },
-          { code: "R-S000001", purpose: "rectificative" },
+          { code: "R-S000001", purpose: "corrective" },
         ],
         source: "initial-paper",
         issuedAt: expect.any(String),
@@ -106,7 +103,7 @@ describe("host initial paper candidate validation", () => {
     [
       { code: "A", purpose: "standard" },
       { code: "A", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
     [
       { code: "A", purpose: "standard" },
@@ -116,7 +113,7 @@ describe("host initial paper candidate validation", () => {
     [
       { code: "A".repeat(22), purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
   ])("refuses incomplete or ambiguous purpose/base sets %j", (...bases) => {
     expect(() => validateInitialPaperCandidates({ ...context, bases }, [1])).toThrowError(invalid);
@@ -258,7 +255,7 @@ describe("host initial paper candidate validation", () => {
     expect(result.candidates[0]?.series).toEqual([
       { code: "A-S000042", purpose: "standard" },
       { code: "FF-S000042", purpose: "full" },
-      { code: "R-S000042", purpose: "rectificative" },
+      { code: "R-S000042", purpose: "corrective" },
       { code: "B-S000042", purpose: "standard" },
     ]);
     for (const series of [
@@ -285,7 +282,7 @@ describe("host initial paper candidate validation", () => {
     expect(result.candidates[0]?.series).toEqual([
       { code: "A-P000008", purpose: "standard" },
       { code: "FF-P000008", purpose: "full" },
-      { code: "R-P000008", purpose: "rectificative" },
+      { code: "R-P000008", purpose: "corrective" },
     ]);
     expect(() => readInitialPaperCandidates(context, result)).toThrowError(invalid);
   });

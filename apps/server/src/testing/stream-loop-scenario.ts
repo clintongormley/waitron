@@ -62,6 +62,7 @@ import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
 import { STREAM_LOOP_SPARE_PHASES, runLoopSpare, type StartedFollow } from "./stream-loop-spare.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -80,7 +81,7 @@ const VENUE: VenueRequest = {
   timeZone: "Europe/Madrid",
   dayCutover: "05:00",
   seriesCode: "A",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Administrator",
     firstNames: "Test",
@@ -506,11 +507,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       taxpayerNif: "74000001P",
       identity: "P000042",
       recoveryKey: true,
-      bases: [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
-      ],
+      bases: SERIES_BASES,
     });
     const allocationEnv = await writeAllocationInput(scratch, recoveryFixture, "restore");
     const recoveryModules = ALL_MODULES.map((module) =>

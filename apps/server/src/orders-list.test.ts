@@ -185,23 +185,23 @@ describe("each status, from the product's own write paths", () => {
       reason: "Error",
     });
 
-  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its credit note", async () => {
+  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its corrective", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
       status: "cancelled",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
-      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      correctives: [expect.stringMatching(/^R\/\d+$/)],
       credited: "in_full",
       stillOwed: null,
     });
   });
 
-  it("refuses to cancel a bill whose credit notes already bring its invoice to nothing, leaving its row as it was", async () => {
+  it("refuses to cancel a bill whose correctives already bring its invoice to nothing, leaving its row as it was", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     await credit(venue, id, "2.48", "-3.00");
     const before = await rowOf(id);
-    expect(before).toMatchObject({ credited: "in_full", creditNotes: [expect.any(String)] });
+    expect(before).toMatchObject({ credited: "in_full", correctives: [expect.any(String)] });
     expect(await cancel(id)).toMatchObject({
       status: 409,
       json: { code: "sale.correction_exceeds_total" },
@@ -214,7 +214,7 @@ describe("each status, from the product's own write paths", () => {
     expect((await cancel(party.tabId)).status).toBe(200);
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "cancelled",
-      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      correctives: [expect.stringMatching(/^R\/\d+$/)],
       credited: "in_full",
       stillOwed: null,
       departedAt: expect.any(String),
@@ -285,7 +285,7 @@ describe("a bill closed as a deferred payment", () => {
   });
 });
 
-describe("credit notes and what is still owed", () => {
+describe("correctives and what is still owed", () => {
   it("marks a part credit, and owes what the till's collect then charges, to the cent", async () => {
     const id = await placedIssuedBill(venue, "Red wine bottle");
     await credit(venue, id, "2.00", "-2.42");
@@ -293,7 +293,7 @@ describe("credit notes and what is still owed", () => {
     expect(row).toMatchObject({
       credited: "in_part",
       stillOwed: "27.58",
-      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      correctives: [expect.stringMatching(/^R\/\d+$/)],
     });
 
     expect(await collect(venue, id, "27.57")).toEqual({
@@ -333,7 +333,7 @@ describe("a replaced invoice", () => {
       insertCorrective(tx, sale!.id, { replaces: true }),
     );
     const replaced = await rowOf(id);
-    expect(replaced).toMatchObject({ credited: null, stillOwed: "30.00", creditNotes: [] });
+    expect(replaced).toMatchObject({ credited: null, stillOwed: "30.00", correctives: [] });
     expect(ids((await list("anyDate=true&credited=true")).rows)).not.toContain(id);
     const detail = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
     expect(detail.invoices.map((invoice) => invoice.kind)).toEqual(["invoice", "replacement"]);
@@ -343,10 +343,10 @@ describe("a replaced invoice", () => {
     expect(refunded).toMatchObject({
       credited: "in_part",
       stillOwed: "27.58",
-      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+      correctives: [expect.stringMatching(/^R\/\d+$/)],
     });
     expect(ids((await list("anyDate=true&credited=true")).rows)).toContain(id);
-    const refundNumber = (refunded.creditNotes as string[])[0]!;
+    const refundNumber = (refunded.correctives as string[])[0]!;
     expect(ids((await list(`anyDate=true&q=${encodeURIComponent(refundNumber)}`)).rows)).toEqual([
       id,
     ]);
@@ -354,7 +354,7 @@ describe("a replaced invoice", () => {
     expect(after.invoices.map((invoice) => invoice.kind)).toEqual([
       "invoice",
       "replacement",
-      "credit_note",
+      "corrective",
     ]);
   });
 
@@ -405,12 +405,12 @@ describe("filters and search", () => {
     expect(found).not.toContain(open.tabId);
   });
 
-  it("finds an invoice by A/12, by its bare number, and by its credit note's number", async () => {
+  it("finds an invoice by A/12, by its bare number, and by its corrective's number", async () => {
     const id = await placedIssuedBill(venue, "Croquettes");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
     const [, number] = (row.invoiceNumber as string).split("/");
-    for (const q of [row.invoiceNumber as string, number!, (row.creditNotes as string[])[0]!]) {
+    for (const q of [row.invoiceNumber as string, number!, (row.correctives as string[])[0]!]) {
       expect(ids((await list(`anyDate=true&q=${encodeURIComponent(q)}`)).rows), q).toContain(id);
     }
   });
@@ -443,7 +443,7 @@ describe("filters and search", () => {
     expect(ids((await list("anyDate=true&q=ortega")).rows)).toEqual([party.tabId]);
   });
 
-  it("filters by who a line is credited to, and by having a credit note", async () => {
+  it("filters by who a line is credited to, and by having a corrective", async () => {
     const id = await placedIssuedBill(venue, "Octopus");
     await credit(venue, id, "2.00", "-2.42");
     expect(ids((await list(`anyDate=true&staff=${venue.operatorId}`)).rows)).toContain(id);
@@ -726,7 +726,7 @@ describe("rows written within one millisecond, read in the order they were writt
     ]);
   });
 
-  it("shows an invoice's credit notes in the order they were issued", async () => {
+  it("shows an invoice's correctives in the order they were issued", async () => {
     const billId = await placedIssuedBill(venue, "Tarta");
     const saleId = await saleOf(billId);
     const id = descendingIds();
@@ -734,7 +734,7 @@ describe("rows written within one millisecond, read in the order they were writt
       const [series] = await tx
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.purpose, "rectificative"));
+        .where(eq(invoiceSeries.purpose, "corrective"));
       for (const invoiceNumber of [900001, 900002, 900003])
         await tx.insert(sales).values({
           id: id(),
@@ -757,7 +757,7 @@ describe("rows written within one millisecond, read in the order they were writt
     const detail = await detailOf(billId);
     expect(
       detail.invoices
-        .filter((invoice) => invoice.kind === "credit_note")
+        .filter((invoice) => invoice.kind === "corrective")
         .map((invoice) => invoice.number.split("/")[1]),
     ).toEqual(["900001", "900002", "900003"]);
   });

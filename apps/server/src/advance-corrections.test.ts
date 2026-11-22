@@ -171,7 +171,7 @@ async function correctionOf(tx: Transaction, saleId: string) {
     origin: venue().cfg.origin,
     operationDescription: "Sale on premises",
     nodeId: venue().cfg.nodeId,
-    seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue().cfg.nodeId, "rectificative")),
+    seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue().cfg.nodeId, "corrective")),
     correctsSaleId: brandSaleId(saleId),
     authz: { sessionId: adminSessionId },
     clock: venue().clock,

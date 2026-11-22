@@ -102,6 +102,104 @@ it("sends the chosen working language in the real Live claim request", async () 
     venue: { staffLanguage: "en", invoiceLocales: ["es-ES"] },
   });
 });
+/** How the claim refuses a configuration import as a new taxpayer under the export's own tax ID
+ * (`freezeConfiguration` in apps/server/src/boot.ts). */
+const sameTaxIdRefusal = () =>
+  Response.json(
+    { error: { code: "setup.request_invalid", params: { field: "taxId" } } },
+    { status: 400 },
+  );
+async function importAsNewTaxpayer(app: SetupApp) {
+  await screen(app, "mode");
+  emit(app, "setup-patch", {
+    patch: { mode: "live", venue, configurationImport: true, newTaxpayer: true },
+  });
+  emit(app, "setup-goto", { screen: "venue" });
+  await screen(app, "venue");
+  emit(app, "setup-advance");
+}
+const claims = (requests: { path: string }[]) => requests.filter((r) => r.path.endsWith("/claim"));
+
+it("sends a venue detail the claim refuses back under the field it names, and Next claims again", async () => {
+  let refusals = 0;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/claim") && refusals++ === 0) return sameTaxIdRefusal();
+    },
+  });
+  await importAsNewTaxpayer(app);
+  await expect.poll(() => claims(requests)).toHaveLength(1);
+  const form = await screen(app, "venue");
+  const input = form.shadowRoot!.querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >("[data-test=taxId]")!;
+  await expect.poll(() => input.hasAttribute("invalid")).toBe(true);
+  expect(input.error).toBe("Check the tax ID. A new business needs its own.");
+  expect(app.shadowRoot!.querySelector("[data-test=screen-first-owner]")).toBeNull();
+  expect(
+    (form.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
+      .disabled,
+  ).toBe(false);
+
+  emit(app, "setup-patch", { patch: { venue: { taxId: "B76365782" } } });
+  emit(app, "setup-advance");
+  await screen(app, "cert");
+  expect(claims(requests)).toHaveLength(2);
+});
+it.each([
+  ["says a setup is claimed", () => Response.json({ claimed: true })],
+  ["cannot be read", () => Promise.reject(new TypeError("network unavailable"))],
+])(
+  "keeps a refused claim on the owner step, asking to reconnect, when the box's status %s",
+  async (_, status: () => Response | Promise<Response>) => {
+    let claimed = false;
+    const { app, requests } = await mount({
+      intercept(path) {
+        if (path.endsWith("/claim")) {
+          claimed = true;
+          return sameTaxIdRefusal();
+        }
+        if (claimed && path.endsWith("/first-setup/status")) return status();
+      },
+    });
+    await importAsNewTaxpayer(app);
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => ownerWords(owner)).toBe(initialOwnerStrings.en.error);
+    expect(ownerWords(owner)).toBe(
+      "Reconnect to check the saved result. Do not repeat activation.",
+    );
+    expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
+    expect(claims(requests)).toHaveLength(1);
+  },
+);
+it("keeps a refused replacement for an abandoned setup on the owner step, asking to reconnect", async () => {
+  let abandoned = false;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/abandon")) {
+        abandoned = true;
+        return Response.json({ state: { ...initial, status: "abandoned", revision: 2 } });
+      }
+      if (path.endsWith("/claim") && abandoned) return sameTaxIdRefusal();
+    },
+  });
+  await liveVenue(app);
+  await screen(app, "cert");
+  emit(app, "setup-goto", { screen: "venue" });
+  const owner = await screen(app, "first-owner");
+  owner.querySelector<HTMLElement>("[data-test=abandon-attempt]")!.click();
+  await expect.poll(() => owner.querySelector("[data-test=replace-attempt]")).not.toBeNull();
+  owner.querySelector<HTMLElement>("[data-test=replace-attempt]")!.click();
+  await screen(app, "admin");
+  emit(app, "setup-patch", { patch: { venue } });
+  emit(app, "setup-goto", { screen: "venue" });
+  await screen(app, "venue");
+  emit(app, "setup-advance");
+  await expect.poll(() => claims(requests)).toHaveLength(2);
+  const refused = await screen(app, "first-owner");
+  await expect.poll(() => ownerWords(refused)).toBe(initialOwnerStrings.en.error);
+  expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
+});
 it.each(["demo", "prepare"])("keeps %s free of custody claims", async (mode) => {
   const { app, requests } = await mount();
   await liveVenue(app, mode);
@@ -426,7 +524,7 @@ it("reads back a completed activation after a lost response and offers no second
         series: [
           { code: "A-0CRHE", purpose: "standard" },
           { code: "FF-0CRHE", purpose: "full" },
-          { code: "R-0CRHE", purpose: "rectificative" },
+          { code: "R-0CRHE", purpose: "corrective" },
         ],
       },
     },
@@ -901,7 +999,7 @@ it("labels the frozen series inputs as bases on the owner-bound review", async (
   const review = await screen(app, "review");
   expect(review.shadowRoot!.textContent).toContain("Invoice series base");
   expect(review.shadowRoot!.textContent).toContain("Full invoice series base");
-  expect(review.shadowRoot!.textContent).toContain("Corrections series base");
+  expect(review.shadowRoot!.textContent).toContain("Corrective series base");
   expect(review.shadowRoot!.querySelector("[data-test=summary-seriesCode]")!.textContent).toBe("A");
 });
 
@@ -1215,7 +1313,7 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       "name",
       "postalCode",
       "province",
-      "rectificativeSeriesCode",
+      "correctiveSeriesCode",
       "seriesCode",
       "staffLanguage",
       "taxId",

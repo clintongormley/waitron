@@ -11,7 +11,7 @@ export const DEFERRED_PAYMENT_EXPORT_WORDS = {
     vat: "VAT (EUR)",
     total: "Total (EUR)",
     correctedBy: "Corrected by",
-    correctionsTotal: "Corrections total (EUR)",
+    correctionsTotal: "Correctives total (EUR)",
     replacedBy: "Replaced by",
   },
   es: {

@@ -63,7 +63,7 @@ function frozen(): FirstSetupFrozen {
       dayCutover: "06:00",
       seriesCode: "A",
       fullSeriesCode: "F",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: { displayName: "Elena", email: "elena@example.test", pinHash, passwordHash: verifier },
     },
   };

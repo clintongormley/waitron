@@ -20,6 +20,7 @@ import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { readOperationAuthority } from "@waitron/module";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -35,11 +36,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
   allocationId: "paper-source-42",
@@ -50,7 +47,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -191,7 +188,7 @@ it("combines real key authentication, configured paper files and the complete ac
     expect(ledger[0]?.result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
       await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),

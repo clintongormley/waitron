@@ -2561,13 +2561,13 @@ describe("TillApi", () => {
   it("splitAfterPrint POSTs to the bill's split-after-print route, with a PIN only when one is given, and answers the new bill", async () => {
     const fetchStub = vi
       .fn()
-      .mockImplementation(async () => jsonResponse({ billId: "wo2", creditNoteNumber: "R/3" }));
+      .mockImplementation(async () => jsonResponse({ billId: "wo2", correctiveNumber: "R/3" }));
     const { signal } = new AbortController();
     const api = new TillApi("", fetchStub);
 
     await expect(api.splitAfterPrint("wo1")).resolves.toEqual({
       billId: "wo2",
-      creditNoteNumber: "R/3",
+      correctiveNumber: "R/3",
     });
     await api.splitAfterPrint("wo1", { personId: "sup-1", pin: "1234" }, { signal });
 

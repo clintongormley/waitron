@@ -23,7 +23,7 @@ const context = {
     taxId: "B12345674",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     name: "Olivo",
     city: "Madrid",
     fiscalTerritory: "ES-common",
@@ -36,7 +36,7 @@ const input = {
     series: [
       { code: "A-0CSQW", purpose: "standard" },
       { code: "FF-0CSQW", purpose: "full" },
-      { code: "R-0CSQW", purpose: "rectificative" },
+      { code: "R-0CSQW", purpose: "corrective" },
     ],
   },
 };

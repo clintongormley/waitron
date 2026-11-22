@@ -116,7 +116,7 @@ operation. Its format is:
   "requiredBases": [
     { "code": "A", "purpose": "standard" },
     { "code": "FF", "purpose": "full" },
-    { "code": "R", "purpose": "rectificative" }
+    { "code": "R", "purpose": "corrective" }
   ],
   "recipientVenueId": "venue-madrid",
   "generationId": "generation-1",
@@ -162,7 +162,7 @@ Your `block.json` contains the frozen scope and complete identity set. For examp
       "series": [
         { "code": "A-P000042", "purpose": "standard" },
         { "code": "FF-P000042", "purpose": "full" },
-        { "code": "R-P000042", "purpose": "rectificative" }
+        { "code": "R-P000042", "purpose": "corrective" }
       ],
       "source": "paper",
       "issuedAt": "2026-10-12T08:00:00.000Z"

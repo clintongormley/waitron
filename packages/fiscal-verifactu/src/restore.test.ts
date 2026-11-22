@@ -37,14 +37,14 @@ const NODE: ProvisionedNode = {
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
-/** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (rectificative). */
+/** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (corrective). */
 async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
   );
   await db.insert(invoiceSeries).values([
     { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
-    { nodeId: TENANT_A.nodeId, code: "RE", purpose: "rectificative", nextNumber: 1 },
+    { nodeId: TENANT_A.nodeId, code: "RE", purpose: "corrective", nextNumber: 1 },
   ]);
   return sif;
 }
@@ -84,7 +84,7 @@ describe("restoreFiscal", () => {
 
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
       { code: "S7", purpose: "standard" },
     ]);
     const outcome = await fixture.transaction(db, "restore", (tx, operation) =>
@@ -113,7 +113,7 @@ describe("restoreFiscal", () => {
     expect(outcome.series).toBeUndefined();
     expect(await activeSeriesWithPurposes()).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RE-P000042", purpose: "rectificative" },
+      { code: "RE-P000042", purpose: "corrective" },
       { code: "S7-P000042", purpose: "standard" },
     ]);
     expect(outcome.report).toContain(`installation ${n}`);
@@ -132,7 +132,7 @@ describe("restoreFiscal", () => {
     const fixture = recoveryFixture(
       [
         { code: "FA", purpose: "standard" },
-        { code: "RE", purpose: "rectificative" },
+        { code: "RE", purpose: "corrective" },
       ],
       "P000043",
     );
@@ -147,7 +147,7 @@ describe("restoreFiscal", () => {
     vi.setSystemTime(new Date("2039-01-01T00:00:00.000Z"));
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ]);
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation));
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
@@ -159,7 +159,7 @@ describe("restoreFiscal", () => {
     await seedLiveNode();
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ]);
     await fixture.transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation));
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
@@ -204,7 +204,7 @@ describe("restoreFiscal", () => {
     await db.execute(sql`update invoice_series set code = ${long} where code = 'FA'`);
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ]);
     const err = await fixture
       .transaction(db, "restore", (tx, operation) => restoreFiscal(tx, NODE, operation))
@@ -266,7 +266,7 @@ describe("restoreFiscal", () => {
     vi.setSystemTime(NOW);
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ]);
     await fixture.transaction(db, "restore", (tx, operation) =>
       FISCAL_RESTORE(tx, NODE, operation),

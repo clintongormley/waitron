@@ -20,14 +20,11 @@ import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
@@ -188,7 +185,7 @@ it("selects and activates the next hour through the unchanged restore hook while
     expect(selected.input.allocation.series).toEqual([
       { code: "A-0CNQR", purpose: "standard" },
       { code: "FF-0CNQR", purpose: "full" },
-      { code: "R-0CNQR", purpose: "rectificative" },
+      { code: "R-0CNQR", purpose: "corrective" },
     ]);
     await restore(f.preparation, { binding, authority, input: selected.input });
   });

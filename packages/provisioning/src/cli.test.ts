@@ -71,7 +71,7 @@ const VENUE_ARGS = [
   "06:00",
   "--series-code",
   "A",
-  "--rectificative-code",
+  "--corrective-series-code",
   "R",
   "--admin-name",
   "Owner",
@@ -395,9 +395,7 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
 
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'setup.request_invalid {"field":"rectificativeSeriesCode"}',
-    );
+    expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"correctiveSeriesCode"}');
     expect(h.applyVenue).not.toHaveBeenCalled();
   });
 
@@ -1011,7 +1009,7 @@ describe("runCli venue", () => {
       "time zone (e.g. Europe/Madrid): ",
       "day cutover (HH:MM): ",
       "series code: ",
-      "rectificative series code: ",
+      "corrective series code: ",
       "admin name: ",
       "admin email: ",
     ]);

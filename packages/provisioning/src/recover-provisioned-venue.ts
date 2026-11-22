@@ -25,7 +25,7 @@ export async function recoverProvisionedVenue(
   const bases = [
     { code: venue.seriesCode, purpose: "standard" },
     { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
-    { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
+    { code: venue.correctiveSeriesCode, purpose: "corrective" },
   ];
   const selection = venueFiscalSelection(availableModules, venue.fiscalTerritory);
   const owners = enabledModules(availableModules, selection.config).filter(

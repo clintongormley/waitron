@@ -1,6 +1,7 @@
 import { canUseDeviceProfile } from "@waitron/identity";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -53,7 +54,7 @@ function request(taxId = "B12345678"): VenueRequest {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
@@ -204,11 +205,7 @@ it.each([undefined, "en", "es"] as const)(
       operatorId: initialAdministratorId,
       identity: "S000001",
       taxpayerNif: "B10000015",
-      bases: [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
-      ],
+      bases: SERIES_BASES,
     }).request("setup");
     const calls: unknown[][] = [];
     const rawInputs: unknown[] = [];
@@ -484,7 +481,7 @@ describe("applyVenue", () => {
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
-    expect(series.rows.map((r) => r.purpose)).toEqual(["full", "rectificative", "standard"]);
+    expect(series.rows.map((r) => r.purpose)).toEqual(["corrective", "full", "standard"]);
 
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
@@ -955,7 +952,7 @@ describe("applyVenue", () => {
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
-      { kind: "create-series", code: "A", purpose: "rectificative" },
+      { kind: "create-series", code: "A", purpose: "corrective" },
     ];
 
     const result = await realApplyVenue(collidingPlan, {

@@ -756,7 +756,7 @@ export const en = {
   "find_page.other": "Other",
   "find_page.sale": "Sale",
   "find_page.full-invoice": "Full invoice",
-  "find_page.correction": "Correction",
+  "find_page.correction": "Corrective",
   "find_page.replacement": "Replacement corrective",
   "find_page.any_zone": "Any zone",
   "find_page.any_staff": "Any staff",
@@ -2060,14 +2060,14 @@ export const en = {
   "cancel_credit.action": "Cancel and credit",
   "cancel_credit.title": "Cancel and credit",
   "cancel_credit.scope":
-    "Invoice {invoice} ({amount}) will be credited in full: a credit note is issued and the bill is cancelled.",
+    "Invoice {invoice} ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
   "cancel_credit.scope_unnumbered":
-    "This bill's invoice ({amount}) will be credited in full: a credit note is issued and the bill is cancelled.",
+    "This bill's invoice ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
   "cancel_credit.reason": "Reason",
   "cancel_credit.reason_invalid": "Say why the bill is cancelled",
   "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
   "cancel_credit.approval_next":
-    "If you cannot issue credit notes yourself, someone who can approves it with their PIN next.",
+    "If you cannot issue corrective invoices yourself, someone who can approves it with their PIN next.",
   "cancel_credit.confirm": "Cancel and credit",
   "cancel_credit.keep": "Keep the bill",
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
@@ -2078,17 +2078,17 @@ export const en = {
   "cancel_credit.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
-    "The person who approved this cannot issue credit notes. Choose someone who can.",
-  "cancel_credit.done": "Credit note {number} issued. The bill is cancelled.",
-  "cancel_credit.done_unnumbered": "A credit note was issued and the bill is cancelled.",
+    "The person who approved this cannot issue corrective invoices. Choose someone who can.",
+  "cancel_credit.done": "Corrective invoice {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A corrective invoice was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
   // Reopen to split: a printed receipt is credited in full and its dishes go onto a new open bill
   "split.action": "Reopen to split",
   "split.title": "Reopen to split",
   "split.scope":
-    "Receipt {invoice} ({amount}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.",
+    "Receipt {invoice} ({amount}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.",
   "split.scope_unnumbered":
-    "This bill's receipt ({amount}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.",
+    "This bill's receipt ({amount}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.",
   "split.confirm": "Reopen to split",
   "split.unserved":
     "Some dishes on this bill are not marked served, so it cannot be split yet. If the guests have had them, choose Mark served: the receipt is then credited and the dishes go onto a new bill.",
@@ -2108,11 +2108,11 @@ export const en = {
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
   "split.done":
-    "Credit note {number} issued. Move each guest's dishes to their own bill, then print each one.",
+    "Corrective invoice {number} issued. Move each guest's dishes to their own bill, then print each one.",
   "split.done_unnumbered":
-    "A credit note was issued. Move each guest's dishes to their own bill, then print each one.",
+    "A corrective invoice was issued. Move each guest's dishes to their own bill, then print each one.",
   "split.credited_elsewhere":
-    "Credit note {number} was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
+    "Corrective invoice {number} was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
   "split.credited_elsewhere_unnumbered":
     "This bill was already credited, perhaps on another device, and no new bill was opened. Nothing more was credited.",
   "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
@@ -3063,7 +3063,7 @@ export const es: Record<StringKey, string> = {
   "find_page.other": "Otro",
   "find_page.sale": "Venta",
   "find_page.full-invoice": "Factura completa",
-  "find_page.correction": "Rectificación",
+  "find_page.correction": "Rectificativa",
   "find_page.replacement": "Rectificativa por sustitución",
   "find_page.any_zone": "Cualquier zona",
   "find_page.any_staff": "Cualquier persona",

@@ -269,7 +269,7 @@ describe("FISCAL_SLOT.venueFields", () => {
       legalName: "Waitron SL",
       seriesCode: "Serie A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "FR",
+      correctiveSeriesCode: "FR",
       operationDescription: "Venta en establecimiento",
     };
     let error: unknown;

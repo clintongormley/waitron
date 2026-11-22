@@ -28,7 +28,7 @@ const primary = { nodeId: TENANT_A.nodeId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
   { code: "a/B_1.2-3", purpose: "standard" },
 ];
 const reserveBinding: OperationBinding = {

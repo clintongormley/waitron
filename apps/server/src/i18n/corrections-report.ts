@@ -5,7 +5,7 @@ export const CORRECTIONS_REPORT_WORDS = {
     nothing: "No corrections",
     directions: { reduction: "Reduction", addition: "Addition" },
     kinds: {
-      correction: "Correction",
+      correction: "Corrective",
       void: "Void",
       date_moved_out: "Date moved out",
       date_moved_in: "Date moved in",

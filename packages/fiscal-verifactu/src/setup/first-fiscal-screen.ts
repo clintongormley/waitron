@@ -34,7 +34,7 @@ type Context = {
     taxId: string;
     seriesCode: string;
     fullSeriesCode?: string;
-    rectificativeSeriesCode: string;
+    correctiveSeriesCode: string;
   };
 };
 type Input = {
@@ -455,7 +455,7 @@ export class FirstFiscalScreen extends LitElement {
                 <dd>${this.imported.allocation.installationIdentity}</dd>
                 <dt>${t.series}</dt>
                 <dd data-test="review-series">
-                  ${this.imported.allocation.series.map((series) => html`<div>${series.code} · ${series.purpose === "standard" ? t.standard : series.purpose === "full" ? t.full : t.rectificative}</div>`)}
+                  ${this.imported.allocation.series.map((series) => html`<div>${series.code} · ${series.purpose === "standard" ? t.standard : series.purpose === "full" ? t.full : t.corrective}</div>`)}
                 </dd>
                 <dt>${t.software}</dt>
                 <dd>${this.request?.softwareId}</dd>

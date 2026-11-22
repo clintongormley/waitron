@@ -8,7 +8,7 @@ import { ALL_MODULES } from "../../src/modules.js";
 export interface TestVenue {
   nodeId: string;
   seriesId: string;
-  rectificativeSeriesId: string;
+  correctiveSeriesId: string;
 }
 
 /**
@@ -34,7 +34,7 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Administrator",
             pinHash: fixturePinHash("5555"),
@@ -49,7 +49,7 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
     return {
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
-      rectificativeSeriesId: venue.seriesIds[2]!,
+      correctiveSeriesId: venue.seriesIds[2]!,
     };
   } finally {
     await store.close();

@@ -29,7 +29,7 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
@@ -331,12 +331,12 @@ describe("planVenue", () => {
     expect(venue).toMatchObject({ dayCutover: stored });
   });
 
-  it("emits distinct standard, full and rectificative series with the requested codes", () => {
+  it("emits distinct standard, full and corrective series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
       { kind: "create-series", code: "FF", purpose: "full" },
-      { kind: "create-series", code: "R", purpose: "rectificative" },
+      { kind: "create-series", code: "R", purpose: "corrective" },
     ]);
   });
 
@@ -349,9 +349,9 @@ describe("planVenue", () => {
 
   it.each([
     { overrides: { fullSeriesCode: "A" }, field: "fullSeriesCode", code: "A" },
-    { overrides: { fullSeriesCode: "R" }, field: "rectificativeSeriesCode", code: "R" },
+    { overrides: { fullSeriesCode: "R" }, field: "correctiveSeriesCode", code: "R" },
     { overrides: { seriesCode: "FF" }, field: "fullSeriesCode", code: "FF" },
-    { overrides: { rectificativeSeriesCode: "FF" }, field: "rectificativeSeriesCode", code: "FF" },
+    { overrides: { correctiveSeriesCode: "FF" }, field: "correctiveSeriesCode", code: "FF" },
   ])("refuses repeated code $code on $field", ({ overrides, field, code }) => {
     try {
       planVenue(request(overrides), MODULES);
@@ -397,9 +397,9 @@ describe("planVenue", () => {
     }
   });
 
-  it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
+  it("REFUSES equal standard and corrective series codes before emitting anything", () => {
     try {
-      planVenue(request({ seriesCode: "A", rectificativeSeriesCode: "A" }), MODULES);
+      planVenue(request({ seriesCode: "A", correctiveSeriesCode: "A" }), MODULES);
       expect.unreachable("should have refused equal series codes");
     } catch (error) {
       expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
@@ -506,7 +506,7 @@ describe("describeVenueAction", () => {
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
       "create full series FF",
-      "create rectificative series R",
+      "create corrective series R",
       "seed module probe: seed the probe",
     ]);
   });

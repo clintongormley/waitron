@@ -136,7 +136,7 @@ async function venueWith(
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Admin",
           pinHash: fixturePinHash("1234"),
@@ -1822,10 +1822,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)
         .where(
-          and(
-            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-            eq(invoiceSeries.purpose, "rectificative"),
-          ),
+          and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
         );
       const session = await loginWithPin(tx, {
         deviceId: venue.deviceId,

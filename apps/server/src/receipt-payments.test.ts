@@ -421,7 +421,7 @@ it("a replacement of a paid ticket owes nothing", async () => {
         operationDescription: "Restaurante",
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
-        seriesId: seriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "rectificative")),
+        seriesId: seriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
         correctsSaleId: brandSaleId(original),
         authz: { sessionId: session.id },
         clock: venue.clock,

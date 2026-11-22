@@ -323,7 +323,7 @@ describe("till-table-order-screen: Cancel and credit", () => {
     status: "placed",
     receiptAvailable: true,
     invoiceNumber: "A/12",
-    creditNotes: [],
+    correctives: [],
   };
 
   it("offers to cancel and credit a bill whose invoice was issued and nothing is paid", async () => {

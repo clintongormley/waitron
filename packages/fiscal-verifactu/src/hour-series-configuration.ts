@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 export function assertHourSeriesConfiguration(bases: readonly { purpose: string }[]): void {
   if (
     bases.length !== 3 ||
-    !["standard", "full", "rectificative"].every(
+    !["standard", "full", "corrective"].every(
       (purpose) => bases.filter((base) => base.purpose === purpose).length === 1,
     )
   )

@@ -65,7 +65,7 @@ it.each([
         const [series] = await tx
           .select({ id: invoiceSeries.id })
           .from(invoiceSeries)
-          .where(eq(invoiceSeries.purpose, "rectificative"));
+          .where(eq(invoiceSeries.purpose, "corrective"));
         const session = await startManagementSession(tx, {
           method: "password",
           personId: venue.adminId,

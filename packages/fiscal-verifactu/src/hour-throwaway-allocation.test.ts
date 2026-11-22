@@ -27,7 +27,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const operator = "administrator";
 const input = () => ({
@@ -80,7 +80,7 @@ it("disposable preparation activates every exact hour base through the unchanged
   expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-0CNNW", purpose: "standard" },
     { code: "FF-0CNNW", purpose: "full" },
-    { code: "R-0CNNW", purpose: "rectificative" },
+    { code: "R-0CNNW", purpose: "corrective" },
     { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   const [sif] = await suite.db.select().from(registroSif);

@@ -145,7 +145,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       hasPayments: true,
       holdsMoney: true,
       invoiceNumber: "A/1",
-      creditNotes: ["R/1"],
+      correctives: ["R/1"],
       amountDue: "17.90",
     }),
   ])("keeps a zero-due bill out of unpaid departure and leaves Pay available", async (zero) => {

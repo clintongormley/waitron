@@ -140,7 +140,7 @@ async function placedOrder(...names: string[]): Promise<string> {
   return id;
 }
 
-/** Records a credit note for the bill's whole issued invoice of one Tarta, so it owes nothing. */
+/** Records a corrective for the bill's whole issued invoice of one Tarta, so it owes nothing. */
 async function creditWholeInvoice(billId: string): Promise<void> {
   const [issued] = venue.db.all<{ id: string }>(
     sql`select id from sales where working_order_id = ${billId}`,
@@ -150,7 +150,7 @@ async function creditWholeInvoice(billId: string): Promise<void> {
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       );
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,

@@ -357,7 +357,7 @@ export async function readBillAdvances(
 
 /**
  * The first advance on the bill `workingOrderId` with a correction still open, which could yet file
- * a credit note on it after the bill's invoice took it off by its filed figures. A correction with
+ * a corrective on it after the bill's invoice took it off by its filed figures. A correction with
  * a refund pending stays open: Close refuses `invoice_correction.refund_pending`.
  */
 export async function advanceWithOpenCorrection(

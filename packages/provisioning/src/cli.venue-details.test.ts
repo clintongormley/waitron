@@ -30,7 +30,7 @@ const fields = {
   "time-zone": "Europe/Madrid",
   "day-cutover": "06:00",
   "series-code": "A",
-  "rectificative-code": "R",
+  "corrective-series-code": "R",
   "admin-name": "Owner",
   "admin-email": "owner@example.test",
 };

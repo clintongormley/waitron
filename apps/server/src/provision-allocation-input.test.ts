@@ -25,6 +25,7 @@ import { AppError } from "@waitron/shared";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -34,11 +35,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const fingerprint = paperCustodianFingerprint(publicKey)!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const request: VenueRequest = {
   country: "ES",
   taxId: "50000000R",
@@ -55,7 +52,7 @@ const request: VenueRequest = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -75,7 +72,7 @@ const candidate = {
   series: [
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ],
 };
 const approval = {
@@ -219,7 +216,7 @@ async function allocatedVenue() {
   ).toEqual([
     { code: "A-S000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000042", purpose: "full", nextNumber: 1 },
-    { code: "R-S000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(
     await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),

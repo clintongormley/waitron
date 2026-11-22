@@ -27,7 +27,7 @@ export interface RecordReplacementInput {
   operationDescription: string;
   /** The node that issues the replacement and whose chain it extends. */
   nodeId: NodeId;
-  /** Must be this node's live `rectificative` series. */
+  /** Must be this node's live `corrective` series. */
   seriesId: SeriesId;
   /** The invoice the replacement takes the place of. */
   correctsSaleId: SaleId;
@@ -39,7 +39,7 @@ export interface RecordReplacementInput {
 }
 
 /**
- * Records a corrective invoice by replacement: a new invoice, numbered from the rectificative
+ * Records a corrective invoice by replacement: a new invoice, numbered from the corrective
  * series, carrying the original's own total, stored VAT split and lines in its place. It takes no
  * amounts from the caller. Its own refusals come before a number is allocated; the fiscal backend's
  * come after it, inside the same transaction. A failed integrity check records an incident and

@@ -19,6 +19,7 @@ import {
   type PaperAllocation,
   type PaperReservationContext,
 } from "./paper-evidence.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TENANT_A.nodeId };
@@ -27,11 +28,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const allocation: PaperAllocation = {
   version: 1,
   allocationId: "allocation-42",
@@ -42,7 +39,7 @@ const allocation: PaperAllocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper",
   issuedAt: "2026-10-12T08:00:00.000Z",

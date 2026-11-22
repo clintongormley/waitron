@@ -58,6 +58,6 @@ your adviser. The workbook lists what was recorded in the period for earlier per
 - **Summary**: base and VAT for each earlier period, VAT rate, and whether it is a reduction or an
   addition.
 - **Corrections**: one line per invoice, kind and VAT rate, with the day it was made, its kind
-  (**Correction**, **Void**, **Date moved out**, **Date moved in** or
+  (**Corrective**, **Void**, **Date moved out**, **Date moved in** or
   **Issued after its sale's period**), its invoice number, the invoice it corrects and the period
   it belongs to.

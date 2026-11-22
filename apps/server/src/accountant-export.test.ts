@@ -626,7 +626,7 @@ describe("accountant period selection", () => {
     });
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const correction = await seedSale(
       suite.db,
@@ -680,7 +680,7 @@ describe("accountant period selection", () => {
     });
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const replacement = await seedSale(
       suite.db,
@@ -724,11 +724,11 @@ describe("accountant period selection", () => {
     await FakeFiscalBackend.install(suite.db);
     const backend = new FakeFiscalBackend(suite.db);
     await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
-    const [full, rectificative] = await suite.db
+    const [full, corrective] = await suite.db
       .insert(invoiceSeries)
       .values([
         { nodeId: venue.nodeId, code: "F", purpose: "full" },
-        { nodeId: venue.nodeId, code: "R", purpose: "rectificative" },
+        { nodeId: venue.nodeId, code: "R", purpose: "corrective" },
       ])
       .returning({ id: invoiceSeries.id });
     const [person] = await seedPersons(suite.db, {
@@ -785,7 +785,7 @@ describe("accountant period selection", () => {
         operationDescription: "Test op",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
-        seriesId: brandSeriesId(rectificative!.id),
+        seriesId: brandSeriesId(corrective!.id),
         correctsSaleId: original,
         authz: {
           sessionId: (
@@ -818,7 +818,7 @@ describe("accountant period selection", () => {
   it("lists a sale with ordinary refunds once, under its own type", async () => {
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const refundSeries = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
     const once = await seedSale(suite.db, venue, {
@@ -904,9 +904,9 @@ describe("accountant period selection", () => {
   it("puts every row in its sale's period, and over both quarters matches the returns and the corrections", async () => {
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
-    const rectificative = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
+    const corrective = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
     const later = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: "2026-04-01T10:00:00.000Z",
@@ -921,7 +921,7 @@ describe("accountant period selection", () => {
       total: "24.20",
       lines: [{ vatRate: "10.00", lineTotal: "22.00" }],
     });
-    const replacement = await seedSale(suite.db, rectificative, {
+    const replacement = await seedSale(suite.db, corrective, {
       invoiceNumber: 1,
       issuedAt: "2026-04-03T10:00:00.000Z",
       total: "24.20",
@@ -936,7 +936,7 @@ describe("accountant period selection", () => {
       total: "36.30",
       lines: [{ vatRate: "10.00", lineTotal: "33.00" }],
     });
-    const undatedReplacement = await seedSale(suite.db, rectificative, {
+    const undatedReplacement = await seedSale(suite.db, corrective, {
       invoiceNumber: 3,
       issuedAt: "2026-04-05T10:00:00.000Z",
       total: "36.30",
@@ -944,7 +944,7 @@ describe("accountant period selection", () => {
       replacesOriginal: true,
       lines: [{ vatRate: "10.00", lineTotal: "33.00" }],
     });
-    const refund = await seedSale(suite.db, rectificative, {
+    const refund = await seedSale(suite.db, corrective, {
       invoiceNumber: 2,
       issuedAt: "2026-04-04T10:00:00.000Z",
       total: "-3.30",

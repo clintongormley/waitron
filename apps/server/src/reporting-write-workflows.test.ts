@@ -57,7 +57,7 @@ async function seedIssuer(): Promise<Issuer> {
   const [ordinary] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
   const [correction] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId, code: "R", purpose: "rectificative" })
+    .values({ nodeId, code: "R", purpose: "corrective" })
     .returning();
   await withTransaction(suite.db, (tx) => backend.registerNode(tx, nodeId));
   return { nodeId, seriesId: seriesId(ordinary!.id), correctionSeriesId: seriesId(correction!.id) };

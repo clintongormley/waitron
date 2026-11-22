@@ -91,7 +91,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
   await suite.db.insert(invoiceSeries).values(
     [
       { code: "A-0CNNW", purpose: "standard" as const },
-      { code: "R-0CNNW", purpose: "rectificative" as const },
+      { code: "R-0CNNW", purpose: "corrective" as const },
       { code: "FF-0CNNW", purpose: "full" as const },
     ].map((series) => ({ ...series, nodeId: node.nodeId })),
   );

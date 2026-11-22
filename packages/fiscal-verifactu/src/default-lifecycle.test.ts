@@ -12,17 +12,14 @@ import { currentSif, registerSif } from "./registro-sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = {
   nodeId: TENANT_A.nodeId,
 };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 
 beforeEach(async () => {
   await seedTenants(suite.db);
@@ -71,7 +68,7 @@ it("the default seed activates exactly the independently supplied identity and p
   ).toEqual([
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
-    { code: "R-S000001", purpose: "rectificative" },
+    { code: "R-S000001", purpose: "corrective" },
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });

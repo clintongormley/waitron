@@ -511,7 +511,7 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
   for (const code of [
     "working_order.not_placed",
     "working_order.reason_required",
-    "series.no_rectificative_for_node",
+    "series.no_corrective_for_node",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
   ]) {

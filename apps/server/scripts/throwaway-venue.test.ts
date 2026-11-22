@@ -28,7 +28,7 @@ function request(identity: { taxId: string; legalName: string }): VenueRequest {
     dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Admin",
       pinHash: "pin-hash",
@@ -67,7 +67,7 @@ describe("applyDevelopmentVenue", () => {
     expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
-      { code: "R-0CNNW", purpose: "rectificative" },
+      { code: "R-0CNNW", purpose: "corrective" },
     ]);
     expect(suite.db.all(sql`select tax_id, legal_name from taxpayer`)).toEqual([
       { tax_id: identity.taxId, legal_name: identity.legalName },

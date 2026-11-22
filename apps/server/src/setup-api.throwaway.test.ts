@@ -102,7 +102,7 @@ function body(mode: Mode): Record<string, unknown> {
       dayCutover: "05:00",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: {
         displayName: "Administrator",
         firstNames: "Anna Mary",
@@ -394,7 +394,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(venueDb.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
-      { code: "R-0CNNW", purpose: "rectificative" },
+      { code: "R-0CNNW", purpose: "corrective" },
     ]);
     expect(venueDb.db.all(sql`select environment from deployment`)).toEqual([{ environment }]);
   }

@@ -79,7 +79,7 @@ export async function applyReplacementInvoiceRequest(
             FISCAL_SLOT.venueFields?.defaults?.operationDescription ??
             "",
           nodeId: generation.nodeId,
-          seriesId: seriesId(await readLiveSeriesIdTx(tx, generation.nodeId, "rectificative")),
+          seriesId: seriesId(await readLiveSeriesIdTx(tx, generation.nodeId, "corrective")),
           correctsSaleId,
           operationDate,
           authz: { managementSessionId: token },

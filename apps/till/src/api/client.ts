@@ -1433,7 +1433,7 @@ export interface CounterWaitingOrder {
   openedAt: string;
   settledAt: string | null;
   collectedAt: string | null;
-  /** What collecting a placed order charges, credit notes included. */
+  /** What collecting a placed order charges, correctives included. */
   total: string;
   counts: OrderStateCounts;
   canHandOver: boolean;
@@ -2391,10 +2391,10 @@ export interface PartyBill {
   receiptLanguage?: string;
   /** The issued invoice's number ("A/1"); absent while no sale is filed. */
   invoiceNumber?: string;
-  /** The numbers of the credit notes correcting the invoice, oldest first; absent while no sale is
+  /** The numbers of the correctives correcting the invoice, oldest first; absent while no sale is
    * filed. */
-  creditNotes?: string[];
-  /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
+  correctives?: string[];
+  /** Its sale's total plus its correctives, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
@@ -4266,7 +4266,7 @@ export class TillApi {
     id: string,
     override?: { personId: string; pin: string },
     options: ReadOptions = {},
-  ): Promise<{ billId: string; creditNoteNumber: string }> {
+  ): Promise<{ billId: string; correctiveNumber: string }> {
     return this.#request(
       `/api/working-orders/${id}/split-after-print`,
       "POST",

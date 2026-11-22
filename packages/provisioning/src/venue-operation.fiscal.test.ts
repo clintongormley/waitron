@@ -19,6 +19,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NODE = "c0000000-0000-4000-8000-000000000001";
@@ -27,11 +28,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const request: VenueRequest = {
   country: "ES",
   taxId: "B12345678",
@@ -48,7 +45,7 @@ const request: VenueRequest = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -68,7 +65,7 @@ const candidate = {
   series: [
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ],
 };
 const approval = {
@@ -193,7 +190,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
     ).toEqual([
       { code: "A-S000042", purpose: "standard" },
       { code: "FF-S000042", purpose: "full" },
-      { code: "R-S000042", purpose: "rectificative" },
+      { code: "R-S000042", purpose: "corrective" },
     ]);
     const [held] = await suite.db.select().from(fiscalAllocations);
     expect(held!.approval.operatorId).toBe(ADMIN);

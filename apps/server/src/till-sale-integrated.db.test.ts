@@ -182,7 +182,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
@@ -372,14 +372,14 @@ async function rawPaymentsFor(
   return rows.map((r) => ({ state: r.state, hasSale: r.has_sale === 1 })); // 0/1 — see `orderState`
 }
 
-/** The venue's rectificative series. */
-function rectificativeSeries(cfg: DeviceRequestConfig): string {
+/** The venue's corrective series. */
+function correctiveSeries(cfg: DeviceRequestConfig): string {
   return suite.db.all<{ id: string }>(sql`
-    select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
+    select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'corrective'
   `)[0]!.id;
 }
 
-/** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
+/** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a corrective through
  *  `recordCorrection`. */
 async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(
@@ -396,7 +396,7 @@ async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<
       operationDescription: "Venta en establecimiento",
       origin: cfg.origin,
       nodeId: cfg.nodeId,
-      seriesId: brandSeriesId(rectificativeSeries(cfg)),
+      seriesId: brandSeriesId(correctiveSeries(cfg)),
       correctsSaleId: brandSaleId(saleId),
       total: "-1.50",
       lines: [

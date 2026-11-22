@@ -375,7 +375,7 @@ export async function fileCorrectionIn(
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
-  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
+  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
   const { saleId: correctiveSaleId } = await recordCorrection(tx, deps.backend, {
     operationDescription: await readSaleOperationDescription(tx, cfg, { kind: "sale", saleId }),
     origin: cfg.origin,

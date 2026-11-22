@@ -22,6 +22,7 @@ import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocati
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -37,11 +38,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
   allocationId: "paper-source-42",
@@ -52,7 +49,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -207,7 +204,7 @@ it("restores through the real key runner, public paper selection and the complet
     expect(retained[0]!.result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(result.seriesId).toBe(
       retained[0]!.result.series.find((row) => row.purpose === "standard")!.id,
@@ -293,7 +290,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
     ).toEqual([
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-      { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
     ]);
     const sifs = await suite.db.select().from(registroSif);
     expect(sifs).toHaveLength(2);

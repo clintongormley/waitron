@@ -78,7 +78,7 @@ describe("reserved-identity accessors", () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: CLOUD_NODE, code: "FA-3", purpose: "standard" },
-        { nodeId: CLOUD_NODE, code: "RF-3", purpose: "rectificative" },
+        { nodeId: CLOUD_NODE, code: "RF-3", purpose: "corrective" },
       ]),
     );
     const rows = await withTransaction(suite.db, (tx) =>
@@ -108,12 +108,12 @@ describe("reserved-identity accessors", () => {
     expect(Number(after.rows[0]!.count)).toBe(Number(before.rows[0]!.count));
   });
 
-  it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
+  it("readStandardSeriesId returns the node's standard series id, not the corrective", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "F-42", purpose: "standard" },
-        { nodeId: node, code: "R-42", purpose: "rectificative" },
+        { nodeId: node, code: "R-42", purpose: "corrective" },
       ]),
     );
     const id = await readStandardSeriesId(suite.db, node);
@@ -167,22 +167,20 @@ describe("reserved-identity accessors", () => {
     );
   });
 
-  it("readLiveSeriesIdTx reads the node's live rectificative series, not the standard", async () => {
+  it("readLiveSeriesIdTx reads the node's live corrective series, not the standard", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "F-7", purpose: "standard" },
-        { nodeId: node, code: "R-7", purpose: "rectificative" },
-        { nodeId: node, code: "R-6", purpose: "rectificative" },
+        { nodeId: node, code: "R-7", purpose: "corrective" },
+        { nodeId: node, code: "R-6", purpose: "corrective" },
       ]),
     );
     await suite.db
       .update(invoiceSeries)
       .set({ retiredAt: new Date() })
       .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "R-6")));
-    const id = await withTransaction(suite.db, (tx) =>
-      readLiveSeriesIdTx(tx, node, "rectificative"),
-    );
+    const id = await withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "corrective"));
     const [row] = await suite.db
       .select({ code: invoiceSeries.code })
       .from(invoiceSeries)
@@ -218,29 +216,29 @@ describe("reserved-identity accessors", () => {
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 
-  it("readLiveSeriesIdTx throws series.no_rectificative_for_node when the node has no live one", async () => {
+  it("readLiveSeriesIdTx throws series.no_corrective_for_node when the node has no live one", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "F-8", purpose: "standard" }]),
     );
     const err = await captureError(() =>
-      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "rectificative")),
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "corrective")),
     );
-    expect(isAppError(err) && err.code).toBe("series.no_rectificative_for_node");
+    expect(isAppError(err) && err.code).toBe("series.no_corrective_for_node");
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 
-  it("readLiveSeriesIdTx is LOUD on two live rectificative series", async () => {
+  it("readLiveSeriesIdTx is LOUD on two live corrective series", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { nodeId: node, code: "R-9", purpose: "rectificative" },
-        { nodeId: node, code: "R-10", purpose: "rectificative" },
+        { nodeId: node, code: "R-9", purpose: "corrective" },
+        { nodeId: node, code: "R-10", purpose: "corrective" },
       ]),
     );
     await expect(
-      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "rectificative")),
-    ).rejects.toThrow(/more than one rectificative series/);
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "corrective")),
+    ).rejects.toThrow(/more than one corrective series/);
   });
 
   it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {
@@ -249,7 +247,7 @@ describe("reserved-identity accessors", () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FA", purpose: "standard" },
-        { nodeId: node, code: "RE", purpose: "rectificative" },
+        { nodeId: node, code: "RE", purpose: "corrective" },
         { nodeId: other, code: "FA", purpose: "standard" },
       ]),
     );
@@ -271,7 +269,7 @@ describe("reserved-identity accessors", () => {
       withTransaction(suite.db, (tx) =>
         insertNodeSeriesTx(tx, node, [
           { code: "FA-7", purpose: "standard" },
-          { code: "FA-7", purpose: "rectificative" },
+          { code: "FA-7", purpose: "corrective" },
         ]),
       ),
     ).rejects.toMatchObject({ code: "series.code_collision", params: { code: "FA-7" } });

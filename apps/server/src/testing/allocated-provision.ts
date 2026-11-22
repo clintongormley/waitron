@@ -19,7 +19,7 @@ export async function initialSetupInput(
     taxId: string;
     seriesCode: string;
     fullSeriesCode?: string;
-    rectificativeSeriesCode: string;
+    correctiveSeriesCode: string;
   },
   environment: "preproduction" | "production" = "preproduction",
 ) {
@@ -37,7 +37,7 @@ export async function initialSetupInput(
     bases: [
       { code: venue.seriesCode, purpose: "standard" },
       { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
-      { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
+      { code: venue.correctiveSeriesCode, purpose: "corrective" },
     ],
   });
   const held = fixture.request("setup");

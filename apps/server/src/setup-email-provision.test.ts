@@ -56,7 +56,7 @@ function body(mode: "live" | "demo" | "prepare" = "live"): Record<string, unknow
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       name: "Sala",
       fiscalTerritory: "ES-common",
       invoiceLocales: ["es-ES"],

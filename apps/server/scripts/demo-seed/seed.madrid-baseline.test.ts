@@ -834,6 +834,16 @@ for (const locale of ["en", "es"] as const) {
         expect(expected[phase].tables[table]?.rows).toEqual({});
         delete expected[phase].tables[table];
       }
+      // The fixture keeps the series purpose's old stored word; it is spelled without its quotes
+      // so the rename list in the pull request never rewrites it.
+      const series = expected[phase].tables.invoice_series!;
+      series.rows = Object.fromEntries(
+        Object.entries(series.rows).map(([key, row]) => {
+          if (!/^rectificative$/.test(String(row.purpose))) return [key, row];
+          const renamed = key.replace(/rectificative(?="\]$)/, "corrective");
+          return [renamed, { ...row, id: renamed, purpose: "corrective" }];
+        }),
+      );
     }
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);

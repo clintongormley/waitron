@@ -37,7 +37,7 @@ export async function readOrderInvoice(
 }
 
 /**
- * Credit the whole of an issued invoice with a corrective invoice in the node's live rectificative
+ * Credit the whole of an issued invoice with a corrective invoice in the node's live corrective
  * series, filed under the request's device, its lines the invoice's with their signs reversed and its VAT
  * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing.
  * `recordCorrection` checks `sale.rectify` against `authz` and counts nothing, so an override in
@@ -52,7 +52,7 @@ export async function creditWholeInvoice(
 ): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
-  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
+  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
   const total = centsToDecimal(-invoice.total);
   // A replaced invoice is credited through its replacement, whose lines repeat the invoice's.
   const target = await correctionTargetFor(tx, invoice.id);

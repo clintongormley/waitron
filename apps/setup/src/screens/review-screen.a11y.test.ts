@@ -18,7 +18,7 @@ const draft: DeepPartial<ProvisionBody> = {
     invoiceLocales: ["es-ES"],
     staffLanguage: "en",
     seriesCode: "FA",
-    rectificativeSeriesCode: "RF",
+    correctiveSeriesCode: "RF",
     admin: {
       firstNames: "Alba",
       lastNames: "Ramos",

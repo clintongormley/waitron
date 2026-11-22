@@ -34,7 +34,7 @@ async function bill(full = false) {
       .values([
         { nodeId: node!.id, code: "FS", purpose: "standard", nextNumber: 7 },
         { nodeId: node!.id, code: "FF", purpose: "full", nextNumber: 11 },
-        { nodeId: node!.id, code: "FR", purpose: "rectificative", nextNumber: 19 },
+        { nodeId: node!.id, code: "FR", purpose: "corrective", nextNumber: 19 },
       ])
       .returning();
     const order = await seedWorkingOrder(tx, {

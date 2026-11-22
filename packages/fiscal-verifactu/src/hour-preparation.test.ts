@@ -26,7 +26,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
@@ -169,7 +169,7 @@ it("builds signer-free activation material only after recording the complete sel
         series: [
           { code: "A-0CNNW", purpose: "standard" },
           { code: "FF-0CNNW", purpose: "full" },
-          { code: "R-0CNNW", purpose: "rectificative" },
+          { code: "R-0CNNW", purpose: "corrective" },
           { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
         ],
       },
@@ -193,7 +193,7 @@ it("activates every exact base through the real prepared seed boundary without a
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-0CNNW", purpose: "standard" },
     { code: "FF-0CNNW", purpose: "full" },
-    { code: "R-0CNNW", purpose: "rectificative" },
+    { code: "R-0CNNW", purpose: "corrective" },
     { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   expect(f.revisions).toHaveLength(2);

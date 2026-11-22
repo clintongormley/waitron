@@ -54,7 +54,7 @@ async function setupVenue(adminPassword: string = OLD_PASSWORD): Promise<{ admin
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),

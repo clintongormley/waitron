@@ -16,11 +16,7 @@ function intent(identity = "0CNNW", issuedAt = "2026-10-16T11:40:00.000Z") {
       targetNodeId: "old-node",
     },
     scope,
-    bases: [
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
-    ],
+    bases: SERIES_BASES,
     contextKey: "context",
     answer: "no",
     identity,
@@ -114,6 +110,7 @@ it.each([
 });
 
 import { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const publicRow = {
   reference: "intent/fiscal-verifactu/retained",
   kind: "intent",

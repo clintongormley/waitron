@@ -88,7 +88,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db
     .insert(invoiceSeries)
     .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });
-  await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "rectificative" });
+  await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "corrective" });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "FF", purpose: "full" });
   await stampDeployment(db, "preproduction");
   await db.insert(registroSif).values({
@@ -184,7 +184,7 @@ async function restoreDepsFor(
     bases: [
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ],
     identity: "P000042",
     recoveryKey: true,

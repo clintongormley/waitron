@@ -34,7 +34,7 @@ export const SPAIN_RECEIPT_LABELS = {
     correctiveInvoice: "Corrective invoice",
     correctsInvoice: "Corrects invoice",
     replacesInvoiceInFull: "Fully replaces invoice",
-    rectificationAmount: "Amount of the rectification",
+    rectificationAmount: "Amount of the correction",
     saleDate: "Date of the sale",
     customer: "Customer",
     unitsColumn: "Units",

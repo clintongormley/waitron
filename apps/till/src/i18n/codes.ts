@@ -401,8 +401,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Say why",
     es: "Indica el motivo",
   },
-  "series.no_rectificative_for_node": {
-    en: "This venue has no credit note series set up. Tell a manager",
+  "series.no_corrective_for_node": {
+    en: "This venue has no corrective invoice series set up. Tell a manager",
     es: "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
   },
   "sale.total_exceeds_simplified_limit": {

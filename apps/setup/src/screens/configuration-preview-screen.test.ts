@@ -24,7 +24,7 @@ const preview: ConfigurationPreview = {
     dayCutover: "06:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
   },
   modules: ["core", "identity"],
   reconnectModules: ["core"],

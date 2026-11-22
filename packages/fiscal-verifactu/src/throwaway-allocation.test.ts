@@ -1,4 +1,5 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
@@ -22,11 +23,7 @@ const TAXPAYER = "B12345674";
 const node = {
   nodeId: brandNodeId("c0000000-0000-4000-8000-000000000008"),
 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 
 function seat(): ThrowawayAllocation {
   return FISCAL_PROVISIONING.throwawayAllocation!;
@@ -100,7 +97,7 @@ describe("the throwaway allocation seat", () => {
       expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
-        { code: "R-0CNNW", purpose: "rectificative" },
+        { code: "R-0CNNW", purpose: "corrective" },
       ]);
     });
 

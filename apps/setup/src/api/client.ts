@@ -61,7 +61,7 @@ export interface VenueDraft {
   taxpayerDomicile: string | null;
   seriesCode: string;
   fullSeriesCode: string;
-  rectificativeSeriesCode: string;
+  correctiveSeriesCode: string;
   admin: AdminDraft;
   name: string;
   fiscalTerritory: string;

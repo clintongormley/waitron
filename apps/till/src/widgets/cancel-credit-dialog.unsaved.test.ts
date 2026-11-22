@@ -188,7 +188,7 @@ it("an accepted credit commits the reason before result refresh and invalidates 
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
-  form.done = { creditNote: "R/3" };
+  form.done = { corrective: "R/3" };
   form.refusal = { code: "network" };
   await form.updateComplete;
   await expect.poll(() => q.open).toBe(false);
@@ -205,7 +205,7 @@ it("a retained result is exempt on reconnect and cannot submit a second credit",
   const { app, form } = await mount();
   await fill(form, "Wrong table");
   const confirm = form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-confirm]")!;
-  form.done = { creditNote: null };
+  form.done = { corrective: null };
   await form.updateComplete;
   form.remove();
   app.shadowRoot!.appendChild(form);

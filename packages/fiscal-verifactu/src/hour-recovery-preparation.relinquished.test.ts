@@ -28,7 +28,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 let wall = NOW;

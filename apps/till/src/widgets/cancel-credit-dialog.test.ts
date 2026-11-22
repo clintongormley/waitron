@@ -51,11 +51,11 @@ function capture<T>(el: TillCancelCreditDialog, type: string): T[] {
 }
 
 describe("till-cancel-credit-dialog: what it will do", () => {
-  it("names the invoice and its amount, and says a credit note is issued and the bill cancelled", async () => {
+  it("names the invoice and its amount, and says a corrective invoice is issued and the bill cancelled", async () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `Invoice A/12 (${money("24.50")}) will be credited in full: a credit note is issued and the bill is cancelled.`,
+      `Invoice A/12 (${money("24.50")}) will be credited in full: a corrective invoice is issued and the bill is cancelled.`,
     );
     expect(text(confirm(el))).toBe(t("cancel_credit.confirm"));
     expect(text(root(el).querySelector("[data-cancel-credit-next]"))).toBe(
@@ -74,7 +74,7 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const el = await mount({ invoiceNumber: null });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `This bill's invoice (${money("24.50")}) will be credited in full: a credit note is issued and the bill is cancelled.`,
+      `This bill's invoice (${money("24.50")}) will be credited in full: a corrective invoice is issued and the bill is cancelled.`,
     );
   });
 
@@ -154,7 +154,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
 
   it.each([
     "working_order.not_placed",
-    "series.no_rectificative_for_node",
+    "series.no_corrective_for_node",
     "device.unauthorized",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
@@ -170,7 +170,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
   it("says each cancel refusal in Spanish too", async () => {
     setLocale("es");
     const own = await mount({ refusal: { code: "bill.payments_received" } });
-    const shared = await mount({ refusal: { code: "series.no_rectificative_for_node" } });
+    const shared = await mount({ refusal: { code: "series.no_corrective_for_node" } });
 
     expect(actions(own).error).toBe(
       "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
@@ -232,12 +232,12 @@ describe("till-cancel-credit-dialog: dismissing", () => {
 });
 
 describe("till-cancel-credit-dialog: done", () => {
-  it("names the credit note issued, offers only Done, and asks for no reason", async () => {
-    const el = await mount({ done: { creditNote: "R/3" } });
+  it("names the corrective invoice issued, offers only Done, and asks for no reason", async () => {
+    const el = await mount({ done: { corrective: "R/3" } });
     const closed = capture(el, "cancel-credit-close");
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Credit note R/3 issued. The bill is cancelled.",
+      "Corrective invoice R/3 issued. The bill is cancelled.",
     );
     expect(reason(el)).toBeNull();
     expect(root(el).querySelector("[data-cancel-credit-confirm]")).toBeNull();
@@ -246,13 +246,13 @@ describe("till-cancel-credit-dialog: done", () => {
   });
 
   it("puts Done in the shared actions row", async () => {
-    const el = await mount({ done: { creditNote: "R/3" } });
+    const el = await mount({ done: { corrective: "R/3" } });
 
     expect(root(el).querySelector("wt-form-actions [data-cancel-credit-finished]")).not.toBeNull();
   });
 
-  it("says the bill is cancelled when the credit note's number could not be read", async () => {
-    const el = await mount({ done: { creditNote: null } });
+  it("says the bill is cancelled when the corrective invoice's number could not be read", async () => {
+    const el = await mount({ done: { corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       t("cancel_credit.done_unnumbered"),
@@ -261,7 +261,7 @@ describe("till-cancel-credit-dialog: done", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es");
-    const el = await mount({ done: { creditNote: "R/3" } });
+    const el = await mount({ done: { corrective: "R/3" } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Factura rectificativa R/3 emitida. La cuenta queda cancelada.",
@@ -295,7 +295,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     const el = await mount({ mode: "split" });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `Receipt A/12 (${money("24.50")}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.`,
+      `Receipt A/12 (${money("24.50")}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.`,
     );
     expect(reason(el)).toBeNull();
     expect(text(confirm(el))).toBe("Reopen to split");
@@ -310,7 +310,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     const el = await mount({ mode: "split", invoiceNumber: null });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `This bill's receipt (${money("24.50")}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.`,
+      `This bill's receipt (${money("24.50")}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.`,
     );
   });
 
@@ -450,22 +450,22 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     expect(actions(el).error).toBe(t("cancel_credit.refused_not_permitted"));
   });
 
-  it("names the credit note and says what to do next", async () => {
-    const el = await mount({ mode: "split", done: { creditNote: "R/3" } });
+  it("names the corrective invoice and says what to do next", async () => {
+    const el = await mount({ mode: "split", done: { corrective: "R/3" } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Credit note R/3 issued. Move each guest's dishes to their own bill, then print each one.",
+      "Corrective invoice R/3 issued. Move each guest's dishes to their own bill, then print each one.",
     );
   });
 
   it("says a bill found already credited opened no new bill", async () => {
-    const el = await mount({ mode: "split", done: { creditNote: "R/3", creditedElsewhere: true } });
+    const el = await mount({ mode: "split", done: { corrective: "R/3", creditedElsewhere: true } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Credit note R/3 was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
+      "Corrective invoice R/3 was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
     );
 
-    el.done = { creditNote: null, creditedElsewhere: true };
+    el.done = { corrective: null, creditedElsewhere: true };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "This bill was already credited, perhaps on another device, and no new bill was opened. Nothing more was credited.",
@@ -515,7 +515,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
       "Parte de esta cuenta ya está pagada, así que no se puede dividir así. Los demás clientes pagan el resto de este ticket con Cobrar.",
     );
 
-    el.done = { creditNote: "R/3", creditedElsewhere: true };
+    el.done = { corrective: "R/3", creditedElsewhere: true };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Ya se había emitido la factura rectificativa R/3 para esta cuenta, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva. No se ha abonado nada más.",

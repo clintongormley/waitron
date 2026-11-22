@@ -40,7 +40,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const time = "2026-10-16T11:00:00.000Z";
 const keys = generateKeyPairSync("ed25519");

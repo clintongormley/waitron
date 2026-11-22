@@ -24,7 +24,7 @@ const venue: ProvisionBody["venue"] = {
   dayCutover: "05:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     firstNames: "Elena",
     lastNames: "García",

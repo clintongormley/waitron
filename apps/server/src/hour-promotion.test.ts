@@ -1,6 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,11 +75,7 @@ const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const joinBinding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "reserve",
@@ -444,7 +441,7 @@ it("retains the selected hour across restart but discards transient comparison a
   expect((await rows()).allocations).toHaveLength(2);
 });
 
-it.each(["standard", "full", "rectificative"])(
+it.each(["standard", "full", "corrective"])(
   "refuses a second %s prefix before dormant admission or hour selection",
   async (purpose) => {
     await suite.db.insert(invoiceSeries).values({

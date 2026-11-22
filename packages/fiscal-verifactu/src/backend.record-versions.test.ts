@@ -243,15 +243,15 @@ it("corrects a replacement by differences, naming the replacement in an R5 'I'",
 });
 
 it("still refuses to correct an R5 by differences", async () => {
-  const creditNoteId = await correctiveOfOriginal("I");
+  const correctiveId = await correctiveOfOriginal("I");
   const sale = await operationSale("credit");
 
   await expect(
     withTransaction(suite.db, (tx) =>
-      backend.recordCorrection(tx, sale, { correctsSaleId: creditNoteId }),
+      backend.recordCorrection(tx, sale, { correctsSaleId: correctiveId }),
     ),
   ).rejects.toMatchObject({
     code: "fiscal.correction_unsupported",
-    params: { saleId: creditNoteId, tipoFactura: "R5" },
+    params: { saleId: correctiveId, tipoFactura: "R5" },
   });
 });

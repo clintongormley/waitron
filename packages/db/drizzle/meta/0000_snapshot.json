@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b494f89d-5336-4b9f-959e-26d497f5dfcf",
+  "id": "8aa452e4-a451-4a7d-a765-98c9c2590ee1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -439,7 +439,7 @@
       "checkConstraints": {
         "invoice_series_purpose_ck": {
           "name": "invoice_series_purpose_ck",
-          "value": "\"invoice_series\".\"purpose\" in ('standard', 'full', 'rectificative')"
+          "value": "\"invoice_series\".\"purpose\" in ('standard', 'full', 'corrective')"
         },
         "invoice_series_next_number_ck": {
           "name": "invoice_series_next_number_ck",

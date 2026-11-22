@@ -63,7 +63,7 @@ const VENUE_ARGS = [
   "06:00",
   "--series-code",
   "A",
-  "--rectificative-code",
+  "--corrective-series-code",
   "R",
   "--admin-name",
   "Owner",

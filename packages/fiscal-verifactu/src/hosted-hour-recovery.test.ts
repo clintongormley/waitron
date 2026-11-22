@@ -62,7 +62,7 @@ function fixture() {
     bases: [
       { code: "a/b_.-", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
     contextKey: "selected-backup/host-key/isolation",
     history: [{ reference: "selected-backup", complete: true, records: [] }],
@@ -222,7 +222,7 @@ it.each(["restore", "promote"])(
             installationIdentity: "0CNNW",
             series: [
               { code: "FF-0CNNW", purpose: "full" },
-              { code: "R-0CNNW", purpose: "rectificative" },
+              { code: "R-0CNNW", purpose: "corrective" },
               { code: "a/b_.--0CNNW", purpose: "standard" },
             ],
           },

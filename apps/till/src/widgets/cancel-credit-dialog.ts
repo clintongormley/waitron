@@ -18,10 +18,10 @@ import { servableDishes, serveListed, unservedDishText } from "./dish-format.js"
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the credit note issued, or null when no number was read.
+/** A cancelled bill: the number of the corrective issued, or null when no number was read.
  * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
 export interface CancelCreditDone {
-  creditNote: string | null;
+  corrective: string | null;
   creditedElsewhere?: boolean;
 }
 
@@ -260,9 +260,9 @@ export class TillCancelCreditDialog extends LitElement {
     const [numbered, unnumbered]: [StringKey, StringKey] = done.creditedElsewhere
       ? ["split.credited_elsewhere", "split.credited_elsewhere_unnumbered"]
       : [TEXT[this.mode].done, TEXT[this.mode].doneUnnumbered];
-    return done.creditNote === null
+    return done.corrective === null
       ? t(unnumbered)
-      : t(numbered).replace("{number}", () => done.creditNote!);
+      : t(numbered).replace("{number}", () => done.corrective!);
   }
 
   #doneBody(done: CancelCreditDone) {

@@ -85,7 +85,7 @@ export function createDemoVenueProvisioner(
           timeZone: fixture.timeZone,
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Administrator",
             pinHash: fixturePinHash(options.adminPin ?? "1234"),
@@ -97,7 +97,7 @@ export function createDemoVenueProvisioner(
       ),
       { db: db(), modules: fixture.modules },
     );
-    // planVenue puts the standard series before the rectificative one.
+    // planVenue puts the standard series before the corrective one.
     return {
       ...venue,
       seriesId: venue.seriesIds[0]!,

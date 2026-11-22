@@ -81,10 +81,7 @@ async function correct(saleId: string) {
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(
-          eq(invoiceSeries.nodeId, t.venue.cfg.nodeId),
-          eq(invoiceSeries.purpose, "rectificative"),
-        ),
+        and(eq(invoiceSeries.nodeId, t.venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       );
     const session = await loginWithPin(tx, {
       deviceId: t.venue.deviceId,

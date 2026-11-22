@@ -21,6 +21,7 @@ import { registroSif } from "./schema/sif.js";
 import { validateInitialPaperCandidates } from "./initial-paper-candidates.js";
 import type { PaperConsumption } from "./paper-protocol.js";
 import type { AllocationContext, FiscalAllocation } from "./allocation-envelope.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const context: InitialSetupContext = {
@@ -37,11 +38,7 @@ const context: InitialSetupContext = {
   taxId: "89890001K",
   environment: "production",
   recipientVenueId: "first-setup:attempt1",
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
-  ],
+  bases: SERIES_BASES,
 };
 const keys = generateKeyPairSync("ed25519");
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -465,7 +462,7 @@ it("the historical paper collector activates independently bound evidence", asyn
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
-    { code: "R-S000001", purpose: "rectificative" },
+    { code: "R-S000001", purpose: "corrective" },
   ]);
   expect((await suite.db.select().from(fiscalAllocations))[0]?.allocation).toEqual(
     f.input.allocation,

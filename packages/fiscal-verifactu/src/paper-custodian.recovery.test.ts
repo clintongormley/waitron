@@ -9,6 +9,7 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const targetNodeId = "c0000000-0000-4000-8000-000000000001";
 const binding = {
@@ -19,11 +20,7 @@ const binding = {
   targetNodeId,
 };
 const operatorId = { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const allocation = {
   version: 1 as const,
   allocationId: "paper-42",
@@ -34,7 +31,7 @@ const allocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-14T08:00:00.000Z",

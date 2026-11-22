@@ -15,7 +15,7 @@ export interface VenueFiscalFields {
   readonly legalName: string;
   readonly seriesCode: string;
   readonly fullSeriesCode: string;
-  readonly rectificativeSeriesCode: string;
+  readonly correctiveSeriesCode: string;
 }
 
 /* The next four constants restate rules `@waitron/verifactu` owns, which exports only the
@@ -48,7 +48,7 @@ export const VENUE_FISCAL_FIELD_PATHS = [
   "legalName",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ] as const;
 
 export type VenueFiscalFieldPath = (typeof VENUE_FISCAL_FIELD_PATHS)[number];
@@ -65,7 +65,7 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
   for (const [field, code] of [
     ["seriesCode", venue.seriesCode],
     ["fullSeriesCode", venue.fullSeriesCode],
-    ["rectificativeSeriesCode", venue.rectificativeSeriesCode],
+    ["correctiveSeriesCode", venue.correctiveSeriesCode],
   ] as const) {
     if (!NUMSERIE_CHARSET.test(code)) refuse(field);
     // The cap is on the BASE, not on what is typed: a cold restore suffixes the installation

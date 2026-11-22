@@ -14,6 +14,7 @@ import * as envelope from "./allocation-envelope.js";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import { deviceId, saleId } from "@waitron/shared";
 import { altaFor } from "./testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -25,11 +26,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const approval = {
   version: 1,
   eventId: binding.eventId,
@@ -111,11 +108,7 @@ it("records a fresh emergency identity outside the backup before activating all 
     ]);
     return activated;
   });
-  expect(result.series.map(({ purpose }) => purpose)).toEqual([
-    "standard",
-    "full",
-    "rectificative",
-  ]);
+  expect(result.series.map(({ purpose }) => purpose)).toEqual(["standard", "full", "corrective"]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   const saved = (await incident()).data;
   const template = altaFor(

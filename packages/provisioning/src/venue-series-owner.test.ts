@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, nodes, taxpayer, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { NodeSeed, ProvisionedNode } from "@waitron/module";
@@ -27,7 +28,7 @@ const request: VenueRequest = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -38,7 +39,7 @@ const request: VenueRequest = {
 const allocated = [
   { id: "c0000000-0000-4000-8000-000000000001", code: "A-S000042", purpose: "standard" },
   { id: "c0000000-0000-4000-8000-000000000002", code: "FF-S000042", purpose: "full" },
-  { id: "c0000000-0000-4000-8000-000000000003", code: "R-S000042", purpose: "rectificative" },
+  { id: "c0000000-0000-4000-8000-000000000003", code: "R-S000042", purpose: "corrective" },
 ];
 type Reference = (typeof allocated)[number];
 type Resolve = (
@@ -48,14 +49,7 @@ type Resolve = (
 ) => Promise<readonly Reference[]>;
 let seeded = false;
 const read: Resolve = async (tx, node, bases) => {
-  if (
-    JSON.stringify(bases) !==
-    JSON.stringify([
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
-    ])
-  )
+  if (JSON.stringify(bases) !== JSON.stringify(SERIES_BASES))
     throw new Error("requested bases differ from this allocation");
   return tx
     .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
@@ -275,7 +269,7 @@ it("refuses duplicated requested purposes even if a module returns a different c
       .where(eq(invoiceSeries.nodeId, node.nodeId)),
   );
   const plan = planVenue(request, [module]).map((action) =>
-    action.kind === "create-series" && action.purpose === "rectificative"
+    action.kind === "create-series" && action.purpose === "corrective"
       ? { ...action, purpose: "standard" as const }
       : action,
   );

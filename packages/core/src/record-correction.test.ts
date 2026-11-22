@@ -29,13 +29,13 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTaxpayer creates
-let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
+let rectSeriesId: SeriesId; // a purpose='corrective' series on the same node
 // `supervisorId` holds `sale.rectify`, so `supervisorSessionId` authorizes every green-path
 // correction; `staffId` holds no `sale.rectify`; `managerId` is the second person whose PIN unlocks
 // an override, and also holds `sale.void`, so `managerSessionId` authorizes the one precondition
@@ -55,7 +55,7 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+  rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
@@ -144,7 +144,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /** A full reversal of the €14.41 sale: negative total and negative delta lines, drawn from the
- * rectificative series. The locale list is inherited from the original, not supplied. */
+ * corrective series. The locale list is inherited from the original, not supplied. */
 function correctionInput(
   correctsSaleId: SaleId,
   overrides: Partial<RecordCorrectionInput> = {},
@@ -320,7 +320,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     const { saleId } = await sell(backend);
     await expect(correct(backend, saleId, { seriesId })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
-      params: { seriesId, expected: "rectificative", actual: "standard" },
+      params: { seriesId, expected: "corrective", actual: "standard" },
     });
   });
 
@@ -355,11 +355,11 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
   });
 
-  it("rejects a rectificative series belonging to another node", async () => {
+  it("rejects a corrective series belonging to another node", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTaxpayer(suite.db);
-    const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
+    const otherRect = await seedCorrectiveSeries(suite.db, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
       params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },
@@ -371,7 +371,7 @@ describe("recordCorrection — numbering", () => {
   it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    // The rectificative series' counter still stands at 1, so the correction draws this number.
+    // The corrective series' counter still stands at 1, so the correction draws this number.
     await seedBareSale(
       suite.db,
       { deviceId, nodeId, seriesId: rectSeriesId },
@@ -466,7 +466,7 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.fiscalBackend).toBe(backend.id);
   });
 
-  it("allocates the corrective number from the rectificative series", async () => {
+  it("allocates the corrective number from the corrective series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
@@ -938,8 +938,8 @@ describe("recordCorrection — a sale may be corrected more than once", () => {
 
 describe("recordCorrection — never below zero", () => {
   /** The fake refuses to correct anything but a sale; the `none` backend (fiscal-none) records a
-   * correction of a credit note, which this stands in for. */
-  class CorrectsCreditNotesBackend extends FakeFiscalBackend {
+   * correction of a corrective, which this stands in for. */
+  class CorrectsCorrectivesBackend extends FakeFiscalBackend {
     override recordCorrection(
       tx: Transaction,
       sale: SaleForFiscalRecord,
@@ -1049,8 +1049,8 @@ describe("recordCorrection — never below zero", () => {
     expect(await countCorrectives(originalId)).toBe(0);
   });
 
-  it("still records a positive correction of a credit note", async () => {
-    const backend = new CorrectsCreditNotesBackend(suite.db);
+  it("still records a positive correction of a corrective", async () => {
+    const backend = new CorrectsCorrectivesBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const { saleId: creditId } = await correct(backend, originalId);
 
@@ -1075,8 +1075,8 @@ describe("recordCorrection — never below zero", () => {
     expect(row?.correctsSaleId).toBe(creditId);
   });
 
-  it("refuses a negative correction of a credit note, which is already below zero", async () => {
-    const backend = new CorrectsCreditNotesBackend(suite.db);
+  it("refuses a negative correction of a corrective, which is already below zero", async () => {
+    const backend = new CorrectsCorrectivesBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const { saleId: creditId } = await correct(backend, originalId);
 

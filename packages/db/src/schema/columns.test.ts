@@ -57,7 +57,7 @@ const probe = table("probe", {
 });
 
 const otherProbe = table("other_probe", {
-  kind: enumText("kind", ["standard", "rectificative"] as const),
+  kind: enumText("kind", ["standard", "corrective"] as const),
 });
 
 const checkedProbe = table(
@@ -335,7 +335,7 @@ describe("enumCheck derives the check constraint from the column's own values", 
   it("lists exactly the values the column was declared with", () => {
     expect(render(enumCheck(probe.kind))).toBe("\"probe\".\"kind\" in ('cash_sale', 'manual')");
     expect(render(enumCheck(otherProbe.kind))).toBe(
-      "\"other_probe\".\"kind\" in ('standard', 'rectificative')",
+      "\"other_probe\".\"kind\" in ('standard', 'corrective')",
     );
   });
 

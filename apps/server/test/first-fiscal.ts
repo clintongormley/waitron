@@ -17,6 +17,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { createFirstSetupOwner } from "../src/first-setup-owner.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const PASSWORD = "SYNTHETIC-owner-password";
 export const MODULE = "fiscal-verifactu";
@@ -37,7 +38,7 @@ export const request = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: { displayName: "Elena", email: "elena@example.test", password: PASSWORD, pin: "4826" },
 };
 export async function firstFiscalFixture(parent: string = tmpdir()) {
@@ -67,11 +68,7 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
           taxId: venue.taxId,
           environment,
           recipientVenueId: sourceId,
-          bases: [
-            { code: "A", purpose: "standard" },
-            { code: "FF", purpose: "full" },
-            { code: "R", purpose: "rectificative" },
-          ],
+          bases: SERIES_BASES,
           binding: {
             module: MODULE,
             action: "setup",

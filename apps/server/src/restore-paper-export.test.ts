@@ -40,7 +40,7 @@ it.each(["archive", "stream"] as const)(
     ).toEqual([
       { code: "A-0CNQT", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNQT", purpose: "full", nextNumber: 1 },
-      { code: "R-0CNQT", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-0CNQT", purpose: "corrective", nextNumber: 1 },
     ]);
     expect(
       rows.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),

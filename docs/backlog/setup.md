@@ -18,7 +18,7 @@ What constrains the next change to the wizard:
   is named `<code>-<installation name>`, and `stripOwnSuffixes`
   (`packages/fiscal-verifactu/src/reserved-series.ts`) removes a trailing `-<name>` that matches a
   recorded installation name, so the defaults are **FS** (simplified invoices), **FF** (full
-  invoices) and **FR** (corrections). Nothing in the dashboard can change or add a series today.
+  invoices) and **FR** (correctives). Nothing in the dashboard can change or add a series today.
 - **A sale's operation description comes from its department.** Save it on the **Details** tab
   of the department's dialog. When the department has none, the installed fiscal contribution's
   default fills it (`apps/server/src/sale-operation-description.ts`).

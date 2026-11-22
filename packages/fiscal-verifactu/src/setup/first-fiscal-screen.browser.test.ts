@@ -25,7 +25,7 @@ const publicRequest = {
   requiredBases: [
     { code: "A", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
   candidates: [{ installationIdentity: "S000001" }],
   candidateDigest: "public-digest",
@@ -86,7 +86,7 @@ async function mount(overrides: Partial<InitialSetupActions> = {}) {
       taxId: "B12345674",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
     },
   };
   el.api = api;
@@ -448,7 +448,7 @@ it("creates the localized module screen through its contribution and discards it
         taxId: "B12345674",
         seriesCode: "A",
         fullSeriesCode: "FF",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
       },
     },
     api: {

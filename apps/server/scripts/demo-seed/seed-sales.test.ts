@@ -129,7 +129,6 @@ function venueFor(v: VenueResult): SeedSalesVenue {
   return {
     operationDescription: "Sale on premises",
     nodeId: v.nodeId,
-    // planVenue emits the standard series first, then the rectificative one.
     seriesId: v.seriesIds[0]!,
   };
 }

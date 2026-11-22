@@ -46,7 +46,7 @@ function request(taxId: string): VenueRequest {
     dayCutover: "06:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Admin",
       email: `${taxId}@example.test`,

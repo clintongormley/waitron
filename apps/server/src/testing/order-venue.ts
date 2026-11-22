@@ -192,7 +192,7 @@ function adminSession(venue: BillVenue, tx: Transaction) {
   return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
-/** A credit note of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
+/** A corrective of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
 export async function credit(
   venue: BillVenue,
   billId: string,
@@ -205,7 +205,7 @@ export async function credit(
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       );
     const session = await adminSession(venue, tx);
     await recordCorrection(tx, venue.backend, {

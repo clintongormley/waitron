@@ -15,14 +15,11 @@ import * as fiscal from "./index.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { fiscalAllocations } from "./schema/allocations.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -126,7 +123,7 @@ it("activates the complete Cloud identity through collected local authority and 
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-C000042", purpose: "standard" },
     { code: "FF-C000042", purpose: "full" },
-    { code: "R-C000042", purpose: "rectificative" },
+    { code: "R-C000042", purpose: "corrective" },
   ]);
   const rows = await suite.db.select().from(fiscalAllocations);
   expect(rows).toHaveLength(1);

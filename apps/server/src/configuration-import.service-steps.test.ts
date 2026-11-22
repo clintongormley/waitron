@@ -57,7 +57,7 @@ it("a configuration import over a venue whose closed party has a completed step 
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",

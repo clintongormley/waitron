@@ -304,7 +304,7 @@ function amendmentsOf(billId: string) {
   );
 }
 
-async function activeRectificative() {
+async function activeCorrective() {
   const [row] = await inTx(venue, (tx) =>
     tx
       .select({ id: invoiceSeries.id, next: invoiceSeries.nextNumber })
@@ -312,7 +312,7 @@ async function activeRectificative() {
       .where(
         and(
           eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-          eq(invoiceSeries.purpose, "rectificative"),
+          eq(invoiceSeries.purpose, "corrective"),
           isNull(invoiceSeries.retiredAt),
         ),
       ),
@@ -396,14 +396,14 @@ function receivePayment(billId: string) {
 const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
-  it("credits the whole invoice in the rectificative series, settles it owing nothing, and abandons the order", async () => {
+  it("credits the whole invoice in the corrective series, settles it owing nothing, and abandons the order", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
     expect(original.total).toBe(300);
     // The requesting device is not the configuration's own, so the two cannot be confused below.
     expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
     expect(original).toMatchObject({ source: "device", deviceId: venue.deviceId });
-    const series = await activeRectificative();
+    const series = await activeCorrective();
 
     const answer = await cancel(id);
 
@@ -466,7 +466,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(settled).toHaveLength(1);
     const outstanding = await inTx(venue, (tx) => listOutstandingSales(tx));
     expect(outstanding.map((sale) => sale.saleId)).not.toContain(original.id);
-    expect(await activeRectificative()).toEqual({ id: series!.id, next: series!.next + 1 });
+    expect(await activeCorrective()).toEqual({ id: series!.id, next: series!.next + 1 });
 
     expect(await statusOf(venue, id)).toBe("abandoned");
     expect(await amendmentsOf(id)).toEqual([
@@ -670,7 +670,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
 
-  it("names, on each credit-note line, the invoice line with the same number that it reverses", async () => {
+  it("names, on each corrective line, the invoice line with the same number that it reverses", async () => {
     const id = await placed([
       { name: "Caña", quantity: "2" },
       {
@@ -798,7 +798,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
-  it("refuses a second cancel, leaving exactly one credit note", async () => {
+  it("refuses a second cancel, leaving exactly one corrective", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     expect((await cancel(id)).status).toBe(200);
     const original = await invoiceOf(id);
@@ -812,9 +812,9 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await creditsOf(original.id)).toHaveLength(1);
   });
 
-  it("refuses when the node has no live rectificative series, writing nothing", async () => {
+  it("refuses when the node has no live corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
-    const retired = await activeRectificative();
+    const retired = await activeCorrective();
     await inTx(venue, (tx) =>
       tx
         .update(invoiceSeries)
@@ -824,20 +824,20 @@ describe("cancelling a placed order whose invoice was issued", () => {
     try {
       await expectRefusedUnwritten(id, cancel(id), {
         status: 409,
-        code: "series.no_rectificative_for_node",
+        code: "series.no_corrective_for_node",
       });
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }
   });
 
-  it("refuses an operator without sale.rectify before looking for a rectificative series, writing nothing", async () => {
+  it("refuses an operator without sale.rectify before looking for a corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
-    const retired = await activeRectificative();
+    const retired = await activeCorrective();
     await inTx(venue, (tx) =>
       tx
         .update(invoiceSeries)
@@ -852,7 +852,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }
@@ -993,11 +993,11 @@ describe("cancelling a placed order whose invoice was issued", () => {
     ).toEqual([]);
   });
 
-  it("fails loudly when the node has two live rectificative series, writing nothing", async () => {
+  it("fails loudly when the node has two live corrective series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const code = `R${randomUUID().slice(0, 8)}`;
     await inTx(venue, (tx) =>
-      insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "rectificative" }]),
+      insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "corrective" }]),
     );
     try {
       const before = fiscalSnapshot();
@@ -1020,7 +1020,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("refuses an invoice already partly credited, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
-    const series = await activeRectificative();
+    const series = await activeCorrective();
     // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
@@ -1063,7 +1063,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("refuses an invoice already credited upwards, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
-    const series = await activeRectificative();
+    const series = await activeCorrective();
     // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
@@ -1202,7 +1202,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
-    const series = await activeRectificative();
+    const series = await activeCorrective();
 
     const answers = await Promise.all([cancel(id), cancel(id)]);
 
@@ -1211,7 +1211,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
       [409, "working_order.not_placed"],
     ]);
     expect(await creditsOf(original.id)).toHaveLength(1);
-    expect(await activeRectificative()).toEqual({ id: series!.id, next: series!.next + 1 });
+    expect(await activeCorrective()).toEqual({ id: series!.id, next: series!.next + 1 });
     expect(await amendmentsOf(id)).toHaveLength(2);
   });
 
@@ -1894,7 +1894,7 @@ describe("cancelling a placed order with no invoice", () => {
   });
 });
 
-describe("a party's bills name the invoice and its credit notes (GET /api/parties/:id/bills)", () => {
+describe("a party's bills name the invoice and its correctives (GET /api/parties/:id/bills)", () => {
   async function billOf(partyId: string, billId: string) {
     const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
     expect(listed.status).toBe(200);
@@ -1931,7 +1931,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
     return party;
   }
 
-  it("names the invoice of a placed bill whose invoice was issued, with no credit notes", async () => {
+  it("names the invoice of a placed bill whose invoice was issued, with no correctives", async () => {
     const party = await invoicedPartyBill();
     const original = await invoiceOf(party.tabId);
 
@@ -1939,10 +1939,10 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill).toMatchObject({ status: "placed", receiptAvailable: true });
     expect(bill.invoiceNumber).toBe(await numberOf(original));
-    expect(bill.creditNotes).toEqual([]);
+    expect(bill.correctives).toEqual([]);
   });
 
-  it("names the credit note a cancel filed against the invoice", async () => {
+  it("names the corrective a cancel filed against the invoice", async () => {
     const party = await invoicedPartyBill();
     const original = await invoiceOf(party.tabId);
     expect((await cancel(party.tabId)).status).toBe(200);
@@ -1953,7 +1953,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill.status).toBe("abandoned");
     expect(bill.invoiceNumber).toBe(await numberOf(original));
-    expect(bill.creditNotes).toEqual([await numberOf(credits[0]!)]);
+    expect(bill.correctives).toEqual([await numberOf(credits[0]!)]);
   });
 
   it("names neither on a placed bill with no invoice", async () => {
@@ -1971,7 +1971,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill).toMatchObject({ status: "placed", receiptAvailable: false });
     expect(bill).not.toHaveProperty("invoiceNumber");
-    expect(bill).not.toHaveProperty("creditNotes");
+    expect(bill).not.toHaveProperty("correctives");
   });
 });
 
@@ -2003,7 +2003,7 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
     return rows.map((row) => row.correctsLineId);
   }
 
-  it("lists it with its invoice, and once cancelled one credit note reverses each invoice line and it leaves the list", async () => {
+  it("lists it with its invoice, and once cancelled one corrective reverses each invoice line and it leaves the list", async () => {
     const id = await placed([
       { name: "Mosto", quantity: "1" },
       { name: "Zumo", quantity: "2" },

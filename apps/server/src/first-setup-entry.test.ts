@@ -323,7 +323,7 @@ async function abandonedConsumedClaim(kind = "consumed-abandoned") {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           email: "elena@example.test",
           displayName: "Elena",

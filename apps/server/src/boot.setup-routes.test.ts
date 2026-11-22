@@ -1244,7 +1244,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
-      { code: "R-0CNNW", purpose: "rectificative" },
+      { code: "R-0CNNW", purpose: "corrective" },
     ]);
     expect(db.all(sql`select environment from deployment`)).toEqual([
       { environment: "preproduction" },
@@ -2825,7 +2825,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
             seriesCode: "B",
             fullSeriesCode: "FB",
-            rectificativeSeriesCode: "RB",
+            correctiveSeriesCode: "RB",
           },
         });
       };

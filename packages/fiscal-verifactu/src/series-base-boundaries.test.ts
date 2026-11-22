@@ -10,11 +10,11 @@ const venue = {
   legalName: "Waitron SL",
   seriesCode: "FS",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "FR",
+  correctiveSeriesCode: "FR",
   operationDescription: "Venta en establecimiento",
 };
 
-it.each(["seriesCode", "fullSeriesCode", "rectificativeSeriesCode"] as const)(
+it.each(["seriesCode", "fullSeriesCode", "correctiveSeriesCode"] as const)(
   "accepts a 21-character %s and refuses 22 before setup",
   (field) => {
     expect(() =>

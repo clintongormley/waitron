@@ -244,7 +244,7 @@ function billsOf(partyId: string) {
   );
 }
 
-/** Everything a split would write: the credit note and its record, and the copied bill and dishes. */
+/** Everything a split would write: the corrective and its record, and the copied bill and dishes. */
 function written() {
   return venue.db.all(sql`
     select
@@ -293,7 +293,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(credits.map((credit) => credit.total)).toEqual([-4800]);
     expect(answer.json).toEqual({
       billId: expect.any(String),
-      creditNoteNumber: `R/${credits[0]!.invoiceNumber}`,
+      correctiveNumber: `R/${credits[0]!.invoiceNumber}`,
     });
     const newBill = answer.json.billId as string;
     expect(await filedSales(venue.db, [credits[0]!.id])).toEqual(
@@ -530,7 +530,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     await expectRefused(id, () => split(id), { status: 409, code: "bill.not_issued" });
   });
 
-  it("refuses a second request, filing one credit note", async () => {
+  it("refuses a second request, filing one corrective", async () => {
     const party = await printed("Tarta");
     expect((await split(party.tabId)).status).toBe(200);
     const before = written();
@@ -566,7 +566,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
-  it("refuses an operator without sale.rectify before looking for a rectificative series", async () => {
+  it("refuses an operator without sale.rectify before looking for a corrective series", async () => {
     const party = await printed("Tarta");
     const [live] = await inTx(venue, (tx) =>
       tx
@@ -575,7 +575,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
         .where(
           and(
             eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-            eq(invoiceSeries.purpose, "rectificative"),
+            eq(invoiceSeries.purpose, "corrective"),
             isNull(invoiceSeries.retiredAt),
           ),
         ),
@@ -591,7 +591,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }

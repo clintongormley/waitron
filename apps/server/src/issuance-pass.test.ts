@@ -129,7 +129,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),

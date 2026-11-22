@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import * as evidence from "./paper-evidence.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const keys = generateKeyPairSync("ed25519");
 const otherKeys = generateKeyPairSync("ed25519");
@@ -21,7 +22,7 @@ const allocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-12T08:00:00.000Z",
@@ -55,7 +56,7 @@ const blockBytes = Buffer.from(
         [
           ["A-P000042", "standard"],
           ["FF-P000042", "full"],
-          ["R-P000042", "rectificative"],
+          ["R-P000042", "corrective"],
         ],
         "paper",
         "2026-10-12T08:00:00.000Z",
@@ -114,11 +115,7 @@ const context = {
   currentRegisterConfirmed: true,
   reservationConfirmed: true,
   currentEntryState: "reserved" as const,
-  requiredBases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
-  ],
+  requiredBases: SERIES_BASES,
 };
 
 function check(
@@ -272,7 +269,7 @@ describe("a paper reservation for a dormant named standby", () => {
     ).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
-  it("requires the complete standard, full and rectificative series", () => {
+  it("requires the complete standard, full and corrective series", () => {
     expect(
       check(undefined, trust, { ...context, requiredBases: context.requiredBases.slice(0, 2) }),
     ).toEqual({ ok: false, reason: "series_mismatch" });

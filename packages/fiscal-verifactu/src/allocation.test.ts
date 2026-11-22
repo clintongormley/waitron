@@ -45,7 +45,7 @@ const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toSt
 const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const approval: RecoveryApproval = {
   version: 1,
@@ -254,7 +254,7 @@ describe("allocation activation with host-issued operator authority", () => {
         installationIdentity: "S000042",
         series: [
           { code: "A-S000042", purpose: "standard" },
-          { code: "R-S000042", purpose: "rectificative" },
+          { code: "R-S000042", purpose: "corrective" },
         ],
       },
       permission,
@@ -635,7 +635,7 @@ describe("atomic allocation activation", () => {
     expect(result.activationEventId).toBe("event-42");
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
       (
@@ -960,7 +960,7 @@ describe("activation over retained fiscal rows", () => {
     ).toEqual([{ ultimo_registro_id: null, ultima_huella: null, secuencia: 13 }]);
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
       { code: "S13-P000042", purpose: "standard" },
     ]);
   });
@@ -1151,7 +1151,7 @@ describe("independent attempts from the same old backup", () => {
         expect(result.activationEventId).toBe(eventId);
         expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
           { code: `A-${draw.identity}`, purpose: "standard" },
-          { code: `R-${draw.identity}`, purpose: "rectificative" },
+          { code: `R-${draw.identity}`, purpose: "corrective" },
         ]);
         expect(
           (await db.execute(sql`select installation_identity from fiscal_allocations`)).rows,

@@ -85,7 +85,7 @@ type TextField =
   | "dayCutover"
   | "seriesCode"
   | "fullSeriesCode"
-  | "rectificativeSeriesCode";
+  | "correctiveSeriesCode";
 
 /**
  * Each postal address's tokens share a section of its own: without one, Chromium filled the street
@@ -109,7 +109,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   dayCutover: "off",
   seriesCode: "off",
   fullSeriesCode: "off",
-  rectificativeSeriesCode: "off",
+  correctiveSeriesCode: "off",
 };
 
 const INPUT_NAME: Readonly<Partial<Record<TextField, string>>> = { name: "venueName" };
@@ -118,8 +118,14 @@ const CODE_FIELDS: ReadonlySet<TextField> = new Set([
   "taxId",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ]);
+
+const SERIES_FIELDS: readonly TextField[] = [
+  "seriesCode",
+  "fullSeriesCode",
+  "correctiveSeriesCode",
+];
 
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold as one field. `taxpayerDomicile`
@@ -162,7 +168,7 @@ const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   "dayCutover",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ]);
 
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
@@ -177,7 +183,7 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "dayCutover",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ];
 
 type HintedField =
@@ -216,7 +222,7 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   dayCutover: "venue.help.day_cutover",
   seriesCode: "venue.help.series_codes",
   fullSeriesCode: "venue.help.series_codes",
-  rectificativeSeriesCode: "venue.help.series_codes",
+  correctiveSeriesCode: "venue.help.series_codes",
 };
 
 const hasHint = (key: TextField): key is HintedField => key in FIELD_HINT;
@@ -238,7 +244,7 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   dayCutover: "venue.field.day_cutover",
   seriesCode: "venue.field.series_code",
   fullSeriesCode: "venue.field.full_series_code",
-  rectificativeSeriesCode: "venue.field.rectificative_series_code",
+  correctiveSeriesCode: "venue.field.corrective_series_code",
 };
 
 function venueAddressParts(values: Record<TextField, string>): RegisteredAddressParts {
@@ -404,8 +410,8 @@ export class SetupVenueScreen extends LitElement {
   /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
   @property({ attribute: false }) refusal?: unknown;
 
-  /** A field path the server refused (the `params.field` of `setup.request_invalid` or
-   * `venue.detail_invalid`), routed back by the shell. */
+  /** A field path a refusal of the venue details names in its `params.field`, routed back by the
+   * shell. */
   @property() invalidField?: string;
 
   @state() private values: Record<TextField, string> = {
@@ -426,7 +432,7 @@ export class SetupVenueScreen extends LitElement {
     dayCutover: "04:00",
     seriesCode: "FS",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "FR",
+    correctiveSeriesCode: "FR",
   };
 
   @state() private invoiceLocales: string[] = ["es-ES"];
@@ -601,7 +607,7 @@ export class SetupVenueScreen extends LitElement {
       dayCutover: venue.dayCutover ?? this.values.dayCutover,
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
-      rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
+      correctiveSeriesCode: venue.correctiveSeriesCode ?? this.values.correctiveSeriesCode,
     };
     this.#demoVenueNameSource =
       this.draft.demoVenueNameSource ?? (this.values.name === "" ? "automatic" : "custom");
@@ -671,7 +677,13 @@ export class SetupVenueScreen extends LitElement {
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     // Editing the field the server refused retires that mark: the new value has not been refused.
-    if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
+    // A repeated series code is mended by changing either of the codes that repeat each other.
+    const repeated: ReadonlySet<string | undefined> = this.#repeatedSeriesCodes();
+    if (
+      this.serverInvalid?.key === key ||
+      (repeated.has(key) && repeated.has(this.serverInvalid?.key))
+    )
+      this.serverInvalid = undefined;
     const value = event.detail.value;
     this.#cancelAddressSearch(SEARCH_FILLS[key]);
     if (key === "name") this.#demoVenueNameSource = "custom";
@@ -885,16 +897,7 @@ export class SetupVenueScreen extends LitElement {
     if (languages.length !== 1 || !receipt?.choices.includes(languages[0]!)) {
       invalid.add("invoiceLocales");
     }
-    for (const [first, second] of [
-      ["seriesCode", "fullSeriesCode"],
-      ["seriesCode", "rectificativeSeriesCode"],
-      ["fullSeriesCode", "rectificativeSeriesCode"],
-    ] as const) {
-      if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
-        invalid.add(first);
-        invalid.add(second);
-      }
-    }
+    for (const key of this.#repeatedSeriesCodes()) invalid.add(key);
     // Last, so it sees every mark on the fields the line is joined from.
     const unreadable = this.#unreadableCity(invalid);
     if (unreadable !== undefined) invalid.add(unreadable);
@@ -938,6 +941,19 @@ export class SetupVenueScreen extends LitElement {
     return this.sameAsVenue ? "city" : "registeredCity";
   }
 
+  #repeatedSeriesCodes(): Set<TextField> {
+    const repeated = new Set<TextField>();
+    for (const [index, first] of SERIES_FIELDS.entries()) {
+      for (const second of SERIES_FIELDS.slice(index + 1)) {
+        if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
+          repeated.add(first);
+          repeated.add(second);
+        }
+      }
+    }
+    return repeated;
+  }
+
   #collectErrors(): Map<FieldKey, string> {
     const errors = new Map<FieldKey, string>();
     for (const key of this.#invalid) errors.set(key, this.#fieldMessage(key));
@@ -946,11 +962,17 @@ export class SetupVenueScreen extends LitElement {
       (this.serverInvalid.line === undefined ||
         this.serverInvalid.line === registeredLine(this.#pack(), this.values, this.sameAsVenue))
     ) {
+      const { key } = this.serverInvalid;
+      const repeated: ReadonlySet<FieldKey> = this.#repeatedSeriesCodes();
       errors.set(
-        this.serverInvalid.key,
-        this.serverInvalid.key === "taxpayerDomicile" && this.sameAsVenue
+        key,
+        key === "taxpayerDomicile" && this.sameAsVenue
           ? t("venue.error.registered_same_refused")
-          : this.serverInvalid.refusal.message,
+          : // A series field's server words are about a code's characters. A repeat the server
+            // refused is still in the form, as that is what was sent, so it gets the form's words.
+            repeated.has(key)
+            ? t("venue.error.series_codes")
+            : this.serverInvalid.refusal.message,
       );
     }
     return errors;
@@ -1012,7 +1034,7 @@ export class SetupVenueScreen extends LitElement {
         dayCutover: this.values.dayCutover,
         seriesCode: this.values.seriesCode,
         fullSeriesCode: this.values.fullSeriesCode,
-        rectificativeSeriesCode: this.values.rectificativeSeriesCode,
+        correctiveSeriesCode: this.values.correctiveSeriesCode,
       },
     };
     dispatchSetupPatch(this, patch);
@@ -1040,7 +1062,7 @@ export class SetupVenueScreen extends LitElement {
       return this.#jurisdiction()?.supported === false
         ? t("venue.error.territory_unsupported")
         : t("venue.error.province");
-    if (key === "seriesCode" || key === "fullSeriesCode" || key === "rectificativeSeriesCode")
+    if (key === "seriesCode" || key === "fullSeriesCode" || key === "correctiveSeriesCode")
       return t("venue.error.series_codes");
     return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
@@ -1329,7 +1351,7 @@ export class SetupVenueScreen extends LitElement {
               <h2>${t("venue.section.invoicing")}</h2>
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
               ${this.#field(t("venue.label.full_series_code"), "fullSeriesCode")}
-              ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
+              ${this.#field(t("venue.label.corrective_series_code"), "correctiveSeriesCode")}`
       }
       <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}

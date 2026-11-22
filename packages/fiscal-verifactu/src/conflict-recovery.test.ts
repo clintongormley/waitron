@@ -34,14 +34,11 @@ import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 import type { RecoveryConflictRef } from "./conflict-types.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 let instant = Date.parse("2026-10-16T11:38:00Z");

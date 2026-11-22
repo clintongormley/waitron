@@ -50,16 +50,16 @@ export async function seedTaxpayer(db: Database): Promise<SeededTaxpayer> {
 }
 
 /**
- * Adds a `rectificative` series to an existing node, as `recordCorrection` requires.
+ * Adds a `corrective` series to an existing node, as `recordCorrection` requires.
  */
-export async function seedRectificativeSeries(
+export async function seedCorrectiveSeries(
   db: Database,
   nodeId: NodeId,
   code = "R",
 ): Promise<SeriesId> {
   const [row] = await db
     .insert(invoiceSeries)
-    .values({ nodeId, code, purpose: "rectificative" })
+    .values({ nodeId, code, purpose: "corrective" })
     .returning({ id: invoiceSeries.id });
   return brandSeriesId(row!.id);
 }

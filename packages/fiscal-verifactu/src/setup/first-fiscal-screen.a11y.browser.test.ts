@@ -30,7 +30,7 @@ for (const theme of ["light", "dark"] as const)
             taxId: "B12345674",
             seriesCode: "A",
             fullSeriesCode: "FF",
-            rectificativeSeriesCode: "R",
+            correctiveSeriesCode: "R",
           },
         };
         const request = {

@@ -600,7 +600,7 @@ function parseVenue(
     dayCutover: asString(v.dayCutover, "dayCutover"),
     seriesCode: asString(v.seriesCode, "seriesCode"),
     fullSeriesCode: asString(v.fullSeriesCode, "fullSeriesCode"),
-    rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
+    correctiveSeriesCode: asString(v.correctiveSeriesCode, "correctiveSeriesCode"),
     admin: {
       ...parseSetupAdmin(v.admin, heldAdmin),
       // The DISPLAY language, not the fiscal `invoiceLocales`. Never null: the till after a
@@ -691,7 +691,7 @@ async function parseProvisionPayload(
     legalName: venue.legalName,
     seriesCode: venue.seriesCode,
     fullSeriesCode: venue.fullSeriesCode ?? "FF",
-    rectificativeSeriesCode: venue.rectificativeSeriesCode,
+    correctiveSeriesCode: venue.correctiveSeriesCode,
   });
   const secret = contribution.provisioningSecret;
   const secretExpected = secret?.required(environment) ?? false;

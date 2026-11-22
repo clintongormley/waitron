@@ -56,7 +56,7 @@ it("round-trips the clock-in capability and still refuses a shared display", asy
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",
@@ -129,7 +129,7 @@ it.each(["request", "artifact"] as const)(
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
       seriesCode: "A",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: {
         displayName: "Owner",
         pinHash: "scrypt$00$00",

@@ -161,8 +161,8 @@ it("collects the standby's current outside input before the promotion transactio
   expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
   expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
+    "corrective",
     "full",
-    "rectificative",
     "standard",
   ]);
 });
@@ -215,7 +215,7 @@ async function mirror(activate: StandbyProvisioning["activate"]) {
 }
 async function activateSeries(tx: Transaction, node: ProvisionedNode) {
   await tx.insert(invoiceSeries).values(
-    ["standard", "full", "rectificative"].map((purpose) => ({
+    ["standard", "full", "corrective"].map((purpose) => ({
       nodeId: node.nodeId,
       code: purpose + "-P000042",
       purpose,
@@ -357,7 +357,7 @@ describe("opaque authenticated standby carriers", () => {
           operatorId: "admin",
         });
         await tx.insert(invoiceSeries).values(
-          ["standard", "full", "rectificative"].map((purpose) => ({
+          ["standard", "full", "corrective"].map((purpose) => ({
             nodeId: node.nodeId,
             code: purpose + "-P000042",
             purpose,

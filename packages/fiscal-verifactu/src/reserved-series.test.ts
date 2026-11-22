@@ -13,13 +13,13 @@ describe("deriveReservedSeriesCodes", () => {
     const derived = deriveReservedSeriesCodes(
       [
         { code: "A", purpose: "standard" },
-        { code: "R", purpose: "rectificative" },
+        { code: "R", purpose: "corrective" },
       ],
       "P000042",
     );
     expect(derived).toEqual([
       { code: "A-P000042", purpose: "standard" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
   });
 
@@ -58,14 +58,14 @@ describe("liveSeriesBases", () => {
       expect(await liveSeriesBases(tx, node)).toEqual([{ code: "FA", purpose: "standard" }]);
 
       await tx.execute(sql`
-        insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'RE', 'rectificative'),
-          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042', 'rectificative'),
-          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042-P000042', 'rectificative')
+        insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'RE', 'corrective'),
+          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042', 'corrective'),
+          (${newId()}, ${node.nodeId}, 'FA-P000042-P000042-P000042', 'corrective')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
-        { code: "FA-P000042-P000042", purpose: "rectificative" },
-        { code: "RE", purpose: "rectificative" },
+        { code: "FA-P000042-P000042", purpose: "corrective" },
+        { code: "RE", purpose: "corrective" },
       ]);
     });
   });
@@ -74,7 +74,7 @@ describe("liveSeriesBases", () => {
 describe("liveSeriesBases across purposes", () => {
   const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
-  it("keeps FA standard and FA-S000001 rectificative distinct when S000001 is registered", async () => {
+  it("keeps FA standard and FA-S000001 corrective distinct when S000001 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {
       const node = { nodeId: TENANT_A.nodeId };
       const sif = await registerSif(tx, {
@@ -86,11 +86,11 @@ describe("liveSeriesBases across purposes", () => {
       expect(sif.numeroInstalacion).toBe("S000001");
       await tx.execute(sql`
           insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'FA', 'standard'),
-            (${newId()}, ${node.nodeId}, 'FA-S000001', 'rectificative')
+            (${newId()}, ${node.nodeId}, 'FA-S000001', 'corrective')
         `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
-        { code: "FA-S000001", purpose: "rectificative" },
+        { code: "FA-S000001", purpose: "corrective" },
       ]);
     });
   });

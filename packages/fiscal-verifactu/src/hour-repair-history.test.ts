@@ -3,6 +3,7 @@ import { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
 import { hourSetupInput } from "./hour-preparation.js";
 import { projectHourHistory } from "./hour-history.js";
 import type { InitialSetupContext } from "@waitron/module";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" } as const;
 const row = {
@@ -65,11 +66,7 @@ function setup() {
   const selected = {
     binding,
     scope,
-    bases: [
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
-    ],
+    bases: SERIES_BASES,
     identity: "0CNPH",
     issuedAt: "2026-10-16T12:01:00.000Z",
   };

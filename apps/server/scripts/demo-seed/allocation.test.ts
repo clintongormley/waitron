@@ -28,7 +28,7 @@ function request(changes: Partial<VenueRequest> = {}): VenueRequest {
     dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FA",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Demo",
       pinHash: "demo-hash",
@@ -61,7 +61,7 @@ describe("developer allocation boundary", () => {
       expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FA-0CNNW", purpose: "full" },
-        { code: "R-0CNNW", purpose: "rectificative" },
+        { code: "R-0CNNW", purpose: "corrective" },
       ]);
       expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
         { numero_instalacion: "0CNNW", node_id: venue.nodeId },

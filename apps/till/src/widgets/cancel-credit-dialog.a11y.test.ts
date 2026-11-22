@@ -19,14 +19,14 @@ const states: [string, State][] = [
   [
     "refused",
     {
-      refusal: { code: "series.no_rectificative_for_node" },
+      refusal: { code: "series.no_corrective_for_node" },
       busy: false,
       pressed: false,
       done: null,
     },
   ],
   ["sending", { refusal: null, busy: true, pressed: false, done: null }],
-  ["done", { refusal: null, busy: false, pressed: false, done: { creditNote: "R/3" } }],
+  ["done", { refusal: null, busy: false, pressed: false, done: { corrective: "R/3" } }],
 ];
 
 describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s theme)", (theme) => {

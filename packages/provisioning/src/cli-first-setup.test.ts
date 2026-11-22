@@ -99,7 +99,7 @@ async function fixture(answer = "yes") {
     "A",
     "--full-series-code",
     "FF",
-    "--rectificative-code",
+    "--corrective-series-code",
     "R",
     "--admin-name",
     request.admin.displayName,

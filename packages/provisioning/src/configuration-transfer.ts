@@ -85,7 +85,7 @@ export interface PreparedVenue {
   dayCutover: string;
   seriesCode: string;
   fullSeriesCode: string;
-  rectificativeSeriesCode: string;
+  correctiveSeriesCode: string;
 }
 
 export async function buildConfigurationBundle(
@@ -105,14 +105,14 @@ export async function buildConfigurationBundle(
     taxpayerDomicile: string | null;
     seriesCode: string | null;
     fullSeriesCode: string | null;
-    rectificativeSeriesCode: string | null;
+    correctiveSeriesCode: string | null;
   }>(sql`
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
       t.taxpayer_domicile as "taxpayerDomicile",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
-      max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
+      max(s.code) filter (where s.purpose = 'corrective') as "correctiveSeriesCode"
     from taxpayer t
     join nodes n on n.id = ${source.nodeId}
     join invoice_series s on s.node_id = n.id and s.retired_at is null
@@ -123,7 +123,7 @@ export async function buildConfigurationBundle(
     row === undefined ||
     row.seriesCode === null ||
     row.fullSeriesCode === null ||
-    row.rectificativeSeriesCode === null
+    row.correctiveSeriesCode === null
   ) {
     throw new AppError("setup.request_invalid", { field: "venue" });
   }
@@ -134,7 +134,7 @@ export async function buildConfigurationBundle(
     taxpayerDomicile,
     seriesCode,
     fullSeriesCode,
-    rectificativeSeriesCode,
+    correctiveSeriesCode,
   } = row;
   const fields = await readVenue(db);
   const { doc } = await readVenueSettings(db);
@@ -156,7 +156,7 @@ export async function buildConfigurationBundle(
       dayCutover: `${cutoverForBusinessDay(clock, businessDay)}:00`,
       seriesCode,
       fullSeriesCode,
-      rectificativeSeriesCode,
+      correctiveSeriesCode,
     },
     privacyContact: (await readPrivacyContact(db))!,
     contentLanguages:
@@ -600,7 +600,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "legalName",
     "seriesCode",
     "fullSeriesCode",
-    "rectificativeSeriesCode",
+    "correctiveSeriesCode",
     "name",
     "fiscalTerritory",
     "dayCutover",

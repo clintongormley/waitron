@@ -129,7 +129,7 @@ it.each(["production", "preproduction"] as const)(
           series: [
             { code: "A-0CNNY", purpose: "standard" },
             { code: "FF-0CNNY", purpose: "full" },
-            { code: "R-0CNNY", purpose: "rectificative" },
+            { code: "R-0CNNY", purpose: "corrective" },
           ],
         },
       },

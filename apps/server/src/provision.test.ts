@@ -68,7 +68,7 @@ function venueRequest(taxId: string): VenueRequest {
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Administrator",
       pinHash: fixturePinHash("1234"),
@@ -805,7 +805,7 @@ describe("recoverProvisionedVenue — refusals", () => {
     await expect(
       recoverProvisionedVenue(db, {
         ...request,
-        venue: { ...request.venue, rectificativeSeriesCode: "S" },
+        venue: { ...request.venue, correctiveSeriesCode: "S" },
       }),
     ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   });

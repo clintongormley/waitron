@@ -21,7 +21,7 @@ const ROW: OrderRowDto = {
   saleId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   invoiceNumber: "A/12",
   invoiceType: "F2",
-  creditNotes: ["R/2"],
+  correctives: ["R/2"],
   status: "left_without_paying",
   credited: "in_part",
   total: "30.00",
@@ -176,7 +176,7 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("€15.00");
   });
 
-  it("places each credit note below its invoice number", async () => {
+  it("places each corrective below its invoice number", async () => {
     const { el } = await loaded();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;

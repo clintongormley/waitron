@@ -584,7 +584,7 @@ describe("selected-hour admission before archive placement", () => {
           series: [
             { code: "A-0CNSP", purpose: "standard" },
             { code: "FF-0CNSP", purpose: "full" },
-            { code: "R-0CNSP", purpose: "rectificative" },
+            { code: "R-0CNSP", purpose: "corrective" },
           ],
         },
       },

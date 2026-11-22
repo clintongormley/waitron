@@ -37,7 +37,7 @@ import "./errors.js";
 
 export interface SplitAfterPrint {
   billId: string;
-  creditNoteNumber: string;
+  correctiveNumber: string;
 }
 
 /**
@@ -61,7 +61,7 @@ export async function splitAfterPrint(
       await refusePlacedOrderMoney(tx, id);
       await refuseUnservedDishes(tx, id);
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      const creditNoteId = await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+      const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, authz);
       await abandonPlacedOrder(tx, cfg, id);
       const opened = await openSplitBill(tx, cfg, id, partyId);
       await bumpPartyRevision(tx, partyId);
@@ -73,7 +73,7 @@ export async function splitAfterPrint(
         operator.personId,
         `Bill split after printing to bill ${opened.billNumber}`,
       );
-      return { billId: opened.billId, creditNoteNumber: await readInvoiceNumber(tx, creditNoteId) };
+      return { billId: opened.billId, correctiveNumber: await readInvoiceNumber(tx, correctiveId) };
     }),
   );
 }

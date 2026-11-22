@@ -27,7 +27,7 @@ const context = {
     taxId: "B12345674",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     name: "Olivo",
     city: "Madrid",
     fiscalTerritory: "ES-common",
@@ -44,7 +44,7 @@ const selected = {
       series: [
         { code: "A-0CSQW", purpose: "standard" },
         { code: "FF-0CSQW", purpose: "full" },
-        { code: "R-0CSQW", purpose: "rectificative" },
+        { code: "R-0CSQW", purpose: "corrective" },
       ],
     },
   },
@@ -1113,7 +1113,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(deliveries).toEqual([
     {
       stageId: "stage",
-      inputDigest: "e799c91f661c00f8cf2ba285b34aaa1be7c6d4c5c8a9307e9614d920621d9253",
+      inputDigest: "dbb78bd723502a8dddb18cf3d1548488f409447a2eb5e20f3505fea6ac6bd531",
       bindingDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       documentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       statement: {
@@ -1741,7 +1741,7 @@ it.each([
     "en",
     "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
-    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"],
+    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"],
   ],
   [
     "es",

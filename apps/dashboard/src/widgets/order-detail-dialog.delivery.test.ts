@@ -68,7 +68,7 @@ const f1 = (
     saleId: "sale-1",
     invoiceNumber: "A/12",
     invoiceType: "F1",
-    creditNotes: [],
+    correctives: [],
     status: "paid",
     credited: null,
     total: "30.00",

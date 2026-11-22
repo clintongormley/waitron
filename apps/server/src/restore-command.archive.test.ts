@@ -132,9 +132,7 @@ beforeAll(async () => {
       purpose: "standard",
       nextNumber: 5,
     });
-    await tx
-      .insert(invoiceSeries)
-      .values({ nodeId: ids.node, code: "RE", purpose: "rectificative" });
+    await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "RE", purpose: "corrective" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FF", purpose: "full" });
     await tx.insert(registroSif).values({
       id: ids.sif,
@@ -398,7 +396,7 @@ async function run(
     bases: [
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ],
   });
   const held = allocation.request("restore");

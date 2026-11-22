@@ -69,7 +69,7 @@ function input(clock: TrustedClock, overrides: Partial<RecordSaleInput> = {}): R
     ...overrides,
   };
 }
-async function addSeries(purpose: "full" | "rectificative") {
+async function addSeries(purpose: "full" | "corrective") {
   const [s] = await v.db
     .insert(invoiceSeries)
     .values({ nodeId: v.cfg.nodeId, code: purpose === "full" ? "FULL" : "CREDIT", purpose })
@@ -183,7 +183,7 @@ describe("core-only callers prepare the saved writing zone", () => {
   it("dates generic R5 now and retains the old offset-zero original identity", async () => {
     const old = await original();
     const before = records(old.saleId);
-    const credit = await addSeries("rectificative");
+    const credit = await addSeries("corrective");
     const issued = await withTransaction(v.db, async (tx) =>
       recordCorrection(tx, v.backend, {
         operationDescription: "Restaurante",
@@ -302,7 +302,7 @@ describe("core-only callers prepare the saved writing zone", () => {
       const old = await original();
       const selected =
         capability === "R5"
-          ? await addSeries("rectificative")
+          ? await addSeries("corrective")
           : capability === "F3"
             ? await addSeries("full")
             : v.seriesId;

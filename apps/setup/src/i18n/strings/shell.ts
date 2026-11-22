@@ -70,8 +70,6 @@ export const shellEn = {
 
   "shell.venue_error.territory_country_mismatch": "The country must match the fiscal territory.",
   "shell.venue_error.invalid_locales": "Choose the receipt language.",
-  "shell.venue_error.duplicate_series_code":
-    "The series code and rectificative series code must differ.",
   "shell.venue_error.regime_not_implemented": "That fiscal territory isn't supported yet.",
   "shell.venue_error.other":
     "The venue details were rejected — please review and correct them. ({code})",
@@ -293,8 +291,6 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.venue_error.territory_country_mismatch":
     "El país debe coincidir con el territorio fiscal.",
   "shell.venue_error.invalid_locales": "Elige el idioma del recibo.",
-  "shell.venue_error.duplicate_series_code":
-    "El código de serie y el de la serie rectificativa deben ser distintos.",
   "shell.venue_error.regime_not_implemented": "Ese territorio fiscal aún no está disponible.",
   "shell.venue_error.other":
     "Se han rechazado los datos del local: revísalos y corrígelos. ({code})",

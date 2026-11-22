@@ -31,7 +31,7 @@ const row: OrderRowDto = {
   saleId: "sale-1",
   invoiceNumber: "A/12",
   invoiceType: "F2",
-  creditNotes: [],
+  correctives: [],
   status: "paid",
   credited: null,
   total: "30.00",

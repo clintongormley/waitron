@@ -33,7 +33,7 @@ const venue: VenueRequest = {
   dayCutover: "06:00",
   seriesCode: "F",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: { displayName: "Admin", email: "admin@example.test", pinHash: "pin", passwordHash: "pw" },
 };
 

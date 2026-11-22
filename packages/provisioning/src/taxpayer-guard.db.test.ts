@@ -27,7 +27,7 @@ function request(): VenueRequest {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",

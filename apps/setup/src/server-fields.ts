@@ -10,7 +10,7 @@ export type ServerFieldKey =
   | "taxpayerDomicile"
   | "seriesCode"
   | "fullSeriesCode"
-  | "rectificativeSeriesCode"
+  | "correctiveSeriesCode"
   | "staffLanguage"
   | "dayCutover";
 
@@ -39,8 +39,8 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
       return t("server_fields.series_code");
     },
   },
-  rectificativeSeriesCode: {
-    key: "rectificativeSeriesCode",
+  correctiveSeriesCode: {
+    key: "correctiveSeriesCode",
     get message() {
       return t("server_fields.series_code");
     },

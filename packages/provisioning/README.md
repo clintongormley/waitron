@@ -30,7 +30,7 @@ separate retained preproduction sample database.
 | `keyring` | nothing at all — no venue directory, no files       | once per deployment |
 | `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
-`venue` creates the taxpayer row, the venue, a node and its standard, full and rectificative
+`venue` creates the taxpayer row, the venue, a node and its standard, full and corrective
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
@@ -47,7 +47,7 @@ usage: waitron-provision <command> [options]
            [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
-           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
+           [--corrective-series-code <code>] [--admin-name <name>] [--admin-email <email>]
            [--admin-first-names <names>] [--admin-last-names <names>]
            [--recovery-pdf <absolute external path of a new file>] [--yes]
 ```
@@ -72,7 +72,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`taxpayer` holds exactly one), an
-**admin person**, the venue, a node, and standard, full and rectificative invoice series, and
+**admin person**, the venue, a node, and standard, full and corrective invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
@@ -193,7 +193,7 @@ not the venue.
 (common-territory Spain, Veri\*Factu with IVA) or `GB-vat`, which selects `fiscal-none` and files
 nothing; any other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also
 refuses a `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes
-among the standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
+among the standard, full and corrective series (`provisioning.duplicate_series_code`) before the directory is opened.
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
@@ -270,7 +270,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                         | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
 | `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give one of the territories named above, such as `ES-common`.                                                                                                                                                                        |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
-| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--rectificative-code` are the same                            | Give each invoice purpose a different code.                                                                                                                                                                                          |
+| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--corrective-series-code` are the same                        | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
 several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved

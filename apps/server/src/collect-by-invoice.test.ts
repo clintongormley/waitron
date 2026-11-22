@@ -209,7 +209,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
 });
 
 describe("collecting an invoice that carries a corrective invoice", () => {
-  // Tarta's 18.00 invoice (21% VAT), corrected by default by a credit note of -2.00 base (-2.42):
+  // Tarta's 18.00 invoice (21% VAT), corrected by default by a corrective of -2.00 base (-2.42):
   // the customer owes 15.58.
   async function correctedCake(
     credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
@@ -229,10 +229,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)
         .where(
-          and(
-            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-            eq(invoiceSeries.purpose, "rectificative"),
-          ),
+          and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
         );
       const session = await loginWithPin(tx, {
         deviceId: venue.deviceId,
@@ -424,7 +421,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     return row!.collectedAt;
   }
 
-  // Tarta's 18.00 is a 14.88 base at 21%: a credit note of that base reverses the whole invoice.
+  // Tarta's 18.00 is a 14.88 base at 21%: a corrective of that base reverses the whole invoice.
   const wholeInvoice = { base: "14.88", total: "-18.00" };
 
   it("opens the cash drawer when a corrected bill is collected in cash", async () => {
@@ -523,10 +520,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)
         .where(
-          and(
-            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-            eq(invoiceSeries.purpose, "rectificative"),
-          ),
+          and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
         );
       const now = venue.clock.now();
       // No fiscal record is written for this row: it bypasses recordCorrection on purpose.

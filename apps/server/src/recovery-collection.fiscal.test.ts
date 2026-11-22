@@ -33,7 +33,7 @@ beforeEach(async () => {
   await suite.db.insert(invoiceSeries).values([
     { nodeId: node.nodeId, code: "A", purpose: "standard" },
     { nodeId: node.nodeId, code: "FF", purpose: "full" },
-    { nodeId: node.nodeId, code: "R", purpose: "rectificative" },
+    { nodeId: node.nodeId, code: "R", purpose: "corrective" },
   ]);
   secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
 });
@@ -53,7 +53,7 @@ it("authenticates the real node key, collects outside the write lock and activat
       series: [
         { code: `A-${draw.identity}`, purpose: "standard" },
         { code: `FF-${draw.identity}`, purpose: "full" },
-        { code: `R-${draw.identity}`, purpose: "rectificative" },
+        { code: `R-${draw.identity}`, purpose: "corrective" },
       ],
       reservationEvidence: { checksum: draw.checksum },
     },
@@ -116,7 +116,7 @@ it("authenticates the real node key, collects outside the write lock and activat
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: `A-${draw.identity}`, purpose: "standard" },
     { code: `FF-${draw.identity}`, purpose: "full" },
-    { code: `R-${draw.identity}`, purpose: "rectificative" },
+    { code: `R-${draw.identity}`, purpose: "corrective" },
   ]);
   expect(await suite.db.select().from(registroSif)).toHaveLength(1);
   const ledger = await suite.db.select().from(fiscalAllocations);

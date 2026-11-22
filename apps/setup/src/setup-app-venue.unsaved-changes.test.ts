@@ -21,7 +21,7 @@ const initialVenue = {
   taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid, Madrid",
   seriesCode: "FA",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "RF",
+  correctiveSeriesCode: "RF",
   name: "Calle Mayor",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],
@@ -231,7 +231,7 @@ describe("setup venue unsaved changes", () => {
     ["dayCutover", "07:00"],
     ["seriesCode", "FB"],
     ["fullSeriesCode", "FC"],
-    ["rectificativeSeriesCode", "RD"],
+    ["correctiveSeriesCode", "RD"],
   ])("Back protects the authored %s until Discard", async (key, value) => {
     const { el, venue, api } = await mount();
     await edit(venue, key, value);

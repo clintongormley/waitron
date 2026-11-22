@@ -53,7 +53,7 @@ export interface RecordCorrectionInput {
    * asesor before a real cross-node caller is wired.
    */
   nodeId: NodeId;
-  /** Must name a `rectificative` series (`sale.series_wrong_purpose`); none is provisioned here. */
+  /** Must name a `corrective` series (`sale.series_wrong_purpose`); none is provisioned here. */
   seriesId: SeriesId;
   /** The earlier sale being corrected; a replaced sale is corrected through its replacement
    * (`correctionTargetFor`), whose lines `correctsLineId` then names. */
@@ -91,7 +91,7 @@ export interface RecordCorrectionInput {
 }
 
 /**
- * Records a corrective invoice (a credit note) for a prior sale: a new record with its own number
+ * Records a corrective invoice for a prior sale: a new record with its own number
  * that points at the invoice it corrects. It settles nothing; a refund is a separate payments
  * action.
  *

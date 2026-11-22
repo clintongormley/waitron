@@ -1078,7 +1078,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 Left open by A1382 (`device.forbidden_action`), #3605 (eight `codes.ts` refusals) and #3604 (the
 till's own sentences and notice hints). What is left is fiscal and invoice wording. By code:
 
-- `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_rectificative_for_node`,
+- `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_corrective_for_node`,
   `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
   `sale.correction_unsupported`, `department.operation_description_required`,

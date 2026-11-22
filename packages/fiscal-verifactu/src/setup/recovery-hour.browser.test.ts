@@ -49,7 +49,7 @@ const selected = {
       series: [
         { code: "A-0CSQW", purpose: "standard" },
         { code: "FF-0CSQW", purpose: "full" },
-        { code: "R-0CSQW", purpose: "rectificative" },
+        { code: "R-0CSQW", purpose: "corrective" },
       ],
     },
   },
@@ -1806,7 +1806,7 @@ it("a handover start lists each new series with what it is for, and hands over n
     expect(seriesRows(el)).toEqual([
       "A-0CSQW — Standard",
       "FF-0CSQW — Full invoice",
-      "R-0CSQW — Correction",
+      "R-0CSQW — Corrective",
     ]),
   );
   const next = button(el, "continue") as HTMLElement & { variant: string; disabled: boolean };
@@ -1912,7 +1912,7 @@ it("a restore lists each new series with what it is for, in English and Spanish,
     expect(seriesRows(el)).toEqual([
       "A-0CSQW — Standard",
       "FF-0CSQW — Full invoice",
-      "R-0CSQW — Correction",
+      "R-0CSQW — Corrective",
     ]),
   );
   expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
@@ -2409,7 +2409,7 @@ it.each([
     expect(section.querySelector("h4")!.textContent!.trim()).toBe(heading);
     expect([...section.querySelectorAll("li")].map((li) => li.textContent!.trim())).toEqual(
       locale === "en"
-        ? ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]
+        ? ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"]
         : ["A-0CSQW — Simplificada", "FF-0CSQW — Factura completa", "R-0CSQW — Rectificativa"],
     );
     expect(section.textContent!.replace(/[A-Z]+-0CSQW/g, "")).not.toContain("0CSQW");
@@ -2535,7 +2535,7 @@ it("after Proceed the second screen says which series were created, and the rest
     [...el.shadowRoot!.querySelectorAll("[data-test=selected-hour] li")].map((li) =>
       li.textContent?.trim(),
     ),
-  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]);
+  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"]);
   expect(el.shadowRoot!.querySelector<HTMLElement>("[data-test=check-venue]")?.hidden).toBe(true);
   expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
   expect(el.readCredentials()).not.toBeNull();

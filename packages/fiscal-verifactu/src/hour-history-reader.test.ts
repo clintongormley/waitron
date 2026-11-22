@@ -21,16 +21,13 @@ import { registroSif } from "./schema/sif.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { VerifactuBackend } from "./backend.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 async function readInventory() {
   const environment = await readDeploymentEnvironment(suite.db);
   return withTransaction(suite.db, (tx) => readHourHistory(tx, environment));
 }
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 it("enumerates the higher retired other-node hour that current-node readers omit", async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
@@ -197,7 +194,7 @@ it("an unassignable series refuses completeness instead of disappearing", async 
   await seedRows();
   await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "rectificative" });
+    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "corrective" });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 it("a malformed hour suffix cannot become empty history", async () => {

@@ -26,7 +26,7 @@ function checkContext(context: InitialSetupContext): void {
     !/^[A-Z0-9]{9}$/.test(context.taxId) ||
     context.bases.length < 3 ||
     purposes.size !== 3 ||
-    !["standard", "full", "rectificative"].every((purpose) => purposes.has(purpose)) ||
+    !["standard", "full", "corrective"].every((purpose) => purposes.has(purpose)) ||
     !isAllocatedSeries(
       context.bases.map(({ code, purpose }) => ({ code: `${code}-S000001`, purpose })),
       "S000001",

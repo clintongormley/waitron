@@ -146,9 +146,7 @@ async function parseRequest(value: unknown): Promise<CustodyRequest> {
   const bases = value.requiredBases as { code: string; purpose: string }[];
   if (
     bases.some((base) => !exact(base, ["code", "purpose"])) ||
-    !["standard", "full", "rectificative"].every((purpose) =>
-      bases.some((b) => b.purpose === purpose),
-    )
+    !["standard", "full", "corrective"].every((purpose) => bases.some((b) => b.purpose === purpose))
   )
     refuse();
   const block = parsePaperBlock({

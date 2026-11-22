@@ -56,7 +56,7 @@ beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+    .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
   const rows = await seedPersons(suite.db, {

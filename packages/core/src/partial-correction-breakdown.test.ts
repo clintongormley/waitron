@@ -21,7 +21,7 @@ import { checkPartialCorrectionHistory } from "./partial-correction-breakdown.js
 import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
-import { seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -69,7 +69,7 @@ let invoice: Invoice;
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+  rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
   const openSession = async (role: "staff" | "supervisor") => {
     const [person] = await seedPersons(suite.db, {

@@ -35,7 +35,7 @@ const node = { nodeId: TENANT_A.nodeId };
 const time = "2026-10-16T11:00:00.000Z";
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const key = Buffer.alloc(32, 29).toString("base64");
 const candidate = makeAuthority().issue();

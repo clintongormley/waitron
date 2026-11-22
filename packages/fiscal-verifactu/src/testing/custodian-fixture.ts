@@ -4,7 +4,7 @@ export const custodyPassphrase = "synthetic test passphrase";
 export const custodyBases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 export async function custodyRequest() {
   const candidates: PaperAllocation[] = [1, 2].map((n) => ({

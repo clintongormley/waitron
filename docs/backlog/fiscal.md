@@ -278,7 +278,7 @@ intra-community and import boxes (32–39); a libro-registro / Pre303 export.
 ## A1e. Simplified and full invoices use separate series
 
 A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full` purpose beside
-`standard` and `rectificative`, provisions its series, and makes core require it for F1 and F3.
+`standard` and `corrective`, provisions its series, and makes core require it for F1 and F3.
 Table bill payments, unpaid departures and Counter bills paid through the shared Pay window can issue F1; no route calls `recordSubstitution`. The separate-series
 basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-findings.md).
 **Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) remains open for F3 and R5.

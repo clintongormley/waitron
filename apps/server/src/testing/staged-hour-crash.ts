@@ -47,12 +47,9 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./hour-test-clock.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
-];
+const bases = SERIES_BASES;
 export async function stagedHourCrash(
   { db, node: nodeDb }: { db: Database; node: NodeDatabase },
   kind: "archive" | "stream",

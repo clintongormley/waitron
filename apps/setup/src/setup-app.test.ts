@@ -733,7 +733,7 @@ describe("setup-app", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         seriesCode: "F",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
       },
       modules: ["core"],
       reconnectModules: ["core"],
@@ -777,7 +777,7 @@ describe("setup-app", () => {
       dayCutover: "06:00",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
-      rectificativeSeriesCode: "OLDR",
+      correctiveSeriesCode: "OLDR",
     };
     const sixFields = {
       taxId: "B12345678",
@@ -785,7 +785,7 @@ describe("setup-app", () => {
       taxpayerDomicile: "Calle Vieja 1, 28001 Madrid, Madrid",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
-      rectificativeSeriesCode: "OLDR",
+      correctiveSeriesCode: "OLDR",
     };
     const typed = {
       taxId: "A58818501",
@@ -793,7 +793,7 @@ describe("setup-app", () => {
       taxpayerDomicile: "Calle Nueva 2, 28002 Madrid, Madrid",
       seriesCode: "NEW",
       fullSeriesCode: "NEWF",
-      rectificativeSeriesCode: "NEWR",
+      correctiveSeriesCode: "NEWR",
     };
 
     async function staged(
@@ -878,7 +878,7 @@ describe("setup-app", () => {
         legalName: "",
         seriesCode: "FS",
         fullSeriesCode: "FF",
-        rectificativeSeriesCode: "FR",
+        correctiveSeriesCode: "FR",
       });
       expect(venueValue(venue, "name")).toBe("Prepared");
       patch(el, { venue: typed });
@@ -1585,7 +1585,7 @@ describe("setup-app", () => {
   it.each([
     ["legalName", "legalName"],
     ["seriesCode", "seriesCode"],
-    ["rectificativeSeriesCode", "rectificativeSeriesCode"],
+    ["correctiveSeriesCode", "correctiveSeriesCode"],
   ])("sends a %s refusal back to the venue form with the field marked", async (field, key) => {
     const provision = vi
       .fn()
@@ -1604,6 +1604,54 @@ describe("setup-app", () => {
       disabled: boolean;
     };
     expect(next.disabled).toBe(false);
+  });
+
+  it("shows a repeated series code under the field the refusal names, in the form's own words", async () => {
+    try {
+      const provision = vi.fn().mockRejectedValue({
+        code: "provisioning.duplicate_series_code",
+        params: { code: "FS", field: "correctiveSeriesCode" },
+        status: 400,
+      });
+      const el = await mountSetupApp(stubApi({ provision }));
+      patch(el, { venue: { seriesCode: "FS", correctiveSeriesCode: "FS" } });
+      provisionRequest(el);
+      await flush(el);
+      const venue = await screenHost(el, "venue");
+      const input = venue.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("[data-test=correctiveSeriesCode]")!;
+      await input.updateComplete;
+      expect(input.hasAttribute("invalid")).toBe(true);
+      expect(input.error).toBe("Use a different code for each invoice series.");
+      expect(await bottomOf(venue)).toBe("Correct the highlighted fields to continue.");
+      const next = venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(next.disabled).toBe(false);
+
+      setLocale("es-ES");
+      await flush(el);
+      await (venue as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await input.updateComplete;
+      expect(input.error).toBe("Usa un código distinto para cada serie de facturas.");
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it("keeps a venue-data refusal naming a field the form does not show above Next", async () => {
+    const provision = vi.fn().mockRejectedValue({
+      code: "fiscal.operation_date_invalid",
+      params: { field: "operationDate" },
+      status: 400,
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const venue = await screenHost(el, "venue");
+    expect(venue.shadowRoot!.querySelector("[invalid]")).toBeNull();
+    expect(await bottomOf(venue)).toContain("(fiscal.operation_date_invalid)");
   });
 
   it("sends a refused start-of-day time back to the venue form with the field explained", async () => {
@@ -1901,7 +1949,6 @@ describe("setup-app", () => {
   it.each([
     ["provisioning.territory_country_mismatch", "country must match the fiscal territory"],
     ["provisioning.invalid_locales", "Choose the receipt language."],
-    ["provisioning.duplicate_series_code", "must differ"],
     ["fiscal.regime_not_implemented", "isn't supported yet"],
   ])(
     "routes venue-data code %s BACK to the venue form with its message",
@@ -2976,7 +3023,7 @@ describe("A2 mode boundaries", () => {
           legalName: "Demo company",
           seriesCode: "FS",
           fullSeriesCode: "FF",
-          rectificativeSeriesCode: "FR",
+          correctiveSeriesCode: "FR",
           admin: { displayName: "Ada" },
           name: "Calle Mayor",
           addressLine1: "Calle Mayor 1",
@@ -2990,7 +3037,7 @@ describe("A2 mode boundaries", () => {
       expect(draft.venue?.legalName).toBeUndefined();
       expect(draft.venue?.seriesCode).toBeUndefined();
       expect(draft.venue?.fullSeriesCode).toBeUndefined();
-      expect(draft.venue?.rectificativeSeriesCode).toBeUndefined();
+      expect(draft.venue?.correctiveSeriesCode).toBeUndefined();
       expect(draft.venue?.admin?.displayName).toBe("Ada");
       expect(draft.venue?.addressLine1).toBe("Calle Mayor 1");
     },
