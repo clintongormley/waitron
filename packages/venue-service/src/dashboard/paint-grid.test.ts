@@ -131,17 +131,21 @@ test("each column heading holds the day name and a slot for its menu on one line
 });
 
 test("dragging down a day previews the stretch and paints the chosen period on release", async () => {
-  const el = await grid({ mon: [] }, { chosen: "dinner" });
+  const el = await grid({ mon: [], thu: [] }, { chosen: "dinner" });
+  el.columns = el.columns.map((column) =>
+    column.key === "mon" ? { ...column, cutover: "06:10" } : column,
+  );
+  await el.updateComplete;
   const seen = changes(el);
-  point(el, "mon", 840, "pointerdown");
-  point(el, "mon", 1050, "pointermove");
+  point(el, "mon", 830, "pointerdown");
+  point(el, "mon", 1040, "pointermove");
   await el.updateComplete;
   const preview = el.shadowRoot!.querySelector<HTMLElement>(".preview")!;
   expect(preview).not.toBeNull();
   expect(getComputedStyle(preview).borderTopStyle).toBe("dashed");
   expect(preview.textContent).toContain("Dinner 20:00–23:30");
   expect(seen).toEqual([]);
-  point(el, "mon", 1050, "pointerup");
+  point(el, "mon", 1040, "pointerup");
   await el.updateComplete;
   expect(seen).toEqual([
     { key: "mon", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:30" }] },

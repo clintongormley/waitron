@@ -1,5 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
+import { live } from "lit/directives/live.js";
 import { cutoverForBusinessDay } from "@waitron/shared";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
@@ -83,7 +85,7 @@ interface Draft {
 interface Refused {
   /** Beside Save. */
   message: string;
-  field?: "name" | "dates";
+  field?: "name" | "dates" | "repeatsYearly";
   column?: LocalDate;
   /** The department (`d:<id>`) or zone (`z:<id>`) whose column is marked; any, when absent. */
   owner?: string;
@@ -234,6 +236,11 @@ function seasonSignature(model: Model): string {
 }
 const byStart = (cutover: string) => (a: Paint, b: Paint) =>
   stepSpan(a, cutover)[0] - stepSpan(b, cutover)[0];
+const paintCrossesStart = (paint: readonly Paint[], cutover: string) =>
+  paint.some((block) => {
+    const [start, end] = stepSpan(block, cutover);
+    return start >= end;
+  });
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
 
@@ -709,21 +716,26 @@ export class SpecialDayPainter extends LitElement {
     const draft = copyDraft(this.draft);
     const baseline = copyDraft(this.baseline);
     if (this.vacated) {
-      const cutover = this.cutover();
-      const fill = (paint: OwnerPaint, holes: OwnerPaint) => {
-        for (const [owner, days] of holes)
-          paint.set(
-            owner,
-            refill(
-              paint.get(owner) ?? new Map(),
-              days,
-              fresh.paint.get(owner) ?? new Map(),
-              cutover,
-            ),
-          );
+      const fill = ({ paint, repeatsYearly }: Draft, holes: OwnerPaint) => {
+        for (const [owner, days] of holes) {
+          const ownerDays = paint.get(owner) ?? new Map<LocalDate, Paint[]>();
+          const stored = fresh.paint.get(owner) ?? NOTHING_BY_KEY;
+          for (const [date, blocks] of days) {
+            const current = ownerDays.get(date);
+            if (current === undefined) continue;
+            const filled = refill(
+              new Map([[date, current]]),
+              new Map([[date, blocks]]),
+              stored,
+              this.columnCutover(date, repeatsYearly),
+            );
+            ownerDays.set(date, filled.get(date)!);
+          }
+          paint.set(owner, ownerDays);
+        }
       };
-      fill(draft.paint, this.vacated.draft);
-      fill(baseline.paint, this.vacated.baseline);
+      fill(draft, this.vacated.draft);
+      fill(baseline, this.vacated.baseline);
       this.vacated = undefined;
     }
     if (draft.name === baseline.name) draft.name = baseline.name = fresh.name;
@@ -799,22 +811,25 @@ export class SpecialDayPainter extends LitElement {
   private dropDeletedPeriods(previous: Model) {
     const removed = removedPeriods(previous, this.model);
     if (!removed.size) return;
-    const cutover = this.cutover();
-    const holes = (paint: OwnerPaint, into: OwnerPaint = new Map()): OwnerPaint => {
-      for (const [owner, days] of paint)
-        for (const [date, blocks] of savedBlocks(
-          days,
-          removed,
-          this.baseline.paint.get(owner) ?? new Map(),
-          cutover,
-        )) {
+    const holes = ({ paint, repeatsYearly }: Draft, into: OwnerPaint = new Map()): OwnerPaint => {
+      for (const [owner, days] of paint) {
+        const saved = this.baseline.paint.get(owner) ?? NOTHING_BY_KEY;
+        for (const [date, day] of days) {
+          const blocks = savedBlocks(
+            new Map([[date, day]]),
+            removed,
+            saved,
+            this.columnCutover(date, repeatsYearly),
+          ).get(date);
+          if (blocks === undefined) continue;
           const held = new Map(into.get(owner));
           into.set(owner, held.set(date, [...(held.get(date) ?? []), ...blocks]));
         }
+      }
       return into;
     };
-    const draft = holes(this.draft.paint, this.vacated?.draft);
-    const baseline = holes(this.baseline.paint, this.vacated?.baseline);
+    const draft = holes(this.draft, this.vacated?.draft);
+    const baseline = holes(this.baseline, this.vacated?.baseline);
     this.vacated = draft.size || baseline.size ? { draft, baseline } : undefined;
     const strip = (paint: OwnerPaint): OwnerPaint =>
       new Map([...paint].map(([owner, days]) => [owner, withoutPeriods(days, removed)]));
@@ -1194,9 +1209,32 @@ export class SpecialDayPainter extends LitElement {
       cutoverForBusinessDay(this.model.businessDayClock, date)
     );
   }
+  private columnCutover(date: LocalDate, yearly = this.draft.repeatsYearly): string {
+    return yearly ? this.model.dayCutover : this.dateCutover(date);
+  }
+
+  private setRepeatsYearly(value: boolean): void {
+    const painted = [...this.draft.paint];
+    for (const { date } of this.draft.dates) {
+      const cutover = this.columnCutover(date, value);
+      const incompatible = painted.find(([, days]) =>
+        paintCrossesStart(days.get(date) ?? [], cutover),
+      );
+      if (!incompatible) continue;
+      const name = ownerName(this.model, incompatible[0]);
+      const message = format("special.repeat_crosses_start", { date: columnLabel(date) });
+      this.refused = {
+        field: "repeatsYearly",
+        message: name ? format("painter.refused_in", { name, message }) : message,
+      };
+      return;
+    }
+    this.change({ ...this.draft, repeatsYearly: value });
+  }
+
   private departmentClosed(owner: string, date: LocalDate): boolean {
     const day = this.draft.paint.get(owner)?.get(date) ?? [];
-    const cutover = this.dateCutover(date);
+    const cutover = this.columnCutover(date);
     return (
       day.length === 1 &&
       day[0]!.periodId === null &&
@@ -1210,7 +1248,7 @@ export class SpecialDayPainter extends LitElement {
     const prior = new Map(this.beforeClosed.get(owner));
     if (closed) {
       prior.set(date, days.get(date) ?? []);
-      const cutover = this.dateCutover(date);
+      const cutover = this.columnCutover(date);
       days.set(date, [{ periodId: null, startsAt: cutover, endsAt: cutover }]);
     } else {
       days.set(date, prior.get(date) ?? []);
@@ -1254,27 +1292,28 @@ export class SpecialDayPainter extends LitElement {
     this.change({ ...this.draft, paint });
   }
 
-  /** The changeover of the first date, which the whole grid is drawn from. */
-  private cutover(): string {
-    const first = this.draft.dates[0]?.date;
-    return (first && this.seasonDays.get(first)?.dayCutover) || this.model.dayCutover;
+  private readonly copyRefusal = (paint: readonly Paint[], destination: PaintColumn) => {
+    const cutover = destination.cutover ?? this.model.dayCutover;
+    return paintCrossesStart(paint, cutover)
+      ? format("paint.copy_crosses_start", { date: destination.label })
+      : undefined;
+  };
+
+  private yearlyCutover(): string | undefined {
+    return this.draft.repeatsYearly ? this.model.dayCutover : undefined;
   }
-  private changeoversDiffer(): boolean {
-    const changeovers = new Set(
-      this.draft.dates.flatMap(({ date }) => this.seasonDays.get(date)?.dayCutover ?? []),
-    );
-    return changeovers.size > 1;
-  }
+
   /** For a department, its season hours; for a zone, its department's day with the draft's paint
    *  laid over the season, and the zone's season closures over that as Closed. */
-  private underlay(department: Department, zoneId: string | undefined, cutover: string) {
+  private underlay(department: Department, zoneId: string | undefined) {
+    const yearlyCutover = this.yearlyCutover();
     const painted = this.draft.paint.get(departmentKey(department.id));
     const memo = this.underlayMemo;
     if (
       memo?.days === this.seasonDays &&
       memo.painted === painted &&
       memo.owner === `${department.id}/${zoneId ?? ""}` &&
-      memo.cutover === cutover
+      memo.yearlyCutover === yearlyCutover
     )
       return memo.underlay;
     const underlay = new Map<string, Paint[]>();
@@ -1288,6 +1327,7 @@ export class SpecialDayPainter extends LitElement {
         );
         continue;
       }
+      const cutover = yearlyCutover ?? day.dayCutover;
       const closures: Paint[] = layerZonePaint(
         season.zones.find((zone) => zone.zoneId === zoneId)?.closed ?? [],
         [],
@@ -1304,38 +1344,42 @@ export class SpecialDayPainter extends LitElement {
       days: this.seasonDays,
       painted,
       owner: `${department.id}/${zoneId ?? ""}`,
-      cutover,
+      yearlyCutover,
       underlay,
     };
     return underlay;
   }
   private zoneDaysMemo?: {
     source: ReadonlyMap<string, Paint[]>;
-    cutover: string;
+    columns: readonly PaintColumn[];
     days: ReadonlyMap<string, Paint[]>;
   };
-  private zoneDays(source: ReadonlyMap<string, Paint[]>, cutover: string) {
-    if (this.zoneDaysMemo?.source === source && this.zoneDaysMemo.cutover === cutover)
+  private zoneDays(source: ReadonlyMap<string, Paint[]>, columns: readonly PaintColumn[]) {
+    if (this.zoneDaysMemo?.source === source && this.zoneDaysMemo.columns === columns)
       return this.zoneDaysMemo.days;
     const days = new Map(
-      [...source].map(([date, paint]) => [
-        date,
-        paint.reduce<Paint[]>((ranges, block) => paintStretch(ranges, block, cutover, false), []),
+      columns.map(({ key, cutover }) => [
+        key,
+        (source.get(key) ?? []).reduce<Paint[]>(
+          (ranges, block) => paintStretch(ranges, block, cutover ?? this.model.dayCutover, false),
+          [],
+        ),
       ]),
     );
-    this.zoneDaysMemo = { source, cutover, days };
+    this.zoneDaysMemo = { source, columns, days };
     return days;
   }
   private underlayMemo?: {
     days: ReadonlyMap<LocalDate, SeasonDay>;
     painted: ReadonlyMap<LocalDate, Paint[]> | undefined;
     owner: string;
-    cutover: string;
+    yearlyCutover: string | undefined;
     underlay: ReadonlyMap<string, Paint[]>;
   };
   /** For a zone, each date not closed all day whose season day is known, mapped to its
    *  department's open blocks that date: the season's hours with the draft's paint laid over. */
-  private closedWithin(department: Department, cutover: string) {
+  private closedWithin(department: Department) {
+    const yearlyCutover = this.yearlyCutover();
     const painted = this.draft.paint.get(departmentKey(department.id));
     const shut = this.closedDates();
     const memo = this.withinMemo;
@@ -1344,7 +1388,7 @@ export class SpecialDayPainter extends LitElement {
       memo.painted === painted &&
       memo.shut === shut &&
       memo.departmentId === department.id &&
-      memo.cutover === cutover
+      memo.yearlyCutover === yearlyCutover
     )
       return memo.within;
     const within = new Map<string, Paint[]>();
@@ -1352,14 +1396,17 @@ export class SpecialDayPainter extends LitElement {
       if (shut.has(date)) continue;
       const season = day.departments.find(({ departmentId }) => departmentId === department.id);
       if (!season) continue;
-      within.set(date, layerPaint(season.ranges, painted?.get(date) ?? [], cutover));
+      within.set(
+        date,
+        layerPaint(season.ranges, painted?.get(date) ?? [], yearlyCutover ?? day.dayCutover),
+      );
     }
     this.withinMemo = {
       days: this.seasonDays,
       painted,
       shut,
       departmentId: department.id,
-      cutover,
+      yearlyCutover,
       within,
     };
     return within;
@@ -1387,7 +1434,7 @@ export class SpecialDayPainter extends LitElement {
     painted: ReadonlyMap<LocalDate, Paint[]> | undefined;
     shut: ReadonlySet<LocalDate>;
     departmentId: string;
-    cutover: string;
+    yearlyCutover: string | undefined;
     within: ReadonlyMap<string, Paint[]>;
   };
 
@@ -1426,12 +1473,6 @@ export class SpecialDayPainter extends LitElement {
             ${t("special.season_error")}
           </p>`
         : nothing
-    }${
-      this.changeoversDiffer()
-        ? html`<p class="notice" data-test="changeover-notice">
-            ${format("special.changeover_differs", { time: this.cutover() })}
-          </p>`
-        : nothing
     }`;
     const zone = department && this.zone(department);
     const owner = department ? (zone ? zoneKey(zone.id) : departmentKey(department.id)) : undefined;
@@ -1468,7 +1509,7 @@ export class SpecialDayPainter extends LitElement {
       this.refused?.column && (this.refused.owner === undefined || this.refused.owner === shown)
         ? new Map([[this.refused.column, this.refused.mark ?? this.refused.message]])
         : NOTHING_BY_KEY;
-    const cutover = this.cutover();
+    const columns = this.columns();
     const empty = !this.draft.dates.length;
     const noDates =
       this.loading || this.loadFailed
@@ -1480,10 +1521,10 @@ export class SpecialDayPainter extends LitElement {
           ? noDates
           : html`<paint-grid
               .target=${this.seeded ?? ""}
-              .columns=${this.columns()}
+              .columns=${columns}
               .closedErases=${false}
               .closedAllDay=${shut}
-              .cutover=${cutover}
+              .cutover=${this.model.dayCutover}
               .readOnly=${true}
               .columnErrors=${columnErrors(undefined)}
               >${ticks}</paint-grid
@@ -1492,7 +1533,7 @@ export class SpecialDayPainter extends LitElement {
     const chosen = this.effectiveChosen(department, zone !== undefined);
     const periods = zone ? this.zonePeriods(department) : department.periods;
     const stopped = this.loading || this.loadFailed || this.offered !== undefined;
-    const within = zone ? this.closedWithin(department, cutover) : undefined;
+    const within = zone ? this.closedWithin(department) : undefined;
     return html`${notices}${
       this.readOnly
         ? nothing
@@ -1520,16 +1561,17 @@ export class SpecialDayPainter extends LitElement {
         ? noDates
         : html`<paint-grid
             .target=${`${this.seeded ?? ""}/${owner}`}
-            .columns=${this.columns()}
-            .days=${zone ? this.zoneDays(this.draft.paint.get(owner!) ?? NOTHING_BY_KEY, cutover) : (this.draft.paint.get(owner!) ?? NOTHING_BY_KEY)}
-            .underlay=${this.underlay(department, zone?.id, cutover)}
+            .columns=${columns}
+            .days=${zone ? this.zoneDays(this.draft.paint.get(owner!) ?? NOTHING_BY_KEY, columns) : (this.draft.paint.get(owner!) ?? NOTHING_BY_KEY)}
+            .underlay=${this.underlay(department, zone?.id)}
             .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}
             .periods=${periods}
             .chosen=${chosen}
             .closedErases=${false}
             .closedAllDay=${shut}
             .paintable=${zone ? ZONE_PAINTABLE : undefined}
-            .cutover=${cutover}
+            .cutover=${this.model.dayCutover}
+            .copyRefusal=${this.copyRefusal}
             .readOnly=${this.readOnly || stopped}
             .columnErrors=${columnErrors(owner)}
             @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner!, event)}
@@ -1569,14 +1611,14 @@ export class SpecialDayPainter extends LitElement {
     return this.shutDates.dates;
   }
 
-  /** Kept while the dates and the language stay, so the grid sees the same columns. */
   private dateColumns?: { key: string; columns: readonly PaintColumn[] };
   private columns(): readonly PaintColumn[] {
-    const key = `${currentLocale()} ${this.draft.dates.map(({ date }) => date).join(",")}`;
+    const dates = this.draft.dates.map(({ date }) => [date, this.columnCutover(date)] as const);
+    const key = `${currentLocale()} ${dates.join(",")}`;
     if (this.dateColumns?.key !== key)
       this.dateColumns = {
         key,
-        columns: this.draft.dates.map(({ date }) => ({ key: date, label: columnLabel(date) })),
+        columns: dates.map(([date, cutover]) => ({ key: date, label: columnLabel(date), cutover })),
       };
     return this.dateColumns.columns;
   }
@@ -1592,7 +1634,7 @@ export class SpecialDayPainter extends LitElement {
     return t(this.specialDayId === null ? "special.new" : "special.edit");
   }
   private message(): string {
-    if (this.refused) return this.refused.message;
+    if (this.refused && this.refused.field !== "repeatsYearly") return this.refused.message;
     if (this.blocked()) return t("prep.fix_fields");
     return this.loadFailed
       ? t("special.load_error")
@@ -1611,15 +1653,18 @@ export class SpecialDayPainter extends LitElement {
     const years = new Set(dates.map((date) => date.slice(0, 4))).size > 1;
     const nameError =
       errors.name ?? (this.refused?.field === "name" ? (this.refused.mark ?? "") : "");
+    const repeatRefusal =
+      this.refused?.field === "repeatsYearly" ? this.refused.message : undefined;
     const repeat = (value: boolean, label: "special.no" | "special.yes") =>
       html`<label
         ><input
           type="radio"
           name="repeatsYearly"
           value=${value ? "yes" : "no"}
-          .checked=${this.draft.repeatsYearly === value}
+          .checked=${live(this.draft.repeatsYearly === value)}
+          aria-describedby=${ifDefined(repeatRefusal ? "repeat-refusal" : undefined)}
           ?disabled=${locked}
-          @change=${() => this.change({ ...this.draft, repeatsYearly: value })}
+          @change=${() => this.setRepeatsYearly(value)}
         /><span>${t(label)}</span></label
       >`;
     return html`<section class="panel" data-test="panel">
@@ -1702,6 +1747,7 @@ export class SpecialDayPainter extends LitElement {
       <fieldset>
         <legend>${t("special.every_year")}</legend>
         <div class="segmented">${repeat(false, "special.no")}${repeat(true, "special.yes")}</div>
+        ${repeatRefusal ? html`<p id="repeat-refusal" class="error" role="alert" data-test="repeat-refusal">${repeatRefusal}</p>` : nothing}
         ${onHoliday ? html`<p class="note" data-test="holiday-note">${t("special.holiday_note")}</p>` : nothing}
         ${leap ? html`<p class="note" data-test="leap-note">${t("special.leap")}</p>` : nothing}
       </fieldset>

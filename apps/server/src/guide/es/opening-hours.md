@@ -36,6 +36,8 @@ Los horarios de las estaciones siguen los periodos pintados, sus cartas, las rut
 
 En Año o Mes, selecciona un tramo con Mayús+clic y añade fechas sueltas con Cmd+clic (Ctrl+clic en Windows). En el móvil, mantén pulsada una fecha y arrastra para seleccionar un tramo. Mientras aparezca la barra de selección, toca fechas para añadirlas o quitarlas y elige **Crear un día especial**.
 
+Cuando las fechas empiezan su jornada a horas distintas, guíate por la escala horaria de cada fecha al pintar. Con **Cada año**, usa la escala común. Si al cambiar **Cada año** se indica un departamento o una zona y una fecha, borra o vuelve a pintar su horario en esa fecha antes de intentarlo otra vez. Si **Copiar a…** rechaza una fecha, píntala por separado.
+
 ## Nombres de los festivos {#holiday-names}
 
 Cuando planificas en torno a un festivo, su nombre sigue el idioma del panel. Los festivos de España incluidos se muestran con su nombre oficial publicado en español y con su nombre en inglés cuando usas el panel en inglés. Por ejemplo, el 25 de diciembre aparece como **Natividad del Señor** o **Christmas Day**. Cambiar el idioma de la pantalla mantiene el festivo en la misma fecha.

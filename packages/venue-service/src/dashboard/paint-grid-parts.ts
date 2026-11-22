@@ -44,14 +44,20 @@ export function hourMarks(cutover: string): number[] {
 
 /** The pinned time column, one label per clock hour. */
 export function timeRuler(cutover: string) {
-  return html`<div class="times" aria-hidden="true">
-    ${hourMarks(cutover).map(
-      (minute) =>
-        html`<span class="hour" style=${styleMap({ top: `${(minute / DAY) * 100}%` })}
-          >${clockAt(minute, cutover)}</span
-        >`,
-    )}
-  </div>`;
+  return html`<div class="times" aria-hidden="true">${hourLabels(cutover)}</div>`;
+}
+
+export function columnTimeRuler(cutover: string) {
+  return html`<div class="times column-times" aria-hidden="true">${hourLabels(cutover)}</div>`;
+}
+
+function hourLabels(cutover: string) {
+  return hourMarks(cutover).map(
+    (minute) =>
+      html`<span class="hour" style=${styleMap({ top: `${(minute / DAY) * 100}%` })}
+        >${clockAt(minute, cutover)}</span
+      >`,
+  );
 }
 
 /** A day column's hour lines. */
@@ -175,7 +181,7 @@ export class OverflowFade implements ReactiveController {
 
 export interface ColumnStrokeOptions {
   includeChangeover?: boolean;
-  cutover: () => string;
+  cutover: (key: string) => string;
   /** Whether a primary-button press on this column begins a stroke. */
   canStart: (key: string) => boolean;
   /** Whether a stroke released now is kept. */
@@ -242,12 +248,12 @@ export class ColumnStroke implements ReactiveController {
     this.#dragged = false;
   }
 
-  #minuteAtY(clientY: number, column: HTMLElement): number {
+  #minuteAtY(clientY: number, column: HTMLElement, key: string): number {
     const box = column.getBoundingClientRect();
     return stepMinuteAt(
       clientY - box.top,
       box.height / ROWS,
-      this.#options.cutover(),
+      this.#options.cutover(key),
       this.#options.includeChangeover,
     );
   }
@@ -262,7 +268,7 @@ export class ColumnStroke implements ReactiveController {
     const column = event.currentTarget as HTMLElement;
     const box = column.getBoundingClientRect();
     const shift = held === undefined ? 0 : (held / DAY) * box.height + box.top - event.clientY;
-    const origin = held ?? this.#minuteAtY(event.clientY, column);
+    const origin = held ?? this.#minuteAtY(event.clientY, column, key);
     this.#gesture = {
       pointerId: event.pointerId,
       key,
@@ -289,7 +295,7 @@ export class ColumnStroke implements ReactiveController {
   };
   #stretchTo(clientY: number): void {
     const gesture = this.#gesture!;
-    const minute = this.#minuteAtY(clientY + gesture.shift, gesture.column);
+    const minute = this.#minuteAtY(clientY + gesture.shift, gesture.column, gesture.key);
     // Captured only once it moves: a captured click lands on the column, not the block clicked.
     if (minute !== gesture.origin) capturePointer(gesture.column, gesture.pointerId);
     const start = Math.min(gesture.anchor, minute);
@@ -369,16 +375,19 @@ export interface CopyChooserOptions {
   columns: () => readonly { key: string; label: string }[];
   /** The control the chooser opens beside and gives the focus back to. */
   trigger: (key: string) => HTMLElement | null;
+  refusal?: (from: string, to: string[]) => string | undefined;
   /** The ticked columns, in column order; the chooser has already closed. */
   copy: (from: string, to: string[]) => void;
 }
 
 /** The "Copy {day} to" chooser: ticks the other columns and reports them to its host, which
  *  draws `render()` and is asked to redraw as the ticks change. */
+type CopySelection = { key: string; ticked: ReadonlySet<string>; refusal?: string };
+
 export class CopyChooser {
   readonly #host: PaintGridHost;
   readonly #options: CopyChooserOptions;
-  #copying: { key: string; ticked: ReadonlySet<string> } | null = null;
+  #copying: CopySelection | null = null;
 
   constructor(host: PaintGridHost, options: CopyChooserOptions) {
     this.#host = host;
@@ -389,7 +398,7 @@ export class CopyChooser {
   get from(): string | undefined {
     return this.#copying?.key;
   }
-  #set(copying: { key: string; ticked: ReadonlySet<string> } | null): void {
+  #set(copying: CopySelection | null): void {
     if (copying === null && this.#copying === null) return;
     this.#copying = copying;
     this.#host.requestUpdate();
@@ -419,13 +428,23 @@ export class CopyChooser {
     else ticked.delete(key);
     this.#set({ key: copying.key, ticked });
   }
-  #copy(): void {
+  async #copy(): Promise<void> {
     const copying = this.#copying;
     if (copying === null || copying.ticked.size === 0) return;
     const to = this.#options
       .columns()
       .map(({ key }) => key)
       .filter((key) => copying.ticked.has(key));
+    const refusal = this.#options.refusal?.(copying.key, to);
+    if (refusal !== undefined) {
+      const refused = { ...copying, refusal };
+      this.#set(refused);
+      await this.#host.updateComplete;
+      const trigger = this.#options.trigger(copying.key);
+      if (this.#copying === refused && trigger && this.#popup?.matches(":popover-open"))
+        placePopover(this.#popup, trigger, true, true);
+      return;
+    }
     this.close(true);
     this.#options.copy(copying.key, to);
   }
@@ -441,7 +460,7 @@ export class CopyChooser {
     const columns = this.#options.columns();
     const from = columns.find(({ key }) => key === copying?.key);
     const heading = t("paint.copy_day_to").replace("{day}", from?.label ?? "");
-    const ready = (copying?.ticked.size ?? 0) > 0;
+    const ready = (copying?.ticked.size ?? 0) > 0 && copying?.refusal === undefined;
     return html`<div
       class="chooser"
       id="copy-chooser"
@@ -471,6 +490,7 @@ export class CopyChooser {
                       />${label}</label
                     >`,
                 )}
+              ${copying.refusal ? html`<p role="alert">${copying.refusal}</p>` : nothing}
               <div class="actions">
                 <wt-button variant="secondary" @click=${() => this.close(true)}
                   >${t("hours.cancel")}</wt-button
@@ -478,7 +498,7 @@ export class CopyChooser {
                 <wt-button
                   variant=${ready ? "primary" : "secondary"}
                   ?disabled=${!ready}
-                  @click=${() => this.#copy()}
+                  @click=${() => void this.#copy()}
                   >${t("paint.copy")}</wt-button
                 >
               </div>`
@@ -538,6 +558,16 @@ export const paintGridStyles = css`
     min-width: 100%;
     grid-template-columns: var(--times-width) var(--column-tracks);
   }
+  .scroll.per-date {
+    --fade-from: 1px;
+  }
+  .per-date .layout {
+    grid-template-columns: var(--column-tracks);
+  }
+  .dated-column {
+    display: grid;
+    grid-template-columns: var(--times-width) minmax(0, 1fr);
+  }
   .heading {
     position: sticky;
     top: 0;
@@ -583,6 +613,12 @@ export const paintGridStyles = css`
     z-index: 2;
     background: var(--wt-color-bg);
     border-inline-end: 1px solid var(--wt-color-border);
+  }
+  .column-times {
+    position: relative;
+    inset-inline-start: auto;
+    z-index: auto;
+    border-inline-end: 0;
   }
   /* Each label hangs just under its hour line, as a block's label does, so the changeover's
      label at the very top is spaced like the rest. */
@@ -648,6 +684,11 @@ export const paintGridStyles = css`
   }
   .chooser input[type="checkbox"] {
     accent-color: var(--wt-color-primary);
+  }
+  .chooser [role="alert"] {
+    max-inline-size: calc(var(--wt-space-6) * 10);
+    margin: 0;
+    color: var(--wt-color-danger);
   }
   .chooser .actions {
     display: flex;

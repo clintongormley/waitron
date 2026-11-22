@@ -142,7 +142,7 @@ describe("a stored special day", () => {
         .value,
     ).toBe("Christmas dinners");
     expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
-    expect(grid(painter).columns).toEqual([
+    expect(grid(painter).columns.map(({ key, label }) => ({ key, label }))).toEqual([
       { key: "2026-12-14", label: "Mon 14 Dec" },
       { key: "2026-12-15", label: "Tue 15 Dec" },
       { key: "2026-12-25", label: "Fri 25 Dec" },

@@ -8,6 +8,7 @@ export {
   ROWS,
   hourMarks,
   timeRuler,
+  columnTimeRuler,
   hourLines,
   paintGridStyles,
   OverflowFade,
