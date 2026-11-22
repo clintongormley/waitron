@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, incidents, outgoingMail } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { AppError } from "@waitron/shared";
 import { boxAlertMail } from "./box-alert-mail.js";
 import { runMailPass } from "./mail-sender.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -286,7 +287,7 @@ it("leaves full-disk mail on its direct path even with Cloud enabled", async () 
 
 it("still checks the alerts when the saved Cloud choice cannot be read", async () => {
   const d = duty();
-  d.state.cloudRelayEnabled = new Error("Cloud settings unreadable");
+  d.state.cloudRelayEnabled = new AppError("cloud.state_invalid", {});
   d.state.delivery = { mode: "unconfigured" };
   d.state.lowSince = at(0);
   d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
@@ -298,6 +299,17 @@ it("still checks the alerts when the saved Cloud choice cannot be read", async (
     "clock.unusable",
   ]);
   expect(d.events("box_email.check_failed")).toEqual([]);
+});
+
+it("reports a failure from reading saved mail settings", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = new Error("Saved mail lookup failed");
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  await d.check();
+  expect(d.events("box_email.check_failed")).toEqual([
+    ["warn", "box_email.check_failed", { errorCode: "unknown" }],
+  ]);
 });
 
 const OLD_BACKUPS: EmailedIncident = {

@@ -239,7 +239,7 @@ describe("certificate reminder job", () => {
   });
 
   it.each(["before lookup", "during lookup"] as const)(
-    "keeps a saved mail server with an unusable sender ahead of Cloud when saved %s",
+    "preserves mail-server priority for a server saved %s",
     async (timing) => {
       const ring = loadKeyRing({
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),

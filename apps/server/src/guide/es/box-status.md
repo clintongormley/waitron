@@ -467,7 +467,8 @@ disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras el disco
 hora siguen con problemas puede enviar el mismo correo otra vez. En Preparación, activa el correo
 de Cloud en un servidor de pruebas para recibir alertas por falta de espacio, copias de seguridad,
 actualizaciones revertidas y correcciones del reloj si dejas en blanco el servidor de correo.
-Añade tu propio servidor en **Sistema → Correo** para recibir alertas por disco lleno o por un reloj inutilizable.
+Añade tu propio servidor de correo en **Sistema → Correo** para recibir alertas por disco lleno o
+por un reloj inutilizable.
 
 Cada vez que el servidor pone su reloj en hora envía su propio correo, aunque lo vuelva a poner en
 hora antes de un minuto, lo que marca como resuelto el aviso del primer cambio. Cuando el aviso de
