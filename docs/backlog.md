@@ -1431,7 +1431,7 @@ this section records the remaining build and real-box qualification.
   it in place at its next start and finishes joining as a standby. With
   3b-F a Veri*Factu venue's spare joins too, with nothing fiscal written at the join; the activation
   writes the spare's dormant setup first, and a two-box test on separate databases runs a handover
-  to the joined spare and the old box's return by emergency switch after a reset (A947 3b-F, 2026-11-14). A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  to the joined spare and the old box's return by emergency switch after a reset (A947 3b-F, 2026-11-14). [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
@@ -1885,6 +1885,8 @@ rebuilds Claude's own copy.
 ---
 
 ## Standing decisions
+
+- **A box in setup mode may be trusted by mistake while it answers the venue's name; accepted, with a warning where it offers its certificate (owner, 2026-11-21, A947).** [Decision and limits](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
 - **Main pushes keep quick checks; package tests run on PRs and full runs (owner, 2026-11-08, A1452).** [Exceptions and merge-risk decision](backlog/ci.md#decisions-and-deliberate-limits).
 
