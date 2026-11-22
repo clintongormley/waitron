@@ -516,7 +516,7 @@ describe("setup-connect-screen: the words of every refusal of Join", () => {
     ],
     [
       { code: "mirror.join_waiting" },
-      "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
+      "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
       START_AGAIN_TOO,
     ],
     [

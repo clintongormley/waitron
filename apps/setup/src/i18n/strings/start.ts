@@ -147,7 +147,7 @@ export const startEn = {
   "connect.refusal.join_full_recent":
     "The main box has had {max} requests to join in the last {minutes} minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
   "connect.refusal.join_waiting":
-    "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
+    "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_approving":
     "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
   "connect.refusal.join_in_use":
@@ -391,7 +391,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.join_full_recent":
     "El servidor principal ha recibido {max} solicitudes para unirse en los últimos {minutes} minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
   "connect.refusal.join_waiting":
-    "Este servidor ya está esperando para unirse. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
+    "Este servidor ya está esperando para unirse, o todavía está terminando su última solicitud. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_approving":
     "El servidor principal está aprobando esta unión, o acaba de dejar de aprobarla, así que no se puede detener desde aquí. Espera un momento: esta página mostrará después la respuesta del servidor principal.",
   "connect.refusal.join_in_use":
