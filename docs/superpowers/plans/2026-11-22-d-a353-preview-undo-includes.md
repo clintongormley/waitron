@@ -1,0 +1,17 @@
+# Undo how an included menu appears in Preview
+
+In Preview, a manager can put an included menu back to the way the published version showed it, either as a folder or directly, with the published folder's fixed names, photo and colour. Follow [A353 PR 2](2026-11-06-a353-preview-undo.md#pr-2--an-includes-own-presentation). An edit made in the included menu itself still opens that menu. Adding and removing inclusions, placement, order and shortcuts stay with the later A353 pull requests.
+
+## Plan the write
+
+- In `packages/menu/src/menu-undo.ts`, handle this menu's `section_changed` for an include. Find the matching occurrence in the published and working documents. Offer Undo only if this menu holds one occurrence in each version and the working structure still names its own parent list and matching member. Stop at another menu's root when walking this menu's lists. Use the parent path to resolve the list, using `rootSectionId` at top level. Send the existing `setIncludeFolder(listId, memberId, input)` command. Restore the published fixed values or an empty override object for a folder. For direct display, omit overrides so previously saved values stay hidden for future use. Keep the distinction between following a value and explicitly clearing it.
+- Apply the same switched-off language rule as the existing section Undo. Offer the write when those fixed names match and the save can preserve them. Give no Undo if an off-language name would need restoring or clearing. Omit the action when the current structure is absent or the occurrence is ambiguous. Keep the existing Edit link for changes credited to the included menu.
+- Extend `packages/menu/src/menu-undo.test.ts` and `menu-undo.db.test.ts` first. The planner checks a missing or ambiguous target, both display transitions and the off-language decision. Through the real save, verify fixed names and colour restored together, a photo returned to following, direct display preserving hidden overrides and an unchanged switched-off name surviving the write. Keep the included-menu edit-link assertion. Run both files with `pnpm --filter @waitron/menu exec vitest run` and their paths.
+
+## Show Undo in the dashboard
+
+- Pass the existing structure from `apps/dashboard/src/screens/menus-screen.ts` to `widgets/menu-preview.ts`. Use it in the existing planner and its cached result so a newly loaded structure can make Undo appear. Extend `api/menu-undo.ts` to send the command once through `DashboardApi.setIncludeFolder`. Use the existing save and refresh flow and Preview message location. Add English and Spanish wording for the applicable include write refusals in `i18n/strings.ts`, for the watcher to settle at clearance.
+- Extend `api/menu-undo.test.ts`, the widget's Preview Undo test and `screens/menus-screen.preview-undo.test.ts` as needed. The client test observes one correctly addressed write. The widget test checks the action appears once structure arrives and retains Edit for the included menu's own change. The screen test covers click, one write and a refreshed Preview. Run those focused Chromium files, the guide checks and dashboard typecheck. Inspect an include change in both languages and themes at phone and desktop widths.
+- Update the English and Spanish menu guide section and the design-system note. Narrow the A353 entries in `docs/backlog.md` and `docs/backlog/menu.md` to the remaining PRs and remove the old branch pointer.
+
+Estimate 115–175 production lines, 140–225 test lines and 15–30 guide and backlog lines. Existing write route and schema.
