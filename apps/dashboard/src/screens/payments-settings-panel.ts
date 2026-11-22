@@ -37,6 +37,7 @@ export class PaymentsSettingsPanel extends LitElement {
   @state() private readError = "";
   @state() private saveError = "";
   #revision = 0;
+  #baseline!: Switches;
   #scope?: DraftScope<Switches>;
   #generation = 0;
   #queries = new DashboardQueries(
@@ -77,7 +78,7 @@ export class PaymentsSettingsPanel extends LitElement {
 
   #resetDraft(view: PaymentSettingsView): void {
     this.#revision = view.revision;
-    this.draft = {
+    this.draft = this.#baseline = {
       tipsEnabled: view.tipsEnabled,
       testProviders: view.testProvidersAvailable && view.testProviders,
     };
@@ -122,8 +123,28 @@ export class PaymentsSettingsPanel extends LitElement {
       if (generation !== this.#generation) return;
       this.saveError = codeOf(error);
       if (this.saveError === "settings.out_of_date") {
-        const revision = (error as { params?: { revision?: number } }).params?.revision;
-        if (typeof revision === "number") this.#revision = revision;
+        try {
+          const view = await this.api.getPaymentSettings();
+          if (generation !== this.#generation) return;
+          const baseline = this.#baseline;
+          this.#received(view);
+          this.#resetDraft(this.latest!);
+          this.draft = {
+            tipsEnabled:
+              draft.tipsEnabled === baseline.tipsEnabled
+                ? this.#baseline.tipsEnabled
+                : draft.tipsEnabled,
+            testProviders:
+              this.latest!.testProvidersAvailable &&
+              (draft.testProviders === baseline.testProviders
+                ? this.#baseline.testProviders
+                : draft.testProviders),
+          };
+          this.#scope?.changed();
+          this.saveError = "payments.settings_refreshed";
+        } catch (refreshError) {
+          if (generation === this.#generation) this.saveError = codeOf(refreshError);
+        }
       }
     } finally {
       if (generation === this.#generation) this.saving = false;
@@ -147,6 +168,10 @@ export class PaymentsSettingsPanel extends LitElement {
   override render() {
     const action = saveActionState(this.#scope);
     const error = this.saveError || this.readError;
+    const message =
+      error === "payments.settings_refreshed"
+        ? t("payments.settings_refreshed")
+        : error && codeMessage(error);
     return html`<section aria-labelledby="payment-settings-heading">
       <h2 id="payment-settings-heading">${t("payments.settings_heading")}</h2>
       ${
@@ -165,7 +190,7 @@ export class PaymentsSettingsPanel extends LitElement {
             ? nothing
             : html`<p role="status">${t("payments.settings_loading")}</p>`
       }
-      <wt-form-actions .error=${error ? codeMessage(error) : ""}>
+      <wt-form-actions .error=${message}>
         <wt-button
           variant=${action.variant}
           ?disabled=${action.unchanged || this.saving}

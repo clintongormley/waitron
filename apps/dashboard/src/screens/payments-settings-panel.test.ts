@@ -17,11 +17,12 @@ const initial: PaymentSettingsView = {
 async function mount(
   testProvidersAvailable = false,
   savePaymentSettings = vi.fn(async (draft) => ({ ...draft, testProvidersAvailable, revision: 4 })),
+  getPaymentSettings = async () => ({ ...initial, testProvidersAvailable }),
 ) {
   setLocale("en");
   const { el } = await mountWidget<PaymentsSettingsPanel>("dashboard-payments-settings", {
     api: {
-      getPaymentSettings: async () => ({ ...initial, testProvidersAvailable }),
+      getPaymentSettings,
       savePaymentSettings,
     } as unknown as DashboardApi,
   });
@@ -56,29 +57,43 @@ it("keeps Save quiet until the switches change and excludes the practice switch 
   await expect.element(save).toBeDisabled();
 });
 
-it("saves the revised Prepare choices after the manager confirms a stale edit", async () => {
+it("keeps the draft tip choice and refreshes the untouched practice switch after a stale save", async () => {
+  const getPaymentSettings = vi
+    .fn()
+    .mockResolvedValueOnce({ ...initial, testProvidersAvailable: true })
+    .mockResolvedValue({
+      ...initial,
+      testProviders: false,
+      testProvidersAvailable: true,
+      revision: 4,
+    });
   const savePaymentSettings = vi
     .fn()
     .mockRejectedValueOnce({ code: "settings.out_of_date", params: { revision: 4 } })
-    .mockResolvedValue({
-      tipsEnabled: true,
-      testProviders: true,
-      testProvidersAvailable: true,
-      revision: 5,
-    });
-  await mount(true, savePaymentSettings);
+    .mockImplementation(async (draft) => ({ ...draft, testProvidersAvailable: true, revision: 5 }));
+  await mount(true, savePaymentSettings, getPaymentSettings);
   const providers = page.getByRole("switch", { name: "Use card providers' test accounts" });
+  const tips = page.getByRole("switch", { name: "Offer tips at the till" });
   await expect.element(providers).toBeChecked();
-  await page.getByRole("switch", { name: "Offer tips at the till" }).click();
+  await tips.click();
   const save = page.getByRole("button", { name: "Save", exact: true });
   await save.click();
-  await expect.element(page.getByText(codeMessage("settings.out_of_date"))).toBeVisible();
-  await expect.element(page.getByRole("switch", { name: "Offer tips at the till" })).toBeChecked();
+  await vi.waitFor(() => expect(getPaymentSettings).toHaveBeenCalledTimes(2), { timeout: 1000 });
+  await expect.element(providers).not.toBeChecked();
+  await expect.element(tips).toBeChecked();
+  await expect
+    .element(
+      page.getByText(
+        "Someone else saved these settings while you were editing. Review the switches before saving.",
+      ),
+    )
+    .toBeVisible();
   await expect.element(save).toBeEnabled();
+  expect(savePaymentSettings).toHaveBeenCalledTimes(1);
   await save.click();
   expect(savePaymentSettings.mock.calls).toEqual([
     [{ tipsEnabled: true, testProviders: true, revision: 3 }],
-    [{ tipsEnabled: true, testProviders: true, revision: 4 }],
+    [{ tipsEnabled: true, testProviders: false, revision: 4 }],
   ]);
   await expect.element(save).toBeDisabled();
 });

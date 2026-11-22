@@ -48,7 +48,9 @@ request to enable practice providers. The overdue-card proposal also reads the t
 transaction. The existing Card payments page gets a Settings section below Card readers.
 The simulator instance remains available to pending collections and refunds after switching to
 test providers. Replacing the old Demo reader row checks, the running-server test verifies the
-practice option and the simulated-payment notice in both directions.
+practice option and the simulated-payment notice in both directions. At 20:27 the watcher cleared
+one reread after a stale save. The screen keeps the manager's edits, shows the latest value for any
+untouched switch, and waits for another Save.
 
 **Owner lands:** no. Tips are kept off the invoice (`docs/backlog.md:2598`, the Tips row), so the
 switch's source moving changes no sale, invoice number, fiscal record or hashed value; the rule that
@@ -188,10 +190,11 @@ dashboard panel and tab 130, client and strings 25) and about 420 lines of tests
 50, routes 110, panel, unsaved and a11y 170, re-pointed fixtures 40). Not counted: deleted
 `till-config.ts` and its test. About 3 hours.
 
-**Measured 2026-11-22.** After sharing the route-test setup and dropping duplicate assertions, the
-kept files add 451 production lines, 551 test lines and 21 test-support lines. They remove 382
-lines. The two retired files held 182 additional lines. The watcher cleared the overage at 20:09.
-The export projection, current payment consumers and browser checks account for the growth.
+**Measured 2026-11-22.** The final diff adds 480 production lines, 607 test lines and 21
+test-support lines. It removes 92 production lines, 290 test lines and 20 test-support lines.
+The two retired files held 182 additional lines. The watcher cleared the earlier measured overage
+at 20:09. The simulator refund case, tips-only transfer and stale-save check account for the
+review changes.
 
 ## Finish line
 
