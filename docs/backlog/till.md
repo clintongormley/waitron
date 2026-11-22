@@ -500,10 +500,7 @@ Every `/api/menu-state` poll waits its turn in the
 write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
 inside `withTransaction`; reading outside a transaction would skip the queue but give
 `menuState`'s queries no single consistent view, and there is no read-only transaction
-(`packages/db/src/tenancy.ts`). A
-till learns of a change only by polling, because the dashboard's live-update route accepts the
-management cookie only; a till-session branch there would let the server tell tills (plan D11), a
-later refinement.
+(`packages/db/src/tenancy.ts`).
 
 ## The till's home page (Task 9, #729)
 

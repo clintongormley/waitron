@@ -859,8 +859,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#uploaded-font-files-for-themes-owner-2026-10-20-a841-q7-b--after-a841)
 
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. Every menu poll waits
-  its turn in the write queue, and a till learns of a menu change only by polling, because the
-  dashboard's live-update route accepts the management cookie only.
+  its turn in the write queue.
   [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Every menu read from an
