@@ -186,14 +186,11 @@ const crossingTo = (relay: Relay, path: string) =>
 
 describe("a relay between a joining box and the main box", () => {
   const pairs = new JoinPairs();
-  const relays: Relay[] = [];
 
   beforeAll(() => pairs.open("waitron-join-relay-"));
 
   afterAll(async () => {
-    for (const relay of relays) await relay.close();
-    const failures = await pairs.close();
-    if (failures.length > 0) throw new AggregateError(failures, "join relay teardown failed");
+    await pairs.close("join relay teardown failed");
   });
 
   it(
@@ -201,7 +198,7 @@ describe("a relay between a joining box and the main box", () => {
     async () => {
       const pair = await pairs.start("pure", "preproduction", undefined);
       const relay = await startRelay(pair);
-      relays.push(relay);
+      pairs.closeWithSuite(() => relay.close());
       const joined = await pair.adopt(relay.url);
       expect(joined.status, JSON.stringify(joined.body)).toBe(200);
       expect(joined.body).toMatchObject({ adopted: true, restarting: true });
@@ -242,7 +239,7 @@ describe("a relay between a joining box and the main box", () => {
     async () => {
       const pair = await pairs.start("rewrite", "preproduction", undefined);
       const relay = await startRelay(pair, { rewriteStore: true });
-      relays.push(relay);
+      pairs.closeWithSuite(() => relay.close());
       const before = await joinState(pair.dirsM.venue, pair.m.nodeId);
       const refused = await pair.adopt(relay.url);
       expect(refused.status, JSON.stringify(refused.body)).toBe(400);
@@ -269,7 +266,7 @@ describe("a relay between a joining box and the main box", () => {
     async () => {
       const pair = await pairs.start("tapped", "preproduction", undefined);
       const relay = await startRelay(pair, { rewriteStore: true, holdCancel: true });
-      relays.push(relay);
+      pairs.closeWithSuite(() => relay.close());
       const refused = await pair.adopt(relay.url);
       expect(refused.body).toEqual({ error: { code: "mirror.join_invalid", params: {} } });
       // The code M shows, worked out from what crossed the relay.

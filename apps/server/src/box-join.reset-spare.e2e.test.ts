@@ -25,8 +25,7 @@ describe("a reset spare and the main box's start", () => {
   beforeAll(() => pairs.open("waitron-join-reset-"));
 
   afterAll(async () => {
-    const failures = await pairs.close();
-    if (failures.length > 0) throw new AggregateError(failures, "reset spare teardown failed");
+    await pairs.close("reset spare teardown failed");
   });
 
   it(

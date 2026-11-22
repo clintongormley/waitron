@@ -26,8 +26,7 @@ describe("a joining box's environment", () => {
   beforeAll(() => pairs.open("waitron-join-env-"));
 
   afterAll(async () => {
-    const failures = await pairs.close();
-    if (failures.length > 0) throw new AggregateError(failures, "join environment teardown failed");
+    await pairs.close("join environment teardown failed");
   });
 
   const setupStatus = async (url: string, via: RequestInit): Promise<unknown> => {

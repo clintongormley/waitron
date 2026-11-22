@@ -72,20 +72,28 @@ export class JoinPairs {
   private readonly boxes: TestBox[] = [];
   private readonly retained: RetainedHttpListener[] = [];
   private readonly closers: (() => Promise<void>)[] = [];
+  private readonly owned: (() => Promise<void>)[] = [];
 
   async open(prefix: string): Promise<void> {
     this.scratch = await mkdtemp(join(tmpdir(), prefix));
     this.migrationsRoot = await copyMigrations(this.scratch);
   }
 
-  /** Closes every box and client, removes the scratch folder, and answers what failed. */
-  async close(): Promise<unknown[]> {
-    const failures = await closeBoxes(this.boxes);
+  /** Closes `close` with the suite, before the boxes; a failure fails the teardown. */
+  closeWithSuite(close: () => Promise<void>): void {
+    this.owned.push(close);
+  }
+
+  /** Closes everything the suite started and removes the scratch folder; throws what failed. */
+  async close(label: string): Promise<void> {
+    const failures: unknown[] = [];
+    for (const close of this.owned) await close().catch((error: unknown) => failures.push(error));
+    failures.push(...(await closeBoxes(this.boxes)));
     for (const held of this.retained)
       if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
     for (const close of this.closers) await close().catch(() => {});
     if (this.scratch !== undefined) await rm(this.scratch, { recursive: true, force: true });
-    return failures;
+    if (failures.length > 0) throw new AggregateError(failures, label);
   }
 
   /** An HTTPS client trusting `ca`, closed with the suite. */
