@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -57,8 +57,7 @@ async function readDrawer(tx: Transaction, printerId: string) {
         inArray(drawerEntries.kind, ["count", "recount"]),
       ),
     )
-    // There is one first count in the interval, followed by the newest recount.
-    .orderBy(asc(drawerEntries.kind), desc(drawerEntries.sequence))
+    .orderBy(desc(eq(drawerEntries.kind, "count")), desc(drawerEntries.sequence))
     .limit(2);
   return { printerId, openingCash, afterClose, sequence: last?.sequence ?? 0, first, recount };
 }

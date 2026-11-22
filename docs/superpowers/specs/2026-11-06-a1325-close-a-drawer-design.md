@@ -92,9 +92,6 @@ The till's menu offers **Close drawer** on a device with a drawer. Steps:
    it to **For tips**.
 6. They confirm. The close is saved and the slip prints.
 
-On 22 November 2026 at 04:01, the watcher cleared a recovery for a stale count. If later cash
-movements make the amount available negative, staff can recount again and keep all counts on record.
-
 **An unfinished close.** The first count is saved at step 3, not at the end, or backing out would give a
 fresh first count with the expected figure already known. If the person stops or the till dies, the next
 attempt on that drawer, from any device, resumes from what was saved. A manager sees a count that was

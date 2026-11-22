@@ -44,7 +44,8 @@ if it stays shut. Count the cash and choose **Save count**. Waitron then shows a
 you can choose **Recount** once to check it. If you leave after saving a count, choose **Close drawer**
 again from any till assigned to it to pick up where you left off.
 
-If Waitron asks you to recount after cash moved, choose **Recount** and enter what is in the drawer now.
+If Waitron asks you to recount after cash moved, choose **Recount** and enter what is in the
+drawer now.
 
 Enter the cash you want to leave and check **For the bank** before taking the rest out. Choose
 **Finish close**. If you need another slip, you can reprint it from
