@@ -303,6 +303,14 @@ async function mountApp(overrides: Record<string, unknown> = {}, props: Partial<
   return mounted;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 /** Settles awaited API promises (the real `setTimeout` is not faked) and Lit's render. */
 async function flush(el: TillApp): Promise<void> {
   for (let i = 0; i < 3; i++) {
@@ -566,7 +574,7 @@ describe("a basket that spans a publish", () => {
   });
 
   it("defers a poll answer while the basket is locked for editing", async () => {
-    const offers = Promise.withResolvers<ZoneOffers>();
+    const offers = deferred<ZoneOffers>();
     const listZoneOffers = vi.fn().mockReturnValueOnce(offers.promise);
     const { el } = await mountApp({ listZoneOffers });
     const { store } = await toCounter(el);
@@ -589,8 +597,8 @@ describe("a basket that spans a publish", () => {
   });
 
   it("picks up postponed offers when payment clears the basket before another poll", async () => {
-    const offers = Promise.withResolvers<ZoneOffers>();
-    const sale = Promise.withResolvers<typeof saleResult>();
+    const offers = deferred<ZoneOffers>();
+    const sale = deferred<typeof saleResult>();
     const listZoneOffers = vi.fn().mockReturnValueOnce(offers.promise);
     const { el } = await mountApp({
       listZoneOffers,
@@ -892,7 +900,7 @@ describe("a pay refused because the menu changed", () => {
   });
 
   it("retries a refused payment using the offers read already started by the poll", async () => {
-    const offers = Promise.withResolvers<ZoneOffers>();
+    const offers = deferred<ZoneOffers>();
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockReturnValue(offers.promise),
       recordSale: vi.fn().mockRejectedValueOnce(refusal).mockResolvedValueOnce(saleResult),
