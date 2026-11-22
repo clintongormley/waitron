@@ -1705,8 +1705,7 @@ export const en = {
   "payment_slip.capture_failed": "Payment received, but the payment slip could not print.",
   "drawer_close.title": "Close drawer",
   "drawer_close.permission":
-    "Your role cannot close this drawer. Sign in with drawer access to continue.",
-  "drawer_close.switch_operator": "Switch operator",
+    "Your role cannot close this drawer. Log out and sign in with the Open cash drawers permission.",
   "drawer_close.use_key": "Open the drawer with the key.",
   "drawer_close.key_if_needed": "If the drawer stays shut, open it with the key.",
   "drawer_close.counted": "Cash counted",
@@ -3970,8 +3969,7 @@ export const es: Record<StringKey, string> = {
   "payment_slip.capture_failed": "Pago recibido, pero no se pudo imprimir el justificante de pago.",
   "drawer_close.title": "Cerrar cajón",
   "drawer_close.permission":
-    "Tu rol no puede cerrar este cajón. Inicia sesión con acceso al cajón para continuar.",
-  "drawer_close.switch_operator": "Cambiar de persona",
+    "Tu rol no puede cerrar este cajón. Cierra sesión y vuelve a entrar con el permiso Abrir cajones.",
   "drawer_close.use_key": "Abre el cajón con la llave.",
   "drawer_close.key_if_needed": "Si el cajón sigue cerrado, ábrelo con la llave.",
   "drawer_close.counted": "Efectivo contado",

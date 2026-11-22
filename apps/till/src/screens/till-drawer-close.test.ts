@@ -141,25 +141,33 @@ it("saves the count before showing the difference, allows a recount and saves th
   await vi.waitFor(() => expect(words(el)).toContain("reprint the slip in Sales"));
 });
 
-it("offers another sign-in when this operator has no drawer permission", async () => {
-  setLocale("en-GB");
-  const requests = api();
-  requests.readDrawerClose.mockRejectedValue({ code: "authorization.not_permitted" });
-  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
-    api: requests,
-    printerId: "bar",
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot?.querySelector("wt-form-actions")?.error).toContain(
-      "Your role cannot close this drawer",
-    ),
-  );
-  const signingOut = vi.fn();
-  el.addEventListener("logout", signingOut);
-  await press(el, "sign-in");
-  expect(signingOut).toHaveBeenCalledOnce();
-  expect(requests.openDrawer).not.toHaveBeenCalled();
-});
+it.each(["read", "finish"] as const)(
+  "offers another sign-in when the %s is refused for its drawer grant",
+  async (stage) => {
+    setLocale("en-GB");
+    const requests = api();
+    if (stage === "read") {
+      requests.readDrawerClose.mockRejectedValue({ code: "authorization.not_permitted" });
+    } else {
+      requests.readDrawerClose.mockResolvedValue(pending);
+      requests.finishDrawerClose.mockRejectedValue({ code: "authorization.not_permitted" });
+    }
+    const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+      api: requests,
+      printerId: "bar",
+    });
+    if (stage === "finish") await press(el, "finish");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot?.querySelector("wt-form-actions")?.error).toContain("Open cash drawers"),
+    );
+    const signingOut = vi.fn();
+    el.addEventListener("logout", signingOut);
+    expect(action(el, "sign-in")?.textContent?.trim()).toBe("Log out");
+    await press(el, "sign-in");
+    expect(signingOut).toHaveBeenCalledOnce();
+    expect(requests.openDrawer).not.toHaveBeenCalled();
+  },
+);
 
 it("resumes the saved count without a new kick and leaves it available on Back", async () => {
   const requests = api();

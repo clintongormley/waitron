@@ -68,10 +68,11 @@ the printer's name identifies an A4 printer.
 If a Bluetooth printer still appears in Waitron but lost its pairing, put it in pairing mode.
 Open **Add a printer** and choose **Pair** beside it, or use **Pair again** if its details offer it.
 
-If **Delete** warns that the drawer has a balance or a pending count, follow **Close first**. Choose
-**Close drawer** on the named till and leave zero cash. If no till is listed, assign the drawer
-in **Devices** first. If the drawer setting is off, turn it on in calibration. **Delete anyway** keeps the balance and any pending count if you later add
-a printer at the same address and Waitron restores its registration.
+If **Delete** warns that the drawer has a balance or a pending count, follow the instructions under
+**Close first**. On the named till, choose **Close drawer** and leave zero cash. If no till is listed,
+assign the drawer in **Devices** first. If the drawer setting is off, turn it on in calibration.
+**Delete anyway** keeps the balance and any pending count if you later add a printer at the same
+address and Waitron restores its registration.
 
 ## Print Queue {#print-queue}
 

@@ -90,6 +90,10 @@ export class WtDeleteDialog extends LitElement {
         margin: 0;
       }
 
+      .guidance a {
+        color: var(--wt-color-primary-text);
+      }
+
       .irreversible {
         margin: 0;
         font-weight: var(--wt-font-weight-bold);
@@ -220,7 +224,7 @@ export class WtDeleteDialog extends LitElement {
                   alternative
                     ? html`
                         <p>${alternative.warning}</p>
-                        <div data-test="delete-guidance">
+                        <div class="guidance" data-test="delete-guidance">
                           <h3>${alternative.heading}</h3>
                           ${alternative.guidance}
                           ${

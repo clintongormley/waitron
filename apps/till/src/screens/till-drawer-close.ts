@@ -288,7 +288,7 @@ export class TillDrawerClose extends LitElement {
                 data-drawer-action="sign-in"
                 variant="primary"
                 @click=${() => this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }))}
-                >${t("drawer_close.switch_operator")}</wt-button
+                >${t("action.logout")}</wt-button
               >`
             : nothing
         }
