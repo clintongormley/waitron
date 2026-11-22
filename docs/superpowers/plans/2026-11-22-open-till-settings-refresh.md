@@ -18,10 +18,9 @@ change left Send visible while first save recorded Pay before preparation.
    `apps/till/src/till-app-setup-refresh.test.ts`. Use the selected zone’s mode
    from the device-zone poll. Defer updates while a tender, Send or payment
    attempt is in progress using the existing order stage and request checks.
-   For the first Send and tender, use the mode the server already computes in
-   `/api/dead-ends/sale` (`apps/server/src/till-api.ts`) through `#askCounterDeadEnds`.
-   If it changed, show the current choices and keep the dishes. Keep the
-   existing read-failure and payment-retry behaviour.
+   Test a zone poll while a tender is in flight. Keep the existing payment
+   preflight and retry behaviour. The payment route already sends the dishes
+   when a counter order is paid. The poll corrects the controls afterward.
 2. **Saved baskets.** Return the recorded mode on park, including its retry,
    and on reading a held basket (`apps/server/src/working-order.ts`,
    `apps/till/src/api/client.ts`). Reuse the venue-service recorded context.
@@ -48,7 +47,8 @@ change left Send visible while first save recorded Pay before preparation.
 4. **Checks and guides.** Run the changed till and server tests, the existing
    idle and clock cases, the normal hook and scoped PR CI. Update the English
    and Spanish Staff and Table service guides and the developer setup-read
-   description. Retire the two backlog entries after the behaviour passes.
+   description. CLAUDE.md §3 requires both guide languages for a screen change.
+   Retire the two backlog entries after the behaviour passes.
 
-Estimate +125/−25 production lines and +195/−0 test lines. Reuse existing reads,
-writes and saved order facts. Starting screens still open at sign-in.
+Estimate +120/−25 production lines and +230/−0 test lines. The layout of an assigned
+profile is locked by `device_profile.in_use`. Starting screens open at sign-in.
