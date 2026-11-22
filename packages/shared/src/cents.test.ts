@@ -46,14 +46,14 @@ describe("centsToDecimal", () => {
     });
   });
 
-  it("refuses a whole number too large to be held exactly", () => {
-    expect(refusalOf(() => centsToDecimal(Number.MAX_SAFE_INTEGER + 2))).toEqual({
+  it("refuses a magnitude beyond what a number counts exactly", () => {
+    expect(refusalOf(() => centsToDecimal(2 ** 53))).toEqual({
       code: "shared.invalid_cents",
-      params: { value: String(Number.MAX_SAFE_INTEGER + 2) },
+      params: { value: "9007199254740992" },
     });
-    expect(refusalOf(() => centsToDecimal(-(Number.MAX_SAFE_INTEGER + 2)))).toEqual({
+    expect(refusalOf(() => centsToDecimal(-(2 ** 53)))).toEqual({
       code: "shared.invalid_cents",
-      params: { value: String(-(Number.MAX_SAFE_INTEGER + 2)) },
+      params: { value: "-9007199254740992" },
     });
   });
 
