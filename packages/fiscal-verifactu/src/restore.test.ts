@@ -1,3 +1,4 @@
+import { readChainHead } from "./chain.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -100,10 +101,8 @@ describe("restoreFiscal", () => {
     );
     expect(old[0]?.revocado_en).not.toBeNull();
     expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(true);
-    const { rows: head } = await db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${TAXPAYER_A.nodeId}`,
-    );
-    expect(head[0]?.secuencia).toBe(7); // ours; never reset
+    const head = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(head.secuencia).toBe(7);
     const { rows: ledger } = await db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from verifactu_records`,
     );

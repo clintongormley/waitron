@@ -20,7 +20,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // These fixtures have no filed records; clear only their mutable identity rows.
   await suite.db.transaction(async (tx) => {
-    for (const table of ["cadenas", "verifactu_identities", "nodes", "taxpayer"]) {
+    for (const table of ["verifactu_identities", "nodes", "taxpayer"]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);
     }
   });

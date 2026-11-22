@@ -1,3 +1,4 @@
+import { readChainHead } from "./chain.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import {
   UNIQUE_VIOLATION,
@@ -214,20 +215,10 @@ describe("a new SIF identity begins a new chain", () => {
     expect(first.numeroInstalacion).toBe("S000001");
     expect(second.numeroInstalacion).toBe("P000042");
 
-    const head = await db.execute<{
-      secuencia: number;
-      ultima_huella: string | null;
-      ultimo_registro_id: string | null;
-    }>(
-      sql`select secuencia, ultima_huella, ultimo_registro_id from cadenas
-          where node_id = ${TAXPAYER_A.nodeId}`,
-    );
-    // The chain POINTER is broken — the next record cannot chain to the old one.
-    expect(head.rows[0]?.ultima_huella).toBeNull();
-    expect(head.rows[0]?.ultimo_registro_id).toBeNull();
-    // But the sequence is NOT reset. It is ours, an ordering aid for the outbox, and resetting it
-    // would collide with UNIQUE (node_id, secuencia) on the very next append.
-    expect(head.rows[0]?.secuencia).toBe(7);
+    const head = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(head.ultimaHuella).toBeNull();
+    expect(head.ultimoRegistroId).toBeNull();
+    expect(head.secuencia).toBe(7);
   });
 
   it("reports PrimerRegistro from local state, not from a flag", async () => {

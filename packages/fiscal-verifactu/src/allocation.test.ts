@@ -19,6 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TAXPAYER_A, seedTaxpayers, seedSoldRegistro } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
+import { readChainHead } from "./chain.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { activateAllocation } from "./allocation.js";
 import {
@@ -618,7 +619,7 @@ async function activate(
   );
 }
 async function activationSnapshot() {
-  const tables = ["verifactu_identities", "invoice_series", "cadenas", "fiscal_allocations"];
+  const tables = ["verifactu_identities", "invoice_series", "fiscal_allocations"];
   const snapshot: Record<string, unknown> = {};
   for (const name of tables) {
     if (!/^[a-z_]+$/.test(name)) throw new Error("invalid probe table");
@@ -650,15 +651,11 @@ describe("atomic allocation activation", () => {
         .map((s) => s.id)
         .sort(),
     ).toEqual(result.series.map((s) => s.id).sort());
-    expect(
-      (
-        await suite.db.execute(
-          sql`select node_id, ultimo_registro_id, ultima_huella, secuencia from cadenas`,
-        )
-      ).rows,
-    ).toEqual([
-      { node_id: node.nodeId, ultimo_registro_id: null, ultima_huella: null, secuencia: 0 },
-    ]);
+    expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual({
+      ultimoRegistroId: null,
+      ultimaHuella: null,
+      secuencia: 0,
+    });
     expect(
       (
         await suite.db.execute(
@@ -734,7 +731,6 @@ describe("atomic allocation activation", () => {
   it.each([
     ["retire SIF", "before update on verifactu_identities"],
     ["insert SIF", "before insert on verifactu_identities"],
-    ["reset chain", "before insert on cadenas"],
     ["retire series", "before update on invoice_series"],
     ["insert series", "before insert on invoice_series when new.code = 'R-P000042'"],
     ["audit result", "before insert on fiscal_allocations"],
@@ -878,17 +874,31 @@ describe("replay scope and history", () => {
   });
 
   it("starts an empty chain while retaining its existing sequence", async () => {
-    await suite.db.execute(
-      sql`insert into cadenas(node_id, secuencia, actualizado_en) values(${node.nodeId}, 13, ${new Date("2026-10-12T08:00:00.000Z").getTime()})`,
+    const earlier = await withTransaction(suite.db, (tx) =>
+      seedFixtureSif(tx, {
+        nodeId: node.nodeId,
+        nif: candidate.taxpayerNif,
+        idSistemaInformatico: candidate.softwareId,
+      }),
     );
+    await seedSoldRegistro(suite.db, {
+      nodeId: node.nodeId,
+      sifId: earlier.id,
+      nif: candidate.taxpayerNif,
+      secuencia: 13,
+      huella: "A".repeat(64),
+      entorno: "preproduction",
+    });
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date("2026-10-12T08:00:00.000Z") })
+      .where(eq(invoiceSeries.code, "S13"));
     await activate();
-    expect(
-      (
-        await suite.db.execute(
-          sql`select ultimo_registro_id, ultima_huella, secuencia from cadenas where node_id=${node.nodeId}`,
-        )
-      ).rows,
-    ).toEqual([{ ultimo_registro_id: null, ultima_huella: null, secuencia: 13 }]);
+    expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual({
+      ultimoRegistroId: null,
+      ultimaHuella: null,
+      secuencia: 13,
+    });
   });
 
   it("refuses a malformed new activation without changing any row", async () => {
@@ -951,13 +961,11 @@ describe("activation over retained fiscal rows", () => {
         ...retained,
         retiredAt: expect.any(Date),
       });
-    expect(
-      (
-        await suite.db.execute(
-          sql`select ultimo_registro_id, ultima_huella, secuencia from cadenas where node_id=${node.nodeId}`,
-        )
-      ).rows,
-    ).toEqual([{ ultimo_registro_id: null, ultima_huella: null, secuencia: 13 }]);
+    expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual({
+      ultimoRegistroId: null,
+      ultimaHuella: null,
+      secuencia: 13,
+    });
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "R-P000042", purpose: "corrective" },
@@ -1007,7 +1015,7 @@ async function inRestoredCopy(body: (db: Database) => Promise<void>) {
 
 async function rawActivationSnapshot(db: Database) {
   const result: Record<string, unknown> = {};
-  for (const table of ["verifactu_identities", "invoice_series", "cadenas", "fiscal_allocations"]) {
+  for (const table of ["verifactu_identities", "invoice_series", "fiscal_allocations"]) {
     if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot table");
     result[table] = (await db.execute(sql.raw(`select * from "${table}" order by rowid`))).rows;
   }
