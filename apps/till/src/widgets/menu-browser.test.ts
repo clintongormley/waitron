@@ -1076,14 +1076,14 @@ describe("till-menu-browser", () => {
       const menu = display(
         "till",
         { columns: 8 },
-        display("handheld", { columns: 4, order: "menu_first" }),
+        display("handheld", { columns: 2, order: "menu_first" }),
       );
       const handheld = await mount({ menu, handheld: true });
       const till = await mount({ menu, handheld: false });
       expect(regions(handheld.el)).toEqual(["search", "structure", "shortcuts"]);
       expect(regions(till.el)).toEqual(["search", "shortcuts", "structure"]);
       for (const [{ el, host }, columns] of [
-        [handheld, 4],
+        [handheld, 2],
         [till, 8],
       ] as const) {
         await widen(host, 1280);

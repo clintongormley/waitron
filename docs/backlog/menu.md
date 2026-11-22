@@ -47,13 +47,6 @@ the full scans and translation-gap read remain.
 
 Left open:
 
-- **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct snapshots in the invalidation cases. These files were outside the branch and left unchanged. Replace those with valid, distinguishable snapshots using columns plus another display field, preserving every revision, read-count and late-answer assertion; do not collapse three distinct observations into two.
-- **A291 DONE (2026-10-06):** removed format-2 preview/republication and silent omission from till
-  reads. Unsupported live documents refuse with `menu.reset_required`, localized in dashboard and
-  till; the Menus list, selected menu, Preview and Home display the reset instruction. Menu and real management/till route
-  tests cover the refusal; configuration export/import still leaves publications behind. Reset the
-  venue instead of republishing old menus. Historical W93 Decision 5 has a dated superseding note.
-
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
   copies the till's tile/breadcrumb markup, thumbnail/paint helpers and CSS
   (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already

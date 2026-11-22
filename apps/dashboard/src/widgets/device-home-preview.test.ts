@@ -261,7 +261,7 @@ describe("dashboard-device-home-preview", () => {
       "till",
       { columns: 7, order: "menu_first" },
       display("handheld", {
-        columns: 5,
+        columns: 2,
       }),
     );
     const { el } = await mount({ document });
@@ -273,7 +273,7 @@ describe("dashboard-device-home-preview", () => {
     expect(divider(el)).toBe("Full menu");
     expect(regionName(el, "structure")).toBe("Full menu");
     expect(grids(el)).toHaveLength(2);
-    for (const grid of grids(el)) expect(grid.style.getPropertyValue("--columns").trim()).toBe("5");
+    for (const grid of grids(el)) expect(grid.style.getPropertyValue("--columns").trim()).toBe("2");
 
     el.device = "till";
     await el.updateComplete;
