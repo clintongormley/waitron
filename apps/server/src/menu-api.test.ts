@@ -6932,10 +6932,15 @@ describe("menu settings routes", () => {
       const schedules = await withTransaction(suite.db, (tx) => readTakeawayVatSchedules(tx, [id]));
       expect(schedules.get(id)).toEqual([{ from: null, rate: "4.00" }]);
     } finally {
-      await send(app, "PUT", "/management-api/venue-defaults", {
-        body: { defaultTakeawayVatRate: "10.00" },
-      });
+      // The save refuses null, so the stored default is cleared directly.
+      await suite.db.execute(
+        sql`update settings set doc = json_set(doc, '$.defaultTakeawayVatRate', null) where module = 'menu'`,
+      );
     }
+    const stored = await suite.db.execute<{ rate: string | null }>(
+      sql`select json_extract(doc, '$.defaultTakeawayVatRate') as rate from settings where module = 'menu'`,
+    );
+    expect(stored.rows).toEqual([{ rate: null }]);
   });
 
   it.each(["5.00", "3.00", "4", null, 4])(
