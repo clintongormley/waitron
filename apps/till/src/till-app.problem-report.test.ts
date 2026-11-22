@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseTheme, type WtButton, type WtTextarea } from "@waitron/ui";
 import { clockApp, signIn, working } from "../test/clock-app.js";
+import type { TillApi } from "./api/client.js";
 import { cleanupWidgets, resetPage } from "./widgets/test-helpers.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -186,7 +187,9 @@ it("leaves the build empty until setReportBuild gives it one, then names it in t
 });
 
 it("shows that the box will retry a confirmed Cloud report", async () => {
-  const sendProblemReport = vi.fn(async (_id: string) => ({ delivery: "queued" as const }));
+  const sendProblemReport = vi
+    .fn<TillApi["sendProblemReport"]>()
+    .mockResolvedValue({ delivery: "queued" });
   const { el } = await clockApp({
     enabled: false,
     api: {
