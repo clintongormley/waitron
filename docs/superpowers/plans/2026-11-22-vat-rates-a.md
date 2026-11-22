@@ -132,6 +132,10 @@ from reading the code, except the commands quoted, which were run.
 Each has a recommended default; the plan is written to it. **D10, D11 and D17 need the owner's yes
 before the tasks that depend on them start** (each task names its gate).
 
+**Answered 2026-11-22 10:03:** the owner chose "Yes to all (Recommended)" for D10, D11, D17 and D18,
+which also confirms the design's approval (lane L's `questions.md`, "WATCHER 2026-11-22 10:03").
+PR 1 landed as #4047.
+
 - **D1. Four pull requests in piece A, in this order:** PR 1 storage (no visible change); PR 2
   takeaway at each product's own rate; PR 3 eat-in at the dine-in rate; PR 3b the screens and guides
   for it. Takeaway goes first because a blank takeaway label falls back to the eat-in label

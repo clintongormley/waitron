@@ -2,7 +2,7 @@
 
 Status: **approved by the owner, 21 November 2026** ("y"), after reading the list of the writer's
 calls and asking how a takeaway set menu gets its rate (answer: worked out from its products, as
-in "Set menus" below). The rules in "What the owner decided" are the owner's, from conversations on
+in "Set menus" below). The owner confirmed this approval on 22 November 2026 at 10:03, choosing "Yes to all" for piece A's D10, D11, D17 and D18 (lane L's `questions.md`, "WATCHER 2026-11-22 10:03"). The rules in "What the owner decided" are the owner's, from conversations on
 16, 18 and 21 November 2026. The parts marked **my call** are the writer's, approved with the rest. Statements about today's code cite `file:line` on `main` at `58432f9af9`.
 They come from reading the code, not from running it.
 
