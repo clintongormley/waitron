@@ -24,7 +24,8 @@ The Variants dialog keeps its own Save. Course, Add, Copy and Remove keep their 
   null. Freeze surcharge input and both actions while sending. Use accepted prices as
   the baseline before one refresh. Keep refused edits ready to retry and offer Try again
   if the refresh fails. Separate requests can save some prices when others are refused.
-  A submitted batch can finish after leaving. Its feedback lives in Dishes.
+  If you press Save and leave Menus before a refusal arrives, you do not see it.
+  Price overrides shows late refusals through `lateRefusalFor`.
 - Start red in `widgets/set-menu-dishes.test.ts` for blur without a write, then check
   multi-dish Save, Enter, Cancel, equal amounts, validation and partial refusal with retry.
   Keep the field and general refusal assertions and cover a failed refresh after an accepted

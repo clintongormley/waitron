@@ -309,8 +309,10 @@ los idiomas que uses y guarda.
 
 En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
-incluyes. Indica el suplemento junto al plato o la variante que cueste más. Cambia el **Curso**
-de un plato si lo sirves de otra manera en esta carta. Por ejemplo, pon una tapa en Entrantes
+incluyes. Indica el suplemento junto a cada plato que cueste más y pulsa **Guardar** en
+**Platos**. Deja el importe en blanco si el plato está incluido en el precio de la carta.
+Ajusta los suplementos de las variantes en **Variantes**. Cambia el **Curso** de un plato si
+lo sirves de otra manera en esta carta. Por ejemplo, pon una tapa en Entrantes
 para que cuente como entrante y salga con ese curso si la pides desde la carta a precio fijo.
 
 En **Qué incluye cada carta a precio fijo**, indica cuántos platos ofreces de cada curso. Por ejemplo,

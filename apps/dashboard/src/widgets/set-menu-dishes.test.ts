@@ -45,7 +45,7 @@ it("groups dishes in course order and links from No course to the product", asyn
   await expect.element(link).toHaveAttribute("href", "/products/product/hake");
 });
 
-it("remembers a course table's column choice when the editor is reopened", async () => {
+it("names a hidden surcharge error and remembers the hidden column on reopen", async () => {
   const key = "waitron.menus.set-menu.dishes.starters:columns";
   localStorage.removeItem(key);
   onTestFinished(() => localStorage.removeItem(key));
@@ -56,6 +56,8 @@ it("remembers a course table's column choice when the editor is reopened", async
       .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
       .shadowRoot!.querySelector('wt-data-table[aria-label="Starters"]')!,
   );
+  const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
+  await surcharge.fill("20000");
   const chooser = table.getByRole("button", { name: "Customise columns" });
   await vi.waitFor(() => expect(chooser.element()).toBeVisible());
   await chooser.click();
@@ -63,6 +65,17 @@ it("remembers a course table's column choice when the editor is reopened", async
   await expect.element(hideSurcharge).toBeChecked();
   await page.elementLocator(hideSurcharge.element().closest("label")!).click();
   await page.getByRole("button", { name: "Done" }).click();
+  const actions = page.elementLocator(
+    el
+      .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
+      .shadowRoot!.querySelector("wt-form-actions")!,
+  );
+  const save = actions.getByRole("button", { name: "Save", exact: true });
+  await save.click();
+  await expect
+    .element(actions.getByRole("alert"))
+    .toHaveTextContent("Your change to Soup was not saved.");
+  await expect.element(save).toBeDisabled();
 
   cleanupWidgets();
   await mountDishes();
@@ -109,6 +122,7 @@ it("moves Bravas to Starters and explains both line changes, then restores its p
     await page.getByRole("combobox", { name: /^Course for Bravas/ }).click();
     await page.getByRole("option", { name, exact: true }).click();
   };
+  await page.getByRole("textbox", { name: "Surcharge for Bravas" }).fill("3.50");
   await choose("Starters");
   await expect.element(page.getByRole("combobox", { name: /^Course for Bravas/ })).toBeDisabled();
   finishMove();
@@ -135,6 +149,10 @@ it("moves Bravas to Starters and explains both line changes, then restores its p
     )
     .toBeVisible();
   expect(api.saveSetMenuDishCourse).toHaveBeenNthCalledWith(2, "daily", "bravas-item", null);
+  await expect
+    .element(page.getByRole("textbox", { name: "Surcharge for Bravas" }))
+    .toHaveValue("3.50");
+  expect(api.updateMenuItem).not.toHaveBeenCalled();
 });
 
 it("leaves the next field focused if the manager moved on while a course change was saving", async () => {
@@ -166,8 +184,8 @@ it("leaves the next field focused if the manager moved on while a course change 
   expect((field.getRootNode() as ShadowRoot).activeElement === field).toBe(true);
 });
 
-it("shows Included while blank, saves on Enter, and clears the surcharge on blur", async () => {
-  const { api } = await mountDishes();
+it("shows Included while blank and stages clearing the surcharge until Save", async () => {
+  const { el, api } = await mountDishes();
   const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
   await expect.element(field).toHaveAttribute("placeholder", "Included");
   await field.fill("5.25");
@@ -185,6 +203,9 @@ it("shows Included while blank, saves on Enter, and clears the surcharge on blur
   await field.fill("");
   api.readSetMenu.mockResolvedValue(details);
   await page.getByRole("textbox", { name: "Surcharge for Soup" }).click();
+  expect(api.updateMenuItem).toHaveBeenCalledTimes(1);
+  const dishes = page.elementLocator(el.shadowRoot!.querySelector("dashboard-set-menu-dishes")!);
+  await dishes.getByRole("button", { name: "Save", exact: true }).click();
   await vi.waitFor(() =>
     expect(api.updateMenuItem).toHaveBeenNthCalledWith(2, "daily", "bravas-item", {
       grossPrice: null,
@@ -192,10 +213,15 @@ it("shows Included while blank, saves on Enter, and clears the surcharge on blur
   );
 });
 
-it("queues a return to Included while the preceding surcharge read is still pending", async () => {
-  const { api } = await mountDishes();
-  const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
-  await expect.element(field).toHaveAttribute("placeholder", "Included");
+it("saves two staged surcharges together and freezes editing until the refresh finishes", async () => {
+  const { el, api } = await mountDishes();
+  const dishes = page.elementLocator(el.shadowRoot!.querySelector("dashboard-set-menu-dishes")!);
+  const save = dishes.getByRole("button", { name: "Save", exact: true });
+  const cancel = dishes.getByRole("button", { name: "Cancel", exact: true });
+  const starter = page.getByRole("textbox", { name: "Surcharge for Soup" });
+  const sharing = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  await expect.element(save).toBeDisabled();
+  const reads = api.readSetMenu.mock.calls.length;
   let release!: (value: typeof details) => void;
   api.readSetMenu.mockImplementationOnce(
     () =>
@@ -203,17 +229,63 @@ it("queues a return to Included while the preceding surcharge read is still pend
         release = resolve;
       }),
   );
-  await field.fill("5.25");
-  await userEvent.keyboard("{Enter}");
+  await starter.fill("2.00");
+  await sharing.fill("5.25");
+  await save.click();
   await vi.waitFor(() => expect(release).toBeDefined());
-  await field.fill("");
-  await userEvent.keyboard("{Enter}");
-  release({ ...details, dishes: [hake, { ...bravas, surcharge: "5.25" }, soup] });
-  await vi.waitFor(() =>
-    expect(api.updateMenuItem).toHaveBeenNthCalledWith(2, "daily", "bravas-item", {
-      grossPrice: null,
-    }),
-  );
+  expect(api.updateMenuItem).toHaveBeenCalledWith("daily", "soup-item", { grossPrice: "2.00" });
+  expect(api.updateMenuItem).toHaveBeenCalledWith("daily", "bravas-item", { grossPrice: "5.25" });
+  await expect.element(sharing).toBeDisabled();
+  await expect.element(save).toBeDisabled();
+  await expect.element(cancel).toBeDisabled();
+  release({
+    ...details,
+    dishes: [hake, { ...bravas, surcharge: "5.25" }, { ...soup, surcharge: "2.00" }],
+  });
+  await expect.element(sharing).toBeEnabled();
+  await expect.element(cancel).toBeDisabled();
+  expect(api.readSetMenu).toHaveBeenCalledTimes(reads + 1);
+
+  await starter.fill("4");
+  await sharing.fill("");
+  await cancel.click();
+  await expect.element(starter).toHaveValue("2.00");
+  await expect.element(sharing).toHaveValue("5.25");
+  await expect.element(save).toBeDisabled();
+  expect(api.updateMenuItem).toHaveBeenCalledTimes(2);
+});
+
+it("keeps only refused edits for a retry when the refresh also fails", async () => {
+  const { el, api } = await mountDishes();
+  const dishes = page.elementLocator(el.shadowRoot!.querySelector("dashboard-set-menu-dishes")!);
+  const save = dishes.getByRole("button", { name: "Save", exact: true });
+  const starter = page.getByRole("textbox", { name: "Surcharge for Soup" });
+  const sharing = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  api.updateMenuItem
+    .mockImplementationOnce(() => Promise.resolve())
+    .mockRejectedValueOnce({
+      code: "set_menu.invalid",
+      params: { field: "surcharge" },
+    });
+  api.readSetMenu.mockRejectedValueOnce(new Error("offline"));
+  await starter.fill("2");
+  await sharing.fill("5.25");
+  await save.click();
+  await expect.element(starter).toHaveAttribute("aria-invalid", "true");
+  await expect.element(sharing).toHaveValue("5.25");
+  await expect.element(dishes.getByRole("button", { name: "Try again" })).toBeVisible();
+  api.readSetMenu.mockResolvedValue({
+    ...details,
+    dishes: [hake, { ...bravas, surcharge: "5.25" }, { ...soup, surcharge: "2.00" }],
+  });
+  await save.click();
+  await expect.element(save).toBeDisabled();
+  await expect.element(starter).not.toHaveAttribute("aria-invalid", "true");
+  expect(api.updateMenuItem.mock.calls).toEqual([
+    ["daily", "bravas-item", { grossPrice: "5.25" }],
+    ["daily", "soup-item", { grossPrice: "2" }],
+    ["daily", "soup-item", { grossPrice: "2" }],
+  ]);
 });
 
 it("marks a refused surcharge on its row and lets Escape put back the saved price", async () => {
@@ -453,6 +525,7 @@ it("refuses a surcharge above the limit beside its row and sends nothing", async
   const { api } = await mountDishes();
   const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
   await field.fill("20000");
+  await expect.element(field).not.toHaveAttribute("aria-invalid", "true");
   await userEvent.keyboard("{Enter}");
   await expect.element(field).toHaveAttribute("aria-invalid", "true");
   await expect.element(page.getByText("Enter a surcharge from 0.00 to 10,000.00.")).toBeVisible();

@@ -1,8 +1,17 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, belongsToComposition, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  belongsToComposition,
+  draftScopeFor,
+  FormFeedback,
+  saveActionState,
+  submitOnEnter,
+  type DataTableColumn,
+  type DraftScope,
+} from "@waitron/ui";
 import { stringToCents } from "@waitron/shared";
 import { validSurcharge } from "./set-menu-dish-choices.js";
 import "./set-menu-copy-dishes.js";
@@ -13,6 +22,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { ListWriteQueue } from "./section-writes.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 
@@ -23,11 +33,7 @@ export type SetMenuDishesSaved = {
   removedLines?: SetMenuLine[];
 };
 
-type PriceDraft = {
-  text: string;
-  error?: string;
-  refused?: boolean;
-};
+type PriceRefusal = { message: string; namesField: boolean };
 
 const rowKey = (dish: Dish) => dish.menuItemId;
 const surchargeFields = new Set(["grossPrice", "price", "surcharge"]);
@@ -47,6 +53,9 @@ export class SetMenuDishes extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-3);
       }
+      wt-data-table {
+        isolation: isolate;
+      }
       wt-data-table::part(dish-course) {
         min-inline-size: calc(var(--wt-space-6) * 5);
       }
@@ -62,7 +71,10 @@ export class SetMenuDishes extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) details!: SetMenuDetails;
-  @state() private prices = new Map<string, PriceDraft>();
+  @state() private prices = new Map<string, string>();
+  @state() private refusals = new Map<string, PriceRefusal>();
+  @state() private hiddenErrors = new Set<string>();
+  @state() private savingPrices = false;
   @state() private courseErrors = new Map<string, string>();
   @state() private changingCourse = new Set<string>();
   @state() private actionError = "";
@@ -74,78 +86,162 @@ export class SetMenuDishes extends LitElement {
   }
 
   readonly #writes = new ListWriteQueue();
-  readonly #pendingPrices = new Map<string, { price: string | null }>();
+  readonly #feedback = new FormFeedback(this);
+  #scope?: DraftScope<boolean>;
 
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
-  #updatePrice(itemId: string, draft?: PriceDraft): void {
-    const prices = new Map(this.prices);
-    if (draft === undefined) prices.delete(itemId);
-    else prices.set(itemId, draft);
-    this.prices = prices;
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#scope = draftScopeFor(this, {
+      id: this,
+      current: () => !this.savingPrices && this.#changes().length > 0,
+      snapshot: (dirty) => dirty,
+      equal: (before, after) => before === after,
+      restore: () => this.#cancelPrices(),
+    }).scope;
   }
 
-  #save(dish: Dish, via: "enter" | "leave"): void {
-    const id = dish.menuItemId;
-    const draft = this.prices.get(id);
-    if (draft === undefined || (via === "leave" && draft.refused)) return;
-    const text = draft.text.trim();
-    if (!validSurcharge(text)) {
-      this.#updatePrice(id, {
-        text: draft.text,
-        error: codeMessage("set_menu.invalid", undefined, { field: "surcharge" }),
-      });
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    super.disconnectedCallback();
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    if (!changed.has("details")) return;
+    const ids = new Set(this.details.dishes.map(rowKey));
+    this.prices = new Map([...this.prices].filter(([id]) => ids.has(id)));
+    this.refusals = new Map([...this.refusals].filter(([id]) => ids.has(id)));
+    this.#scope?.changed();
+    if (this.prices.size) void this.#showPriceErrors();
+  }
+
+  #changes() {
+    return (this.details?.dishes ?? []).flatMap((dish) => {
+      const text = this.prices.get(dish.menuItemId);
+      if (text === undefined) return [];
+      const price = text.trim() || null;
+      return this.#invalidPrice(price) || !sameSurcharge(price, dish.surcharge)
+        ? [{ dish, price }]
+        : [];
+    });
+  }
+
+  #invalidPrice(price: string | null): boolean {
+    return !validSurcharge(price ?? "");
+  }
+
+  #priceError(id: string): string {
+    if (this.#feedback.attempted && this.#invalidPrice(this.prices.get(id)?.trim() ?? null))
+      return codeMessage("set_menu.invalid", undefined, { field: "surcharge" });
+    const refusal = this.refusals.get(id);
+    return refusal?.namesField ? refusal.message : "";
+  }
+
+  #updatePrice(id: string, text?: string): void {
+    const prices = new Map(this.prices);
+    if (text === undefined) prices.delete(id);
+    else prices.set(id, text);
+    this.prices = prices;
+    this.refusals = new Map(this.refusals);
+    this.refusals.delete(id);
+    if (!this.#changes().length) this.#feedback.reset();
+    this.#scope?.changed();
+  }
+
+  #cancelPrices(): void {
+    this.prices = new Map();
+    this.refusals = new Map();
+    this.#feedback.reset();
+    this.#scope?.changed();
+  }
+
+  async #showPriceErrors(focus = false): Promise<void> {
+    await this.updateComplete;
+    const tables = [...this.renderRoot.querySelectorAll("wt-data-table")];
+    await Promise.all(tables.map(({ updateComplete }) => updateComplete));
+    const fields = new Map(
+      tables.flatMap((table) =>
+        [
+          ...table.renderRoot.querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>(
+            "wt-price-input[data-item]",
+          ),
+        ].map((field) => [field.dataset.item!, field] as const),
+      ),
+    );
+    const ids = this.#changes()
+      .map(({ dish }) => dish.menuItemId)
+      .filter((id) => this.#priceError(id));
+    const hidden = ids.filter((id) => !fields.has(id));
+    if (hidden.length !== this.hiddenErrors.size || hidden.some((id) => !this.hiddenErrors.has(id)))
+      this.hiddenErrors = new Set(hidden);
+    if (focus) fields.get(ids.find((id) => fields.has(id)) ?? "")?.focus();
+  }
+
+  #savePrices(): void {
+    if (this.savingPrices || saveActionState(this.#scope).unchanged) return;
+    const changes = this.#changes();
+    this.#feedback.press();
+    this.refusals = new Map();
+    if (changes.some(({ price }) => this.#invalidPrice(price))) {
+      void this.#showPriceErrors(true);
       return;
     }
-    const price = text || null;
-    const waiting = this.#pendingPrices.get(id);
-    const baseline = waiting ? waiting.price : dish.surcharge;
-    if (sameSurcharge(price, baseline)) {
-      if (!waiting) this.#updatePrice(id);
-      return;
-    }
-    const sent = { text: draft.text };
-    this.#updatePrice(id, sent);
-    const queued = { price };
-    this.#pendingPrices.set(id, queued);
+
+    this.savingPrices = true;
+    this.#scope?.changed();
     this.#writes.run(this.details.id, async () => {
-      this.actionError = "";
-      try {
+      const saved = new Map<string, string | null>();
+      const refusals = new Map<string, PriceRefusal>();
+      for (const { dish, price } of changes) {
+        const id = dish.menuItemId;
+        if (!this.details.dishes.some(({ menuItemId }) => menuItemId === id)) continue;
         try {
           await this.api.updateMenuItem(this.details.id, id, { grossPrice: price });
+          saved.set(id, price);
         } catch (error) {
           const field = fieldOf(error);
-          const message = codeMessage(codeOf(error), undefined, { field });
-          this.actionError = message;
-          if (this.prices.get(id) === sent) {
-            this.#updatePrice(id, {
-              ...sent,
-              refused: true,
-              ...(surchargeFields.has(field) ? { error: message } : {}),
-            });
-            if (surchargeFields.has(field)) {
-              this.renderRoot
-                .querySelectorAll("wt-data-table")
-                .forEach((table) =>
-                  table.shadowRoot
-                    ?.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
-                      `wt-price-input[data-item="${CSS.escape(id)}"]`,
-                    )
-                    ?.focus(),
-                );
-            }
-          }
-          return;
+          refusals.set(id, {
+            message: codeMessage(codeOf(error), undefined, { field }),
+            namesField: surchargeFields.has(field),
+          });
         }
-        await this.#refresh();
-        if (this.prices.get(id) === sent) this.#updatePrice(id);
-      } finally {
-        if (this.#pendingPrices.get(id) === queued) this.#pendingPrices.delete(id);
       }
+      if (saved.size) {
+        this.details = {
+          ...this.details,
+          dishes: this.details.dishes.map((dish) =>
+            saved.has(dish.menuItemId) ? { ...dish, surcharge: saved.get(dish.menuItemId)! } : dish,
+          ),
+        };
+        this.prices = new Map([...this.prices].filter(([id]) => !saved.has(id)));
+        await this.#refresh();
+      }
+      this.refusals = refusals;
+      this.savingPrices = false;
+      if (!refusals.size) this.#feedback.reset();
+      this.#scope?.commit(false);
+      if (refusals.size && this.isConnected) await this.#showPriceErrors(true);
     });
+  }
+
+  #priceMessage(): string {
+    const errors: Record<string, string> = {};
+    const fields = new Set<string>();
+    for (const {
+      dish: { menuItemId: id, name },
+    } of this.#changes()) {
+      const error = this.#priceError(id);
+      if (error && !this.hiddenErrors.has(id)) fields.add(id);
+      else {
+        const reason = error || this.refusals.get(id)?.message;
+        if (reason) errors[id] = fill("menus.change_not_saved", { name, reason });
+      }
+    }
+    return this.#feedback.message(errors, fields, t("form.fix_fields"));
   }
 
   async #refresh(): Promise<void> {
@@ -264,7 +360,6 @@ export class SetMenuDishes extends LitElement {
 
   #surcharge(dish: Dish) {
     const id = dish.menuItemId;
-    const draft = this.prices.get(id);
     return html`<wt-price-input
       part="dish-surcharge"
       name="surcharge"
@@ -274,21 +369,21 @@ export class SetMenuDishes extends LitElement {
       locale=${currentLocale()}
       label=${fill("menus.set_menu_surcharge_for", { name: dish.name })}
       placeholder=${t("menus.set_menu_included")}
-      .value=${live(draft?.text ?? dish.surcharge ?? "")}
-      .error=${draft?.error ?? ""}
+      .value=${live(this.prices.get(id) ?? dish.surcharge ?? "")}
+      .error=${this.#priceError(id)}
+      .disabled=${this.savingPrices}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        this.#updatePrice(id, { text: event.detail.value });
+        if (!this.savingPrices) this.#updatePrice(id, event.detail.value);
       }}
       @keydown=${(event: KeyboardEvent) => {
-        if ((event.key !== "Enter" && event.key !== "Escape") || belongsToComposition(event))
-          return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.key === "Enter") this.#save(dish, "enter");
-        else this.#updatePrice(id);
+        if (this.savingPrices) return;
+        if (event.key === "Escape" && !belongsToComposition(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.#updatePrice(id);
+        } else submitOnEnter(event, this.renderRoot.querySelector("[data-surcharge-save]"));
       }}
-      @focusout=${() => this.#save(dish, "leave")}
     ></wt-price-input>`;
   }
 
@@ -378,6 +473,9 @@ export class SetMenuDishes extends LitElement {
     }
     const courses = [...this.details.courses, { id: null, name: t("menus.set_menu_no_course") }];
     const columns = this.#columns();
+    const action = saveActionState(this.#scope);
+    const invalid =
+      this.#feedback.attempted && this.#changes().some(({ price }) => this.#invalidPrice(price));
     return html`
       <h2>${t("menus.set_menu_dishes")}</h2>
       <div class="add-actions">
@@ -419,6 +517,7 @@ export class SetMenuDishes extends LitElement {
             .rows=${groups.get(id)!}
             .columns=${columns}
             .rowKey=${rowKey}
+            @wt-columns-change=${() => void this.#showPriceErrors()}
           ></wt-data-table>
         `,
       )}
@@ -426,11 +525,29 @@ export class SetMenuDishes extends LitElement {
       ${
         this.loadError
           ? html`<p role="alert">${t("menus.set_menu_load_error")}</p>
-              <wt-button variant="secondary" @click=${() => void this.#refresh()}
+              <wt-button
+                variant="secondary"
+                @click=${() => this.#writes.run(this.details.id, () => this.#refresh())}
                 >${t("menus.retry")}</wt-button
               >`
           : nothing
       }
+      <wt-form-actions .error=${this.#priceMessage()}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.savingPrices || action.unchanged}
+          @click=${() => this.#cancelPrices()}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant=${this.savingPrices ? "primary" : action.variant}
+          data-surcharge-save
+          ?disabled=${this.savingPrices || action.unchanged || invalid}
+          @click=${() => this.#savePrices()}
+          >${t("action.save")}</wt-button
+        >
+      </wt-form-actions>
     `;
   }
 }
