@@ -1,12 +1,73 @@
-import { LitElement } from "lit";
+import { LitElement, html, nothing, type TemplateResult } from "lit";
 import { commands, page, userEvent } from "vitest/browser";
 import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-button.js";
-import type { WtInput } from "./wt-input.js";
-import "./wt-input.js";
+import { WtInput } from "./wt-input.js";
 
 afterEach(cleanup);
+
+class InputWithUnit extends WtInput {
+  protected override get fieldDecoration() {
+    const customLayout = this.hasAttribute("custom-layout");
+    return {
+      fieldClass: this.getAttribute("field-class") ?? undefined,
+      inputPart: "amount",
+      autocomplete: "off",
+      placeholder: "0,00",
+      extraDescriptionIds: ["unit"],
+      endClass: customLayout ? "unit-end" : undefined,
+      end: html`<span id="unit">kg</span>`,
+    };
+  }
+
+  protected override renderFieldContents(
+    label: TemplateResult | typeof nothing,
+    input: TemplateResult,
+    end: TemplateResult,
+  ): TemplateResult {
+    return html`<span class="amount">${label}${input}</span>${end}`;
+  }
+}
+customElements.define("wt-input-with-unit-test", InputWithUnit);
+
+test("a decorated input uses the subclass's layout and native input settings", async () => {
+  const el = await mount(
+    '<wt-input-with-unit-test label="Weight" name="weight" placeholder="0.00" autocomplete="on" custom-layout field-class="unit-field"></wt-input-with-unit-test>',
+  );
+  const root = el.shadowRoot!;
+  expect(root.querySelector(".field.unit-field .amount label")?.getAttribute("for")).toBe("weight");
+  const input = root.querySelector<HTMLInputElement>(
+    '.field.unit-field .amount input[part="amount"]',
+  )!;
+  expect(input.id).toBe("weight");
+  expect(input.placeholder).toBe("0,00");
+  expect(input.autocomplete).toBe("off");
+  expect(root.querySelector(".field.unit-field > slot.unit-end")).not.toBeNull();
+});
+
+test("a custom end slot is visible without space reserved for an overlay", async () => {
+  const el = await mount("<wt-input-with-unit-test custom-layout></wt-input-with-unit-test>");
+  const field = el.shadowRoot!.querySelector(".field")!;
+  expect(field.classList.contains("has-end")).toBe(false);
+  expect(field.querySelector("slot.unit-end #unit")?.checkVisibility()).toBe(true);
+});
+
+test("a decorated input describes its end fallback after its hint and error", async () => {
+  const el = await mount(
+    '<wt-input-with-unit-test label="Weight" hint="Net weight" error="Enter weight"></wt-input-with-unit-test>',
+  );
+  const root = el.shadowRoot!;
+  const input = root.querySelector("input")!;
+  const descriptions = input.getAttribute("aria-describedby")!.split(" ");
+  expect(descriptions.map((id) => root.getElementById(id)?.textContent?.trim())).toEqual([
+    "Net weight",
+    "Enter weight",
+    "kg",
+  ]);
+  const end = root.querySelector<HTMLSlotElement>('.field.has-end > slot.end[name="end"]')!;
+  expect(end.querySelector("#unit")?.checkVisibility()).toBe(true);
+});
 
 function parts(el: HTMLElement) {
   const root = el.shadowRoot!;

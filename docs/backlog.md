@@ -491,7 +491,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Product names on phones and sold-out tiles** (bundle of 2, size M, needs the owner). [Detail](backlog/menu.md#bundle-product-names-on-phones-and-sold-out-tiles)
 
-- **Smaller things #379 surfaced and did not take.** The price input and modifier rules.
+- **Smaller things #379 surfaced and did not take.** Separating product and modifier rules.
   [Detail](backlog/menu.md#smaller-things-379-surfaced-and-did-not-take)
 
 - **Translation report excludes image names (C122, #1006).** The media module's

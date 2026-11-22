@@ -1,11 +1,28 @@
 import { expect, test, afterEach, onTestFinished } from "vitest";
 import { stringToCents } from "@waitron/shared";
+import { WtInput } from "@waitron/ui-core/components/wt-input";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { applyTokens } from "../tokens/index.js";
 import "./wt-price-input.js";
 import type { WtPriceInput } from "./wt-price-input.js";
 
 afterEach(cleanup);
+
+test("a price uses the shared decimal control and supplies its unit in the end slot", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" name="price" unit="kg" readonly></wt-price-input>',
+  );
+  expect(el).toBeInstanceOf(WtInput);
+  const root = el.shadowRoot!;
+  expect(root.querySelectorAll("input")).toHaveLength(1);
+  const input = root.querySelector("input")!;
+  expect(input.type).toBe("text");
+  expect(input.inputMode).toBe("decimal");
+  expect(input.readOnly).toBe(true);
+  const unit = root.querySelector<HTMLButtonElement>('slot[name="end"] button.unit')!;
+  expect(unit.textContent?.trim()).toBe("kg");
+  expect(unit.disabled).toBe(false);
+});
 
 test("associates the label with the field so it has an accessible name", async () => {
   const el = await mount('<wt-price-input label="Price" name="price"></wt-price-input>');
@@ -136,37 +153,6 @@ test("wt-unit-click bubbles and crosses shadow boundaries, so an ancestor outsid
   expect(received).toBeDefined();
 });
 
-test("links explanatory error text to the invalid field", async () => {
-  const el = await mount(
-    '<wt-price-input label="Price" name="price" error="Enter a price"></wt-price-input>',
-  );
-  const input = el.shadowRoot!.querySelector("input")!;
-  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
-  expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(input.getAttribute("aria-describedby")).toBe(error.id);
-  expect(error.textContent).toBe("Enter a price");
-});
-
-test("a field with no error is not marked invalid", async () => {
-  const el = await mount("<wt-price-input></wt-price-input>");
-  expect(el.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
-  expect(el.shadowRoot!.querySelector("[data-error]")).toBeNull();
-});
-
-test("the error message paints from the danger token", async () => {
-  const el = await mount('<wt-price-input error="Bad"></wt-price-input>');
-  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  const error = el.shadowRoot!.querySelector("[data-error]")!;
-  expect(getComputedStyle(error).color).toBe("rgb(13, 14, 15)");
-});
-
-test("marks a required field visibly and in the native input contract", async () => {
-  const el = await mount('<wt-price-input label="Price" name="price" required></wt-price-input>');
-  const input = el.shadowRoot!.querySelector("input")!;
-  expect(input.required).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
-});
-
 test("gives each unnamed instance a unique fallback id shaped wt-price-input-N", async () => {
   const a = await mount('<wt-price-input label="A"></wt-price-input>');
   const b = await mount('<wt-price-input label="B"></wt-price-input>');
@@ -181,12 +167,6 @@ test("the money field meets the minimum tap target", async () => {
   const el = await mount("<wt-price-input></wt-price-input>");
   const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;
   expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-});
-
-test("focusing the host delegates focus to the inner field", async () => {
-  const el = await mount("<wt-price-input></wt-price-input>");
-  el.focus();
-  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("input"));
 });
 
 test("a disabled field refuses typing and refuses to open the unit picker", async () => {
@@ -243,13 +223,6 @@ test("a field given a value does not show its placeholder", async () => {
 test("a field with no placeholder carries no placeholder attribute", async () => {
   const el = await mount("<wt-price-input></wt-price-input>");
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("placeholder")).toBe(false);
-});
-
-test("the placeholder paints from the muted-text token", async () => {
-  const el = await mount('<wt-price-input placeholder="4.50"></wt-price-input>');
-  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  const input = el.shadowRoot!.querySelector("input")!;
-  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
 test("a named field submits under its own name, and an unnamed one carries no name at all", async () => {
@@ -754,8 +727,6 @@ test("a hint shown as the placeholder paints from the muted-text token", async (
 
 // ── The filled field (A178) ──
 
-type Price = HTMLElementTagNameMap["wt-price-input"];
-
 function field(el: Element) {
   const root = el.shadowRoot!;
   return {
@@ -815,14 +786,6 @@ for (const [what, attrs] of [
   });
 }
 
-test("a value set from code after the first render floats the label", async () => {
-  const el = await mount('<wt-price-input label="Price"></wt-price-input>');
-  expect(field(el).field.getAttribute("data-label")).toBe("rest");
-  (el as Price).value = "9.00";
-  await (el as Price).updateComplete;
-  expect(field(el).field.getAttribute("data-label")).toBe("float");
-});
-
 test("the amount paints its value from the field-value token", async () => {
   const el = await mount('<wt-price-input label="Price" value="9.00"></wt-price-input>');
   host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
@@ -837,7 +800,6 @@ test("an overriding field draws its value bold and upright, with a primary bar a
   host.style.setProperty("--wt-field-line-width-active", "3px");
   const { field: box, input } = field(el);
   expect(el.hasAttribute("overriding")).toBe(true);
-  expect(box.hasAttribute("data-overriding")).toBe(true);
   expect(getComputedStyle(input).fontWeight).toBe("800");
   expect(getComputedStyle(input).fontStyle).toBe("normal");
   const bar = getComputedStyle(box, "::before");
@@ -862,7 +824,7 @@ test("an overriding field keeps its value upright inside italic text, where an o
 test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
   const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
   const { field: box, input } = field(el);
-  expect(box.hasAttribute("data-overriding")).toBe(false);
+  expect(el.hasAttribute("overriding")).toBe(false);
   expect(getComputedStyle(box, "::before").content).toBe("none");
   expect(getComputedStyle(input, "::placeholder").fontStyle).toBe("italic");
   // The control takes `font: inherit` (packages/ui-core/src/field-styles.ts:73).
@@ -876,7 +838,7 @@ test("overriding follows the property, and a disabled overriding field draws no 
   el.overriding = true;
   await el.updateComplete;
   expect(el.hasAttribute("overriding")).toBe(true);
-  expect(field(el).field.hasAttribute("data-overriding")).toBe(true);
+  expect(getComputedStyle(field(el).field, "::before").content).toBe('""');
   el.disabled = true;
   await el.updateComplete;
   expect(getComputedStyle(field(el).field, "::before").content).toBe("none");
@@ -884,7 +846,7 @@ test("overriding follows the property, and a disabled overriding field draws no 
   el.overriding = false;
   await el.updateComplete;
   expect(el.hasAttribute("overriding")).toBe(false);
-  expect(field(el).field.hasAttribute("data-overriding")).toBe(false);
+  expect(getComputedStyle(field(el).field, "::before").content).toBe("none");
 });
 
 test("focusing the amount draws the focus line and label colour, and no focus ring on the amount", async () => {
@@ -898,41 +860,6 @@ test("focusing the amount draws the focus line and label colour, and no focus ri
   expect(getComputedStyle(box).boxShadow).toBe("rgb(1, 2, 3) 0px -3px 0px 0px inset");
   expect(getComputedStyle(label!).color).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(input).outlineStyle).toBe("none");
-});
-
-test("invalid marks the amount invalid and draws the danger line and label, with no error line", async () => {
-  const el = await mount('<wt-price-input label="Price" unit="kg" invalid></wt-price-input>');
-  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  host.style.setProperty("--wt-field-line-width-active", "3px");
-  const { field: box, label, input } = field(el);
-  expect(el.hasAttribute("invalid")).toBe(true);
-  expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(el.shadowRoot!.querySelector("[data-error]")).toBeNull();
-  expect(input.hasAttribute("aria-describedby")).toBe(false);
-  expect(box.hasAttribute("data-invalid")).toBe(true);
-  expect(getComputedStyle(box).boxShadow).toBe("rgb(13, 14, 15) 0px -3px 0px 0px inset");
-  expect(getComputedStyle(label!).color).toBe("rgb(13, 14, 15)");
-});
-
-test("an error marks the field box invalid as the invalid property does, and a valid one is unmarked", async () => {
-  const el = await mount('<wt-price-input label="Price" error="Enter a price"></wt-price-input>');
-  const plain = await mount('<wt-price-input label="Price"></wt-price-input>');
-  expect(field(el).field.hasAttribute("data-invalid")).toBe(true);
-  expect(field(plain).field.hasAttribute("data-invalid")).toBe(false);
-  expect(plain.hasAttribute("invalid")).toBe(false);
-});
-
-test("a disabled field paints its own paler fill, a dashed line and muted text", async () => {
-  const el = await mount(
-    '<wt-price-input label="Price" unit="kg" value="9.00" disabled></wt-price-input>',
-  );
-  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
-  host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
-  const { field: box, input } = field(el);
-  expect(box.hasAttribute("data-disabled")).toBe(true);
-  expect(getComputedStyle(box).backgroundColor).toBe("rgb(21, 22, 23)");
-  expect(getComputedStyle(box, "::after").borderBottomStyle).toBe("dashed");
-  expect(getComputedStyle(input).color).toBe("rgb(24, 25, 26)");
 });
 
 test("hide-label makes the field box compact, the tap-target height", async () => {
