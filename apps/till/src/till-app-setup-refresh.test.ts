@@ -1,6 +1,6 @@
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
-import { clockState } from "../test/clock-app.js";
+import { clockState, deferred } from "../test/clock-app.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -467,10 +467,21 @@ describe("A768 the till follows the venue's setup revision", () => {
     const { el, counter, send } = await counterBasket({
       parkOrder,
       placeOrder,
+      getTill: vi.fn().mockResolvedValue({ ...till("till"), receiptLanguages: ["es-ES", "en-GB"] }),
+      setOrderReceiptLanguage: vi.fn().mockResolvedValue({ revision: 1 }),
       askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: true, deadEnds: [], stations: [] }),
     });
     expect(send()).not.toBeNull();
 
+    emit(counter, "choose-receipt-language");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-reprint-language-dialog")!,
+      "reprint-language-confirm",
+      {
+        language: "en-GB",
+      },
+    );
     emit(counter, "place-order");
     await flush(el);
 
@@ -478,7 +489,19 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(placeOrder).not.toHaveBeenCalled();
     expect(send()).toBeNull();
     expect(counter.store.persisted).toBe(true);
+    expect(api.setOrderReceiptLanguage).toHaveBeenCalledWith(counter.store.id, {
+      expectedEdit: null,
+      revision: 0,
+      language: "en-GB",
+    });
     expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    emit(counter, "park-order", {});
+    await flush(el);
+    expect(counter.store.lines).toHaveLength(0);
+    counter.store.addProduct(counter.products[0]!, "1");
+    await flush(el);
+    expect(send()).not.toBeNull();
   });
 
   it("applies the polled flow after a refused tender finishes", async () => {
@@ -511,6 +534,58 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
   });
 
+  it("uses the recorded flow after a declined card leaves a saved basket", async () => {
+    let decline!: (reply: { outcome: "declined" }) => void;
+    const pay = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          decline = resolve;
+        }),
+    );
+    const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+      id,
+      zoneId: "z1",
+      serviceMode: "prepay",
+      orderNumber: 1,
+      label: null,
+      revision: 0,
+      expectedEdit: null,
+      invoiceType: "F2",
+      dining: "eat_in",
+      diningChoice: "none",
+      lines: [{ menuItemId: "offer-beer", productId: "product-offer-beer", quantity: "1.000" }],
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    }));
+    const { el, counter, send } = await counterBasket({
+      pay,
+      retrieveWorkingOrder,
+      getTill: vi.fn().mockResolvedValue({
+        ...till("till"),
+        cardProvider: "simulator",
+        capabilities: ["integrated-card-payment"],
+      }),
+    });
+    expect(send()).not.toBeNull();
+    emit(counter, "collect-card", { readerId: "reader-2" });
+    await flush(el);
+    expect(pay).toHaveBeenCalledOnce();
+
+    changeToPrepay();
+    await poll(el);
+    expect(send()).not.toBeNull();
+    decline({ outcome: "declined" });
+    await flush(el);
+    counter
+      .shadowRoot!.querySelector("till-tender-pay")!
+      .shadowRoot!.querySelector<HTMLElement>(".switch-tender")!
+      .click();
+    await flush(el);
+
+    expect(counter.store.persisted).toBe(true);
+    expect(send()).toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
   it("arms a changed idle timeout from a revision-only poll", async () => {
     let now = 0;
     let idle = () => {};
@@ -537,6 +612,31 @@ describe("A768 the till follows the venue's setup revision", () => {
     idle();
     await flush(el);
     expect(lock(el)).not.toBeNull();
+  });
+
+  it("uses a profile read that answers after sign-out at the next sign-in", async () => {
+    const activity = new SessionActivity();
+    const configure = vi.spyOn(activity, "configure");
+    const { el } = await mountApp({}, activity);
+    await flush(el);
+    await signIn(el);
+
+    const next = deferred<TillInfo>();
+    api.getTill.mockReturnValueOnce(next.promise);
+    api.menuState.mockResolvedValue(state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(api.getTill).toHaveBeenCalledTimes(2);
+
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    next.resolve({ ...noCourses, setupRevision: "s2", inactivityTimeoutSeconds: 45 });
+    await flush(el);
+
+    await signIn(el);
+    expect(configure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ loggedIn: true, timeoutSeconds: 45 }),
+    );
   });
 
   it("starts the clock controls after clearing the basket and removes them when disabled", async () => {
@@ -574,6 +674,26 @@ describe("A768 the till follows the venue's setup revision", () => {
     api.menuState.mockResolvedValue(state("v1", "lf-1", "s3"));
     await poll(el);
     expect(clockIn()).toBeNull();
+  });
+
+  it("selects the new layout's home once an order clears after reassignment", async () => {
+    const { el, counter } = await counterBasket();
+    const currentShell = () => el.shadowRoot!.querySelector("till-shell")!;
+    expect(currentShell().activeScreen).toBe("counter");
+
+    api.getDeviceZones.mockResolvedValue({
+      ...deviceZonesFixture(["z1"], ["room"]),
+      profileId: "handheld",
+      snapshot: "tablet-profile",
+    });
+    api.getTill.mockResolvedValue({ ...till("tablet-landscape"), setupRevision: "s2" });
+    await poll(el);
+    expect(currentShell().activeScreen).toBe("counter");
+
+    counter.store.clear();
+    await flush(el);
+    expect(currentShell().formFactor).toBe("tablet-landscape");
+    expect(currentShell().activeScreen).toBe("floor");
   });
 
   it("refreshes screen navigation when the profile's screen changes", async () => {

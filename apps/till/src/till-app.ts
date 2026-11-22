@@ -8128,7 +8128,7 @@ export class TillApp extends LitElement {
           await this.#reloadCounterOrder(id, session);
         if (
           !this.#store.persisted &&
-          (await this.#adoptCreatedCounterNote(id, basketVisit, session))
+          (await this.#adoptCreatedCounterNote(id, basketVisit, session, "reader"))
         ) {
           this.#commitBasket(payload);
           // As the server answers (`readOrderDinings`, `apps/server/src/order-dining.ts`): only a
@@ -8187,7 +8187,7 @@ export class TillApp extends LitElement {
                     ? "sale.payment_in_flight"
                     : counterError(error, "sale.error"));
       if (reachedFiscal && isNetworkFailure(error) && !this.#store.persisted)
-        await this.#adoptCreatedCounterNote(id, basketVisit, session, false);
+        await this.#adoptCreatedCounterNote(id, basketVisit, session, "reader-unconfirmed");
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
@@ -8398,8 +8398,9 @@ export class TillApp extends LitElement {
     id: string,
     generation: number,
     session: number,
-    confirmed = true,
+    source: "park" | "reader" | "reader-unconfirmed",
   ): Promise<boolean> {
+    const confirmed = source !== "reader-unconfirmed";
     const current = () =>
       this.isConnected &&
       session === this.#operatorSession &&
@@ -8408,7 +8409,17 @@ export class TillApp extends LitElement {
     if (!current()) return false;
     if (confirmed) this.#store.markPersisted();
     try {
-      const note = await this.api.getKitchenNote({ workingOrderId: id });
+      let order: HeldOrder | undefined;
+      if (source !== "park") {
+        try {
+          order = await this.api.retrieveWorkingOrder(id);
+        } catch {
+          // The note read can still establish that the card attempt created an order.
+        }
+        if (!current()) return false;
+        if (order !== undefined) this.#setSavedCounterFlow(order.serviceMode);
+      }
+      const note = order?.kitchenNote ?? (await this.api.getKitchenNote({ workingOrderId: id }));
       if (!current()) return false;
       if (note.ownerRevision !== this.#store.revision) {
         const read = await this.#loadHeldOrder(id, () => !current());
@@ -9137,9 +9148,8 @@ export class TillApp extends LitElement {
           });
           if (!current()) return;
           this.#setSavedCounterFlow(parked?.serviceMode);
-          if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
+          if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session, "park"))) return;
           this.#commitBasket(payload);
-          if (parked?.serviceMode === "prepay") return;
         }
         const choiceRevision = await this.#saveInvoiceChoice(id, null, api);
         if (choiceRevision !== undefined) {
@@ -9147,7 +9157,7 @@ export class TillApp extends LitElement {
           this.#store.markSaved(choiceRevision);
         }
         await this.#saveUnsavedReceiptLanguage(id);
-        if (!current()) return;
+        if (!current() || this.collectFlow === "prepay") return;
         this.#unconfirmedPlace = {
           id,
           session,
@@ -12320,10 +12330,15 @@ export class TillApp extends LitElement {
 
   #queueProfileSetup(till: TillInfo, asked: number): void {
     if (
-      this.operatorName === "" ||
+      !this.isConnected ||
+      this.deviceMode ||
       asked < (this.#pendingProfileSetup?.asked ?? this.#profileSetupApplied)
     )
       return;
+    if (this.operatorName === "" && !this.#loginPending) {
+      this.#applyProfileSetup(till, asked);
+      return;
+    }
     this.#pendingProfileSetup = { till, asked };
     this.#reconcileProfileSetup();
   }
@@ -12350,7 +12365,12 @@ export class TillApp extends LitElement {
       return;
     const clocking = this.#clockingAllowed();
     const timeout = this.#inactivityTimeoutSeconds;
+    const formFactor = this.formFactor;
     this.#applyProfileSetup(pending.till, pending.asked);
+    if (formFactor !== this.formFactor) {
+      this.#setActiveTab(this.activeTabKey, true, true);
+      if (this.activeTabKey === "floor" && !this.#floorLoaded) void this.#loadFloorData();
+    }
     if (timeout !== this.#inactivityTimeoutSeconds) this.#configureSessionActivity();
     if (clocking === this.#clockingAllowed()) return;
     this.#clockAccessLost = false;

@@ -208,8 +208,9 @@ un perfil se conservan sus selecciones. Si añades un puesto después, selecció
 donde sus titulares necesiten iniciar sesión.
 
 Si cambias el tiempo de inactividad o el fichaje en un perfil de dispositivo, el
-TPV aplica el cambio en cuanto cierras el pedido abierto. Para abrir la nueva
-pantalla de inicio, cierra la sesión y vuelve a iniciarla.
+TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV
+reciba la nueva pantalla de inicio, cierra la sesión y vuelve a iniciarla para
+abrirla.
 
 ## Horas y descansos {#hours}
 

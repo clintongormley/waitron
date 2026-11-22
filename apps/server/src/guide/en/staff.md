@@ -193,8 +193,8 @@ job selected. Copying a profile keeps its selections. When you add a job later, 
 profiles where its holders need to sign in.
 
 After you change the idle timeout or clocking in a device profile, an open till
-picks up the change as soon as its order is clear. To open the new starting
-screen, sign out and sign in again.
+picks up the change when it has no order open. After the till picks up a new
+starting screen, sign out and sign in again to open it.
 
 ## Hours and breaks {#hours}
 
