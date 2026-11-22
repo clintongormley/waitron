@@ -65,14 +65,14 @@ work. A pointer that names only a SECTION of one ("spec §3.2", "(§9)", "KDS-1 
 and the dead ones dropped, everywhere except `apps/server`, `bench` and `packages/fiscal-verifactu`;
 the comments left elsewhere name documents that still exist or outside standards. Find the rest with
 `git grep -nIE -e "§[0-9]" --and --not -e "CLAUDE\.md.? §" -- apps/server bench packages/fiscal-verifactu`.
-It also finds sections of outside standards (RFCs, AEAT's documents, GPL) and of kept specs, which
+It also finds sections of outside standards (RFCs, AEAT's documents) and of kept specs, which
 stay, so check which document each one names before cutting it. Three test titles elsewhere still
-carry a section tag from a design no longer in `docs/`, and a comments-only sweep cannot change a
-test title: "§9b's words" in `apps/setup/src/setup-app-recover.test.ts` (#2335), "series purpose
-guard (§5)" in `packages/core/src/record-correction.test.ts` (#46) and "(§4)" in
+carry a section tag from a design or plan no longer in `docs/`, and a comments-only sweep cannot
+change a test title: "§9b's words" in `apps/setup/src/setup-app-recover.test.ts` (#2335),
+"series purpose guard (§5)" in `packages/core/src/record-correction.test.ts` (#46) and "(§4)" in
 `packages/payments-stripe/src/device-provider.test.ts` (#64).
 **Next action:** fold into the comment-pruning sweeps: drop the tag, or re-point it to the pull
-request that built the work.
+request that built the work. The three test titles need a pull request of their own.
 
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
