@@ -493,3 +493,10 @@ still holds money its corrective could give back is the watcher's decision of 16
 owner's; plan
 [2026-11-21-advance-manual-route.md](../superpowers/plans/2026-11-21-advance-manual-route.md)).
 Copy it into the shared Google Doc before sending.
+
+Question 9's item d): version 0.1.0's declaration uses Q53's draft, without its cloud-server phrase
+and without saying the library has its own declaration (0.2.1 has none), so the adviser's answer is
+applied to the next version's template (owner, 22 November 13:05: "Just put in whatever we have for
+now, we can update it later"). It keeps the spare-server sentence, because this version can add a
+spare box and switch to it (A947); question 9's "A later version will add a standby server" and its
+Spanish «Una versión posterior añadirá un servidor de reserva» do not describe this version.

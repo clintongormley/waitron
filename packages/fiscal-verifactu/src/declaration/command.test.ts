@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { testProducer } from "../../test/declaration.js";
+import { TEST_RELEASE_BLOCKER, testProducer, withReleaseBlocker } from "../../test/declaration.js";
 import { nodeIo, runDeclarationCommand } from "./command.js";
 
 const PACKAGE = fileURLToPath(new URL("../../", import.meta.url));
@@ -17,22 +17,24 @@ const PRODUCER_ENV = {
 
 const SIGNING = ["--version", "1.0.0", "--place", "Elche", "--date", "2026-10-22"];
 
-let real: string;
+let blocked: string;
 let unblocked: string;
 
 beforeEach(async () => {
-  real = await mkdtemp(join(tmpdir(), "declaration-real-"));
+  blocked = await mkdtemp(join(tmpdir(), "declaration-blocked-"));
   unblocked = await mkdtemp(join(tmpdir(), "declaration-unblocked-"));
-  for (const root of [real, unblocked]) {
+  for (const root of [blocked, unblocked]) {
     await cp(join(PACKAGE, "declarations"), join(root, "declarations"), { recursive: true });
   }
   const template = join(unblocked, "declarations/template.md");
   const text = await readFile(template, "utf8");
   await writeFile(template, text.replace(/^<!-- release-blocker: .* -->\n/gm, ""));
+  const blockedTemplate = join(blocked, "declarations/template.md");
+  await writeFile(blockedTemplate, withReleaseBlocker(await readFile(blockedTemplate, "utf8")));
 });
 
 afterEach(async () => {
-  await rm(real, { recursive: true, force: true });
+  await rm(blocked, { recursive: true, force: true });
   await rm(unblocked, { recursive: true, force: true });
 });
 
@@ -54,7 +56,7 @@ function code(stderr: string): string | undefined {
 
 describe("runDeclarationCommand", () => {
   it("prints a refusal's code and params to stderr and answers 1", async () => {
-    const result = await run(real, ["show", ...SIGNING], {});
+    const result = await run(blocked, ["show", ...SIGNING], {});
 
     expect(result).toEqual({
       status: 1,
@@ -64,7 +66,7 @@ describe("runDeclarationCommand", () => {
   });
 
   it("shows a draft with the producer's values and every blocker", async () => {
-    const result = await run(real, ["show", "--draft", ...SIGNING]);
+    const result = await run(blocked, ["show", "--draft", ...SIGNING]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("DECLARACIÓN RESPONSABLE");
@@ -72,7 +74,7 @@ describe("runDeclarationCommand", () => {
     expect(result.stdout).toContain("Elche – España");
     const blockers = result.stderr.trim().split("\n");
     expect(blockers).toHaveLength(1);
-    expect(blockers[0]).toMatch(/^release-blocker: Item 1\.d\)/);
+    expect(blockers[0]).toBe(`release-blocker: ${TEST_RELEASE_BLOCKER}`);
   });
 
   it("writes a version that check accepts, leaving the producer's slots", async () => {
@@ -124,16 +126,16 @@ describe("runDeclarationCommand", () => {
   });
 
   it("refuses a written version that still carries a blocker", async () => {
-    const template = await readFile(join(real, "declarations/template.md"), "utf8");
-    await writeFile(join(real, "declarations/v1.0.0.md"), template);
+    const template = await readFile(join(blocked, "declarations/template.md"), "utf8");
+    await writeFile(join(blocked, "declarations/v1.0.0.md"), template);
 
-    expect(code((await run(real, ["check", "--version", "1.0.0"])).stderr)).toBe(
+    expect(code((await run(blocked, ["check", "--version", "1.0.0"])).stderr)).toBe(
       "declaration.release_blocked",
     );
   });
 
   it("refuses to write while a blocker remains", async () => {
-    const result = await run(real, ["write", ...SIGNING]);
+    const result = await run(blocked, ["write", ...SIGNING]);
 
     expect(code(result.stderr)).toBe("declaration.release_blocked");
   });
@@ -213,7 +215,7 @@ describe("runDeclarationCommand", () => {
       'declaration.date_invalid {"date":"22/10/2026"}\n',
     ],
   ])("refuses %s before reading any blocker", async (_name, argv, expected) => {
-    expect(await run(real, argv)).toEqual({ status: 1, stdout: "", stderr: expected });
+    expect(await run(blocked, argv)).toEqual({ status: 1, stdout: "", stderr: expected });
   });
 
   const RELEASING = ["--version", "1.0.0", "--place", "Elche", "--date", "2026-12-03"];
@@ -267,12 +269,12 @@ describe("runDeclarationCommand", () => {
 
   it("lets a missing version's read error through when rendering", async () => {
     await expect(
-      run(real, ["render", "--version", "9.9.9", "--out", join(real, "out")]),
+      run(blocked, ["render", "--version", "9.9.9", "--out", join(blocked, "out")]),
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("lets an error that is not a refusal through", async () => {
-    await expect(run(real, ["check", "--version", "9.9.9"])).rejects.toMatchObject({
+    await expect(run(blocked, ["check", "--version", "9.9.9"])).rejects.toMatchObject({
       code: "ENOENT",
     });
   });

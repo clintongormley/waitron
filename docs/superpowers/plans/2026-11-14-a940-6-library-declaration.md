@@ -5,6 +5,11 @@ Status: decisions 1–4 answered by the owner (relayed by the watcher, `question
 found that the library can do one thing the approved 1.e) says it cannot, so decision 5 below is
 open and nothing is built until it is answered. Lane A, 2026-11-14.
 
+> **2026-11-22:** the owner: "don't block this behind 1.d. Just put in whatever we have for now, we
+> can update it later". So Waitron's 0.1.0 no longer waits for Q53, and its item d) no longer says
+> the library has its own declaration (0.2.1 has none; the watcher's cut). The Waitron-side pull
+> request that moves to `^0.3.0` puts that clause back in the template for the next version.
+
 **What someone can do when it lands.** Anyone who installs a release of `@waitron/verifactu` from
 npm finds that release's declaración responsable (the producer's signed-off statement that the
 software meets the Veri\*Factu rules) on the release's GitHub page and inside the npm package, before

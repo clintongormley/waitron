@@ -430,7 +430,7 @@ Remaining Stripe qualification and maintenance.
   built. The manager's stuck-payment lists, resolve routes and bill-payment attestations apply the
   same collection ownership. The primary named in the held chart also recovers payments from boxes
   the chart fences or revokes, so plain promotion retains a manager fallback
-  (`apps/server/src/payments-api.ts`). Today's venue has one node (CLAUDE.md §5).
+  (`apps/server/src/payments-api.ts`).
   [Implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

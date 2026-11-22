@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { declarationSourceFor } from "../../test/declaration.js";
+import {
+  declarationSourceFor,
+  TEST_RELEASE_BLOCKER,
+  withReleaseBlocker,
+} from "../../test/declaration.js";
 import {
   declarationDate,
   declarationItems,
@@ -43,7 +47,8 @@ describe("prepareDeclarationSource", () => {
   });
 
   it("keeps the template's comment lines", () => {
-    expect(releaseBlockers(prepareDeclarationSource(input()))).toHaveLength(1);
+    const source = prepareDeclarationSource(input({ template: withReleaseBlocker(template) }));
+    expect(releaseBlockers(source)).toEqual([TEST_RELEASE_BLOCKER]);
   });
 
   it("joins the functions list as Spanish prose", () => {
@@ -98,10 +103,8 @@ describe("parseFunctions", () => {
 });
 
 describe("releaseBlockers", () => {
-  it("answers each blocker line's text in the real template", () => {
-    const blockers = releaseBlockers(template);
-    expect(blockers).toHaveLength(1);
-    expect(blockers[0]).toMatch(/^Item 1\.d\) is Q53's draft\. Question 9 /);
+  it("answers each blocker line's text", () => {
+    expect(releaseBlockers(withReleaseBlocker(template))).toEqual([TEST_RELEASE_BLOCKER]);
   });
 
   it("answers nothing for a text with none", () => {

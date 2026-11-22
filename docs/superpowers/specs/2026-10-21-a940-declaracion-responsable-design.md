@@ -19,6 +19,11 @@
 
 > **2026-11-13, A940 slice 5:** the [slice 5 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a940-5-kept-declarations.md)'s "Decisions made in this plan" replace parts of §7.3: the earlier versions are listed on the declaration page every About screen frames, not on each About page; an earlier version opens as plain text only; the table is classed `state`, one row per version for the venue rather than per box; only a box accepting sales writes, never one in time-zone repair; a venue without the Veri\*Factu module keeps and lists nothing; and the first-start time is stored but neither shown nor used for ordering. The table's version check also refuses a part with a leading zero, so one version cannot be kept under two spellings. The campaign watcher cleared the plan on 2026-11-13 at 01:42, with three changes (lane A's `questions.md`); no owner approval of these departures is claimed.
 
+> **2026-11-22, A940 item d):** the owner: "don't block this behind 1.d. Just put in whatever we
+> have for now, we can update it later". Version 0.1.0's item d) is therefore Q53's draft; the
+> watcher's instructions cut its cloud-server phrase and the library's own-declaration clause; the
+> asesor's answer goes into a later version ([runbook](../../operations/release.md#the-declarations-item-d)).
+
 > **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 > **A950 pointer, 29 October 2026:** the current update design is in the

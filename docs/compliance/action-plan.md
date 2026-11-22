@@ -217,6 +217,9 @@ We offered reciprocity in the message. Send it.
 > 2026-11-08), so records from an official image name that placeholder until the real values
 > replace it, which is safe only while no box has started in production. Apart from that
 > replacement, the tax number must not change until A993 lands.
+>
+> **2026-11-22:** the owner decided that 0.1.0's item d) is Q53's draft; the asesor's answer goes
+> into a later version.
 
 Needed before anyone else uses the software; already overdue in principle, since the producer
 deadline passed on 29 July 2025.

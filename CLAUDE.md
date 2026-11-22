@@ -949,7 +949,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the future (`1112`) a record written since its time was last confirmed makes it wait for a person
   or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
-  inline. TODAY a venue has ONE node and no failover at all. Detail:
+  inline. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A box that is not a mirror, whose held chart lists another box that finished joining, asks it
   by signed query, trusting only the venue's authority (`tls/ca.crt`), before selling or filing,
