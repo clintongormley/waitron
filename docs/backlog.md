@@ -823,11 +823,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Finish drawer reporting, reminders and waiter floats** (bundle of 2, 1 go-live, 1 important, size L, design approved 2026-11-06). The remaining drawer work is the warning for an unfinished close and adding drawer counts and differences to the daily email. [Detail](backlog/till.md#bundle-finish-drawer-reporting-reminders-and-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
 
-- **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
-  styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another
-  receipt language): one of two tidy-ups its review raised and left, because each changes files
-  outside it.
-
 - **Loose ends left by W97 (#1311).**
   - A disabled device's profile approvals come back when a join enables it again (unchecked
     whether that is wanted).

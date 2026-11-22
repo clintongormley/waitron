@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
+import { choiceRowStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { formatDecimalInput, parseDecimalInput } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
@@ -104,6 +105,7 @@ const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 export class TillAdjustmentDialog extends LitElement {
   static override styles = [
     baseStyles,
+    choiceRowStyles,
     css`
       .body {
         display: flex;
@@ -125,39 +127,6 @@ export class TillAdjustmentDialog extends LitElement {
       .detail {
         color: var(--wt-color-text-muted);
         overflow-wrap: anywhere;
-      }
-
-      .choice {
-        margin: 0;
-        padding: 0;
-        border: none;
-        min-width: 0;
-      }
-
-      .choice legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1) var(--wt-space-4);
-      }
-
-      .option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
       }
 
       .required,

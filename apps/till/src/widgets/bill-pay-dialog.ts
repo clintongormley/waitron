@@ -6,6 +6,7 @@ import {
   outsideCardSummary,
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/client.js";
+import { choiceRowStyles } from "./choice-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -221,6 +222,7 @@ const PEOPLE = /^[1-9]\d{0,2}$/;
 export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    choiceRowStyles,
     outsideCardStyles,
     helpAnchorStyles,
     guestsStepperStyles,
@@ -282,25 +284,6 @@ export class TillBillPayDialog extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .choice {
-        margin: 0;
-        padding: 0;
-        border: none;
-        min-width: 0;
-      }
-
-      .choice legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1) var(--wt-space-4);
-      }
-
       [data-pay-way] .options {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -326,20 +309,6 @@ export class TillBillPayDialog extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2) var(--wt-space-4);
-      }
-
-      .option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
       }
 
       .units {

@@ -15,6 +15,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { choiceStackStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -46,6 +47,7 @@ type RefundDraft = { howMuch: "whole" | "part"; amount: string; reasonId: string
 export class TillBillRefundDialog extends LitElement {
   static override styles = [
     baseStyles,
+    choiceStackStyles,
     css`
       .body {
         display: flex;
@@ -73,39 +75,6 @@ export class TillBillRefundDialog extends LitElement {
       .summary dd {
         margin: 0;
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .choice {
-        margin: 0;
-        padding: 0;
-        border: none;
-        min-width: 0;
-      }
-
-      .choice legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .options {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
       }
 
       .muted {

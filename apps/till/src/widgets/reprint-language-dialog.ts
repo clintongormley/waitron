@@ -1,9 +1,10 @@
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { languageDisplayName } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import type { WtDialog } from "@waitron/ui";
+import { choiceStackStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -17,43 +18,7 @@ export interface ReprintLanguageDetail {
  */
 @customElement("till-reprint-language-dialog")
 export class TillReprintLanguageDialog extends LitElement {
-  static override styles = [
-    baseStyles,
-    css`
-      .choice {
-        margin: 0;
-        padding: 0;
-        border: none;
-        min-width: 0;
-      }
-
-      .choice legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .options {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
-      }
-    `,
-  ];
+  static override styles = [baseStyles, choiceStackStyles];
 
   /** The receipt languages the venue's country offers. */
   @property({ attribute: false }) languages: string[] = [];
