@@ -294,7 +294,7 @@ export class OrdersScreen extends LitElement {
         sortValue: (row) => row.invoiceNumber ?? "",
         label: t("orders.col.invoice"),
         cell: (row) =>
-          html`${row.invoiceNumber ?? ""}${row.invoiceType === null ? nothing : html`<span part="invoice-type">${t(row.invoiceType === "F1" ? "orders.invoice_full" : "orders.invoice_simplified")}</span>`}${row.creditNotes.map(
+          html`${row.invoiceNumber ?? ""}${row.invoiceType === null ? nothing : html`<span part="invoice-type">${t(row.invoiceType === "F1" ? "orders.invoice_full" : "orders.invoice_simplified")}</span>`}${row.correctives.map(
             (number) => html`<span part="mark">${number}</span>`,
           )}`,
       },

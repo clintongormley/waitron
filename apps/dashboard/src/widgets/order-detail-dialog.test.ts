@@ -24,7 +24,7 @@ const detail: OrderDetailDto = {
     saleId: "sale-1",
     invoiceNumber: "A/12",
     invoiceType: "F2",
-    creditNotes: ["R/2"],
+    correctives: ["R/2"],
     status: "left_without_paying",
     credited: "in_part",
     total: "30.00",
@@ -54,7 +54,7 @@ const detail: OrderDetailDto = {
       rungBy: "Luis",
     },
     {
-      kind: "credit_note",
+      kind: "corrective",
       number: "R/2",
       issuedAt: "2026-09-30T13:30:00Z",
       total: "-15.00",

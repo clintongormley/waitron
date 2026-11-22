@@ -2393,7 +2393,7 @@ export interface PartyBill {
   invoiceNumber?: string;
   /** The numbers of the credit notes correcting the invoice, oldest first; absent while no sale is
    * filed. */
-  creditNotes?: string[];
+  correctives?: string[];
   /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
@@ -4266,7 +4266,7 @@ export class TillApi {
     id: string,
     override?: { personId: string; pin: string },
     options: ReadOptions = {},
-  ): Promise<{ billId: string; creditNoteNumber: string }> {
+  ): Promise<{ billId: string; correctiveNumber: string }> {
     return this.#request(
       `/api/working-orders/${id}/split-after-print`,
       "POST",

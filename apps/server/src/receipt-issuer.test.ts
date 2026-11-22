@@ -308,7 +308,7 @@ describe("the day of the sale on an invoice issued on a later day", () => {
     const at = "2026-03-15T12:00:00.000Z";
     const later = await issue(false, false, { at, operationDate: "2026-03-14" });
     const sameDay = await issue(false, false, { at, operationDate: "2026-03-15" });
-    const [stored, laterTicket, sameDayTicket, creditNote] = await withTransaction(
+    const [stored, laterTicket, sameDayTicket, corrective] = await withTransaction(
       v.db,
       async (tx) => [
         (
@@ -331,8 +331,8 @@ describe("the day of the sale on an invoice issued on a later day", () => {
     expect(laterTicket.invoiceType).toBe("F2");
     expect(laterTicket.saleDay).toBe("2026-03-14");
     expect(sameDayTicket).not.toHaveProperty("saleDay");
-    expect(creditNote.invoiceType).toBe("R5");
-    expect(creditNote).not.toHaveProperty("saleDay");
+    expect(corrective.invoiceType).toBe("R5");
+    expect(corrective).not.toHaveProperty("saleDay");
   });
 });
 

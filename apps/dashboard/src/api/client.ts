@@ -2758,7 +2758,7 @@ export interface OrderRowDto {
   saleId: string | null;
   invoiceNumber: string | null;
   invoiceType: "F1" | "F2" | null;
-  creditNotes: string[];
+  correctives: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
   total: string;
@@ -2788,7 +2788,7 @@ export interface OrderDetailDto {
     sentNutrition: { allergens: AllergenDeclaration; dietaryDeclarations: string[] } | null;
   }[];
   invoices: {
-    kind: "invoice" | "credit_note" | "replacement" | "substitution";
+    kind: "invoice" | "corrective" | "replacement" | "substitution";
     invoiceType?: "F1" | "F2";
     recipient?: {
       taxId: string;

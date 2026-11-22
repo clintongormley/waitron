@@ -122,7 +122,7 @@ describe("Orders table pages", () => {
       credited: "in_part",
       staff: [{ id: venue.operatorId, name: "Anna" }],
     });
-    expect(credited.rows[0]!.creditNotes).toHaveLength(1);
+    expect(credited.rows[0]!.correctives).toHaveLength(1);
   });
 
   it("sorts mixed-case series codes before the invoice number in either direction", async () => {

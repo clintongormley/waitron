@@ -3999,7 +3999,7 @@ describe("till-app: a bill that already holds money", () => {
               status: "placed" as const,
               receiptAvailable: true,
               invoiceNumber: "F-0007",
-              creditNotes: [],
+              correctives: [],
               amountDue: "120.00",
             }
           : {}),

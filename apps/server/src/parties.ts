@@ -48,7 +48,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
 import { ensureToday } from "./floor-today-store.js";
 import { refuseTakenOff } from "./floor-today-table.js";
-import { readCreditNotes, readPartyTables } from "./orders-list.js";
+import { readCorrectiveNumbers, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
 import "./errors.js";
@@ -134,8 +134,8 @@ export interface PartyBill {
   /** The number the bill's sale was filed under ("A/1"); absent while no sale is filed. */
   invoiceNumber?: string;
   /** The numbers of the sales correcting the bill's sale, oldest first; absent while no sale is filed. */
-  creditNotes?: string[];
-  /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
+  correctives?: string[];
+  /** Its sale's total plus its correctives, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
@@ -609,7 +609,7 @@ export async function readPartyBills(
       ),
     );
   const filed = new Map(filedSales.map((sale) => [sale.workingOrderId, sale]));
-  const notes = await readCreditNotes(
+  const correctives = await readCorrectiveNumbers(
     tx,
     filedSales.map((sale) => sale.id),
   );
@@ -654,7 +654,7 @@ export async function readPartyBills(
         ? {}
         : {
             invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
-            creditNotes: notes.get(sale.id) ?? [],
+            correctives: correctives.get(sale.id) ?? [],
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
       ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
@@ -680,7 +680,7 @@ export type FamilyBill = Omit<
   PartyBill,
   | "receiptAvailable"
   | "invoiceNumber"
-  | "creditNotes"
+  | "correctives"
   | "amountDue"
   | "revision"
   | "invoiceType"

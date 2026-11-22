@@ -1313,7 +1313,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       receiptAvailable: true,
       receiptLanguage: "es-ES",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
-      creditNotes: [],
+      correctives: [],
       amountDue: "18.00",
       dining: "eat_in",
       diningChoice: "none",

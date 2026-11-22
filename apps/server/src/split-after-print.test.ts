@@ -293,7 +293,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(credits.map((credit) => credit.total)).toEqual([-4800]);
     expect(answer.json).toEqual({
       billId: expect.any(String),
-      creditNoteNumber: `R/${credits[0]!.invoiceNumber}`,
+      correctiveNumber: `R/${credits[0]!.invoiceNumber}`,
     });
     const newBill = answer.json.billId as string;
     expect(await filedSales(venue.db, [credits[0]!.id])).toEqual(

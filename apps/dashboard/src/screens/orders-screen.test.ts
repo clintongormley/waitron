@@ -21,7 +21,7 @@ const ROW: OrderRowDto = {
   saleId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   invoiceNumber: "A/12",
   invoiceType: "F2",
-  creditNotes: ["R/2"],
+  correctives: ["R/2"],
   status: "left_without_paying",
   credited: "in_part",
   total: "30.00",

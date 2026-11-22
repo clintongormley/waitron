@@ -670,7 +670,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
 
-  it("names, on each credit-note line, the invoice line with the same number that it reverses", async () => {
+  it("names, on each corrective line, the invoice line with the same number that it reverses", async () => {
     const id = await placed([
       { name: "Caña", quantity: "2" },
       {
@@ -1939,7 +1939,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill).toMatchObject({ status: "placed", receiptAvailable: true });
     expect(bill.invoiceNumber).toBe(await numberOf(original));
-    expect(bill.creditNotes).toEqual([]);
+    expect(bill.correctives).toEqual([]);
   });
 
   it("names the credit note a cancel filed against the invoice", async () => {
@@ -1953,7 +1953,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill.status).toBe("abandoned");
     expect(bill.invoiceNumber).toBe(await numberOf(original));
-    expect(bill.creditNotes).toEqual([await numberOf(credits[0]!)]);
+    expect(bill.correctives).toEqual([await numberOf(credits[0]!)]);
   });
 
   it("names neither on a placed bill with no invoice", async () => {
@@ -1971,7 +1971,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
 
     expect(bill).toMatchObject({ status: "placed", receiptAvailable: false });
     expect(bill).not.toHaveProperty("invoiceNumber");
-    expect(bill).not.toHaveProperty("creditNotes");
+    expect(bill).not.toHaveProperty("correctives");
   });
 });
 

@@ -808,8 +808,8 @@ const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
 ]);
 
 /** The latest credit note a read of the party's bills shows on bill `billId`. */
-function creditNoteOf(bills: readonly PartyBill[] | null, billId: string): string | null {
-  return bills?.find((row) => row.workingOrderId === billId)?.creditNotes?.at(-1) ?? null;
+function latestCorrectiveOf(bills: readonly PartyBill[] | null, billId: string): string | null {
+  return bills?.find((row) => row.workingOrderId === billId)?.correctives?.at(-1) ?? null;
 }
 
 function refusedBeforeLookup(error: unknown): boolean {
@@ -21525,7 +21525,7 @@ export class TillApp extends LitElement {
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    let split: { billId: string; creditNoteNumber: string } | undefined;
+    let split: { billId: string; correctiveNumber: string } | undefined;
     try {
       if (open.mode === "split")
         split = await this.api.splitAfterPrint(open.workingOrderId, override, {
@@ -21551,11 +21551,11 @@ export class TillApp extends LitElement {
   async #onSplitAfterPrint(
     id: number,
     sent: Sent,
-    answer: { billId: string; creditNoteNumber: string },
+    answer: { billId: string; correctiveNumber: string },
   ): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, { creditNote: answer.creditNoteNumber });
+    this.#showCancelCredited(id, { corrective: answer.correctiveNumber });
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const shown =
       this.activeTabId === open.workingOrderId && (await this.#switchToBill(answer.billId));
@@ -21592,12 +21592,12 @@ export class TillApp extends LitElement {
   async #onCancelCredited(id: number, sent: Sent): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, { creditNote: null });
+    this.#showCancelCredited(id, { corrective: null });
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting === shown && !this.#hasLeftParty(open.partyId, sent)) {
-      this.#showCancelCredited(id, { creditNote: creditNoteOf(bills, open.workingOrderId) });
+      this.#showCancelCredited(id, { corrective: latestCorrectiveOf(bills, open.workingOrderId) });
     }
   }
 
@@ -21672,7 +21672,7 @@ export class TillApp extends LitElement {
           compareDecimal(decimal(row.total), decimal(bill.total)) === 0,
       );
     this.#showCancelCredited(open.id, {
-      creditNote: creditNoteOf(bills, open.workingOrderId),
+      corrective: latestCorrectiveOf(bills, open.workingOrderId),
       creditedElsewhere,
     });
   }

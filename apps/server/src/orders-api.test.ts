@@ -280,7 +280,7 @@ describe("Orders routes", () => {
     expect(answer.json).toMatchObject({
       row: { status: "paid" },
       lines: [{ creditedTo: venue.operatorId }],
-      invoices: [{ kind: "invoice" }, { kind: "credit_note" }],
+      invoices: [{ kind: "invoice" }, { kind: "corrective" }],
       tenders: [{ method: "cash", amount: due }],
       party: { tables: [expect.stringMatching(/^Mesa /)] },
       departure: { reason: "Se marcharon sin pagar", recordedBy: "Sophia", authorizedBy: "Sophia" },

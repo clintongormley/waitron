@@ -26,7 +26,7 @@ const states: [string, State][] = [
     },
   ],
   ["sending", { refusal: null, busy: true, pressed: false, done: null }],
-  ["done", { refusal: null, busy: false, pressed: false, done: { creditNote: "R/3" } }],
+  ["done", { refusal: null, busy: false, pressed: false, done: { corrective: "R/3" } }],
 ];
 
 describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s theme)", (theme) => {

@@ -97,7 +97,7 @@ export interface OrderRow {
   saleId: string | null;
   invoiceNumber: string | null;
   invoiceType: "F1" | "F2" | null;
-  creditNotes: string[];
+  correctives: string[];
   status: OrderStatus;
   credited: "in_full" | "in_part" | null;
   total: Decimal;
@@ -365,7 +365,7 @@ function whereOf(clauses: SQL[]): SQL {
 /**
  * One page of rows: closest match first when searched by words, then newest first by `at`, then
  * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due,
- * payments before an invoice (two), credit-note numbers, tables and staff, each for the whole page
+ * payments before an invoice (two), corrective numbers, tables and staff, each for the whole page
  * and each skipped when the page has nothing to ask.
  */
 export function ordersPageSql(filter: OrderListFilter): SQL {
@@ -473,7 +473,7 @@ async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRo
     uninvoiced.length === 0
       ? { received: new Map<string, Decimal>() }
       : await readPaymentsByBill(tx, uninvoiced);
-  const notes = await readCreditNotes(
+  const correctives = await readCorrectiveNumbers(
     tx,
     raw.flatMap((row) => row.sale_id ?? []),
   );
@@ -522,7 +522,7 @@ async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRo
       invoiceNumber:
         row.sale_id === null ? null : formatInvoiceNumber(row.series_code!, row.invoice_number!),
       invoiceType: row.sale_id === null ? null : row.counterparty_tax_id === null ? "F2" : "F1",
-      creditNotes: row.sale_id === null ? [] : (notes.get(row.sale_id) ?? []),
+      correctives: row.sale_id === null ? [] : (correctives.get(row.sale_id) ?? []),
       status: row.status,
       credited:
         row.credited === 1 ? (compareDecimal(net, ZERO) === 0 ? "in_full" : "in_part") : null,
@@ -541,15 +541,15 @@ async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRo
 }
 
 /**
- * The formatted numbers of each sale's credit notes (`correctivesOf`: never its replacement, and
+ * The formatted numbers of each sale's correctives (`correctivesOf`: never its replacement, and
  * its replacement's own), oldest first, keyed by the sale.
  */
-export async function readCreditNotes(
+export async function readCorrectiveNumbers(
   tx: Transaction,
   saleIds: readonly string[],
 ): Promise<Map<string, string[]>> {
-  const notes = new Map<string, string[]>();
-  if (saleIds.length === 0) return notes;
+  const correctives = new Map<string, string[]>();
+  if (saleIds.length === 0) return correctives;
   const { rows } = await tx.execute<{ of: string; code: string; number: number }>(sql`
     select s.id as of, sr.code as code, c.invoice_number as number
     from sales s
@@ -561,8 +561,11 @@ export async function readCreditNotes(
     )})
     order by c.issued_at, c.rowid`);
   for (const row of rows)
-    notes.set(row.of, [...(notes.get(row.of) ?? []), formatInvoiceNumber(row.code, row.number)]);
-  return notes;
+    correctives.set(row.of, [
+      ...(correctives.get(row.of) ?? []),
+      formatInvoiceNumber(row.code, row.number),
+    ]);
+  return correctives;
 }
 
 /**
@@ -646,7 +649,7 @@ export interface OrderLine {
   creditedTo: string | null;
 }
 export interface OrderInvoice {
-  kind: "invoice" | "credit_note" | "replacement" | "substitution";
+  kind: "invoice" | "corrective" | "replacement" | "substitution";
   invoiceType?: "F1" | "F2";
   recipient?: {
     taxId: string;
@@ -1070,7 +1073,7 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
       rungBy: invoice.rungBy,
     })),
     ...corrections.map((invoice): OrderInvoice => ({
-      kind: "credit_note",
+      kind: "corrective",
       number: formatInvoiceNumber(invoice.code, invoice.number),
       issuedAt: invoice.issuedAt,
       total: centsToDecimal(invoice.total),
