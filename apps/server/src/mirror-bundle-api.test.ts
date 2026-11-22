@@ -439,7 +439,7 @@ afterAll(async () => {
 });
 
 describe("issueMirrorBundle, through the box-join routes", () => {
-  it("returns a bundle carrying the venue identity for an authorised admin credential", async () => {
+  it("returns a bundle carrying the venue identity for a join an administrator approved", async () => {
     const { designated } = await setupVenue();
     const lines: string[] = [];
     const log: Logger = (level, event, fields) =>

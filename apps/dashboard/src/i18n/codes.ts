@@ -1666,8 +1666,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La copia continua a tu bucket está activada. Desactívala en Copias de seguridad para añadir un servidor de reserva; tu bucket dejará de recibir los cambios del local.",
   },
   "mirror.clocks_apart": {
-    en: "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). Correct the new box's time, then choose Start again on it.",
-    es: "Los relojes de los dos servidores se separan más de 10 minutos (este {primaryAt}, el nuevo {standbyAt}). Corrige la hora del servidor nuevo y elige Empezar de nuevo en él.",
+    en: "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Start again on it.",
+    es: "Los relojes de los dos servidores se separan más de 10 minutos (este {primaryAt}, el nuevo {standbyAt}). Si la hora del servidor nuevo es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y elige Empezar de nuevo en él.",
   },
   "mirror.standby_name_taken": {
     en: "Another box here has the same short name as the new box. Choose Start again on the new box; it picks a new name.",

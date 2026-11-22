@@ -322,7 +322,7 @@ describe("the main box's authority certificate, and a request pinned to it", () 
     expect(seen!.headers).not.toHaveProperty("cookie");
   });
 
-  it("answers null for a plain-http loopback main box, which has no certificate to compare", async () => {
+  it("answers null for a plain-http loopback main box, which has no certificate to trust", async () => {
     expect(await fetchPrimaryCertificate("http://127.0.0.1:1")).toBeNull();
   });
 

@@ -65,7 +65,7 @@ vi.mock("./modules.js", async (importOriginal) => {
   };
 });
 
-// One identity for every password adopt, so a fixture can endorse the identity the box sends.
+// One identity for every adopt, so a fixture can endorse the identity the box sends.
 vi.mock("./reserved-identity.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./reserved-identity.js")>();
   return { ...actual, generateStandbyIdentity: () => STANDBY };
