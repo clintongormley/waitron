@@ -337,6 +337,7 @@ describe("the Rota contribution", () => {
       params: { week: "nonsense", area: "station:kitchen" } as Record<string, string>,
     };
     const host: CalendarViewHost = {
+      today: "2026-12-18",
       get month() {
         return address.month;
       },

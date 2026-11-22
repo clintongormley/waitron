@@ -882,7 +882,8 @@ own view words (`CALENDAR_OWN_VIEW_IDS`). Its `CalendarViewHost` provides the sh
 `<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`.
 The optional `today` is the venue's business date once the opening-hours read settles, with the
 browser's date as a fallback. The tab carries the shown month by default. Set `carryMonthOnTab: false`
-when the view chooses its own starting date. Those address pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
+when the view chooses its own starting date. A switch from an address without a month uses the
+destination's default date or view. Those address pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
 `opening-hours` in `keepUnlisted`; a view never adds its address words to that file. A view whose
 read builds on venue-service's `readCalendarMonthPlan` spreads `CALENDAR_MONTH_PLAN_READS`
 (`packages/venue-service/src/dashboard/live-queries.ts`) into its live dependencies rather than
