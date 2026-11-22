@@ -1782,13 +1782,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   prove that aliases or indirect helper calls are sequential. Do not build it yet (watcher).
   See `docs/developers/conventions-data.md`, "Multi-table writes share ONE transaction".
 
-- **A module this server runs with no transfer declaration, or no recorded version, is refused as
-  `setup.request_invalid` field `module:<name>`** (`packages/provisioning/src/configuration-transfer.ts`),
-  which setup words, when the export is uploaded, as "The configuration export could not be opened.
-  Check the file and passphrase." That blames the file for a fault in this server's own build. An
-  export from a box running other modules now has its own code, `setup.configuration_parts_differ`
-  (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
-
 - **A1544. Measure the real box's memory use and database-cache allowance.**
   The 366-day / 91,500-sale comparison completed uncapped, at 8 GiB and at an assumed 7 GiB.
   The 7 GiB run's counter-sale median was 13.752 ms against 12.323 ms uncapped; host load was

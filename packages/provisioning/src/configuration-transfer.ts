@@ -198,10 +198,7 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
   const names = new Set<string>();
   for (const module of modules) {
     const contribution = module.configurationTransfer;
-    if (contribution === undefined) {
-      throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
-    }
-    if (contribution.kind === "none") continue;
+    if (contribution?.kind !== "tables") continue;
     for (const table of contribution.tables) {
       if (!/^[a-z][a-z0-9_]*$/.test(table.name) || names.has(table.name)) {
         throw new AppError("setup.request_invalid", { field: `table:${table.name}` });
@@ -739,10 +736,6 @@ export function validateConfigurationBundle(
     .sort();
   if (exportOnly.length > 0 || serverOnly.length > 0) {
     throw new AppError("setup.configuration_parts_differ", { exportOnly, serverOnly });
-  }
-  const unrecorded = versioned.find((module) => targetVersions[module.name] === undefined);
-  if (unrecorded !== undefined) {
-    throw new AppError("setup.request_invalid", { field: `module:${unrecorded.name}` });
   }
   const differences = [...exportSets].map((name) => bundle.modules[name]! - targetVersions[name]!);
   if (differences.some((difference) => difference > 0)) {

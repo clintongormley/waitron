@@ -1508,7 +1508,6 @@ interface ConfigurationTransferContext {
   } | null;
 }
 
-/** Every module declares either its transferable configuration or that it has none. */
 export type ModuleConfigurationTransfer =
   | { readonly kind: "none" }
   | {
