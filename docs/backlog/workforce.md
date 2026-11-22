@@ -49,7 +49,7 @@ Keep saved periods and snapshots intact. The
 
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
-**Owner, 2026-10-16.** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
+**Owner, 2026-10-16.** The owner's point, as written:
 
 > **Staffing month: the Monday "Rota for this week" link goes**
 > (board 6; today the `rota-week` button in
@@ -184,7 +184,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
 ## Bundle: Staffing month day box
 
 - **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
-  opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724.
+  opens the week last picked (owner, 2026-10-16).**
   [Detail](workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes).
 
 ## Decisions and deliberate limits
