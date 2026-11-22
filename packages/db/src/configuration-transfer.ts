@@ -178,6 +178,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
     { name: "products" },
+    { name: "product_takeaway_vat_rates" },
     {
       name: "device_profiles",
       omit: ["card_readers"],

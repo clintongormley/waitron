@@ -346,6 +346,7 @@ const ADDED_TABLES = [
   "set_menu_dish_courses",
   "bill_set_menu_copies",
   "bill_advances",
+  "product_takeaway_vat_rates",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [

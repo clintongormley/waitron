@@ -915,9 +915,9 @@ because `mapModelo303` (`packages/reporting/src/modelo-303.ts`) has a box for on
 refuses any other rate, so one sale at 5% would make that period's modelo 303 download fail.
 Check which of 2, 5 and 7.5 have a row on the current modelo 303 form (the committed AEAT record
 design, `packages/reporting/reference/DR303e26.xlsx`) and map those; the code says the 5% row is
-gone from the 2026 form (`packages/reporting/src/modelo-303.ts:34-35`). A rate with no row cannot
-be offered taken away. `apps/server/src/vat-rates-reportable.test.ts` fails if the pick list is
-widened without the mapping.
+gone from the 2026 form (`DEVENGADO_BOXES` in `packages/reporting/src/modelo-303.ts`). A rate
+with no row cannot be offered taken away. `apps/server/src/vat-rates-reportable.test.ts` fails if
+the pick list is widened without the mapping.
 
 ## Correcting a paid invoice: what A802 left open
 
