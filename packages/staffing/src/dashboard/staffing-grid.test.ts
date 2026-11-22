@@ -1338,6 +1338,7 @@ test("resizing at a date's own start keeps the preview and saved hours on that s
   point(el, "mon", 240, "pointermove");
   await el.updateComplete;
   const preview = el.shadowRoot!.querySelector(".preview")!;
+  expect(preview, "the resize preview").not.toBeNull();
   expect(preview.getBoundingClientRect().top).toBeCloseTo(
     block(el, "mon").getBoundingClientRect().top,
     0,
