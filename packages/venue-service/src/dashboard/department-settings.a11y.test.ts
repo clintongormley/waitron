@@ -495,6 +495,12 @@ describe.each(["light", "dark"] as const)("department-settings estimated margin 
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
       await expect.poll(() => control().error).not.toBe("");
+      await expect
+        .poll(
+          async () =>
+            (await formMessageOf(el.shadowRoot!.querySelector("wt-form-actions")!))?.textContent,
+        )
+        .toContain("Correct the highlighted fields");
     }
     await expectNoA11yViolations(host);
   });

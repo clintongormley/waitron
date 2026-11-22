@@ -511,7 +511,7 @@ const en = {
   "venue.name": "Department name",
   "venue.trading_name": "Trading name",
   "venue.estimated_margin": "Estimated margin (%)",
-  "venue.estimated_margin_hint": "For the estimated cost of free items in the corrections workbook",
+  "venue.estimated_margin_hint": "Used to estimate the cost of free items",
   "venue.estimated_margin_invalid": "Enter a percentage from 0 to 100 with at most two decimals.",
   "venue.operation_description": "Invoice operation description",
   "venue.operation_description_hint": "Sent to the tax agency; not printed",
@@ -1459,8 +1459,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.name": "Nombre del departamento",
   "venue.trading_name": "Nombre comercial",
   "venue.estimated_margin": "Margen estimado (%)",
-  "venue.estimated_margin_hint":
-    "Para el coste estimado de los artículos gratuitos en el libro de correcciones",
+  "venue.estimated_margin_hint": "Para estimar el coste de las invitaciones",
   "venue.estimated_margin_invalid":
     "Introduce un porcentaje de 0 a 100 con dos decimales como máximo.",
   "venue.operation_description": "Descripción de la operación",
