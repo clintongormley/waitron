@@ -751,6 +751,143 @@ describe("a waiting change checks the hours written while it waits", () => {
       withTransaction(suite.db, (tx) => updateMenuPeriod(tx, v.periodId, { name: "Late" })),
     ).resolves.toBeUndefined();
   });
+  describe("a special day edit beside a stored range that clashes with the waiting start", () => {
+    const clashing = async () => {
+      const v = await fixture([], { date: "2026-12-20", zone: true });
+      await withTransaction(suite.db, (tx) =>
+        seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] }),
+      );
+      await waiting(v);
+      return v;
+    };
+    const save = (
+      v: Awaited<ReturnType<typeof fixture>>,
+      revision: number,
+      change: { closedAllDay?: boolean; paint?: boolean } = {},
+    ) =>
+      withTransaction(suite.db, (tx) =>
+        saveSpecialDay(
+          tx,
+          v.specialDayId!,
+          {
+            name: "Renamed day",
+            repeatsYearly: false,
+            dates: [{ date: "2026-12-20", closedAllDay: change.closedAllDay ?? false }],
+            ...(change.paint
+              ? {
+                  paint: [
+                    {
+                      departmentId: v.departmentId,
+                      date: "2026-12-20",
+                      ranges: [{ periodId: v.periodId, ...range("12:00", "16:00") }],
+                    },
+                  ],
+                }
+              : {}),
+          },
+          at,
+          revision,
+        ),
+      );
+    it("accepts a rename", async () => {
+      const v = await clashing();
+      await expect(save(v, 2)).resolves.toMatchObject({ name: "Renamed day" });
+    });
+    it("accepts a rename against a stale clock revision", async () => {
+      const v = await clashing();
+      await expect(save(v, 1)).resolves.toMatchObject({ name: "Renamed day" });
+    });
+    it("still refuses a save that also changes a date's closed-all-day", async () => {
+      const v = await clashing();
+      await expect(save(v, 2, { closedAllDay: true })).rejects.toMatchObject({
+        code: "hours.clock_change_conflict",
+      });
+    });
+    it("still refuses a save that also paints", async () => {
+      const v = await clashing();
+      await expect(save(v, 2, { paint: true })).rejects.toMatchObject({
+        code: "hours.clock_change_conflict",
+      });
+    });
+    it("still checks the clock revision of a save that changes a date", async () => {
+      const v = await clashing();
+      await expect(save(v, 1, { closedAllDay: true })).rejects.toMatchObject({
+        code: "hours.clock_changed",
+      });
+    });
+    const renamed = { name: "Renamed day", repeatsYearly: false };
+    const onDate = (date: string) => ({ dates: [{ date, closedAllDay: false }] });
+    const stale = (id: string | null, input: object, when = at) =>
+      withTransaction(suite.db, (tx) => saveSpecialDay(tx, id, input, when, 1));
+    it.each<[string, (v: Awaited<ReturnType<typeof clashing>>) => [string | null, object]]>([
+      ["a new special day", () => [null, { ...renamed, ...onDate("2026-12-21") }]],
+      [
+        "a save that changes repeats yearly",
+        (v) => [v.specialDayId!, { ...renamed, ...onDate("2026-12-20"), repeatsYearly: true }],
+      ],
+      [
+        "a save that replaces its date with another",
+        (v) => [v.specialDayId!, { ...renamed, ...onDate("2026-12-21") }],
+      ],
+      [
+        "a save that clears a department's paint",
+        (v) => [
+          v.specialDayId!,
+          {
+            ...renamed,
+            ...onDate("2026-12-20"),
+            paint: [{ departmentId: v.departmentId, date: "2026-12-20", ranges: [] }],
+          },
+        ],
+      ],
+      [
+        "a save that clears a zone's paint",
+        (v) => [
+          v.specialDayId!,
+          {
+            ...renamed,
+            ...onDate("2026-12-20"),
+            zonePaint: [{ zoneId: v.zoneId!, date: "2026-12-20", ranges: [] }],
+          },
+        ],
+      ],
+    ])("still checks the clock revision of %s", async (_, request) => {
+      const v = await clashing();
+      await expect(stale(...request(v))).rejects.toMatchObject({ code: "hours.clock_changed" });
+    });
+    it("refuses a stale save as a stale clock when its paint does not fit the start since taken effect", async () => {
+      const v = await clashing();
+      await expect(
+        stale(
+          v.specialDayId!,
+          {
+            ...renamed,
+            ...onDate("2026-12-20"),
+            paint: [
+              {
+                departmentId: v.departmentId,
+                date: "2026-12-20",
+                ranges: [{ periodId: v.periodId, ...range("21:00", "04:30") }],
+              },
+            ],
+          },
+          new Date("2026-11-05T12:00:00Z"),
+        ),
+      ).rejects.toMatchObject({ code: "hours.clock_changed" });
+    });
+    it("refuses a stale save of a special day that is gone as a stale clock", async () => {
+      await clashing();
+      await expect(
+        stale(randomUUID(), { ...renamed, ...onDate("2026-12-20") }),
+      ).rejects.toMatchObject({ code: "hours.clock_changed" });
+    });
+    it("refuses a stale save with a blank name as a stale clock", async () => {
+      const v = await clashing();
+      await expect(
+        stale(v.specialDayId!, { ...renamed, ...onDate("2026-12-20"), name: "" }),
+      ).rejects.toMatchObject({ code: "hours.clock_changed" });
+    });
+  });
   it("creates a period with no ranges while a change waits", async () => {
     const v = await fixture([]);
     await waiting(v);
@@ -2391,6 +2528,17 @@ describe("a keep-open for the night before the change", () => {
 
   it("does not clash when it ends before the new changeover", async () => {
     await keptOpen("02:30");
+    const conflicts = await withTransaction(suite.db, (tx) =>
+      keptOpenConflicts(tx, before, candidate("03:00"), E),
+    );
+    expect(conflicts).toEqual([]);
+  });
+
+  it("does not clash for a zone in a switched-off department", async () => {
+    const v = await keptOpen("04:30");
+    await withTransaction(suite.db, (tx) =>
+      tx.update(departments).set({ active: false }).where(eq(departments.id, v.departmentId)),
+    );
     const conflicts = await withTransaction(suite.db, (tx) =>
       keptOpenConflicts(tx, before, candidate("03:00"), E),
     );

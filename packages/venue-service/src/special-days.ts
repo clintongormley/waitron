@@ -841,11 +841,30 @@ export async function saveSpecialDay(
   at: Date,
   expectedClockRevision: number,
 ): Promise<SpecialDayDetail> {
-  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
-  const stored = id === null ? null : await readSpecialDay(tx, id);
-  const clock = await readVenueClock(tx);
-  const inForce = inForceClock(clock, at);
-  const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
+  const read = async () => {
+    const stored = id === null ? null : await readSpecialDay(tx, id);
+    const clock = await readVenueClock(tx);
+    const inForce = inForceClock(clock, at);
+    return {
+      stored,
+      clock,
+      parsed: parseInput(input, { settled: settledClock(clock, at), inForce }),
+    };
+  };
+  // A request that fails to read or parse refuses a stale clock revision first, as a timed save does.
+  const { stored, clock, parsed } = await read().catch(async (error: unknown) => {
+    await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
+    throw error;
+  });
+  const datesKey = (dates: { date: LocalDate; closedAllDay: boolean }[]) =>
+    JSON.stringify(dates.map((entry) => [entry.date, entry.closedAllDay]).sort());
+  const timed =
+    stored === null ||
+    stored.repeatsYearly !== parsed.repeatsYearly ||
+    datesKey(stored.dates) !== datesKey(parsed.dates) ||
+    parsed.paint.length > 0 ||
+    parsed.zonePaint.length > 0;
+  await assertBusinessDayScheduleWrite(tx, timed ? "time" : "metadata", expectedClockRevision);
   await assertPaintOwners(
     tx,
     parsed.paint.map((entry) => entry.ownerId),
@@ -981,7 +1000,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await assertWaitingChangeFits(tx, at, clock);
+  if (timed) await assertWaitingChangeFits(tx, at, clock);
   return readSpecialDay(tx, specialDayId);
 }
 

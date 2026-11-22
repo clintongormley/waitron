@@ -1551,9 +1551,15 @@ in the sweep below are retired. The booking writer remains; the account below re
   while it waits"). It checks the venue's hours as written, so a clash in another department refuses
   an unrelated write ("refuses a clean season week while another department holds a clash, naming
   that department"). A period rename is not checked ("accepts a period rename beside a stored range
-  that clashes with the waiting start"), but a special day's save is checked even when it changes
-  only the name (`saveSpecialDay`, `packages/venue-service/src/special-days.ts`). The Calendar cuts a weekly range at a past
-  day's own changeover when the range misfits that day's start but fits the start in force
+  that clashes with the waiting start"), nor, together with its clock revision, is a special
+  day's save that changes only its name ("accepts a rename" and "accepts a rename against a stale
+  clock revision", under "a special day edit beside a stored range that clashes with the waiting
+  start"). A new special day, or a save that changes "repeats yearly", its dates or a date's
+  closed-all-day, or names any department's or zone's paint, even to clear it, gets both checks
+  (`timed` in `saveSpecialDay`; that group's "still checks the clock revision of …" cases test the
+  revision check for each, and its "still refuses a save that also …" cases the waiting-start
+  check for a closed-all-day change and for paint). The Calendar cuts a weekly range
+  at a past day's own changeover when the range misfits that day's start but fits the start in force
   (`cutToOwnDay`, `packages/venue-service/src/calendar-cut.ts`; "a past day's range that misfits its
   own start" in `opening-hours-calendar.test.ts`). The editor shows an
   unreadable clock but provides no repair path. The request cases are in

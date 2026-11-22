@@ -70,16 +70,10 @@ code, not run again here.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.
-- **A866.** A zone keep-open saved for tonight in a deactivated department still blocks a start
-  change (`keptOpenConflicts`, `packages/venue-service/src/business-day-schedule.ts`, reads every
-  department's zone extensions). (2026-10-24, A789 slice 2: the period half is gone.)
 - **A867, a crossing range hides an overlap.** A range that fails on its own is listed as crossing
   the new start; the day's other ranges are marked overlapping only when no range fails on its own
   (`overlapping` in `businessDayClockConflicts`). A review's probe: 13:00–16:00, 15:00–17:00 and
   22:00–04:30 moving 05:00 → 03:00 lists only 22:00–04:30. No test pins either half.
-- **A868.** Renaming a special day is refused while any stored range clashes with a waiting start,
-  though renaming a period or a season is not (`saveSpecialDay`,
-  `packages/venue-service/src/special-days.ts`).
 - **A869, a one-off day after the change.** While 03:00 waits, a one-off special day on 2026-11-05
   with 04:00–12:00, which fits the 03:00 start that date will have, is refused
   `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
