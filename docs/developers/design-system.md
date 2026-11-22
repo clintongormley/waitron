@@ -1868,7 +1868,7 @@ tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) wi
 "Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
 and photo, each following the included menu until it is changed. **Use included menu colour** and
 **Use included menu photo** stage a return to the menu’s value when the folder fixes that field.
-The menu also offers "Remove from this menu". The
+The ⋮ also holds "Remove from this menu". The
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
 Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Select mode, put every grip in one leading column before the tree arrow and indentation.

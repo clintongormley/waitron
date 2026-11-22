@@ -142,8 +142,8 @@ it("submits a different folder value and drops it when set back to the menu valu
   });
 });
 it.each([
-  ["colour", { names: { en: "Bar" }, image: "own-photo" }],
-  ["photo", { names: { en: "Bar" }, color: "#112233" }],
+  ["colour", { names: { en: "Bar", es: "Barra" }, image: "own-photo" }],
+  ["photo", { names: { en: "Bar", es: "Barra" }, color: "#112233" }],
 ] as const)("releases a matching fixed %s when Save is pressed", async (fieldName, overrides) => {
   const el = await includeForm({
     value: {
@@ -151,6 +151,10 @@ it.each([
       overrides: { names: { en: "Bar" }, image: "own-photo", color: "#112233" },
     },
   });
+  await type(el, "names-es", "Barra");
+  await expect
+    .element(page.getByRole("button", { name: t("action.save"), exact: true }))
+    .toBeEnabled();
   const submittedBeforeSave = vi.fn();
   el.addEventListener("wt-submit", submittedBeforeSave, { once: true });
   const reset = page.getByRole("button", { name: `Use included menu ${fieldName}`, exact: true });
