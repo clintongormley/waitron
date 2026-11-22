@@ -325,8 +325,11 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         end(r, "code_taken", now);
         return { refused: "code_taken" };
       }
-      for (const older of listedRequests()) {
-        if (older.address === r.address) end(older, "replaced", now);
+      // An approved request from this address goes too: its box has started again, so it no longer
+      // holds back a tap on this one. One from another address still does.
+      for (const older of requests.values()) {
+        if (older.address === r.address && (isListed(older) || older.phase === "approved"))
+          end(older, "replaced", now);
       }
       const decoys = drawDecoys(code, shown(listedRequests()), options.drawCode);
       const answer = { mainNonce: r.mainNonce, signature: input.signAnswer(r.mainNonce) };

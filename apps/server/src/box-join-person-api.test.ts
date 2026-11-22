@@ -660,6 +660,27 @@ describe("the main box's person routes for a joining box", () => {
     expect(await poll(second)).toEqual({ state: "waiting" });
   });
 
+  it("takes a tap on the new code once the approved box has chosen Start again and asked again", async () => {
+    const box = joiningBox("192.168.1.20", { unlikeNodeId: designated.nodeId });
+    const first = await listedJoin(app, box);
+    expect((await approve(first.requestId, { code: first.code })).status).toBe(202);
+    expect(await poll(first)).toMatchObject({ state: "approved" });
+    const cancelled = await cancelJoin(app, first);
+    expect({ status: cancelled.status, body: await cancelled.json() }).toEqual(
+      refusal(409, "mirror.join_approving"),
+    );
+
+    const again = await listedRequest("192.168.1.20");
+    expect(await approve(again.requestId, { code: again.code })).toEqual({
+      status: 202,
+      body: null,
+    });
+    expect(await poll(first)).toEqual({ state: "ended", reason: "replaced" });
+    expect((await readPairLink(suite.node, designated.nodeId))?.peerNodeId).toBe(
+      again.box.hello.newNodeId,
+    );
+  });
+
   it("answers mirror.join_not_found for an unknown request", async () => {
     const unknown = "00000000-0000-4000-8000-000000000000";
     expect(await check(unknown)).toEqual(refusal(404, "mirror.join_not_found"));
