@@ -5201,7 +5201,7 @@ describe("The station editor", () => {
     await settle(el);
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["watcher"]);
     expect(q(el, "wt-modal p.note")?.textContent).toBe(
-      "New stations start with the printers every station uses.",
+      "Ticked: the printers every station uses now. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
     );
     await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
     q(el, '[data-test="save-station"]')!.click();
@@ -5216,11 +5216,33 @@ describe("The station editor", () => {
       printerIds: ["watcher"],
     });
   });
-  it("Add station starts with no printers when one station is active or none share a printer", async () => {
+  it("Add station starts with the one active station's active printers", async () => {
+    const loaded = {
+      ...ticketView,
+      stations: [ticketView.stations[0]!, { ...upstairs, active: false }],
+      stationPrinters: [
+        { stationId: "bar", printerId: "watcher" },
+        { stationId: "bar", printerId: "old" },
+        { stationId: "bar", printerId: "disabled" },
+        { stationId: "upstairs", printerId: "next" },
+      ],
+    };
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual([
+      "old",
+      "watcher",
+    ]);
+    expect(q(el, "wt-modal p.note")?.textContent).toBe(
+      "Ticked: the printers every station uses now. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
+    );
+  });
+  it("Add station starts with no printers when no station is active or none share a printer", async () => {
     for (const loaded of [
       {
         ...ticketView,
-        stations: [ticketView.stations[0]!, { ...upstairs, active: false }],
+        stations: ticketView.stations.map((station) => ({ ...station, active: false })),
         stationPrinters: [
           { stationId: "bar", printerId: "watcher" },
           { stationId: "upstairs", printerId: "watcher" },

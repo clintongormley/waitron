@@ -931,7 +931,7 @@ export class PrepStationsScreen extends LitElement {
   #printersOnEveryStation(): string[] {
     const view = this.view!;
     const active = view.stations.filter((station) => station.active);
-    if (active.length < 2) return [];
+    if (active.length === 0) return [];
     const lists = active.map((station) => this.#printersOf(station.id));
     return view.printers
       .filter((printer) => printer.active !== false)
