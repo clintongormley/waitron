@@ -1606,24 +1606,52 @@ describe("setup-app", () => {
     expect(next.disabled).toBe(false);
   });
 
-  it("shows a repeated series code under the field the refusal names", async () => {
+  it("shows a repeated series code under the field the refusal names, in the form's own words", async () => {
+    try {
+      const provision = vi.fn().mockRejectedValue({
+        code: "provisioning.duplicate_series_code",
+        params: { code: "FS", field: "correctiveSeriesCode" },
+        status: 400,
+      });
+      const el = await mountSetupApp(stubApi({ provision }));
+      patch(el, { venue: { seriesCode: "FS", correctiveSeriesCode: "FS" } });
+      provisionRequest(el);
+      await flush(el);
+      const venue = await screenHost(el, "venue");
+      const input = venue.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("[data-test=correctiveSeriesCode]")!;
+      await input.updateComplete;
+      expect(input.hasAttribute("invalid")).toBe(true);
+      expect(input.error).toBe("Use a different code for each invoice series.");
+      expect(await bottomOf(venue)).toBe("Correct the highlighted fields to continue.");
+      const next = venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(next.disabled).toBe(false);
+
+      setLocale("es-ES");
+      await flush(el);
+      await (venue as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await input.updateComplete;
+      expect(input.error).toBe("Usa un código distinto para cada serie de facturas.");
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it("keeps a venue-data refusal naming a field the form does not show above Next", async () => {
     const provision = vi.fn().mockRejectedValue({
-      code: "provisioning.duplicate_series_code",
-      params: { code: "FS", field: "correctiveSeriesCode" },
+      code: "fiscal.operation_date_invalid",
+      params: { field: "operationDate" },
+      status: 400,
     });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
     const venue = await screenHost(el, "venue");
-    const input = venue.shadowRoot!.querySelector<
-      HTMLElement & { error: string; updateComplete: Promise<unknown> }
-    >("[data-test=correctiveSeriesCode]")!;
-    await input.updateComplete;
-    expect(input.hasAttribute("invalid")).toBe(true);
-    expect(input.error).toBe(
-      "Two invoice series have the same code. Give each series its own code.",
-    );
-    expect(await bottomOf(venue)).toBe("Correct the highlighted fields to continue.");
+    expect(venue.shadowRoot!.querySelector("[invalid]")).toBeNull();
+    expect(await bottomOf(venue)).toContain("(fiscal.operation_date_invalid)");
   });
 
   it("sends a refused start-of-day time back to the venue form with the field explained", async () => {

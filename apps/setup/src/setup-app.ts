@@ -369,6 +369,28 @@ export const JOIN_HANDLE_KEY = "waitron-setup-join-handle";
 /** The main box this tab's join asked, for the done and reset screens' link to its Servers page. */
 export const JOIN_PRIMARY_KEY = "waitron-setup-join-primary";
 
+/**
+ * A refusal of the venue details, as the venue form shows it: under a field the form shows when the
+ * refusal names one, otherwise above Next. Undefined for a refusal that is not about those details.
+ */
+function venueRefusal(error: unknown): { field: string } | { message: Message } | undefined {
+  const { code, params } = (error ?? {}) as { code?: unknown; params?: { field?: unknown } };
+  if (typeof code !== "string") return undefined;
+  const field = typeof params?.field === "string" ? params.field : undefined;
+  const venueData = code.startsWith("provisioning.") || code.startsWith("fiscal.");
+  // The same list the venue form marks and explains from, so a path can never route back to a form
+  // that has nothing to say about it.
+  if (
+    (venueData || code === "setup.request_invalid" || code === "venue.detail_invalid") &&
+    field !== undefined &&
+    Object.hasOwn(VENUE_SERVER_FIELDS, field)
+  )
+    return { field };
+  if (!venueData) return undefined;
+  const key = VENUE_ERROR_MESSAGES[code];
+  return { message: key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key) };
+}
+
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.vault_not_empty": "shell.adopt.vault_not_empty",
@@ -1044,7 +1066,6 @@ export class SetupApp extends LitElement {
    * leave a field red on a value the operator has already corrected.
    */
   @state() private venueInvalidField?: string;
-  @state() private venueInvalidFieldMessage?: Message;
 
   /** A new object for every refusal of Finish joining, which is how the join screen sees it. */
   @state() private joinRefusal?: { code: string; params?: Record<string, unknown> };
@@ -1400,7 +1421,6 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryBusy = false;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
-    this.venueInvalidFieldMessage = undefined;
     this.reviewError = undefined;
     this.joinRefusal = undefined;
     this.connectError = undefined;
@@ -1456,7 +1476,6 @@ export class SetupApp extends LitElement {
     if (this.screen !== "venue") return;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
-    this.venueInvalidFieldMessage = undefined;
     this.reviewError = undefined;
     if (this.draft.mode === "live") void this.#claimFirstSetup();
     else this.#afterFirstOwner();
@@ -1633,6 +1652,18 @@ export class SetupApp extends LitElement {
         if (!current()) return;
         if (session && !session.recoveryRequired && !session.state) {
           this.#reenterCloudAdmin();
+          return;
+        }
+      }
+      // The claim checks the venue details before it saves an attempt, so a refusal of them leaves
+      // nothing to repeat; the box is still asked, as the page keeps the claim pending until it says.
+      const refusal = venueRefusal(error);
+      if (refusal !== undefined) {
+        const session = this.#firstSession;
+        await session?.refresh().catch(() => {});
+        if (!current()) return;
+        if (session && !session.recoveryRequired && !session.state) {
+          this.#backToVenue(refusal);
           return;
         }
       }
@@ -1910,7 +1941,6 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
-    this.venueInvalidFieldMessage = undefined;
     this.#clearProvisionOutcome();
     this.#registerRoot();
     const submitted = structuredClone(this.draft);
@@ -1993,43 +2023,30 @@ export class SetupApp extends LitElement {
     this.screen = "provisioning";
   }
 
+  #backToVenue(refusal: { field: string } | { message: Message }): void {
+    if ("field" in refusal) this.venueInvalidField = refusal.field;
+    else this.venueError = refusal.message;
+    this.screen = "venue";
+  }
+
   /**
-   * A venue-data refusal (`provisioning.*`, `fiscal.*`, or a `setup.request_invalid` /
-   * `venue.detail_invalid` naming a field the venue form shows) would fail again on a re-POST of the
-   * same data, so it routes back to the venue form rather than offering a retry.
+   * A venue-data refusal (see {@link venueRefusal}) would fail again on a re-POST of the same data,
+   * so it routes back to the venue form rather than offering a retry.
    */
   #mapProvisionError(error: ApiError): void {
     // A network drop rejects with a bare `TypeError`, which carries no `code`.
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (this.#mapFirstSetupError(error)) return;
-    const field = typeof error.params?.field === "string" ? error.params.field : undefined;
-    if (
-      code === "provisioning.duplicate_series_code" &&
-      field !== undefined &&
-      Object.hasOwn(VENUE_SERVER_FIELDS, field)
-    ) {
-      this.venueInvalidField = field;
-      this.venueInvalidFieldMessage = say("shell.venue_error.duplicate_series_code");
-      this.screen = "venue";
-      return;
-    }
-    if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
-      const key = VENUE_ERROR_MESSAGES[code];
-      this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
-      this.screen = "venue";
+    const refusal = venueRefusal(error);
+    if (refusal !== undefined) {
+      this.#backToVenue(refusal);
       return;
     }
     switch (code) {
       case "setup.request_invalid":
       case "venue.detail_invalid": {
-        // The same list the venue form marks and explains from, so a path can never route back to a
-        // form that has nothing to say about it.
-        if (field !== undefined && Object.hasOwn(VENUE_SERVER_FIELDS, field)) {
-          this.venueInvalidField = field;
-          this.screen = "venue";
-          return;
-        }
+        const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         this.reviewError =
           field === undefined
             ? say("shell.review.request_invalid")
@@ -3090,7 +3107,6 @@ export class SetupApp extends LitElement {
           .errorMessage=${this.venueError?.()}
           .refusal=${this.venueError}
           .invalidField=${this.venueInvalidField}
-          .invalidFieldMessage=${this.venueInvalidFieldMessage}
         ></setup-venue-screen>`;
       case "cert":
         return html`<setup-cert-screen

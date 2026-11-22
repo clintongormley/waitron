@@ -121,6 +121,14 @@ const CODE_FIELDS: ReadonlySet<TextField> = new Set([
   "correctiveSeriesCode",
 ]);
 
+const SERIES_FIELDS: readonly TextField[] = [
+  "seriesCode",
+  "fullSeriesCode",
+  "correctiveSeriesCode",
+];
+const isSeriesField = (key: string | undefined): boolean =>
+  SERIES_FIELDS.some((field) => field === key);
+
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold as one field. `taxpayerDomicile`
  * is the registered address's joined line. */
@@ -404,12 +412,9 @@ export class SetupVenueScreen extends LitElement {
   /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
   @property({ attribute: false }) refusal?: unknown;
 
-  /** A field path the server refused (the `params.field` of `setup.request_invalid` or
-   * `venue.detail_invalid`), routed back by the shell. */
+  /** A field path a refusal of the venue details names in its `params.field`, routed back by the
+   * shell. */
   @property() invalidField?: string;
-  /** Words for `invalidField`'s refusal when they are not that field's own, such as a repeated
-   * series code; read on each render, so they follow a language switch. */
-  @property({ attribute: false }) invalidFieldMessage?: () => string;
 
   @state() private values: Record<TextField, string> = {
     country: "ES",
@@ -548,18 +553,8 @@ export class SetupVenueScreen extends LitElement {
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
-      const field =
+      const refusal =
         this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
-      const words = this.invalidFieldMessage;
-      const refusal: ServerField | undefined =
-        field === undefined || words === undefined
-          ? field
-          : {
-              key: field.key,
-              get message() {
-                return words();
-              },
-            };
       this.serverInvalid =
         refusal === undefined
           ? undefined
@@ -684,7 +679,13 @@ export class SetupVenueScreen extends LitElement {
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     // Editing the field the server refused retires that mark: the new value has not been refused.
-    if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
+    // A repeated series code is mended by changing either code, so any series code retires it.
+    const repeated: ReadonlySet<string | undefined> = this.#repeatedSeriesCodes();
+    if (
+      this.serverInvalid?.key === key ||
+      (isSeriesField(key) && repeated.has(this.serverInvalid?.key))
+    )
+      this.serverInvalid = undefined;
     const value = event.detail.value;
     this.#cancelAddressSearch(SEARCH_FILLS[key]);
     if (key === "name") this.#demoVenueNameSource = "custom";
@@ -898,16 +899,7 @@ export class SetupVenueScreen extends LitElement {
     if (languages.length !== 1 || !receipt?.choices.includes(languages[0]!)) {
       invalid.add("invoiceLocales");
     }
-    for (const [first, second] of [
-      ["seriesCode", "fullSeriesCode"],
-      ["seriesCode", "correctiveSeriesCode"],
-      ["fullSeriesCode", "correctiveSeriesCode"],
-    ] as const) {
-      if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
-        invalid.add(first);
-        invalid.add(second);
-      }
-    }
+    for (const key of this.#repeatedSeriesCodes()) invalid.add(key);
     // Last, so it sees every mark on the fields the line is joined from.
     const unreadable = this.#unreadableCity(invalid);
     if (unreadable !== undefined) invalid.add(unreadable);
@@ -951,6 +943,19 @@ export class SetupVenueScreen extends LitElement {
     return this.sameAsVenue ? "city" : "registeredCity";
   }
 
+  #repeatedSeriesCodes(): Set<TextField> {
+    const repeated = new Set<TextField>();
+    for (const [index, first] of SERIES_FIELDS.entries()) {
+      for (const second of SERIES_FIELDS.slice(index + 1)) {
+        if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
+          repeated.add(first);
+          repeated.add(second);
+        }
+      }
+    }
+    return repeated;
+  }
+
   #collectErrors(): Map<FieldKey, string> {
     const errors = new Map<FieldKey, string>();
     for (const key of this.#invalid) errors.set(key, this.#fieldMessage(key));
@@ -959,11 +964,17 @@ export class SetupVenueScreen extends LitElement {
       (this.serverInvalid.line === undefined ||
         this.serverInvalid.line === registeredLine(this.#pack(), this.values, this.sameAsVenue))
     ) {
+      const { key } = this.serverInvalid;
+      const repeated: ReadonlySet<FieldKey> = this.#repeatedSeriesCodes();
       errors.set(
-        this.serverInvalid.key,
-        this.serverInvalid.key === "taxpayerDomicile" && this.sameAsVenue
+        key,
+        key === "taxpayerDomicile" && this.sameAsVenue
           ? t("venue.error.registered_same_refused")
-          : this.serverInvalid.refusal.message,
+          : // A series field's server words are about a code's characters. A repeat the server
+            // refused is still in the form, as that is what was sent, so it gets the form's words.
+            repeated.has(key)
+            ? t("venue.error.series_codes")
+            : this.serverInvalid.refusal.message,
       );
     }
     return errors;

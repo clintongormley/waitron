@@ -986,6 +986,27 @@ describe("setup-venue-screen form errors", () => {
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
 
+  it.each(["seriesCode", "fullSeriesCode", "correctiveSeriesCode"])(
+    "words a refused repeated series code as the form does, and drops it when %s changes",
+    async (edited) => {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { venue: { seriesCode: "FS", correctiveSeriesCode: "FS" } },
+        invalidField: "correctiveSeriesCode",
+      });
+      await el.updateComplete;
+      expect(errorOf(el, "correctiveSeriesCode")).toBe(t("venue.error.series_codes"));
+      expect(errorOf(el, "seriesCode")).toBe("");
+      expect((next(el) as HTMLElement & { disabled: boolean }).disabled).toBe(false);
+
+      await type(el, "name", "Deli del Sol");
+      expect(errorOf(el, "correctiveSeriesCode")).toBe(t("venue.error.series_codes"));
+
+      await type(el, edited, "FT");
+      expect(errorOf(el, "correctiveSeriesCode")).toBe("");
+      expect(await bottomOf(el)).toBe("");
+    },
+  );
+
   it("drops a field refusal on the next press and sends the form again, unchanged", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",

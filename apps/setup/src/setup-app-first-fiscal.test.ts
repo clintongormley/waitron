@@ -102,6 +102,47 @@ it("sends the chosen working language in the real Live claim request", async () 
     venue: { staffLanguage: "en", invoiceLocales: ["es-ES"] },
   });
 });
+it("sends a repeated series code the claim refuses back under the field it names, and Next claims again", async () => {
+  let refusals = 0;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/claim") && refusals++ === 0)
+        return Response.json(
+          {
+            error: {
+              code: "provisioning.duplicate_series_code",
+              params: { code: "A", field: "correctiveSeriesCode" },
+            },
+          },
+          { status: 400 },
+        );
+    },
+  });
+  await screen(app, "mode");
+  emit(app, "setup-patch", {
+    patch: { mode: "live", venue: { ...venue, correctiveSeriesCode: "A" } },
+  });
+  emit(app, "setup-goto", { screen: "venue" });
+  await screen(app, "venue");
+  emit(app, "setup-advance");
+  await expect.poll(() => requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
+  const form = await screen(app, "venue");
+  const input = form.shadowRoot!.querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >("[data-test=correctiveSeriesCode]")!;
+  await expect.poll(() => input.hasAttribute("invalid")).toBe(true);
+  expect(input.error).toBe("Use a different code for each invoice series.");
+  expect(app.shadowRoot!.querySelector("[data-test=screen-first-owner]")).toBeNull();
+  expect(
+    (form.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
+      .disabled,
+  ).toBe(false);
+
+  emit(app, "setup-patch", { patch: { venue: { correctiveSeriesCode: "R" } } });
+  emit(app, "setup-advance");
+  await screen(app, "cert");
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(2);
+});
 it.each(["demo", "prepare"])("keeps %s free of custody claims", async (mode) => {
   const { app, requests } = await mount();
   await liveVenue(app, mode);
