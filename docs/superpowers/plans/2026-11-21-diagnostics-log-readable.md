@@ -8,6 +8,9 @@ Lane D's DIAGNOSTICS-LOG-READABLE asks for local times, readable details, filter
 - [ ] In `apps/dashboard/src/api/client.ts` and `screens/diagnostics-screen.ts`, use the current polling route, `wt-combobox` and a shared search input. Render one compact ordered-list row per event with venue-local time, level, event, request ID and visible details. Format report and expiry times in the venue zone. Search across the rendered row. Keep Pause, Clear, passive polling and detailed logging. In `diagnostics-screen.test.ts` and its accessibility suite, check the default, all-level and no-match states, local time across a zone difference, detail/request-ID search and pause. Check phone and desktop in both languages and themes.
 - [ ] Move `loop.sleeping` and empty `resolve_pending.complete` sweeps to debug in `loop.ts` and `boot.ts`. Keep meaningful sweep results at info. Adjust existing tests that wait for sleep to enable debug, and assert the level in `loop.test.ts` and `boot-pending-sweep.test.ts`. Update the two Box status guides, `docs/operations/backups-and-support.md`, the server README's logging entries and the written masking rule where it describes the viewer. About 200 production and 180 test lines.
 
+  **22 November, JR5:** The old timer and its `loop.sleeping` event are gone.
+  Empty `resolve_pending.complete` sweeps log at debug in `card-follow-up.ts`.
+
 - [ ] Skip the viewer’s two successful passive GETs in the request log. A real Diagnostics route test keeps failed reads and ordinary requests. The watcher moved this step from PR 2 to PR 1 at 01:24 on 21 November after the run-it review.
 
 ## PR 2. Explain a request

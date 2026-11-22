@@ -845,6 +845,8 @@ The ones worth grepping for:
   This box logs an empty card sweep at `debug`. Pending work, captures, failures and incidents
   appear at `info`. The incidents are `payment.pending_outcome_unactionable` and
   `payment.capture_mismatch`.
+- **`tender_refund.recovery_failed`** (`error`) carries `errorCode`. A `refundId` identifies
+  a failed refund row. The other card checks keep their schedule in that case.
 - **`bill_request.clear_failed`** (`warn`) — `{ billId, partyId, error }`. A payment left nothing of
   the party's family to pay, but taking away the party's bill request was refused
   (`clearBillRequestIfPaid`, `src/bill-request.ts`). The payment went through; the bill request

@@ -1743,6 +1743,9 @@ describe("settled-tender recovery boot lifetime", () => {
     try {
       await listening(Number(env.WAITRON_HTTP_PORT));
       expect(recoverTenderRefunds).toHaveBeenCalledOnce();
+      expect(recoverTenderRefunds).toHaveBeenCalledWith(
+        expect.objectContaining({ log: expect.any(Function) }),
+      );
       closing = server.close();
       await Promise.race([aborted, closing]);
       expect(signal?.aborted).toBe(true);

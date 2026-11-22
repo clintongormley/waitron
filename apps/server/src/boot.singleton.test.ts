@@ -185,10 +185,6 @@ function dutyEnv(port: number) {
 
 // Passed as `startServer`'s RAW `base`, not the merged `env`: the supervisor re-reads its config off
 // `loadBoxEnv(base, stateDir)` on each reload.
-//
-// Weaker than it looks: the primary case asserts only that it does NOT take the non-primary branch,
-// not that its backup duty ran — the suite has no way to fail the supervisor's open of the venue
-// without breaking the boot.
 function backupBase() {
   return {
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
@@ -242,7 +238,6 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
           expect.any(String),
         ),
       );
-      // See `backupBase` for what the log assertion proves.
       expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
       expect(createCloudArchiveTarget).toHaveBeenCalledTimes(1);

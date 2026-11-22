@@ -280,8 +280,8 @@ vi.mock("./box-secrets.js", async (importOriginal) => {
 
 /**
  * `startServer` end to end: the field mapping in `boot.ts` — `timings.scheduler.*` into
- * `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into `recordPass`, the `settlementLagMs`
- * conditional spread, the migrations-root default — and the whole `close()` sequence.
+ * `SchedulerDeps`, the `settlementLagMs` conditional spread, the migrations-root default,
+ * and the whole `close()` sequence.
  *
  * The suite owns a venue DIRECTORY, because boot needs one and `useVenueDb` does not expose its own.
  * The suite's handle stays open across the file; reads beside a running server are safe in
