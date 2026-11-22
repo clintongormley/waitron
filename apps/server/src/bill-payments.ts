@@ -1121,7 +1121,7 @@ async function issueOrSettleWhenFullyPaid(
   if (zero && options.closeZero !== true && !advancesPaidAll) return unpaid;
   if (compareDecimal(fundsOf(workingOrderId, due, held).received, due) !== 0) return unpaid;
   if (zero && held.some(receivedHoldsMoney)) return unpaid;
-  // An advance's open correction could still file a credit note the invoice would not take off.
+  // An advance's open correction could still file a corrective the invoice would not take off.
   // Money already moved cannot be refused: the invoice waits, and closing or discarding that
   // correction issues it if the bill is still paid off (`issueAdvanceBill` in invoice-corrections.ts).
   const correcting =

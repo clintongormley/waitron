@@ -57,7 +57,7 @@ export function stillToPay(
 }
 
 /**
- * What a bill still owes: for a bill whose ticket is issued, its amount due (credit notes counted)
+ * What a bill still owes: for a bill whose ticket is issued, its amount due (correctives counted)
  * less what it has received (`total − outstanding`); else its outstanding.
  */
 export function stillOwed(bill: Pick<PartyBill, "total" | "outstanding" | "amountDue">): string {

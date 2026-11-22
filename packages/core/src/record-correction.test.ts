@@ -938,7 +938,7 @@ describe("recordCorrection — a sale may be corrected more than once", () => {
 
 describe("recordCorrection — never below zero", () => {
   /** The fake refuses to correct anything but a sale; the `none` backend (fiscal-none) records a
-   * correction of a credit note, which this stands in for. */
+   * correction of a corrective, which this stands in for. */
   class CorrectsCorrectivesBackend extends FakeFiscalBackend {
     override recordCorrection(
       tx: Transaction,
@@ -1049,7 +1049,7 @@ describe("recordCorrection — never below zero", () => {
     expect(await countCorrectives(originalId)).toBe(0);
   });
 
-  it("still records a positive correction of a credit note", async () => {
+  it("still records a positive correction of a corrective", async () => {
     const backend = new CorrectsCorrectivesBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const { saleId: creditId } = await correct(backend, originalId);
@@ -1075,7 +1075,7 @@ describe("recordCorrection — never below zero", () => {
     expect(row?.correctsSaleId).toBe(creditId);
   });
 
-  it("refuses a negative correction of a credit note, which is already below zero", async () => {
+  it("refuses a negative correction of a corrective, which is already below zero", async () => {
     const backend = new CorrectsCorrectivesBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const { saleId: creditId } = await correct(backend, originalId);

@@ -192,7 +192,7 @@ function adminSession(venue: BillVenue, tx: Transaction) {
   return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
-/** A credit note of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
+/** A corrective of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
 export async function credit(
   venue: BillVenue,
   billId: string,

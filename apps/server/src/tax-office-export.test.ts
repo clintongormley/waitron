@@ -1082,7 +1082,7 @@ describe("the month's CSV and README", () => {
     expect(line).toContain('"\'=1+1","-1.00","-0.10"');
   });
 
-  it("writes a credit note's negative amounts with the language's decimal mark", () => {
+  it("writes a corrective's negative amounts with the language's decimal mark", () => {
     const credit: TaxOfficeInvoice = {
       ...row,
       kind: "R5",

@@ -15,7 +15,7 @@ export interface TakenOffBy {
 /**
  * The invoice that took each of the advances `advanceSaleIds` off, by advance: the earliest sale
  * with a line deducting it that is neither a corrective nor a full invoice issued in substitution.
- * A credit note, a replacement or a substitution copies that line, so it is never the one named;
+ * A corrective, a replacement or a substitution copies that line, so it is never the one named;
  * an advance no invoice took off is absent. One read per {@link SQL_VARIABLE_LIMIT} advances.
  */
 export async function advancesTakenOff(

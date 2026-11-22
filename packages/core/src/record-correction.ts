@@ -91,7 +91,7 @@ export interface RecordCorrectionInput {
 }
 
 /**
- * Records a corrective invoice (a credit note) for a prior sale: a new record with its own number
+ * Records a corrective invoice for a prior sale: a new record with its own number
  * that points at the invoice it corrects. It settles nothing; a refund is a separate payments
  * action.
  *

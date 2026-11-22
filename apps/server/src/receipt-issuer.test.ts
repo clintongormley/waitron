@@ -304,7 +304,7 @@ describe("the invoice a corrective names", () => {
 });
 
 describe("the day of the sale on an invoice issued on a later day", () => {
-  it("prints an F2's earlier sale day, not one equal to its issue day, nor on its credit note", async () => {
+  it("prints an F2's earlier sale day, not one equal to its issue day, nor on its corrective", async () => {
     const at = "2026-03-15T12:00:00.000Z";
     const later = await issue(false, false, { at, operationDate: "2026-03-14" });
     const sameDay = await issue(false, false, { at, operationDate: "2026-03-15" });

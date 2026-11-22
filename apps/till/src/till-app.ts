@@ -807,7 +807,7 @@ const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
   "service_zone.not_allowed",
 ]);
 
-/** The latest credit note a read of the party's bills shows on bill `billId`. */
+/** The latest corrective a read of the party's bills shows on bill `billId`. */
 function latestCorrectiveOf(bills: readonly PartyBill[] | null, billId: string): string | null {
   return bills?.find((row) => row.workingOrderId === billId)?.correctives?.at(-1) ?? null;
 }
@@ -21547,7 +21547,7 @@ export class TillApp extends LitElement {
     else await this.#onSplitAfterPrint(open.id, sent, split);
   }
 
-  /** The split's answer names the credit note and the new bill, which the screen then shows. */
+  /** The split's answer names the corrective and the new bill, which the screen then shows. */
   async #onSplitAfterPrint(
     id: number,
     sent: Sent,
@@ -21587,7 +21587,7 @@ export class TillApp extends LitElement {
     await this.#sendCancelCredit({ ...now, busy: false });
   }
 
-  /** The credit note number is read from the bills after the result is shown. A read without a
+  /** The corrective number is read from the bills after the result is shown. A read without a
    * time limit must not hold the dialog busy, and an old read must not replace a later result. */
   async #onCancelCredited(id: number, sent: Sent): Promise<void> {
     const open = this.#cancelCreditingNow(id);

@@ -176,7 +176,7 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("€15.00");
   });
 
-  it("places each credit note below its invoice number", async () => {
+  it("places each corrective below its invoice number", async () => {
     const { el } = await loaded();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;

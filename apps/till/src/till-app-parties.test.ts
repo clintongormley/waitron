@@ -10696,7 +10696,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
   });
 
-  /** A presented bill of 18.00 whose invoice owes `amountDue` once its credit notes are counted. */
+  /** A presented bill of 18.00 whose invoice owes `amountDue` once its correctives are counted. */
   const creditedBill = (workingOrderId: string, amountDue: string): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
@@ -10724,7 +10724,7 @@ describe("till-app: recording an unpaid departure", () => {
       .textContent!.replace(/\s+/g, " ")
       .trim();
 
-  it("leaves out a presented bill whose credit notes cancel its invoice, and its amount from the total", async () => {
+  it("leaves out a presented bill whose correctives cancel its invoice, and its amount from the total", async () => {
     drafts.bills.add("wo-credited");
     const { el } = await openDeparture({
       getPartyBills: vi
@@ -11392,7 +11392,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 
-  it("with the permission, sends the reason alone and names the credit note the bills now carry", async () => {
+  it("with the permission, sends the reason alone and names the corrective the bills now carry", async () => {
     const { el } = await openCancel();
 
     await typeReason(el, "  Charged to the wrong table ");
@@ -11613,7 +11613,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(doneText(el)).toBeNull();
   });
 
-  it("a second press refused as no longer waiting, once the first cancel that got no answer has landed, names the credit note", async () => {
+  it("a second press refused as no longer waiting, once the first cancel that got no answer has landed, names the corrective", async () => {
     const server = billServer();
     server.cancelOrder.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     server.cancelOrder.mockImplementationOnce(async () => {
@@ -11686,7 +11686,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(bottom(el)).toBe(t("cancel_credit.refused_payments"));
   });
 
-  it("keeps the retry's credit note number when the earlier bills read answers late", async () => {
+  it("keeps the retry's corrective number when the earlier bills read answers late", async () => {
     let sends = 0;
     const server = billServer(async () => {
       sends++;
@@ -11960,7 +11960,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await flush(el, 8);
   }
 
-  it("opens in split mode, splits, names the credit note and opens the new bill", async () => {
+  it("opens in split mode, splits, names the corrective and opens the new bill", async () => {
     const server = billServer();
     const cancelOrder = vi.fn();
     const { el } = await openSplit({ ...server, cancelOrder });

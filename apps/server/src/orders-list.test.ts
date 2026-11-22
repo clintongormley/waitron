@@ -185,7 +185,7 @@ describe("each status, from the product's own write paths", () => {
       reason: "Error",
     });
 
-  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its credit note", async () => {
+  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its corrective", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
@@ -197,7 +197,7 @@ describe("each status, from the product's own write paths", () => {
     });
   });
 
-  it("refuses to cancel a bill whose credit notes already bring its invoice to nothing, leaving its row as it was", async () => {
+  it("refuses to cancel a bill whose correctives already bring its invoice to nothing, leaving its row as it was", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     await credit(venue, id, "2.48", "-3.00");
     const before = await rowOf(id);
@@ -285,7 +285,7 @@ describe("a bill closed as a deferred payment", () => {
   });
 });
 
-describe("credit notes and what is still owed", () => {
+describe("correctives and what is still owed", () => {
   it("marks a part credit, and owes what the till's collect then charges, to the cent", async () => {
     const id = await placedIssuedBill(venue, "Red wine bottle");
     await credit(venue, id, "2.00", "-2.42");
@@ -405,7 +405,7 @@ describe("filters and search", () => {
     expect(found).not.toContain(open.tabId);
   });
 
-  it("finds an invoice by A/12, by its bare number, and by its credit note's number", async () => {
+  it("finds an invoice by A/12, by its bare number, and by its corrective's number", async () => {
     const id = await placedIssuedBill(venue, "Croquettes");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
@@ -443,7 +443,7 @@ describe("filters and search", () => {
     expect(ids((await list("anyDate=true&q=ortega")).rows)).toEqual([party.tabId]);
   });
 
-  it("filters by who a line is credited to, and by having a credit note", async () => {
+  it("filters by who a line is credited to, and by having a corrective", async () => {
     const id = await placedIssuedBill(venue, "Octopus");
     await credit(venue, id, "2.00", "-2.42");
     expect(ids((await list(`anyDate=true&staff=${venue.operatorId}`)).rows)).toContain(id);
@@ -726,7 +726,7 @@ describe("rows written within one millisecond, read in the order they were writt
     ]);
   });
 
-  it("shows an invoice's credit notes in the order they were issued", async () => {
+  it("shows an invoice's correctives in the order they were issued", async () => {
     const billId = await placedIssuedBill(venue, "Tarta");
     const saleId = await saleOf(billId);
     const id = descendingIds();

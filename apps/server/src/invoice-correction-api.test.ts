@@ -704,7 +704,7 @@ describe("GET /api/invoice-corrections", () => {
 });
 
 describe("a replaced bill is corrected through its replacement", () => {
-  it("files the credit note of a correction opened on the bill against the replacement", async () => {
+  it("files the corrective of a correction opened on the bill against the replacement", async () => {
     const saleId = await sold(["10.00"]);
     const replacementId = await replace(saleId);
 

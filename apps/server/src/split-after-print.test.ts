@@ -244,7 +244,7 @@ function billsOf(partyId: string) {
   );
 }
 
-/** Everything a split would write: the credit note and its record, and the copied bill and dishes. */
+/** Everything a split would write: the corrective and its record, and the copied bill and dishes. */
 function written() {
   return venue.db.all(sql`
     select
@@ -530,7 +530,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     await expectRefused(id, () => split(id), { status: 409, code: "bill.not_issued" });
   });
 
-  it("refuses a second request, filing one credit note", async () => {
+  it("refuses a second request, filing one corrective", async () => {
     const party = await printed("Tarta");
     expect((await split(party.tabId)).status).toBe(200);
     const before = written();

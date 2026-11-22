@@ -18,7 +18,7 @@ import { servableDishes, serveListed, unservedDishText } from "./dish-format.js"
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the credit note issued, or null when no number was read.
+/** A cancelled bill: the number of the corrective issued, or null when no number was read.
  * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
 export interface CancelCreditDone {
   corrective: string | null;

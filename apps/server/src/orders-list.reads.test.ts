@@ -57,8 +57,8 @@ const ANY: OrderListFilter = {
 
 /**
  * Three bills, oldest first, that between them make `listOrders` ask every read: a party's open bill
- * holding a cash payment (payments, refunds, tables, staff), an invoiced bill with a credit note
- * (amounts due, credit notes), and a debt (a departure).
+ * holding a cash payment (payments, refunds, tables, staff), an invoiced bill with a corrective
+ * (amounts due, correctives), and a debt (a departure).
  */
 async function oneOfEach(): Promise<void> {
   const party = await seatedWith(venue, "Caña", "Tarta");

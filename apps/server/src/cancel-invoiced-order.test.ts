@@ -798,7 +798,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
-  it("refuses a second cancel, leaving exactly one credit note", async () => {
+  it("refuses a second cancel, leaving exactly one corrective", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     expect((await cancel(id)).status).toBe(200);
     const original = await invoiceOf(id);
@@ -1894,7 +1894,7 @@ describe("cancelling a placed order with no invoice", () => {
   });
 });
 
-describe("a party's bills name the invoice and its credit notes (GET /api/parties/:id/bills)", () => {
+describe("a party's bills name the invoice and its correctives (GET /api/parties/:id/bills)", () => {
   async function billOf(partyId: string, billId: string) {
     const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
     expect(listed.status).toBe(200);
@@ -1931,7 +1931,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
     return party;
   }
 
-  it("names the invoice of a placed bill whose invoice was issued, with no credit notes", async () => {
+  it("names the invoice of a placed bill whose invoice was issued, with no correctives", async () => {
     const party = await invoicedPartyBill();
     const original = await invoiceOf(party.tabId);
 
@@ -1942,7 +1942,7 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
     expect(bill.correctives).toEqual([]);
   });
 
-  it("names the credit note a cancel filed against the invoice", async () => {
+  it("names the corrective a cancel filed against the invoice", async () => {
     const party = await invoicedPartyBill();
     const original = await invoiceOf(party.tabId);
     expect((await cancel(party.tabId)).status).toBe(200);
@@ -2003,7 +2003,7 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
     return rows.map((row) => row.correctsLineId);
   }
 
-  it("lists it with its invoice, and once cancelled one credit note reverses each invoice line and it leaves the list", async () => {
+  it("lists it with its invoice, and once cancelled one corrective reverses each invoice line and it leaves the list", async () => {
     const id = await placed([
       { name: "Mosto", quantity: "1" },
       { name: "Zumo", quantity: "2" },

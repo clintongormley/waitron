@@ -228,12 +228,12 @@ async function expectNothingWritten(
   expect((await partyState(partyId)).state).toBe("open");
 }
 
-/** Records a credit note of 2.00 base (-2.42) against the bill's invoice. */
+/** Records a corrective of 2.00 base (-2.42) against the bill's invoice. */
 function creditTwoEuros(billId: string): Promise<void> {
   return credit(billId, "2.00", "-2.42");
 }
 
-/** Records a credit note of `base` at 21% VAT, totalling `total`, against the bill's invoice. */
+/** Records a corrective of `base` at 21% VAT, totalling `total`, against the bill's invoice. */
 async function credit(billId: string, base: string, total: string): Promise<void> {
   const [issued] = await salesOf(billId);
   await inTx(venue, async (tx) => {
@@ -987,7 +987,7 @@ describe("a presented bill whose card is in flight", () => {
 });
 
 describe("a bill that owes nothing", () => {
-  it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
+  it("settles a presented bill whose corrective brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
@@ -1074,7 +1074,7 @@ describe("a bill that owes nothing", () => {
     expect((await partyState(anna.partyId)).state).toBe("closed");
   });
 
-  it("closes a party whose only owing bill a credit note has brought to nothing, settling it and recording no departure", async () => {
+  it("closes a party whose only owing bill a corrective has brought to nothing, settling it and recording no departure", async () => {
     const party = await seatedWith(venue);
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
@@ -1134,7 +1134,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
     return listed.json as unknown as Record<string, unknown>[];
   }
 
-  it("reads a presented bill whose credit note cancels its invoice as owing nothing, leaving its outstanding as it was", async () => {
+  it("reads a presented bill whose corrective cancels its invoice as owing nothing, leaving its outstanding as it was", async () => {
     const party = await seatedWith(venue);
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
@@ -2458,7 +2458,7 @@ describe("left unpaid with part paid", () => {
     ]);
   });
 
-  it("refuses a printed bill whose credit note leaves no more owed than was paid, and writes nothing", async () => {
+  it("refuses a printed bill whose corrective leaves no more owed than was paid, and writes nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     await printOrderForTest(
       { ...venue, admission: testTradingAdmission() },

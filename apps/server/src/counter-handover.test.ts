@@ -372,7 +372,7 @@ async function collectByCardAfterLostReply(id: string): Promise<void> {
   expect(venue.card.collectCalls).toHaveLength(before + 1);
 }
 
-/** Records a credit note for the bill's whole issued invoice, so it owes nothing. */
+/** Records a corrective for the bill's whole issued invoice, so it owes nothing. */
 async function creditWholeInvoice(billId: string): Promise<void> {
   const [issued] = venue.db.all<{ id: string }>(
     sql`select id from sales where working_order_id = ${billId}`,
@@ -490,7 +490,7 @@ async function stationQueuesListing(id: string): Promise<{ listing: number; stat
   return { listing, stations: stations.length };
 }
 
-/** Pays a placed already-issued order whose credit note leaves nothing owed. */
+/** Pays a placed already-issued order whose corrective leaves nothing owed. */
 async function collectOwingNothing(id: string): Promise<void> {
   await creditWholeInvoice(id);
   expect((await closeCreditedBill(id)).tender).toEqual({ method: "unpaid" });
@@ -504,7 +504,7 @@ describe("paying a counter order sent without payment, before it is handed over"
     ["issued", "card", collectByCard],
     ["ticket_then_pay", "card, its reply lost,", collectByCardAfterLostReply],
     ["issued", "card, its reply lost,", collectByCardAfterLostReply],
-    ["issued", "a credit note owing nothing", collectOwingNothing],
+    ["issued", "a corrective owing nothing", collectOwingNothing],
   ] as const)(
     "a %s order paid by %s records no handover, and stays waiting and on its station queue",
     async (mode, _method, pay) => {
@@ -1024,7 +1024,7 @@ describe("GET /api/orders/counter-waiting", () => {
     expect((await waitingRow(id))?.movableDishes).toEqual([]);
   });
 
-  it("totals a placed order by the sale already issued for it (here a seeded unpaid invoice), net of its credit notes, which is what collecting it charges", async () => {
+  it("totals a placed order by the sale already issued for it (here a seeded unpaid invoice), net of its correctives, which is what collecting it charges", async () => {
     const credited = await placed("issued", "Tarta");
     await creditWholeInvoice(credited);
     const uncredited = await placed("issued", "Tarta");

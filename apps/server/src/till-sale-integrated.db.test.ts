@@ -379,7 +379,7 @@ function correctiveSeries(cfg: DeviceRequestConfig): string {
   `)[0]!.id;
 }
 
-/** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
+/** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a corrective through
  *  `recordCorrection`. */
 async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(
