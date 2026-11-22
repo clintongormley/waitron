@@ -145,7 +145,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "menu-publications.json": {
         holds:
-          "the editions you published or scheduled and the cancellations recorded under your name, with the menu ID, today’s menu name, the edition number, the action (created covers both publishing and scheduling) and the time of the original creation or the cancellation. A live edit can cancel a scheduled edition under the editor’s name. Its replacement has a new edition number and keeps the original author and time.",
+          "the editions you published or scheduled and the cancellations recorded under your name, with the menu ID, today’s menu name, the edition number, the action (created covers publishing, scheduling and edits to a live menu) and the time of the original creation or the cancellation. A live edit can cancel a scheduled edition under the editor’s name. Its replacement has a new edition number and keeps the original author and time.",
         use: "Used to track who published, scheduled or cancelled a menu edition.",
       },
       "bookings-created.json": {
@@ -300,7 +300,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "menu-publications.json": {
         holds:
-          "las ediciones que publicaste o programaste y las cancelaciones que constan a tu nombre, con el identificador y el nombre actual de la carta, el número de edición, la acción (created abarca tanto la publicación como la programación) y la hora de creación original o la de cancelación. Un cambio en la carta publicada puede dejar una edición programada cancelada a nombre de quien hizo el cambio. La edición que la sustituye tiene un número nuevo y conserva la autoría y la hora originales.",
+          "las ediciones que publicaste o programaste y las cancelaciones que constan a tu nombre, con el identificador y el nombre actual de la carta, el número de edición, la acción (created abarca la publicación, la programación y los cambios en una carta publicada) y la hora de creación original o la de cancelación. Un cambio en la carta publicada puede dejar una edición programada cancelada a nombre de quien hizo el cambio. La edición que la sustituye tiene un número nuevo y conserva la autoría y la hora originales.",
         use: "Se usa para saber quién publicó, programó o canceló una edición de la carta.",
       },
       "bookings-created.json": {

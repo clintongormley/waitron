@@ -18,20 +18,22 @@ it.each([
   [
     "en",
     "today’s menu name",
-    "created covers both publishing and scheduling",
+    "created covers publishing, scheduling and edits to a live menu",
     "the time of the original creation or the cancellation",
+    "keeps the original author and time",
     "when you created it",
   ],
   [
     "es",
     "el nombre actual de la carta",
-    "created abarca tanto la publicación como la programación",
+    "created abarca la publicación, la programación y los cambios en una carta publicada",
     "la hora de creación original o la de cancelación",
+    "conserva la autoría y la hora originales",
     "cuándo la creaste",
   ],
 ] as const)(
   "explains menu and booking entries in %s",
-  (language, menuName, action, original, created) => {
+  (language, menuName, action, original, replacement, created) => {
     const readme = personalDataReadme({
       language,
       venue: "Example Bar",
@@ -43,6 +45,7 @@ it.each([
     expect(readme).toContain(menuName);
     expect(readme).toContain(action);
     expect(readme).toContain(original);
+    expect(readme).toContain(replacement);
     expect(readme).toContain("- bookings-created.json: ");
     expect(readme).toContain(created);
   },
