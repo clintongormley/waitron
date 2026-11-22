@@ -5,6 +5,7 @@ import { includedMenus, placesOf } from "./menu-inclusion.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import { and, eq, inArray } from "drizzle-orm";
+import type { AreaVatRates } from "@waitron/country-packs";
 import {
   AppError,
   centsToDecimal,
@@ -34,7 +35,11 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { readVenueVatRates, setTakeawayVatRate } from "./takeaway-vat-rates.js";
+import {
+  checkPickableTakeawayVatRate,
+  insertFirstTakeawayVatRate,
+  readVenueVatRates,
+} from "./takeaway-vat-rates.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction, VenueSettings } from "@waitron/db";
@@ -958,8 +963,14 @@ export async function deactivateMenu(
     });
 }
 
-export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
-  return insertProduct(tx, input, true);
+/** A caller creating several products passes `rates` from one {@link readVenueVatRates}; without
+ * it the area is read here. */
+export async function createProduct(
+  tx: Transaction,
+  input: CreateProductInput,
+  rates?: AreaVatRates,
+): Promise<Product> {
+  return insertProduct(tx, input, true, undefined, rates);
 }
 
 /** Skips the row's name check because the editor checks the whole family before writing. */
@@ -996,6 +1007,7 @@ async function insertProduct(
   input: CreateProductInput,
   checkNames: boolean,
   venue?: VenueSettings,
+  rates?: AreaVatRates,
 ): Promise<Product> {
   if (!input.name.trim()) throw new AppError("product.invalid", { field: "name" });
   if (stringToCents(input.unitPrice) < 0)
@@ -1028,14 +1040,13 @@ async function insertProduct(
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
-  const areaRates = await readVenueVatRates(tx, venue);
-  const [row] = await tx.insert(products).values(values).returning({ id: products.id });
-  await setTakeawayVatRate(
-    tx,
-    row!.id,
-    input.takeawayVatRate ?? areaRates.defaultTakeaway,
+  const areaRates = rates ?? (await readVenueVatRates(tx, venue));
+  const takeawayVatRate = checkPickableTakeawayVatRate(
+    input.takeawayVatRate === undefined ? areaRates.defaultTakeaway : input.takeawayVatRate,
     areaRates,
   );
+  const [row] = await tx.insert(products).values(values).returning({ id: products.id });
+  await insertFirstTakeawayVatRate(tx, row!.id, takeawayVatRate);
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
   const [created] = await tx
     .select(PRODUCT_COLUMNS)

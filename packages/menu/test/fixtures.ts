@@ -255,6 +255,14 @@ export async function racePair<A, B>(
 
 /** `tx`, counting the `select … from settings` queries built on it. */
 export function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
+  return countingReadsOf(tx, settings);
+}
+
+/** `tx`, counting the `select … from <table>` queries built on it. */
+export function countingReadsOf(
+  tx: Transaction,
+  table: unknown,
+): { tx: Transaction; reads: () => number } {
   let reads = 0;
   const counted = new Proxy(tx, {
     get(target, prop) {
@@ -264,7 +272,7 @@ export function countingSettingsReads(tx: Transaction): { tx: Transaction; reads
         const builder = target.select(...args);
         const from = builder.from.bind(builder);
         builder.from = ((source: Parameters<typeof from>[0]) => {
-          if (source === settings) reads += 1;
+          if (source === table) reads += 1;
           return from(source);
         }) as typeof builder.from;
         return builder;

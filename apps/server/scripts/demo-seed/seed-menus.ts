@@ -14,6 +14,7 @@ import {
   menuItems,
   updateMenuDetails,
   updateMenuItem,
+  readVenueVatRates,
   requireMenuRoot,
   setProductVariants,
   writeContentLanguages,
@@ -101,6 +102,7 @@ export async function seedMenus(
     area: venue.province ?? undefined,
   });
   await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required, null);
+  const vatRates = await readVenueVatRates(tx);
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const presentation = async (text: Readonly<Record<string, string>>, basename?: string) => {
     const names = translated(text);
@@ -175,22 +177,26 @@ export async function seedMenus(
               )
             ).id
           : undefined;
-        const created = await createProduct(tx, {
-          categoryId: category.id,
-          name: plain(product.staffName ?? product.customerName),
-          customerName: translated(product.customerName),
-          description:
-            product.description === undefined ? undefined : translated(product.description),
-          kitchenName: product.kitchenName === undefined ? undefined : plain(product.kitchenName),
-          dietaryDeclarations:
-            product.dietaryDeclarations === undefined
-              ? undefined
-              : [...product.dietaryDeclarations],
-          ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
-          unitPrice: product.unitPrice,
-          vatClass: product.vatClass,
-          takeawayVatClass: product.takeawayVatClass,
-        });
+        const created = await createProduct(
+          tx,
+          {
+            categoryId: category.id,
+            name: plain(product.staffName ?? product.customerName),
+            customerName: translated(product.customerName),
+            description:
+              product.description === undefined ? undefined : translated(product.description),
+            kitchenName: product.kitchenName === undefined ? undefined : plain(product.kitchenName),
+            dietaryDeclarations:
+              product.dietaryDeclarations === undefined
+                ? undefined
+                : [...product.dietaryDeclarations],
+            ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
+            unitPrice: product.unitPrice,
+            vatClass: product.vatClass,
+            takeawayVatClass: product.takeawayVatClass,
+          },
+          vatRates,
+        );
         productIds.push(created.id);
         if (product.variants?.length) {
           await setProductVariants(

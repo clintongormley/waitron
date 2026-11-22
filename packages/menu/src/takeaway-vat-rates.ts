@@ -26,14 +26,22 @@ export async function readVenueVatRates(
 ): Promise<AreaVatRates> {
   const taxpayer = await readTaxpayer(tx);
   const territory = (venue ?? (await readVenueSettings(tx)).doc).fiscalTerritory;
-  const rates = taxpayer === null ? undefined : vatRatesFor(taxpayer.country, territory);
-  if (rates === undefined) {
-    throw new AppError("vat_rate.area_unsupported", {
-      country: taxpayer?.country ?? null,
-      territory,
-    });
-  }
+  return vatRatesOfArea(taxpayer?.country ?? null, territory);
+}
+
+/** The VAT rates of `country` (null: no taxpayer saved) with `territory`, for a caller that has
+ * already read both. */
+export function vatRatesOfArea(country: string | null, territory: string): AreaVatRates {
+  const rates = country === null ? undefined : vatRatesFor(country, territory);
+  if (rates === undefined) throw new AppError("vat_rate.area_unsupported", { country, territory });
   return rates;
+}
+
+/** Refuses, as `product.invalid`, a rate that is not one of the area's pickable rates. */
+export function checkPickableTakeawayVatRate(rate: unknown, rates: AreaVatRates): string {
+  if (typeof rate !== "string" || !rates.pickable.includes(rate))
+    throw new AppError("product.invalid", { field: "takeawayVatRate" });
+  return rate;
 }
 
 /**
@@ -57,15 +65,21 @@ export async function setTakeawayVatRate(
     if (product.parentId === null) {
       throw new AppError("product.invalid", { field: "takeawayVatRate" });
     }
-  } else if (!(rates ?? (await readVenueVatRates(tx))).pickable.includes(rate)) {
-    throw new AppError("product.invalid", { field: "takeawayVatRate" });
-  }
+  } else checkPickableTakeawayVatRate(rate, rates ?? (await readVenueVatRates(tx)));
   await tx.delete(productTakeawayVatRates).where(eq(productTakeawayVatRates.productId, productId));
-  if (rate !== null) {
-    await tx
-      .insert(productTakeawayVatRates)
-      .values({ productId, startsOn: null, rate: stringToBasisPoints(rate) });
-  }
+  if (rate !== null) await insertFirstTakeawayVatRate(tx, productId, rate);
+}
+
+/** Writes the one row from the beginning of time of a product created in this transaction, which
+ * has no rows yet. The caller has checked `rate` with {@link checkPickableTakeawayVatRate}. */
+export async function insertFirstTakeawayVatRate(
+  tx: Transaction,
+  productId: string,
+  rate: string,
+): Promise<void> {
+  await tx
+    .insert(productTakeawayVatRates)
+    .values({ productId, startsOn: null, rate: stringToBasisPoints(rate) });
 }
 
 /**

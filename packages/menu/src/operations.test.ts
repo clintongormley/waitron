@@ -10,6 +10,7 @@ import {
   products,
   productTakeawayVatRates,
   sections,
+  taxpayer,
   withTransaction,
   readActivityForSubject,
 } from "@waitron/db";
@@ -52,6 +53,8 @@ import {
 import type { AvailableProduct } from "./operations.js";
 import { createUnit, EACH_UNIT, reassignProductsToUnit } from "./units.js";
 import {
+  countingReadsOf,
+  countingSettingsReads,
   seedMenuFixture,
   seedLegacySellingUnits,
   seedVenueWithSeries,
@@ -2140,6 +2143,86 @@ describe("a new product's takeaway VAT rate", () => {
     );
     const schedules = await run((tx) => readTakeawayVatSchedules(tx, [product.id]));
     expect(schedules.get(product.id)).toEqual([{ from: null, rate: "4.00" }]);
+  });
+
+  const productsNamed = (tx: Transaction, name: string) =>
+    tx.select({ id: products.id }).from(products).where(eq(products.name, name));
+
+  it("refuses a rate the area does not offer before writing the product, so a caller that catches it keeps none", async () => {
+    const left = await run(async (tx) => {
+      await expect(
+        createProduct(tx, { ...tea, name: "Juice", vatClass: "general", takeawayVatRate: "5.00" }),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });
+      return productsNamed(tx, "Juice");
+    });
+    expect(left).toEqual([]);
+    const made = await run(async (tx) => {
+      const { id } = await createProduct(tx, {
+        ...tea,
+        name: "Juice",
+        vatClass: "general",
+        takeawayVatRate: "4.00",
+      });
+      const rows = await tx
+        .select({ startsOn: productTakeawayVatRates.startsOn, rate: productTakeawayVatRates.rate })
+        .from(productTakeawayVatRates)
+        .where(eq(productTakeawayVatRates.productId, id));
+      return { products: await productsNamed(tx, "Juice"), rows };
+    });
+    expect(made).toEqual({
+      products: [{ id: expect.any(String) }],
+      rows: [{ startsOn: null, rate: 400 }],
+    });
+  });
+
+  it("refuses an explicit null, which a product never has, rather than taking the default", async () => {
+    const left = await run(async (tx) => {
+      await expect(
+        createProduct(tx, {
+          ...tea,
+          name: "Juice",
+          vatClass: "general",
+          takeawayVatRate: null as unknown as string,
+        }),
+      ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });
+      return productsNamed(tx, "Juice");
+    });
+    expect(left).toEqual([]);
+  });
+
+  it("checks against the area's rates a caller hands in, reading neither the taxpayer nor the settings", async () => {
+    const rates = {
+      dineIn: [{ from: null, rate: "10.00" }],
+      accepted: ["5.00"],
+      pickable: ["5.00"],
+      defaultTakeaway: "5.00",
+    };
+    const counts = await run(async (tx) => {
+      const taxpayers = countingReadsOf(tx, taxpayer);
+      const settingsReads = countingSettingsReads(taxpayers.tx);
+      const { id } = await createProduct(
+        settingsReads.tx,
+        { ...tea, name: "Juice", vatClass: "general" },
+        rates,
+      );
+      return {
+        id,
+        taxpayer: taxpayers.reads(),
+        settings: settingsReads.reads(),
+      };
+    });
+    expect({ taxpayer: counts.taxpayer, settings: counts.settings }).toEqual({
+      taxpayer: 0,
+      settings: 0,
+    });
+    const schedules = await run((tx) => readTakeawayVatSchedules(tx, [counts.id]));
+    expect(schedules.get(counts.id)).toEqual([{ from: null, rate: "5.00" }]);
+    const unread = await run(async (tx) => {
+      const taxpayers = countingReadsOf(tx, taxpayer);
+      await createProduct(taxpayers.tx, { ...tea, name: "Lemonade", vatClass: "general" });
+      return taxpayers.reads();
+    });
+    expect(unread).toBe(1);
   });
 
   it("gives a variant no rate of its own", async () => {
