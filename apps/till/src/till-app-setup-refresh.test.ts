@@ -1242,7 +1242,11 @@ describe("A841 the till follows the theme in use", () => {
         now: () => now,
         wakeLock: { request: async () => wake },
         setTimer: (callback, delay) => {
-          idle = callback;
+          idle = () => {
+            idle = undefined;
+            due = undefined;
+            callback();
+          };
           due = now + delay;
           return 1;
         },
@@ -1273,6 +1277,7 @@ describe("A841 the till follows the theme in use", () => {
       now = 1_000_000;
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
       expect(due).toBe(2_800_000);
+      now = 1_100_000;
       api.getTill.mockResolvedValue({
         ...kds,
         setupRevision: "s3",
@@ -1297,8 +1302,8 @@ describe("A841 the till follows the theme in use", () => {
         inactivityTimeoutSeconds: 1_800,
       });
       await poll(el);
-      expect(due).toBe(2_800_000);
-      now = 2_800_000;
+      expect(due).toBe(2_900_000);
+      now = 2_900_000;
       idle!();
       await flush(el);
 
