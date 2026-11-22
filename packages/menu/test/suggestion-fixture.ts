@@ -5,6 +5,7 @@ import {
   contentSuggestions,
   CORE_MIGRATIONS,
   products,
+  productTakeawayVatRates,
   withTransaction,
   type Database,
   type SuggestionJobRow,
@@ -212,6 +213,9 @@ export async function addPlainProducts(
       };
     });
     const inserted = await tx.insert(products).values(rows).returning({ id: products.id });
+    await tx
+      .insert(productTakeawayVatRates)
+      .values(inserted.map(({ id }) => ({ productId: id, startsOn: null, rate: 1000 })));
     ids.push(...inserted.map((row) => row.id));
   }
   return ids;

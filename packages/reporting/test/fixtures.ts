@@ -28,6 +28,7 @@ import {
   parties,
   partyTables,
   products,
+  productTakeawayVatRates,
   purchaseInvoiceVat,
   purchaseInvoices,
   saleLines,
@@ -496,6 +497,9 @@ export async function seedFiredLine(
       vatClass: "general",
     })
     .returning({ id: products.id });
+  await db
+    .insert(productTakeawayVatRates)
+    .values({ productId: product!.id, startsOn: null, rate: 1000 });
   const [line] = await db
     .insert(workingOrderLines)
     .values({

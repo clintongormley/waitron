@@ -154,9 +154,11 @@ before the tasks that depend on them start** (each task names its gate).
   set-menu form's eat-in field decides nothing from PR 3; piece B removes it (hiding it earlier
   would need a stand-in value for `menus_set_terms_ck`, `menus.ts:71-72`). *Recommended.*
 - **D3. Every top-level product has a rate from the beginning of time; a variant may have one.**
-  `createProduct` writes it (the requested rate, else the venue default); the two fixtures that
-  insert products raw write one — `seedMenuItem` (`packages/db/src/testing/seed.ts:162-170`) and
-  `packages/venue-service/src/testing/set-menu-fixtures.ts:53-66`; the
+  `createProduct` writes it (the requested rate, else the venue default); the five fixtures that
+  insert top-level products raw write one — `seedMenuItem` (`packages/db/src/testing/seed.ts`),
+  `packages/venue-service/src/testing/set-menu-fixtures.ts`, `plantStoredProduct`
+  (`packages/menu/test/fixtures.ts`), `addPlainProducts` (`packages/menu/test/suggestion-fixture.ts`)
+  and `seedFiredLine` (`packages/reporting/test/fixtures.ts`); the
   configuration import refuses a top-level product without exactly one such row; the demo creates
   products through `createProduct`. A product line with no rate is refused `vat_rate.unavailable`,
   never guessed — no venue can reach it. A variant with no rows takes its parent's (the spec's "my
@@ -527,7 +529,7 @@ product with no taxpayer fail at runtime until this task's Step 4 fixes them.
 
 **Files:** `packages/menu/src/operations.ts:990-1036` (`insertProduct` writes
 `input.takeawayVatRate ?? (await readVenueVatRates(tx)).defaultTakeaway`; Task 2.1 puts the venue
-setting in front); the two raw fixtures (D3); the madrid baseline (the table moves from
+setting in front); the five raw fixtures (D3); the madrid baseline (the table moves from
 `ADDED_TABLES` to a transform: one row at 1000 per captured top-level product); the test files that
 now create a product with no taxpayer. Test: `packages/menu/src/operations.test.ts`.
 

@@ -634,7 +634,6 @@ for (const locale of ["en", "es"] as const) {
       expect(expected.seeded.tables[name]!.rows).toEqual({});
       historicalSeeded.tables[name] = structuredClone(expected.seeded.tables[name]!);
     }
-    // The capture predates takeaway rates; they are added back once the products' keys settle.
     historicalSeeded.tables.product_takeaway_vat_rates!.rows = {};
     const publicationTemplate = expected.seeded.tables.menu_publications!;
     const rows = Object.values(historicalSeeded.tables.menu_releases!.rows).map((row) => ({

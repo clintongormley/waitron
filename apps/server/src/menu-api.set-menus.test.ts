@@ -24,7 +24,6 @@ const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
-    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
   },
 });

@@ -6,6 +6,7 @@ import {
   categories,
   invoiceSeries,
   products,
+  productTakeawayVatRates,
   units,
   withTransaction,
 } from "@waitron/db";
@@ -74,6 +75,10 @@ export async function plantStoredProduct(
         : { dietaryDeclarations: null }),
     })
     .returning({ id: products.id });
+  if (parentId === null)
+    await tx
+      .insert(productTakeawayVatRates)
+      .values({ productId: row!.id, startsOn: null, rate: 1000 });
   return row!.id;
 }
 
