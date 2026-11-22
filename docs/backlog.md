@@ -1260,10 +1260,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   retry says when nothing changed. Ordinary SMTP and Settings tests use the venue sender name.
   Demo's normal route captures account mail, reminders and alerts outside development; an enabled
   test Cloud relay takes its three selected account classes.
-  Left: qualify account email against the live test Cloud (BOX-EMAIL-RELAY, invitations, resets
-  and email-change codes), plus the old-address warning, security notices and role changes on a
-  fresh Prepare box with Cloud email on and no saved mail server. The Cloud test deployment and
-  inbox check for the three notices are pending. Receipts and other notices still use SMTP.
+  A fresh Prepare box that opts into Cloud email and leaves its mail server blank can also
+  send the old-address warning, security notices and role changes through test Cloud.
+  Left: qualify invitations, resets and email-change codes against the live test Cloud
+  (BOX-EMAIL-RELAY). Receipts and other notices still use SMTP.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **A venue's own mail server always wins; Cloud sends only when there is none (owner,
