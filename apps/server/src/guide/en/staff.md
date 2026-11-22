@@ -41,6 +41,8 @@ leave invitation and password-reset links usable. Save names and contact details
 
 To configure delivery of these links, open [Email settings](email.md#set-up). If an invitation does not arrive within a few minutes, check the recipient’s junk mail and Email settings before resending: only the newest link works. If a retry says nothing changed, wait a minute before trying again.
 
+To sign in with a different email address, choose **Change** beside the address on the sign-in screen.
+
 If Waitron cannot verify your passkey, you can retry or choose **Use your password** to sign in.
 On the password screen, **I’ve forgotten my password** requests an email with a link to choose
 a new password. The acknowledgement is the same for every address; it does not confirm that an
