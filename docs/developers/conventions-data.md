@@ -4090,8 +4090,8 @@ The server reads `trading.env`, `secrets.env` and `backup.env` for their own nam
 `WAITRON_NODE_ID` in `trading.env`. If you put it in `backup.env`, startup skips it and names it in
 the `config.unknown_variables` warning. The warning reports setting names and skips malformed
 lines because they can contain key material. A non-empty process value takes precedence.
-The development launcher passes its env files to Node before the server starts, so those values
-have process precedence.
+The development launcher passes its settings file, `secrets.env` and `trading.env` to Node
+before the server starts, so those values have process precedence.
 
 `scripts/environment-variables.test.ts` checks names in tracked text. Its code-constant exceptions
 apply across source files. Review the code to verify which accessor reads a setting and to follow

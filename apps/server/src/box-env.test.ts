@@ -62,7 +62,7 @@ describe("loadBoxEnv", () => {
     },
   );
 
-  it("trading.env beats secrets.env", async () => {
+  it("reads the deployment environment from trading.env", async () => {
     const dir = await boxWith({
       "secrets.env": "WAITRON_ENV=from-secrets\n",
       "trading.env": "WAITRON_ENV=from-trading\n",
