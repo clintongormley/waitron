@@ -9489,21 +9489,14 @@ export async function listTablesWithState(
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
       cast(coalesce(del.pending, 0) as int) as pending_deliveries
     from dining_tables dt
-    -- A GROUPED derived table joined on the table id, not a LEFT JOIN LATERAL ... ON TRUE: this
-    -- engine has no LATERAL and refuses it at prepare with near "select": syntax error (measured
-    -- 2026-09-22 on Node v26.7.0). The only correlation is the table's id, reached through its
-    -- active membership, which is an ordinary join key, so every held table's bills are aggregated
-    -- once and matched by id.
     left join (
       select pt.table_id,
              cast(count(distinct wo.id) filter (where wo.status = 'open') as int) as open_bills,
              cast(count(wol.id) filter (where wo.status = 'open') as int) as line_count,
              cast(count(wol.id) filter (where wol.served_at is null) as int) as pending_to_serve,
-             -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
-             -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
-             -- (working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
-             -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
-             -- unfired, made-here or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
+             -- The ticket item is joined 1:1 on the line -- its (working_order_line_id) UNIQUE gives
+             -- at most one ti per wol, so this LEFT JOIN neither multiplies wol rows (line_count /
+             -- tab_total stay correct) nor double-counts.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.

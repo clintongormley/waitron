@@ -736,8 +736,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by the comments sweep (#613–#623).** Found while pruning comments.
   - Split-off checks may reach the same path as a held-order edit that changes sent lines (#623).
-    Nothing tests two `openTab` calls racing on one table or concurrent rounds landing on
-    consecutive line numbers (the sequential versions are in `tabs.test.ts`).
     [Detail](backlog/till.md#split-off-checks-may-reach-the-same-path-as-a-held-order-edit-that-changes-sent-lines)
   - Till widget points from #616 that were read but not run (`apps/till/src/widgets`).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)

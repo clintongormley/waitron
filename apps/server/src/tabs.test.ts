@@ -21,6 +21,7 @@ import {
   printJobs,
   ticketItems,
   parties,
+  partyTables,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -75,6 +76,7 @@ import {
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
+import { parkedRace } from "./testing/parked-race.js";
 import "./errors.js";
 import { fireGroup } from "./order-groups.js";
 import { readScopedPassBoard } from "./pass-board.js";
@@ -293,6 +295,32 @@ describe("openTab", () => {
     });
   });
 
+  it("two seatings racing on one free table: the second waits for the first and is refused (tab.already_open)", async () => {
+    const { cfg, tableId } = await setupVenue();
+    const seat = (tx: Transaction) =>
+      seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
+    const [first, second] = await parkedRace(db, seat, seat);
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({
+      status: "rejected",
+      reason: { code: "tab.already_open", params: { tableId } },
+    });
+    const holders = await db
+      .select({ partyId: partyTables.partyId })
+      .from(partyTables)
+      .where(eq(partyTables.tableId, tableId));
+    expect(holders).toEqual([
+      { partyId: (first as PromiseFulfilledResult<{ partyId: string }>).value.partyId },
+    ]);
+    const open = await db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.status, "open"));
+    expect(open).toEqual([
+      { id: (first as PromiseFulfilledResult<{ tabId: string }>).value.tabId },
+    ]);
+  });
+
   it("refuses an unknown table (table.not_found) and a deactivated one (table.inactive)", async () => {
     const { cfg, tableId } = await setupVenue();
     const missing = randomUUID();
@@ -382,6 +410,29 @@ describe("addTabRound (append-only, no re-price)", () => {
       { lineNo: 1, gross: 150 },
       { lineNo: 2, gross: 150 },
       { lineNo: 3, gross: 999 },
+    ]);
+  });
+
+  it("two rounds racing on one tab take consecutive line numbers, the first round's lines first", async () => {
+    const { cfg, coffeeId, waterId, tableId, coffeeOffer, waterOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    const round = (menuItemId: string) => (tx: Transaction) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId, quantity: "1" },
+        { menuItemId, quantity: "1" },
+      ]);
+    const settled = await parkedRace(db, round(coffeeOffer), round(waterOffer));
+    expect(settled.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
+    const lines = await db
+      .select({ lineNo: workingOrderLines.lineNo, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toEqual([
+      { lineNo: 1, productId: coffeeId },
+      { lineNo: 2, productId: coffeeId },
+      { lineNo: 3, productId: waterId },
+      { lineNo: 4, productId: waterId },
     ]);
   });
 
@@ -787,7 +838,7 @@ describe("readTabLines", () => {
     }
   });
 
-  it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {
+  it("carries each line's course + fired/held state for the tab's waiter-fire", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer, waterOffer } = await setupVenue();
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Entrantes", displayOrder: 0 }),

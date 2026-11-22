@@ -15,14 +15,9 @@ their full text.
   comments-only change. Split-off checks may reach the same path as a held-order edit that
   changes sent lines (read, not run). The walk-up concurrent double-pay case in
   `working-order.pay-and-dispatch.test.ts` replays through the settled branch and never reaches
-  `payWorkingOrder`'s duplicate-key catch; nothing tests two `openTab` calls racing on one table
-  or concurrent rounds landing on consecutive line numbers (the sequential versions are in
-  `tabs.test.ts`); nothing checks that a location or status foreign-key refusal in `tables.ts` is
-  not reported as a zone fault; `setTablePlacement`'s raw read is typed `boolean | null` where the
-  engine returns 1/0/null (it only tests truthiness). The SQL `--` comments inside
-  `listTablesWithState`'s template text still carry "measured 2026-09-22", PostgreSQL's "LATERAL
-  form" and aggregate-pair history and a "KDS-1 §3d" pointer. Stale test titles: "recordSale
-  UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style plan tags.
+  `payWorkingOrder`'s duplicate-key catch; nothing checks that a location or status foreign-key
+  refusal in `tables.ts` is not reported as a zone fault. Stale test titles: many "(KDS-…)" and
+  "(A1)"-style plan tags.
 
 ## Till widget points from #616 that were read but not run
 
