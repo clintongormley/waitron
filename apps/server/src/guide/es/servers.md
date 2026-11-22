@@ -2,6 +2,12 @@
 
 Abre la dirección del servidor para entrar al panel de gestión, o añade `/till/` para abrir la caja. Actualiza los marcadores y accesos directos antiguos de la caja para que terminen en `/till/`. El navegador conserva su registro como dispositivo.
 
+Si `waitron.local` no abre la caja en un dispositivo, usa la dirección IP del servidor, como
+`https://192.168.1.10/till/`. Cuando el servidor está conectado por cable, **Sistema → Estado del
+servidor** la muestra junto a **Cable**, en **Red**. En un teléfono o una tableta Android, la página
+puede decir primero que no se encuentra; cuando Chrome pregunte si puede acceder a los dispositivos
+de tu red local, permítelo.
+
 ## Cuando abres el servidor de reserva {#spare}
 
 Si ves **Este es el servidor de reserva del local**, abre el servidor principal para llegar a las

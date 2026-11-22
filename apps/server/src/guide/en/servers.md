@@ -2,6 +2,11 @@
 
 Open the box’s address for the dashboard, or add `/till/` to open the till. Update any older till bookmark or home-screen shortcut to end in `/till/`. Your enrolled browser keeps its device sign-in.
 
+If `waitron.local` does not open the till on a device, use the box's IP address instead, such as
+`https://192.168.1.10/till/`. When the box is connected by cable, **System → Box status** shows it
+beside **Wired**, under **Network**. On an Android phone or tablet the page may first say it cannot
+be found; when Chrome then asks whether it can reach devices on your local network, allow it.
+
 ## When you open the spare box {#spare}
 
 If you see **This is the venue’s spare box**, open the main box to reach the restaurant screens
