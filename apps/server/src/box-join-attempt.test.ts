@@ -611,6 +611,30 @@ describe("the new box's join attempt", () => {
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
+  it.each([
+    ["approved", async () => ({ bundle: await bundleFor() })],
+    ["failed", async () => ({ bundle: await bundleFor(), signingKey: otherKey() })],
+  ] as const)(
+    "forgets a join that is %s here when the main box refuses its cancel, so a new one can start",
+    async (state, make) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const attempt = createBoxJoinAttempt(deps());
+      const shown = await attempt.start(MAIN_URL);
+      const { bundle, signingKey } = await make();
+      await approveWith(shown.code, bundle, signingKey);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(attempt.current()?.state).toBe(state);
+
+      await attempt.cancel();
+      expect(sent.at(-1)).toMatchObject({ path: "/api/node/join/cancel", status: 409 });
+      expect(attempt.current()).toBeNull();
+      expect(attempt.joined()).toBeNull();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
+      await attempt.start(MAIN_URL);
+    },
+  );
+
   it("refuses to start while a start runs or an attempt waits", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { holding, release } = holdingHello();

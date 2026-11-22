@@ -97,7 +97,7 @@ export const startEn = {
   "connect.start_again": "Start again",
   "connect.finish": "Finish joining",
   "connect.finish.bundle_fetch_failed":
-    "This box could not get a copy from the main box that checks out, so nothing was installed. Choose Start again: it asks the main box for a new code.",
+    "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
   "connect.reading": "Checking this box's join…",
   "connect.waiting.lead":
     "On the main box, open System → Servers, choose Check beside the request from this box, and tap this code:",
@@ -107,7 +107,7 @@ export const startEn = {
   "connect.waiting.time_left": "Time left: {minutes} min",
   "connect.approved": "The main box approved a join with code {code}.",
   "connect.approved.hint":
-    "Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again.",
+    "Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
   "connect.elsewhere":
     "A join was started from another page or device. This page cannot show its code. Choose Start again to start one here; the other page's join then ends.",
   "connect.replaced":
@@ -127,6 +127,8 @@ export const startEn = {
     "This join stopped, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.failed.not_found":
     "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
+  "connect.failed.copy_invalid":
+    "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
   "connect.refusal.join_invalid":
     "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
   "connect.refusal.join_not_found":
@@ -335,7 +337,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.start_again": "Empezar de nuevo",
   "connect.finish": "Terminar la unión",
   "connect.finish.bundle_fetch_failed":
-    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. Elige Empezar de nuevo: pide al servidor principal un código nuevo.",
+    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
   "connect.reading": "Comprobando la unión de este servidor…",
   "connect.waiting.lead":
     "En el servidor principal, abre Sistema → Servidores, elige Comprobar junto a la solicitud de este servidor y toca este código:",
@@ -345,7 +347,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.waiting.time_left": "Tiempo restante: {minutes} min",
   "connect.approved": "El servidor principal aprobó una unión con el código {code}.",
   "connect.approved.hint":
-    "Elige Terminar la unión solo si tocaste ese código en el servidor principal. Si no, elige Empezar de nuevo.",
+    "Elige Terminar la unión solo si tocaste ese código en el servidor principal. Si no, elige Empezar de nuevo aquí. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista.",
   "connect.elsewhere":
     "Se empezó una unión desde otra página o dispositivo. Esta página no puede mostrar su código. Elige Empezar de nuevo para empezar una aquí; la unión de la otra página terminará.",
   "connect.replaced":
@@ -366,6 +368,8 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Esta unión se detuvo, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.failed.not_found":
     "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Elige Empezar de nuevo.",
+  "connect.failed.copy_invalid":
+    "El servidor principal aprobó este servidor, pero la copia que envió no ha superado la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
   "connect.refusal.join_invalid":
     "El servidor principal no ha podido leer la solicitud de este servidor. Vuelve a elegir Unirse. Si pasa otra vez, comprueba que los dos servidores tienen la misma versión de Waitron.",
   "connect.refusal.join_not_found":

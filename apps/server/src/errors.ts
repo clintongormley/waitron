@@ -1584,7 +1584,8 @@ declare module "@waitron/shared" {
     "mirror.join_in_progress": Record<string, never>;
     /**
      * The new box's cancel arrived while the main box was approving the request or had approved
-     * it; the request goes on, and the new box keeps waiting for the answer.
+     * it; the request goes on. A new box still waiting keeps following it; one already holding the
+     * approved answer forgets its join, and the main box's listing of it is removed there.
      */
     "mirror.join_approving": Record<string, never>;
     /**

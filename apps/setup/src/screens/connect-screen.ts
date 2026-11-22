@@ -53,7 +53,8 @@ const ENDED_WORDS: Record<string, StringKey> = {
 };
 
 const FAILED_WORDS: Record<string, StringKey> = {
-  "mirror.join_invalid": "connect.ended.invalid",
+  // Only an approved answer whose copy does not check out leaves a join failed this way.
+  "mirror.join_invalid": "connect.failed.copy_invalid",
   "mirror.join_not_found": "connect.failed.not_found",
 };
 

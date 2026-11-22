@@ -306,7 +306,7 @@ describe("setup-connect-screen: approved and Finish joining", () => {
     const finished = vi.fn();
     el.addEventListener("join-finish-requested", finished);
     expect(text(el, "[data-test=state]")).toBe(
-      "The main box approved a join with code 482\u00a0913. Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again.",
+      "The main box approved a join with code 482\u00a0913. Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
     );
     await press(el, "finish");
     expect(finished).toHaveBeenCalledOnce();
@@ -374,7 +374,7 @@ describe("setup-connect-screen: approved and Finish joining", () => {
     el.refusal = { code: "mirror.bundle_fetch_failed" };
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
-        "This box could not get a copy from the main box that checks out, so nothing was installed. Choose Start again: it asks the main box for a new code.",
+        "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
       ),
     );
     expect(q(el, "[data-test=start-again]")).not.toBeNull();
@@ -427,7 +427,7 @@ describe("setup-connect-screen: the words of every state", () => {
     ],
     [
       { state: "failed", error: "mirror.join_invalid" },
-      "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
+      "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
     ],
     [
       { state: "failed", error: "mirror.join_not_found" },

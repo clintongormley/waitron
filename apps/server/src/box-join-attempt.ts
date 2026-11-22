@@ -304,7 +304,9 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     } finally {
       if (cancelling === sending) cancelling = null;
     }
-    if (!approving) return;
+    // A join this box already holds the approved answer for has nothing more to hear: the person
+    // starts over, and the main box's Servers page is where its listing of this box is removed.
+    if (!approving || attempt.state.state !== "waiting") return;
     // The main box is approving: keep following it, unless another attempt has begun meanwhile.
     if (current === null) {
       current = attempt;
