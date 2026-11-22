@@ -244,6 +244,10 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de estación en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
+Si falla un aviso de corrección, pulsa **Reimprimir** en el terminal para ver qué platos quedan
+en el pedido. El aviso desaparece cuando el nuevo ticket sale en la misma impresora de esa estación.
+Si la tarjeta ya no aparece, abre **Impresoras** y reenvía el aviso a su impresora.
+
 Un plato desaparece de las pantallas de estación en cuanto el camarero lo marca como servido; si se
 sirve solo en parte, se queda con lo que falta.
 

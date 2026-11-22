@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "337a42dd-3051-474c-b0db-a3d64bfbe3ec",
+  "id": "95a6cf6c-fb2c-46a8-8568-c26df71a67fb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6828,6 +6828,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "correction_slip": {
+          "name": "correction_slip",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {

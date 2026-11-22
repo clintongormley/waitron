@@ -1313,23 +1313,108 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     expect(await problemsOf(table5.partyId)).toEqual([]);
   });
 
-  it("raises no problem for a failed HOLD correction slip, as for every correction slip", async () => {
+  it("shows a failed HOLD cancellation on its station card and table until a Reprint prints", async () => {
     const v = await holdingVenue();
     const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
-      { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
+      { release: "hold", lines: [line(v, "burger"), line(v, "fish"), line(v, "beer")] },
     ]);
     await voidDish(v, table4, "fish");
     const [, slip] = await jobsAt(v.kitchenPrinterId);
     expect(slip!.lines[0]).toBe("*** HOLD CANCELLED ***");
-    const linked = (await links()).map((row) => row.printJobId);
-
     await setJob(slip!.id, exhausted);
+    await inTx((tx) =>
+      attachPrinterToStation(tx, { stationId: v.kitchenStationId, printerId: v.receiptPrinter }),
+    );
 
-    expect(linked).not.toContain(slip!.id);
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
+    const reprints = (await links()).filter((row) => row.reprint);
+    for (const row of reprints.filter((row) => row.printerId !== v.kitchenPrinterId)) {
+      await setJob(row.printJobId, { status: "done" });
+    }
+
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+    expect(await problemsOf(table4.partyId)).toEqual([
+      {
+        workingOrderId: table4.tabId,
+        stationId: v.kitchenStationId,
+        stationName: "Kitchen",
+        since: await createdAtOf(slip!.id),
+      },
+    ]);
+    expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBe(true);
+
+    const reprint = reprints.find((row) => row.printerId === v.kitchenPrinterId)!;
+    await setJob(reprint.printJobId, { status: "done" });
     expect(await problemsOf(table4.partyId)).toEqual([]);
-    expect("printProblem" in (await stationCard(v.kitchenStationId, table4.tabId))).toBe(false);
+    expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBeUndefined();
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
   });
+
+  it("carries a failed VOID warning into the surviving bill when bills are merged", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Table 4", ["burger", "fish"]);
+    const destination = await firedTable(v, "Table 5");
+    await reprintPrinted(v, destination.tabId);
+    await voidDish(v, source, "fish");
+    const slip = (await jobsAt(v.kitchenPrinterId)).at(-1)!;
+    expect(slip.lines).toContain("*** VOID ***");
+    await setJob(slip.id, exhausted);
+    expect((await stationCard(v.kitchenStationId, source.tabId)).printProblem).toBe(true);
+
+    await mergeBills(v, source, destination);
+
+    expect(await problemsOf(destination.partyId)).toMatchObject([
+      { workingOrderId: destination.tabId, stationId: v.kitchenStationId },
+    ]);
+    expect((await stationCard(v.kitchenStationId, destination.tabId)).printProblem).toBe(true);
+    await inTx((tx) =>
+      detachPrinterFromStation(tx, {
+        stationId: v.kitchenStationId,
+        printerId: v.kitchenPrinterId,
+      }),
+    );
+    expect(await problemsOf(destination.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+    const copy = await inTx((tx) => resendPrintJob(tx, slip.id));
+    await setJob(copy.jobId, { status: "done" });
+    expect(await problemsOf(destination.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it.each(["VOID", "TO STATION"] as const)(
+    "keeps a failed %s slip in the printer alert after the kitchen card goes away",
+    async (kind) => {
+      const v = await setupVenue();
+      const table4 = await firedTable(v, "Table 4");
+      if (kind === "VOID") await voidDish(v, table4, "burger");
+      else {
+        const [item] = await db
+          .select({ lineId: ticketItems.workingOrderLineId })
+          .from(ticketItems)
+          .where(eq(ticketItems.stationId, v.kitchenStationId));
+        await inTx((tx) =>
+          moveDishesToStation(
+            tx,
+            v.cfg,
+            table4.tabId,
+            { submissionId: randomUUID(), lineIds: [item!.lineId], stationId: v.barStationId },
+            { deviceId: v.cfg.origin.deviceId, personId: ALEX },
+          ),
+        );
+      }
+      const [, slip] = await jobsAt(v.kitchenPrinterId);
+      expect(slip!.lines[0]).toBe(kind === "VOID" ? "*** VOID ***" : "*** MOVED TO BAR ***");
+      await setJob(slip!.id, exhausted);
+
+      expect(await problemsOf(table4.partyId)).toEqual([]);
+      expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(false);
+      expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+      const copy = await inTx((tx) => resendPrintJob(tx, slip!.id));
+      await setJob(copy.jobId, exhausted);
+      expect(await waitingAt(v.kitchenPrinterId)).toBe(2);
+    },
+  );
 });
 
 describe("a printing problem a Reprint would print nothing for", () => {

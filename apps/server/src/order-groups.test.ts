@@ -4792,9 +4792,15 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(await printedSince(v, 8)).toEqual([
         ["*** FIRE ***", ...header, "GROUP 4 · MAINS", `1 x ${DISHES.steak.kitchen}`],
       ]);
-      // The FIRE slip is linked as the fire and HOLD tickets are; the corrections are not.
       expect(await linkedJobs()).toEqual([...linkedBefore, (await jobIds(v)).at(-1)]);
-      expect(linkedBefore).toEqual((await jobIds(v)).slice(0, 5));
+      const ids = await jobIds(v);
+      expect(linkedBefore).toEqual(ids.slice(0, 8));
+      const marked = await db
+        .select({ id: kitchenPrintJobs.printJobId })
+        .from(kitchenPrintJobs)
+        .where(eq(kitchenPrintJobs.correctionSlip, true))
+        .orderBy(sql`${kitchenPrintJobs}.rowid`);
+      expect(marked.map(({ id }) => id)).toEqual(ids.slice(5, 8));
     });
 
     it("prints a FIRE slip for a waiter-released group", async () => {

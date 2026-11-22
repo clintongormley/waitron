@@ -216,6 +216,10 @@ Each card carries its order's station note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a station screen
 that nobody signs in on shows neither.
 
+If a correction slip fails, use **Reprint** on the till to see which dishes are still on the
+order. The warning clears once the new ticket prints at that station on the same printer. If the
+card has gone, open **Printers** and resend the failed slip to its printer.
+
 A dish leaves the station screens as soon as the waiter marks it served; one served in part stays,
 showing only what is left.
 

@@ -876,7 +876,7 @@ async function enqueueKitchenJobs(
 ): Promise<void> {
   for (const job of jobs) {
     const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document");
-    await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
+    await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint ? "reprint" : "ticket");
     await insertInChunks(
       tx,
       kitchenPrintJobLines,
@@ -923,17 +923,22 @@ async function markHoldPaper(
     .where(inIds(ticketItems.workingOrderLineId, lines));
 }
 
-/** Record which bill and stations a kitchen ticket's job carried. */
 async function linkKitchenJob(
   tx: Transaction,
   printJobId: string,
   workingOrderId: string,
   stationIds: string[],
-  reprint: boolean,
+  kind: "ticket" | "reprint" | "correction",
 ): Promise<void> {
-  await tx
-    .insert(kitchenPrintJobs)
-    .values(stationIds.map((stationId) => ({ printJobId, workingOrderId, stationId, reprint })));
+  await tx.insert(kitchenPrintJobs).values(
+    stationIds.map((stationId) => ({
+      printJobId,
+      workingOrderId,
+      stationId,
+      reprint: kind === "reprint",
+      correctionSlip: kind === "correction",
+    })),
+  );
 }
 
 /** `queued → preparing → ready`. */
@@ -1719,7 +1724,8 @@ async function printCorrectionSlips(
         timeZone,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document");
+        const { jobId } = await enqueuePrintJob(tx, printer.printerId, bytes, "document");
+        await linkKitchenJob(tx, jobId, orderId, [stationId], "correction");
       }
     }
   }
@@ -2861,7 +2867,7 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
   );
 }
 
-/** A job without kitchen links stays in the printer alert. */
+/** A correction can still be resent from the printer alert after its station card disappears. */
 export async function kitchenJobsNotWaiting(
   tx: Transaction,
   jobs: readonly { id: string; printerId: string; sourceId: string }[],
@@ -2873,6 +2879,7 @@ export async function kitchenJobsNotWaiting(
       printJobId: kitchenPrintJobs.printJobId,
       workingOrderId: kitchenPrintJobs.workingOrderId,
       stationId: kitchenPrintJobs.stationId,
+      correctionSlip: kitchenPrintJobs.correctionSlip,
       queued: sql<number>`${kitchenPrintJobs}.rowid`,
     })
     .from(kitchenPrintJobs)
@@ -2936,8 +2943,9 @@ export async function kitchenJobsNotWaiting(
     if (rows === undefined) continue;
     const waiting = rows.some(
       (row) =>
-        !movedPaperPrinted({ ...row, printerId: job.printerId }) &&
-        targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`),
+        row.correctionSlip ||
+        (!movedPaperPrinted({ ...row, printerId: job.printerId }) &&
+          targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`)),
     );
     if (!waiting) settled.add(job.id);
   }
@@ -2947,7 +2955,7 @@ export async function kitchenJobsNotWaiting(
 /**
  * `orderId`'s link rows that no reprint for the same station, on the same printer, queued after
  * them and printed itself or through a resend ({@link printedOrResent}), has covered: the ones still
- * able to name a missing dish. Oldest first.
+ * still needed for printing problems. Oldest first.
  */
 async function readUncoveredLinks(tx: Transaction, orderId: string) {
   const rows = await tx
@@ -2956,6 +2964,7 @@ async function readUncoveredLinks(tx: Transaction, orderId: string) {
       printJobId: kitchenPrintJobs.printJobId,
       stationId: kitchenPrintJobs.stationId,
       reprint: kitchenPrintJobs.reprint,
+      correctionSlip: kitchenPrintJobs.correctionSlip,
       createdAt: kitchenPrintJobs.createdAt,
       printerId: printJobs.printerId,
       status: printJobs.status,
@@ -2984,7 +2993,13 @@ async function readUncoveredLinks(tx: Transaction, orderId: string) {
 async function writeLinksAfter(
   tx: Transaction,
   orderId: string,
-  rows: readonly { id?: string; printJobId: string; stationId: string; createdAt: string }[],
+  rows: readonly {
+    id?: string;
+    printJobId: string;
+    stationId: string;
+    correctionSlip?: boolean;
+    createdAt: string;
+  }[],
 ): Promise<void> {
   if (rows.length === 0) return;
   await tx
@@ -3009,6 +3024,7 @@ async function writeLinksAfter(
       workingOrderId: orderId,
       stationId: row.stationId,
       reprint: false,
+      correctionSlip: row.correctionSlip,
       createdAt: row.createdAt,
     })),
   );
