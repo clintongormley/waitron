@@ -2161,8 +2161,8 @@ Keep the job log before re-running.
 ### CI does not run every check on every push
 
 The `changes` job skips the expensive `code`-gated jobs when every changed path is inert —
-documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
-`.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
+documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, `.impeccable/`,
+the root `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
 the changed packages themselves. A root file a member depends on is the exception — a
 root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` lists, because a member file reads

@@ -32,19 +32,22 @@ describe("isInertPath", () => {
     },
   );
 
-  it.each(["CLAUDE.md", "README.md", "CONTRIBUTING.md"])(
+  it.each(["CLAUDE.md", "README.md", "CONTRIBUTING.md", "DESIGN.md"])(
     "treats the root-level %s as inert",
     (path) => {
       expect(isInertPath(path)).toBe(true);
     },
   );
 
-  it.each([".codex/config.toml", ".vscode/settings.json", ".gitignore", ".editorconfig"])(
-    "treats the root config %s as inert",
-    (path) => {
-      expect(isInertPath(path)).toBe(true);
-    },
-  );
+  it.each([
+    ".codex/config.toml",
+    ".vscode/settings.json",
+    ".impeccable/design.json",
+    ".gitignore",
+    ".editorconfig",
+  ])("treats the root config %s as inert", (path) => {
+    expect(isInertPath(path)).toBe(true);
+  });
 
   it.each([
     "packages/db/src/index.ts",

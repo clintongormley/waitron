@@ -3,6 +3,12 @@
 Every screen in this project is built from `wt-*` primitives styled by `--wt-*` tokens.
 This document is the contract. If you are building a view, read this first.
 
+`DESIGN.md` at the repository root is a short summary of this look for design tools, with
+`.impeccable/design.json` beside it. Both hold hand-made copies of token values: whoever changes a
+token updates the copies, and `scripts/design-md-tokens.test.ts` fails while a copy it checks
+differs from its token. That check is weaker than its name; the test file's opening comment
+lists what it checks and what it does not.
+
 ## Shared package boundary
 
 `@waitron/ui-core` owns account-form controls: button, input, textarea, card, icon, spinner,
@@ -650,6 +656,10 @@ the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 and the sizes particular to one view: the dashboard's
 `--wt-approvals-…`, `--wt-overview-…`, `--wt-menu-list-…`, `--wt-authenticator-…` and
 `--wt-image-preview-…` tokens and the till's `--wt-till-…` tokens
+
+**Shadows may lift more than they do today** (owner, 2026-11-22, choosing "Allow more depth" for
+`DESIGN.md`): new work may use shadows to lift cards and buttons, starting from `--wt-shadow-1|2`
+and adding a token for any new step, never an inline value.
 
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which

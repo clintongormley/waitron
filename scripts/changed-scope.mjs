@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 // Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
-// changed-packages.mjs): whether a change can affect a test, build or type-check result
+// changed-packages.mjs): whether a change can affect what a `code`-gated job runs or finds
 // (`isInertPath` and `classify`), and which gated jobs a resolved scope gives work to (`SCOPE_GATES`
 // and `gateOutputs`).
 //
@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
  * ROOT-ONLY. The same names inside a package stay code — the conservative route, since the
  * classifier cannot read a package's config to prove it inert.
  */
-const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
+const INERT_ROOT_PREFIXES = [".codex/", ".vscode/", ".impeccable/"];
 const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 
 /**
@@ -177,7 +177,11 @@ export function isImageInputPath(path) {
   return path.startsWith("deploy/") || IMAGE_SMOKE_FILES.includes(path);
 }
 
-/** True when a change to `path` cannot affect any test, build or type-check result. */
+/**
+ * True when no `code`-gated job reads `path`, so a change to it runs no package's tests, builds or
+ * type-checks. The root guards run whatever the scope and read some of these (`CLAUDE.md`,
+ * `DESIGN.md`, `.impeccable/design.json`).
+ */
 export function isInertPath(path) {
   if (path.startsWith("docs/")) return true;
   if (INERT_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;

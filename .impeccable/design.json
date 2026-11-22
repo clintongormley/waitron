@@ -1,0 +1,750 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-22T20:57:19+00:00",
+  "title": "Design System: Waitron",
+  "extensions": {
+    "colorMeta": {
+      "waitron-teal": {
+        "role": "primary",
+        "displayName": "Waitron Teal",
+        "tonalRamp": [
+          "oklch(15% 0.037 225)",
+          "oklch(26% 0.054 225)",
+          "oklch(37% 0.071 225)",
+          "oklch(48% 0.087 225)",
+          "oklch(60% 0.090 225)",
+          "oklch(72% 0.072 225)",
+          "oklch(84% 0.054 225)",
+          "oklch(95% 0.037 225)"
+        ]
+      },
+      "waitron-teal-hover": {
+        "role": "primary",
+        "displayName": "Waitron Teal Hover",
+        "tonalRamp": [
+          "oklch(15% 0.032 225)",
+          "oklch(26% 0.046 225)",
+          "oklch(37% 0.061 225)",
+          "oklch(48% 0.075 225)",
+          "oklch(60% 0.077 225)",
+          "oklch(72% 0.062 225)",
+          "oklch(84% 0.046 225)",
+          "oklch(95% 0.032 225)"
+        ]
+      },
+      "waitron-teal-disabled": {
+        "role": "primary",
+        "displayName": "Waitron Teal Disabled",
+        "tonalRamp": [
+          "oklch(15% 0.034 225)",
+          "oklch(26% 0.050 225)",
+          "oklch(37% 0.065 225)",
+          "oklch(48% 0.080 225)",
+          "oklch(60% 0.083 225)",
+          "oklch(72% 0.066 225)",
+          "oklch(84% 0.050 225)",
+          "oklch(95% 0.034 225)"
+        ]
+      },
+      "sky": {
+        "role": "primary",
+        "displayName": "Sky",
+        "tonalRamp": [
+          "oklch(15% 0.037 219)",
+          "oklch(26% 0.054 219)",
+          "oklch(37% 0.070 219)",
+          "oklch(48% 0.087 219)",
+          "oklch(60% 0.090 219)",
+          "oklch(72% 0.072 219)",
+          "oklch(84% 0.054 219)",
+          "oklch(95% 0.037 219)"
+        ]
+      },
+      "sky-hover": {
+        "role": "primary",
+        "displayName": "Sky Hover",
+        "tonalRamp": [
+          "oklch(15% 0.035 220)",
+          "oklch(26% 0.051 220)",
+          "oklch(37% 0.067 220)",
+          "oklch(48% 0.082 220)",
+          "oklch(60% 0.085 220)",
+          "oklch(72% 0.068 220)",
+          "oklch(84% 0.051 220)",
+          "oklch(95% 0.035 220)"
+        ]
+      },
+      "on-teal": {
+        "role": "neutral",
+        "displayName": "On Teal",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(37% 0.000 90)",
+          "oklch(48% 0.000 90)",
+          "oklch(60% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "on-sky": {
+        "role": "neutral",
+        "displayName": "On Sky",
+        "tonalRamp": [
+          "oklch(15% 0.011 221)",
+          "oklch(26% 0.016 221)",
+          "oklch(37% 0.021 221)",
+          "oklch(48% 0.026 221)",
+          "oklch(60% 0.027 221)",
+          "oklch(72% 0.022 221)",
+          "oklch(84% 0.016 221)",
+          "oklch(95% 0.011 221)"
+        ]
+      },
+      "page": {
+        "role": "neutral",
+        "displayName": "Page Grey",
+        "tonalRamp": [
+          "oklch(15% 0.001 286)",
+          "oklch(26% 0.001 286)",
+          "oklch(37% 0.001 286)",
+          "oklch(48% 0.001 286)",
+          "oklch(60% 0.001 286)",
+          "oklch(72% 0.001 286)",
+          "oklch(84% 0.001 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(37% 0.000 90)",
+          "oklch(48% 0.000 90)",
+          "oklch(60% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "surface-lifted": {
+        "role": "neutral",
+        "displayName": "Surface Lifted",
+        "tonalRamp": [
+          "oklch(15% 0.013 225)",
+          "oklch(26% 0.019 225)",
+          "oklch(37% 0.025 225)",
+          "oklch(48% 0.031 225)",
+          "oklch(60% 0.032 225)",
+          "oklch(72% 0.025 225)",
+          "oklch(84% 0.019 225)",
+          "oklch(95% 0.013 225)"
+        ]
+      },
+      "surface-sunken": {
+        "role": "neutral",
+        "displayName": "Surface Sunken",
+        "tonalRamp": [
+          "oklch(15% 0.004 267)",
+          "oklch(26% 0.006 267)",
+          "oklch(37% 0.007 267)",
+          "oklch(48% 0.009 267)",
+          "oklch(60% 0.009 267)",
+          "oklch(72% 0.007 267)",
+          "oklch(84% 0.006 267)",
+          "oklch(95% 0.004 267)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "tonalRamp": [
+          "oklch(15% 0.002 1)",
+          "oklch(26% 0.004 1)",
+          "oklch(37% 0.005 1)",
+          "oklch(48% 0.006 1)",
+          "oklch(60% 0.006 1)",
+          "oklch(72% 0.005 1)",
+          "oklch(84% 0.004 1)",
+          "oklch(95% 0.002 1)"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "tonalRamp": [
+          "oklch(15% 0.002 271)",
+          "oklch(26% 0.003 271)",
+          "oklch(37% 0.004 271)",
+          "oklch(48% 0.004 271)",
+          "oklch(60% 0.005 271)",
+          "oklch(72% 0.004 271)",
+          "oklch(84% 0.003 271)",
+          "oklch(95% 0.002 271)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "tonalRamp": [
+          "oklch(15% 0.004 267)",
+          "oklch(26% 0.006 267)",
+          "oklch(37% 0.007 267)",
+          "oklch(48% 0.009 267)",
+          "oklch(60% 0.009 267)",
+          "oklch(72% 0.007 267)",
+          "oklch(84% 0.006 267)",
+          "oklch(95% 0.004 267)"
+        ]
+      },
+      "field-fill": {
+        "role": "neutral",
+        "displayName": "Field Fill",
+        "tonalRamp": [
+          "oklch(15% 0.002 271)",
+          "oklch(26% 0.002 271)",
+          "oklch(37% 0.003 271)",
+          "oklch(48% 0.004 271)",
+          "oklch(60% 0.004 271)",
+          "oklch(72% 0.003 271)",
+          "oklch(84% 0.002 271)",
+          "oklch(95% 0.002 271)"
+        ]
+      },
+      "field-line": {
+        "role": "neutral",
+        "displayName": "Field Line",
+        "tonalRamp": [
+          "oklch(15% 0.008 266)",
+          "oklch(26% 0.012 266)",
+          "oklch(37% 0.015 266)",
+          "oklch(48% 0.019 266)",
+          "oklch(60% 0.019 266)",
+          "oklch(72% 0.015 266)",
+          "oklch(84% 0.012 266)",
+          "oklch(95% 0.008 266)"
+        ]
+      },
+      "field-value": {
+        "role": "neutral",
+        "displayName": "Field Value",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(37% 0.000 90)",
+          "oklch(48% 0.000 90)",
+          "oklch(60% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Danger Red",
+        "tonalRamp": [
+          "oklch(15% 0.068 29)",
+          "oklch(26% 0.098 29)",
+          "oklch(37% 0.129 29)",
+          "oklch(48% 0.159 29)",
+          "oklch(60% 0.165 29)",
+          "oklch(72% 0.131 29)",
+          "oklch(84% 0.098 29)",
+          "oklch(95% 0.068 29)"
+        ]
+      },
+      "danger-hover": {
+        "role": "status",
+        "displayName": "Danger Hover",
+        "tonalRamp": [
+          "oklch(15% 0.061 29)",
+          "oklch(26% 0.088 29)",
+          "oklch(37% 0.115 29)",
+          "oklch(48% 0.143 29)",
+          "oklch(60% 0.147 29)",
+          "oklch(72% 0.118 29)",
+          "oklch(84% 0.088 29)",
+          "oklch(95% 0.061 29)"
+        ]
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Success Green",
+        "tonalRamp": [
+          "oklch(15% 0.041 163)",
+          "oklch(26% 0.059 163)",
+          "oklch(37% 0.077 163)",
+          "oklch(48% 0.095 163)",
+          "oklch(60% 0.098 163)",
+          "oklch(72% 0.079 163)",
+          "oklch(84% 0.059 163)",
+          "oklch(95% 0.041 163)"
+        ]
+      },
+      "warning": {
+        "role": "status",
+        "displayName": "Warning Amber",
+        "tonalRamp": [
+          "oklch(15% 0.042 67)",
+          "oklch(26% 0.060 67)",
+          "oklch(37% 0.079 67)",
+          "oklch(48% 0.097 67)",
+          "oklch(60% 0.101 67)",
+          "oklch(72% 0.081 67)",
+          "oklch(84% 0.060 67)",
+          "oklch(95% 0.042 67)"
+        ]
+      },
+      "highlight": {
+        "role": "status",
+        "displayName": "Highlight",
+        "tonalRamp": [
+          "oklch(15% 0.033 99)",
+          "oklch(26% 0.047 99)",
+          "oklch(37% 0.062 99)",
+          "oklch(48% 0.076 99)",
+          "oklch(60% 0.079 99)",
+          "oklch(72% 0.063 99)",
+          "oklch(84% 0.047 99)",
+          "oklch(95% 0.033 99)"
+        ]
+      },
+      "night-page": {
+        "role": "neutral",
+        "displayName": "Night Page",
+        "tonalRamp": [
+          "oklch(15% 0.003 264)",
+          "oklch(26% 0.005 264)",
+          "oklch(37% 0.006 264)",
+          "oklch(48% 0.008 264)",
+          "oklch(60% 0.008 264)",
+          "oklch(72% 0.006 264)",
+          "oklch(84% 0.005 264)",
+          "oklch(95% 0.003 264)"
+        ]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "tonalRamp": [
+          "oklch(15% 0.005 264)",
+          "oklch(26% 0.007 264)",
+          "oklch(37% 0.009 264)",
+          "oklch(48% 0.011 264)",
+          "oklch(60% 0.012 264)",
+          "oklch(72% 0.009 264)",
+          "oklch(84% 0.007 264)",
+          "oklch(95% 0.005 264)"
+        ]
+      },
+      "night-surface-raised": {
+        "role": "neutral",
+        "displayName": "Night Surface Raised",
+        "tonalRamp": [
+          "oklch(15% 0.006 264)",
+          "oklch(26% 0.009 264)",
+          "oklch(37% 0.012 264)",
+          "oklch(48% 0.014 264)",
+          "oklch(60% 0.015 264)",
+          "oklch(72% 0.012 264)",
+          "oklch(84% 0.009 264)",
+          "oklch(95% 0.006 264)"
+        ]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "tonalRamp": [
+          "oklch(15% 0.002 265)",
+          "oklch(26% 0.003 265)",
+          "oklch(37% 0.004 265)",
+          "oklch(48% 0.005 265)",
+          "oklch(60% 0.005 265)",
+          "oklch(72% 0.004 265)",
+          "oklch(84% 0.003 265)",
+          "oklch(95% 0.002 265)"
+        ]
+      },
+      "night-ink-muted": {
+        "role": "neutral",
+        "displayName": "Night Ink Muted",
+        "tonalRamp": [
+          "oklch(15% 0.007 264)",
+          "oklch(26% 0.010 264)",
+          "oklch(37% 0.013 264)",
+          "oklch(48% 0.017 264)",
+          "oklch(60% 0.017 264)",
+          "oklch(72% 0.014 264)",
+          "oklch(84% 0.010 264)",
+          "oklch(95% 0.007 264)"
+        ]
+      },
+      "night-hairline": {
+        "role": "neutral",
+        "displayName": "Night Hairline",
+        "tonalRamp": [
+          "oklch(15% 0.009 264)",
+          "oklch(26% 0.012 264)",
+          "oklch(37% 0.016 264)",
+          "oklch(48% 0.020 264)",
+          "oklch(60% 0.021 264)",
+          "oklch(72% 0.017 264)",
+          "oklch(84% 0.012 264)",
+          "oklch(95% 0.009 264)"
+        ]
+      },
+      "night-field-fill": {
+        "role": "neutral",
+        "displayName": "Night Field Fill",
+        "tonalRamp": [
+          "oklch(15% 0.007 266)",
+          "oklch(26% 0.010 266)",
+          "oklch(37% 0.013 266)",
+          "oklch(48% 0.016 266)",
+          "oklch(60% 0.016 266)",
+          "oklch(72% 0.013 266)",
+          "oklch(84% 0.010 266)",
+          "oklch(95% 0.007 266)"
+        ]
+      },
+      "night-field-line": {
+        "role": "neutral",
+        "displayName": "Night Field Line",
+        "tonalRamp": [
+          "oklch(15% 0.010 263)",
+          "oklch(26% 0.015 263)",
+          "oklch(37% 0.018 263)",
+          "oklch(48% 0.023 263)",
+          "oklch(60% 0.023 263)",
+          "oklch(72% 0.018 263)",
+          "oklch(84% 0.015 263)",
+          "oklch(95% 0.010 263)"
+        ]
+      },
+      "night-field-value": {
+        "role": "neutral",
+        "displayName": "Night Field Value",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(37% 0.000 90)",
+          "oklch(48% 0.000 90)",
+          "oklch(60% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "night-danger": {
+        "role": "status",
+        "displayName": "Night Danger",
+        "tonalRamp": [
+          "oklch(15% 0.060 27)",
+          "oklch(26% 0.087 27)",
+          "oklch(37% 0.114 27)",
+          "oklch(48% 0.141 27)",
+          "oklch(60% 0.146 27)",
+          "oklch(72% 0.117 27)",
+          "oklch(84% 0.087 27)",
+          "oklch(95% 0.060 27)"
+        ]
+      },
+      "night-success": {
+        "role": "status",
+        "displayName": "Night Success",
+        "tonalRamp": [
+          "oklch(15% 0.050 162)",
+          "oklch(26% 0.072 162)",
+          "oklch(37% 0.094 162)",
+          "oklch(48% 0.116 162)",
+          "oklch(60% 0.120 162)",
+          "oklch(72% 0.096 162)",
+          "oklch(84% 0.072 162)",
+          "oklch(95% 0.050 162)"
+        ]
+      },
+      "night-warning": {
+        "role": "status",
+        "displayName": "Night Warning",
+        "tonalRamp": [
+          "oklch(15% 0.053 76)",
+          "oklch(26% 0.076 76)",
+          "oklch(37% 0.100 76)",
+          "oklch(48% 0.123 76)",
+          "oklch(60% 0.127 76)",
+          "oklch(72% 0.102 76)",
+          "oklch(84% 0.076 76)",
+          "oklch(95% 0.053 76)"
+        ]
+      },
+      "table-free": {
+        "role": "status",
+        "displayName": "Free Green",
+        "tonalRamp": [
+          "oklch(15% 0.010 162)",
+          "oklch(26% 0.014 162)",
+          "oklch(37% 0.019 162)",
+          "oklch(48% 0.023 162)",
+          "oklch(60% 0.024 162)",
+          "oklch(72% 0.019 162)",
+          "oklch(84% 0.014 162)",
+          "oklch(95% 0.010 162)"
+        ]
+      },
+      "table-seated": {
+        "role": "status",
+        "displayName": "Seated Blue",
+        "tonalRamp": [
+          "oklch(15% 0.077 260)",
+          "oklch(26% 0.112 260)",
+          "oklch(37% 0.146 260)",
+          "oklch(48% 0.180 260)",
+          "oklch(60% 0.187 260)",
+          "oklch(72% 0.149 260)",
+          "oklch(84% 0.112 260)",
+          "oklch(95% 0.077 260)"
+        ]
+      },
+      "table-bill": {
+        "role": "status",
+        "displayName": "Bill Purple",
+        "tonalRamp": [
+          "oklch(15% 0.070 305)",
+          "oklch(26% 0.102 305)",
+          "oklch(37% 0.133 305)",
+          "oklch(48% 0.164 305)",
+          "oklch(60% 0.170 305)",
+          "oklch(72% 0.136 305)",
+          "oklch(84% 0.102 305)",
+          "oklch(95% 0.070 305)"
+        ]
+      },
+      "table-reserved": {
+        "role": "status",
+        "displayName": "Reserved Amber",
+        "tonalRamp": [
+          "oklch(15% 0.018 76)",
+          "oklch(26% 0.026 76)",
+          "oklch(37% 0.034 76)",
+          "oklch(48% 0.042 76)",
+          "oklch(60% 0.044 76)",
+          "oklch(72% 0.035 76)",
+          "oklch(84% 0.026 76)",
+          "oklch(95% 0.018 76)"
+        ]
+      },
+      "table-calm": {
+        "role": "status",
+        "displayName": "Table Calm",
+        "tonalRamp": [
+          "oklch(15% 0.008 263)",
+          "oklch(26% 0.012 263)",
+          "oklch(37% 0.016 263)",
+          "oklch(48% 0.020 263)",
+          "oklch(60% 0.020 263)",
+          "oklch(72% 0.016 263)",
+          "oklch(84% 0.012 263)",
+          "oklch(95% 0.008 263)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "A page's own heading."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Dialog and setup section headings, large till buttons, a table token's name."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text on the dashboard."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Text inside inputs, at least 1rem so phones do not zoom."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Group labels and navigation group headers (uppercase); field labels at normal weight."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Codes and identifiers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-1",
+        "value": "0 1px 2px rgb(0 0 0 / 0.08)",
+        "purpose": "A raised card, a switch, a selected calendar entry, the till's ticket, and the dashboard's sidebar, the panel its folded strip of icons opens, and its phone drawer."
+      },
+      {
+        "name": "shadow-2",
+        "value": "0 8px 24px rgb(0 0 0 / 0.16)",
+        "purpose": "Dialogs, menus, dropdowns, tooltips, toasts, a dragged row."
+      },
+      {
+        "name": "scrim",
+        "value": "rgb(0 0 0 / 0.4)",
+        "purpose": "The dimming behind a modal."
+      }
+    ],
+    "motion": [
+      {
+        "name": "duration-fade",
+        "value": "400ms",
+        "purpose": "A notice that goes by itself fades out."
+      },
+      {
+        "name": "duration-move",
+        "value": "150ms",
+        "purpose": "A dragged row slides into its new place."
+      },
+      {
+        "name": "duration-disclosure",
+        "value": "900ms",
+        "purpose": "A disclosure opens or closes."
+      },
+      {
+        "name": "duration-pulse-slow",
+        "value": "2000ms",
+        "purpose": "Overdue, time to fire, the Waiting tab, the Ready bar's warning."
+      },
+      {
+        "name": "duration-pulse-fast",
+        "value": "1000ms",
+        "purpose": "Forgotten tables and kitchen cards."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "till-phone",
+        "value": "40rem"
+      },
+      {
+        "name": "dashboard-drawer",
+        "value": "48rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one main action on a screen: Pay, Continue, Use this device.",
+      "html": "<button class=\"ds-btn-primary\">Continue</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: var(--wt-space-2, 8px); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); font-weight: var(--wt-font-weight-bold, 600); min-height: var(--wt-tap-min, 44px); min-width: var(--wt-tap-min, 44px); padding: var(--wt-space-2, 8px) var(--wt-space-4, 16px); border: 1px solid transparent; border-radius: var(--wt-radius-md, 8px); background: var(--wt-color-primary, #007392); color: var(--wt-color-on-primary, #ffffff); cursor: pointer; } .ds-btn-primary:hover:enabled { background: var(--wt-color-primary-hover, #09607a); } .ds-btn-primary:focus-visible { outline: 2px solid var(--wt-color-focus, #007392); outline-offset: 2px; } .ds-btn-primary:disabled { background: var(--wt-color-primary-disabled, #7acae9); color: var(--wt-color-on-primary-disabled, #ffffff); cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button and every dashboard card action: plain at rest, teal border on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Edit</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: var(--wt-space-2, 8px); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); font-weight: var(--wt-font-weight-bold, 600); min-height: var(--wt-tap-min, 44px); min-width: var(--wt-tap-min, 44px); padding: var(--wt-space-2, 8px) var(--wt-space-4, 16px); border: 1px solid var(--wt-color-border, #d6d9e0); border-radius: var(--wt-radius-md, 8px); background: var(--wt-color-surface, #ffffff); color: var(--wt-color-text, #231f20); cursor: pointer; } .ds-btn-secondary:hover:enabled { border-color: var(--wt-color-primary-text, #007392); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--wt-color-focus, #007392); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "A destructive action.",
+      "html": "<button class=\"ds-btn-danger\">Delete</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: var(--wt-space-2, 8px); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); font-weight: var(--wt-font-weight-bold, 600); min-height: var(--wt-tap-min, 44px); min-width: var(--wt-tap-min, 44px); padding: var(--wt-space-2, 8px) var(--wt-space-4, 16px); border: 1px solid transparent; border-radius: var(--wt-radius-md, 8px); background: var(--wt-color-danger, #b3261e); color: var(--wt-color-on-danger, #ffffff); cursor: pointer; } .ds-btn-danger:hover:enabled { background: var(--wt-color-danger-hover, #9a1f18); } .ds-btn-danger:focus-visible { outline: 2px solid var(--wt-color-focus, #007392); outline-offset: 2px; } .ds-btn-danger:disabled { background: var(--wt-color-danger-disabled, #d9928e); color: var(--wt-color-on-danger-disabled, #ffffff); cursor: not-allowed; }"
+    },
+    {
+      "name": "Filled Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Every text field: a filled box, rounded top, a line along the bottom that turns teal on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Email <span class=\"ds-req\">*</span></span><input class=\"ds-field-input\" type=\"email\" placeholder=\"name@example.com\"></label>",
+      "css": ".ds-field { position: relative; display: flex; align-items: flex-end; min-height: var(--wt-field-height, 56px); background: var(--wt-color-field-fill, #f0f1f4); border-start-start-radius: var(--wt-radius-md, 8px); border-start-end-radius: var(--wt-radius-md, 8px); box-shadow: inset 0 calc(-1 * var(--wt-field-line-width, 1px)) 0 var(--wt-color-field-line, #7d8390); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); } .ds-field:focus-within { box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active, 2px)) 0 var(--wt-color-primary, #007392); } .ds-field-label { position: absolute; inset-inline: var(--wt-space-3, 12px); top: var(--wt-space-2, 8px); font-size: var(--wt-font-size-sm, 0.75rem); color: var(--wt-color-text-muted, #626366); } .ds-field:focus-within .ds-field-label { color: var(--wt-color-field-label-focus, #007392); } .ds-req { margin-inline-start: var(--wt-space-1, 4px); color: var(--wt-color-danger, #b3261e); } .ds-field-input { width: 100%; min-width: var(--wt-tap-min, 44px); min-height: var(--wt-field-height, 56px); padding: calc(var(--wt-space-3, 12px) + var(--wt-font-size-sm, 0.75rem)) var(--wt-space-3, 12px) var(--wt-space-2, 8px); border: 0; background: transparent; color: var(--wt-color-field-value, #000000); font: inherit; font-size: var(--wt-text-control-font-size, max(1rem, 1em, 0.875rem)); outline: none; } .ds-field-input::placeholder { color: var(--wt-color-text-muted, #626366); font-style: italic; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "One group of facts in a hairline frame, its heading inside the card at the top; no shadow at rest.",
+      "html": "<div class=\"ds-card\"><h2 class=\"ds-card-header\">Takings</h2><div class=\"ds-card-row\"><span class=\"ds-k\">Bills closed</span><span class=\"ds-v\">42 · €1,240.50</span></div><div class=\"ds-card-row\"><span class=\"ds-k\">Tips</span><span class=\"ds-v\">€38.00</span></div></div>",
+      "css": ".ds-card { font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); background: var(--wt-color-surface, #ffffff); border: 1px solid var(--wt-color-border, #d6d9e0); border-radius: var(--wt-radius-lg, 16px); padding: var(--wt-space-4, 16px); color: var(--wt-color-text, #231f20); max-width: 24rem; } .ds-card-header { margin: 0 0 var(--wt-space-3, 12px); font-size: var(--wt-font-size-md, 0.875rem); font-weight: var(--wt-font-weight-bold, 600); color: var(--wt-color-text-muted, #626366); } .ds-card-row { display: flex; justify-content: space-between; gap: var(--wt-space-4, 16px); padding: var(--wt-space-1, 4px) 0; } .ds-k { color: var(--wt-color-text-muted, #626366); } .ds-v { font-weight: var(--wt-font-weight-bold, 600); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "description": "Flat rows in muted ink; the current page is bold teal with a teal leading edge.",
+      "html": "<nav class=\"ds-nav\"><div class=\"ds-nav-group\">Menu</div><button class=\"ds-nav-item\" aria-current=\"page\">Products</button><button class=\"ds-nav-item\">Courses</button><button class=\"ds-nav-item\">Prep stations</button></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; width: 14rem; padding: 8px; background: var(--wt-color-bg, #f7f7f8); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-md, 0.875rem); } .ds-nav-group { padding: 8px 12px; font-size: var(--wt-font-size-sm, 0.75rem); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--wt-color-primary-text, #007392); } .ds-nav-item { text-align: start; min-height: 44px; padding: 8px 12px; border: 0; border-inline-start: 4px solid transparent; background: transparent; color: var(--wt-color-text-muted, #626366); font: inherit; cursor: pointer; } .ds-nav-item:hover { color: var(--wt-color-text, #231f20); background: var(--wt-color-surface, #ffffff); } .ds-nav-item:focus-visible { outline: 2px solid var(--wt-color-focus, #007392); outline-offset: 2px; } .ds-nav-item[aria-current=\"page\"] { border-inline-start-color: var(--wt-color-primary, #007392); color: var(--wt-color-primary-text, #007392); font-weight: 600; }"
+    },
+    {
+      "name": "Lozenge",
+      "kind": "chip",
+      "refersTo": "lozenge",
+      "description": "A pill for a short label: plain on the surface in normal weight, or filled with a category's own colour, which is data, with black or white text, whichever reads better, in bold, though no screen passes it a colour yet.",
+      "html": "<span class=\"ds-lozenge ds-lozenge-plain\">Archived</span> <span class=\"ds-lozenge\" style=\"background: #256bb1; color: #ffffff\">Mains</span>",
+      "css": ".ds-lozenge { display: inline-flex; align-items: center; padding: 0 var(--wt-space-3, 12px); border: 1px solid transparent; border-radius: var(--wt-radius-full, 9999px); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); font-size: var(--wt-font-size-sm, 0.75rem); font-weight: var(--wt-font-weight-bold, 600); line-height: calc(var(--wt-tap-min, 44px) / 1.6); text-wrap: nowrap; } .ds-lozenge-plain { background: var(--wt-color-surface, #ffffff); border-color: var(--wt-color-border, #d6d9e0); color: var(--wt-color-text, #231f20); font-weight: var(--wt-font-weight-normal, 400); }"
+    },
+    {
+      "name": "Table Token",
+      "kind": "custom",
+      "refersTo": "table-token",
+      "description": "The till's picture of one table: a left edge in its state's colour.",
+      "html": "<div class=\"ds-table\"><div class=\"ds-table-name\">T4</div><div class=\"ds-table-meta\">4 covers · €62.40</div></div> <div class=\"ds-table ds-table-forgotten\"><span class=\"ds-table-ring\" aria-hidden=\"true\"></span><div class=\"ds-table-name\">T7</div><div class=\"ds-table-meta\">2 covers · forgotten</div></div>",
+      "css": ".ds-table { position: relative; display: inline-flex; flex-direction: column; gap: 8px; min-width: 9rem; padding: 12px; border: 1px solid var(--wt-color-border, #d6d9e0); border-left: var(--wt-space-1, 4px) solid var(--wt-color-table-calm-edge, #8fb7f5); border-radius: var(--wt-radius-md, 8px); background: var(--wt-color-surface, #ffffff); color: var(--wt-color-text, #231f20); font-family: var(--wt-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif); } .ds-table-forgotten { border-left-color: var(--wt-color-primary, #007392); } .ds-table-ring { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 var(--wt-space-1, 4px) currentColor; color: var(--wt-color-danger, #b3261e); animation: ds-pulse var(--wt-duration-pulse-fast, 1000ms) ease-in-out infinite; } .ds-table-name { font-size: var(--wt-font-size-lg, 1.125rem); font-weight: 600; } .ds-table-meta { font-size: var(--wt-font-size-sm, 0.75rem); color: var(--wt-color-text-muted, #626366); } @keyframes ds-pulse { 50% { color: var(--wt-color-danger-pulse-dim, #e8bebc); } } @media (prefers-reduced-motion: reduce) { .ds-table-ring { animation: none; } .ds-table-forgotten { border-left-color: var(--wt-color-danger, #b3261e); border-left-width: var(--wt-space-3, 12px); } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Pass",
+    "overview": "A kitchen pass in good order: everything in its place, nothing shouting, and only what needs\nattention lights up. Waitron's screens are calm grey and white surfaces with plain type, so\nthat the few things carrying colour, such as the one action to take, a table waiting for its bill\nor a dish running late, are seen at a glance by someone who is not looking carefully.\n\nThe mood is calm, plain and dependable. Density follows the device: the till and station screens\nuse large touch targets and big, glanceable status marks; the dashboard is a quieter, denser\nworking space of tables, cards and forms. The venue's own logo, colours and text settings fill\nthe frame through Appearance, so Waitron's own identity stays in the background.",
+    "keyCharacteristics": [
+      "One accent, Waitron Teal, for the action to take, the current place and focus.",
+      "Strong colour reserved for meaning: table states and warnings, and the colours a venue picks for prep stations, calendar entries and products.",
+      "The device's system font unless a venue's Appearance picks serif; hierarchy from size and weight, not from typefaces.",
+      "Thin hairline borders do most of the separating; dialogs, menus, dropdowns, tooltips and toasts carry a shadow.",
+      "Light and dark themes are equal citizens, each with its own tuned values.",
+      "Tap targets are at least 44 by 44 pixels, apart from the exceptions the contract lists under `--wt-tap-min`."
+    ],
+    "rules": [
+      {
+        "name": "The One Teal Rule",
+        "body": "Waitron Teal marks the thing to do or the place you are, and nothing else. A screen with several teal-filled buttons has lost its one signal.",
+        "section": "colors"
+      },
+      {
+        "name": "The Colour Means Something Rule",
+        "body": "Never use a status colour (danger, success, warning or a table state) as decoration: a status colour used for decoration teaches staff to ignore it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paired Colour Rule",
+        "body": "The accent, status, table-state and calendar palette fills each come with their own text colour in the token file (`on-*`). Prep-station fills take ordinary body text, and a colour that is data, such as a lozenge's category colour, takes black or white text, whichever reads better.",
+        "section": "colors"
+      },
+      {
+        "name": "The Label Versus Section Rule",
+        "body": "A group label is small, bold, uppercase and muted; a field label is small, normal weight and muted. That difference is the only signal separating a section from a field, so keep it exact.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "**Do** read every colour, space, radius and font size from a `--wt-*` token; add a token when one is missing.",
+      "**Do** keep Waitron Teal for the one action, the current place and focus.",
+      "**Do** give every tappable thing at least 44 by 44 pixels, apart from the exceptions the contract lists under `--wt-tap-min`.",
+      "**Do** check a new screen in both themes and at phone width, by looking at it.",
+      "**Do** fix a look problem in the shared `wt-*` component, for every screen that uses it.",
+      "**Do** let the venue's logo, brand colour and text size show through; draw brand-coloured text with the primary-text token, not the fill token."
+    ],
+    "donts": [
+      "**Don't** use hex values, named colours, `rem` or `em` in a component's styles; this file's hex values are for reading, not copying.",
+      "**Don't** use a status colour as decoration.",
+      "**Don't** fill every card action solid teal on the dashboard; colour there comes on hover.",
+      "**Don't** centre a narrow form beside the sidebar; anchor it to the left like the table screens.",
+      "**Don't** put text on a coloured fill without that fill's own text colour.",
+      "**Don't** draw a form field by hand; use the field primitives."
+    ]
+  }
+}
