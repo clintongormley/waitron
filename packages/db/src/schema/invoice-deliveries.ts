@@ -49,9 +49,7 @@ export const invoiceDeliveries = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
-    /* v8 ignore start */
     printJobId: id("print_job_id").references(() => printJobs.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     printerId: id("printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),

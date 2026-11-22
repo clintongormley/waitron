@@ -52,9 +52,7 @@ export const payments = table(
     workingOrderId: id("working_order_id").notNull(),
     // The device that started the payment; a stuck payment's sale is filed under it.
     source: saleSourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     // Null until the sale is written: the money moves first (`associatePaymentWithSale`).
     saleId: id("sale_id"),
     // The collection owner: the box that started the payment.

@@ -21,7 +21,6 @@ export const accountActions = table(
     expiresAt: tsString("expires_at").notNull(),
     usedAt: tsString("used_at"),
   },
-  /* v8 ignore start */
   (t) => [
     foreignKey({
       columns: [t.personId],
@@ -39,5 +38,4 @@ export const accountActions = table(
     check("account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
     check("account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
-  /* v8 ignore stop */
 );

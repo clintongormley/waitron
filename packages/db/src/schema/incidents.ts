@@ -28,12 +28,8 @@ export const incidents = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     source: incidentSourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
-    /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
-    /* v8 ignore stop */
     code: label("code").notNull(),
     params: json<Record<string, unknown>>("params").notNull().default({}),
     severity: label("severity").$type<IncidentSeverity>().notNull(),

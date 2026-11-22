@@ -45,9 +45,7 @@ export const deferredClosures = table(
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
     source: sourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     nodeId: id("node_id").notNull(),
     closedAt: tsString("closed_at").notNull(),
     businessDay: day("business_day").notNull(),

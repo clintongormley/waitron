@@ -23,9 +23,7 @@ export const drawerOpens = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     deviceId: id("device_id").references(() => devices.id),
-    /* v8 ignore start */
     printerId: id("printer_id").references(() => printers.id),
-    /* v8 ignore stop */
     personId: id("person_id").notNull(),
     openedAt: ts("opened_at").notNull().$defaultFn(now),
     reason: enumText("reason", [
@@ -37,14 +35,10 @@ export const drawerOpens = table(
       "card_slip",
       "tender_refund",
     ] as const).notNull(),
-    /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
-    /* v8 ignore stop */
     // Set for every open a bill payment, or a cash refund from one, causes — the payment that issues
     // the invoice included, because the row is written before the invoice exists.
-    /* v8 ignore start */
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
-    /* v8 ignore stop */
     tenderRefundId: id("tender_refund_id").references(() => refunds.id),
     authorizedBy: id("authorized_by"),
     // A person holding cash.drawer authorized the open on behalf of an operator who does not.

@@ -22,31 +22,21 @@ export const devices = table(
     id: id("id").primaryKey().$defaultFn(newId),
     deviceProfileId: id("device_profile_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => deviceProfiles.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     // The explicit receipt, slip and drawer choices; NULL means use the profile's default.
-    /* v8 ignore start */
     receiptPrinterId: id("receipt_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
-    /* v8 ignore stop */
-    /* v8 ignore start */
     paymentSlipPrinterId: id("payment_slip_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
-    /* v8 ignore stop */
-    /* v8 ignore start */
     cashDrawerPrinterId: id("cash_drawer_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
-    /* v8 ignore stop */
     // An invoice choice can name either printer kind.
-    /* v8 ignore start */
     invoicePrinterId: id("invoice_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
-    /* v8 ignore stop */
     // No key into the switchable payments set; selectDeviceReader checks it and reader deletion clears it.
     cardReaderId: id("card_reader_id"),
     label: label("label").notNull(),

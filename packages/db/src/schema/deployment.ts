@@ -14,10 +14,8 @@ export const deployment = table(
     environment: label("environment").notNull(),
     stampedAt: ts("stamped_at").notNull().$defaultFn(now),
   },
-  /* v8 ignore start */
   (t) => [
     check("deployment_singleton_ck", sql`${t.id} = 1`),
     check("deployment_environment_ck", sql`${t.environment} in ('production', 'preproduction')`),
   ],
-  /* v8 ignore stop */
 );

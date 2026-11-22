@@ -95,6 +95,7 @@ export async function appendOrderAmendment(
     .returning({ id: orderAmendments.id });
   /* v8 ignore start */
   if (inserted === undefined) {
+    // This unconditional INSERT returns its row or throws.
     throw new Error("order_amendments: insert returned no row");
   }
   /* v8 ignore stop */

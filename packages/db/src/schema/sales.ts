@@ -73,14 +73,10 @@ export const sales = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     source: saleSourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     seriesId: id("series_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     // Which node processed and chained this sale.
     nodeId: id("node_id").notNull(),
     invoiceNumber: count("invoice_number").notNull(),

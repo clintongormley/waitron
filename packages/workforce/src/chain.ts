@@ -147,6 +147,7 @@ async function attemptAppend(
     .returning({ id: timeEntries.id });
   /* v8 ignore start */
   if (inserted === undefined) {
+    // This unconditional INSERT returns its row or throws.
     throw new Error("time_entries: insert returned no row");
   }
   /* v8 ignore stop */

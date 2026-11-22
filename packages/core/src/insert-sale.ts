@@ -33,7 +33,7 @@ export async function insertSale(
 
   /* v8 ignore start */
   if (inserted === undefined) {
-    // This unconditional INSERT returns its row or throws on a constraint violation.
+    // This unconditional INSERT returns its row or throws.
     throw new Error("sales: insert returned no row");
   }
   /* v8 ignore stop */

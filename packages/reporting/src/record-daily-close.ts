@@ -285,6 +285,7 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
       const [inserted] = await sp.insert(dailyCloses).values(row).returning({ id: dailyCloses.id });
       /* v8 ignore start */
       if (inserted === undefined) {
+        // This unconditional INSERT returns its row or throws.
         throw new Error("daily_closes: insert returned no row");
       }
       /* v8 ignore stop */
