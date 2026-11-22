@@ -48,10 +48,13 @@ Cloud** on the email step. Leave the mail server blank and continue, or enter an
 server. Once the box restarts and connects, Cloud can send staff invitations, password-reset links
 and email-change codes.
 
-Your mail server sends account security notices, role change notices and the warning to a staff
-member's previous address when someone else changes it in **Users**. If you choose Cloud
-and leave the mail server blank, Cloud sends those three notices. To email customers, the daily
-report or other staff notices, add a mail server in **System → Email**.
+If you choose Cloud and leave the mail server blank, Cloud also sends account security notices,
+role change notices and the warning to a staff member's previous address when someone else
+changes it in **Users**. Managers with an email address can also receive certificate expiry
+reminders and box alerts about low space, deleted backups, backup runs that stopped, rolled-back
+upgrades and clock corrections. Your mail server takes priority when you add one. To email
+customers, send the daily report or receive other box alerts by email, add a mail server in
+**System → Email**.
 
 If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
 the mail server you use for staff email.

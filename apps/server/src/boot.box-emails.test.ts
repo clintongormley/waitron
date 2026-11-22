@@ -451,7 +451,11 @@ describe("the running server's notice and email checks", () => {
       }
     },
   );
-  it("Prepare without a mail server sends a staff notice through the Cloud relay", async () => {
+  it.each([
+    ["security_change", false],
+    ["box_alert", false],
+    ["box_alert", true],
+  ] as const)("routes a Prepare %s notice with saved SMTP=%s", async (kind, savedSmtp) => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
     let submitted: Record<string, unknown> | undefined;
@@ -485,7 +489,47 @@ describe("the running server's notice and email checks", () => {
           },
         },
       });
-      await queueSecurityNotice(f.venueId);
+      if (kind === "security_change") {
+        await queueSecurityNotice(f.venueId);
+      } else {
+        const [person] = await seedPersons(suite.db, {
+          displayName: "Notice recipient",
+          role: "manager",
+          email: "notice@example.test",
+        });
+        await withTransaction(suite.db, async (tx) => {
+          await saveCloudVenueId(tx, f.venueId);
+          const now = new Date();
+          const [incident] = await tx
+            .insert(incidents)
+            .values({
+              source: "backup",
+              code: "backup.archives_deleted",
+              params: { count: 2, date: "2026-11-01", lastDate: "2026-11-02", severalDays: true },
+              severity: "warning",
+              detectedAt: now.toISOString(),
+            })
+            .returning({ id: incidents.id });
+          await enqueueMail(tx, {
+            kind,
+            dedupeKey: "notice",
+            personId: person!.id,
+            subjectId: incident!.id,
+            params: { code: "backup.archives_deleted" },
+            now,
+            notAfter: new Date(now.getTime() + 3600000),
+          });
+          if (savedSmtp)
+            await saveSmtpForTest(
+              tx,
+              loadKeyRing({
+                WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+                WAITRON_CREDENTIALS_KEY_VERSION: "1",
+              }),
+              { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+            );
+        });
+      }
       holder.pauseMail = true;
       await bootServer(
         booted,
@@ -497,12 +541,25 @@ describe("the running server's notice and email checks", () => {
       );
       await holder.cloudPass;
       await runMailPass(holder.mail!);
-      expect(submitted).toMatchObject({
-        version: 2,
-        class: "security_change",
-        recipient: "notice@example.test",
-      });
-      expect(holder.smtp).toEqual([]);
+      if (savedSmtp) {
+        expect(submitted).toBeUndefined();
+        expect(holder.smtp).toHaveLength(1);
+      } else {
+        expect(submitted).toMatchObject({
+          version: 2,
+          class: kind,
+          recipient: "notice@example.test",
+          ...(kind === "box_alert" && {
+            facts: {
+              code: "backup.archives_deleted",
+              count: 2,
+              date: "2026-11-01",
+              lastDate: "2026-11-02",
+            },
+          }),
+        });
+        expect(holder.smtp).toEqual([]);
+      }
     } finally {
       await shutDown(booted);
       origin.mockRestore();

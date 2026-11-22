@@ -86,6 +86,77 @@ async function queue(
 }
 const row = () => readMail(suite.db, "notice");
 
+const clock = {
+  before: "2026-10-25T00:59:00.000Z",
+  after: "2026-10-25T01:50:00.000Z",
+  beforeOffsetMinutes: 120,
+  afterOffsetMinutes: 60,
+  source: "staff",
+};
+const cloudCases = [
+  { code: "storage.space_low", params: {}, facts: {} },
+  {
+    code: "backup.archives_deleted",
+    params: { count: 2, date: "2026-11-01", lastDate: "2026-11-07", severalDays: true },
+    facts: { count: 2, date: "2026-11-01", lastDate: "2026-11-07" },
+  },
+  {
+    code: "backup.run_stopped",
+    params: { neededBytes: 1024, availableBytes: 512 },
+    facts: { neededBytes: 1024, availableBytes: 512 },
+  },
+  {
+    code: "upgrade.rolled_back",
+    params: { fromVersion: "1.2.0-rc.1", toVersion: "1.1.0" },
+    facts: { fromVersion: "1.2.0-rc.1", toVersion: "1.1.0" },
+  },
+  {
+    code: "clock.corrected",
+    params: {
+      ...clock,
+      stepMs: -90_000.8,
+      person: ` Anna `,
+      device: "T".repeat(81),
+      unverified: false,
+    },
+    facts: { ...clock, stepMs: -90_001, person: "Anna", device: "T".repeat(80), unverified: false },
+  },
+  {
+    code: "clock.corrected",
+    params: { ...clock, stepMs: 90_000.4, person: "Anna", device: "Till", unverified: true },
+    facts: { ...clock, stepMs: 90_000, unverified: true },
+  },
+] as const;
+
+it.each(cloudCases)("sends only the Cloud facts for $code", async ({ code, params, facts }) => {
+  const incident = code === "clock.corrected" || code === "backup.archives_deleted";
+  await queue(code, { incident, params });
+  const grant = { id: "grant", revision: 1, enabled: true, expiresAt: "2026-11-11T00:00:00Z" };
+  const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+  await runMailPass({
+    ...deps,
+    resolveDelivery: async () => ({ mode: "unconfigured" }),
+    resolveAccountRelay: async () => grant,
+    noticeRelayAllowed: async () => true,
+    sendCloudEmail,
+  });
+  expect(sendCloudEmail).toHaveBeenCalledExactlyOnceWith(
+    grant,
+    expect.any(String),
+    {
+      class: "box_alert",
+      recipient: "manager@example.test",
+      displayName: "Corner Bistro",
+      locale: "es-ES",
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-11-10T12:00:00.000Z",
+      facts: { code, ...facts },
+    },
+    deps.signal,
+  );
+  expect(await row()).toMatchObject({ status: "sent", attempts: 1 });
+});
+
 it("sends an open alert in the manager's own language without personal log fields", async () => {
   const params = { count: 2, date: "2026-10-27", lastDate: "2026-10-27", severalDays: false };
   await queue("backup.archives_deleted", { params });

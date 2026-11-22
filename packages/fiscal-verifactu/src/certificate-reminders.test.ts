@@ -91,6 +91,12 @@ describe("claimReminder", () => {
       recipient: "ana@example.com",
       subject: "AEAT certificate expires on 25 Oct 2026",
       text: EN_EXPIRING,
+      notice: {
+        language: "en",
+        timeZone: "Europe/Madrid",
+        expiresAt: "2026-08-26T22:00:00.000Z",
+        facts: { stage: "due", date: "2026-10-25", daysLeft: 60 },
+      },
     });
     const second = await claimAt(WARNING, [BEA, ANA]);
     expect(second?.recipient).toBe("bea@example.com");
@@ -117,6 +123,12 @@ describe("claimReminder", () => {
       recipient: "ana@example.com",
       subject: "AEAT certificate expires on 25 Oct 2026",
       text: EN_EXPIRING.replace("60 day(s)", "14 day(s)"),
+      notice: {
+        language: "en",
+        timeZone: "Europe/Madrid",
+        expiresAt: "2026-10-11T22:00:00.000Z",
+        facts: { stage: "due", date: "2026-10-25", daysLeft: 14 },
+      },
     });
     expect(urgent!.id).not.toBe(warning!.id);
   });
@@ -202,7 +214,20 @@ describe("claimReminder", () => {
       recipient: "bea@example.com",
       subject: "El certificado de la AEAT caduca el 25 oct 2026",
       text: ES_EXPIRING,
+      notice: {
+        language: "es",
+        timeZone: "Europe/Madrid",
+        expiresAt: "2026-08-26T22:00:00.000Z",
+        facts: { stage: "due", date: "2026-10-25", daysLeft: 60 },
+      },
     });
+  });
+
+  it("ends a due notice at certificate expiry when it comes before midnight", async () => {
+    await seedTenantNodeSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const reminder = await claimAt("2026-10-24T22:58:00Z", [ANA]);
+    expect(reminder?.notice?.expiresAt).toBe("2026-10-24T22:59:00.000Z");
   });
 
   it("says the certificate expired, in each language, from the instant it ends", async () => {
@@ -215,6 +240,18 @@ describe("claimReminder", () => {
     await expect(claimAt(EXPIRED, [BEA])).resolves.toMatchObject({
       subject: "El certificado de la AEAT caducó el 25 oct 2026",
       text: "El certificado de la AEAT caducó el 25 oct 2026. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local.",
+    });
+  });
+
+  it("supplies the expired notice date without a days-left field", async () => {
+    await seedTenantNodeSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const reminder = await claimAt(EXPIRED, [BEA]);
+    expect(reminder?.notice).toEqual({
+      language: "es",
+      timeZone: "Europe/Madrid",
+      expiresAt: "2026-10-25T23:00:00.000Z",
+      facts: { stage: "expired", date: "2026-10-25" },
     });
   });
 

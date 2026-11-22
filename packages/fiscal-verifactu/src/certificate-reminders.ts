@@ -1,14 +1,19 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { readHistoryNodes, type Transaction } from "@waitron/db";
+import type { FiscalCertificateReminder } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
-import { calendarDaysLeft, certificateStage, localDate } from "./certificate-dates.js";
+import {
+  calendarDaysLeft,
+  certificateStage,
+  localDate,
+  nextLocalMidnight,
+} from "./certificate-dates.js";
 import { venueTimeZone } from "./certificate-install.js";
 import { latestInstallAmong } from "./certificate-record.js";
 import { fiscalCertificateReminders } from "./schema/certificate-reminders.js";
 
 type Language = "en" | "es";
 type Recipient = { personId: string; email: string; language: Language };
-type Reminder = { id: string; recipient: string; subject: string; text: string };
 
 const RETRY_AFTER_MS = 86_400_000;
 const DAY_LOCALES: Record<Language, string> = { en: "en-GB", es: "es-ES" };
@@ -61,7 +66,7 @@ export async function claimReminder(
   deps: { nodeId: string },
   recipients: readonly Recipient[],
   now: Date,
-): Promise<Reminder | null> {
+): Promise<FiscalCertificateReminder | null> {
   const history = await readHistoryNodes(tx, deps.nodeId as NodeId);
   const install = await latestInstallAmong(tx, history);
   if (install === null) return null;
@@ -122,12 +127,22 @@ export async function claimReminder(
         .returning({ id: fiscalCertificateReminders.id });
     }
     if (claimed === undefined) continue;
-    const date = formatDay(localDate(install.validUntil, timeZone), recipient.language);
+    const date = localDate(install.validUntil, timeZone);
     const days = calendarDaysLeft(now, install.validUntil, timeZone);
+    const expired = stage === "expired";
+    const deadline = expired
+      ? now.getTime() + RETRY_AFTER_MS
+      : Math.min(install.validUntil.getTime(), Date.parse(nextLocalMidnight(now, timeZone)));
     return {
       id: claimed.id,
       recipient: recipient.email,
-      ...wording(recipient.language, stage === "expired", date, days),
+      ...wording(recipient.language, expired, formatDay(date, recipient.language), days),
+      notice: {
+        language: recipient.language,
+        timeZone,
+        expiresAt: new Date(deadline).toISOString(),
+        facts: expired ? { stage: "expired", date } : { stage: "due", date, daysLeft: days },
+      },
     };
   }
   return null;

@@ -121,6 +121,7 @@ function duty({ startedAt = at(0) } = {}) {
     lowSince: null as Date | null,
     recipients: [ANNA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
+    cloudRelayEnabled: false,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     incidents: [] as readonly EmailedIncident[],
     backupStopped: undefined as BackupOutcomeHolder["runStopped"],
@@ -154,6 +155,7 @@ function duty({ startedAt = at(0) } = {}) {
     emailedIncidents,
     backupStopped: () => state.backupStopped,
     context,
+    cloudRelayEnabled: async () => state.cloudRelayEnabled,
     send: (message) =>
       send(message).then((outcome) => (outcome === "uncertain" ? "unknown" : outcome)),
     isPrimary: () => state.primary,
@@ -250,6 +252,34 @@ function duty({ startedAt = at(0) } = {}) {
 function notice(code: string): OwnedStaffNotice {
   return { owner: "fiscal-verifactu", key: code, code, severity: "error", params: {} };
 }
+
+it("queues low space through Cloud and keeps an unusable clock on the box path", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = true;
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+  await d.check();
+  expect((await d.rows()).map(({ params }) => params.code)).toEqual([
+    "storage.space_low",
+    "storage.space_low",
+  ]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "clock.unusable",
+  ]);
+});
+
+it("leaves full-disk mail on its direct path even with Cloud enabled", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = true;
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.diskSince = at(0);
+  await d.check();
+  expect(await d.rows()).toEqual([]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "storage.disk_full",
+  ]);
+});
 
 const OLD_BACKUPS: EmailedIncident = {
   id: "i-old-backups",

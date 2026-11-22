@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { cancelMail, incidents, readVenue } from "@waitron/db";
 import { boxEmailMessage, type BoxAlertCode } from "./box-alert-email.js";
+import { cloudEmailLocale, cloudNoticeLabel, type CloudBoxAlertFacts } from "./cloud-email.js";
 import type { Logger } from "./logger.js";
 import { readManagerEmailRecipient } from "./manager-email-recipients.js";
 import type { MailKindOwner } from "./mail-sender.js";
@@ -16,8 +17,72 @@ export interface BoxAlertWords {
   code: BoxAlertCode;
   language: "en" | "es";
   venue: string;
+  timeZone: string;
   params?: Readonly<Record<string, unknown>>;
 }
+
+function cloudFacts(
+  code: BoxAlertCode,
+  params: Readonly<Record<string, unknown>> = {},
+): CloudBoxAlertFacts | undefined {
+  switch (code) {
+    case "storage.space_low":
+      return { code };
+    case "backup.archives_deleted": {
+      const { count, date, lastDate } = params;
+      if (typeof count === "number" && typeof date === "string" && typeof lastDate === "string")
+        return { code, count, date, lastDate };
+      break;
+    }
+    case "backup.run_stopped": {
+      const { neededBytes, availableBytes } = params;
+      if (typeof neededBytes === "number" && typeof availableBytes === "number")
+        return { code, neededBytes, availableBytes };
+      break;
+    }
+    case "upgrade.rolled_back": {
+      const { fromVersion, toVersion } = params;
+      if (typeof fromVersion === "string" && typeof toVersion === "string")
+        return { code, fromVersion, toVersion };
+      break;
+    }
+    case "clock.corrected": {
+      const { before, after, beforeOffsetMinutes, afterOffsetMinutes, stepMs, source, unverified } =
+        params;
+      if (
+        typeof before !== "string" ||
+        typeof after !== "string" ||
+        typeof beforeOffsetMinutes !== "number" ||
+        typeof afterOffsetMinutes !== "number" ||
+        typeof stepMs !== "number" ||
+        (source !== "admin" && source !== "staff" && source !== "setup") ||
+        typeof unverified !== "boolean"
+      )
+        break;
+      const person =
+        !unverified && typeof params.person === "string" && cloudNoticeLabel(params.person);
+      const device =
+        !unverified &&
+        source === "staff" &&
+        typeof params.device === "string" &&
+        cloudNoticeLabel(params.device);
+      return {
+        code,
+        before,
+        after,
+        beforeOffsetMinutes,
+        afterOffsetMinutes,
+        stepMs: Math.round(stepMs),
+        source,
+        unverified,
+        ...(person && { person }),
+        ...(device && { device }),
+      };
+    }
+  }
+  return undefined;
+}
+
 export function boxAlertMail(deps: {
   previousEpisodeMailIds: ReadonlySet<string>;
   venueLanguage: "en" | "es";
@@ -48,13 +113,33 @@ export function boxAlertMail(deps: {
         params =
           typeof mail.params.wording === "string" ? JSON.parse(mail.params.wording) : undefined;
       }
+      const venue = await readVenue(tx);
       return {
         recipient: recipient.email,
-        prepared: { code, language: recipient.language, venue: (await readVenue(tx)).name, params },
+        prepared: {
+          code,
+          language: recipient.language,
+          venue: venue.name,
+          timeZone: venue.timeZone,
+          params,
+        },
       };
     },
-    async compose(words) {
-      return boxEmailMessage(words.code, words.language, words.venue, words.params);
+    async compose(words, mail) {
+      const facts = cloudFacts(words.code, words.params ?? undefined);
+      return {
+        ...boxEmailMessage(words.code, words.language, words.venue, words.params),
+        ...(facts && {
+          staffNotice: {
+            class: "box_alert",
+            displayName: words.venue,
+            locale: cloudEmailLocale(words.language),
+            timeZone: words.timeZone,
+            expiresAt: mail.notAfter,
+            facts,
+          },
+        }),
+      };
     },
     async settle(tx, mail, outcome, now) {
       if (outcome.status === "expired") return;
