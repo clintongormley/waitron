@@ -44,8 +44,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { attendanceJob } from "./attendance-loop.js";
 import { mailSendJob } from "./mail-sender.js";
-import { runPendingCardLoop } from "./bill-payments-loop.js";
-import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { cardFollowUpJob } from "./card-follow-up.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -108,13 +107,9 @@ vi.mock("./mail-sender.js", async (load) => {
     }),
   };
 });
-vi.mock("./bill-payments-loop.js", async (load) => {
-  const a = await load<typeof import("./bill-payments-loop.js")>();
-  return { ...a, runPendingCardLoop: vi.fn(a.runPendingCardLoop) };
-});
-vi.mock("./tender-refund-recovery.js", async (load) => {
-  const a = await load<typeof import("./tender-refund-recovery.js")>();
-  return { ...a, runTenderRefundRecoveryLoop: vi.fn(a.runTenderRefundRecoveryLoop) };
+vi.mock("./card-follow-up.js", async (load) => {
+  const a = await load<typeof import("./card-follow-up.js")>();
+  return { ...a, cardFollowUpJob: vi.fn(a.cardFollowUpJob) };
 });
 vi.mock("./menu-activation.js", async (load) => {
   const a = await load<typeof import("./menu-activation.js")>();
@@ -127,13 +122,7 @@ const NODE = "33333333-3333-4333-8333-333333333333";
 const ORIGIN = "http://127.0.0.1:32123";
 const PATH = "/management-api/venue-details/time-zone-repair";
 const PASSWORD = "syntheticPassword123";
-const duties = [
-  attendanceJob,
-  mailSendJob,
-  runPendingCardLoop,
-  runTenderRefundRecoveryLoop,
-  menuActivationJob,
-];
+const duties = [attendanceJob, mailSendJob, cardFollowUpJob, menuActivationJob];
 let scratch: string;
 let server: StartedServer | undefined;
 let manager: string;
@@ -311,7 +300,7 @@ describe("startup zone admission", () => {
     ).toBe(2);
     await boot();
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
-    expect(runPendingCardLoop).toHaveBeenCalledOnce();
+    expect(cardFollowUpJob).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -847,6 +836,6 @@ describe("startup zone admission", () => {
     ).toBe(2);
     await boot();
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
-    expect(runPendingCardLoop).toHaveBeenCalledOnce();
+    expect(cardFollowUpJob).toHaveBeenCalledOnce();
   });
 });

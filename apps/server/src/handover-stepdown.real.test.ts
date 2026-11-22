@@ -52,29 +52,15 @@ vi.mock("./start-peer-check.js", async (importOriginal) => ({
   repairAtStart: () => Promise.resolve(),
 }));
 
-// The pending-card loop sleeps at most 50 ms between passes, so a loop nobody stopped sweeps again
+// The card follow-up job sleeps at most 50 ms between passes, so a loop nobody stopped sweeps again
 // inside the window the test holds open after the stepdown.
-vi.mock("./bill-payments-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
+vi.mock("./card-follow-up.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./card-follow-up.js")>();
   return {
     ...actual,
-    runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {
-      const [deps] = args;
-      return actual.runPendingCardLoop({
-        ...deps,
-        sleep: (ms, signal) =>
-          new Promise<void>((done) => {
-            const timer = setTimeout(done, Math.min(ms, 50));
-            signal.addEventListener(
-              "abort",
-              () => {
-                clearTimeout(timer);
-                done();
-              },
-              { once: true },
-            );
-          }),
-      });
+    cardFollowUpJob: (...args: Parameters<typeof actual.cardFollowUpJob>) => {
+      const job = actual.cardFollowUpJob(...args);
+      return { ...job, minSleepMs: 50, maxSleepMs: 50 };
     },
   };
 });

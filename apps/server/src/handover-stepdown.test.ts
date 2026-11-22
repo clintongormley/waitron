@@ -49,8 +49,7 @@ const BINDING: HandoverBinding = {
   membership: { term: 3, digest: "a".repeat(64) },
 };
 
-const ABORTS = ["pendingCardController", "tenderRefundController", "jobRunner"] as const;
-const LOOPS = ["pendingCardLoop", "tenderRefundLoop"] as const;
+const ABORTS = ["jobRunner"] as const;
 const STOPPERS = [
   "certificateDiagnosis",
   "spareSettings",
@@ -86,16 +85,6 @@ function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
       return Promise.resolve();
     },
   };
-  for (const name of LOOPS) {
-    Object.defineProperty(handles, name, {
-      enumerable: true,
-      configurable: true,
-      get: () => {
-        calls.push(name);
-        return Promise.resolve();
-      },
-    });
-  }
   handles.unsubscribeFromChanges = () => calls.push("unsubscribeFromChanges");
   handles.liveEvents = { close: () => calls.push("liveEvents") };
   for (const [name, value] of Object.entries(overrides)) {
@@ -370,25 +359,6 @@ describe("a stepdown", () => {
     expect(passes).toHaveLength(1);
   });
 
-  it("a throw while signalling still schedules the restart", async () => {
-    await begin();
-    const duties = fakeDuties({
-      pendingCardController: {
-        abort: () => {
-          throw new Error("abort failed");
-        },
-      },
-    });
-    const r = rig(suite.node, { duties });
-    const response = await r.app.request("/stepdown", { method: "POST" });
-    expect(response.status).toBe(500);
-    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
-    expect(r.deps.gate.isClosed()).toBe(true);
-    // The duties after the one that threw were still told.
-    expect(r.controllers.tenderRefundController!.signal.aborted).toBe(true);
-    expect(await readHandoverRestriction(suite.node, SOURCE)).not.toBeNull();
-  });
-
   it("a runner signal that throws does not keep the early stops from being told", async () => {
     await begin();
     const duties = fakeDuties({
@@ -403,12 +373,14 @@ describe("a stepdown", () => {
     const r = rig(suite.node, { duties });
     const response = await r.app.request("/stepdown", { method: "POST" });
     expect(response.status).toBe(500);
+    expect(r.deps.gate.isClosed()).toBe(true);
     expect(r.calls.slice(0, 3)).toEqual([
       "certificateDiagnosis",
       "spareSettings",
       "handoverDestinationDuty",
     ]);
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    expect(await readHandoverRestriction(suite.node, SOURCE)).not.toBeNull();
   });
 
   it("a close that fails is logged and the box still restarts", async () => {

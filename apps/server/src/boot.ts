@@ -245,7 +245,6 @@ import { withUnfinishedJoinEnvironment } from "./unfinished-join.js";
 import { accountActionMail } from "./account-mail.js";
 import { reconcilePassFor, reconcilerAsDuty, reconciliationMoneyGates } from "./reconcile-duty.js";
 import { drainJob, reconcileJob } from "./fiscal-jobs.js";
-import type { PassReport } from "./pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { TradingAdmission } from "./trading-admission.js";
@@ -319,7 +318,9 @@ import { readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { invoiceMail } from "./invoice-mail.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceJob } from "./attendance-loop.js";
-import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
+import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
+import { cardFollowUpJob } from "./card-follow-up.js";
 import { boxAlertMail } from "./box-alert-mail.js";
 import { attendanceReminderMail } from "./attendance-email.js";
 import { mountModulesApi } from "./modules-api.js";
@@ -407,9 +408,8 @@ import { certificateReminderJob } from "./certificate-reminder-worker.js";
 import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
-import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
-import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary, type AdoptDeps } from "./adopt.js";
 import { rememberCheckedAddressesIn, type BoxLookup } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -615,140 +615,8 @@ export function sweepOwners(
   return { nodeId, takenOverFrom, unowned: role === "primary" };
 }
 
-/** Resolve pending payments, settle bills, then look up receipt details. Secondary boxes
- * sweep their own payments even when they never settle bills. This stays out of health duties
- * because a box without a card provider has nothing to sweep. */
-export function withPendingSweep(
-  settle: (now: Date) => Promise<PassReport>,
-  sweepProviders: () => Promise<readonly PaymentProvider[]>,
-  owners: () => CollectionOwners,
-  log: Logger,
-  signal?: AbortSignal,
-): (now: Date) => Promise<PassReport> {
-  return async (now) => {
-    if (signal?.aborted) return settle(now);
-    let owned: CollectionOwners;
-    let providers: readonly PaymentProvider[];
-    try {
-      owned = owners();
-      providers = await sweepProviders();
-    } catch (error) {
-      log("warn", "resolve_pending.failed", { error: String(error) });
-      return settle(now);
-    }
-    for (const provider of providers) {
-      if (signal?.aborted) break;
-      try {
-        const r = await provider.resolvePending(now, owned, signal);
-        const hasWork =
-          r.nextDueAt !== null || r.forwarded > 0 || r.declined > 0 || r.incidentsRaised > 0;
-        log(hasWork ? "info" : "debug", "resolve_pending.complete", {
-          provider: provider.provider,
-          captured: r.forwarded,
-          failed: r.declined,
-          incidentsRaised: r.incidentsRaised,
-          nextDueAt: r.nextDueAt?.toISOString() ?? null,
-        });
-      } catch (error) {
-        log("warn", "resolve_pending.failed", {
-          provider: provider.provider,
-          error: String(error),
-        });
-      }
-    }
-    const report = await settle(now);
-    let nextDueAt = report.nextDueAt;
-    for (const provider of providers) {
-      if (signal?.aborted) break;
-      try {
-        const due = await provider.fillMissingCardDetails?.(
-          owned,
-          ({ outcome, ...fields }) =>
-            log("info", `payment.card_details_${outcome}`, {
-              provider: provider.provider,
-              ...fields,
-            }),
-          signal,
-        );
-        if (due != null && (nextDueAt === null || due < nextDueAt)) nextDueAt = due;
-      } catch (error) {
-        log("warn", "payment.card_details_failed", {
-          provider: provider.provider,
-          errorCode: codeOf(error),
-        });
-      }
-    }
-    return nextDueAt === report.nextDueAt ? report : { ...report, nextDueAt };
-  };
-}
-
-export function pendingCardPass(
-  parts: {
-    sweepProviders: () => Promise<readonly PaymentProvider[]>;
-    owners: () => CollectionOwners;
-    settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>;
-    getRole: () => SingletonRole;
-    log: Logger;
-  },
-  signal: AbortSignal,
-): (now: Date) => Promise<PassReport> {
-  const { getRole, log } = parts;
-  return withPendingSweep(
-    withPendingBillPayments(
-      async () => ({ duties: [], nextDueAt: null }),
-      parts.settle,
-      getRole,
-      log,
-      signal,
-    ),
-    parts.sweepProviders,
-    parts.owners,
-    log,
-    signal,
-  );
-}
-
-/** How soon the loop comes back while a bill payment or refund is pending: a bill stays locked
- * until it settles, and with nothing else due the loop would otherwise sleep its whole ceiling. */
-const BILL_PENDING_RECHECK_MS = 60_000;
-
 /**
- * After each pass, settle the pending card bill payments no attempt in this process is driving
- * (`settlePendingBillPayments`, bill payments design §5.4). A failure never changes the inner
- * report; while a payment stays pending it brings the report's next due time forward to
- * {@link BILL_PENDING_RECHECK_MS} from now, never later than the report's own. Settling files
- * invoices and fails payments this process is not driving, so it runs only while `getRole` answers
- * `primary`, read for each pass.
- */
-export function withPendingBillPayments(
-  inner: (now: Date) => Promise<PassReport>,
-  settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>,
-  getRole: () => SingletonRole,
-  log: Logger,
-  signal?: AbortSignal,
-): (now: Date) => Promise<PassReport> {
-  return async (now) => {
-    const report = await inner(now);
-    if (signal?.aborted || getRole() !== "primary") return report;
-    try {
-      const { errors, pending, ...counts } = await settle(signal);
-      if (counts.received + counts.failed > 0) {
-        log("info", "bill_payment.settled", counts);
-      }
-      for (const failure of errors) log("warn", "bill_payment.settle_failed", failure);
-      const recheckAt = new Date(now.getTime() + BILL_PENDING_RECHECK_MS);
-      if (pending > 0 && (report.nextDueAt === null || report.nextDueAt > recheckAt)) {
-        return { ...report, nextDueAt: recheckAt };
-      }
-    } catch (error) {
-      log("warn", "bill_payment.settle_failed", { error: String(error) });
-    }
-    return report;
-  };
-}
-
-/**
- * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
+ * The card follow-up job enumerates the demo/prepare simulator (if one was built),
  * plus every pooled card provider this taxpayer has a sealed credential for. A provider with no sealed
  * credential is not swept: its `resolvePending` would only fail on the missing credential.
  *
@@ -4746,13 +4614,14 @@ async function bootServer(
 
   // Read once: rows naming this box as destination appear only in a promotion, which restarts it.
   const takenOverFrom = await readTakenOverFrom(db, tradingContext.nodeId);
-  const pendingCardController = new AbortController();
-  const pendingCardLoop = runPendingCardLoop({
-    admission: tradingAdmission,
-    pass: pendingCardPass(
+  const refundProviderFor = refundProvidersOf({
+    simulator: cardSimulator.forExistingPayments,
+    pool: cardPool,
+  });
+  jobRunner.add(
+    cardFollowUpJob(
       {
-        // A fenced box or a mirror does not sweep: the box holding the venue's database asks, and
-        // one box asks, because a sweep can cancel a payment at the provider.
+        // A sweep can cancel a payment. Only the box holding the venue's database asks the provider.
         sweepProviders: fencedOrMirror
           ? () => Promise.resolve([])
           : connectedCardProviderSweep({
@@ -4761,8 +4630,7 @@ async function bootServer(
               contributions: CARD_PROVIDERS,
               simulator: cardSimulator.forExistingPayments,
             }),
-        owners: () =>
-          sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
+        owners: () => sweepOwners(tradingContext.nodeId, readSingletonRole(), takenOverFrom),
         settle: () =>
           settlePendingBillPayments({
             db,
@@ -4773,47 +4641,29 @@ async function bootServer(
             clockUnconfirmed: startClockHolds,
             log,
           }),
-        getRole: () => holders.singletonRole.current,
+        recoverRefunds: (stopSignal) =>
+          recoverTenderRefunds({
+            db,
+            backend: nodeBackend,
+            admission: tradingAdmission,
+            cfg: tradingContext,
+            clock: tillClock,
+            refundProviderFor,
+            attendance: attendanceRecorder,
+            clockUnconfirmed: startClockHolds,
+            stopSignal,
+          }),
+        startRefundResolvers: () => startTenderRefundResolvers(db),
+        stopRefundResolvers: () => stopTenderRefundResolvers(db),
+      },
+      {
+        getRole: readSingletonRole,
+        recoversRefunds: !fencedOrMirror,
+        admissionReady: () => tradingAdmission.snapshot().state === "ready",
         log,
       },
-      pendingCardController.signal,
     ),
-    now,
-    signal: pendingCardController.signal,
-    log: (level, event, fields) => log(level, event, { ...fields, loop: "pending_cards" }),
-  });
-  undoOnFailure.push(async () => {
-    pendingCardController.abort();
-    await pendingCardLoop;
-  });
-
-  const tenderRefundController = new AbortController();
-  const tenderRefundLoop =
-    isSingletonPrimary && !fencedOrMirror
-      ? runTenderRefundRecoveryLoop({
-          db,
-          backend: nodeBackend,
-          admission: tradingAdmission,
-          cfg: tradingContext,
-          clock: tillClock,
-          refundProviderFor: refundProvidersOf({
-            simulator: cardSimulator.forExistingPayments,
-            pool: cardPool,
-          }),
-          attendance: attendanceRecorder,
-          clockUnconfirmed: startClockHolds,
-          signal: tenderRefundController.signal,
-          onShutdownTimeout: (refundIds) =>
-            log("warn", "tender_refund.shutdown_pending", { refundIds }),
-          isPrimary: () => holders.singletonRole.current === "primary",
-          onError: (error) =>
-            log("error", "tender_refund.recovery_failed", { errorCode: codeOf(error) }),
-        })
-      : undefined;
-  undoOnFailure.push(async () => {
-    tenderRefundController.abort();
-    await tenderRefundLoop;
-  });
+  );
 
   const mdns = startMdnsResponder({
     // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
@@ -4874,10 +4724,6 @@ async function bootServer(
   undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
   undoOnFailure.push(stopJobRunner);
   const duties = backgroundDuties({
-    pendingCardController,
-    tenderRefundController,
-    pendingCardLoop,
-    tenderRefundLoop,
     certificateDiagnosis,
     unsubscribeFromChanges,
     jobRunner,

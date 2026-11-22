@@ -35,7 +35,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 //   answer time never reaches the box's clock. `WAITRON_FISCAL_TEST_SUBMISSIONS` lets a preproduction box file to it.
 // - The card provider is `FakePaymentProvider` behind the held Stripe credential, and Stripe's
 //   reconciler finds nothing. A sweep on M1 hears no answer for an open payment; one on M2 captures.
-//   The pending-card loop sleeps at most 50 ms between passes.
+//   The card follow-up job sleeps at most 50 ms between passes.
 // - `restart` and a spied `process.kill` stand for the SIGTERM that ends a real process; the test
 //   starts the box again in this process.
 // - `requestFromBox` and `requestProvenFromBox` say no request comes from the box itself: every
@@ -154,29 +154,15 @@ const outside = vi.hoisted(() => ({
   fake: null as unknown,
 }));
 
-// The pending-card loop sleeps at most 50 ms between passes, so a box that sweeps does so inside the
+// The card follow-up job sleeps at most 50 ms between passes, so a box that sweeps does so inside the
 // run, and a sweep count that stays put is a loop that stopped.
-vi.mock("./bill-payments-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
+vi.mock("./card-follow-up.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./card-follow-up.js")>();
   return {
     ...actual,
-    runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {
-      const [deps] = args;
-      return actual.runPendingCardLoop({
-        ...deps,
-        sleep: (ms, signal) =>
-          new Promise<void>((done) => {
-            const timer = setTimeout(done, Math.min(ms, 50));
-            signal.addEventListener(
-              "abort",
-              () => {
-                clearTimeout(timer);
-                done();
-              },
-              { once: true },
-            );
-          }),
-      });
+    cardFollowUpJob: (...args: Parameters<typeof actual.cardFollowUpJob>) => {
+      const job = actual.cardFollowUpJob(...args);
+      return { ...job, minSleepMs: 50, maxSleepMs: 50 };
     },
   };
 });
@@ -335,7 +321,7 @@ interface Box {
   server?: StartedServer;
   /** The provider the running server's card sweep and till reach. */
   card?: FakePaymentProvider;
-  /** How many sweeps of the pending-card loop reached the provider, by any run of this box. */
+  /** How many sweeps of the card follow-up job reached the provider, by any run of this box. */
   sweeps: number;
   /** Resolved the first time this run of the box asks for a restart. */
   restartAsked: ReturnType<typeof hold>;

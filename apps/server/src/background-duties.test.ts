@@ -6,12 +6,10 @@ import {
 } from "./background-duties.js";
 import { createJobRunner } from "./job-runner.js";
 
-const ABORTS = ["pendingCardController", "tenderRefundController", "jobRunner"];
+const ABORTS = ["jobRunner"];
 
 const CLOSERS = [
   "jobRunner",
-  "pendingCardLoop",
-  "tenderRefundLoop",
   "certificateDiagnosis",
   "unsubscribeFromChanges",
   "spareSettings",
@@ -27,20 +25,8 @@ function recordingHandles(
   calls: string[],
   overrides: Partial<BackgroundDutyHandles> = {},
 ): BackgroundDutyHandles {
-  const aborter = (name: string) => ({ abort: () => void calls.push(`abort ${name}`) });
-  const awaited = (name: string) =>
-    ({
-      then: (resolve: () => void) => {
-        calls.push(`await ${name}`);
-        resolve();
-      },
-    }) as unknown as Promise<void>;
   const stopper = (name: string) => ({ stop: () => void calls.push(`stop ${name}`) });
   return {
-    pendingCardController: aborter("pendingCardController"),
-    tenderRefundController: aborter("tenderRefundController"),
-    pendingCardLoop: awaited("pendingCardLoop"),
-    tenderRefundLoop: awaited("tenderRefundLoop"),
     certificateDiagnosis: stopper("certificateDiagnosis"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     jobRunner: {
@@ -101,8 +87,6 @@ describe("background duties", () => {
     expect(calls).toEqual([
       ...ABORTS.map((name) => `abort ${name}`),
       "stop jobRunner",
-      "await pendingCardLoop",
-      "await tenderRefundLoop",
       "stop certificateDiagnosis",
       "call unsubscribeFromChanges",
       "stop spareSettings",
@@ -211,22 +195,19 @@ describe("background duties", () => {
 
   it("carries on past a failing abort to every other abort and closer, then rejects with the first failure", async () => {
     const calls: string[] = [];
-    const first = new Error("pending-card abort failed");
+    const first = new Error("job runner abort failed");
     let finish!: () => void;
     const running = new Promise<void>((resolve) => (finish = resolve));
     const handles = recordingHandles(calls, {
-      pendingCardController: {
-        abort: () => {
+      jobRunner: {
+        signalStepdown: () => {
           throw first;
         },
-      },
-      tenderRefundController: {
-        abort: () => {
-          calls.push("abort tenderRefundController");
-          throw new Error("refund abort failed");
+        stopJobs: () => running,
+        stopServices: async () => {
+          calls.push("stop jobRunnerServices");
         },
       },
-      pendingCardLoop: running,
       spareSettings: { stop: () => Promise.reject(new Error("box email failed")) },
     });
 
@@ -237,7 +218,6 @@ describe("background duties", () => {
     stopping.catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(settled).toBe(false);
-    expect(calls).toContain("abort tenderRefundController");
     expect(calls).not.toContain("stop jobRunnerServices");
 
     finish();

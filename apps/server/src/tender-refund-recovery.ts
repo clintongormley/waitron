@@ -3,14 +3,7 @@ import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, withTransaction } from "@waitron/db";
 import { raisePendingRefundUnresolved } from "./bill-refund-alerts.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
-import {
-  recoverCardRefund,
-  refundsPaused,
-  tenderRefundIsLive,
-  startTenderRefundResolvers,
-  stopTenderRefundResolvers,
-} from "./tender-refund-sends.js";
-import { realSleep, sleepMsFor } from "./loop.js";
+import { recoverCardRefund, refundsPaused, tenderRefundIsLive } from "./tender-refund-sends.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
 
 const RECHECK_MS = 60_000;
@@ -137,46 +130,4 @@ export async function recoverTenderRefunds(
     pending: summary!.pending,
     nextDueAt: summary!.next === null ? null : new Date(summary!.next),
   };
-}
-
-export async function runTenderRefundRecoveryLoop(
-  deps: TenderRefundDeps & {
-    signal: AbortSignal;
-    isPrimary: () => boolean;
-    onError: (error: unknown) => void;
-    onShutdownTimeout?: (refundIds: string[]) => void;
-    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-  },
-): Promise<void> {
-  const sleep = deps.sleep ?? realSleep;
-  if (!deps.signal.aborted) startTenderRefundResolvers(deps.db);
-  let stopping: Promise<string[]> | undefined;
-  const stop = () => {
-    stopping ??= stopTenderRefundResolvers(deps.db);
-  };
-  deps.signal.addEventListener("abort", stop, { once: true });
-  try {
-    while (!deps.signal.aborted) {
-      let wait = RECHECK_MS;
-      try {
-        if (deps.isPrimary()) {
-          const report = await recoverTenderRefunds({ ...deps, stopSignal: deps.signal });
-          wait = sleepMsFor(report.nextDueAt, deps.clock.now().instant, 500, RECHECK_MS);
-        }
-      } catch (error) {
-        deps.onError(error);
-      }
-      if (deps.signal.aborted) break;
-      try {
-        await sleep(wait, deps.signal);
-      } catch (error) {
-        deps.onError(error);
-      }
-    }
-  } finally {
-    deps.signal.removeEventListener("abort", stop);
-    stop();
-    const timedOut = await stopping!;
-    if (timedOut.length > 0) deps.onShutdownTimeout?.(timedOut);
-  }
 }

@@ -17,7 +17,8 @@ import {
   stopTenderRefundResolvers,
   startTenderRefundResolvers,
 } from "./tender-refund-sends.js";
-import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
+import { runRefundFollowUp } from "./testing/card-follow-up.js";
 import { TradingAdmission } from "./trading-admission.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
@@ -319,11 +320,13 @@ describe("settled tender recovery admission", () => {
     const before = v.snapshot();
     const controller = new AbortController();
     const errors: unknown[] = [];
-    await runTenderRefundRecoveryLoop({
+    await runRefundFollowUp({
       ...v.deps,
       signal: controller.signal,
       isPrimary: () => false,
-      onError: (error) => errors.push(error),
+      log: (level, event, data) => {
+        if (level === "error") errors.push({ event, data });
+      },
       sleep: async () => {
         controller.abort();
       },
@@ -400,7 +403,7 @@ describe("settled tender recovery stopping", () => {
     const [row] = await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id));
     expect(row).toMatchObject({ state: "pending", lastLookupAt: null, sendCount: 1 });
   });
-  it("the loop hands its own signal to its pass", async () => {
+  it("the job hands its own signal to refund recovery", async () => {
     await retained(true);
     await retained(true);
     const controller = new AbortController();
@@ -411,11 +414,13 @@ describe("settled tender recovery stopping", () => {
       return ask(query);
     });
     const errors: unknown[] = [];
-    await runTenderRefundRecoveryLoop({
+    await runRefundFollowUp({
       ...v.deps,
       signal: controller.signal,
       isPrimary: () => true,
-      onError: (error) => errors.push(error),
+      log: (level, event, data) => {
+        if (level === "error") errors.push({ event, data });
+      },
       sleep: async () => {},
     });
     expect(errors).toEqual([]);

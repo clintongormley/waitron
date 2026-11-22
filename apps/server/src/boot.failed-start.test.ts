@@ -42,8 +42,9 @@ import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
 import { createJobRunner } from "./job-runner.js";
-import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
-import { runPendingCardLoop } from "./bill-payments-loop.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
+import { stopTenderRefundResolvers } from "./tender-refund-sends.js";
+import { cardFollowUpJob } from "./card-follow-up.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
@@ -157,7 +158,7 @@ vi.mock("./spare-settings.js", async (importOriginal) => {
 
 vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./tender-refund-recovery.js")>();
-  return { ...actual, runTenderRefundRecoveryLoop: vi.fn(actual.runTenderRefundRecoveryLoop) };
+  return { ...actual, recoverTenderRefunds: vi.fn(actual.recoverTenderRefunds) };
 });
 
 vi.mock("./sealed-state.js", async (importOriginal) => {
@@ -165,9 +166,13 @@ vi.mock("./sealed-state.js", async (importOriginal) => {
   return { ...actual, createSealedStateRefresher: vi.fn(actual.createSealedStateRefresher) };
 });
 
-vi.mock("./bill-payments-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
-  return { ...actual, runPendingCardLoop: vi.fn(actual.runPendingCardLoop) };
+vi.mock("./card-follow-up.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./card-follow-up.js")>();
+  return { ...actual, cardFollowUpJob: vi.fn(actual.cardFollowUpJob) };
+});
+vi.mock("./tender-refund-sends.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./tender-refund-sends.js")>();
+  return { ...actual, stopTenderRefundResolvers: vi.fn(actual.stopTenderRefundResolvers) };
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
@@ -244,8 +249,9 @@ afterEach(async () => {
   vi.mocked(startSpareStore).mockClear();
   vi.mocked(createJobRunner).mockClear();
   vi.mocked(tamperWatchJob).mockClear();
-  vi.mocked(runTenderRefundRecoveryLoop).mockReset();
-  vi.mocked(runPendingCardLoop).mockReset();
+  vi.mocked(recoverTenderRefunds).mockReset();
+  vi.mocked(stopTenderRefundResolvers).mockReset();
+  vi.mocked(cardFollowUpJob).mockReset();
   for (const held of reservations.values()) if (held.server.listening) await held.close();
   reservations.clear();
   adopted.clear();
@@ -1652,19 +1658,7 @@ describe("settled-tender recovery boot lifetime", () => {
       lines.push(String(line));
       return true;
     });
-    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce(
-      (options) =>
-        new Promise<void>((resolve) => {
-          options.signal.addEventListener(
-            "abort",
-            () => {
-              options.onShutdownTimeout?.([refundId]);
-              resolve();
-            },
-            { once: true },
-          );
-        }),
-    );
+    vi.mocked(stopTenderRefundResolvers).mockResolvedValueOnce([refundId]);
     let server: StartedServer | undefined;
     try {
       server = await startServer(env);
@@ -1688,46 +1682,37 @@ describe("settled-tender recovery boot lifetime", () => {
     }
   }, 60_000);
 
-  it("aborts and awaits recovery when a later trading-start step fails", async () => {
+  it("awaits refund resolver shutdown when a later trading-start step fails", async () => {
     const venueDir = await seededVenueDir();
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }), {
       landing: true,
     });
     const failure = new Error("landing interfaces unavailable");
     failLandingAfterMdns(failure);
-    let stopped = false;
-    let signal: AbortSignal | undefined;
     let release = () => {};
-    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce((options) => {
-      signal = options.signal;
-      return new Promise<void>((resolve) => {
-        release = resolve;
-        options.signal.addEventListener(
-          "abort",
-          () => {
-            stopped = true;
-            resolve();
-          },
-          { once: true },
-        );
-      });
-    });
-    const timeout = new AbortController();
-    const deadline = delay(10_000, "recovery was not stopped", { signal: timeout.signal }).catch(
-      () => "deadline cancelled",
+    vi.mocked(stopTenderRefundResolvers).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([]);
+        }),
     );
     const result = startServer(env).then(
       (server) => server,
       (error: unknown) => error,
     );
+    const deadline = new AbortController();
     try {
-      expect(await Promise.race([result, deadline])).toBe(failure);
-      expect(runTenderRefundRecoveryLoop).toHaveBeenCalledOnce();
-      expect(signal?.aborted).toBe(true);
-      expect(stopped).toBe(true);
+      await vi.waitFor(() => expect(stopTenderRefundResolvers).toHaveBeenCalledOnce());
+      expect(recoverTenderRefunds).not.toHaveBeenCalled();
+      expect(await Promise.race([result, delay(50, "waiting", { signal: deadline.signal })])).toBe(
+        "waiting",
+      );
+      expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
+      release();
+      expect(await result).toBe(failure);
       expect(readVenueHolder(venueDir)).toBeNull();
     } finally {
-      timeout.abort();
+      deadline.abort();
       release();
       const outcome = await result;
       if (isStartedServer(outcome)) await outcome.close();
@@ -1743,14 +1728,14 @@ describe("settled-tender recovery boot lifetime", () => {
     const aborted = new Promise<void>((resolve) => {
       abort = resolve;
     });
-    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce((options) => {
-      signal = options.signal;
-      return new Promise<void>((resolve) => {
+    vi.mocked(recoverTenderRefunds).mockImplementationOnce((options) => {
+      signal = options.stopSignal!;
+      return new Promise((resolve) => {
         release = () => {
           stopped = true;
-          resolve();
+          resolve({ pending: 0, nextDueAt: null });
         };
-        options.signal.addEventListener("abort", abort, { once: true });
+        options.stopSignal!.addEventListener("abort", abort, { once: true });
       });
     });
     const server = await startServer(env);
@@ -1758,7 +1743,7 @@ describe("settled-tender recovery boot lifetime", () => {
     const deadline = new AbortController();
     try {
       await listening(Number(env.WAITRON_HTTP_PORT));
-      expect(runTenderRefundRecoveryLoop).toHaveBeenCalledOnce();
+      expect(recoverTenderRefunds).toHaveBeenCalledOnce();
       closing = server.close();
       await Promise.race([aborted, closing]);
       expect(signal?.aborted).toBe(true);
@@ -1783,7 +1768,7 @@ describe("settled-tender recovery boot lifetime", () => {
 });
 
 describe("pending card checks boot lifetime", () => {
-  it("stops and awaits the pending card loop when a later boot step fails", async () => {
+  it("stops and awaits the card follow-up pass when a later boot step fails", async () => {
     const venueDir = await seededVenueDir();
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
     const failure = new Error("late card-loop boot failure");
@@ -1793,13 +1778,17 @@ describe("pending card checks boot lifetime", () => {
     const aborted = new Promise<void>((resolve) => {
       markAborted = resolve;
     });
-    vi.mocked(runPendingCardLoop).mockImplementationOnce((options) => {
-      signal = options.signal;
-      return new Promise<void>((resolve) => {
-        release = resolve;
-        options.signal.addEventListener("abort", markAborted, { once: true });
-      });
-    });
+    const define = vi.mocked(cardFollowUpJob).getMockImplementation()!;
+    vi.mocked(cardFollowUpJob).mockImplementationOnce((...args) => ({
+      ...define(...args),
+      pass: (ctx) => {
+        signal = ctx.signal;
+        return new Promise((resolve) => {
+          release = () => resolve({ nextDueAt: null });
+          ctx.signal.addEventListener("abort", markAborted, { once: true });
+        });
+      },
+    }));
     vi.mocked(startMdnsResponder).mockImplementationOnce(() => {
       throw failure;
     });
@@ -1810,7 +1799,7 @@ describe("pending card checks boot lifetime", () => {
     const deadline = new AbortController();
     try {
       await Promise.race([aborted, starting]);
-      expect(runPendingCardLoop).toHaveBeenCalledOnce();
+      expect(cardFollowUpJob).toHaveBeenCalledOnce();
       expect(signal?.aborted).toBe(true);
       expect(
         await Promise.race([starting, delay(50, "waiting", { signal: deadline.signal })]),
@@ -1826,7 +1815,7 @@ describe("pending card checks boot lifetime", () => {
     }
   }, 60_000);
 
-  it("awaits the pending card loop before closing its venue", async () => {
+  it("awaits the card follow-up pass before closing its venue", async () => {
     const venueDir = await seededVenueDir();
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
     let signal: AbortSignal | undefined;
@@ -1835,13 +1824,17 @@ describe("pending card checks boot lifetime", () => {
     const aborted = new Promise<void>((resolve) => {
       markAborted = resolve;
     });
-    vi.mocked(runPendingCardLoop).mockImplementationOnce((options) => {
-      signal = options.signal;
-      return new Promise<void>((resolve) => {
-        release = resolve;
-        options.signal.addEventListener("abort", markAborted, { once: true });
-      });
-    });
+    const define = vi.mocked(cardFollowUpJob).getMockImplementation()!;
+    vi.mocked(cardFollowUpJob).mockImplementationOnce((...args) => ({
+      ...define(...args),
+      pass: (ctx) => {
+        signal = ctx.signal;
+        return new Promise((resolve) => {
+          release = () => resolve({ nextDueAt: null });
+          ctx.signal.addEventListener("abort", markAborted, { once: true });
+        });
+      },
+    }));
     const server = await startServer(env);
     const deadline = new AbortController();
     let closing: Promise<void> | undefined;
