@@ -264,3 +264,18 @@ it("uses its signed-in API to preview and send only the Cloud attachment", async
     "POST /management-api/problem-reports/preview/send",
   ]);
 });
+
+it("offers a download when Cloud delivery is refused", async () => {
+  const api = new DashboardApi("", async (_, init) =>
+    init.method === "GET"
+      ? Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' })
+      : Response.json({ error: { code: "cloud.busy", params: {} } }, { status: 409 }),
+  );
+  const { dialog } = await fixture(api);
+  await expect.poll(() => dialog.shadowRoot!.querySelector("[data-send]")).not.toBeNull();
+  await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error)
+    .toBe("Could not send the report. Download it to keep a copy.");
+  expect(dialog.shadowRoot!.querySelector<WtButton>("[data-download]")!.disabled).toBe(false);
+});

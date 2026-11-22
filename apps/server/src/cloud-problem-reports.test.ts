@@ -1,14 +1,19 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { incidents } from "@waitron/db";
+import { incidents, withTransaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { startManagementSession } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { expect, it, onTestFinished, vi } from "vitest";
 import type { CloudConnection } from "./cloud-client.js";
 import { createCloudProblemReports } from "./cloud-problem-reports.js";
+import { mountProblemReportApi } from "./problem-report-api.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const signal = () => new AbortController().signal;
@@ -121,4 +126,30 @@ it("only offers sending on the main box with a stamped stable release and a regi
   }
   f.registration(undefined);
   expect(await f.reports().preview("dashboard", "alice")).toEqual({ available: false });
+});
+
+it("refuses a dashboard preview sent from another sign-in by the same person", async () => {
+  const f = await fixture();
+  const db = suite.db;
+  const [person] = await seedPersons(db, { displayName: "Manager", role: "admin" });
+  const signIn = async () => {
+    const { token } = await withTransaction(db, (tx) =>
+      startManagementSession(tx, { personId: person!.id, method: "password" }),
+    );
+    return { cookie: `${MANAGEMENT_COOKIE}=${token}` };
+  };
+  const first = await signIn();
+  const second = await signIn();
+  const app = new Hono();
+  mountProblemReportApi(app, { db, reports: f.reports() }, () => {});
+  const base = "/management-api/problem-reports";
+  const preview = await app.request(`${base}/preview`, { headers: first });
+  const { id } = await preview.json();
+  const send = (headers: HeadersInit) =>
+    app.request(`${base}/${id}/send`, { method: "POST", headers });
+
+  const refused = await send(second);
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({ error: { code: "cloud.request_invalid" } });
+  expect(await (await send(first)).json()).toEqual({ delivery: "sent" });
 });

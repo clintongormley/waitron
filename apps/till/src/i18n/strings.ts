@@ -21,7 +21,7 @@ export const en = {
   "problem_report.send": "Send to Waitron Cloud",
   "problem_report.sent": "Sent to Waitron Cloud.",
   "problem_report.queued": "Saved on this box. It will try sending again.",
-  "problem_report.refused": "Could not send the report. Download it or reopen it to try again.",
+  "problem_report.refused": "Could not send the report. Download it to keep a copy.",
 
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped": "New invoices are stopped. Open recovery with the current box key.",
@@ -2338,8 +2338,7 @@ export const es: Record<StringKey, string> = {
   "problem_report.send": "Enviar a Waitron Cloud",
   "problem_report.sent": "Enviado a Waitron Cloud.",
   "problem_report.queued": "Guardado en este servidor. Volverá a intentar enviarlo.",
-  "problem_report.refused":
-    "No se ha podido enviar el informe. Descárgalo o vuelve a abrirlo para intentarlo de nuevo.",
+  "problem_report.refused": "No se ha podido enviar el informe. Descárgalo para guardar una copia.",
 
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
