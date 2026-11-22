@@ -98,14 +98,14 @@ it("offers the discard form for unreadable state in both languages, with a safe 
   }
 });
 it.each([
-  ["staged", "que ya está en este servidor."],
-  ["placing", "configurar este servidor."],
+  ["staged", "before"],
+  ["placing", "after"],
 ] as const)(
-  "names the box servidor, never caja, on the Spanish %s discard page and answer",
-  async (phase, sentence) => {
+  "never calls the box a till on the Spanish %s discard page and answer",
+  async (phase, key) => {
     const f = await fixture(phase);
     const page = await (await f.request("/", undefined, "es-ES")).text();
-    expect(page).toContain(sentence);
+    expect(page).toContain(RESTORE_DISCARD_WORDS["es-ES"][key]);
     expect(page).not.toMatch(/\bcaja\b/i);
     const answer = await (
       await f.request(
@@ -114,7 +114,7 @@ it.each([
         "es-ES",
       )
     ).text();
-    expect(answer).toContain("Puedes restaurar otra copia o configurar este servidor.");
+    expect(answer).toContain(RESTORE_DISCARD_WORDS["es-ES"].done);
     expect(answer).not.toMatch(/\bcaja\b/i);
   },
 );
