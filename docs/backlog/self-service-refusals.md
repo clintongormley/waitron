@@ -520,7 +520,7 @@ Wording: `apps/setup/src/i18n/strings/shell.ts:26` and `apps/setup/src/i18n/stri
 
 State: A partially prepared database carries a stamp for another environment. Changing elapsed time cannot change the stamp. Receipt: `apps/server/src/adopt.ts:114`; `apps/setup/src/setup-app.ts:1523`.
 
-Route: The authenticated reset route only accepts a half-finished adopt, as setup-api.ts:1067 checks. It is not a general reset for this state. Missing: an applicable self-service fresh-server/reinstall path that does not erase trading data.
+Route: The reset route only accepts a half-finished adopt, as setup-api.ts:1366 checks. It is not a general reset for this state. Missing: an applicable self-service fresh-server/reinstall path that does not erase trading data.
 
 _2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed): the wizard's handling of this code and these words are deleted. A run of the real setup routes found the wizard never receives `deployment.already_stamped`: after a refused attempt the server answers first with that attempt's own refusal. The dead end that remains is under [stamp-order plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md). The rest of this entry records the earlier tree._
 
@@ -539,7 +539,7 @@ Wording: `apps/setup/src/i18n/strings/shell.ts:67` and `apps/setup/src/i18n/stri
 
 State: Reset was requested. The warning explicitly covers the case where the supervised restart did not perform it; that is not proved bug-only. Receipt: `apps/setup/src/setup-app.ts:2012`; `apps/server/src/setup-api.ts:1048`.
 
-Route: Existing: reload after restart. Missing if the half-join remains: an authenticated retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
+Route: Existing: reload after restart. Missing if the half-join remains: a retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
 
@@ -729,7 +729,7 @@ still block Start again on this path.
 
 ### setup-reset
 
-**An incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
+**An incomplete-join reset needs an outcome after a failed restart.** Add a supported way to retry or restart if the half-join remains.
 
 _2026-11-11, A1089 slice 1: the resetting message now names pressing Reset this server again instead of support; a reset that never takes effect is still open._
 

@@ -415,7 +415,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
 
-- **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
+- **A1089: an incomplete-join reset needs an outcome after a failed restart.** Add a supported way to retry or restart if the half-join remains.
   [Audit](backlog/self-service-refusals.md#setup-reset).
 
 - **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1159 and A1161 list what still refuses. Start again (former A1158) and Recover from backup still have no warned way out when a damaged setup retains its installed box row, even without sales or fiscal records.
