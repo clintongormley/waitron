@@ -20,6 +20,7 @@ import {
   MENU_CHANGE_SOURCES,
   MENU_CONFIGURATION_TRANSFER,
   MENU_PROVISIONING,
+  MENU_PERSONAL_DATA,
   GUEST_MENU_SETTINGS,
   MENU_SETTINGS,
 } from "@waitron/menu";
@@ -57,6 +58,7 @@ import {
   BOOKINGS_FLOOR_ANNOTATIONS,
   BOOKINGS_TABLE_REMOVAL,
   BOOKINGS_PERMISSIONS,
+  BOOKINGS_PERSONAL_DATA,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
 import { HANDOVER_BACKUP_VERIFICATION } from "@waitron/handover";
@@ -201,6 +203,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: MENU_CHANGE_SOURCES,
     configurationTransfer: MENU_CONFIGURATION_TRANSFER,
     provisioning: MENU_PROVISIONING,
+    personalData: MENU_PERSONAL_DATA,
     settings: [GUEST_MENU_SETTINGS, MENU_SETTINGS],
   },
   {
@@ -362,6 +365,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: BOOKINGS_PERMISSIONS,
     floorAnnotations: BOOKINGS_FLOOR_ANNOTATIONS,
     tableRemoval: BOOKINGS_TABLE_REMOVAL,
+    personalData: BOOKINGS_PERSONAL_DATA,
     configurationTransfer: { kind: "none" },
   },
   {

@@ -522,10 +522,12 @@ describe("ALL_MODULES personal-data seat", () => {
 
   it("no other module carries the seat", () => {
     expect(ALL_MODULES.filter((m) => m.personalData !== undefined).map((m) => m.name)).toEqual([
+      "menu",
       "venue-service",
       "identity",
       "workforce",
       "payments",
+      "bookings",
       "adjustments",
       "staffing",
     ]);

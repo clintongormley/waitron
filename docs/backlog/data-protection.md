@@ -91,11 +91,12 @@ by the answers):
     recovery pack. The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
-  - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment
-    requests and resolutions, payment refund approvals, department transfer senders, service
-    steps, handover activations (`handover_activations.person_id`, and `authorisedBy` inside its
-    signed evidence), and the adjustments module's `credited_to`, whose sale the item counted
-    as. Adjustments and payments have their own `personal-data.coverage.test.ts` guards.
+  - **Other modules' actor columns**: fiscal operations, payment requests and resolutions, payment
+    refund approvals, department transfer senders, service steps, handover activations
+    (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the
+    adjustments module's `credited_to`, whose sale the item counted as. Adjustments, Payments, Menu
+    and Bookings have their own `personal-data.coverage.test.ts` guards. Each module's part is read
+    only while that module is on, so its retained rows are left out of the download while it is off.
   - **The invoice number of an adjusted bill in `adjustments.json`.** The file gives the order
     number only, which is what the Adjustment report shows of each entry. The invoice number of the
     sale later filed from the bill could be found through `sales.working_order_id`, but formatting

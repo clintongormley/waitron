@@ -16,6 +16,7 @@ import {
   type PersonalDataSubject,
   type WaitronModule,
 } from "@waitron/module";
+import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { eq } from "drizzle-orm";
@@ -27,7 +28,13 @@ import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { TIME_RECORD_FILES, timeRecordPersonalData } from "./personal-data-time-record.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    WORKFORCE_MIGRATIONS,
+    WORKFORCE_ES_MIGRATIONS,
+    PAYMENTS_MIGRATIONS,
+    BOOKINGS_MIGRATIONS,
+  ],
 });
 /** The venue's date is 2026-03-10; Martha's last entry is on 2026-03-20, after it. */
 const AT = new Date("2026-03-10T12:00:00Z");

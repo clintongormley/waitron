@@ -143,6 +143,15 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds: "the order number for each payment hold you decided, what you decided and when.",
         use: "Kept to account for how the venue settled a payment discrepancy.",
       },
+      "menu-publications.json": {
+        holds:
+          "the editions you published or scheduled and the cancellations recorded under your name, with the menu ID, today’s menu name, the edition number, the action and when it was recorded. A live edit can cancel a scheduled edition under the editor’s name. Its replacement has a new edition number and keeps the original author and time.",
+        use: "Used to track who published, scheduled or cancelled a menu edition.",
+      },
+      "bookings-created.json": {
+        holds: "the ID of each booking you created and when you created it.",
+        use: "Used to track who took each booking.",
+      },
       "adjustments.json": {
         holds:
           "the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the list value of what it applied to (the item, or the whole bill), the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it.",
@@ -288,6 +297,15 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds:
           "el número de pedido de cada pago retenido sobre el que tomaste una decisión, qué decidiste y cuándo.",
         use: "Se guarda para dar cuenta de cómo resolvió el local una discrepancia de pago.",
+      },
+      "menu-publications.json": {
+        holds:
+          "las ediciones que publicaste o programaste y las cancelaciones que constan a tu nombre, con el identificador y el nombre actual de la carta, el número de edición, la acción y cuándo quedó registrada. Un cambio en la carta publicada puede dejar una edición programada cancelada a nombre de quien hizo el cambio. La edición que la sustituye tiene un número nuevo y conserva la persona y la hora originales.",
+        use: "Se usa para saber quién publicó, programó o canceló una edición de la carta.",
+      },
+      "bookings-created.json": {
+        holds: "el identificador de cada reserva que creaste y cuándo la creaste.",
+        use: "Se usa para saber quién tomó cada reserva.",
       },
       "adjustments.json": {
         holds:

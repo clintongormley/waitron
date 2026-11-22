@@ -130,6 +130,10 @@ búscala en `payment-holds.json`.
 Consulta `service-actions.json` para ver tus acciones en pedidos y en el servicio de mesas, y
 `department-transfers.json` para ver los traspasos entre departamentos que resolviste.
 
+Consulta `menu-publications.json` para ver las ediciones de carta que publicaste o programaste
+y las cancelaciones que constan a tu nombre. Si Reservas está activado, `bookings-created.json`
+recoge las reservas que creaste.
+
 Un `README.txt` explica cada archivo, quién más recibe los datos, cuánto tiempo se guardan y tus
 derechos. La copia nunca contiene secretos como tu PIN o tu contraseña. Para cualquier otra cosa
 sobre tus datos, pregunta al local.

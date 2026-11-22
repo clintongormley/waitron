@@ -9,6 +9,8 @@ import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { drawerOpens, personStaffRoles, stampDeployment, withTransaction } from "@waitron/db";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { bookings } from "@waitron/bookings";
+import { createMenu, previewMenu, publishMenu } from "@waitron/menu";
 import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -71,6 +73,23 @@ describe("the personal-data downloads in a real start", () => {
       holdDecidedAt: decidedAt,
       holdDecidedBy: venue.personId,
     });
+    const menu = await withTransaction(suite.db, async (tx) => {
+      const { id } = await createMenu(tx, { name: "Lunch Menu" });
+      const { hash } = await previewMenu(tx, id);
+      await publishMenu(tx, id, hash, venue.personId, { at: new Date(decidedAt) });
+      return id;
+    });
+    const [booking] = await suite.db
+      .insert(bookings)
+      .values({
+        bookingDate: "2026-05-10",
+        bookingTime: "19:00",
+        partySize: 2,
+        contactName: "Private guest",
+        createdBy: venue.personId,
+        createdAt: decidedAt,
+      })
+      .returning({ id: bookings.id });
     await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const [admin, manager] = await seedPersons(suite.db, [
       { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
@@ -135,6 +154,19 @@ describe("the personal-data downloads in a real start", () => {
       });
       expect(strFromU8(files["README.txt"]!)).toContain("- payment-holds.json: ");
 
+      const menuFile = "menu-publications.json";
+      const bookingFile = "bookings-created.json";
+      expect(files).toHaveProperty([menuFile]);
+      expect(files).toHaveProperty([bookingFile]);
+      expect(JSON.parse(strFromU8(files[menuFile]!))).toEqual({
+        entries: [
+          { menuId: menu, menuName: "Lunch Menu", edition: 1, action: "created", at: decidedAt },
+        ],
+      });
+      expect(JSON.parse(strFromU8(files[bookingFile]!))).toEqual({
+        entries: [{ bookingId: booking!.id, at: decidedAt }],
+      });
+
       const url = `http://127.0.0.1:${httpPort()}/management-api/staff/${venue.personId}/personal-data/export`;
       const other = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` },
@@ -149,6 +181,9 @@ describe("the personal-data downloads in a real start", () => {
       expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Anna"]);
       expect(otherFiles["payment-holds.json"]).toEqual(files["payment-holds.json"]);
 
+      expect(otherFiles[menuFile]).toEqual(files[menuFile]);
+      expect(otherFiles[bookingFile]).toEqual(files[bookingFile]);
+
       const colleague = await fetch(ownUrl, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
       });
@@ -159,6 +194,8 @@ describe("the personal-data downloads in a real start", () => {
       });
       expect(Object.keys(colleagueFiles)).not.toContain("payment-holds.json");
       expect(Object.keys(colleagueFiles)).not.toContain("actions.json");
+      expect(colleagueFiles).not.toHaveProperty([menuFile]);
+      expect(colleagueFiles).not.toHaveProperty([bookingFile]);
 
       const refused = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
