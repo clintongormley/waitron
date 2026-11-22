@@ -725,21 +725,6 @@ against the Requested by names; on a phone the table scrolls sideways inside its
 the cut-off last column to say so. Owner to look at the pictures and say whether either wants
 changing.
 
-## On a short phone the till's More menu is taller than the room it gets (found by A681's look, 2026-10-17).
-
-On a handheld, since A797 slice 3, Log out follows the Settings group, last in ☰
-but for A1096's "Powered by" line (and its rule) under it while a venue logo is in use, which adds
-to the height (design §3.1), so with every entry offered it sits below the menu's bottom edge at
-360×640 (759 px against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and
-nothing says the menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px).
-Since A1123 a handheld's More opens under ☰ rather than over the bar, so it has less room than
-those measurements had.
-Since TILL-HAPTIC-SWITCH, **Vibrate on button press** adds a row where the device has a touch
-screen and its browser supports vibration; with it, a More that lists no screens no longer fits an
-844×480 window, though Log out can still be scrolled to.
-Decide whether More should show that it scrolls, or hold fewer items on a short screen.
-
-
 ## At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI, 2026-10-17).
 
 With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
@@ -1139,7 +1124,7 @@ all floor-map and table-screen changes belong to the owner's redesign.
 
 ## Bundle: The till top bar fits at phone width, 1024 and 1280
 
-7 entries, size M. The remaining overflow and owner decisions are below.
+6 entries, size M. The remaining overflow and owner decisions are below.
 
 - **A1082. At 390 px the counter till's top bar is cut off.** Seen, 2026-10-24 (A789 slice 2's look,
   `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the first tab, Counter
@@ -1155,10 +1140,6 @@ all floor-map and table-screen changes belong to the owner's redesign.
   call. [Detail](till.md#a921-on-a-narrow-till-should-the-persons-name-give-room-to-the-tab-strip)
 - **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
   one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
-- **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
-  2026-10-17).** Decide whether More should show that it scrolls, or hold fewer items on a short
-  screen.
-  [Detail](till.md#on-a-short-phone-the-tills-more-menu-is-taller-than-the-room-it-gets-found-by-a681s-look-2026-10-17)
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
   2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
   strip's content at 196 px in a 182 px box; locally the same check measured 178 px in 184 px.
