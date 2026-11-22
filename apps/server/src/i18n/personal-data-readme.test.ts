@@ -15,19 +15,35 @@ it("describes signed drawer amounts and the recorded payment outcome time in Spa
 });
 
 it.each([
-  ["en", "today’s menu name", "the original author and time", "when you created it"],
-  ["es", "el nombre actual de la carta", "la persona y la hora originales", "cuándo la creaste"],
-] as const)("explains menu and booking entries in %s", (language, menuName, original, created) => {
-  const readme = personalDataReadme({
-    language,
-    venue: "Example Bar",
-    person: "Martha",
-    date: "2026-11-22",
-    files: ["menu-publications.json", "bookings-created.json"],
-  });
-  expect(readme).toContain("- menu-publications.json: ");
-  expect(readme).toContain(menuName);
-  expect(readme).toContain(original);
-  expect(readme).toContain("- bookings-created.json: ");
-  expect(readme).toContain(created);
-});
+  [
+    "en",
+    "today’s menu name",
+    "created covers both publishing and scheduling",
+    "the time of the original creation or the cancellation",
+    "when you created it",
+  ],
+  [
+    "es",
+    "el nombre actual de la carta",
+    "created abarca tanto la publicación como la programación",
+    "la hora de creación original o la de cancelación",
+    "cuándo la creaste",
+  ],
+] as const)(
+  "explains menu and booking entries in %s",
+  (language, menuName, action, original, created) => {
+    const readme = personalDataReadme({
+      language,
+      venue: "Example Bar",
+      person: "Martha",
+      date: "2026-11-22",
+      files: ["menu-publications.json", "bookings-created.json"],
+    });
+    expect(readme).toContain("- menu-publications.json: ");
+    expect(readme).toContain(menuName);
+    expect(readme).toContain(action);
+    expect(readme).toContain(original);
+    expect(readme).toContain("- bookings-created.json: ");
+    expect(readme).toContain(created);
+  },
+);
