@@ -232,7 +232,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     expect(day2.vat.grossTotal).toBe("120.00");
   });
 
-  it("subtracts a refund on the day and device that paid it (test 25)", async () => {
+  it("subtracts a refund given on another day on another device (test 25)", async () => {
     const deviceA = brandDeviceId(venue.deviceId);
     const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(

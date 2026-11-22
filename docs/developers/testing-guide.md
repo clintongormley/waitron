@@ -4098,9 +4098,6 @@ owner has not approved it separately.
   the timings leave it out.
 - **The bench venue stays open across days.** A real box restarts sometimes; a resumed build
   reopens it, and carries on the attendance scan saved in the folder.
-- **`recordDailyClose` is the bench's own addition.** No boot step or route calls it today:
-  `git grep -n recordDailyClose -- 'apps/*.ts' 'packages/*.ts'` finds it, outside tests, only in
-  `apps/server/scripts/bench/trading-day.ts` and in `packages/reporting` itself.
 - **Each measure round starts from the same copy of the last day**, at the instant the build ended.
   Rounds do not see each other's writes. Within a round they do: each `filing.pass` sample adds 50
   sales first, so the last of 200 samples reads about 10,000 more sales than the first.

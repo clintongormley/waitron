@@ -329,10 +329,7 @@ describe("dated business-day reporting through real storage", () => {
       });
     },
   );
-});
-
-describe("recorded facts refuse retrospective boundary changes", () => {
-  it("schedules a new start after a drawer close while keeping the saved count and withdrawal", async () => {
+  it("keeps a drawer close with the same day when the start changes after it", async () => {
     await inTx((tx) =>
       seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
@@ -340,11 +337,17 @@ describe("recorded facts refuse retrospective boundary changes", () => {
         recordedAt: "2026-11-03T12:00:00.000Z",
       }),
     );
-    const before = await frozen();
-    expect(before.drawer_entries).toHaveLength(2);
+    const path = "drawer-closes?from=2026-11-03&to=2026-11-03";
+    const before = await report(path);
+    expect(before).toMatchObject({
+      closes: [{ first: { counted: "8.00" }, finished: { bankWithdrawal: "8.00" } }],
+    });
     await schedule("07:00");
-    expect(await frozen()).toEqual(before);
+    expect(await report(path)).toEqual(before);
   });
+});
+
+describe("recorded facts refuse retrospective boundary changes", () => {
   it("refuses future issuance without rewriting any sale, filing, number or close", async () => {
     await billlessSale({
       ...venue,

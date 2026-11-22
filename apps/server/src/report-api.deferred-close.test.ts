@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, devices, withTransaction } from "@waitron/db";
+import { departments, devices, drawerEntries, withTransaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountReportApi } from "./report-api.js";
@@ -183,11 +183,31 @@ describe("reports, a bill closed as a deferred payment", () => {
     const request = await t.requestFor(order, "18.00", null);
     const clock = clockAt(Date.parse(`${yesterday}T12:00:00Z`));
     expect(await t.close(request, t.depsWith({ clock }))).toMatchObject({ businessDay: yesterday });
+    const cash = await t.counterOrder("open");
+    const paid = await cashPayment(
+      { db: venue.db, app: venue.appAt(clock) },
+      venue.cookie,
+      cash,
+      "18.00",
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect((await get(reportPath)).closureSummary).toEqual({
-      billsClosed: { count: 1, total: "18.00" },
+      billsClosed: { count: 2, total: "36.00" },
       deferredPayments: "18.00",
-      received: "0.00",
+      received: "18.00",
     });
+    expect(
+      await venue.db
+        .select({ kind: drawerEntries.kind, amount: drawerEntries.amount })
+        .from(drawerEntries)
+        .where(eq(drawerEntries.printerId, printerId))
+        .orderBy(drawerEntries.sequence),
+    ).toEqual([
+      { kind: "cash_in", amount: 1000 },
+      { kind: "count", amount: 1000 },
+      { kind: "finish", amount: 600 },
+      { kind: "cash_payment", amount: 1800 },
+    ]);
     expect(await get(drawerPath)).toEqual(drawerHistory);
   });
 });
