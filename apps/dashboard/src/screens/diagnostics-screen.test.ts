@@ -403,15 +403,14 @@ it.each(["send", "discard"] as const)(
   },
 );
 
-it("hides the description review controls when the server refuses a manager", async () => {
-  const getProblemDescriptions = vi.fn(async () => {
-    throw { code: "authorization.not_permitted" };
-  });
+const reviewFailures = ["authorization.not_permitted", "server.internal"];
+it.each(reviewFailures)("keeps review hidden after %s", async (code) => {
+  const load = vi.fn().mockRejectedValue({ code });
   const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
-    api: stubApi({ getProblemDescriptions }),
+    api: stubApi({ getProblemDescriptions: load }),
     canReviewDescriptions: true,
   });
   await flush(el);
-  expect(getProblemDescriptions).toHaveBeenCalledOnce();
+  expect(load).toHaveBeenCalledOnce();
   expect(q(el, "[data-description-refresh]")).toBeNull();
 });

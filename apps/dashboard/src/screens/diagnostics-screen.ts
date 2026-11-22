@@ -163,8 +163,8 @@ export class DiagnosticsScreen extends LitElement {
       }
     } catch (error) {
       if (!read.signal.aborted) {
-        this.descriptions = undefined;
         this.reviewError = codeOf(error) !== "authorization.not_permitted";
+        if (!this.reviewError) this.descriptions = undefined;
       }
     } finally {
       this.reviewBusy = false;
@@ -191,7 +191,7 @@ export class DiagnosticsScreen extends LitElement {
   }
 
   #renderDescriptions() {
-    if (!this.canReviewDescriptions || (!this.descriptions && !this.reviewError)) return nothing;
+    if (!this.canReviewDescriptions || !this.descriptions) return nothing;
     return html`
       <h2 data-description-heading tabindex="-1">${t("problem_report.review_title")}</h2>
       <wt-button

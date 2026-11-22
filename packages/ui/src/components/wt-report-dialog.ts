@@ -82,6 +82,7 @@ export class WtReportDialog extends LitElement {
   private readonly feedback = new FormFeedback(this);
   @query("wt-modal") private modal!: WtModal;
   private cloudRequest?: AbortController;
+  private descriptionBusy = false;
 
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("open") && !changed.has("cloud")) return;
@@ -115,6 +116,7 @@ export class WtReportDialog extends LitElement {
     const preview = this.cloudPreview;
     const signal = this.cloudRequest?.signal;
     if (!cloud || !preview || !signal || signal.aborted || !this.canSend) return;
+    this.descriptionBusy = false;
     this.delivery = "sending";
     try {
       const text = this.description.trim() ? this.description : undefined;
@@ -135,8 +137,14 @@ export class WtReportDialog extends LitElement {
           }),
         );
       }
-    } catch {
-      if (!signal.aborted) this.delivery = "refused";
+    } catch (error) {
+      if (signal.aborted) return;
+      this.descriptionBusy =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "cloud.busy";
+      this.delivery = "refused";
     }
   }
 
@@ -183,7 +191,7 @@ export class WtReportDialog extends LitElement {
     const cloudCopy = this.cloudPreview && c.cloud;
     const feedback =
       this.delivery === "refused"
-        ? this.description.trim()
+        ? this.descriptionBusy && this.description.trim()
           ? cloudCopy?.descriptionRefused
           : cloudCopy?.refused
         : this.downloadError;

@@ -282,17 +282,20 @@ it.each([
   },
 );
 
+const canDownload = "Could not send the report. Download it to keep a copy.";
 it.each([
-  ["", "Could not send the report. Download it to keep a copy."],
+  ["", "cloud.busy", canDownload],
+  ["Printer jammed", "cloud.not_configured", canDownload],
   [
     "Printer jammed",
+    "cloud.busy",
     "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
   ],
-] as const)("offers recovery when Cloud delivery is refused (%s)", async (description, message) => {
+] as const)("recovery for %s and %s", async (description, code, message) => {
   const api = new DashboardApi("", async (_, init) =>
     init.method === "GET"
       ? Response.json({ available: true, id: "preview", attachment: '{"version":"1.2.3"}' })
-      : Response.json({ error: { code: "cloud.busy", params: {} } }, { status: 409 }),
+      : Response.json({ error: { code, params: {} } }, { status: 409 }),
   );
   const { dialog } = await fixture(api);
   await expect.poll(() => dialog.shadowRoot!.querySelector("[data-send]")).not.toBeNull();
