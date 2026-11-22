@@ -87,7 +87,6 @@ describe("the node:sqlite adapter", () => {
         throw new Error("deliberate");
       }),
     ).toThrow("deliberate");
-    // The enclosing transaction is still usable, which is the whole point of the savepoint.
     db.insert(rows).values({ id: 3, name: "after" }).run();
     raw.exec("commit");
     expect(raw.prepare("select name from t order by id").all()).toEqual([

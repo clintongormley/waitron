@@ -38,18 +38,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
 
-## The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert
-
-- The nested `tx.transaction(...)` in `enqueueSuccessor`
-  wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today
-  (`docs/developers/conventions-data.md` has the probe). Whether to remove that nested call,
-  or say why it stays, is open. #587's review also found older comments
-  still describing PostgreSQL's behaviour, left alone there:
-  `packages/store/src/node-sqlite-adapter.test.ts:90` calls keeping the outer transaction usable
-  "the whole point of the savepoint"; a test name in
-  `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
-  transaction" (a test title, which a comments-only change cannot touch).
-
 ## `centsToDecimal` does not refuse a count past the money bound
 
 - A count of more than 99999999999999 cents either way, up to `Number.MAX_SAFE_INTEGER` either
@@ -1009,7 +997,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-14 entries, size M.
+13 entries, size M.
 
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
@@ -1035,6 +1023,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `src/drain.ts`'s `codeOf` comment names `@waitron/scheduler`, now part of `@waitron/payments`. A760
   left
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
+- **A fiscal test title says a collision would "poison the whole transaction"** — found by #587's
+  review. `packages/fiscal-verifactu/src/chain.test.ts`'s "retries inside a savepoint, so a real
+  collision does not poison the whole transaction": on this engine a refused unique-key insert backs
+  out by itself and leaves the transaction usable. Rename it in the next fiscal change.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
 - **Transfer lock cases left by the comment-pruning sweeps**
@@ -1043,8 +1035,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   wide** — found by #567 while pruning comments. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`.
   [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
-- **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert**
-  [Detail](architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
 - **`centsToDecimal` does not refuse a count past the money bound**
   [Detail](architecture.md#centstodecimal-does-not-refuse-a-count-past-the-money-bound)
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).

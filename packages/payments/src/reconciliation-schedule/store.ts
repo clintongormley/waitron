@@ -252,19 +252,14 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    // The adapter's nested `tx.transaction` is a savepoint. Its body is one insert, which SQLite
-    // backs out by itself when refused, leaving the transaction usable, so today it changes nothing
-    // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need").
-    await tx.transaction(async (attempt) => {
-      await attempt.insert(reconciliationRuns).values({
-        duty: params.duty,
-        periodFrom,
-        periodTo: params.period.to.toISOString(),
-        generation: Number(state.highest) + 1,
-        state: "pending",
-        attempts: 0,
-        nextAttemptAt: params.dueAt.toISOString(),
-      });
+    await tx.insert(reconciliationRuns).values({
+      duty: params.duty,
+      periodFrom,
+      periodTo: params.period.to.toISOString(),
+      generation: Number(state.highest) + 1,
+      state: "pending",
+      attempts: 0,
+      nextAttemptAt: params.dueAt.toISOString(),
     });
     return true;
   } catch (error) {
