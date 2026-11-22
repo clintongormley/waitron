@@ -547,7 +547,6 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       },
       reuseExistingParents: true,
       envio: true,
-      cadena: true,
       entorno: "preproduction",
     });
 

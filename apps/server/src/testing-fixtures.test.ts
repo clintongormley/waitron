@@ -1,6 +1,8 @@
 import { withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { readChainHead } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { nodeId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { seedFiscalRegistro, insertFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -35,30 +37,32 @@ describe("the shared fixtures seed a real migrated venue", () => {
   });
 
   it("seeds a fiscal registro with its whole FK closure, chain head and envío", async () => {
-    const seeded = await seedFiscalRegistro(db, { cadena: true, envio: true });
+    const seeded = await seedFiscalRegistro(db, { envio: true });
     const { rows } = await db.execute<{
       huella: string;
       entorno: string;
       fecha: string;
       creado: string;
-      chain: string;
       envio: string;
     }>(sql`
       select r.huella, r.entorno,
              r.fecha_hora_huso_gen_registro as fecha, r.creado_en as creado,
-             c.ultima_huella as chain, e.estado as envio
+             e.estado as envio
       from verifactu_records r
-      join cadenas c on c.node_id = r.node_id
       join verifactu_submissions e on e.registro_id = r.id
       where r.id = ${seeded.registroId}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       huella: seeded.huella,
       entorno: "production",
-      chain: seeded.huella,
       envio: "pendiente",
       // The fixture's `+01:00` literal reaches the column as the UTC instant it names.
       fecha: "2026-07-20T18:20:30.000Z",
+    });
+    expect(await withTransaction(db, (tx) => readChainHead(tx, nodeId(seeded.nodeId)))).toEqual({
+      secuencia: seeded.secuencia,
+      ultimoRegistroId: seeded.registroId,
+      ultimaHuella: seeded.huella,
     });
     // `creado_en` comes from the column's own generator, which only the insert BUILDER runs.
     expect(Number.isNaN(Date.parse(rows[0]!.creado))).toBe(false);

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { invoiceSeries, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
 import {
-  cadenas,
   verifactuSubmissions,
   verifactuIdentities,
   verifactuRecords,
@@ -135,7 +134,7 @@ export interface RegistroOptions {
   entorno?: Entorno;
   /** The 64-char huella. Default `"F".repeat(64)`. */
   huella?: string;
-  /** verifactu_records.secuencia (and cadenas.secuencia). Default 1. */
+  /** verifactu_records.secuencia. Default 1. */
   secuencia?: number;
   /** num_serie_factura. Default `A/${secuencia}`. */
   numSerie?: string;
@@ -206,15 +205,11 @@ export async function insertFiscalRegistro(
 }
 
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
-  /** Also seed a `cadenas` chain-head row pointing at this registro. */
-  cadena?: boolean;
   /** Also seed an `verifactu_submissions` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };
 }
 
-/**
- * Seeds the FK closure AND the registro (optionally its `cadenas`/`verifactu_submissions` companions).
- */
+/** Seeds the registro, its parents and, optionally, its submission. */
 export async function seedFiscalRegistro(
   db: Database,
   opts: SeedFiscalRegistroOptions = {},
@@ -222,14 +217,6 @@ export async function seedFiscalRegistro(
   const ids = await seedFiscalParents(db, opts);
   const registro = await insertFiscalRegistro(db, ids, opts);
 
-  if (opts.cadena) {
-    await db.insert(cadenas).values({
-      nodeId: ids.nodeId,
-      secuencia: registro.secuencia,
-      ultimoRegistroId: registro.registroId,
-      ultimaHuella: registro.huella,
-    });
-  }
   if (opts.envio) {
     const estado =
       typeof opts.envio === "object" ? (opts.envio.estado ?? "pendiente") : "pendiente";
