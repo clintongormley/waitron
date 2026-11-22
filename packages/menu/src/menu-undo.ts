@@ -12,6 +12,7 @@ import type {
   MenuHome,
   SectionInput,
 } from "@waitron/shared";
+import { pathKey } from "./menu-navigation.js";
 
 export interface UndoStructureNode {
   memberId: string;
@@ -55,6 +56,21 @@ export type MenuUndoCommand =
       listId: string;
       memberId: string;
       input: IncludeFolderInput;
+      name: string;
+    }
+  | {
+      method: "addSectionMember";
+      listId: string;
+      ref: Extract<MemberRef, { kind: "product" }>;
+      position: number;
+      name: string;
+    }
+  | { method: "removeSectionMember"; listId: string; memberId: string; name: string }
+  | {
+      method: "moveSectionMembersInto";
+      listId: string;
+      members: { listId: string; memberId: string }[];
+      position: number;
       name: string;
     }
   | { method: "updateSection"; sectionId: string; patch: Partial<SectionInput>; name: string }
@@ -189,6 +205,10 @@ function thisMenuAction(plan: Plan, change: MenuChange): MenuChangeAction {
       return plan.live.section(change.sectionId)?.includedMenu === undefined
         ? ownSectionUndo(plan.input.languages, plan.live, plan.now, change)
         : includeFolderUndo(plan, change);
+    case "product_added":
+    case "product_moved":
+    case "product_removed":
+      return productPlacementUndo(plan, change);
     case "price_changed":
       return dishPriceUndo(plan.live, plan.now, change);
     case "product_changed":
@@ -199,6 +219,120 @@ function thisMenuAction(plan: Plan, change: MenuChange): MenuChangeAction {
 }
 
 const undo = (command: MenuUndoCommand): MenuChangeAction => ({ kind: "undo", command });
+
+type Structure = NonNullable<MenuUndoInput["structure"]>;
+type OwnList = { listId: string; nodes: readonly UndoStructureNode[] };
+
+function ownListAt(structure: Structure, path: readonly string[]): OwnList | null {
+  let { rootSectionId: listId, nodes } = structure;
+  for (const sectionId of path) {
+    const section = nodes.find(
+      (node) => node.ref.kind === "section" && node.ref.sectionId === sectionId,
+    );
+    if (section === undefined || section.includedMenuId !== undefined) return null;
+    listId = sectionId;
+    nodes = section.children ?? [];
+  }
+  return { listId, nodes };
+}
+
+function holdsProduct(nodes: readonly UndoStructureNode[], productId: string): boolean {
+  return nodes.some(
+    ({ ref, children }) =>
+      (ref.kind === "product" && ref.productId === productId) ||
+      (children !== undefined && holdsProduct(children, productId)),
+  );
+}
+
+function productMemberAt(structure: Structure, path: readonly string[], productId: string) {
+  const list = ownListAt(structure, path);
+  const member = list?.nodes.find(
+    ({ ref }) => ref.kind === "product" && ref.productId === productId,
+  );
+  return list && member ? { listId: list.listId, memberId: member.memberId } : null;
+}
+
+function matchesMember(ref: MemberRef, member: DocumentMember): boolean {
+  switch (member.kind) {
+    case "product":
+      return ref.kind === "product" && ref.productId === member.productId;
+    case "section":
+      return ref.kind === "section" && ref.sectionId === member.sectionId;
+    case "set_menu":
+      return ref.kind === "set_menu" && ref.menuId === member.menuId;
+  }
+}
+
+function restoreSpot(
+  structure: Structure,
+  live: MenuDocument,
+  path: readonly string[],
+  productId: string,
+) {
+  const list = ownListAt(structure, path);
+  if (list === null) return null;
+  let members = live.root.members;
+  for (const sectionId of path) {
+    const section = members.find(
+      (member) => member.kind === "section" && member.sectionId === sectionId,
+    );
+    if (section?.kind !== "section") return null;
+    members = section.members;
+  }
+  const productIndex = members.findIndex(
+    (member) => member.kind === "product" && member.productId === productId,
+  );
+  if (productIndex < 0) return null;
+  for (let index = productIndex - 1; index >= 0; index--) {
+    const sibling = members[index]!;
+    const storedIndex = list.nodes.findIndex(({ ref }) => matchesMember(ref, sibling));
+    if (storedIndex >= 0) return { listId: list.listId, position: storedIndex + 1 };
+  }
+  return { listId: list.listId, position: 0 };
+}
+
+function productPlacementUndo(
+  plan: Plan,
+  change: Extract<MenuChange, { kind: "product_added" | "product_moved" | "product_removed" }>,
+): MenuChangeAction {
+  const { structure } = plan.input;
+  if (!structure) return NONE;
+  const { name, productId } = change;
+  const was = plan.live.offer(productId)?.offer;
+  const now = plan.now.offer(productId)?.offer;
+  const ref = { kind: "product", productId } as const;
+  if (change.kind === "product_added") {
+    if (now?.placements.length !== 1) return NONE;
+    const member = productMemberAt(structure, now.placements[0]!, productId);
+    return member ? undo({ method: "removeSectionMember", ...member, name }) : NONE;
+  }
+  if (change.kind === "product_removed") {
+    if (
+      was?.placements.length !== 1 ||
+      was.grossPrice !== null ||
+      was.variants.some((variant) => variant.menuPrice !== null) ||
+      holdsProduct(structure.nodes, productId)
+    )
+      return NONE;
+    const spot = restoreSpot(structure, plan.live.document, was.placements[0]!, productId);
+    return spot ? undo({ method: "addSectionMember", ...spot, ref, name }) : NONE;
+  }
+
+  if (was === undefined || now === undefined) return NONE;
+  const wasPaths = new Set(was.placements.map(pathKey));
+  const nowPaths = new Set(now.placements.map(pathKey));
+  const added = now.placements.filter((path) => !wasPaths.has(pathKey(path)));
+  const removed = was.placements.filter((path) => !nowPaths.has(pathKey(path)));
+  if (added.length > 1 || removed.length > 1) return NONE;
+  const member = added[0] && productMemberAt(structure, added[0], productId);
+  const spot = removed[0] && restoreSpot(structure, plan.live.document, removed[0], productId);
+  if (member === null || spot === null) return NONE;
+  if (member && spot)
+    return undo({ method: "moveSectionMembersInto", ...spot, members: [member], name });
+  if (member) return undo({ method: "removeSectionMember", ...member, name });
+  if (spot) return undo({ method: "addSectionMember", ...spot, ref, name });
+  return NONE;
+}
 
 function homeDisplayUndo(
   live: MenuDocument,

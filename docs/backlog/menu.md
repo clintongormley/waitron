@@ -243,8 +243,8 @@ the 2026-09-30 folders design; what remains:
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
   2026-10-07: "would it be possible to have an 'Undo' link as well?").** Planned in five pull
-  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). Left for later: PR 3, products added, moved and removed in
-  this menu's own lists; PR 4, includes added and removed, own sections moved, and a new own section
+  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). Left for later: PR 4,
+  includes added and removed, own sections moved, and a new own section
   that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this
   entry is deleted and the changes left without Undo (the plan's section 2) become their own entry.
 

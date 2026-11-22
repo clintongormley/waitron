@@ -27,6 +27,14 @@ export async function sendMenuUndo(api: MenuUndoApi, command: MenuUndoCommand): 
     case "setIncludeFolder":
       await api.setIncludeFolder(command.listId, command.memberId, command.input);
       return;
+    case "addSectionMember":
+      await api.addSectionMember(command.listId, command.ref, command.position);
+      return;
+    case "removeSectionMember":
+      return api.removeSectionMember(command.listId, command.memberId);
+    case "moveSectionMembersInto":
+      await api.moveSectionMembersInto(command.listId, command.members, command.position);
+      return;
     case "setHomeDisplay":
       return api.setHomeDisplay(command.menuId, command.device, command.patch);
   }
@@ -74,6 +82,22 @@ function refusalSentence(
       if (code === "menu_section.invalid" && !PRESENTATION_FIELDS.includes(field)) return null;
       const key = SECTION_REFUSALS[code];
       return key ? { key, values: { name: command.name } } : null;
+    }
+    case "addSectionMember":
+    case "removeSectionMember":
+    case "moveSectionMembersInto": {
+      const values = { name: command.name };
+      if (code === "menu_section.not_found")
+        return {
+          key:
+            command.method === "addSectionMember"
+              ? "menu_preview.undo_product_list_gone"
+              : "menu_preview.undo_product_placement_gone",
+          values,
+        };
+      if (code === "menu_section.member_duplicate" && command.method !== "removeSectionMember")
+        return { key: "menu_preview.undo_product_already_in_list", values };
+      return null;
     }
     case "setHomeDisplay":
       if (code === "menu.not_found") return { key: "menu_preview.undo_menu_gone", values: {} };
