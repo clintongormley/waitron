@@ -858,15 +858,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   may also be a font file the venue uploads, so every screen draws the bar's own face.
   [Detail](backlog/till.md#uploaded-font-files-for-themes-owner-2026-10-20-a841-q7-b--after-a841)
 
-- **Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16).** — left
-  open by the product folders work. Since A429 slice 3 the floor screen re-reads the floor every
-  15 seconds while a zone's map is on screen. Polling would read `listTablesWithState` every few
-  seconds on every till; choose the interval and cost first.
-  [Detail](backlog/till.md#refresh-the-floor-without-a-staff-action-in-a-zones-list-view--open-3d-w16)
-
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. Every menu poll waits
-  its turn in the write queue, and a till learns of a menu change only by polling, because the
-  dashboard's live-update route accepts the management cookie only.
+  its turn in the write queue.
   [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Every menu read from an

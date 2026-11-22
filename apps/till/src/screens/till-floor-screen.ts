@@ -1117,9 +1117,8 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  /** A handheld re-reads in list view too, so its Ready bar stays current. */
   #watchFloor(): void {
-    if ((this.#zone.view !== "map" && !this.handheld) || !this.isConnected) {
+    if (!this.isConnected) {
       this.#rereadTimer?.stop();
       this.#rereadTimer = undefined;
       return;

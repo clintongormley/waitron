@@ -500,10 +500,7 @@ Every `/api/menu-state` poll waits its turn in the
 write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
 inside `withTransaction`; reading outside a transaction would skip the queue but give
 `menuState`'s queries no single consistent view, and there is no read-only transaction
-(`packages/db/src/tenancy.ts`). A
-till learns of a change only by polling, because the dashboard's live-update route accepts the
-management cookie only; a till-session branch there would let the server tell tills (plan D11), a
-later refinement.
+(`packages/db/src/tenancy.ts`).
 
 ## The till's home page (Task 9, #729)
 
@@ -2756,14 +2753,6 @@ plan editor's save refuses deleting a booked table (`table.booked`) but not maki
 booking stays, and seating it is refused `table.in_joined_table` once the reset applies, so staff
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
 refuses it, as a delete is refused, or only warns.
-
-## Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16)
-
-Left open by the product folders work. Since A429 slice 3 the
-floor screen re-reads the floor every 15 seconds while a zone's map is on screen
-(`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
-events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
-few seconds on every till; choose the interval and cost first.
 
 ## A921. On a narrow till, should the person's name give room to the tab strip?
 

@@ -221,14 +221,34 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(details).toEqual([{ poll: true }]);
   });
 
-  it("a till does not ask while the list shows", async () => {
+  it("a till asks every 15 s while the list shows", async () => {
     const el = await mount();
-    const seen = countRefreshes(el);
+    const details: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => details.push((event as CustomEvent).detail));
 
     await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
     vi.advanceTimersByTime(30_000);
-    expect(seen.count).toBe(0);
+    expect(details).toEqual([{ poll: true }, { poll: true }]);
+  });
+
+  it("a till refreshes on a table change while the list shows", async () => {
+    const live = liveConnectionFixture();
+    try {
+      const el = await mount({ live: live.connection });
+      await toggleFloorView(el);
+      expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+      const seen = countRefreshes(el);
+      live.ready();
+      await Promise.resolve();
+      expect(seen.count).toBe(1);
+      live.change("dining_tables");
+      await Promise.resolve();
+      expect(seen.count).toBe(2);
+    } finally {
+      cleanupWidgets();
+      live.connection.stop();
+    }
   });
 
   it("a handheld asks every 15 s while the list shows", async () => {
@@ -324,14 +344,15 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(seen.count).toBe(1);
   });
 
-  it("starts again when the map comes back, and stops when the screen leaves", async () => {
+  it("keeps its re-read across a view change, stops when the screen leaves and starts again when it comes back", async () => {
     const el = await mount();
     const seen = countRefreshes(el);
 
+    vi.advanceTimersByTime(10_000);
     await toggleFloorView(el);
-    await toggleFloorView(el);
-    vi.advanceTimersByTime(15_000);
+    vi.advanceTimersByTime(5_000);
     expect(seen.count).toBe(1);
+    await toggleFloorView(el);
 
     const host = el.parentElement!;
     el.remove();
