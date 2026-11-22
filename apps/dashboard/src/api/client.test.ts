@@ -638,7 +638,7 @@ describe("DashboardApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await api.setVenueDefaultMenu("c2");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue/default-menu", {
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-default-menu", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },

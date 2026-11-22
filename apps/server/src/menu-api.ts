@@ -1461,7 +1461,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     }),
   );
 
-  app.put("/management-api/venue/default-menu", (c) =>
+  app.put("/management-api/venue-default-menu", (c) =>
     runBodyMenu(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = await requireMenuIdBody(c);

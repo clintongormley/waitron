@@ -337,7 +337,7 @@ describe("Menu API — option groups, gates, by-id FKs", () => {
       }),
     );
     await expect403(
-      await send(app, "PUT", "/management-api/venue/default-menu", staffCookie, {
+      await send(app, "PUT", "/management-api/venue-default-menu", staffCookie, {
         menuId: ZERO_UUID,
       }),
     );
