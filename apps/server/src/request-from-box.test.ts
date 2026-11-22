@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   addressIsBox,
+  plainAddress,
   requestAddress,
   requestFromBox,
   requestProvenFromBox,
@@ -43,6 +44,19 @@ it.each(["192.168.10.31", "fe80::2", "::ffff:192.168.10.31", "fe80::2%eth0"])(
     expect(addressIsBox(address, deps)).toBe(false);
   },
 );
+
+it.each([
+  ["::ffff:192.168.1.5", "192.168.1.5"],
+  ["::FFFF:192.168.1.5", "192.168.1.5"],
+  ["fe80::1%en0", "fe80::1"],
+  ["FE80:0000:0000:0000:0000:0000:0000:0001", "fe80::1"],
+  ["2001:db8:0:0:0:0:0:1", "2001:db8::1"],
+  ["0:0:0:0:0:ffff:c0a8:0105", "192.168.1.5"],
+  ["192.168.1.5", "192.168.1.5"],
+  ["::1", "::1"],
+])("writes %s as %s", (address, plain) => {
+  expect(plainAddress(address)).toBe(plain);
+});
 
 async function sourceOf(env: unknown, sourceDeps: RequestSourceDeps = deps) {
   const app = new Hono();

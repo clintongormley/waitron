@@ -123,6 +123,9 @@ describe("the main box's box-to-box join routes", () => {
     ["a scope", "FE80:0:0::1%eth0", "fe80::1"],
     ["an IPv4-mapped prefix", "::ffff:192.168.1.20", "::ffff:192.168.1.20"],
     ["upper case and leading zeros", "2001:DB8::0001", "2001:db8::1"],
+    ["no compression", "2001:0db8:0000:0000:0000:0000:0000:0001", "2001:db8::1"],
+    ["plain IPv4, from an IPv4-mapped source", "192.168.1.20", "::ffff:192.168.1.20"],
+    ["no scope, from a scoped source", "fe80::1", "fe80::1%en0"],
   ])("matches a listed address written with %s", async (_name, listed, source) => {
     const box = newBox("192.168.1.20");
     box.hello = { ...box.hello, addresses: [listed] };

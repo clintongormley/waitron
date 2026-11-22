@@ -3,7 +3,7 @@
 // listed; the person compares the code on both screens before anything is sent.
 import "./errors.js";
 import { createPublicKey } from "node:crypto";
-import { isIP, SocketAddress } from "node:net";
+import { isIP } from "node:net";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isUuid } from "@waitron/shared";
@@ -46,7 +46,7 @@ import {
 import { isReadableChart } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
-import { isRemoteStaffRequest, requestAddress } from "./request-from-box.js";
+import { isRemoteStaffRequest, plainAddress, requestAddress } from "./request-from-box.js";
 import { canLockFor, prepareJoinLock } from "./box-join-seal.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
@@ -141,20 +141,10 @@ function parseHello(body: Record<string, unknown>): {
   };
 }
 
-/** One spelling per address: no `%scope`, no IPv4-mapped prefix, IPv6 lower-case and compressed. */
-function canonicalAddress(address: string): string {
-  const bare = address.replace(/%.*$/, "");
-  const compressed =
-    isIP(bare) === 6 ? new SocketAddress({ address: bare, family: "ipv6" }).address : bare;
-  const mapped = /^::ffff:(.*)$/i.exec(compressed)?.[1];
-  return mapped !== undefined && isIP(mapped) === 4 ? mapped : compressed;
-}
-
-/** The request's source address, in canonical spelling, when the hello lists it. */
+/** The request's source address, in {@link plainAddress} spelling, when the hello lists it. */
 function listedSource(c: Context, addresses: readonly string[]): string {
-  const raw = requestAddress(c);
-  const from = raw === undefined ? undefined : canonicalAddress(raw);
-  if (from === undefined || !addresses.some((a) => canonicalAddress(a) === from))
+  const from = requestAddress(c);
+  if (from === undefined || !addresses.some((a) => plainAddress(a) === from))
     throw new AppError("mirror.join_address_mismatch", {});
   return from;
 }
