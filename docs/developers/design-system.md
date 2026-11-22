@@ -5600,8 +5600,8 @@ The Rota view (`packages/staffing/src/dashboard/rota-view.ts`) opens for `schedu
 `/view/rota/week/<monday>[/area/<area>|/area/everyone]`. The Rota tab opens the week of the last day
 you opened in Staffing, or the venue's current week. An address with a valid Monday opens that
 week. A month-only address or an invalid week opens the first week of the addressed or default
-month. Its one bar holds ‹, the
-week's title, › and a Show menu (Everyone, then every area), then at the end the week's state
+month. Its one bar holds ‹, the week's title, › and a Show menu (Everyone, then every area),
+then at the end the week's state
 (Draft or Published), "Staff still see the published week" while a published week is being
 changed, what needs attention, the labour count (or a quiet "No labour rules to check against")
 and the one action. With no `area`, or an unknown one, the Rota shows its first area; with no active
