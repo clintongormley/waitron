@@ -8,7 +8,7 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
-import { refuseAdvanceRefund, refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { refusePlainRefundOfAdvance, refuseTakenOffAdvance } from "./advance-taken-off.js";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -132,7 +132,8 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
-/** A payment on account's money is not refunded this way; its tip alone may come back here. */
+/** A payment on account's money comes back this way only as {@link refusePlainRefundOfAdvance}
+ * allows; its tip alone always may. */
 async function refuseRefundOfAdvance(
   tx: Transaction,
   saleId: string,
@@ -142,8 +143,7 @@ async function refuseRefundOfAdvance(
     .select({ saleId: billAdvances.advanceSaleId })
     .from(billAdvances)
     .where(eq(billAdvances.advanceSaleId, saleId));
-  if (advance !== undefined)
-    await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", { tenderId });
+  if (advance !== undefined) await refusePlainRefundOfAdvance(tx, saleId, { tenderId });
 }
 
 export function refundAmountsFit(applied: number, tip: number, left: number, tipLeft: number) {

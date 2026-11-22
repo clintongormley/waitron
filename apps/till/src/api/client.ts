@@ -1228,6 +1228,8 @@ export interface BillPaymentView extends OutsideCardDetails {
   takenOffBy?: TakenOffBy;
   left?: string;
   tipLeft?: string;
+  /** What Refund a payment gave back from the advance's ticket; `left` still counts it. */
+  givenBack?: string;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";

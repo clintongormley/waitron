@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8aa452e4-a451-4a7d-a765-98c9c2590ee1",
+  "id": "2b94d095-c3bf-4800-acea-3b01e1e60fcb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11344,6 +11344,13 @@
           "name": "refunds_created_at_idx",
           "columns": [
             "created_at"
+          ],
+          "isUnique": false
+        },
+        "refunds_completed_at_idx": {
+          "name": "refunds_completed_at_idx",
+          "columns": [
+            "completed_at"
           ],
           "isUnique": false
         },

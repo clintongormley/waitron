@@ -114,6 +114,7 @@ export const refunds = table(
       .where(sql`${t.providerRefundRef} is not null`),
     index("refunds_recovery_idx").on(t.state, t.nextRetryAt, t.createdAt, t.id),
     index("refunds_created_at_idx").on(t.createdAt),
+    index("refunds_completed_at_idx").on(t.completedAt),
     ...originChecks("refunds", t.source, t.deviceId),
     check(
       "refunds_parent_ck",

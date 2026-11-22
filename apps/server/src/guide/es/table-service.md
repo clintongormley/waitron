@@ -347,7 +347,13 @@ cierra. El pedido espera en **Pedidos pendientes**, en la pantalla **Mostrador**
 En un recibo anterior, elige **Devolver un pago**. Elige el **Pago original**, revisa el **Importe
 del pago que se devuelve** y la **Propina que se devuelve**, y elige un **Motivo**. Un motivo que
 necesita una nota te pide que la escribas. Elige **Devolver**. En efectivo,
-entrega el dinero al cliente cuando la devolución se haya hecho.
+entrega el dinero al cliente cuando la devolución se haya hecho. **Descargar para tu gestor (XLSX)**,
+en **Ventas y recaudación** del panel, lista estas devoluciones en una hoja propia, con el IVA que sigue declarado porque no se emite
+factura rectificativa.
+
+Para devolver un pago parcial que el ticket de la mesa ya descontó, usa primero **Rectificar
+factura** en el ticket de la mesa. Cuando haya devuelto todo lo pagado en él, elige **Devolver un
+pago** en el ticket propio del pago parcial para el resto.
 
 Después de **Cancelar y devolver**, o de **Cerrar mesa** con platos marcados, la ventana se abre
 ya rellenada. El pago queda elegido cuando solo uno se puede devolver en este dispositivo. El

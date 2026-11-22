@@ -4,6 +4,7 @@ import {
   billAdvances,
   billPayments,
   correctivesOf,
+  invoiceCorrectionRefunds,
   invoiceCorrections,
   invoiceSeries,
   orderTableLabels,
@@ -241,6 +242,9 @@ export interface AdvancePaymentMoney {
   correctives: number;
   /** The tips, in cents, of the completed `refunds` against its tender on the advance. */
   tipGivenBack: number;
+  /** The applied amounts, in cents, of those refunds that are no leg of a Correct invoice: what
+   * Refund a payment gave back; `left` still counts it. */
+  givenBack: number;
 }
 
 /** The named bills' advances, each with its correctives (`correctivesOf`) included, oldest first
@@ -287,13 +291,18 @@ export async function readBillAdvances(
   }>(sql`select a.id as advance_id, cast(c.total as text) as total, c.vat_breakdown
     from sales a join sales c on ${correctivesOf(sql`c`, sql`a.id`)}
     where a.id in (${saleIds})`);
-  const tipsGivenBack = await tx
+  const refundsBack = await tx
     .select({
       billPaymentId: tenders.billPaymentId,
       tips: sql<number>`sum(${refunds.tipAmount})`.mapWith(Number),
+      plain:
+        sql<number>`sum(case when ${invoiceCorrectionRefunds.id} is null then ${refunds.appliedAmount} else 0 end)`.mapWith(
+          Number,
+        ),
     })
     .from(refunds)
     .innerJoin(tenders, eq(tenders.id, refunds.tenderId))
+    .leftJoin(invoiceCorrectionRefunds, eq(invoiceCorrectionRefunds.tenderRefundId, refunds.id))
     .where(
       and(
         inArray(
@@ -338,6 +347,7 @@ export async function readBillAdvances(
       gross,
     });
     credits.set(advance.workingOrderId, list);
+    const givenBack = refundsBack.find((row) => row.billPaymentId === advance.billPaymentId);
     payments.set(advance.billPaymentId, {
       saleId: advance.saleId,
       ticket: {
@@ -348,8 +358,8 @@ export async function readBillAdvances(
       },
       left: gross,
       correctives: own.length,
-      tipGivenBack:
-        tipsGivenBack.find((row) => row.billPaymentId === advance.billPaymentId)?.tips ?? 0,
+      tipGivenBack: givenBack?.tips ?? 0,
+      givenBack: givenBack?.plain ?? 0,
     });
   }
   return { credits, payments };

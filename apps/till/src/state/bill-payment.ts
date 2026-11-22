@@ -284,6 +284,10 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     reason?: unknown;
     recoveryUrl?: unknown;
     invoiceNumber?: unknown;
+    finalMoneyLeft?: unknown;
+    finalNotFullyPaid?: unknown;
+    moneyLeft?: unknown;
+    advanceInvoiceNumbers?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -298,6 +302,18 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
     ...(typeof refused.recoveryUrl === "string" ? { recoveryUrl: refused.recoveryUrl } : {}),
     ...(typeof refused.invoiceNumber === "string" ? { invoiceNumber: refused.invoiceNumber } : {}),
+    ...(typeof refused.finalMoneyLeft === "string"
+      ? { finalMoneyLeft: refused.finalMoneyLeft }
+      : {}),
+    ...(refused.finalNotFullyPaid === true ? { finalNotFullyPaid: true as const } : {}),
+    ...(typeof refused.moneyLeft === "string" ? { moneyLeft: refused.moneyLeft } : {}),
+    ...(Array.isArray(refused.advanceInvoiceNumbers)
+      ? {
+          advanceInvoiceNumbers: refused.advanceInvoiceNumbers.filter(
+            (number): number is string => typeof number === "string",
+          ),
+        }
+      : {}),
   };
 }
 
@@ -328,10 +344,16 @@ export function refundSubmissionFor(
 }
 
 /** What is left to give back of a payment: what it took less its completed refunds, or, for one
- * that paid an advance, what the server says is left of it. */
+ * that paid an advance, what the server says is left of it less what Refund a payment gave back. */
 export function refundableOf(payment: BillPaymentView): { applied: string; tip: string } {
   if (payment.left !== undefined && payment.tipLeft !== undefined)
-    return { applied: payment.left, tip: payment.tipLeft };
+    return {
+      applied: toScale(
+        subtractDecimal(decimal(payment.left), decimal(payment.givenBack ?? "0")),
+        MONEY_SCALE,
+      ),
+      tip: payment.tipLeft,
+    };
   const done = payment.refunds.filter((refund) => refund.state === "completed");
   const less = (amount: string, refunded: string[]) =>
     toScale(

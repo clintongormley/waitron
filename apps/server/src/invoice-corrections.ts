@@ -57,7 +57,7 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { saleScopeInZones } from "./find-bill-transactions.js";
-import { refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { refundableAdvanceNumbersTakenOffBy, refuseTakenOffAdvance } from "./advance-taken-off.js";
 import { issueHeldBill } from "./bill-payments.js";
 import "./errors.js";
 
@@ -129,6 +129,7 @@ async function checkCorrectionOpenable(
         saleId,
         moneyLeft: moneyRefundable,
         gross: preview.gross,
+        advanceInvoiceNumbers: await refundableAdvanceNumbersTakenOffBy(tx, saleId),
       });
     return { ...preview, moneyRefundable };
   });

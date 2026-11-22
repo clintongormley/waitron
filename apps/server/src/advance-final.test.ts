@@ -5,8 +5,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
+  devices,
+  drawerEntries,
   parties,
   readVenueClock,
+  refunds,
   saleLines,
   sales,
   taxpayer,
@@ -24,6 +27,7 @@ import {
   type FiledInvoice,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readFindBill } from "./find-bill-bills.js";
 import type { BillPaymentRequest } from "./bill-payments.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { endMeal } from "./meal-end.js";
@@ -356,6 +360,180 @@ describe("the rest's invoice takes the advances off", () => {
     expect(printed).toMatchObject({ total: "90.00", owed: "90.00" });
     expect(ticket).toMatchObject({ total: "90.00", owed: "90.00" });
     expect(ticket).not.toHaveProperty("payments");
+  });
+
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: the bill still owes €90, the advance still counts €30 and shows €20 given back", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await printTheBill(bill);
+    const payments = async () => {
+      const read = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/working-orders/${bill.billId}/payments`,
+      );
+      expect(read.status, JSON.stringify(read.json)).toBe(200);
+      return read.json as { payments: Record<string, unknown>[] };
+    };
+    expect(await payments()).toMatchObject({ received: "30.00", outstanding: "90.00" });
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
+    );
+
+    const given = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advanceId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    const after = await payments();
+    expect(after).toMatchObject({ received: "30.00", outstanding: "90.00" });
+    expect(after.payments[0]).toMatchObject({ left: "30.00", givenBack: "20.00" });
+  });
+
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: Find bills' paid figure does not move", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await printTheBill(bill);
+    const found = () => inTx(venue, (tx) => readFindBill(tx, bill.billId));
+    const before = await found();
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
+    );
+
+    const given = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advanceId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(before).toMatchObject({ paid: "30.00" });
+    expect(await found()).toMatchObject({ paid: before.paid, stillOwed: before.stillOwed });
+  });
+
+  it("example 1 by Print the bill, €50 paid on it: Refund a payment of the advance is refused, saying the receipt is not fully paid, and once it is, refused as on any paid receipt", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await printTheBill(bill);
+    expect((await cash(bill.billId, "50.00")).status).toBe(200);
+    const rest = await restOf(bill.billId);
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
+    );
+    const refundAdvance = () =>
+      send(venue.app, venue.cookie, "POST", `/api/transactions/${advanceId}/refunds`, {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: "30.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: { personId: venue.adminId, pin: "1234" },
+      });
+    const params = {
+      saleId: advanceId,
+      finalSaleId: rest!.id,
+      invoiceNumber: await inTx(venue, (tx) => readInvoiceNumber(tx, brandSaleId(rest!.id))),
+    };
+
+    const unpaid = await refundAdvance();
+    const correction = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${rest!.id}/corrections/preview`,
+      { gross: "30.00" },
+    );
+
+    expect(unpaid.status, JSON.stringify(unpaid.json)).toBe(409);
+    expect(unpaid.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: { ...params, finalMoneyLeft: "50.00", finalNotFullyPaid: true },
+    });
+    expect(correction.json).toEqual({
+      code: "invoice_correction.not_settled",
+      params: { saleId: rest!.id },
+    });
+    expect((await cash(bill.billId, "40.00")).status).toBe(200);
+    const paid = await refundAdvance();
+    expect(paid.status, JSON.stringify(paid.json)).toBe(409);
+    expect(paid.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: { ...params, finalMoneyLeft: "90.00" },
+    });
+    expect(
+      await inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
+    ).toEqual([]);
+  });
+
+  it("example 1, the €90 given back from the rest's invoice, then the €30 advance back in cash by Refund a payment: the drawer records the €30 leaving it", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    expect((await cash(bill.billId, "90.00")).status).toBe(200);
+    const rest = await restOf(bill.billId);
+    const giveBack = async (saleId: string, amount: string) => {
+      const [tender] = await inTx(venue, (tx) =>
+        tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId)),
+      );
+      const given = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/transactions/${saleId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          tenderId: tender!.id,
+          appliedAmount: amount,
+          tipAmount: "0.00",
+          reason: "Paid too much",
+          override: { personId: venue.adminId, pin: "1234" },
+        },
+      );
+      expect(given.status, JSON.stringify(given.json)).toBe(200);
+    };
+    await giveBack(rest!.id, "90.00");
+
+    await giveBack(advanceId, "30.00");
+
+    const [refund] = await inTx(venue, (tx) =>
+      tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
+    );
+    expect(refund).toMatchObject({ method: "cash", state: "completed", appliedAmount: 3000 });
+    const [device] = await inTx(venue, (tx) =>
+      tx.select().from(devices).where(eq(devices.id, venue.deviceId)),
+    );
+    expect(
+      await inTx(venue, (tx) =>
+        tx.select().from(drawerEntries).where(eq(drawerEntries.refundId, refund!.id)),
+      ),
+    ).toMatchObject([
+      {
+        kind: "cash_refund",
+        amount: -3000,
+        printerId: device!.cashDrawerPrinterId,
+        deviceId: venue.deviceId,
+      },
+    ]);
   });
 
   it("a €10 advance and a plain €5, then Print the bill: the ticket takes the advance off, lists the €5 and owes €105", async () => {

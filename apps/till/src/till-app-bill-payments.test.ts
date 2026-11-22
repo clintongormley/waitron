@@ -8252,6 +8252,7 @@ describe("till-app: giving back a bill payment", () => {
       saleId: "advance-sale",
       finalSaleId: "final-sale",
       invoiceNumber: "A/45",
+      finalMoneyLeft: "20.00",
     });
     const el = await askRefund(
       {
@@ -8266,7 +8267,7 @@ describe("till-app: giving back a bill payment", () => {
 
     expect(refundBillPayment).toHaveBeenCalledOnce();
     expect(inRefund(el, "wt-form-actions")!.error).toBe(
-      "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+      "This payment on account was already taken off the table's receipt A/45, so this ticket cannot be corrected. To give money back, first use Correct invoice on A/45: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
     );
     expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
@@ -9924,6 +9925,42 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
       "advance-sale",
     );
     expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(api.refundBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("opens Refund a payment on that ticket, and no bill refund, once the table's receipt took it off", async () => {
+    const takenOff = withAdvance({ invoiceNumber: "A/45", status: "placed" });
+    takenOff.getBillBalance = vi.fn().mockResolvedValue(
+      balanceOf({
+        received: "30.00",
+        outstanding: "90.00",
+        payments: [
+          paymentOf({
+            applied: "30.00",
+            hasTicket: true,
+            saleId: "advance-sale",
+            takenOffBy: { saleId: "table-sale", invoiceNumber: "A/45" },
+            left: "30.00",
+            tipLeft: "0.00",
+            givenBack: "0.00",
+          }),
+        ],
+      }),
+    );
+    const { el } = await mountApp(takenOff);
+    await openTable(el);
+    await openDialog(el, "rest");
+
+    await press(el, '[data-payment-refund="pay-1"]');
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull(),
+    );
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.getRefundableTenders).toHaveBeenCalledWith("advance-sale", {});
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(api.refundBillPayment).not.toHaveBeenCalled();
   });

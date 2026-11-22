@@ -517,6 +517,53 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps what the table's receipt can still give back and the payments on account it took off", () => {
+    expect(
+      refusalOf({
+        code: "advance.taken_off_final_invoice",
+        status: 409,
+        invoiceNumber: "A/45",
+        finalMoneyLeft: "0.00",
+      }),
+    ).toEqual({
+      code: "advance.taken_off_final_invoice",
+      invoiceNumber: "A/45",
+      finalMoneyLeft: "0.00",
+    });
+    expect(
+      refusalOf({ code: "invoice_correction.money_short", advanceInvoiceNumbers: ["A/12", 7] }),
+    ).toEqual({ code: "invoice_correction.money_short", advanceInvoiceNumbers: ["A/12"] });
+    expect(
+      refusalOf({
+        code: "advance.taken_off_final_invoice",
+        finalMoneyLeft: "50.00",
+        finalNotFullyPaid: true,
+      }),
+    ).toEqual({
+      code: "advance.taken_off_final_invoice",
+      finalMoneyLeft: "50.00",
+      finalNotFullyPaid: true,
+    });
+    expect(refusalOf({ code: "invoice_correction.money_short", moneyLeft: "0.00" })).toEqual({
+      code: "invoice_correction.money_short",
+      moneyLeft: "0.00",
+    });
+    expect(
+      refusalOf({
+        code: "advance.taken_off_final_invoice",
+        finalNotFullyPaid: "yes",
+        moneyLeft: 0,
+      }),
+    ).toEqual({ code: "advance.taken_off_final_invoice" });
+    expect(
+      refusalOf({
+        code: "invoice_correction.money_short",
+        finalMoneyLeft: 0,
+        advanceInvoiceNumbers: "A/12",
+      }),
+    ).toEqual({ code: "invoice_correction.money_short" });
+  });
+
   it("keeps the permission a refusal names as text", () => {
     expect(
       refusalOf({ code: "authorization.not_permitted", status: 403, permission: "sale.refund" }),
@@ -675,6 +722,26 @@ describe("a payment's refunds", () => {
 
     expect(refundableOf(payment())).toEqual({ applied: "40.00", tip: "5.00" });
     expect(refundableOf(refunded)).toEqual({ applied: "30.00", tip: "5.00" });
+  });
+
+  it("leaves to give back of a payment on account what is left of it less what Refund a payment gave back", () => {
+    const advance = payment({
+      hasTicket: true,
+      saleId: "advance-sale",
+      left: "30.00",
+      tipLeft: "2.00",
+    });
+    expect(refundableOf({ ...advance, givenBack: "20.00" })).toEqual({
+      applied: "10.00",
+      tip: "2.00",
+    });
+    expect(refundableOf({ ...advance, givenBack: "0.00" })).toEqual({
+      applied: "30.00",
+      tip: "2.00",
+    });
+    expect(refundOffered({ ...advance, tipLeft: "0.00", givenBack: "30.00" }, "placed")).toBe(
+      false,
+    );
   });
 
   it("offers a refund of a received payment on a sent or presented bill, as on an open one, and none on an abandoned bill", () => {

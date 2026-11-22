@@ -23630,15 +23630,25 @@ export class TillApp extends LitElement {
   #refundPayment(open: BillPaying, payment: BillPaymentView, suggested: string | null): void {
     if (payment.hasTicket === true && payment.saleId !== undefined && open.printed !== true) {
       const saleId = payment.saleId;
-      this.#requestLeave(() => this.#correctAdvance(open, saleId));
+      this.#requestLeave(() => this.#openAdvanceTicket(open, saleId, "correct"));
+      return;
+    }
+    if (payment.saleId !== undefined && payment.takenOffBy !== undefined && open.printed === true) {
+      const saleId = payment.saleId;
+      this.#requestLeave(() => this.#openAdvanceTicket(open, saleId, "refund"));
       return;
     }
     this.#openBillRefunding(open, payment, suggested);
   }
 
-  /** Before the bill has an invoice, Refund on a payment that paid an advance opens Correct
-   * invoice on the advance's own ticket, closing the Pay window. */
-  async #correctAdvance(open: BillPaying, saleId: string): Promise<void> {
+  /** Refund on a payment that paid an advance opens, on the advance's own ticket, Correct invoice
+   * before the bill has an invoice, or Refund a payment once that invoice took the advance off,
+   * closing the Pay window. */
+  async #openAdvanceTicket(
+    open: BillPaying,
+    saleId: string,
+    then: "refund" | "correct",
+  ): Promise<void> {
     if (this.#billPayingNow(open.id) === null) return;
     const origin = this.drill;
     this.#closeBillPaying();
@@ -23647,7 +23657,7 @@ export class TillApp extends LitElement {
       { saleId, workingOrderId: null, refundId: null },
       () => this.drill === origin,
       undefined,
-      "correct",
+      then,
     );
   }
 

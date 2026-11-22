@@ -1047,18 +1047,153 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
   );
 });
 
-it("sends staff to Correct invoice on the table's receipt once it took the advance off, naming it", () => {
-  const final = { invoiceNumber: "A/45" };
-  expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
-    "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+it("sends staff to Correct invoice on the table's receipt while it holds money, then to Refund a payment on this ticket for the rest, naming it", () => {
+  const holding = { invoiceNumber: "A/45", finalMoneyLeft: "20.00" };
+  expect(codeMessage("advance.taken_off_final_invoice", "en", holding)).toBe(
+    "This payment on account was already taken off the table's receipt A/45, so this ticket cannot be corrected. To give money back, first use Correct invoice on A/45: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
   );
-  expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
-    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+  expect(codeMessage("advance.taken_off_final_invoice", "es", holding)).toBe(
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, así que este ticket no se puede rectificar. Para devolver dinero, usa primero Rectificar factura en A/45: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en A/45. Para lo que falte, elige Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
-    /^This payment on account was already taken off the table's receipt\. /,
+    /^This payment on account was already taken off the table's receipt, so this ticket cannot be corrected\. To give money back, first use Correct invoice on that receipt: .* gives back money paid on it\. /,
+  );
+  expect(codeMessage("advance.taken_off_final_invoice", "es")).toMatch(
+    /^Este pago a cuenta ya se descontó en el ticket de la mesa, así que .* Rectificar factura en ese ticket: .* devuelve dinero pagado en él\. /,
   );
 });
+
+it.each([
+  [
+    "en",
+    "This payment on account was already taken off the table's receipt A/45, and nothing paid on A/45 is left to give back. Choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+  ],
+  [
+    "es",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45 y no queda nada pagado en A/45 por devolver. Elige Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  ],
+])(
+  "sends staff straight to Refund a payment on this ticket once the table's receipt has nothing left to give back, in %s",
+  (locale, words) => {
+    expect(
+      codeMessage("advance.taken_off_final_invoice", locale, {
+        invoiceNumber: "A/45",
+        finalMoneyLeft: "0.00",
+      }),
+    ).toBe(words);
+  },
+);
+
+it.each([
+  [
+    "en",
+    "This payment on account was already taken off the table's receipt A/45, which is not fully paid yet, so this ticket cannot be corrected. Once A/45 is fully paid, use Correct invoice on A/45 first to give money back: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, then choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+    "This payment on account was already taken off the table's receipt, which is not fully paid yet, so this ticket cannot be corrected. Once that receipt is fully paid, use Correct invoice on it first to give money back: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on it. For anything more, then choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+  ],
+  [
+    "es",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, que aún no está pagado del todo, así que este ticket no se puede rectificar. Cuando A/45 esté pagado del todo, usa primero Rectificar factura en A/45 para devolver dinero: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en A/45. Para lo que falte, elige después Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa, que aún no está pagado del todo, así que este ticket no se puede rectificar. Cuando ese ticket esté pagado del todo, usa primero Rectificar factura en él para devolver dinero: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en él. Para lo que falte, elige después Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  ],
+])(
+  "sends staff to Correct invoice on the table's receipt only once it is fully paid, while it is still being paid, in %s",
+  (locale, named, unnamed) => {
+    const unpaid = { finalMoneyLeft: "50.00", finalNotFullyPaid: true };
+    expect(
+      codeMessage("advance.taken_off_final_invoice", locale, { ...unpaid, invoiceNumber: "A/45" }),
+    ).toBe(named);
+    expect(codeMessage("advance.taken_off_final_invoice", locale, unpaid)).toBe(unnamed);
+  },
+);
+
+it.each([
+  [
+    "en",
+    "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the ticket of the payment on account A/12: it gives money back from that payment and files no corrective invoice; the accountant's export lists it.",
+    "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the tickets of the payments on account A/12 and A/13: it gives money back from those payments and files no corrective invoice; the accountant's export lists it.",
+  ],
+  [
+    "es",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en el ticket del pago a cuenta A/12: devuelve dinero de ese pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  ],
+])(
+  "points a correction with nothing left to give back straight to Refund a payment on the payments on account, without a correction first, in %s",
+  (locale, one, two) => {
+    expect(
+      codeMessage("invoice_correction.money_short", locale, {
+        moneyLeft: "0.00",
+        advanceInvoiceNumbers: ["A/12"],
+      }),
+    ).toBe(one);
+    expect(
+      codeMessage("invoice_correction.money_short", locale, {
+        moneyLeft: "0.00",
+        advanceInvoiceNumbers: ["A/12", "A/13"],
+      }),
+    ).toBe(two);
+  },
+);
+
+it("points a correction short of money to Refund a payment on the payments on account the receipt took off", () => {
+  const one = { advanceInvoiceNumbers: ["A/12"] };
+  const two = { advanceInvoiceNumbers: ["A/12", "A/13"] };
+  expect(codeMessage("invoice_correction.money_short", "en", one)).toBe(
+    "That is more than is left to give back from this bill's payments. Enter a smaller amount. For the rest, once this correction is done, choose Refund a payment on the ticket of the payment on account A/12: it gives money back from that payment and files no corrective invoice; the accountant's export lists it.",
+  );
+  expect(codeMessage("invoice_correction.money_short", "es", one)).toBe(
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta rectificación, elige Devolver un pago en el ticket del pago a cuenta A/12: devuelve dinero de ese pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  );
+  expect(codeMessage("invoice_correction.money_short", "en", two)).toBe(
+    "That is more than is left to give back from this bill's payments. Enter a smaller amount. For the rest, once this correction is done, choose Refund a payment on the tickets of the payments on account A/12 and A/13: it gives money back from those payments and files no corrective invoice; the accountant's export lists it.",
+  );
+  expect(codeMessage("invoice_correction.money_short", "es", two)).toBe(
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta rectificación, elige Devolver un pago en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  );
+  for (const params of [undefined, { advanceInvoiceNumbers: [] }])
+    expect(codeMessage("invoice_correction.money_short", "en", params)).toBe(
+      "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+    );
+});
+
+it("reads a money parameter that is not an amount as money left, never as nothing left", () => {
+  const advances = { advanceInvoiceNumbers: ["A/12"] };
+  for (const moneyLeft of ["", "none", "0,00", 0])
+    expect(codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft })).toBe(
+      codeMessage("invoice_correction.money_short", "en", advances),
+    );
+  expect(
+    codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft: "0.0" }),
+  ).toBe(codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft: "0.00" }));
+  expect(
+    codeMessage("advance.taken_off_final_invoice", "en", {
+      invoiceNumber: "A/45",
+      finalMoneyLeft: "none",
+    }),
+  ).toBe(codeMessage("advance.taken_off_final_invoice", "en", { invoiceNumber: "A/45" }));
+});
+
+it.each([
+  [
+    "en",
+    "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+  ],
+  [
+    "es",
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
+  ],
+])(
+  "leaves Refund a payment out of a correction short of money when no payment on account has money left (%s)",
+  (locale, plain) => {
+    for (const params of [
+      undefined,
+      { advanceInvoiceNumbers: [] },
+      { moneyLeft: "0.00", advanceInvoiceNumbers: [] },
+      { moneyLeft: "12.00", advanceInvoiceNumbers: [] },
+    ])
+      expect(codeMessage("invoice_correction.money_short", locale, params)).toBe(plain);
+  },
+);
 
 it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
   const advance = { invoiceNumber: "A/12" };

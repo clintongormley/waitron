@@ -1,10 +1,19 @@
 import { strFromU8, unzipSync } from "fflate";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { recordReplacement, recordSale } from "@waitron/core";
-import { CORE_MIGRATIONS, invoiceSeries, sales, taxpayer, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceCorrectionRefunds,
+  invoiceCorrections,
+  invoiceSeries,
+  sales,
+  taxpayer,
+  tenders,
+  withTransaction,
+} from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -16,9 +25,17 @@ import {
   seedVoid,
   seedSubstitution,
   seedPurchaseInvoice,
+  seedTender,
+  seedBillPayment,
+  seedBillRefund,
+  seedOpenOrder,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { computeVatCorrections, computeVatReturn } from "@waitron/reporting";
+import {
+  seedRefundableSale,
+  seedTenderRefund,
+} from "@waitron/reporting/test/tender-refund-fixtures.js";
+import { computeVatCorrections, computeVatReturn, validatedRangeWindow } from "@waitron/reporting";
 import {
   decimal,
   deviceOrigin,
@@ -30,6 +47,8 @@ import {
   linkPaymentsOnAccount,
   listAccountantExport,
   partPaymentsAmong,
+  refundsWithoutCorrectiveQuery,
+  refundVatShares,
   renderAccountantWorkbook,
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
@@ -116,6 +135,7 @@ describe("accountant workbook", () => {
                 state: "partially_refunded",
               },
             ],
+            refundsWithoutCorrective: [],
           },
           language,
         ),
@@ -158,6 +178,7 @@ describe("accountant workbook", () => {
           invoices: Array.from({ length: 10_000 }, () => invoice),
           purchases: [],
           outsidePayments: [],
+          refundsWithoutCorrective: [],
         },
         "en",
       ),
@@ -176,6 +197,7 @@ describe("accountant workbook", () => {
           invoices: [{ ...invoice, vatBreakdown: [], total: decimal("0.00") }],
           purchases: [],
           outsidePayments: [],
+          refundsWithoutCorrective: [],
         },
         "en",
       ),
@@ -185,16 +207,16 @@ describe("accountant workbook", () => {
     expect(cells.slice(11, 15)).toEqual(["", "", "", "0.00"]);
   });
   it.each(["en", "es"] as const)(
-    "opens three header-only sheets when the period is empty (%s)",
+    "opens four header-only sheets when the period is empty (%s)",
     async (language) => {
       const bytes = await renderAccountantWorkbook(
-        { invoices: [], purchases: [], outsidePayments: [] },
+        { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
         language,
       );
       expect([...bytes.subarray(0, 4)]).toEqual([80, 75, 3, 4]);
       const files = unzipSync(bytes);
       const workbook = strFromU8(files["xl/workbook.xml"]!);
-      expect(workbook.match(/<sheet /g)).toHaveLength(3);
+      expect(workbook.match(/<sheet /g)).toHaveLength(4);
       expect(workbook).toContain(
         language === "en"
           ? 'name="Issued invoices"'
@@ -214,6 +236,29 @@ describe("accountant workbook", () => {
       }
       expect(strFromU8(files["[Content_Types].xml"]!)).toContain("spreadsheetml.sheet.main+xml");
       expect(strFromU8(files["xl/_rels/workbook.xml.rels"]!)).toContain("worksheets/sheet2.xml");
+    },
+  );
+  it.each(["en", "es"] as const)(
+    "names every sheet within Excel's 31-character limit (%s)",
+    async (language) => {
+      const workbook = strFromU8(
+        unzipSync(
+          await renderAccountantWorkbook(
+            { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+            language,
+          ),
+        )["xl/workbook.xml"]!,
+      );
+      const names = [...workbook.matchAll(/<sheet name="([^"]*)"/g)].map(([, name]) =>
+        name!
+          .replaceAll("&lt;", "<")
+          .replaceAll("&gt;", ">")
+          .replaceAll("&quot;", '"')
+          .replaceAll("&apos;", "'")
+          .replaceAll("&amp;", "&"),
+      );
+      expect(names).toHaveLength(4);
+      for (const name of names) expect(name.length, name).toBeLessThanOrEqual(31);
     },
   );
 
@@ -237,6 +282,7 @@ describe("accountant workbook", () => {
           ],
           purchases: [],
           outsidePayments: [],
+          refundsWithoutCorrective: [],
         },
         "en",
       ),
@@ -335,6 +381,7 @@ describe("accountant workbook", () => {
             ],
             purchases: [],
             outsidePayments: [],
+            refundsWithoutCorrective: [],
           },
           language,
         ),
@@ -389,6 +436,7 @@ describe("accountant workbook", () => {
             ],
             purchases: [],
             outsidePayments: [],
+            refundsWithoutCorrective: [],
           },
           language,
         ),
@@ -404,6 +452,7 @@ describe("accountant workbook", () => {
         {
           invoices: [],
           outsidePayments: [],
+          refundsWithoutCorrective: [],
           purchases: [
             purchase,
             { ...purchase, id: "purchase-2", total: decimal("23.10") },
@@ -460,6 +509,7 @@ describe("accountant workbook", () => {
             },
           ],
           outsidePayments: [],
+          refundsWithoutCorrective: [],
           purchases: [
             {
               ...purchase,
@@ -514,6 +564,27 @@ describe("accountant period selection", () => {
     );
     expect(plan).toContain(
       "SEARCH bill_advances USING INDEX bill_advances_advance_sale_key (advance_sale_id=?)",
+    );
+    expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  });
+
+  it("finds the period's refunds through their completion index rather than every refund", async () => {
+    const window = validatedRangeWindow({
+      fromBusinessDay: "2026-11-01",
+      toBusinessDay: "2026-11-30",
+      timeZone: "Europe/Madrid",
+      dayCutover: "00:00",
+      cutoverChanges: [],
+    });
+    const plan = await withTransaction(suite.db, async (tx) =>
+      (
+        await tx.execute<{ detail: string }>(
+          sql`explain query plan ${refundsWithoutCorrectiveQuery(tx, window).getSQL()}`,
+        )
+      ).rows.map((step) => step.detail),
+    );
+    expect(plan.find((step) => step.includes(" refunds "))).toMatch(
+      /^SEARCH refunds USING INDEX refunds_completed_at_idx \(completed_at>\? AND completed_at<\?\)$/,
     );
     expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
   });
@@ -614,6 +685,7 @@ describe("accountant period selection", () => {
       invoices: [],
       purchases: [],
       outsidePayments: [],
+      refundsWithoutCorrective: [],
     });
   });
 
@@ -1070,4 +1142,359 @@ describe("accountant period selection", () => {
     ).toEqual(["P-2"]);
     expect((await list("2026-12-31", "2026-12-31")).purchases).toEqual([]);
   });
+});
+
+describe("refunds without a corrective invoice", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  let venue: SeededVenue;
+  beforeEach(async () => {
+    venue = await seedVenueWithSeries(suite.db);
+  });
+  const list = (from = "2026-11-01", to = "2026-11-30") =>
+    withTransaction(suite.db, (tx) => listAccountantExport(tx, { from, to }));
+  const refund = (
+    target: Awaited<ReturnType<typeof seedRefundableSale>>,
+    applied: string,
+    at: string,
+  ) =>
+    seedTenderRefund(suite.db, target, {
+      applied,
+      tip: "0.00",
+      state: "completed",
+      createdAt: at,
+      at,
+    });
+
+  it("lists a part payment's plain refund with the table's ticket that took it off and the VAT it leaves declared", async () => {
+    const advance = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "30.00",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "10.00",
+      base: "27.27",
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-02T14:00:00.000Z",
+      total: "90.00",
+      lines: [
+        { vatRate: "10.00", lineTotal: "109.09" },
+        {
+          vatRate: "10.00",
+          lineTotal: "-27.27",
+          advanceRole: "deduction",
+          deductsSaleId: advance.saleId,
+        },
+      ],
+    });
+    const id = await refund(advance, "20.00", "2026-11-03T12:00:00.000Z");
+
+    expect((await list()).refundsWithoutCorrective).toEqual([
+      {
+        id,
+        refundedAt: "2026-11-03T12:00:00.000Z",
+        amount: "20.00",
+        tip: "0.00",
+        method: "cash",
+        reason: "Money returned after the invoice",
+        requestedBy: "Refund operator",
+        authorizedBy: "Refund authorizer",
+        saleId: advance.saleId,
+        invoiceNumber: "A/1",
+        takenOffBy: "A/2",
+        vat: [{ rate: "10.00", base: "18.18", tax: "1.82" }],
+      },
+    ]);
+  });
+
+  it("lists a plain refund of an ordinary card payment, but not a Correct invoice's refund nor one completed outside the period", async () => {
+    const card = await seedRefundableSale(suite.db, venue, {
+      method: "card",
+      applied: "12.10",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "21.00",
+      base: "10.00",
+    });
+    const plain = await refund(card, "6.05", "2026-11-04T12:00:00.000Z");
+    await refund(card, "1.00", "2026-12-01T12:00:00.000Z");
+    const corrected = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "11.00",
+      tip: "0.00",
+      at: "2026-11-02T13:00:00.000Z",
+      invoiceNumber: 2,
+      vatRate: "10.00",
+      base: "10.00",
+    });
+    const correctionRefund = await refund(corrected, "5.50", "2026-11-05T12:00:00.000Z");
+    const corrective = await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-11-05T12:00:00.000Z",
+      total: "-5.50",
+      correctsSaleId: corrected.saleId,
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    const [correction] = await suite.db
+      .insert(invoiceCorrections)
+      .values({
+        originalSaleId: corrected.saleId,
+        submissionId: "correction-1",
+        fingerprint: "fixture",
+        gross: 550,
+        reason: "Overcharged",
+        requestedBy: "cccccccc-0000-4000-8000-000000000010",
+        authorizedBy: "cccccccc-0000-4000-8000-000000000011",
+        viaOverride: false,
+        source: "device",
+        deviceId: venue.deviceId,
+        nodeId: venue.nodeId,
+        state: "filed",
+        correctiveSaleId: corrective,
+        endedAt: "2026-11-05T12:00:00.000Z",
+      })
+      .returning({ id: invoiceCorrections.id });
+    await suite.db.insert(invoiceCorrectionRefunds).values({
+      invoiceCorrectionId: correction!.id,
+      tenderRefundId: correctionRefund,
+      requestId: "request-1",
+    });
+
+    expect((await list()).refundsWithoutCorrective).toEqual([
+      expect.objectContaining({
+        id: plain,
+        method: "card",
+        amount: "6.05",
+        invoiceNumber: "A/1",
+        takenOffBy: null,
+        vat: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+      }),
+    ]);
+    expect(
+      (await list("2026-12-01", "2026-12-01")).refundsWithoutCorrective.map((row) => row.amount),
+    ).toEqual(["1.00"]);
+  });
+
+  it("shares a refund over a two-rate ticket by gross, a tied leftover cent going to the earlier rate, so the rows sum to the refund", async () => {
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-02T12:00:00.000Z",
+      total: "22.00",
+      lines: [
+        { vatRate: "10.00", lineTotal: "10.00" },
+        { vatRate: "21.00", lineTotal: "9.09" },
+      ],
+      vatBreakdown: [
+        { rate: "10.00", base: "10.00", tax: "1.00" },
+        { rate: "21.00", base: "9.09", tax: "1.91" },
+      ],
+    });
+    await seedTender(
+      suite.db,
+      { saleId },
+      { method: "cash", amount: "22.00", settledAt: "2026-11-02T12:00:00.000Z" },
+    );
+    const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+    const ticket = { saleId, tenderId: tender!.id, method: "cash" as const, venue };
+    await refund(ticket, "10.01", "2026-11-03T12:00:00.000Z");
+
+    const [row] = (await list()).refundsWithoutCorrective;
+    expect(row!.vat).toEqual([
+      { rate: "10.00", base: "4.55", tax: "0.46" },
+      { rate: "21.00", base: "4.13", tax: "0.87" },
+    ]);
+    expect(toScale(sumDecimals(row!.vat.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("10.01");
+  });
+
+  it("shares a small refund over four rates in whole cents that are never negative and sum to the refund", () => {
+    const shares = refundVatShares(decimal("0.02"), [
+      { rate: "4.00", base: "9.62", tax: "0.38" },
+      { rate: "10.00", base: "9.09", tax: "0.91" },
+      { rate: "21.00", base: "8.26", tax: "1.74" },
+      { rate: "5.00", base: "0.01", tax: "0.00" },
+    ]);
+    expect(shares).toEqual([
+      { rate: "4.00", base: "0.01", tax: "0.00" },
+      { rate: "10.00", base: "0.01", tax: "0.00" },
+      { rate: "21.00", base: "0.00", tax: "0.00" },
+      { rate: "5.00", base: "0.00", tax: "0.00" },
+    ]);
+    expect(toScale(sumDecimals(shares.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("0.02");
+    expect(
+      refundVatShares(decimal("0.02"), [
+        { rate: "5.00", base: "0.01", tax: "0.00" },
+        { rate: "4.00", base: "9.62", tax: "0.38" },
+        { rate: "10.00", base: "9.09", tax: "0.91" },
+      ]),
+    ).toEqual([
+      { rate: "5.00", base: "0.00", tax: "0.00" },
+      { rate: "4.00", base: "0.01", tax: "0.00" },
+      { rate: "10.00", base: "0.01", tax: "0.00" },
+    ]);
+  });
+
+  it("shares a refund of a table's ticket only over the rates it sold at, not over the part payment it took off", async () => {
+    const advance = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "30.00",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "10.00",
+      base: "27.27",
+    });
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-02T14:00:00.000Z",
+      total: "50.00",
+      lines: [
+        { vatRate: "21.00", lineTotal: "66.12" },
+        {
+          vatRate: "10.00",
+          lineTotal: "-27.27",
+          advanceRole: "deduction",
+          deductsSaleId: advance.saleId,
+        },
+      ],
+      vatBreakdown: [
+        { rate: "21.00", base: "66.12", tax: "13.88" },
+        { rate: "10.00", base: "-27.27", tax: "-2.73" },
+      ],
+    });
+    await seedTender(
+      suite.db,
+      { saleId },
+      { method: "cash", amount: "50.00", settledAt: "2026-11-02T14:00:00.000Z" },
+    );
+    const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+    await refund(
+      { saleId, tenderId: tender!.id, method: "cash" as const, venue },
+      "10.00",
+      "2026-11-03T12:00:00.000Z",
+    );
+
+    const [row] = (await list()).refundsWithoutCorrective;
+    expect(row).toMatchObject({ saleId, invoiceNumber: "A/2", takenOffBy: null });
+    expect(row!.vat).toEqual([{ rate: "21.00", base: "8.26", tax: "1.74" }]);
+  });
+
+  it("leaves out a bill refund, even of a payment on a bill whose ticket was already issued", async () => {
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    const payment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: orderId, deviceId: venue.deviceId },
+      { method: "cash", applied: "20.00", state: "received", at: "2026-11-02T13:00:00.000Z" },
+    );
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-02T12:00:00.000Z",
+      total: "22.00",
+      workingOrderId: orderId,
+      lines: [{ vatRate: "10.00", lineTotal: "20.00" }],
+    });
+    await seedBillRefund(
+      suite.db,
+      { billPaymentId: payment, deviceId: venue.deviceId, nodeId: venue.nodeId },
+      { applied: "5.00", state: "completed", at: "2026-11-03T12:00:00.000Z" },
+    );
+    const control = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "11.00",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 2,
+      vatRate: "10.00",
+      base: "10.00",
+    });
+    const plain = await refund(control, "1.00", "2026-11-03T12:00:00.000Z");
+
+    expect((await list()).refundsWithoutCorrective.map((row) => row.id)).toEqual([plain]);
+  });
+
+  it("lists a refund in the period it completed in, not the one it was asked for in", async () => {
+    const ticket = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "11.00",
+      tip: "0.00",
+      at: "2026-10-30T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "10.00",
+      base: "10.00",
+    });
+    const intoNovember = await seedTenderRefund(suite.db, ticket, {
+      applied: "1.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: "2026-10-31T12:00:00.000Z",
+      at: "2026-11-01T12:00:00.000Z",
+    });
+    const intoDecember = await seedTenderRefund(suite.db, ticket, {
+      applied: "2.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: "2026-11-30T12:00:00.000Z",
+      at: "2026-12-01T12:00:00.000Z",
+    });
+    const ids = async (from: string, to: string) =>
+      (await list(from, to)).refundsWithoutCorrective.map((row) => row.id);
+
+    expect(await ids("2026-10-01", "2026-10-31")).toEqual([]);
+    expect(await ids("2026-11-01", "2026-11-30")).toEqual([intoNovember]);
+    expect(await ids("2026-12-01", "2026-12-31")).toEqual([intoDecember]);
+  });
+
+  it.each(["en", "es"] as const)(
+    "writes one row per VAT rate under a note that the VAT stays declared (%s)",
+    async (language) => {
+      const words = ACCOUNTANT_EXPORT_WORDS[language];
+      const files = unzipSync(
+        await renderAccountantWorkbook(
+          {
+            invoices: [],
+            purchases: [],
+            outsidePayments: [],
+            refundsWithoutCorrective: [
+              {
+                id: "refund-1",
+                refundedAt: "2026-11-03T12:00:00.000Z",
+                amount: decimal("10.01"),
+                tip: decimal("0.50"),
+                method: "card",
+                reason: "Goodwill",
+                requestedBy: "Ana",
+                authorizedBy: "Luis",
+                saleId: "sale-1",
+                invoiceNumber: "A/1",
+                takenOffBy: "A/2",
+                vat: [
+                  { rate: "10.00", base: decimal("4.55"), tax: decimal("0.46") },
+                  { rate: "21.00", base: decimal("4.13"), tax: decimal("0.87") },
+                ],
+              },
+            ],
+          },
+          language,
+        ),
+      );
+      expect(strFromU8(files["xl/workbook.xml"]!)).toContain(
+        `name="${language === "en" ? "Refunds, no corrective invoice" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
+      );
+      const xml = strFromU8(files["xl/worksheets/sheet4.xml"]!);
+      expect(row(xml, 1)).toEqual([
+        language === "en"
+          ? "Note: no corrective invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts"
+          : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
+      ]);
+      expect(row(xml, 2)).toEqual(words.refundColumns);
+      expect(row(xml, 2)).toHaveLength(14);
+      const card = words.paymentMethods.card;
+      const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
+      const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "A/2"];
+      expect(row(xml, 3)).toEqual([...shared, "10.01", "0.50", ...tail, "10.00", "4.55", "0.46"]);
+      expect(row(xml, 4)).toEqual([...shared, "", "", ...tail, "21.00", "4.13", "0.87"]);
+    },
+  );
 });

@@ -95,11 +95,14 @@ VAT"). **No** keeps a plain part payment, which issues no invoice
 (`apps/server/src/bill-payments-api.test.ts`, "leaves €70.00 outstanding on a €120.00 bill,
 changes no line's price, and issues no invoice"). Printing the bill issues the ticket before
 payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
-advance off, the till refuses to give the advance back on its own and names Correct invoice on the
+advance off, the till refuses to correct the advance's own ticket and names Correct invoice on the
 table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
 this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
-invoice can give back at most what it carries, so money beyond it, such as any of an advance that
-equals the meal, has no way back through the till. So that a correction opened before the table's
+invoice can give back at most what was paid on it; once nothing paid on it is left to give back,
+Refund a payment on the advance's own ticket gives back the rest, files no corrective invoice, and
+the accountant export lists it with the VAT left declared (owner, 2026-11-21 16:36; the refusal
+while the table's invoice still holds money is the watcher's decision of 16:54;
+`refusePlainRefundOfAdvance`, the same file). So that a correction opened before the table's
 invoice cannot file a credit note after it, the table's invoice is held back while a correction of
 one of its advances is open: the payment that pays the bill off (refused before any card reader is
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave

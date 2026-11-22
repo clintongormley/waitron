@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to
 > implement this plan task by task, and only after the owner has answered the decisions below.
 
-**Status:** PR 1 (Tasks 0–4) built on `feat/advance-manual-route`; PR 2 (Tasks 5–9) not
-started. The owner chose decisions 1 (i) and 6 (i) at 16:36 on the earlier wording
+**Status:** PR 1 (Tasks 0–4) landed as #3983; PR 2 (Tasks 5–9) built on
+`feat/advance-manual-refund`. The owner chose decisions 1 (i) and 6 (i) at 16:36 on the earlier wording
 (`~/waitron-campaign-l/questions.md`, "WATCHER 2026-11-21 16:36"). The watcher, not the owner,
 accepted the corrected decision 1 below and chose decision 2 (ii) at 16:54 ("WATCHER 2026-11-21
 16:54").
@@ -181,11 +181,12 @@ subtracts. Nothing changes `credits`, the amount the table's ticket takes off. A
 `left`, which makes a part payment the one payment whose plain refund lowers received, and needs a
 guard against the outstanding figure rising.
 
-**(d) The export** gains a sheet "Refunds without a corrective invoice": when, amount, cash or card,
+**(d) The export** gains a sheet "Refunds, no corrective invoice": when, amount, cash or card,
 reason, who asked and approved (names read at export time), the ticket refunded, for a part
 payment the table's ticket that took it off, and **the VAT left declared**: one row per VAT rate of
 the refunded ticket, with that rate, base and VAT of the refund's share. The share is pro rata to
-the ticket's VAT breakdown by gross, rounded to the cent, the last rate taking the remainder; within
+the ticket's VAT breakdown by gross, in whole cents: each rate takes its share rounded down, and the
+cents left over go to the rates with the largest remainders, ties to the earlier rate; within
 a rate, VAT is the share less the share divided by (1 + rate), rounded to the cent, and base is the
 share less that VAT. Example: €20 given back on a €30 part payment at 10% shows base €18.18 and VAT
 €1.82, the VAT that stays filed. A sheet note says this VAT stays declared until the accountant acts.
@@ -240,6 +241,8 @@ PRs, costed before the ticket-view link and the VAT columns were added, which it
 
 ## Size (recommended path)
 
+(2026-11-22: PR 2 adds `refunds_completed_at_idx` and rebuilds core's starting migration, so it
+resets venues; watcher, "WATCHER 2026-11-22 00:24".)
 About 430 lines of production code, no table, no migration, no venue reset, 2 PRs; about 650 lines
 of tests and about 40 lines of guide in each of English and Spanish besides. The first estimate,
 260, left out the ticket-view link, the VAT columns, the refusal's new parameter and the separate
@@ -288,7 +291,7 @@ recommend the owner lands both.
    one per VAT rate with rate, base and VAT as (d); a two-rate ticket's rounding case.
 8. **Server, refusal parameters.** `advance.taken_off_final_invoice` gains `finalMoneyLeft`;
    `invoice_correction.money_short` gains `advanceInvoiceNumbers`, the part payments its table's
-   ticket took off (decision 3). No new refusal code anywhere. Changes the `toEqual` of the refusal
+   ticket took off that still hold money Refund a payment could give back (decision 3). No new refusal code anywhere. Changes the `toEqual` of the refusal
    in `advance-corrections.test.ts:526`, `:550` and `:1015` by the new key; list them.
 9. **Till, words and button.** The EN/ES wording for `advance.taken_off_final_invoice` (both forms)
    and `invoice_correction.money_short` pinned in `codes.test.ts`; Refund on a printed bill's part

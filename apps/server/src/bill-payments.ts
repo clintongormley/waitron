@@ -252,6 +252,8 @@ export interface BillPaymentView extends OutsideCardDetails {
   takenOffBy?: TakenOffBy;
   left?: Decimal;
   tipLeft?: Decimal;
+  /** What Refund a payment gave back from the advance's ticket; `left` still counts it. */
+  givenBack?: Decimal;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -587,20 +589,27 @@ export async function refuseBillHoldingMoney(
   }
 }
 
+/** The money each received payment of an issued bill has kept, the payments of its advances
+ * aside: an advance's money is on its own ticket, and the bill's amount due has it taken off. */
+async function keptByIssuedBill(tx: Transaction, workingOrderId: string): Promise<Decimal[]> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  return held
+    .filter(({ row }) => row.state === "received" && !advances.payments.has(row.id))
+    .map(({ netApplied }) => netApplied);
+}
+
+/** What an issued bill's own payments have kept so far ({@link keptByIssuedBill}), tips aside. */
+export async function paidOnIssuedBill(tx: Transaction, workingOrderId: string): Promise<Decimal> {
+  return sumDecimals([ZERO, ...(await keptByIssuedBill(tx, workingOrderId))]);
+}
+
 /** What an issued bill still owes: its amount due less the money its payments have kept. */
 export async function stillOwedOnIssuedBill(
   tx: Transaction,
   workingOrderId: string,
   amountDue: Decimal,
 ): Promise<Decimal> {
-  // An advance's money is on its own ticket, and the amount due has it taken off already.
-  const { held, advances } = await readHeld(tx, [workingOrderId]);
-  return owedOf(
-    amountDue,
-    held
-      .filter(({ row }) => row.state === "received" && !advances.payments.has(row.id))
-      .map(({ netApplied }) => netApplied),
-  );
+  return owedOf(amountDue, await keptByIssuedBill(tx, workingOrderId));
 }
 
 /**
@@ -704,7 +713,7 @@ function toView(
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
   advance:
     | (PaymentMoney &
-        Pick<AdvancePaymentMoney, "saleId" | "ticket"> & {
+        Pick<AdvancePaymentMoney, "saleId" | "ticket" | "givenBack"> & {
           takenOffBy: TakenOffBy | undefined;
         })
     | undefined,
@@ -722,6 +731,7 @@ function toView(
           ...(advance.takenOffBy === undefined ? {} : { takenOffBy: advance.takenOffBy }),
           left: money(advance.netApplied),
           tipLeft: money(advance.netTip),
+          givenBack: centsToDecimal(advance.givenBack),
         }),
     id: payment.id,
     submissionId: payment.submissionId,
@@ -925,6 +935,7 @@ export async function readBillBalance(
           ...payment,
           saleId: advance.saleId,
           ticket: advance.ticket,
+          givenBack: advance.givenBack,
           takenOffBy: takenOff.get(advance.saleId),
         };
   };
