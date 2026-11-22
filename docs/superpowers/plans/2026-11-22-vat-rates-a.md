@@ -530,7 +530,9 @@ product with no taxpayer fail at runtime until this task's Step 4 fixes them.
 
 **Files:** `packages/menu/src/operations.ts:990-1036` (`insertProduct` writes
 `input.takeawayVatRate ?? (await readVenueVatRates(tx)).defaultTakeaway`; Task 2.1 puts the venue
-setting in front); the five raw fixtures (D3); the madrid baseline (the table moves from
+setting in front. As built, 2026-11-22: only an absent rate takes the default, an explicit null is
+refused, the rate is checked before the product is written, and `createProduct` takes the area's
+rates as an optional third argument); the five raw fixtures (D3); the madrid baseline (the table moves from
 `ADDED_TABLES` to a transform: one row at 1000 per captured top-level product); the test files that
 now create a product with no taxpayer. Test: `packages/menu/src/operations.test.ts`.
 
@@ -555,7 +557,8 @@ Tests: `packages/menu/src/configuration-transfer.test.ts`,
 `packages/provisioning/src/configuration-transfer.json-lists.test.ts`.
 
 - [ ] **Step 1: Failing tests:** a top-level product with no first row, or two, is refused
-  `setup.request_invalid` `{ field: "product_takeaway_vat_rates" }`; a rate outside the importing
+  `setup.request_invalid` `{ field: "product_takeaway_vat_rates" }` (as built: the field names the
+  column, `product_takeaway_vat_rates.product_id`, `.starts_on` or `.rate`); a rate outside the importing
   venue's `pickable` (a 500 row) is refused the same; a variant without rows is accepted; an
   exported venue round-trips its rows.
 - [ ] **Step 2–4:** run (fails), implement, run both files and `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer`.
