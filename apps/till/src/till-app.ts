@@ -19664,6 +19664,7 @@ export class TillApp extends LitElement {
   ): boolean {
     if (billEditConflictIncludes(error, asked.orderId)) {
       this.errorKey = "counter.held_move_draft_conflict";
+      void this.#refreshAfterWrite("held", "refresh.held");
       return true;
     }
     const target = asked.target;

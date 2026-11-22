@@ -122,6 +122,7 @@ const banner = (floor: TillFloorScreen) => floor.shadowRoot!.querySelector("[dat
 it.each(["drag", "Join with"])(
   "%s lets staff take over the blocked draft before retrying",
   async (entry) => {
+    const blockedParty = entry === "drag" ? "p2" : "p1";
     const original = { billId: "b2", editorVersion: 7, draftId: "d2", draftRevision: 3 };
     const conflict = { ...original, editorId: "luis", editorName: "Luis" };
     const own = { billId: "b1", editorVersion: 2, draftId: "d1", draftRevision: 1 };
@@ -150,7 +151,8 @@ it.each(["drag", "Join with"])(
       getTablesState: vi.fn().mockResolvedValue(rows),
       listDrafts: vi.fn(async (id: string) => ({
         drafts: [],
-        billEdits: id === "p2" ? [received] : [{ ...own, editorId: "person", editorName: "Ana" }],
+        billEdits:
+          id === blockedParty ? [received] : [{ ...own, editorId: "person", editorName: "Ana" }],
       })),
       joinTables,
       takeOverDraft,
@@ -184,7 +186,7 @@ it.each(["drag", "Join with"])(
     await userEvent.click(buttons.querySelector<HTMLElement>('[data-split-take-over="b2"]')!);
     await userEvent.click(buttons.querySelector<HTMLElement>("[data-confirm-take-over]")!);
     expect(takeOverDraft).toHaveBeenCalledExactlyOnceWith(
-      "p2",
+      blockedParty,
       "d2",
       { revision: 3, expectedEdit: original, submissionId: expect.any(String) },
       { signal: expect.any(AbortSignal) },
