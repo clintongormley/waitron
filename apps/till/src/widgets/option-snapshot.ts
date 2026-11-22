@@ -1,24 +1,20 @@
 // Deep-import the menu leaf: the `@waitron/menu` barrel would pull drizzle and the DB layer
 // into the browser bundle.
 import {
-  customerOptionSnapshotLabels,
   optionSnapshotLabels,
   staffOptionSnapshotLabels,
 } from "@waitron/menu/src/option-snapshot-labels.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**
- * Which of the three names a surface reads: the kitchen screen and the pass read the kitchen name, a
- * settled receipt the customer-facing text in the invoice locale, the basket and table screen the
- * staff name.
+ * Which name a screen reads: the kitchen screen and the pass read the kitchen name, the basket and
+ * table screen the staff name.
  */
-export type OptionReader =
-  { reads: "kitchen" } | { reads: "staff" } | { reads: "customer"; locale: string };
+export type OptionReader = { reads: "kitchen" } | { reads: "staff" };
 
 /**
  * One `<list>: <label>` line per frozen options answer. The wording rules live in
- * `packages/menu/src/option-snapshot-labels.ts`, which the printed kitchen ticket and receipt
- * call too, so a screen and its paper twin cannot disagree.
+ * `packages/menu/src/option-snapshot-labels.ts`.
  *
  * Extras are not here: each pick is its own priced child line.
  */
@@ -30,8 +26,6 @@ export function optionAnswers(
   switch (reader.reads) {
     case "kitchen":
       return optionSnapshotLabels(snapshots);
-    case "customer":
-      return customerOptionSnapshotLabels(snapshots, reader.locale);
     case "staff":
       return staffOptionSnapshotLabels(snapshots);
   }

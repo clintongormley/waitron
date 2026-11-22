@@ -229,7 +229,7 @@ forms. It takes a nonblank customer map or otherwise the frozen staff map, then 
 requested locale, the default captured in the staff map's key, and finally another stored value.
 It does not consult today's menu. `optionSnapshotLabels` uses the frozen prep station name or
 the frozen staff name; `staffOptionSnapshotLabels` supplies staff wording. The till reaches
-these readers through `apps/till/src/widgets/option-snapshot.ts`.
+the kitchen and staff readers through `apps/till/src/widgets/option-snapshot.ts`.
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
@@ -259,7 +259,7 @@ Where each one surfaces:
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's informational chip for a held dish that cannot be added anew ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
-| Till screens showing an options ANSWER | the reader each one names at the call site — station on the station screen and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
+| Till screens showing an options ANSWER | the reader each one names at the call site, kitchen or staff; the settled ticket instead shows the server's receipt preview | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 

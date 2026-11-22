@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { padInputFor } from "./pad-keys.js";
+import { describe, expect, test, vi } from "vitest";
+import { padInputFor, registerPad, type PadKeyTarget } from "./pad-keys.js";
 
 function keydown(init: KeyboardEventInit, keyCode?: number): KeyboardEvent {
   const event = new KeyboardEvent("keydown", init);
@@ -79,4 +79,29 @@ test("on a PIN pad point and comma mean nothing, and Delete clears", () => {
   expect(padInputFor(keydown({ key: "." }), "pin")).toBeNull();
   expect(padInputFor(keydown({ key: "," }), "pin")).toBeNull();
   expect(padInputFor(keydown({ key: "Delete" }), "pin")).toEqual({ kind: "key", key: "clear" });
+});
+
+test("a key another listener already handled does not reach the pad", () => {
+  const pad = Object.assign(document.createElement("div"), {
+    mode: "decimal" as const,
+    receiveKey: vi.fn(),
+  }) as PadKeyTarget & { receiveKey: ReturnType<typeof vi.fn> };
+  document.body.append(pad);
+  const unregister = registerPad(pad);
+  const handled = (event: Event) => event.preventDefault();
+  try {
+    const press = () =>
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "1", bubbles: true, cancelable: true }),
+      );
+    press();
+    expect(pad.receiveKey).toHaveBeenCalledOnce();
+    document.body.addEventListener("keydown", handled);
+    press();
+    expect(pad.receiveKey).toHaveBeenCalledOnce();
+  } finally {
+    document.body.removeEventListener("keydown", handled);
+    unregister();
+    pad.remove();
+  }
 });

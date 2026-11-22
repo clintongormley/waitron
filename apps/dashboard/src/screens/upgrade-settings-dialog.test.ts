@@ -160,3 +160,183 @@ it("explains a failed open without showing default hours from a different box", 
   expect(field(dialog, "start")).toBeNull();
   expect(save(dialog).disabled).toBe(true);
 });
+
+function pending() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((yes) => (resolve = yes));
+  return { promise, resolve };
+}
+
+it.each([
+  ["start", "", "05:00", "Enter a start time."],
+  ["start", "3am", "05:00", "Enter a time in HH:MM."],
+  ["end", "03:00", "5:00", "Enter a time in HH:MM."],
+] as const)("marks the %s time for %j to %j", async (name, start, end, sentence) => {
+  const { dialog, fetchImpl } = await open();
+  await edit(dialog, "start", start);
+  await edit(dialog, "end", end);
+  await userEvent.click(save(dialog));
+  await expect.poll(() => field(dialog, name).error).toBe(sentence);
+  expect(field(dialog, name === "start" ? "end" : "start").error).toBe("");
+  expect(save(dialog).disabled).toBe(true);
+  expect(fetchImpl).toHaveBeenCalledOnce();
+});
+
+it("saves on Enter in an hour field", async () => {
+  const { dialog, fetchImpl } = await open();
+  await edit(dialog, "start", "02:00");
+  const closed = dialogClosed(dialog);
+  field(dialog, "start").shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await closed;
+  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+    revision: 7,
+    automatic: true,
+    start: "02:00",
+    end: "05:00",
+  });
+});
+
+it("shows empty hours for a box with none saved and keeps them empty on save", async () => {
+  const { dialog, fetchImpl } = await open(
+    vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => Response.json({ ...SETTINGS, start: null, end: null })),
+  );
+  expect(field(dialog, "start").value).toBe("");
+  expect(field(dialog, "end").value).toBe("");
+  expect(field(dialog, "start").required).toBe(false);
+  await userEvent.click(dialog.querySelector("wt-switch")!);
+  const closed = dialogClosed(dialog);
+  await userEvent.click(save(dialog));
+  await closed;
+  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+    revision: 7,
+    automatic: false,
+    start: null,
+    end: null,
+  });
+});
+
+it("reads the settings once when asked to open while already open", async () => {
+  const { fetchImpl, opener } = await open();
+  const el = document.querySelector("dashboard-upgrade-settings-dialog")!;
+  await el.show(opener);
+  expect(fetchImpl).toHaveBeenCalledOnce();
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+});
+
+it.each([
+  ["answers", () => Response.json(SETTINGS)],
+  [
+    "fails",
+    () =>
+      Response.json(
+        { error: { code: "upgrade.settings_unavailable", params: {} } },
+        { status: 503 },
+      ),
+  ],
+])("draws nothing from a read that %s after Cancel", async (_, answer) => {
+  const read = pending();
+  const fetchImpl = vi.fn<typeof fetch>().mockReturnValue(read.promise);
+  const { el, host } = await mountWidget<
+    HTMLElementTagNameMap["dashboard-upgrade-settings-dialog"]
+  >("dashboard-upgrade-settings-dialog", { api: new DashboardApi("", fetchImpl) });
+  const opener = document.createElement("button");
+  host.prepend(opener);
+  const showing = el.show(opener);
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+  expect(dialog.textContent).toContain("Reading upgrade settings…");
+  const closed = dialogClosed(dialog);
+  await userEvent.click(dialog.querySelector("wt-button[slot=cancel]")!);
+  await closed;
+  read.resolve(answer());
+  await showing;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(field(dialog, "start")).toBeNull();
+  expect(await dialogMessageOf(dialog)).toBe("");
+});
+
+it("ignores edits and a second Save while one is being sent", async () => {
+  const sent = pending();
+  const fetchImpl = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async (_path, options) =>
+      options?.method === "POST" ? sent.promise : Response.json(SETTINGS),
+    );
+  const { dialog } = await open(fetchImpl);
+  await edit(dialog, "start", "01:00");
+  await userEvent.click(save(dialog));
+  await expect.poll(() => field(dialog, "start").disabled).toBe(true);
+  field(dialog, "start").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "02:00" }, bubbles: true, composed: true }),
+  );
+  save(dialog).click();
+  await dialog.updateComplete;
+  expect(field(dialog, "start").value).toBe("01:00");
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  const closed = dialogClosed(dialog);
+  sent.resolve(Response.json({ ...SETTINGS, revision: 8, start: "01:00" }));
+  await closed;
+  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+    revision: 7,
+    automatic: true,
+    start: "01:00",
+    end: "05:00",
+  });
+});
+
+it.each([
+  ["succeeds", () => Response.json({ ...SETTINGS, revision: 8, start: "01:00" })],
+  [
+    "is refused",
+    () => Response.json({ error: { code: "upgrade.settings_busy", params: {} } }, { status: 409 }),
+  ],
+])(
+  "leaves a reopened dialog alone when an earlier save %s after the dialog was removed",
+  async (_, answer) => {
+    const sent = pending();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_path, options) =>
+        options?.method === "POST" ? sent.promise : Response.json(SETTINGS),
+      );
+    const { dialog, opener } = await open(fetchImpl);
+    const el = document.querySelector("dashboard-upgrade-settings-dialog")!;
+    const host = el.parentElement!;
+    const saving = vi.spyOn(el.api, "saveBoxUpgradeSettings");
+    await edit(dialog, "start", "01:00");
+    await userEvent.click(save(dialog));
+    await expect.poll(() => saving.mock.results.length).toBe(1);
+    el.remove();
+    host.append(el);
+    await el.show(opener);
+    await el.updateComplete;
+    const reopened = el.shadowRoot!.querySelector("wt-dialog")!;
+    sent.resolve(answer());
+    await saving.mock.results[0]!.value.catch(() => undefined);
+    await el.updateComplete;
+    expect(reopened.open).toBe(true);
+    expect(field(reopened, "start").value).toBe("03:00");
+    expect(field(reopened, "start").disabled).toBe(false);
+    expect(await dialogMessageOf(reopened)).toBe("");
+  },
+);
+
+it("shows a save refusal it has no sentence of its own for in the shared wording", async () => {
+  const { dialog } = await open(
+    vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_path, options) =>
+        options?.method === "POST"
+          ? Response.json({ error: { code: "storage.disk_full", params: {} } }, { status: 503 })
+          : Response.json(SETTINGS),
+      ),
+  );
+  await edit(dialog, "start", "01:00");
+  await userEvent.click(save(dialog));
+  await expect.poll(() => dialogMessageOf(dialog)).toBe("Not saved: the box is out of disk space.");
+  expect(save(dialog).disabled).toBe(false);
+});

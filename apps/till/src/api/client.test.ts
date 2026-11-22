@@ -7106,3 +7106,149 @@ describe("the way an order sells on every sale, pay, park and round body (A1522)
     });
   });
 });
+
+describe("TillApi: collecting a whole bill whose balance has moved on", () => {
+  const cash = { method: "cash" as const, amount: "10.00" };
+
+  it("answers a reader payment on a settled bill as captured with its filed ticket", async () => {
+    const ticket = { invoiceNumber: "A/9" };
+    const fetchStub = vi
+      .fn()
+      .mockImplementation(async (url: string) =>
+        url === "/api/working-orders/wo1/payments"
+          ? jsonResponse({ status: "settled", total: "10.00", outstanding: "0.00", payments: [] })
+          : jsonResponse(ticket),
+      );
+    await expect(
+      new TillApi("", fetchStub).pay({
+        id: "wo1",
+        lines: [],
+        expectedEdit: null,
+        dining: "takeaway",
+        readerId: "r2",
+      }),
+    ).resolves.toEqual({ outcome: "captured", ticket });
+    expect(fetchStub.mock.calls.map(([url, { method }]) => [method, url])).toEqual([
+      ["GET", "/api/working-orders/wo1/payments"],
+      ["GET", "/api/sales/wo1"],
+    ]);
+  });
+
+  it("refuses to collect a placed order whose bill is open again", async () => {
+    const fetchStub = wholeBillReplies("open", "10.00");
+    await expect(
+      new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
+    ).rejects.toEqual({ code: "working_order.not_placed", workingOrderId: "wo1" });
+    expect(postedBodies(fetchStub)).toEqual([]);
+  });
+
+  it("refuses to ring up an open order whose bill was placed meanwhile", async () => {
+    const fetchStub = wholeBillReplies("placed", "10.00");
+    const expectedEdit = { billId: "wo1", editorVersion: 2, draftId: null, draftRevision: null };
+    await expect(
+      new TillApi("", fetchStub).recordSale(
+        [],
+        cash,
+        "wo1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        expectedEdit,
+        "eat_in",
+      ),
+    ).rejects.toEqual({ code: "working_order.not_open", workingOrderId: "wo1" });
+    expect(postedBodies(fetchStub)).toEqual([]);
+  });
+
+  it("refuses to collect while another payment on the bill is still pending", async () => {
+    const fetchStub = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        status: "placed",
+        total: "10.00",
+        outstanding: "10.00",
+        payments: [{ state: "pending" }],
+      }),
+    );
+    await expect(
+      new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
+    ).rejects.toEqual({ code: "order.payment_in_flight", workingOrderId: "wo1" });
+    expect(postedBodies(fetchStub)).toEqual([]);
+  });
+
+  it("refuses cash that does not cover what is still owed", async () => {
+    const fetchStub = wholeBillReplies("placed", "12.00");
+    await expect(
+      new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
+    ).rejects.toEqual({ code: "sale.tender_shortfall", workingOrderId: "wo1" });
+    expect(postedBodies(fetchStub)).toEqual([]);
+  });
+
+  it("says payments were received when the payment answers without a ticket", async () => {
+    const fetchStub = wholeBillReplies("placed", "10.00", { outcome: "received" });
+    await expect(
+      new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
+    ).rejects.toEqual({ code: "bill.payments_received", workingOrderId: "wo1" });
+    expect(postedBodies(fetchStub)).toHaveLength(1);
+  });
+
+  it("words a counter sale's refused tendered amount as a shortfall", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "tendered" } } },
+          400,
+        ),
+      );
+    await expect(
+      new TillApi("", fetchStub).recordSale(
+        [{ menuItemId: "mi-p", quantity: "2" }],
+        { method: "cash", amount: "1.00" },
+        "wo1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+        "eat_in",
+      ),
+    ).rejects.toEqual({ code: "sale.tender_shortfall", workingOrderId: "wo1" });
+  });
+});
+
+describe("TillApi: closing the cash drawer and stopping a reader payment", () => {
+  const sent = (fetchStub: ReturnType<typeof vi.fn>) =>
+    fetchStub.mock.calls.map(([url, init]) => [
+      url,
+      init.method,
+      init.body === undefined ? undefined : JSON.parse(init.body as string),
+    ]);
+
+  it("reads, counts, recounts and finishes a drawer close on its own routes", async () => {
+    const fetchStub = vi.fn().mockImplementation(async () => jsonResponse({ state: "x" }));
+    const api = new TillApi("", fetchStub);
+    await expect(api.readDrawerClose()).resolves.toEqual({ state: "x" });
+    await api.saveDrawerCount({ printerId: "bar", counted: "42.00", startSequence: 7 });
+    await api.recountDrawer("first", { counted: "45.00", startSequence: 8 });
+    await api.finishDrawerClose("first", { amountLeft: "6.00", confirmSequence: 9 });
+    expect(sent(fetchStub)).toEqual([
+      ["/api/drawer/close", "GET", undefined],
+      ["/api/drawer/close/count", "POST", { printerId: "bar", counted: "42.00", startSequence: 7 }],
+      ["/api/drawer/close/first/recount", "POST", { counted: "45.00", startSequence: 8 }],
+      ["/api/drawer/close/first/finish", "POST", { amountLeft: "6.00", confirmSequence: 9 }],
+    ]);
+  });
+
+  it("stops a reader payment by its encoded submission id and answers the outcome", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "cancelled" }));
+    await expect(
+      new TillApi("", fetchStub).cancelBillReaderPayment("wo1", "sub/1"),
+    ).resolves.toEqual({ outcome: "cancelled" });
+    expect(sent(fetchStub)).toEqual([
+      ["/api/working-orders/wo1/payments/sub%2F1/cancel", "POST", undefined],
+    ]);
+  });
+});

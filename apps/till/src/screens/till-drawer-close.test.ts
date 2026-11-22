@@ -224,3 +224,171 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
   },
 );
+
+const footerError = (el: TillDrawerClose) => el.shadowRoot?.querySelector("wt-form-actions")?.error;
+
+it("does not kick the drawer when the dialog closed before its read answered", async () => {
+  const requests = api();
+  let answer!: (value: unknown) => void;
+  const read = new Promise((resolve) => (answer = resolve));
+  requests.readDrawerClose.mockReturnValue(read);
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+    opensDrawer: true,
+  });
+  el.remove();
+  answer({ ...drawer, state: "new", startSequence: 7 });
+  await read;
+  expect(requests.openDrawer).not.toHaveBeenCalled();
+});
+
+it("asks to reopen when the read answers for another drawer", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  requests.readDrawerClose.mockResolvedValue({ ...pending, printerId: "kitchen" });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(footerError(el)).toContain("Open Close drawer again to continue"));
+  expect(action(el, "finish")).toBeNull();
+  expect(el.shadowRoot?.querySelector("wt-input")).toBeNull();
+});
+
+it("says the drawer could not be read when the read fails for another reason", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  requests.readDrawerClose.mockRejectedValue({ code: "server.unavailable" });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(footerError(el)).toContain("Could not read the drawer"));
+  expect(action(el, "sign-in")).toBeNull();
+  expect(action(el, "count")).toBeNull();
+});
+
+it("refuses an amount with more than two decimal places without saving", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+  await fill(el, "counted", "4.567");
+  const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!;
+  await vi.waitFor(() =>
+    expect(field.error).toBe("Enter a cash amount with up to two decimal places."),
+  );
+  expect(footerError(el)).toBe("Check the cash amount above.");
+  expect((action(el, "count") as HTMLElementTagNameMap["wt-button"]).disabled).toBe(true);
+  expect(requests.saveDrawerCount).not.toHaveBeenCalled();
+});
+
+it("saves the count once when the button is pressed twice before the dialog redraws", async () => {
+  const requests = api();
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+  await fill(el, "counted", "42");
+  await el.updateComplete;
+  const button = action(el, "count")!;
+  button.click();
+  button.click();
+  await vi.waitFor(() => expect(action(el, "finish")).toBeTruthy());
+  expect(requests.saveDrawerCount).toHaveBeenCalledOnce();
+});
+
+it("saves the count when Enter is pressed in the amount field", async () => {
+  const requests = api();
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+  await fill(el, "counted", "42");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(requests.saveDrawerCount).toHaveBeenCalledWith({
+      printerId: "bar",
+      startSequence: 7,
+      counted: "42.00",
+    }),
+  );
+});
+
+it.each(["drawer.close_changed", "drawer.recount_unavailable", "drawer.close_not_found"])(
+  "reloads the same count and says cash moved when finishing is refused with %s",
+  async (code) => {
+    setLocale("en-GB");
+    const requests = api();
+    requests.readDrawerClose.mockResolvedValue(pending);
+    requests.finishDrawerClose.mockRejectedValue({ code });
+    const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+      api: requests,
+      printerId: "bar",
+    });
+    await press(el, "finish");
+    await vi.waitFor(() => expect(requests.readDrawerClose).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(footerError(el)).toContain("Cash moved after this count"));
+    expect(action(el, "finish")).toBeTruthy();
+  },
+);
+
+it("asks to reopen when the reload after a refused finish shows another count", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  requests.readDrawerClose
+    .mockResolvedValueOnce(pending)
+    .mockResolvedValueOnce({ ...pending, first: { ...first, id: "other" } });
+  requests.finishDrawerClose.mockRejectedValue({ code: "drawer.close_changed" });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await press(el, "finish");
+  await vi.waitFor(() => expect(footerError(el)).toContain("Open Close drawer again to continue"));
+  expect(action(el, "finish")).toBeNull();
+});
+
+it.each(["drawer.close_changed", "drawer.no_printer"])(
+  "asks to reopen when the first count is refused with %s",
+  async (code) => {
+    setLocale("en-GB");
+    const requests = api();
+    requests.saveDrawerCount.mockRejectedValue({ code });
+    const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+      api: requests,
+      printerId: "bar",
+    });
+    await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+    await fill(el, "counted", "42");
+    await press(el, "count");
+    await vi.waitFor(() =>
+      expect(footerError(el)).toContain("Open Close drawer again to continue"),
+    );
+    expect(action(el, "count")).toBeNull();
+    expect(requests.readDrawerClose).toHaveBeenCalledOnce();
+  },
+);
+
+it("keeps the count open with a retry message when saving fails for another reason", async () => {
+  setLocale("en-GB");
+  const requests = api();
+  requests.saveDrawerCount.mockRejectedValue({ code: "server.unavailable" });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+  });
+  await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+  await fill(el, "counted", "42");
+  await press(el, "count");
+  await vi.waitFor(() =>
+    expect(footerError(el)).toBe("Could not save the drawer close. Try again."),
+  );
+  expect(action(el, "count")).toBeTruthy();
+});
