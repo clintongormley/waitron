@@ -22,17 +22,19 @@ notes below retain their original context. Cloud forwarding and automatic crash/
 separate follow-ups.
 
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
-  module's set), a capture endpoint that FREEZES a self-contained bundle (client trail `snapshot()` +
-  `LogReader.byRequestIds()` + environment), a `wt-report-dialog` and "Report a problem" trigger in
-  the till and dashboard chrome, and a GitHub-ready markdown serialiser.
+  module's set), a capture endpoint that FREEZES a self-contained bundle (the client trail as
+  `captureClientReport` keeps it + `LogReader.byRequestIds()` + environment), a `wt-report-dialog`
+  and "Report a problem" trigger in the till and dashboard chrome, and a GitHub-ready markdown
+  serialiser.
 - **Slice 3 — triage and forwarding.** A dashboard _Problem reports_ screen and automated GitHub-issue
   creation (through Waitron Cloud — see below).
 - **Hardening carried out of Slice 1, for Slice 2:** route the dashboard's boot-probe-fail and
   logout transitions, and a sign-in that leaves the address unchanged, through the nav trail
   (today only a history move records one); add setup route vocabulary and resolved transitions
-  (setup records no nav event). Stored capture sends only what `captureClientReport`
-  (`packages/diagnostics/src/client-report.ts`) keeps: the trail itself keeps any string, number
-  or boolean under any key, and error messages and stacks.
+  (setup records no nav event). Stored capture must send only what `captureClientReport`
+  (`packages/diagnostics/src/client-report.ts`) keeps, never the raw trail: the trail itself keeps
+  any string (cut to 300 characters), number or boolean under any key, up to 20 fields, including
+  error messages and stacks.
 - **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
   Slices 2 and 3 and replace one part of Slice 3; design them together before building:
   - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub
