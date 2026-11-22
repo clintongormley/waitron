@@ -81,17 +81,34 @@ export function parseRanges<T extends ClosedRange>(
   return ranges;
 }
 
-export function parseServiceDay(value: unknown, field: string, cutover: string): ServiceRange[] {
+/** `position` is the range's place in the request, which `parseRanges` reorders. */
+export type AtPosition<T> = T & { position: number };
+
+export function parseServiceDayWithPositions(
+  value: unknown,
+  field: string,
+  cutover: string,
+): AtPosition<ServiceRange>[] {
   return parseRanges(
     value,
     field,
     cutover,
     (field, reason) => invalidTimetable(field, reason === undefined ? undefined : { reason }),
-    (entry, at, range) => {
+    (entry, at, range, position) => {
       const { periodId } = entry;
       if (typeof periodId !== "string" || !isUuid(periodId)) invalidTimetable(`${at}.periodId`);
-      return { periodId: periodId.toLowerCase(), ...range };
+      return { periodId: periodId.toLowerCase(), ...range, position };
     },
+  );
+}
+
+export function parseServiceDay(value: unknown, field: string, cutover: string): ServiceRange[] {
+  return parseServiceDayWithPositions(value, field, cutover).map(
+    ({ periodId, startsAt, endsAt }) => ({
+      periodId,
+      startsAt,
+      endsAt,
+    }),
   );
 }
 

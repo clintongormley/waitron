@@ -1139,6 +1139,21 @@ describe("the timetable's writers", () => {
     ).rejects.toMatchObject(invalid("name"));
   });
 
+  it("names another department's period by the row as sent, not its place by time", async () => {
+    const v = await timed();
+    const week = weekOf((weekday) =>
+      weekday === 2
+        ? [
+            slot(v.periods.deliMidday, "18:00", "20:00"),
+            slot(v.periods.supper.toUpperCase(), "12:00", "14:00"),
+          ]
+        : [],
+    );
+    await expect(
+      scoped((tx) => replaceMenuWeek(tx, v.restaurant, week, AT, 1)),
+    ).rejects.toMatchObject(invalid("days.2.slots.0.periodId"));
+  });
+
   it("changes a period's menus without a department membership list and preserves other periods", async () => {
     const v = await timed();
     await scoped((tx) =>

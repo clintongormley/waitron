@@ -107,8 +107,6 @@ code, not run again here.
 
 ## Loose ends left by A506-4 (#1597).
 
-- `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
-  (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
   at a skipped 02:30 are refused, while the joined range is accepted.
 - [The special-day-then-season rule is written out in several places](#the-special-day-then-season-rule-is-written-out-in-several-places).
