@@ -2669,6 +2669,8 @@ async function bootServer(
         noticeRelayAllowed: async (tx: Transaction) => !(await hasSavedSmtp(tx)),
       }),
   };
+  const boxNoticeRelayAllowed = async (tx: Transaction) =>
+    (await cloudConnection?.emailRelayEnabled()) === true && !(await hasSavedSmtp(tx));
   const assertAccountMailPrimary = async () => {
     if (holders.singletonRole.current !== "primary") throw new AppError("node.read_only", {});
   };
@@ -3170,6 +3172,14 @@ async function bootServer(
         isPrimary: () => holders.singletonRole.current === "primary",
         resolveDelivery: resolveAccountEmail,
         send: createCertificateReminderSender(),
+        ...(cloudConnection &&
+          !captureAccountEmail && {
+            cloud: {
+              enabled: cloudConnection.emailRelayEnabled,
+              resolveGrant: cloudConnection.emailRelay,
+              send: cloudConnection.sendEmail,
+            },
+          }),
       }),
     );
   }
@@ -3936,6 +3946,7 @@ async function bootServer(
         captureOnly,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
+    cloudRelayEnabled: async () => !captureAccountEmail && boxNoticeRelayAllowed(db),
     send: createTextEmailSender(),
     isPrimary: () => holders.singletonRole.current === "primary",
     log,

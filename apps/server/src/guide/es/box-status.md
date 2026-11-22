@@ -464,8 +464,11 @@ que el servidor lo envía en el acto y lo vuelve a intentar cada minuto mientras
 lleno; los demás correos esperan a que vuelva a haber espacio. Un disco lleno al que solo
 se le libera parte del espacio sigue casi sin espacio, así que quien no recibió el correo de
 disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras el disco, una copia o la
-hora siguen con problemas puede enviar el mismo correo otra vez. Mientras no haya ningún
-servidor de correo configurado, no se envía nada.
+hora siguen con problemas puede enviar el mismo correo otra vez. En Preparación, activa el correo
+de Cloud en un servidor de pruebas para recibir alertas por falta de espacio, copias de seguridad,
+actualizaciones revertidas y correcciones del reloj si dejas en blanco el servidor de correo.
+Añade tu propio servidor de correo en **Sistema → Correo** para recibir alertas por disco lleno o
+por un reloj inutilizable.
 
 Cada vez que el servidor pone su reloj en hora envía su propio correo, aunque lo vuelva a poner en
 hora antes de un minuto, lo que marca como resuelto el aviso del primer cambio. Cuando el aviso de

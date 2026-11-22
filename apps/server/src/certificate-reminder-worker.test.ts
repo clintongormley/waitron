@@ -1,5 +1,7 @@
 import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadKeyRing } from "@waitron/credentials";
+import { withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
@@ -14,9 +16,11 @@ import {
   certificateReminderJob,
   runCertificateReminderPass,
 } from "./certificate-reminder-worker.js";
-import type { EmailDelivery } from "./email-delivery.js";
+import type { CloudEmailGrant, CloudEmailOutcome } from "./cloud-email.js";
+import { resolveEmailDelivery, type EmailDelivery } from "./email-delivery.js";
 import { realSleep } from "./loop.js";
 import { runTestJob } from "./testing/run-job.js";
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const seat = FISCAL_SLOT.certificate!;
@@ -27,6 +31,18 @@ const smtp = { url: "smtp://127.0.0.1:1025", from: "venue@example.test" };
 
 let nodeId: string, primary: boolean, now: Date, controller: AbortController;
 let send: ReturnType<typeof vi.fn<CertificateReminderSender>>;
+
+const grant: CloudEmailGrant = {
+  id: "d6e27600-db31-47de-b92d-710ff70daff2",
+  revision: 1,
+  expiresAt: "2026-12-01T00:00:00.000Z",
+  enabled: true,
+};
+const unconfigured = async (): Promise<EmailDelivery> => ({ mode: "unconfigured" });
+const cloudDelivery = {
+  resolveGrant: async () => grant,
+  enabled: async () => true,
+};
 
 const deps = () => ({
   db: suite.db,
@@ -173,6 +189,111 @@ describe("certificate reminder pass", () => {
 });
 
 describe("certificate reminder job", () => {
+  it.each([
+    [AMBER, "2026-08-26T22:00:00.000Z", { stage: "due", date: "2026-10-25", daysLeft: 60 }],
+    [
+      new Date("2026-10-24T23:00:00Z"),
+      "2026-10-25T23:00:00.000Z",
+      { stage: "expired", date: "2026-10-25" },
+    ],
+  ])("sends the certificate facts through Cloud at %s", async (at, expiresAt, facts) => {
+    now = at;
+    await suite.db.delete(persons);
+    await person("Admin", { role: "admin", email: "admin@example.test", locale: "es-ES" });
+    const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => ({ status: "sent" }));
+    await runCertificateReminderPass({
+      ...deps(),
+      resolveDelivery: unconfigured,
+      cloud: { ...cloudDelivery, send: cloudSend },
+    });
+    expect(cloudSend).toHaveBeenCalledExactlyOnceWith(
+      grant,
+      expect.any(String),
+      {
+        class: "certificate_reminder",
+        displayName: "Madrid",
+        locale: "es-ES",
+        timeZone: "Europe/Madrid",
+        recipient: "admin@example.test",
+        expiresAt,
+        facts,
+      },
+      controller.signal,
+    );
+    expect((await reminders()).map(({ status }) => status)).toEqual(["sent"]);
+  });
+
+  it("leaves reminders unclaimed when the Cloud grant cannot be read", async () => {
+    const resolveGrant = vi.fn(async () => {
+      throw new Error("Cloud unavailable");
+    });
+    const cloudSend = vi.fn();
+    await runCertificateReminderPass({
+      ...deps(),
+      resolveDelivery: unconfigured,
+      cloud: { ...cloudDelivery, resolveGrant, send: cloudSend },
+    });
+    expect(resolveGrant).toHaveBeenCalledOnce();
+    expect(cloudSend).not.toHaveBeenCalled();
+    expect(await reminders()).toEqual([]);
+  });
+
+  it.each(["before lookup", "during lookup"] as const)(
+    "preserves mail-server priority for a server saved %s",
+    async (timing) => {
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const save = () =>
+        withTransaction(suite.db, (tx) =>
+          saveSmtpForTest(tx, ring, {
+            url: smtp.url,
+            from: "venue@example.test, other@example.test",
+          }),
+        );
+      if (timing === "before lookup") await save();
+      const resolveGrant = vi.fn(async () => {
+        if (timing === "during lookup") await save();
+        return grant;
+      });
+      const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => ({ status: "sent" }));
+      await runCertificateReminderPass({
+        ...deps(),
+        resolveDelivery: () => resolveEmailDelivery(suite.db, ring, false),
+        cloud: { ...cloudDelivery, resolveGrant, send: cloudSend },
+      });
+      expect(cloudSend).not.toHaveBeenCalled();
+      expect(resolveGrant).toHaveBeenCalledTimes(timing === "before lookup" ? 0 : 1);
+      expect(await reminders()).toEqual([]);
+    },
+  );
+
+  it.each([
+    [{ status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }, "failed"],
+    [{ status: "unknown", failureCode: "mail.relay_unknown" }, "unknown"],
+  ] as const)("waits an hour after a Cloud send returns %j", async (outcome, status) => {
+    const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => outcome);
+    const sleeps: number[] = [];
+    await runTestJob(
+      certificateReminderJob({
+        ...deps(),
+        resolveDelivery: unconfigured,
+        cloud: { ...cloudDelivery, send: cloudSend },
+      }),
+      controller.signal,
+      {
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          controller.abort();
+        },
+      },
+    ).done;
+    expect(sleeps).toEqual([3_600_000]);
+    expect(cloudSend).toHaveBeenCalledOnce();
+    expect((await reminders()).map((row) => row.status)).toEqual([status]);
+  });
+
   it("sleeps 500 ms after work and an hour when idle", async () => {
     const sleeps: number[] = [];
     await runTestJob(certificateReminderJob(deps()), controller.signal, {

@@ -54,11 +54,14 @@ en blanco y continúa, o introduce los datos de tu servidor y envía una prueba.
 reinicie y se conecte, Cloud podrá enviar invitaciones al personal, enlaces para restablecer
 contraseñas y códigos de cambio de correo.
 
-Tu servidor de correo envía los avisos sobre cambios de seguridad de la cuenta y de roles,
-y el aviso a la dirección anterior cuando otra persona cambia el correo de un miembro del
-personal en **Usuarios**. Si eliges Cloud y dejas en blanco el servidor de correo, Cloud envía
-esos tres avisos. Para enviar correos a clientes, el informe diario u otros avisos al personal,
-añade un servidor de correo en **Sistema → Correo**.
+Si eliges Cloud y dejas en blanco el servidor de correo, Cloud también envía los avisos sobre
+cambios de seguridad de la cuenta y de roles, y el aviso a la dirección anterior cuando otra
+persona cambia el correo de un miembro del personal en **Usuarios**. Los encargados con correo
+electrónico también pueden recibir alertas por falta de espacio, copias de seguridad eliminadas o
+detenidas, actualizaciones revertidas y correcciones del reloj. Tu servidor de correo tiene
+prioridad para estos avisos cuando lo configuras. Para enviar correos a
+clientes, enviar el informe diario o recibir otras alertas del servidor por correo, añade un
+servidor de correo en **Sistema → Correo**.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
 **Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
@@ -69,6 +72,10 @@ Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invit
 los enlaces para restablecer contraseñas y los códigos de cambio de correo se envían por Cloud,
 también en Demostración. Revisa el buzón real del destinatario en lugar de la Bandeja de correo
 de Demostración. Mantén un servidor de correo para los recibos y otros avisos.
+
+En un servidor configurado para enviar registros fiscales de prueba, los encargados con correo
+electrónico pueden recibir recordatorios de caducidad del certificado a través de Cloud de prueba
+si activas el correo de Cloud y dejas en blanco el servidor de correo.
 
 Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no

@@ -5,6 +5,7 @@ import type {
   CloudEmailOutcome,
   CloudStaffNotice,
 } from "./cloud-email.js";
+import { isCloudBoxAlert } from "./cloud-email.js";
 import { publishState } from "./live-publish.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -213,9 +214,12 @@ export async function abandonMailClaims(
       .settle(tx, row, { status: "unknown", failureCode: "mail.claim_abandoned" }, now);
   return rows.length;
 }
-function isCloudStaffNotice(kind: OutgoingMailKind): boolean {
+function isCloudStaffNotice({ kind, params }: OutgoingMail): boolean {
   return (
-    kind === "email_changed" || kind === "security_change" || kind === "role_membership_changed"
+    kind === "email_changed" ||
+    kind === "security_change" ||
+    kind === "role_membership_changed" ||
+    (kind === "box_alert" && isCloudBoxAlert(params.code))
   );
 }
 
@@ -258,7 +262,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     if (
       ready.some((r) => r.kind === "account_action") ||
       (deps.noticeRelayAllowed &&
-        ready.some((r) => isCloudStaffNotice(r.kind)) &&
+        ready.some(isCloudStaffNotice) &&
         (await deps.noticeRelayAllowed(deps.db)))
     ) {
       try {
@@ -323,7 +327,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         if (
           delivery.mode === "unconfigured" &&
           deps.resolveAccountRelay &&
-          isCloudStaffNotice(row.kind) &&
+          isCloudStaffNotice(row) &&
           deps.noticeRelayAllowed
         ) {
           noticeRelayAllowed ??= await deps.noticeRelayAllowed(tx);
@@ -447,17 +451,22 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     return result;
   }
   if (message !== undefined && delivery.mode === "cloud") {
-    try {
-      outcome = await deps.sendCloudEmail!(
-        delivery.grant,
-        mail.claimToken!,
-        message.staffNotice
-          ? { ...message.staffNotice, recipient: mail.recipient! }
-          : message.accountEmail!,
-        deps.signal,
-      );
-    } catch {
-      outcome = { status: "unknown", failureCode: "mail.relay_unknown" };
+    const payload = message.staffNotice
+      ? { ...message.staffNotice, recipient: mail.recipient! }
+      : message.accountEmail;
+    if (!payload) {
+      outcome = { status: "rejected", failureCode: "mail.compose_failed", serverRefused: false };
+    } else {
+      try {
+        outcome = await deps.sendCloudEmail!(
+          delivery.grant,
+          mail.claimToken!,
+          payload,
+          deps.signal,
+        );
+      } catch {
+        outcome = { status: "unknown", failureCode: "mail.relay_unknown" };
+      }
     }
   } else if (message !== undefined && delivery.mode !== "cloud") {
     let sent: SmtpSendOutcome;

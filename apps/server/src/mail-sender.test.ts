@@ -818,7 +818,11 @@ describe("one mail sender", () => {
       { kind: "daily_report", deliveryRule: "venue_smtp" },
       { kind: "invoice", deliveryRule: "invoice" },
     ] as const;
-    for (const { kind } of otherMail) await queue(kind, { kind });
+    for (const { kind } of otherMail)
+      await queue(kind, {
+        kind,
+        ...(kind === "box_alert" && { params: { code: "clock.unusable" } }),
+      });
     const grant = {
       id: randomUUID(),
       revision: 1,
@@ -865,6 +869,28 @@ describe("one mail sender", () => {
     for (const { kind } of otherMail)
       expect(await row(kind)).toMatchObject({ status: "pending", attempts: 0 });
     expect(await row("account")).toMatchObject({ status: "sent", attempts: 1 });
+  });
+  it("settles a Cloud claim with no payload as a compose failure", async () => {
+    await queue("one", { params: { code: "storage.space_low" } });
+    const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+    await runMailPass({
+      ...deps,
+      resolveDelivery: async () => ({ mode: "unconfigured" }),
+      noticeRelayAllowed: async () => true,
+      resolveAccountRelay: async () => ({
+        id: "grant",
+        revision: 1,
+        enabled: true,
+        expiresAt: "2026-11-10T00:00:00Z",
+      }),
+      sendCloudEmail,
+    });
+    expect(sendCloudEmail).not.toHaveBeenCalled();
+    expect(await row()).toMatchObject({
+      status: "rejected",
+      failureCode: "mail.compose_failed",
+      attempts: 1,
+    });
   });
   it("logs a relay availability failure once until recovery", async () => {
     await queue("account", { kind: "account_action" });

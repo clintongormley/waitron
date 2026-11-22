@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { FiscalCertificateReminder } from "@waitron/fiscal";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import type { SECURITY_CHANGE_EMAIL_WORDS } from "./i18n/security-change-email.js";
 import type { OnRefusal } from "./cloud-translation.js";
@@ -158,9 +159,41 @@ export function cloudNoticeLabel(value: string): string {
 
 type EditorFacts = { editorName: string; at: string };
 
+export type CloudBoxAlertFacts =
+  | { code: "storage.space_low" }
+  | { code: "backup.archives_deleted"; count: number; date: string; lastDate: string }
+  | { code: "backup.run_stopped"; neededBytes: number; availableBytes: number }
+  | { code: "upgrade.rolled_back"; fromVersion: string; toVersion: string }
+  | {
+      code: "clock.corrected";
+      before: string;
+      after: string;
+      beforeOffsetMinutes: number;
+      afterOffsetMinutes: number;
+      stepMs: number;
+      source: "admin" | "staff" | "setup";
+      unverified: boolean;
+      person?: string;
+      device?: string;
+    };
+
+const CLOUD_BOX_ALERT_CODES: readonly CloudBoxAlertFacts["code"][] = [
+  "storage.space_low",
+  "backup.archives_deleted",
+  "backup.run_stopped",
+  "upgrade.rolled_back",
+  "clock.corrected",
+];
+
+export function isCloudBoxAlert(code: unknown): code is CloudBoxAlertFacts["code"] {
+  return CLOUD_BOX_ALERT_CODES.some((candidate) => candidate === code);
+}
+
 export type CloudStaffNotice = CloudEmailDetails &
   (
     | { class: "email_changed"; facts: EditorFacts }
+    | { class: "box_alert"; facts: CloudBoxAlertFacts }
+    | { class: "certificate_reminder"; facts: FiscalCertificateReminder["notice"]["facts"] }
     | {
         class: "security_change";
         facts: { change: keyof typeof SECURITY_CHANGE_EMAIL_WORDS.en.changes; at: string };

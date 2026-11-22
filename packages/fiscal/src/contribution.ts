@@ -73,6 +73,19 @@ export interface FiscalCertificateDiagnosisDeps {
   ): Promise<FiscalCertificateDiagnosisChildResult>;
 }
 
+export interface FiscalCertificateReminder {
+  id: string;
+  recipient: string;
+  subject: string;
+  text: string;
+  notice: {
+    language: "en" | "es";
+    timeZone: string;
+    expiresAt: string;
+    facts: { date: string } & ({ stage: "due"; daysLeft: number } | { stage: "expired" });
+  };
+}
+
 export interface FiscalCertificateSeat {
   diagnose?(
     deps: FiscalCertificateDiagnosisDeps,
@@ -133,7 +146,7 @@ export interface FiscalCertificateSeat {
       deps: { nodeId: string },
       recipients: readonly { personId: string; email: string; language: "en" | "es" }[],
       now: Date,
-    ): Promise<{ id: string; recipient: string; subject: string; text: string } | null>;
+    ): Promise<FiscalCertificateReminder | null>;
     report(
       tx: Transaction,
       deps: { nodeId: string },

@@ -1257,14 +1257,18 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   Demo's normal route captures account mail, reminders and alerts outside development; an enabled
   test Cloud relay takes its three selected account classes.
   A fresh Prepare box that opts into Cloud email and leaves its mail server blank can also
-  send the old-address warning, security notices and role changes through test Cloud.
+  send the old-address warning, security notices, role changes and selected box alerts through
+  test Cloud. A box configured for test filings can send certificate reminders through the same
+  relay. The two new notice classes need the compatible Cloud release, and box alerts have a
+  joint inbox check pending.
   Left: qualify invitations, resets and email-change codes against the live test Cloud
   (BOX-EMAIL-RELAY). Receipts and other notices still use SMTP.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **A venue's own mail server always wins; Cloud sends only when there is none (owner,
   2026-11-21).** On a paid Cloud plan, Cloud sends every email the box would send, as the venue's
-  own domain or a Waitron address; free accounts get only account emails from Cloud. Today a
+  own domain or a Waitron address. On 2026-11-22 the owner chose five free notice types in
+  addition to invitations, resets and email-change codes. Today a
   paired test Cloud takes invitations, resets and email changes ahead of a saved mail server
   (`apps/server/src/mail-sender.ts`, the `accountDelivery` choice), so that order flips. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
 

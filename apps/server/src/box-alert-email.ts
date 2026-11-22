@@ -15,6 +15,7 @@ import { codeOf } from "@waitron/server-kit";
 import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { LastOfferedUpgrade } from "./box-host-client.js";
+import { isCloudBoxAlert } from "./cloud-email.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
 import { fillTemplate } from "./fill-template.js";
@@ -258,6 +259,7 @@ export function createBoxEmailDuty(deps: {
   backupStopped: () => BackupOutcomeHolder["runStopped"];
   lastOfferedUpgrade?: () => Promise<LastOfferedUpgrade | null>;
   context: () => Promise<BoxEmailContext>;
+  cloudRelayEnabled?: () => Promise<boolean>;
   send: TextEmailSender;
   isPrimary: () => boolean;
   log: Logger;
@@ -448,6 +450,14 @@ export function createBoxEmailDuty(deps: {
         )
         .map(([, episode]) => episode);
       const ctx = due.length === 0 ? undefined : await deps.context();
+      const cloudRelay =
+        ctx?.delivery.mode === "unconfigured" &&
+        ctx.recipients.length > 0 &&
+        due.some(({ episode }) => isCloudBoxAlert(episode.code)) &&
+        (await deps.cloudRelayEnabled?.().catch((error: unknown) => {
+          if (codeOf(error) !== "cloud.state_invalid") throw error;
+          return false;
+        }));
       if (stopped) {
         episodes = previous;
         return;
@@ -458,7 +468,10 @@ export function createBoxEmailDuty(deps: {
       const dropped: string[] = [];
       for (const { episode, key, toldAlready } of due) {
         if (ctx!.recipients.length === 0) sayOnce(episode, "box_email.no_recipients");
-        else if (ctx!.delivery.mode === "unconfigured")
+        else if (
+          ctx!.delivery.mode === "unconfigured" &&
+          !(cloudRelay && isCloudBoxAlert(episode.code))
+        )
           sayOnce(episode, "box_email.not_configured");
         else
           for (const recipient of ctx!.recipients) {

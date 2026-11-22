@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, incidents, outgoingMail } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { AppError } from "@waitron/shared";
 import { boxAlertMail } from "./box-alert-mail.js";
 import { runMailPass } from "./mail-sender.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -121,6 +122,7 @@ function duty({ startedAt = at(0) } = {}) {
     lowSince: null as Date | null,
     recipients: [ANNA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
+    cloudRelayEnabled: false as boolean | Error,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     incidents: [] as readonly EmailedIncident[],
     backupStopped: undefined as BackupOutcomeHolder["runStopped"],
@@ -154,6 +156,10 @@ function duty({ startedAt = at(0) } = {}) {
     emailedIncidents,
     backupStopped: () => state.backupStopped,
     context,
+    cloudRelayEnabled: async () => {
+      if (state.cloudRelayEnabled instanceof Error) throw state.cloudRelayEnabled;
+      return state.cloudRelayEnabled;
+    },
     send: (message) =>
       send(message).then((outcome) => (outcome === "uncertain" ? "unknown" : outcome)),
     isPrimary: () => state.primary,
@@ -250,6 +256,61 @@ function duty({ startedAt = at(0) } = {}) {
 function notice(code: string): OwnedStaffNotice {
   return { owner: "fiscal-verifactu", key: code, code, severity: "error", params: {} };
 }
+
+it("queues low space through Cloud and keeps an unusable clock on the box path", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = true;
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+  await d.check();
+  expect((await d.rows()).map(({ params }) => params.code)).toEqual([
+    "storage.space_low",
+    "storage.space_low",
+  ]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "clock.unusable",
+  ]);
+});
+
+it("leaves full-disk mail on its direct path even with Cloud enabled", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = true;
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.diskSince = at(0);
+  await d.check();
+  expect(await d.rows()).toEqual([]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "storage.disk_full",
+  ]);
+});
+
+it("still checks the alerts when the saved Cloud choice cannot be read", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = new AppError("cloud.state_invalid", {});
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+  await d.check();
+  await d.check();
+  expect(await d.rows()).toEqual([]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "storage.space_low",
+    "clock.unusable",
+  ]);
+  expect(d.events("box_email.check_failed")).toEqual([]);
+});
+
+it("reports a failure from reading saved mail settings", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = new Error("Saved mail lookup failed");
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  await d.check();
+  expect(d.events("box_email.check_failed")).toEqual([
+    ["warn", "box_email.check_failed", { errorCode: "unknown" }],
+  ]);
+});
 
 const OLD_BACKUPS: EmailedIncident = {
   id: "i-old-backups",

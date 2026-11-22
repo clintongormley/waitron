@@ -33,6 +33,10 @@ export function localMidnight(day: string, timeZone: string): string {
   return businessDayBoundaryAt(calendar(timeZone), day);
 }
 
+export function nextLocalMidnight(now: Date, timeZone: string): string {
+  return localMidnight(shiftDay(localDate(now, timeZone), 1), timeZone);
+}
+
 export function calendarDaysLeft(now: Date, validUntil: Date, timeZone: string): number {
   return dayNumber(localDate(validUntil, timeZone)) - dayNumber(localDate(now, timeZone));
 }

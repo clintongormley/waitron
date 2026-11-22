@@ -48,10 +48,13 @@ Cloud** on the email step. Leave the mail server blank and continue, or enter an
 server. Once the box restarts and connects, Cloud can send staff invitations, password-reset links
 and email-change codes.
 
-Your mail server sends account security notices, role change notices and the warning to a staff
-member's previous address when someone else changes it in **Users**. If you choose Cloud
-and leave the mail server blank, Cloud sends those three notices. To email customers, the daily
-report or other staff notices, add a mail server in **System → Email**.
+If you choose Cloud and leave the mail server blank, Cloud also sends account security notices,
+role change notices and the warning to a staff member's previous address when someone else
+changes it in **Users**. Managers with an email address can also receive box alerts about low
+space, deleted backups, backup runs that stopped, rolled-back upgrades and clock corrections.
+Your mail server takes priority for those notices when you add one. To email
+customers, send the daily report or receive other box alerts by email, add a mail server in
+**System → Email**.
 
 If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
 the mail server you use for staff email.
@@ -62,6 +65,9 @@ When you pair your box with the test Cloud and enable its email relay, invitatio
 password-reset links and email-change codes use Cloud, including in Demo. Check the recipient's
 real inbox rather than Demo's Email inbox. Keep a mail server configured for receipts and other
 notices.
+
+On a box configured for test filings, managers with an email address can receive certificate
+expiry reminders through test Cloud when Cloud email is on and the box has no mail server.
 
 Cloud account links lead back to your box. Open them on a network that can reach it. Cloud's
 invitation does not list your roles or include the venue's optional privacy link. If an email

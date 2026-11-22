@@ -23,6 +23,7 @@ export type {
   FiscalCertificateDiagnosisChildResult,
   FiscalCertificateDiagnosisDeps,
   FiscalCertificateJson,
+  FiscalCertificateReminder,
   FiscalCertificateSeat,
   FiscalContribution,
   FiscalDeclarationsSeat,
