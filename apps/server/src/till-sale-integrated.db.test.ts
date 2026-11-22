@@ -182,7 +182,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
@@ -373,7 +373,7 @@ async function rawPaymentsFor(
 }
 
 /** The venue's rectificative series. */
-function rectificativeSeries(cfg: DeviceRequestConfig): string {
+function correctiveSeries(cfg: DeviceRequestConfig): string {
   return suite.db.all<{ id: string }>(sql`
     select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'corrective'
   `)[0]!.id;
@@ -396,7 +396,7 @@ async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<
       operationDescription: "Venta en establecimiento",
       origin: cfg.origin,
       nodeId: cfg.nodeId,
-      seriesId: brandSeriesId(rectificativeSeries(cfg)),
+      seriesId: brandSeriesId(correctiveSeries(cfg)),
       correctsSaleId: brandSaleId(saleId),
       total: "-1.50",
       lines: [

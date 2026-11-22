@@ -38,7 +38,7 @@ import { seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
-import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -920,7 +920,7 @@ describe("recordSale — series validation", () => {
   });
 
   it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
-    const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+    const rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
     ).rejects.toMatchObject({

@@ -42,7 +42,7 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
     seriesCode: "A",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Admin",
       email: "admin@example.test",

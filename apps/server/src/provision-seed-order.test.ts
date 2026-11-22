@@ -31,7 +31,7 @@ describe("first setup module seeds", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Owner",
           pinHash: hashPin("1234"),

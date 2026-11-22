@@ -282,7 +282,7 @@ function demoBody(): Record<string, unknown> {
       dayCutover: "05:00",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: {
         displayName: "Administrator",
         firstNames: "Anna Mary",
@@ -1910,8 +1910,8 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     ],
     [
       "a rectificative series code with a space",
-      "rectificativeSeriesCode",
-      (b) => void (asRec(b.venue).rectificativeSeriesCode = "Series R"),
+      "correctiveSeriesCode",
+      (b) => void (asRec(b.venue).correctiveSeriesCode = "Series R"),
     ],
     [
       "a full invoice series code with a space",

@@ -421,7 +421,7 @@ export function mountSetupFirstFiscalApi(
           ...VENUE_FIELDS,
           "seriesCode",
           "fullSeriesCode",
-          "rectificativeSeriesCode",
+          "correctiveSeriesCode",
           "admin",
         ],
         ["staffLanguage"],

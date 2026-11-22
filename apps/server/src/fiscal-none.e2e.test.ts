@@ -85,7 +85,7 @@ interface GbVenue {
   nodeId: NodeId;
   standardSeriesId: SeriesId;
   fullSeriesId: SeriesId;
-  rectificativeSeriesId: SeriesId;
+  correctiveSeriesId: SeriesId;
   adminSessionId: string;
 }
 
@@ -112,7 +112,7 @@ async function setupGbVenue(): Promise<GbVenue> {
         timeZone: "Europe/London",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
@@ -134,8 +134,8 @@ async function setupGbVenue(): Promise<GbVenue> {
     .where(eq(invoiceSeries.nodeId, nodeId));
   const standard = seriesRows.find((r) => r.purpose === "standard");
   const full = seriesRows.find((r) => r.purpose === "full");
-  const rectificative = seriesRows.find((r) => r.purpose === "corrective");
-  if (standard === undefined || full === undefined || rectificative === undefined) {
+  const corrective = seriesRows.find((r) => r.purpose === "corrective");
+  if (standard === undefined || full === undefined || corrective === undefined) {
     throw new Error("fiscal-none.e2e: venue plan did not seed all series");
   }
 
@@ -162,7 +162,7 @@ async function setupGbVenue(): Promise<GbVenue> {
     nodeId,
     standardSeriesId: brandSeriesId(standard.id),
     fullSeriesId: brandSeriesId(full.id),
-    rectificativeSeriesId: brandSeriesId(rectificative.id),
+    correctiveSeriesId: brandSeriesId(corrective.id),
     adminSessionId,
   };
 }
@@ -262,7 +262,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
         operationDescription: "Sale on premises",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
-        seriesId: venue.rectificativeSeriesId,
+        seriesId: venue.correctiveSeriesId,
         correctsSaleId: toCorrect.saleId,
         total: "-1.50",
         lines: [

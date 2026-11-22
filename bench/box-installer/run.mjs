@@ -965,7 +965,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
                   dayCutover: "05:00",
                   seriesCode: "A",
                   fullSeriesCode: "FF",
-                  rectificativeSeriesCode: "R",
+                  correctiveSeriesCode: "R",
                   admin: {
                     firstNames: "Alex",
                     lastNames: "Example",

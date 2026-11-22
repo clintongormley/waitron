@@ -249,7 +249,7 @@ async function provision(db: Database): Promise<void> {
         timeZone: BENCH_PROFILE.timeZone,
         dayCutover: BENCH_PROFILE.dayCutover,
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Bench administrator",
           pinHash: fixturePinHash("1234"),

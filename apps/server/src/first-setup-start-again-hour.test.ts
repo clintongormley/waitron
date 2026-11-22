@@ -222,7 +222,7 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
       ...request,
       seriesCode: "B",
       fullSeriesCode: "FULL",
-      rectificativeSeriesCode: "RECT",
+      correctiveSeriesCode: "RECT",
     },
   });
   const owner = { ...claim.state, capability: claim.capability };

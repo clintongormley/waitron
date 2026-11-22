@@ -49,7 +49,7 @@ for (const theme of ["light", "dark"] as const)
                   legalName: "Olivo Restauración SL",
                   seriesCode: "A",
                   fullSeriesCode: "FF",
-                  rectificativeSeriesCode: "R",
+                  correctiveSeriesCode: "R",
                   name: "Olivo Centro",
                   city: "Las Palmas",
                   fiscalTerritory: "ES-canary",

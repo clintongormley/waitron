@@ -67,7 +67,7 @@ describe("seedSales across a rate change", () => {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Administradora",
             pinHash: hashPin("1234"),

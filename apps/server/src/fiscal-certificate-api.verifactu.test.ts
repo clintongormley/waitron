@@ -65,7 +65,7 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Owner",
             pinHash: hashPin("1234"),
@@ -229,7 +229,7 @@ for (const [fiscal, box] of Object.entries(boxes)) {
               addressLine2: null,
               dayCutover: "05:00",
               seriesCode: "A",
-              rectificativeSeriesCode: "R",
+              correctiveSeriesCode: "R",
               admin: {
                 displayName: "Owner",
                 pinHash: hashPin("1234"),

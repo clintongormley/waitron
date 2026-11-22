@@ -96,7 +96,7 @@ async function fixture() {
         taxId: "89899101K",
         legalName: "Test venue",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         name: "Main",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["en-GB"],

@@ -2825,7 +2825,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
             seriesCode: "B",
             fullSeriesCode: "FB",
-            rectificativeSeriesCode: "RB",
+            correctiveSeriesCode: "RB",
           },
         });
       };

@@ -11561,7 +11561,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
   it.each([
     ["bill.payments_received", "cancel_credit.refused_payments"],
     ["order.payment_in_flight", "cancel_credit.refused_payment_in_flight"],
-    ["series.no_rectificative_for_node", null],
+    ["series.no_corrective_for_node", null],
     ["device.unauthorized", null],
     ["sale.correction_exceeds_total", null],
     ["sale.correction_not_whole", null],

@@ -19,7 +19,7 @@ const states: [string, State][] = [
   [
     "refused",
     {
-      refusal: { code: "series.no_rectificative_for_node" },
+      refusal: { code: "series.no_corrective_for_node" },
       busy: false,
       pressed: false,
       done: null,

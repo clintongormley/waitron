@@ -212,7 +212,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         "seriesCode",
         "fullSeriesCode",
         "staffLanguage",
-        "rectificativeSeriesCode",
+        "correctiveSeriesCode",
         "admin",
       ],
       [
@@ -221,7 +221,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         "legalName",
         ...VENUE_FIELDS,
         "seriesCode",
-        "rectificativeSeriesCode",
+        "correctiveSeriesCode",
         "admin",
       ],
     ) ||
@@ -252,7 +252,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
       request.taxId,
       request.legalName,
       request.seriesCode,
-      request.rectificativeSeriesCode,
+      request.correctiveSeriesCode,
       admin.displayName,
       admin.email,
     ].some((text) => typeof text !== "string" || text.trim() === "")

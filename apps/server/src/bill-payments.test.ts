@@ -174,7 +174,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
@@ -989,7 +989,7 @@ describe("the invoice at full payment", () => {
     const settledBefore = await inTx((tx) =>
       tx.select().from(saleSettlements).where(eq(saleSettlements.saleId, invoice.id)),
     );
-    const [rectificativeBefore] = await inTx((tx) =>
+    const [correctiveBefore] = await inTx((tx) =>
       tx
         .select({ nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries)
@@ -997,7 +997,7 @@ describe("the invoice at full payment", () => {
     );
     expect(before).toEqual([]);
     expect(settledBefore).toHaveLength(1);
-    expect(rectificativeBefore).toBeDefined();
+    expect(correctiveBefore).toBeDefined();
 
     await expect(
       inTx((tx) =>
@@ -1021,13 +1021,13 @@ describe("the invoice at full payment", () => {
         tx.select().from(saleSettlements).where(eq(saleSettlements.saleId, invoice.id)),
       ),
     ).toEqual(settledBefore);
-    const [rectificativeAfter] = await inTx((tx) =>
+    const [correctiveAfter] = await inTx((tx) =>
       tx
         .select({ nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "corrective")),
     );
-    expect(rectificativeAfter).toEqual(rectificativeBefore);
+    expect(correctiveAfter).toEqual(correctiveBefore);
   });
 
   it("finds a settled F1 by its invoice number or saved customer name without changing sale or print rows", async () => {

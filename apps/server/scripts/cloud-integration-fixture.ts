@@ -80,7 +80,7 @@ if (savedEnv !== undefined) {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Cloud test manager",
             pinHash: hashPin("1234"),

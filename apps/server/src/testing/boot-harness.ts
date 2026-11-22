@@ -208,7 +208,7 @@ export function provisionVenueBody(taxId: string) {
     dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Administrator",
       pin: "1234",

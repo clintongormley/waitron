@@ -41,7 +41,7 @@ interface Context {
     taxId: string;
     seriesCode: string;
     fullSeriesCode?: string;
-    rectificativeSeriesCode: string;
+    correctiveSeriesCode: string;
     name: string;
     city: string;
     fiscalTerritory: string;

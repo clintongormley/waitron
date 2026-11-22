@@ -30,7 +30,7 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       timeZone: "Europe/Madrid",
       seriesCode: "FA",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "RF",
+      correctiveSeriesCode: "RF",
       admin: {
         firstNames: "Alba",
         lastNames: "Ramos",
@@ -333,7 +333,7 @@ describe("setup-review-screen", () => {
       ["summary-invoiceLocales", "Receipts use this language for their fixed words."],
       ["summary-dayCutover", "Sales after this time belong to the next business day."],
       ["summary-seriesCode", "Every invoice number starts with this: FS-000001, FS-000002…"],
-      ["summary-rectificativeSeriesCode", "Credit notes use this separate numbering series."],
+      ["summary-correctiveSeriesCode", "Credit notes use this separate numbering series."],
       [
         "summary-cert",
         "The certificate lets Waitron submit live invoice records to the tax agency.",
@@ -371,7 +371,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-name]")).toBe("Calle Mayor");
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
     expect(text(el, "[data-test=summary-fullSeriesCode]")).toBe("FF");
-    expect(text(el, "[data-test=summary-rectificativeSeriesCode]")).toBe("RF");
+    expect(text(el, "[data-test=summary-correctiveSeriesCode]")).toBe("RF");
     expect(text(el, "[data-test=summary-admin-name]")).toBe("Alba Ramos");
     expect(text(el, "[data-test=summary-admin]")).toBe("Alba");
     expect(text(el, "[data-test=summary-admin-email]")).toBe("alba@example.com");

@@ -40,7 +40,7 @@ let node: SeededNode;
 let generation: NonNullable<ModuleRouteContext["recordGeneration"]>;
 let instant: Date;
 let confirmed: boolean;
-let rectificativeId: string;
+let correctiveId: string;
 let body: Record<string, unknown>;
 let enabledRemedies: RemedyPolicy | undefined;
 const FULL_INVOICES_ON: RemedyPolicy = new Set([
@@ -153,7 +153,7 @@ beforeEach(async () => {
       .insert(invoiceSeries)
       .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
       .returning();
-    rectificativeId = series!.id;
+    correctiveId = series!.id;
   });
   const original = await refusedOriginal();
   body = {
@@ -395,9 +395,9 @@ it("replaces a full invoice with an R4 'S' naming the same customer, and resolve
       ],
     },
   });
-  const rectificative = (rows: typeof before.series) =>
-    rows.find((row) => row.id === rectificativeId)!.nextNumber;
-  expect(rectificative(after.series)).toBe(rectificative(before.series) + 1);
+  const corrective = (rows: typeof before.series) =>
+    rows.find((row) => row.id === correctiveId)!.nextNumber;
+  expect(corrective(after.series)).toBe(corrective(before.series) + 1);
   expect(after.sales.find((row) => row.id === result.saleId)).toMatchObject({
     correctsSaleId: original.saleId,
     replacesOriginal: true,
@@ -501,7 +501,7 @@ it("refuses an original that already has a partial refund, using no number", asy
     await recordCorrection(tx, backend(), {
       origin: jobOrigin("operator_script"),
       nodeId: node.nodeId,
-      seriesId: seriesId(rectificativeId),
+      seriesId: seriesId(correctiveId),
       correctsSaleId: brandSaleId(original!.saleId),
       total: "-6.05",
       operationDescription: "Refund one coffee",
@@ -527,8 +527,8 @@ it("refuses when this node has no live rectificative series", async () => {
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: TODAY })
-    .where(eq(invoiceSeries.id, rectificativeId));
-  await refuses(body, "series.no_rectificative_for_node", 409);
+    .where(eq(invoiceSeries.id, correctiveId));
+  await refuses(body, "series.no_corrective_for_node", 409);
 });
 
 it.each([

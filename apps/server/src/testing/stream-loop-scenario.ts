@@ -81,7 +81,7 @@ const VENUE: VenueRequest = {
   timeZone: "Europe/Madrid",
   dayCutover: "05:00",
   seriesCode: "A",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Administrator",
     firstNames: "Test",

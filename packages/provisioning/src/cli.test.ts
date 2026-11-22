@@ -71,7 +71,7 @@ const VENUE_ARGS = [
   "06:00",
   "--series-code",
   "A",
-  "--rectificative-code",
+  "--corrective-code",
   "R",
   "--admin-name",
   "Owner",
@@ -395,9 +395,7 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
 
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'setup.request_invalid {"field":"rectificativeSeriesCode"}',
-    );
+    expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"correctiveSeriesCode"}');
     expect(h.applyVenue).not.toHaveBeenCalled();
   });
 

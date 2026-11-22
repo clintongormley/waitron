@@ -32,7 +32,7 @@ let node: SeededNode;
 // A SECOND series, `purpose = 'corrective'`, for the corrective sales — a rectificativa draws
 // its number from its own series (RD 1619/2012 art. 6.1.a), and `sales` is unique on
 // (series_id, invoice_number), so the corrective cannot reuse the original's series+number.
-let rectificativeSeriesId: string;
+let correctiveSeriesId: string;
 
 beforeEach(async () => {
   node = await seedNode(suite.db, "A");
@@ -42,7 +42,7 @@ beforeEach(async () => {
     .insert(invoiceSeries)
     .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
-  rectificativeSeriesId = series!.id;
+  correctiveSeriesId = series!.id;
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -61,7 +61,7 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
     // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `corrective`
     // series is a core concern, not the backend's.
-    seriesId: brandSeriesId(rectificativeSeriesId),
+    seriesId: brandSeriesId(correctiveSeriesId),
     seriesCode: "R",
     invoiceNumber,
     issuedAt: new Date("2026-03-02T12:05:00.000Z"),
@@ -116,7 +116,7 @@ async function seedCorrectiveRow(
       source: "device",
       deviceId: node.deviceId,
       nodeId: node.nodeId,
-      seriesId: rectificativeSeriesId,
+      seriesId: correctiveSeriesId,
       invoiceNumber,
       issuedAt: "2026-03-02T12:05:00+01:00",
       issuedOffsetMinutes: 60,

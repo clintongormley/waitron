@@ -34,7 +34,7 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordReplacement } from "./record-replacement.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -319,7 +319,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 
   describe("a ticket a replacement corrective takes the place of", () => {
     async function replaceTicket(backend: FiscalBackend, saleId: SaleId) {
-      const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+      const rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
       return withTransaction(suite.db, (tx) =>
         recordReplacement(tx, backend, {
           operationDescription: "Sale on premises",
@@ -439,7 +439,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
   it("rejects a non-full series: an F3 draws its number from the full series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
+    const rectSeries = await seedCorrectiveSeries(suite.db, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeries, expected: "full", actual: "corrective" },

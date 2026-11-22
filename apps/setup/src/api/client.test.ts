@@ -52,7 +52,7 @@ const provisionBody: ProvisionBody = {
     dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "RA",
+    correctiveSeriesCode: "RA",
     admin: {
       firstNames: "Ada",
       lastNames: "Lovelace",

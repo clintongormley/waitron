@@ -68,7 +68,7 @@ const bundle: ConfigurationBundle = {
     dayCutover: "06:00:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
   },
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
@@ -644,7 +644,7 @@ describe("routing cells in a staged import", () => {
       dayCutover: "06:00",
       seriesCode: "F",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: {
         displayName: "Admin",
         email: `${taxId.toLowerCase()}@example.test`,

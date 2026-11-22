@@ -9,7 +9,7 @@ const GOOD = {
   legalName: "Waitron SL",
   seriesCode: "FS",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "FR",
+  correctiveSeriesCode: "FR",
 };
 
 describe("validateVenueFiscalFields", () => {
@@ -28,8 +28,8 @@ describe("validateVenueFiscalFields", () => {
 
   it("refuses the rectificative code by its own name, not the standard one's", () => {
     expect(() =>
-      validateVenueFiscalFields({ ...GOOD, rectificativeSeriesCode: "Rectificativa A" }),
-    ).toThrow(expect.objectContaining({ params: { field: "rectificativeSeriesCode" } }));
+      validateVenueFiscalFields({ ...GOOD, correctiveSeriesCode: "Rectificativa A" }),
+    ).toThrow(expect.objectContaining({ params: { field: "correctiveSeriesCode" } }));
   });
 
   it("refuses an invalid full invoice series before provisioning, naming its field", () => {

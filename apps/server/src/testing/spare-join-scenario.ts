@@ -85,7 +85,7 @@ export const VENUE_M: VenueRequest = {
   timeZone: "Europe/London",
   dayCutover: "05:00",
   seriesCode: "A",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Administrator",
     firstNames: "Test",

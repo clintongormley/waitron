@@ -34,7 +34,7 @@ type Context = {
     taxId: string;
     seriesCode: string;
     fullSeriesCode?: string;
-    rectificativeSeriesCode: string;
+    correctiveSeriesCode: string;
   };
 };
 type Input = {

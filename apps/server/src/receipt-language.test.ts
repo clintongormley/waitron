@@ -136,7 +136,7 @@ async function venueWith(
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Admin",
           pinHash: fixturePinHash("1234"),

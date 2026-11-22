@@ -220,7 +220,7 @@ async function provisionVenue(
         timeZone: preset.timeZone,
         dayCutover: preset.dayCutover,
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin(ADMIN_PIN),

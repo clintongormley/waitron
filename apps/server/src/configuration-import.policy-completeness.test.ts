@@ -31,7 +31,7 @@ function request(taxId: string): VenueRequest {
     dayCutover: "06:00",
     seriesCode: "A",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Owner",
       pinHash: "scrypt$00$00",

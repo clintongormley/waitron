@@ -52,7 +52,7 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Owner",
           pinHash: fixturePinHash("1234"),

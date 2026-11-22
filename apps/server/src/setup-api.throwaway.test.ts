@@ -102,7 +102,7 @@ function body(mode: Mode): Record<string, unknown> {
       dayCutover: "05:00",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: {
         displayName: "Administrator",
         firstNames: "Anna Mary",

@@ -189,7 +189,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",
           pinHash: hashPin("1234"),
@@ -891,7 +891,7 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Administrator",
             pinHash: hashPin("1234"),
@@ -1134,7 +1134,7 @@ describe("ordering extras and options — parent + child lines", () => {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
           seriesCode: "A",
-          rectificativeSeriesCode: "R",
+          correctiveSeriesCode: "R",
           admin: {
             displayName: "Administrator",
             pinHash: hashPin("1234"),

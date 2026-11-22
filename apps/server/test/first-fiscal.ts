@@ -38,7 +38,7 @@ export const request = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: { displayName: "Elena", email: "elena@example.test", password: PASSWORD, pin: "4826" },
 };
 export async function firstFiscalFixture(parent: string = tmpdir()) {

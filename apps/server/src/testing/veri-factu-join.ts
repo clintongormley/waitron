@@ -69,7 +69,7 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "FA",
-        rectificativeSeriesCode: "RF",
+        correctiveSeriesCode: "RF",
         admin: {
           displayName: "Owner",
           pinHash: fixturePinHash("1234"),

@@ -28,7 +28,7 @@ function request(changes: Partial<VenueRequest> = {}): VenueRequest {
     dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FA",
-    rectificativeSeriesCode: "R",
+    correctiveSeriesCode: "R",
     admin: {
       displayName: "Demo",
       pinHash: "demo-hash",

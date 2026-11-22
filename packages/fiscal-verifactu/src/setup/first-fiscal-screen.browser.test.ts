@@ -86,7 +86,7 @@ async function mount(overrides: Partial<InitialSetupActions> = {}) {
       taxId: "B12345674",
       seriesCode: "A",
       fullSeriesCode: "FF",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
     },
   };
   el.api = api;
@@ -448,7 +448,7 @@ it("creates the localized module screen through its contribution and discards it
         taxId: "B12345674",
         seriesCode: "A",
         fullSeriesCode: "FF",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
       },
     },
     api: {

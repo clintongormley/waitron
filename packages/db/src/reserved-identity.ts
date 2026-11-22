@@ -96,7 +96,7 @@ export async function readLiveSeriesIdTx(
       ? new AppError("series.no_standard_for_node", { nodeId })
       : purpose === "full"
         ? new AppError("series.no_full_for_node", { nodeId })
-        : new AppError("series.no_rectificative_for_node", { nodeId });
+        : new AppError("series.no_corrective_for_node", { nodeId });
   }
   if (extra !== undefined) {
     throw new Error(`invoice_series: node ${nodeId} has more than one ${purpose} series`);

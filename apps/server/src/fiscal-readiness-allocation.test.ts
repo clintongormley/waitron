@@ -47,7 +47,7 @@ const request: VenueRequest = {
   dayCutover: "06:00:00",
   seriesCode: "A",
   fullSeriesCode: "FF",
-  rectificativeSeriesCode: "R",
+  correctiveSeriesCode: "R",
   admin: {
     displayName: "Owner",
     pinHash: "hash",

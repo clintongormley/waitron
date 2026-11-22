@@ -417,7 +417,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "06:00",
     "--series-code",
     "A",
-    "--rectificative-code",
+    "--corrective-code",
     "R",
     "--admin-name",
     "Elena",

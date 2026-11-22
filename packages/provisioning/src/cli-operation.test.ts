@@ -53,7 +53,7 @@ const args = [
   "06:00",
   "--series-code",
   "A",
-  "--rectificative-code",
+  "--corrective-code",
   "R",
   "--admin-name",
   "Owner",

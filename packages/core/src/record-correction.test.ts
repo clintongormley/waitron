@@ -29,7 +29,7 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
@@ -55,7 +55,7 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
+  rectSeriesId = await seedCorrectiveSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
@@ -359,7 +359,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTaxpayer(suite.db);
-    const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
+    const otherRect = await seedCorrectiveSeries(suite.db, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
       params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },

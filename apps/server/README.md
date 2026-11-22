@@ -233,7 +233,7 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --venue-name Counter --territory ES-common --locale es-ES \
     --address-line1 '1 Main Street' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
-    --series-code A --full-series-code FF --rectificative-code R \
+    --series-code A --full-series-code FF --corrective-code R \
     --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```

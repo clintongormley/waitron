@@ -733,7 +733,7 @@ describe("setup-app", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         seriesCode: "F",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
       },
       modules: ["core"],
       reconnectModules: ["core"],
@@ -777,7 +777,7 @@ describe("setup-app", () => {
       dayCutover: "06:00",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
-      rectificativeSeriesCode: "OLDR",
+      correctiveSeriesCode: "OLDR",
     };
     const sixFields = {
       taxId: "B12345678",
@@ -785,7 +785,7 @@ describe("setup-app", () => {
       taxpayerDomicile: "Calle Vieja 1, 28001 Madrid, Madrid",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
-      rectificativeSeriesCode: "OLDR",
+      correctiveSeriesCode: "OLDR",
     };
     const typed = {
       taxId: "A58818501",
@@ -793,7 +793,7 @@ describe("setup-app", () => {
       taxpayerDomicile: "Calle Nueva 2, 28002 Madrid, Madrid",
       seriesCode: "NEW",
       fullSeriesCode: "NEWF",
-      rectificativeSeriesCode: "NEWR",
+      correctiveSeriesCode: "NEWR",
     };
 
     async function staged(
@@ -878,7 +878,7 @@ describe("setup-app", () => {
         legalName: "",
         seriesCode: "FS",
         fullSeriesCode: "FF",
-        rectificativeSeriesCode: "FR",
+        correctiveSeriesCode: "FR",
       });
       expect(venueValue(venue, "name")).toBe("Prepared");
       patch(el, { venue: typed });
@@ -1585,7 +1585,7 @@ describe("setup-app", () => {
   it.each([
     ["legalName", "legalName"],
     ["seriesCode", "seriesCode"],
-    ["rectificativeSeriesCode", "rectificativeSeriesCode"],
+    ["correctiveSeriesCode", "correctiveSeriesCode"],
   ])("sends a %s refusal back to the venue form with the field marked", async (field, key) => {
     const provision = vi
       .fn()
@@ -2976,7 +2976,7 @@ describe("A2 mode boundaries", () => {
           legalName: "Demo company",
           seriesCode: "FS",
           fullSeriesCode: "FF",
-          rectificativeSeriesCode: "FR",
+          correctiveSeriesCode: "FR",
           admin: { displayName: "Ada" },
           name: "Calle Mayor",
           addressLine1: "Calle Mayor 1",
@@ -2990,7 +2990,7 @@ describe("A2 mode boundaries", () => {
       expect(draft.venue?.legalName).toBeUndefined();
       expect(draft.venue?.seriesCode).toBeUndefined();
       expect(draft.venue?.fullSeriesCode).toBeUndefined();
-      expect(draft.venue?.rectificativeSeriesCode).toBeUndefined();
+      expect(draft.venue?.correctiveSeriesCode).toBeUndefined();
       expect(draft.venue?.admin?.displayName).toBe("Ada");
       expect(draft.venue?.addressLine1).toBe("Calle Mayor 1");
     },

@@ -85,7 +85,7 @@ type TextField =
   | "dayCutover"
   | "seriesCode"
   | "fullSeriesCode"
-  | "rectificativeSeriesCode";
+  | "correctiveSeriesCode";
 
 /**
  * Each postal address's tokens share a section of its own: without one, Chromium filled the street
@@ -109,7 +109,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   dayCutover: "off",
   seriesCode: "off",
   fullSeriesCode: "off",
-  rectificativeSeriesCode: "off",
+  correctiveSeriesCode: "off",
 };
 
 const INPUT_NAME: Readonly<Partial<Record<TextField, string>>> = { name: "venueName" };
@@ -118,7 +118,7 @@ const CODE_FIELDS: ReadonlySet<TextField> = new Set([
   "taxId",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ]);
 
 type FormField = TextField | "invoiceLocales";
@@ -162,7 +162,7 @@ const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   "dayCutover",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ]);
 
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
@@ -177,7 +177,7 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "dayCutover",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ];
 
 type HintedField =
@@ -216,7 +216,7 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   dayCutover: "venue.help.day_cutover",
   seriesCode: "venue.help.series_codes",
   fullSeriesCode: "venue.help.series_codes",
-  rectificativeSeriesCode: "venue.help.series_codes",
+  correctiveSeriesCode: "venue.help.series_codes",
 };
 
 const hasHint = (key: TextField): key is HintedField => key in FIELD_HINT;
@@ -238,7 +238,7 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   dayCutover: "venue.field.day_cutover",
   seriesCode: "venue.field.series_code",
   fullSeriesCode: "venue.field.full_series_code",
-  rectificativeSeriesCode: "venue.field.rectificative_series_code",
+  correctiveSeriesCode: "venue.field.corrective_series_code",
 };
 
 function venueAddressParts(values: Record<TextField, string>): RegisteredAddressParts {
@@ -426,7 +426,7 @@ export class SetupVenueScreen extends LitElement {
     dayCutover: "04:00",
     seriesCode: "FS",
     fullSeriesCode: "FF",
-    rectificativeSeriesCode: "FR",
+    correctiveSeriesCode: "FR",
   };
 
   @state() private invoiceLocales: string[] = ["es-ES"];
@@ -601,7 +601,7 @@ export class SetupVenueScreen extends LitElement {
       dayCutover: venue.dayCutover ?? this.values.dayCutover,
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
-      rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
+      correctiveSeriesCode: venue.correctiveSeriesCode ?? this.values.correctiveSeriesCode,
     };
     this.#demoVenueNameSource =
       this.draft.demoVenueNameSource ?? (this.values.name === "" ? "automatic" : "custom");
@@ -887,8 +887,8 @@ export class SetupVenueScreen extends LitElement {
     }
     for (const [first, second] of [
       ["seriesCode", "fullSeriesCode"],
-      ["seriesCode", "rectificativeSeriesCode"],
-      ["fullSeriesCode", "rectificativeSeriesCode"],
+      ["seriesCode", "correctiveSeriesCode"],
+      ["fullSeriesCode", "correctiveSeriesCode"],
     ] as const) {
       if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
         invalid.add(first);
@@ -1012,7 +1012,7 @@ export class SetupVenueScreen extends LitElement {
         dayCutover: this.values.dayCutover,
         seriesCode: this.values.seriesCode,
         fullSeriesCode: this.values.fullSeriesCode,
-        rectificativeSeriesCode: this.values.rectificativeSeriesCode,
+        correctiveSeriesCode: this.values.correctiveSeriesCode,
       },
     };
     dispatchSetupPatch(this, patch);
@@ -1040,7 +1040,7 @@ export class SetupVenueScreen extends LitElement {
       return this.#jurisdiction()?.supported === false
         ? t("venue.error.territory_unsupported")
         : t("venue.error.province");
-    if (key === "seriesCode" || key === "fullSeriesCode" || key === "rectificativeSeriesCode")
+    if (key === "seriesCode" || key === "fullSeriesCode" || key === "correctiveSeriesCode")
       return t("venue.error.series_codes");
     return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
@@ -1329,7 +1329,7 @@ export class SetupVenueScreen extends LitElement {
               <h2>${t("venue.section.invoicing")}</h2>
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
               ${this.#field(t("venue.label.full_series_code"), "fullSeriesCode")}
-              ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
+              ${this.#field(t("venue.label.corrective_series_code"), "correctiveSeriesCode")}`
       }
       <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}

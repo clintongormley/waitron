@@ -200,7 +200,7 @@ function switchMode(
   delete venue.legalName;
   delete venue.seriesCode;
   delete venue.fullSeriesCode;
-  delete venue.rectificativeSeriesCode;
+  delete venue.correctiveSeriesCode;
   delete venue.dayCutover;
   delete venue.invoiceLocales;
   const switched = { ...draft, venue };
@@ -258,7 +258,7 @@ const TAXPAYER_FIELDS = [
   "taxpayerDomicile",
   "seriesCode",
   "fullSeriesCode",
-  "rectificativeSeriesCode",
+  "correctiveSeriesCode",
 ] as const;
 
 const CLAIM_VENUE_FIELDS = [
@@ -283,7 +283,7 @@ const claimVenueFieldsComplete: [
     | "taxpayerDomicile"
     | "seriesCode"
     | "fullSeriesCode"
-    | "rectificativeSeriesCode"
+    | "correctiveSeriesCode"
     | "admin"
     | "staffLanguage"
   >,

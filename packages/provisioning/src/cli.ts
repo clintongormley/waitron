@@ -94,7 +94,7 @@ const USAGE = [
   "           [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
-  "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
+  "           [--corrective-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes] [--test-fiscal]",
   "           [--recovery-pdf <absolute path of a new file, outside box state and venue directories>]",
   "",
@@ -179,7 +179,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "day-cutover": { type: "string" },
       "series-code": { type: "string" },
       "full-series-code": { type: "string" },
-      "rectificative-code": { type: "string" },
+      "corrective-code": { type: "string" },
       "admin-name": { type: "string" },
       "admin-first-names": { type: "string" },
       "admin-last-names": { type: "string" },
@@ -235,8 +235,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
     const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
     const fullSeriesCode = resolveWithoutPrompt(values["full-series-code"]) ?? "FF";
-    const rectificativeSeriesCode = await resolveOption(
-      values["rectificative-code"],
+    const correctiveSeriesCode = await resolveOption(
+      values["corrective-code"],
       "rectificative series code: ",
       deps,
     );
@@ -270,7 +270,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       dayCutover,
       seriesCode,
       fullSeriesCode,
-      rectificativeSeriesCode,
+      correctiveSeriesCode,
       admin: {
         displayName: adminName,
         firstNames: adminFirstNames,
@@ -291,7 +291,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       legalName: request.legalName,
       seriesCode: request.seriesCode,
       fullSeriesCode: request.fullSeriesCode ?? "FF",
-      rectificativeSeriesCode: request.rectificativeSeriesCode,
+      correctiveSeriesCode: request.correctiveSeriesCode,
     });
     const modules = enabledModules(installed, fiscalConfig);
 

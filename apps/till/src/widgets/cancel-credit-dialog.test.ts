@@ -154,7 +154,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
 
   it.each([
     "working_order.not_placed",
-    "series.no_rectificative_for_node",
+    "series.no_corrective_for_node",
     "device.unauthorized",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
@@ -170,7 +170,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
   it("says each cancel refusal in Spanish too", async () => {
     setLocale("es");
     const own = await mount({ refusal: { code: "bill.payments_received" } });
-    const shared = await mount({ refusal: { code: "series.no_rectificative_for_node" } });
+    const shared = await mount({ refusal: { code: "series.no_corrective_for_node" } });
 
     expect(actions(own).error).toBe(
       "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",

@@ -153,7 +153,7 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
-        rectificativeSeriesCode: "R",
+        correctiveSeriesCode: "R",
         admin: {
           displayName: "Owner",
           pinHash: fixturePinHash("1234"),

@@ -94,7 +94,7 @@ async function setupVenue(): Promise<AdoptResult> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "FA",
-        rectificativeSeriesCode: "RF",
+        correctiveSeriesCode: "RF",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),

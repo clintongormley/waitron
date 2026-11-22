@@ -36,7 +36,7 @@ it.each([
 ] as const)("keeps the complete purpose set with full base %j", (full, expectedFull) => {
   const state = frozen();
   state.request.seriesCode = "standard.Exact";
-  state.request.rectificativeSeriesCode = "rectified-Exact";
+  state.request.correctiveSeriesCode = "rectified-Exact";
   if (full === undefined) delete state.request.fullSeriesCode;
   else state.request.fullSeriesCode = full;
   const context = firstSetupModuleContext({ frozen: state }, "test-module");

@@ -58,7 +58,7 @@ function frozenAttempt(passwordHash: string): FirstSetupFrozen {
       dayCutover: "06:00",
       seriesCode: "A",
       fullSeriesCode: "F",
-      rectificativeSeriesCode: "R",
+      correctiveSeriesCode: "R",
       admin: { ...START_AGAIN_ADMIN, pinHash: hashPin("4826"), passwordHash },
     },
   };

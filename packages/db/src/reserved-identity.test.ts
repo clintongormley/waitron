@@ -216,7 +216,7 @@ describe("reserved-identity accessors", () => {
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 
-  it("readLiveSeriesIdTx throws series.no_rectificative_for_node when the node has no live one", async () => {
+  it("readLiveSeriesIdTx throws series.no_corrective_for_node when the node has no live one", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "F-8", purpose: "standard" }]),
@@ -224,7 +224,7 @@ describe("reserved-identity accessors", () => {
     const err = await captureError(() =>
       withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "corrective")),
     );
-    expect(isAppError(err) && err.code).toBe("series.no_rectificative_for_node");
+    expect(isAppError(err) && err.code).toBe("series.no_corrective_for_node");
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 

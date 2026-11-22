@@ -35,7 +35,7 @@ export interface VenueRequest {
   dayCutover: string; // "HH:MM" or "HH:MM:00"
   seriesCode: string;
   fullSeriesCode?: string;
-  rectificativeSeriesCode: string;
+  correctiveSeriesCode: string;
   /** The initial admin. Both secrets arrive already hashed (`hashPin` / `hashPassword`), so no
    * plaintext secret enters the plan. */
   admin: {
@@ -147,7 +147,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   const seriesCodes = [
     { code: request.seriesCode, field: "seriesCode" },
     { code: request.fullSeriesCode ?? "FF", field: "fullSeriesCode" },
-    { code: request.rectificativeSeriesCode, field: "rectificativeSeriesCode" },
+    { code: request.correctiveSeriesCode, field: "correctiveSeriesCode" },
   ];
   const repeated = seriesCodes.find((entry, index) =>
     seriesCodes.slice(0, index).some((prior) => prior.code === entry.code),
@@ -229,7 +229,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
     { kind: "create-series", code: request.fullSeriesCode ?? "FF", purpose: "full" },
-    { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "corrective" },
+    { kind: "create-series", code: request.correctiveSeriesCode, purpose: "corrective" },
     // Module seeds run LAST, once every core row exists.
     ...modules.flatMap((m) =>
       m.provisioning?.seed === undefined

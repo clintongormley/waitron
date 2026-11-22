@@ -29,7 +29,7 @@ export function firstSetupModuleContext(
     bases: [
       { code: frozen.request.seriesCode, purpose: "standard" },
       { code: frozen.request.fullSeriesCode ?? "FF", purpose: "full" },
-      { code: frozen.request.rectificativeSeriesCode, purpose: "corrective" },
+      { code: frozen.request.correctiveSeriesCode, purpose: "corrective" },
     ],
     request: module.request,
   };
