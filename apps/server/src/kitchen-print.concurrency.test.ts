@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { printJobs, printers, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
@@ -23,6 +22,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { parkedRace } from "./testing/parked-race.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
@@ -33,47 +33,6 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
-
-/** A promise that resolves when `open()` is called, to hold a transaction open at an exact point rather
- *  than for a duration. */
-function gate(): { passed: Promise<void>; open: () => void } {
-  let open!: () => void;
-  const passed = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { passed, open };
-}
-
-/**
- * Starts `second` while `first` is parked mid-transaction, and asserts that it has not run. The 20 ms
- * pause is a real one, not a microtask turn, to give the second transaction every chance to run.
- * `release` is in a `finally` so a failed assertion does not hang the suite.
- */
-async function parkedThenRelease<A, B>(
-  first: (tx: Transaction) => Promise<A>,
-  parked: Promise<void>,
-  release: () => void,
-  second: (tx: Transaction) => Promise<B>,
-): Promise<[A, B]> {
-  let secondStarted = false;
-  const one = withTransaction(suite.db, first);
-  await parked;
-  // Started without awaiting `one`. Nothing but the write queue keeps it out.
-  const two = withTransaction(suite.db, (tx: Transaction) => {
-    secondStarted = true;
-    return second(tx);
-  });
-  const settled = Promise.all([one, two]);
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(secondStarted, "the second transaction started while the first was still open").toBe(
-      false,
-    );
-  } finally {
-    release();
-  }
-  return settled;
-}
 
 const AT_CLOCK = "13:00";
 
@@ -148,22 +107,16 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     // ---- The race ----
     // The fire parks uncommitted after enqueueing; the deactivate of the same printer, started
     // meanwhile, must not run before it commits.
-    const readDone = gate();
-    const releaseA = gate();
     let deactivateDone = false;
-    await parkedThenRelease(
-      async (txA) => {
-        await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
-        readDone.open(); // job enqueued; tx deliberately NOT committed yet
-        await releaseA.passed;
-      },
-      readDone.passed,
-      releaseA.open,
+    const settled = await parkedRace(
+      suite.db,
+      (txA) => enqueueKitchenTickets(txA, cfg, orderId, firedItems),
       async (txB) => {
         await updatePrinter(txB, printerId, { active: false });
         deactivateDone = true;
       },
     );
+    expect(settled).toMatchObject([{ status: "fulfilled" }, { status: "fulfilled" }]);
     expect(deactivateDone).toBe(true);
 
     // The fire enqueued its job (proof it was never aborted), and the deactivation landed AFTER it.
@@ -247,28 +200,13 @@ describe("A773 pass release: a printer two pass screens share", () => {
       expectedContext: card!.releaseContext,
     });
 
-    const parked = gate();
-    const go = gate();
-    const first = withTransaction(suite.db, async (tx) => {
-      const released = await releasePassItems(tx, venue.cfg, front, askOf(frontCard));
-      parked.open();
-      await go.passed;
-      return released;
-    });
-    await Promise.race([parked.passed, first.then(undefined, () => undefined)]);
-    let secondStarted = false;
-    const second = withTransaction(suite.db, (tx) => {
-      secondStarted = true;
-      return releasePassItems(tx, venue.cfg, back, askOf(backCard));
-    });
-    const settled = Promise.allSettled([first, second]);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(secondStarted, "the second Fire started while the first was still open").toBe(false);
-    } finally {
-      go.open();
-    }
-    expect(await settled).toMatchObject([
+    expect(
+      await parkedRace(
+        suite.db,
+        (tx) => releasePassItems(tx, venue.cfg, front, askOf(frontCard)),
+        (tx) => releasePassItems(tx, venue.cfg, back, askOf(backCard)),
+      ),
+    ).toMatchObject([
       { status: "fulfilled", value: { releasedTicketItemIds: [item] } },
       {
         status: "rejected",

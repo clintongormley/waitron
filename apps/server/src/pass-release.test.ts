@@ -60,6 +60,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { passReleaseAsk, releasePassItems, type PassActor } from "./pass-release.js";
 import * as kitchenRelease from "./kitchen-release.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { parkedRace } from "./testing/parked-race.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import {
   addGroupedTabRound,
@@ -1464,51 +1465,6 @@ describe("A773 pass release: paper", () => {
   });
 });
 
-/** A promise that resolves when `open()` is called, to hold a transaction open at an exact point
- *  rather than for a duration. */
-function gate(): { passed: Promise<void>; open: () => void } {
-  let open!: () => void;
-  const passed = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { passed, open };
-}
-
-/**
- * Runs `first` and parks its transaction uncommitted, starts `second`, shows it has not run, then
- * lets `first` commit. The 20 ms pause is real, not a microtask turn, to give the second
- * transaction every chance to run; nothing waits on it for an order.
- */
-async function race<A, B>(
-  first: (tx: Transaction) => Promise<A>,
-  second: (tx: Transaction) => Promise<B>,
-): Promise<[PromiseSettledResult<A>, PromiseSettledResult<B>]> {
-  const parked = gate();
-  const go = gate();
-  let secondStarted = false;
-  const one = withTransaction(db, async (tx) => {
-    const value = await first(tx);
-    parked.open();
-    await go.passed;
-    return value;
-  });
-  await Promise.race([parked.passed, one.then(undefined, () => undefined)]);
-  const two = withTransaction(db, (tx) => {
-    secondStarted = true;
-    return second(tx);
-  });
-  const settled = Promise.allSettled([one, two]);
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(secondStarted, "the second transaction started while the first was still open").toBe(
-      false,
-    );
-  } finally {
-    go.open();
-  }
-  return settled;
-}
-
 const refusedWith = (code: string) => ({
   status: "rejected",
   reason: expect.objectContaining({ code }),
@@ -1544,7 +1500,8 @@ describe("A773 pass release: races", () => {
       const [winner, loser] = order === "first" ? asks : [asks[1]!, asks[0]!];
       const before = await rows([f.burger, f.salad]);
       const start = await printed(f.venue);
-      const outcome = await race(
+      const outcome = await parkedRace(
+        db,
         (tx) => releasePassItems(tx, f.venue.cfg, f.hot, winner),
         (tx) => releasePassItems(tx, f.venue.cfg, f.hot, loser),
       );
@@ -1584,7 +1541,8 @@ describe("A773 pass release: races", () => {
         releasePassItems(tx, f.venue.cfg, f.coldPass, askOf(coldCard!));
       const before = await rows([f.burger, f.salad]);
       const start = await printed(f.venue);
-      const outcome = order === "hot" ? await race(hot, cold) : await race(cold, hot);
+      const outcome =
+        order === "hot" ? await parkedRace(db, hot, cold) : await parkedRace(db, cold, hot);
       const [hotOutcome, coldOutcome] = [
         { status: "fulfilled", value: { releasedTicketItemIds: [f.burger] } },
         { status: "fulfilled", value: { releasedTicketItemIds: [f.salad] } },
@@ -1642,7 +1600,8 @@ describe("A773 pass release: races", () => {
           },
           mover(f.venue),
         );
-      const outcome = order === "move" ? await race(move, f.fire) : await race(f.fire, move);
+      const outcome =
+        order === "move" ? await parkedRace(db, move, f.fire) : await parkedRace(db, f.fire, move);
       expect(outcome).toMatchObject(
         order === "move"
           ? [fulfilled, refusedWith("ticket.pass_context_changed")]
@@ -1703,7 +1662,9 @@ describe("A773 pass release: races", () => {
         const narrow = async (tx: Transaction): Promise<unknown> =>
           narrowing.narrow(tx, f.venue, f.pass.profileId);
         const outcome =
-          order === "narrowing" ? await race(narrow, f.fire) : await race(f.fire, narrow);
+          order === "narrowing"
+            ? await parkedRace(db, narrow, f.fire)
+            : await parkedRace(db, f.fire, narrow);
         expect(outcome).toMatchObject(
           order === "narrowing" ? [fulfilled, refusedWith(narrowing.code)] : [fulfilled, fulfilled],
         );
@@ -1782,7 +1743,10 @@ describe("A773 pass release: races", () => {
     it(`settles a Fire against a partial serve of its dish, the ${order} committing first`, async () => {
       const f = await twoBurgersCard();
       const serve = serveOne(f.venue, f.placed.line);
-      const outcome = order === "serve" ? await race(serve, f.fire) : await race(f.fire, serve);
+      const outcome =
+        order === "serve"
+          ? await parkedRace(db, serve, f.fire)
+          : await parkedRace(db, f.fire, serve);
       expect(outcome).toMatchObject(
         order === "serve"
           ? [fulfilled, refusedWith("ticket.pass_context_changed")]
@@ -1807,7 +1771,7 @@ describe("A773 pass release: races", () => {
     await withTransaction(db, serveOne(f.venue, f.placed.line));
     const served = await f.card();
     const fire = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.pass.by, askOf(served));
-    expect(await race(serveOne(f.venue, f.placed.line, true), fire)).toMatchObject([
+    expect(await parkedRace(db, serveOne(f.venue, f.placed.line, true), fire)).toMatchObject([
       fulfilled,
       refusedWith("ticket.pass_context_changed"),
     ]);
@@ -1845,7 +1809,10 @@ describe("A773 pass release: races", () => {
       });
       const cancel = (tx: Transaction) =>
         cancelItem(tx, f.venue.cfg, f.venue.party.partyId, f.placed.line, ask, OPERATOR);
-      const outcome = order === "cancel" ? await race(cancel, f.fire) : await race(f.fire, cancel);
+      const outcome =
+        order === "cancel"
+          ? await parkedRace(db, cancel, f.fire)
+          : await parkedRace(db, f.fire, cancel);
       expect(outcome).toMatchObject(
         order === "cancel"
           ? [fulfilled, refusedWith("ticket.pass_context_changed")]
@@ -1937,7 +1904,7 @@ describe("A773 pass release: races", () => {
   it("lets a waiter's edit read before a Fire commit after it", async () => {
     const f = await burgerAndWater(addGroupedTabRound);
     const edit = await pendingEdit(f.venue, f.water, { portionLineNos: [], quantity: "2" });
-    expect(await race(f.fire, edit)).toMatchObject([fulfilled, fulfilled]);
+    expect(await parkedRace(db, f.fire, edit)).toMatchObject([fulfilled, fulfilled]);
     expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
     const [water] = await withTransaction(db, (tx) =>
       tx
@@ -1959,7 +1926,7 @@ describe("A773 pass release: races", () => {
       const edit = touched
         ? await pendingEdit(f.venue, f.placed.line, { portionLineNos: [], quantity: "2" })
         : await pendingEdit(f.venue, f.water, { portionLineNos: [], quantity: "2" });
-      expect(await race(edit, f.fire)).toMatchObject(
+      expect(await parkedRace(db, edit, f.fire)).toMatchObject(
         touched ? [fulfilled, refusedWith("ticket.pass_context_changed")] : [fulfilled, fulfilled],
       );
       expect(await rows([f.placed.item])).toEqual(touched ? f.before : f.before.map(releasedRow));
@@ -1973,7 +1940,7 @@ describe("A773 pass release: races", () => {
     const read = await cardOf(f.pass.by, f.placed.groupId);
     expect(read.items.map((item) => item.note)).toEqual([null]);
     const edit = await pendingEdit(f.venue, f.placed.line, { portionLineNos: [], note: "No salt" });
-    expect(await race(edit, f.fire)).toMatchObject([fulfilled, fulfilled]);
+    expect(await parkedRace(db, edit, f.fire)).toMatchObject([fulfilled, fulfilled]);
     expect(await rows([f.placed.item])).toEqual(
       f.before.map((row) => releasedRow({ ...row, note: "No salt" })),
     );
