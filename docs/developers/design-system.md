@@ -3799,8 +3799,8 @@ of its own, so the rules above for a form with a primary action apply like this 
 Where the two differ, and why:
 
 - The course list makes its one field read-only while its save is out. The price table keeps every
-  field editable: `wt-price-input` has no read-only setting, and many fields are in view at once, so
-  a slow save would otherwise freeze the field the person wants to correct. Its saves go one at a
+  field editable. `wt-price-input` inherits `readonly` from `wt-input`. The price table leaves it off
+  because many fields are in view at once and a slow save could freeze the field you want to correct. Its saves go one at a
   time in the order they were made (`ListWriteQueue`, `apps/dashboard/src/widgets/section-writes.ts`),
   and a save of a value the field already holds sends nothing.
 - The price table's `label` names its row ("Price override for Lemonade — Large"), adding ", set on

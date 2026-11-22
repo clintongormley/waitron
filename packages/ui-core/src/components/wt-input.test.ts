@@ -1,12 +1,37 @@
-import { LitElement } from "lit";
+import { LitElement, html } from "lit";
 import { commands, page, userEvent } from "vitest/browser";
 import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-button.js";
-import type { WtInput } from "./wt-input.js";
-import "./wt-input.js";
+import { WtInput } from "./wt-input.js";
 
 afterEach(cleanup);
+
+class InputWithUnit extends WtInput {
+  protected override get fieldDecoration() {
+    return {
+      end: html`<span id="unit">kg</span>`,
+      extraDescriptionIds: ["unit"],
+    };
+  }
+}
+customElements.define("wt-input-with-unit-test", InputWithUnit);
+
+test("a decorated input describes its end fallback after its hint and error", async () => {
+  const el = await mount(
+    '<wt-input-with-unit-test label="Weight" hint="Net weight" error="Enter weight"></wt-input-with-unit-test>',
+  );
+  const root = el.shadowRoot!;
+  const input = root.querySelector("input")!;
+  const descriptions = input.getAttribute("aria-describedby")!.split(" ");
+  expect(descriptions.map((id) => root.getElementById(id)?.textContent?.trim())).toEqual([
+    "Net weight",
+    "Enter weight",
+    "kg",
+  ]);
+  const end = root.querySelector<HTMLSlotElement>('slot[name="end"]')!;
+  expect(end.querySelector("#unit")?.checkVisibility()).toBe(true);
+});
 
 function parts(el: HTMLElement) {
   const root = el.shadowRoot!;

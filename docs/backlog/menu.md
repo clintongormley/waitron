@@ -294,9 +294,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 From **The product editor and menu (#345, #379, #387) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
-- **Smaller things #379 surfaced and did not take.** `wt-price-input` was built from scratch
-  rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
-  ones.
+- **Smaller things #379 surfaced and did not take.** `modifier-limits.ts` holds a product rule as
+  well as modifier rules.
 
 ## "May contain" survives in the data with no way to see or set it
 

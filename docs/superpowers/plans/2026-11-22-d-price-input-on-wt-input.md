@@ -23,13 +23,15 @@ currency sign, sizing, override marker and fixed or clickable unit. The unit sit
   input. Keep `focusUnit()`, the unit event and native focus order. Price callers still configure
   units with `unit` and `fixed-unit`. A consumer-supplied `end` element replaces fallback as on
   `wt-input`. No current price caller supplies one. The other inherited options remain available
-  through `WtInput`. Update the read-only guidance in `docs/developers/design-system.md` and keep
+  through `WtInput`. Style the override marker from the price field's reflected `overriding`
+  attribute. Update the read-only guidance in `docs/developers/design-system.md` and keep
   its existing disabled fixed-unit advice for prices. Leave parsing and screens alone.
 - [ ] Re-run the new case, both fields' browser and axe files, dashboard `extra-list-form.test.ts`,
   `product-editor.test.ts`, `menu-prices-table.test.ts`, `form-fields.test.ts`,
   `purchase-form.test.ts`, and till `invoice-correction-dialog.test.ts`. Give the shared seam one
   small test subclass in `wt-input.test.ts` to exercise fallback and extra descriptions without a
-  dependency on `ui`. Run both UI typechecks and targeted mutation checks. The 90 floor applies
+  dependency on `ui`. Once the whole price suite passes, remove price cases that only duplicate a
+  shared-input assertion. Keep price-specific behavior and the EN/ES caret cases. Run both UI typechecks and targeted mutation checks. The 90 floor applies
   to each package's merged score. Look at English and Spanish in both themes at phone and desktop widths.
 - [ ] Remove the price-input detail in `docs/backlog.md` and `docs/backlog/menu.md`, keeping the
   modifier-rules work. Sign off the implementation commit.

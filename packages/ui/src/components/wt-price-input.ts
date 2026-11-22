@@ -1,11 +1,10 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { live } from "lit/directives/live.js";
+import { css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
-import { formatDecimalInput, readDecimalInput } from "@waitron/ui-core";
-import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, disabledStyles } from "../base-styles.js";
-import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
+import { WtInput, type InputFieldDecoration } from "@waitron/ui-core/components/wt-input";
+import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
+import { disabledStyles } from "../base-styles.js";
+import { uniqueId } from "../interactive.js";
 
 const initialCurrencyMeasurements = new Map<Element, (width: number) => void>();
 
@@ -32,16 +31,12 @@ function queueCurrencyMeasurement(currency: Element, write: (width: number) => v
  * euro sign inside the amount box, on the side that locale writes it, as the `currency` part.
  */
 @customElement("wt-price-input")
-export class WtPriceInput extends LitElement {
-  static override shadowRootOptions = delegatesFocusShadowRootOptions;
-
+export class WtPriceInput extends WtInput {
   static override styles = [
-    baseStyles,
-    fieldStyles,
+    ...WtInput.styles,
     css`
-      :host {
-        display: block;
-        max-width: var(--wt-field-max-width);
+      .price-end {
+        display: contents;
       }
 
       /* Beside a unit button the label sits in the amount box, so a long one stops at the button
@@ -153,12 +148,12 @@ export class WtPriceInput extends LitElement {
         ${disabledStyles}
       }
 
-      .field[data-overriding] .field-control {
+      :host([overriding]) .field-control {
         font-weight: var(--wt-font-weight-bold);
         font-style: normal;
       }
 
-      .field[data-overriding]:not([data-disabled])::before {
+      :host([overriding]) .field:not([data-disabled])::before {
         content: "";
         position: absolute;
         inset-block: 0;
@@ -171,30 +166,15 @@ export class WtPriceInput extends LitElement {
     `,
   ];
 
-  @property() value = "";
-  @property() label = "";
-  @property() name = "";
   @property() unit = "";
-  @property() placeholder = "";
-  @property() error = "";
-  @property() hint = "";
-  @property({ type: Boolean, reflect: true }) required = false;
-  @property({ type: Boolean, reflect: true }) disabled = false;
-  @property({ type: Boolean, reflect: true }) invalid = false;
   /** Marks a field holding its own value rather than the fallback its placeholder shows. */
   @property({ type: Boolean, reflect: true }) overriding = false;
-  /** Names the field by `label` without drawing it, and makes the field compact. */
-  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
   /** The unit button's `aria-haspopup`, for a host whose unit click opens a dialog or menu. */
   @property({ attribute: "unit-haspopup" }) unitHasPopup = "";
   /** Draws the euro sign in the amount box as this locale writes it; empty draws none. */
   @property() locale = "";
-  @property({ attribute: "decimal-locale" }) decimalLocale = "";
 
-  private readonly generatedInputId = uniqueId("wt-price-input");
-  private readonly errorId = uniqueId("wt-price-input-error");
-  private readonly hintId = uniqueId("wt-price-input-hint");
   private readonly unitId = uniqueId("wt-price-input-unit");
   private readonly currencyId = uniqueId("wt-price-input-currency");
 
@@ -255,15 +235,6 @@ export class WtPriceInput extends LitElement {
     this.observeCurrency();
   }
 
-  private onInput(event: Event): void {
-    this.value = readDecimalInput(
-      event.target as HTMLInputElement,
-      this.decimalLocale || this.locale || "en",
-    );
-    this.requestUpdate();
-    dispatchWtChange(this, event, { value: this.value });
-  }
-
   private onUnitClick(event: Event): void {
     // Stop the native click before re-emitting, or a consumer across the shadow boundary sees two.
     event.stopPropagation();
@@ -290,68 +261,49 @@ export class WtPriceInput extends LitElement {
       </button>`;
     return this.unit
       ? html`<span id=${this.unitId} class="unit" part="unit">${this.unit}</span>`
-      : nothing;
+      : undefined;
   }
 
-  override render() {
-    const hasError = this.error !== "";
-    const invalid = this.invalid || hasError;
-    const inputId = this.name || this.generatedInputId;
+  protected override get inputLocale(): string {
+    return this.decimalLocale || this.locale || "en";
+  }
+
+  private get showsFixedUnit(): boolean {
+    return this.fixedUnit && this.unit !== "" && !this.hasEnd;
+  }
+
+  protected override get fieldDecoration(): InputFieldDecoration {
+    return {
+      fieldClass: this.showsFixedUnit ? "fixed" : "",
+      inputPart: "amount",
+      autocomplete: "off",
+      placeholder: formatDecimalInput(this.placeholder || this.hint, this.inputLocale) || nothing,
+      extraDescriptionIds: [
+        ...(this.locale ? [this.currencyId] : []),
+        ...(this.showsFixedUnit ? [this.unitId] : []),
+      ],
+      endClass: "price-end",
+      end: this.renderUnit(),
+    };
+  }
+
+  protected override renderFieldContents(
+    label: TemplateResult | typeof nothing,
+    input: TemplateResult,
+    end: TemplateResult,
+  ): TemplateResult {
+    const fixed = this.showsFixedUnit;
     const currency = this.locale ? currencySymbol(this.locale) : null;
-    const hasHint = this.hint !== "";
-    const describedBy = [
-      ...(hasHint ? [this.hintId] : []),
-      ...(hasError ? [this.errorId] : []),
-      ...(currency ? [this.currencyId] : []),
-      ...(this.fixedUnit && this.unit ? [this.unitId] : []),
-    ];
-    const showLabel = this.label !== "" && !this.hideLabel;
-    const fixed = this.fixedUnit && this.unit !== "";
-    const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
     return html`
-      <div class="row">
-        <div
-          class=${fixed ? "field fixed" : "field"}
-          part="field"
-          data-label=${fieldLabelState({
-            value: this.value,
-            hint: this.hint,
-            placeholder: this.placeholder,
-          })}
-          ?data-invalid=${invalid}
-          ?data-disabled=${this.disabled}
-          ?data-overriding=${this.overriding}
-          ?data-compact=${!showLabel}
-        >
-          ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
-            >${fixed ? nothing : label}<input
-              class="field-control"
-              id=${inputId}
-              part="amount"
-              name=${this.name || nothing}
-              .value=${live(formatDecimalInput(this.value, this.decimalLocale || this.locale || "en"))}
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder=${formatDecimalInput(this.placeholder || this.hint, this.decimalLocale || this.locale || "en") || nothing}
-              ?required=${this.required}
-              ?disabled=${this.disabled}
-              aria-label=${this.hideLabel && this.label ? this.label : nothing}
-              aria-invalid=${invalid}
-              aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-              @input=${this.onInput}
-            />${
-              currency
-                ? html`<span id=${this.currencyId} class="currency" part="currency"
-                    >${currency.symbol}</span
-                  >`
-                : nothing
-            }</span
-          >${this.renderUnit()}
-        </div>
-        <slot name="help"></slot>
-      </div>
-      ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
-      ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
+      ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
+        >${fixed ? nothing : label}${input}${
+          currency
+            ? html`<span id=${this.currencyId} class="currency" part="currency"
+                >${currency.symbol}</span
+              >`
+            : nothing
+        }</span
+      >${end}
     `;
   }
 }
