@@ -7,6 +7,7 @@ import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { createHostedHourPreparation } from "./hour-preparation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
 vi.mock("./hour-clock-time-service.js", () => ({ observeTimeServiceHourClock: outside.internet }));
@@ -20,11 +21,7 @@ const binding = {
   sourceId: "first-setup:owned-attempt",
   targetNodeId: TENANT_A.nodeId,
 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 beforeEach(async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });

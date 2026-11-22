@@ -1,28 +1,32 @@
 import { readFileSync } from "node:fs";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import * as fiscal from "./index.js";
 import type { AllocationContext, AllocationValidation } from "./allocation-envelope.js";
 import { validateAllocationReplay } from "./allocation-envelope.js";
+import type { ReceiptTrust } from "./cloud-evidence.js";
+import { cloudReceiptFixture } from "../test/cloud-fixture.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
-const fixture = JSON.parse(
-  readFileSync(new URL("../test/cloud-allocation-receipt.json", import.meta.url), "utf8"),
-) as {
-  issuer: string;
-  keyId: string;
-  publicKey: string;
-  packet: string;
-  receipt: {
-    payload: {
-      allocation: fiscal.FiscalAllocation;
-      approval: fiscal.RecoveryApproval;
-      [key: string]: unknown;
-    };
-    keyId: string;
-    signature: string;
-  };
+type Payload = {
+  allocation: fiscal.FiscalAllocation;
+  approval: fiscal.RecoveryApproval;
+  [key: string]: unknown;
 };
-const trust = { issuer: fixture.issuer, keys: new Map([[fixture.keyId, fixture.publicKey]]) };
+interface Signed {
+  receipt: { payload: Payload; keyId: string; signature: string };
+  trust: ReceiptTrust;
+  packet: string;
+}
+// Cloud's signed original is no longer accepted (its series purpose predates the rename), so every
+// case reads a copy re-signed with a fresh key; the original's own case is at the end.
+function signed(change: (payload: Payload) => void = () => {}): Signed {
+  return cloudReceiptFixture((payload) =>
+    change(payload as unknown as Payload),
+  ) as unknown as Signed;
+}
+const fixture = signed();
+const trust = fixture.trust;
 const context: AllocationContext = {
   taxpayerNif: "89890001K",
   softwareId: "WT",
@@ -33,11 +37,7 @@ const context: AllocationContext = {
   sourceId: "source-1",
   targetNodeId: "node-1",
   incidentEvidence: "incident-1",
-  requiredBases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  requiredBases: SERIES_BASES,
   reauthentication: { eventId: "event-1", operatorId: "operator-1" },
   priorActivation: "none",
   authority: { kind: "cloud" },
@@ -66,29 +66,8 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function signed(change: (payload: typeof fixture.receipt.payload) => void) {
-  const payload = structuredClone(fixture.receipt.payload);
-  change(payload);
-  const keys = generateKeyPairSync("ed25519");
-  const publicKey = keys.publicKey.export({ type: "spki", format: "der" });
-  const keyId = createHash("sha256").update(publicKey).digest("hex");
-  const receipt = {
-    payload,
-    keyId,
-    signature: sign(
-      null,
-      Buffer.from(canonical(["waitron.fiscal-allocation-receipt", 1, keyId, payload])),
-      keys.privateKey,
-    ).toString("base64url"),
-  };
-  return {
-    receipt,
-    trust: { issuer: fixture.issuer, keys: new Map([[keyId, publicKey.toString("base64url")]]) },
-  };
-}
-
 describe("Cloud consumed evidence and independent local recovery authority", () => {
-  it("validates a consumed packet produced by the landed Cloud signer", () => {
+  it("validates a consumed packet re-signed from the landed Cloud signer's receipt", () => {
     expect(verify()).toEqual({
       ok: true,
       allocation: fixture.receipt.payload.allocation,
@@ -223,22 +202,22 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
   });
 
   it.each([
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.version = 2;
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.privateKey = "hidden";
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.recordedAt = "2026-02-30T10:00:00.000Z";
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.venueId = "not-a-uuid";
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       Reflect.set(p.allocation, "reservationEvidence", { kind: "cloud", receipt: fixture.receipt });
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       Reflect.set(p.allocation, "reservationEvidence", {
         kind: "cloud",
         authorityId: "another-authority",
@@ -246,7 +225,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
         reservationSequence: "42",
       });
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       Reflect.set(p.allocation, "reservationEvidence", {
         kind: "cloud",
         authorityId: "fixture-authority",
@@ -254,16 +233,16 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
         reservationSequence: "43",
       });
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.continuity = { ...(p.continuity as object), cHighWater: 41 };
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.continuity = {
         ...(p.continuity as object),
         scope: { taxpayerNif: "B12345674", softwareId: "WT", environment: "preproduction" },
       };
     },
-    (p: typeof fixture.receipt.payload) => {
+    (p: Payload) => {
       p.binding = { ...(p.binding as object), sourceId: "another" };
     },
   ])("refuses correctly signed but inconsistent receipt metadata %#", (change) => {
@@ -278,10 +257,10 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
     const other = generateKeyPairSync("ed25519");
     expect(
       verify(fixture.receipt, context, {
-        issuer: fixture.issuer,
+        issuer: trust.issuer,
         keys: new Map([
           [
-            fixture.keyId,
+            fixture.receipt.keyId,
             other.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
           ],
         ]),
@@ -299,7 +278,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
           canonical([
             "waitron.fiscal-allocation-receipt",
             1,
-            fixture.keyId,
+            fixture.receipt.keyId,
             fixture.receipt.payload,
           ]),
         ),
@@ -308,10 +287,10 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
     };
     expect(
       verify(mislabeled, context, {
-        issuer: fixture.issuer,
+        issuer: trust.issuer,
         keys: new Map([
           [
-            fixture.keyId,
+            fixture.receipt.keyId,
             other.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
           ],
         ]),
@@ -410,6 +389,24 @@ it("a version 2 approval is refused", () => {
     } as fiscal.RecoveryApproval;
   });
   expect(verify(input.receipt, context, input.trust)).toEqual({
+    ok: false,
+    reason: "reservation_untrusted",
+  });
+});
+
+it("refuses the landed Cloud signer's original receipt, whose series purpose predates the rename", () => {
+  const original = JSON.parse(
+    readFileSync(new URL("../test/cloud-allocation-receipt.json", import.meta.url), "utf8"),
+  ) as { issuer: string; keyId: string; publicKey: string; packet: string; receipt: unknown };
+  const enrolled = {
+    issuer: original.issuer,
+    keys: new Map([[original.keyId, original.publicKey]]),
+  };
+  expect(verify(original.receipt, context, enrolled)).toEqual({
+    ok: false,
+    reason: "reservation_untrusted",
+  });
+  expect(verify(original.packet, context, enrolled)).toEqual({
     ok: false,
     reason: "reservation_untrusted",
   });

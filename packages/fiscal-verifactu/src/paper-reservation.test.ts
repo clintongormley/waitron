@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import * as evidence from "./paper-evidence.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const keys = generateKeyPairSync("ed25519");
 const otherKeys = generateKeyPairSync("ed25519");
@@ -114,11 +115,7 @@ const context = {
   currentRegisterConfirmed: true,
   reservationConfirmed: true,
   currentEntryState: "reserved" as const,
-  requiredBases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  requiredBases: SERIES_BASES,
 };
 
 function check(

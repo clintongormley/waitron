@@ -161,8 +161,8 @@ it("collects the standby's current outside input before the promotion transactio
   expect((await readNodeMode(suite.node, TARGET)).mode).toBe("primary");
   expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
   expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
-    "full",
     "corrective",
+    "full",
     "standard",
   ]);
 });

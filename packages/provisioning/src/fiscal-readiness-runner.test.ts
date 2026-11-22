@@ -750,8 +750,8 @@ it("a supplied disposable hour keeps its node and one sample across a readiness 
     expect(
       sample.prepare("select purpose, next_number from invoice_series order by purpose").all(),
     ).toEqual([
-      { purpose: "full", next_number: 1 },
       { purpose: "corrective", next_number: 1 },
+      { purpose: "full", next_number: 1 },
       { purpose: "standard", next_number: 2 },
     ]);
   } finally {

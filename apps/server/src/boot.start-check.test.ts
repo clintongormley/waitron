@@ -1,5 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, SERIES_BASES } from "@waitron/db/testing/seed.js";
 import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -250,11 +250,7 @@ async function boot(
       suite.db,
       { nodeId },
       SPARE.nodeId,
-      [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "corrective" },
-      ],
+      SERIES_BASES,
       admin!.id,
     );
     const held = fixture.request("reserve");

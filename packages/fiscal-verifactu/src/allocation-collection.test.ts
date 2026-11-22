@@ -20,6 +20,7 @@ import {
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { drawEmergencyIdentity } from "./allocation-envelope.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -35,11 +36,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
   allocationId: "collection-42",

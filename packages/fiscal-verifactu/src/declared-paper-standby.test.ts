@@ -14,14 +14,11 @@ import { validatePaperCandidates } from "./initial-paper-candidates.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TENANT_A.nodeId },
   target = { ...primary, nodeId: TENANT_A.nodeId2 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const time = "2026-10-16T00:00:00.000Z";
 const digest = (v: unknown) => createHash("sha256").update(declaredHistoryBytes(v)).digest("hex");
 function fixture(serial = 43) {

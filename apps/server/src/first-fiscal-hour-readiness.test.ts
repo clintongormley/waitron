@@ -144,8 +144,8 @@ it("owned development Live readiness runs the real certificate-free preproductio
   expect(first.records).toEqual([{ entorno: "preproduction" }]);
   expect(first.credentials).toEqual([]);
   expect(first.series).toEqual([
-    { purpose: "full", next_number: 1 },
     { purpose: "corrective", next_number: 1 },
+    { purpose: "full", next_number: 1 },
     { purpose: "standard", next_number: 2 },
   ]);
   const second = await f.post();

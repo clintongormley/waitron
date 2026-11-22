@@ -24,6 +24,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { fixtureSifIdentities } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
@@ -41,11 +42,7 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: binding.eventId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
   allocationId: "paper-source-42",

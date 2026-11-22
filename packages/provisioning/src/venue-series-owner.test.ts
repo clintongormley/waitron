@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, nodes, taxpayer, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, SERIES_BASES } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { NodeSeed, ProvisionedNode } from "@waitron/module";
@@ -48,14 +48,7 @@ type Resolve = (
 ) => Promise<readonly Reference[]>;
 let seeded = false;
 const read: Resolve = async (tx, node, bases) => {
-  if (
-    JSON.stringify(bases) !==
-    JSON.stringify([
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "corrective" },
-    ])
-  )
+  if (JSON.stringify(bases) !== JSON.stringify(SERIES_BASES))
     throw new Error("requested bases differ from this allocation");
   return tx
     .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })

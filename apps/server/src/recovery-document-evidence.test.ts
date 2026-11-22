@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 let root: string;
 let roots: { stateDir: string; venueDir: string };
@@ -24,11 +25,7 @@ const intent = {
   operatorId: "PRIVATE-OPERATOR",
   contextKey: "PRIVATE-CONTEXT",
   scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  bases: SERIES_BASES,
   answer: "no",
   identity: "0CNPT",
   issuedAt: "2026-10-16T12:10:00.000Z",

@@ -12,15 +12,12 @@ import { VerifactuBackend } from "../src/backend.js";
 import { openFilingCase } from "../src/filing-cases.js";
 import { envios } from "../src/schema/envios.js";
 import { fiscalAllocations } from "../src/schema/allocations.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 export const liveConflictNode = {
   nodeId: TENANT_A.nodeId,
 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 export async function seedLiveConflict(
   db: Database,
   clock: { wall(): number; monotonic(): number; advance(ms: number): void },

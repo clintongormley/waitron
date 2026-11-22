@@ -13,6 +13,7 @@ import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { stubNodeSnapshot } from "./testing/node-copy.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const modules = ALL_MODULES.filter((m) => m.name === "fiscal-verifactu");
 const manifest = {
@@ -34,11 +35,7 @@ const intent = {
   operatorId: "OWNER-PRIVATE",
   softwareId: "different-id",
   scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  bases: SERIES_BASES,
   contextKey: "PRIVATE-CONTEXT",
   answer: "no",
   identity: "0CNPH",

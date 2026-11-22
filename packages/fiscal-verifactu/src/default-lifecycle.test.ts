@@ -12,17 +12,14 @@ import { currentSif, registerSif } from "./registro-sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = {
   nodeId: TENANT_A.nodeId,
 };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 
 beforeEach(async () => {
   await seedTenants(suite.db);

@@ -27,6 +27,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
@@ -36,11 +37,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
   allocationId: "allocation-42",

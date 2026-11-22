@@ -7,6 +7,10 @@ export function cloudReceiptFixture(change?: (payload: CloudAllocationReceipt["p
     readFileSync(new URL("./cloud-allocation-receipt.json", import.meta.url), "utf8"),
   ) as { receipt: CloudAllocationReceipt };
   const payload = structuredClone(original.receipt.payload);
+  // The signed original predates the series purpose's rename; its word is spelled without quotes
+  // so the rename list never rewrites it.
+  for (const series of payload.allocation.series)
+    if (/^rectificative$/.test(series.purpose)) Reflect.set(series, "purpose", "corrective");
   change?.(payload);
   const keys = generateKeyPairSync("ed25519");
   const bytes = keys.publicKey.export({ type: "spki", format: "der" });

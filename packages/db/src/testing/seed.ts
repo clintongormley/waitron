@@ -38,6 +38,15 @@ import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } f
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
 import { staffRoles } from "../schema/identity/staff-roles.js";
 
+/** A box's whole series set, in the order tests index it by: standard, full, corrective. */
+export const SERIES_BASES: readonly { readonly code: string; readonly purpose: string }[] =
+  Object.freeze(
+    [
+      { code: "A", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "R", purpose: "corrective" },
+    ].map((base) => Object.freeze(base)),
+  );
 export const FIXTURE_JOB_ROLE = "Fixture team";
 export async function ensureFixtureJobRole(db: Database | Transaction): Promise<string> {
   const [existing] = await db

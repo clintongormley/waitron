@@ -1113,7 +1113,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(deliveries).toEqual([
     {
       stageId: "stage",
-      inputDigest: "e799c91f661c00f8cf2ba285b34aaa1be7c6d4c5c8a9307e9614d920621d9253",
+      inputDigest: "dbb78bd723502a8dddb18cf3d1548488f409447a2eb5e20f3505fea6ac6bd531",
       bindingDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       documentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       statement: {

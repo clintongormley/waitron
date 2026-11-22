@@ -10,6 +10,7 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { readHourSetupInput } from "./initial-hour-setup.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PACK_ATTACHMENT, PACK_WORDS } from "@waitron/recovery-pack";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const context: InitialSetupContext = {
   attemptId: "attempt",
@@ -25,11 +26,7 @@ const context: InitialSetupContext = {
     sourceId: "first-setup:attempt",
     targetNodeId: "node",
   },
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  bases: SERIES_BASES,
 };
 const input = {
   allocation: {

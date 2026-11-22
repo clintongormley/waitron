@@ -6,6 +6,7 @@ import {
   isInstallationIdentity,
   matchesInstallationChecksum,
 } from "./allocation-identity.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 describe("externally allocated installation identity", () => {
   it.each([
@@ -105,11 +106,7 @@ describe("manual emergency identity checksum", () => {
   });
 });
 
-const BASES = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-] as const;
+const BASES = SERIES_BASES;
 const PAPER_SERIES = [
   { code: "A-P000042", purpose: "standard" },
   { code: "FF-P000042", purpose: "full" },

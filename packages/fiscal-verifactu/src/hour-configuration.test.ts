@@ -6,6 +6,7 @@ import { withOperationAuthority } from "@waitron/module";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import { FISCAL_INITIAL_SETUP, FISCAL_OPERATIONS } from "./index.js";
 import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -50,11 +51,7 @@ it("a setup without a host cannot generate names from paper serials", () => {
       sourceId: "first-setup:attempt",
       targetNodeId: "node",
     },
-    bases: [
-      { code: "A", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "R", purpose: "corrective" },
-    ],
+    bases: SERIES_BASES,
   };
   expect(() => FISCAL_INITIAL_SETUP.candidates(context, { serials: [1] })).toThrowError(
     expect.objectContaining({
@@ -85,11 +82,7 @@ it.each([
         receiptId: payload.receiptId,
         priorActivation: "none",
         incidentEvidence: payload.binding.incidentEvidence,
-        requiredBases: [
-          { code: "A", purpose: "standard" },
-          { code: "FF", purpose: "full" },
-          { code: "R", purpose: "corrective" },
-        ],
+        requiredBases: SERIES_BASES,
       };
       const trustPath = join(root, "trust.json");
       const confirmationPath = join(root, "current.json");

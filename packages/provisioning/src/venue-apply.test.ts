@@ -1,6 +1,6 @@
 import { canUseDeviceProfile } from "@waitron/identity";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -204,11 +204,7 @@ it.each([undefined, "en", "es"] as const)(
       operatorId: initialAdministratorId,
       identity: "S000001",
       taxpayerNif: "B10000015",
-      bases: [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "corrective" },
-      ],
+      bases: SERIES_BASES,
     }).request("setup");
     const calls: unknown[][] = [];
     const rawInputs: unknown[] = [];
@@ -484,7 +480,7 @@ describe("applyVenue", () => {
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
-    expect(series.rows.map((r) => r.purpose)).toEqual(["full", "corrective", "standard"]);
+    expect(series.rows.map((r) => r.purpose)).toEqual(["corrective", "full", "standard"]);
 
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);

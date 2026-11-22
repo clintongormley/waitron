@@ -23,6 +23,7 @@ import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envel
 import { establishDormantAllocation } from "./standby-allocation.js";
 
 import { fiscalReservations } from "./schema/reservations.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -30,11 +31,7 @@ const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -694,7 +691,7 @@ it("refuses a live SIF that has no committed allocation ledger", async () => {
 
 it("snapshots requested bases before the first awaited read", async () => {
   const result = await activateForRead();
-  const mutable = structuredClone(bases);
+  const mutable = bases.map((base) => ({ ...base }));
   await withTransaction(suite.db, async (tx) => {
     const reading = activation.readModuleAllocationSeries(tx, node, mutable);
     mutable[0]!.code = "altered";

@@ -15,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, SERIES_BASES } from "@waitron/db/testing/seed.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
@@ -39,11 +39,7 @@ const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("../src/modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NODE = nodeId("c0000000-0000-4000-8000-000000000001");
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();

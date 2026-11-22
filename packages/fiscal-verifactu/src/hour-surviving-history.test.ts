@@ -11,6 +11,7 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -21,11 +22,7 @@ const binding: OperationBinding = {
   sourceId: "source",
   targetNodeId: node.nodeId,
 };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" };
 const read = () => FISCAL_OPERATIONS.readRecoveryHistory!(suite.db);
 afterEach(() => vi.useRealTimers());

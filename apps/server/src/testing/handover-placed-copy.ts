@@ -1,6 +1,6 @@
 import { seedModuleSettings } from "../../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
 // and the transfer of the copy (both real elsewhere); the copy, its signed indicator, its
 // acceptance and its placing are the real functions.
@@ -64,11 +64,7 @@ export const binding: OperationBinding = {
   targetNodeId: standby.nodeId,
 };
 export const fiscalModules = ALL_MODULES.filter((module) => module.name === MODULE);
-export const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+export const bases = SERIES_BASES;
 const handoverBinding = {
   operationId: OPERATION,
   scenario: "controlled" as const,

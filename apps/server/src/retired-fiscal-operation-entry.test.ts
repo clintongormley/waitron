@@ -24,14 +24,11 @@ import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 let root: string;
 let secret: string;
 beforeEach(async () => {

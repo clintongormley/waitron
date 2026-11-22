@@ -9,6 +9,7 @@ import {
   validateInitialPaperCandidates,
   readInitialPaperCandidates,
 } from "./initial-paper-candidates.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 vi.mock("@waitron/verifactu", { spy: true });
 
@@ -26,11 +27,7 @@ const context: InitialSetupContext = {
   taxId: "89890001K",
   environment: "production",
   recipientVenueId: "first-setup:attempt1",
-  bases: [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "corrective" },
-  ],
+  bases: SERIES_BASES,
 };
 const invalid = expect.objectContaining({ code: "sif.allocation_invalid" });
 

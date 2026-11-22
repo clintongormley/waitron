@@ -1055,8 +1055,8 @@ describe("restore hooks (identity phase)", () => {
     `);
     expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
-      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "corrective" },
       { code: `FF-${sif.numeroInstalacion}`, purpose: "full" },
+      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "corrective" },
     ]);
     expect(parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"))).toEqual(
       parseEnvFile(TRADING_ENV),

@@ -27,6 +27,7 @@ import { cloudReceiptFixture } from "@waitron/fiscal-verifactu/test/cloud-fixtur
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import { stagedHourCrash } from "./testing/staged-hour-crash.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -96,11 +97,7 @@ function signedCloudInput(f: Awaited<ReturnType<typeof stage>>) {
       receiptId: receipt.receipt.payload.receiptId,
       priorActivation: "none",
       incidentEvidence: "outside/cloud-restore",
-      requiredBases: [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "corrective" },
-      ],
+      requiredBases: SERIES_BASES,
     }),
   );
   vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
@@ -176,11 +173,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
         incidentEvidence: "outside/cloud-restore",
         currentRegisterConfirmed: true,
         consumptionConfirmed: true,
-        requiredBases: [
-          { code: "A", purpose: "standard" },
-          { code: "FF", purpose: "full" },
-          { code: "R", purpose: "corrective" },
-        ],
+        requiredBases: SERIES_BASES,
       },
     ),
   ).toEqual({ ok: true, allocation });
@@ -201,11 +194,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
       allocationId: allocation.allocationId,
       priorActivation: "none",
       incidentEvidence: "outside/cloud-restore",
-      requiredBases: [
-        { code: "A", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-        { code: "R", purpose: "corrective" },
-      ],
+      requiredBases: SERIES_BASES,
       recipientVenueId,
       generationId: "generation-1",
       blockId: "block-1",

@@ -15,14 +15,11 @@ import * as fiscal from "./index.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { fiscalAllocations } from "./schema/allocations.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
-const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+const bases = SERIES_BASES;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",

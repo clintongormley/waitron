@@ -77,6 +77,7 @@ import {
   selectPastWaits as selectPastWaits_,
   type HourTestClock,
 } from "../src/testing/hour-test-clock.js";
+import { SERIES_BASES } from "@waitron/db/testing/seed.js";
 
 const mocked = vi.hoisted(() => ({ internet: vi.fn(), realSecretChecks: vi.fn() }));
 export const external: { internet: Mock } = mocked;
@@ -123,11 +124,7 @@ export const binding: OperationBinding = {
   sourceId: "exact-selected-backup",
   targetNodeId: node.nodeId,
 };
-export const bases = [
-  { code: "A", purpose: "standard" },
-  { code: "FF", purpose: "full" },
-  { code: "R", purpose: "corrective" },
-];
+export const bases = SERIES_BASES;
 export const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 export let root: string;
 export let key: { secret: string; name: string };
