@@ -32,6 +32,7 @@ interface Placement {
   departmentId: string;
   departmentName: string;
   zoneName?: string;
+  zoneOrder?: number;
   periodName?: string;
   zoneId?: string;
   weekday: number | null;
@@ -77,6 +78,7 @@ export async function businessDayClockConflicts(
       departmentId: floorZones.departmentId,
       departmentName: departments.name,
       zoneName: floorZones.name,
+      zoneOrder: floorZones.displayOrder,
       zoneId: floorZones.id,
       weekday: openingHours.weekday,
       seasonId: openingHours.seasonId,
@@ -106,6 +108,7 @@ export async function businessDayClockConflicts(
       departmentName: departments.name,
       zoneId: floorZones.id,
       zoneName: floorZones.name,
+      zoneOrder: floorZones.displayOrder,
       periodId: openingHours.periodId,
       periodName: menuPeriods.name,
       startsAt: openingHours.startsAt,
@@ -127,7 +130,9 @@ export async function businessDayClockConflicts(
       {
         departmentId: row.departmentId,
         departmentName: row.departmentName,
-        ...(row.zoneId === null ? {} : { zoneId: row.zoneId, zoneName: row.zoneName! }),
+        ...(row.zoneId === null
+          ? {}
+          : { zoneId: row.zoneId, zoneName: row.zoneName!, zoneOrder: row.zoneOrder! }),
         ...(row.periodId === null ? {} : { periodId: row.periodId, periodName: row.periodName! }),
         specialDayId: day.specialDayId,
         specialDayName: day.name,
@@ -153,6 +158,7 @@ export async function businessDayClockConflicts(
   const periods: Placement[] = seasonPeriods.map((row) => ({ ...row, ...undated }));
   const closures: Placement[] = seasonClosures.map((row) => ({ ...row, ...undated }));
   const groups = new Map<string, Placement[]>();
+  const orderOf = new Map<string, (string | number)[]>();
   for (const placement of [...periods, ...closures, ...specialPlacements]) {
     if (
       placement.date !== null &&
@@ -160,7 +166,7 @@ export async function businessDayClockConflicts(
       placement.date < addDays(effectiveBusinessDay, -1)
     )
       continue;
-    // A season's position in the venue's order leads its key, so the sorted groups list seasons by `startsOn`.
+    // The padded season index leads `day`, so `orderOf` lists seasons by `startsOn`.
     const season = `${String(seasonById.get(placement.seasonId)?.index ?? -1).padStart(4, "0")}:${placement.seasonId}`;
     const day =
       placement.specialDayDateId === null
@@ -168,9 +174,26 @@ export async function businessDayClockConflicts(
         : `special:${placement.specialDayDateId}`;
     const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${day}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
+    orderOf.set(key, [
+      placement.departmentName,
+      placement.departmentId,
+      placement.zoneId === undefined ? 0 : 1,
+      placement.zoneOrder ?? 0,
+      placement.zoneName ?? "",
+      placement.zoneId ?? "",
+      placement.specialDayDateId === null ? `0:${day}` : `1:${placement.date}`,
+      placement.specialDayDateId ?? "",
+    ]);
   }
+  const textOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const byOrder = (a: string, b: string) => {
+    const left = orderOf.get(a)!,
+      right = orderOf.get(b)!;
+    const at = left.findIndex((part, index) => part !== right[index]);
+    return at === -1 ? 0 : left[at]! < right[at]! ? -1 : 1;
+  };
   const conflicts: BusinessDayClockConflict[] = [];
-  for (const key of [...groups.keys()].sort()) {
+  for (const key of [...groups.keys()].sort(byOrder)) {
     const placements = groups.get(key)!;
     const oldCutover = cutoverForBusinessDay(before, effectiveBusinessDay);
     const newCutover = cutoverForBusinessDay(candidate, effectiveBusinessDay);
@@ -179,7 +202,8 @@ export async function businessDayClockConflicts(
       (a, b) =>
         rangeSpan(a, oldCutover).start - rangeSpan(b, oldCutover).start ||
         a.startsAt.localeCompare(b.startsAt) ||
-        a.endsAt.localeCompare(b.endsAt),
+        a.endsAt.localeCompare(b.endsAt) ||
+        textOrder(a.periodName ?? "", b.periodName ?? ""),
     );
     const parsesUnder = (group: Placement[], cutover: string) => {
       try {
@@ -201,7 +225,10 @@ export async function businessDayClockConflicts(
       : new Set(placements.filter((p) => !parses([p])));
     const invalidBefore = new Set([...failing].filter((p) => !parsesUnder([p], oldCutover)));
     const crossing = new Set([...failing].filter((p) => !invalidBefore.has(p)));
-    const overlapping = !together && failing.size === 0;
+    const fitting = placements.filter((p) => !failing.has(p));
+    const overlapping = new Set(
+      together ? [] : fitting.filter((p) => fitting.some((q) => q !== p && !parses([p, q]))),
+    );
     for (const [rangeIndex, p] of placements.entries()) {
       const startsAt = p.startsAt.slice(0, 5),
         endsAt = p.endsAt.slice(0, 5);
@@ -212,7 +239,7 @@ export async function businessDayClockConflicts(
         Number(time < cutover || (end && time === cutover));
       let reason: BusinessDayClockConflict["reason"] | null = null;
       if (startsAt === endsAt) reason = "all_day";
-      else if (overlapping || invalidBefore.has(p)) reason = "overlap";
+      else if (overlapping.has(p) || invalidBefore.has(p)) reason = "overlap";
       else if (crossing.has(p)) {
         const span = rangeSpan({ startsAt, endsAt }, newCutover);
         reason =
@@ -282,7 +309,13 @@ export async function keptOpenConflicts(
     .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(and(eq(floorZones.keptOpenDay, tonight), eq(departments.active, true)))
-    .orderBy(asc(floorZones.id));
+    .orderBy(
+      asc(departments.name),
+      asc(departments.id),
+      asc(floorZones.displayOrder),
+      asc(floorZones.name),
+      asc(floorZones.id),
+    );
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
   return zones
