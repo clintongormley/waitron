@@ -6937,9 +6937,6 @@ describe("till-app", () => {
   });
 
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
-    // `#onConfirmPayment` forwards whichever tender the widget emits without branching — this pins that
-    // a CARD tender reaches recordSale UNCHANGED (method still "card", externalRef still present, never
-    // dropped) and keyed under the store's own stable working-order id, exactly like the cash test above.
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;

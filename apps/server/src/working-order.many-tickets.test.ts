@@ -30,7 +30,7 @@ beforeAll(() => useSplitExtrasDb(suite.db));
 
 // Node's own SQLite binds at most 32,766 values per statement; one send here writes more than that
 // to `ticket_items` twice: once for the dishes and once for the extras made at another station.
-it("A1208 one send of 2,400 burgers each with chips writes a kitchen item for every burger and every chips", async () => {
+it("one send of 2,400 burgers each with chips writes a kitchen item for every burger and every chips", async () => {
   const venue = await setupSplitExtrasVenue();
   const lines: ProductLine[] = [];
   for (let left = 2400; left > 0; left -= 99)
@@ -58,7 +58,7 @@ it("A1208 one send of 2,400 burgers each with chips writes a kitchen item for ev
 
 // One printer here, the pass, takes both stations' tickets: a job of 5,462 burgers and 5,462 chips
 // links 10,924 lines to it, more than one statement of three values a row can bind.
-it("A1208 one send of 5,462 burgers each with chips links every burger and every chips to the pass printer's ticket", async () => {
+it("one send of 5,462 burgers each with chips links every burger and every chips to the pass printer's ticket", async () => {
   const venue = await setupSplitExtrasVenue();
   const lines: ProductLine[] = [];
   for (let left = 5462; left > 0; left -= 99)
@@ -94,7 +94,7 @@ it("A1208 one send of 5,462 burgers each with chips links every burger and every
 
 // A table's bill records what the kitchen knew of its party's allergies for each ticket item it
 // fires, three values a row: 11,880 burgers fired at once are more than one statement can bind.
-it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot for every burger", async () => {
+it("a table bill firing 11,880 burgers at once records an allergy snapshot for every burger", async () => {
   const venue = await setupSplitExtrasVenue();
   const id = await withTransaction(suite.db, async (tx) => {
     const tabId = await createTableKitchenOrder(tx, venue.cfg);

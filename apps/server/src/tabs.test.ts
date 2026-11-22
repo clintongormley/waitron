@@ -21,6 +21,7 @@ import {
   printJobs,
   ticketItems,
   parties,
+  partyTables,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -75,6 +76,7 @@ import {
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
+import { parkedRace } from "./testing/parked-race.js";
 import "./errors.js";
 import { fireGroup } from "./order-groups.js";
 import { readScopedPassBoard } from "./pass-board.js";
@@ -293,6 +295,32 @@ describe("openTab", () => {
     });
   });
 
+  it("two seatings racing on one free table: the second waits for the first and is refused (tab.already_open)", async () => {
+    const { cfg, tableId } = await setupVenue();
+    const seat = (tx: Transaction) =>
+      seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
+    const [first, second] = await parkedRace(db, seat, seat);
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({
+      status: "rejected",
+      reason: { code: "tab.already_open", params: { tableId } },
+    });
+    const holders = await db
+      .select({ partyId: partyTables.partyId })
+      .from(partyTables)
+      .where(eq(partyTables.tableId, tableId));
+    expect(holders).toEqual([
+      { partyId: (first as PromiseFulfilledResult<{ partyId: string }>).value.partyId },
+    ]);
+    const open = await db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.status, "open"));
+    expect(open).toEqual([
+      { id: (first as PromiseFulfilledResult<{ tabId: string }>).value.tabId },
+    ]);
+  });
+
   it("refuses an unknown table (table.not_found) and a deactivated one (table.inactive)", async () => {
     const { cfg, tableId } = await setupVenue();
     const missing = randomUUID();
@@ -382,6 +410,29 @@ describe("addTabRound (append-only, no re-price)", () => {
       { lineNo: 1, gross: 150 },
       { lineNo: 2, gross: 150 },
       { lineNo: 3, gross: 999 },
+    ]);
+  });
+
+  it("a round started while another round on the tab is uncommitted waits for it, then takes lines 3 and 4", async () => {
+    const { cfg, coffeeId, waterId, tableId, coffeeOffer, waterOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    const round = (menuItemId: string) => (tx: Transaction) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId, quantity: "1" },
+        { menuItemId, quantity: "1" },
+      ]);
+    const settled = await parkedRace(db, round(coffeeOffer), round(waterOffer));
+    expect(settled).toMatchObject([{ status: "fulfilled" }, { status: "fulfilled" }]);
+    const lines = await db
+      .select({ lineNo: workingOrderLines.lineNo, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toEqual([
+      { lineNo: 1, productId: coffeeId },
+      { lineNo: 2, productId: coffeeId },
+      { lineNo: 3, productId: waterId },
+      { lineNo: 4, productId: waterId },
     ]);
   });
 
@@ -787,7 +838,7 @@ describe("readTabLines", () => {
     }
   });
 
-  it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {
+  it("carries each line's course + fired/held state for the tab's waiter-fire", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer, waterOffer } = await setupVenue();
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, { name: "Entrantes", displayOrder: 0 }),
@@ -1947,7 +1998,7 @@ async function tabWithFiredCoffee(quantity = "1", add = addTabRound) {
   return { ...venue, tabId, ticket, lineId: line!.id };
 }
 
-describe("editing a line the kitchen has and has not started (plan D10, spec §10.3)", () => {
+describe("editing a line the kitchen has and has not started", () => {
   it("a change to a sent, not-started line recalls the old item with a notice and fires the changed line as a new item, price unchanged", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee();
     const before = await linesOf(tabId);
@@ -3178,7 +3229,7 @@ async function fireGroupOfLine(
   );
 }
 
-describe("new work an edit adds reaches the kitchen as a round's would (plan D10)", () => {
+describe("new work an edit adds reaches the kitchen as a round's would", () => {
   it("a change with a rise to the only fired dish of a later course sends the added unit at once", async () => {
     const { cfg, tabId } = await tabWithFiredMains();
 
@@ -3309,7 +3360,7 @@ async function partyTab(add = addTabRound) {
   return { ...venue, tabId };
 }
 
-describe("every write to an open order's lines counts on its revision, a served mark aside (plan D10)", () => {
+describe("every write to an open order's lines counts on its revision, a served mark aside", () => {
   // Serving is a command on a party. It moves the party's revision (`served.test.ts`), not the
   // bill's.
   it("except a served mark, and a served mark cleared", async () => {
@@ -3384,7 +3435,7 @@ describe("every write to an open order's lines counts on its revision, a served 
   });
 });
 
-describe("a line write on an order whose card payment is in flight is refused, a served mark aside (plan D22)", () => {
+describe("a line write on an order whose card payment is in flight is refused, a served mark aside", () => {
   /** The line and order fields these cases compare, on either tab — not every column. */
   async function snapshot(t: Pick<Tabs, "tabId" | "otherId">) {
     const lines = await db
