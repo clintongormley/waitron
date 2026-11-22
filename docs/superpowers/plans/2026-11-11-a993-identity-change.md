@@ -1,316 +1,373 @@
 # A993 — a change of producer opens a new fiscal installation by itself: build plan
 
-**Status: plan, revised 2026-11-11 for a fresh review; for the watcher and the owner. Fiscal: the
-owner lands every slice.** Written on `main` at `53bb877a5e`. Every `file:line` below was read on
-that commit; nothing was run except the `git grep` commands quoted. Design:
-[A940 §5.6](../specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
-("slice 1b" in its §10). Question 0 asks whether to build it now.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Terms. **Producer**: the person or company that makes the software and signs its declaration; every
-Veri\*Factu record names its tax number. **Installation**: one copy of the software at one taxpayer,
-named by a five-symbol code for the UTC minute it was opened (A947), with its own chain of records
-and invoice series (`A-0CNNW/1`, `/2`, …). **Chain head**: the pointer to the latest record.
-**Marker**: a small file in the box's state folder, written by the upgrade, naming the release it is
-installing, that release's producer and the installation being closed.
+**Status: plan, refreshed 2026-11-22 on `main` at `dbf567d417` for a fresh read and the owner's
+approval. Fiscal: the owner lands every pull request.** Every `file:line` below was read on that
+commit; nothing was run except the `git grep`/`grep` commands quoted. The 2026-11-11 version was
+written on `53bb877a5e`; what no longer held is listed in "What changed since 2026-11-11".
 
-## What it delivers
+**Goal:** a production box upgraded to a release whose producer differs from its chain's, carrying
+that upgrade's own marker naming the new producer, opens a new installation (new chain, new
+five-symbol installation name, new series from 1) by itself at start and trades; without a matching
+marker it refuses `sif.producer_changed` as today.
 
-**Smallest usable result (slices 1a, 1b and 2).** The owner can publish a release naming a new
-producer (a future Waitron company instead of himself). Upgrading a production box to it then closes
-the box's chain and opens a new installation and new series starting at 1, with nobody signed in,
-provided the box can read the internet's clock. If it cannot, the upgrade does not replace the old
-release, which keeps selling. Records already made keep the old producer and are sent unchanged.
+**Architecture:** the new installation is opened by the same activation every restore and
+conflict switch already uses (`withHourAdmission` → `activateModuleAllocation` → the writes at
+`allocation.ts:435-478`), with a new action `identity-change` whose authority only the fiscal
+module's own identity-change step can mint. A950's checked upgrade (the path every install on a
+running box takes) writes the marker; its online trial and its stopped checks make the same change
+on their own throwaway copies, so a box that cannot read its time service never stops selling the
+old release.
 
-**Slice 3** adds the approved fallback: a box already running the new release with the change unmade
-shows a page instead of trading, which accepts a phone's or a till's clock and counts down every wait.
+**Tech stack:** TypeScript, Vitest, `node:sqlite` through drizzle, the host upgrade driver
+(`scripts/box/upgrades/*.mjs`, plain Node).
 
-**Still unavailable afterwards:** changing the two-character software code, changing compliance mode
-or fiscal module (stays a refused start, `boot.ts:2091-2098`), and a producer change inside an
-automatic (A950) upgrade (question 5).
+**Spec:** [A940 design §5.6](../specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993).
+
+Terms. **Producer**: who makes the software and signs its declaration; every Veri\*Factu record
+names its tax number. **Installation**: one copy of the software at one taxpayer, named by five
+symbols for the UTC minute it was opened, with its own chain of records and invoice series.
+**Marker**: a small file the upgrade writes into the box's state folder naming the release being
+installed, its producer and the producer it replaces.
 
 ## Authority
 
-- **Design approved**, owner 2026-10-22 about 02:45 (second revision, question 1); **way A chosen**
-  about 02:55 (question 2): "the upgrade changes only while it can read the internet's clock, and
-  otherwise the old release keeps selling …; in the stuck case the page also accepts a phone's or a
-  till's clock under A947's clock rule". Countdown, about 03:12: "But explain that on the screen and
-  provide a countdown for the user to see". Recorded in design §11 and §5.6, "The stuck page".
-- **Owner 2026-11-06 about 18:13** (`~/waitron-campaign/questions.md`, "A940 Task 8: the owner says
-  yes to question 1, both parts"; recorded in the [A940 slice 1 plan](2026-10-22-a940-1-software-identity.md),
-  "What A993 inherits"): "(1) A change of producer stays blocked in production until A993 exists.
-  (2) Once A993 exists, a start opens a new installation for a producer difference only when the
-  upgrade's own marker names that same new producer; otherwise it keeps refusing."
-- **Owner 2026-11-08**, lane L `RUNNER.md`: "Build the shortest safe path to that outcome. Add a
-  check, record, flow or migration only when it directly delivers the outcome or prevents a named
-  failure"; "Write no code or test for an event that cannot really happen at a venue."
-- **Owner 2026-11-09 16:45** (Authority section of the [A802 slice 3 plan](2026-11-10-a802-correction-history.md)):
-  "each slice about 1,000 written lines including tests …; tests at most about twice the code."
-- **Order**, owner 2026-11-10 22:05 (`~/waitron-campaign-l/questions.md`, "OWNER 2026-11-10 22:05"):
-  "**A1481 before A993** → A993".
-- Standing rules: no venue is live, so any installation may be reset and no compatibility code is
-  written (CLAUDE.md §3); the placeholder producer values may be replaced once before any production
-  start (CLAUDE.md §5).
+- Design approved, owner 2026-10-22 about 02:45; way A chosen about 02:55 ("the upgrade changes
+  only while it can read the internet's clock, and otherwise the old release keeps selling …; in the
+  stuck case the page also accepts a phone's or a till's clock"); countdown about 03:12 (design §11).
+- Owner 2026-11-06 about 18:13 (recorded in `docs/backlog/fiscal.md`, A993): "(2) Once A993 exists,
+  a start opens a new installation for a producer difference only when the upgrade's own marker
+  names that same new producer; otherwise it keeps refusing."
+- Owner 2026-11-21 18:17: "build it" (it had been "Later" on 2026-11-11).
+- Standing rules: no venue is live, so no compatibility code (CLAUDE.md §3); the placeholder
+  producer may be replaced once before any production start (CLAUDE.md §5).
 
-## What it leaves out or narrows, and why
+## Global constraints
 
-Each departs from the approved design and needs the owner's word (questions 1–3).
+- `computeHuella`, `chain.ts`, invoice-number allocation, `registros_facturacion` and its triggers,
+  `recordSale`/`recordCorrection`/`recordSubstitution` do not change. Every PR runs
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/write-path.e2e.test.ts src/inmutabilidad.test.ts`
+  **unedited**. A task that finds it needs any of these changed stops and asks the owner.
+- No schema change, so no migration and no venue reset.
+- Production only; a preproduction box keeps trading on its chain under the new producer, as
+  Task 8 built and the owner accepted (fiscal.md, A993).
+- Only a box that sells changes: `acceptingSales` (`boot.ts:2470`, singleton primary and neither
+  fenced nor a mirror). Every other box keeps today's behaviour.
+- The name follows CLAUDE.md §5's restore/promotion rules: five symbols for the box's UTC minute
+  (`encodeMinuteIdentity`), a second clock within 30 seconds (`compareHourClocks`,
+  `hour-clock.ts:67`, with the release floor `readHourRelease`), never a minute in the history the
+  box reads (`readHourHistory`, `hour-history-reader.ts:200`). The second clock is the box's time
+  service being synchronised (`observeTimeServiceHourClock`, `hour-clock-time-service.ts:12`), or
+  from PR 3 a device time confirmed under the box's recovery key; never devices alone.
+- Writes go to `venue.db` only (the four tables `allocation.ts:435-478` writes); nothing in
+  `node.db` changes, so the two-file order rule does not arise (read, not run).
+- FULL review path (fiscal invariants). Every PR also runs `scripts/errors-reachable.test.ts` and
+  `scripts/write-path-tables.test.ts` from the root (`pnpm exec vitest run <file>`).
 
-- **No new column.** A chain's producer is read from its latest record, as Task 8 does
-  (`producer-change.ts:26-33`); every record stores its own software block. No migration, so nothing
-  collides with A1308's planned rename of `registro_sif` and removal of `cadenas`
-  (`specs/2026-11-02-rationalisation/tables-fiscal.md:240-262`, `README.md:301`).
-- **Producer only.** The mode cannot differ today. The taxpayer's tax number has no product writer:
-  `git grep -n "update(tenants)" -- apps packages` finds only `taxpayer-name.ts:14` (legal name) and
-  `privacy-contact.ts:50` (privacy fields) outside test fixtures. The code is the constant `"W1"`
-  (`software.ts:1`).
-- **No record-time guard.** It would sit in chaining, which is protected core. The start's refusal
-  already stops a sale on a changed producer (`boot.producer-change.test.ts:175`), and the producer is
-  a setting read once at start.
-- **No carried clock reading** (design way A, step 3). The change always happens at the new release's
-  start, never inside the upgrade; the upgrade only checks first (question 3).
-- **No frozen-database test until go-live.** The upgrade's check reads the old release's database with
-  the new release's code (design §5.6 step 1, §12). Before go-live every box can be reset, so the check
-  fails closed on anything it cannot read (slice 2) instead. From go-live, when releases may change
-  those tables' shape, a test against the previous release's frozen database (A799's) is required.
-- **No dashboard notice.** One activity-log line, written in the activation's own transaction
-  (`recordActivity`, a kind in `packages/db/src/activity-kinds.ts`).
-- **No restart-at-boot step.** A cut during any upgrade's restart is A950's: its PR2 adds a host
-  recovery service ([A950 plan](2026-11-09-a950-shorter-upgrades.md)).
-- **Preproduction unchanged** (question 2): Task 8's "trades on, the new producer on the same chain".
-- **In slice 1b alone a hand-written marker is accepted**, until slice 2 writes it. A narrow
-  departure from "the upgrade's own marker": the file must name the exact running build and the live
-  installation, so it cannot outlive one deliberate upgrade.
-- **Open departure, docs only:** design §5.6 asks for asesor Q53(d)(2) to be widened to cover
-  cancellations and corrections of old invoices made on the new chain;
-  `docs/compliance/asesor-questions.md:2037-2040` lacks it. Slice 1a adds the design's wording there.
-  The release-notes line belongs to A940 slice 2's release runbook, not yet built.
+## What changed since 2026-11-11
 
-The stuck page with its phone-or-till clock and countdown **is in slice 3**. Until it lands, the stuck
-case retries the internet in-process (slice 1b) with no page; it must land before the first venue.
+1. **A950 built the checked upgrade.** Every install on a started box goes through
+   `cmd_checked_install` (`deploy/waitron.sh:1098`, called at `:1279-1288`) into
+   `scripts/box/upgrades/cli.mjs:332-431`: an online trial on a copy while the old release sells
+   (`host.mjs:758`, called at `:284`), stop, a stopped copy, readiness and a real sale on a second
+   copy (`candidate.mjs:39`), then Restore/Keep or automatic restore (`transaction.mjs:144-202`). The
+   old slice 2 (a `prepare-identity-change` server command inside `waitron.sh install`, waiting for
+   A950's PR2) is replaced by PR 4: the host driver writes the marker, and the existing checks do
+   the work. Old citations `waitron.sh:765-783`, `:401-442`, `:676` no longer describe the path.
+2. **Those checks already refuse a producer change.** `checkUpgradeData` calls
+   `checkFilingIdentity` (`upgrade-checks.ts:90`), so today such an upgrade fails at the online
+   trial and the old release keeps selling (read, not run). Old question 5 (the copy's test sale)
+   is answered by construction: the copies make the change too (PR 2, Task 6).
+3. **The copy sale already needs the time service synchronised** (`upgrade-sale.ts:161-163`); the
+   online trial runs with no clock relay (`host.mjs:776-803`) while the stopped checks have one
+   (`candidate.mjs:72,81`).
+4. **"The internet's clock" is now the box's time service.** `hour-clock-internet.ts` is gone; the
+   `internet` source means the host reports the time service synchronised
+   (`hour-clock-time-service.ts:12-58`, read at `boot.ts:1216`). CLAUDE.md §5: a synchronised time
+   service carries a new name on by itself; a device counts only once the page's proof confirms it.
+5. **Every filing start already waits for its time** (`gateSeatOnStartClock`, `boot.ts:2589`); the
+   identity change reads the time service itself and is not one of the seat's gated members
+   (`start-clock-gate.ts:29-45`).
+6. **A restore's start already waits with a page** that takes the node recovery key
+   (`node-entry.ts:752-840`, `start-clock-waiting.ts:56`, key check at `:92`). PR 3 reuses that page
+   instead of the peer waiting start the old slice 3 named.
+7. **A947 4a landed**: admission takes the five-symbol minute (`allocation-envelope.ts:451`); the
+   actions are `setup`, `restore`, `promote`, `conflict-switch` in four lists
+   (`allocation-envelope.ts:289`, `allocation-operation.ts:120`, `allocation.ts:169-171`,
+   `hour-selection.ts:384`). A one-shot allocation that skips the persisted selection exists:
+   `hour-throwaway-allocation.ts:19-101`, the template here.
+8. **Backup verification checks every stored approval's shape** (`backup-verification-history.ts:133-158`;
+   operator parser `allocation-operator.ts:13-25`). A new approval or operator kind would make every
+   later backup fail verification, so the plan stores the existing version-2 "relinquished"
+   approval with a text operator (decision 5).
+9. **Line moves:** the refusal runs at `boot.ts:2595-2598`; the seat method is
+   `fiscal-verifactu/src/backend.ts:789`, its interface `packages/fiscal/src/backend.ts:499` (the old
+   `packages/fiscal/src/backend.ts:605` is wrong); `withOperationAuthority` `operation-authority.ts:51`;
+   `createSetupHourClock` `hour-setup-clock.ts:125`; the minute rule `hour-selection.ts:541-566`.
+10. **A940 slices 4 and 5 (#2987, #3001, #3014, #3051).** A production start of a build that is not
+    a release refuses `server.unreleased_build`, so a production box always runs a numbered release
+    and `softwareVersion()` names it. The producer is the image's own `ENV`
+    (`deploy/Dockerfile:316-324`), which compose does not pass (`deploy/compose.yml:18-40`), so only
+    another image changes it. Kept declarations need nothing.
+11. **Asesor Q53(d)(2) is already widened** (`docs/compliance/asesor-questions.md:2080-2081`); the old
+    slice 1a docs step is dropped.
+12. **`tenants` became `taxpayer`** (A1308 vb1); its writers change only the legal name and domicile
+    (`taxpayer-name.ts:18,45`).
+13. **The recovery page says the remedy "does not exist yet"** (`i18n/recovery-page.ts:308-320`);
+    false once PR 4 lands, so its words and test change (table below).
+14. Dropped: old question 0 (answered), the activity-log line (the `fiscal_allocations` row,
+    `allocation.ts:466-478`, is the record), the separate asesor edit, and the A1308 collision note
+    (no column is added).
 
-## Slices
+## Decisions (recommended defaults; ★ needs the owner)
 
-Every slice: test first, watched failing; `pnpm --filter @waitron/fiscal-verifactu exec vitest run
---project node src/write-path.e2e.test.ts src/inmutabilidad.test.ts` passes **unedited**; no change to
-`computeHuella`, `chain.ts`, `recordSale`, the alta builders or `registros_facturacion`'s triggers; the
-activation's writes (`allocation.ts:435-478`) are called, never edited. If a slice needs any of those
-changed, it stops and asks the owner. FULL review path. No schema change; if question 1 is answered
-"store it", the column goes in through `migration-baseline rebuild` on the fiscal-verifactu set and
-that slice also runs `scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
-scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts
-scripts/two-file-foreign-keys.test.ts scripts/starting-migrations.test.ts`.
+1. ★ **Producer only, no stored identity column** (design "What each chain stores"). A chain's
+   producer is its head record's (`producer-change.ts:26-33`); the code and mode cannot differ today.
+2. ★ **No record-time guard** (design "The guard"): it would sit in `chain.ts`. The start's refusal
+   stays the guard (`boot.producer-change.test.ts:171`).
+3. ★ **The live change is made at the new release's start; the upgrade's trial and stopped checks
+   make the same change on their own copies, which are thrown away.** The design's clock reading
+   carried across the stop (way A, step 3) goes. A box whose time service is not synchronised fails
+   the online trial and never stops the old release, as way A wants.
+4. ★ **The stuck page takes the box's recovery key** (as a restore's start wait, and as the conflict
+   switch that also opens a new chain on a running box), not a sign-in (design §12, question 4).
+   Alternative: a `node.manage` sign-in as the peer waiting start's carry-on (`carry-on.ts:198-315`).
+5. **Approval and operator:** version 2 with `oldMachineRelinquished: true`, `oldMachineOffline` and
+   `oldMachineAbsent` false (the old installation is this box's, closed by its own step), operator
+   the text `identity-change:<release>`. Every existing reader accepts that shape
+   (`backup-verification-history.ts:135-153`); the door is the private authority, not the data.
+6. **The marker** is `<state>/identity-change.json`:
+   `{ "version": 1, "release": "1.4.0", "producerTaxId": "<new>", "fromProducerTaxId": "<old>" }`.
+   The host writes it only when the candidate image is a numbered release (`ref.name` label
+   `v<version>`) whose `WAITRON_PRODUCER_TAX_ID` differs from the old image's. A start acts only
+   when all three match (its `softwareVersion()`, its producer, the chain head's producer), and
+   deletes it only when it names its own release and no difference is left. A malformed marker counts
+   as absent. Disclosed limit: anyone with root on the box can write the file, as they can edit the
+   database; it guards against an accidental producer difference, not a hostile operator.
+7. ★ **No new words in the upgrade's report.** A refused trial carries
+   `sif.identity_change_waiting` with its reason as A950's failure text; Box status shows A950's
+   ordinary deferral. The design's three Spanish report lines are not built.
+8. **Order PR 1 → 2 → 3 → 4.** Nothing writes the marker until PR 4, so each PR changes nothing a
+   box can reach until the page exists.
 
-### Slice 1a — the fiscal module can open an identity-change installation (not yet called)
+## Changed test checks
 
-**Result:** main unchanged in behaviour; `fiscal-verifactu` exports one entry that opens the new
-installation in one transaction, and nothing else can reach it.
+| Check | Before | After |
+| --- | --- | --- |
+| `apps/server/src/recovery-surface.test.ts:440-462`, `sif.producer_changed` words (PR 4) | EN title "…and this version of Waitron cannot open one, so the box will not sell."; action "…Changing the producer needs a Waitron version that can open a new fiscal installation, which does not exist yet." (ES likewise) | EN title "This box has been given a different software producer from the one its invoices were recorded under, without the upgrade that opens a new fiscal installation for it, so the box will not sell."; action "Install a Waitron version that names the same producer as this box's invoices. A version with a new producer opens its new fiscal installation by itself when it is installed as an upgrade." ES: "…sin la actualización que le abre una nueva instalación fiscal, así que el equipo no venderá." / "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Una versión con un productor nuevo abre su nueva instalación fiscal por sí sola cuando se instala como actualización." |
 
-**Files.**
-- New `identity-change.ts`: compares the head record's producer with the running one; takes clock
-  readings through `createSetupHourClock` (`hour-setup-clock.ts:43`), which supplies the release floor
-  (`readHourRelease`; `compareHourClocks` refuses without one, `hour-clock.ts:126-129`, so an
-  unstamped build never changes); reads the history (`readHourHistory`, `hour-history-reader.ts:200`)
-  plus names reserved by unfinished setups and restores (`publicHourSelectionHistory`,
-  `hour-selection.ts:193`, as `:396-412` does); picks the minute; activates; writes the activity line.
-- `hour-selection.ts`: move the minute rule (`:437-449`) into an exported pure function both use.
-- `allocation-envelope.ts`: a third mode, `identity-change`, with its own approval
-  `{ version: 1, kind: "identity-change", eventId, sourceId: <old SIF row id>, targetNodeId,
-  operatorId, release: <build version> }`. `validateEnvelope` dispatches on it before the person
-  statements (`:389-415`: old machine offline or absent, no parallel recovery, re-authentication);
-  that mode accepts only this approval and the identity-change authority, and every other mode
-  refuses both.
-- `allocation.ts` (an exported entry beside `activateAllocation`, `:129`), `allocation-operator.ts` and
-  `packages/module/src/operation-authority.ts:36-42` (operator `{ kind: "identity-change", nodeId,
-  eventId }`, shown as "identity change at release ‹version›"). The authority is a token kept in a
-  private `WeakSet` in `identity-change.ts` (as `hour-clock.ts:38`), bound to the node, the old SIF row
-  id and the release version, and deleted after one use: the design's binding, adopted. The person
-  action lists (`allocation.ts:169-171`, `allocation-envelope.ts:289`, `hour-selection.ts:276`) are not
-  extended.
-- `docs/compliance/asesor-questions.md`: Q53(d)(2) widened with the design's wording.
+No other check reverses: `git grep -n "producer_changed" -- '*.test.*'` lists
+`boot.producer-change.test.ts:171-180` (no marker: still refuses), `producer-change.test.ts:59,168,189`
+(the seat's refusal, unchanged) and `recovery-surface.test.ts:440-633` (the words above; the
+retry-refuses list at `:601-633` stays true).
 
-**Tests first** (`identity-change.test.ts`, `useVenueDb`, fake clocks):
-1. Head names producer A, running B, clocks agree → a new live SIF row with a five-symbol name, empty
-   head, old series retired, new `A-<name>` series, one activity line. Fails if the change is removed.
-2. Same producer → refused, nothing written. Proof by deletion of the difference check.
-3. Box 30 001 ms from the internet → `clock_disagreement`, nothing written; 30 000 ms → changes.
-4. The new entry called with an authority minted by the exported `withOperationAuthority`
-   (`operation-authority.ts:51`) → refused. Deleting the `WeakSet` check makes it fail.
-5. A used token, or one bound to another SIF row or version → refused.
-6. An identity-change approval under `recovery` or `initial-setup`, and a recovery approval under
-   `identity-change` → refused.
-7. A name reserved by an unfinished restore in the preparation state is not taken.
+## Review focus
 
-**Guard runs:** the fiscal gates above, `hour-selection.test.ts` and
-`minute-selection-unknown-name.test.ts` unedited, `scripts/errors-reachable.test.ts`,
-`scripts/write-path-tables.test.ts`. **Size:** about 330 production / 600 tests.
+1. **The marker's owner.** The host runs as root; the app as `waitron` (`deploy/Dockerfile:338`).
+   Every copy of the marker is chowned to the state folder's owner, as `candidate.mjs:66-71` does for
+   its folders, or the app never reads it (Task 9, a stat assertion).
+2. **A failed check puts the old release back with no marker**: the live marker is written after the
+   stopped copy, so `restoreStoppedTree` removes it (Task 10).
+3. **A crash between the change's commit and the marker's delete**: the next start finds no
+   difference and deletes it (Task 5, case 4).
+4. **A backup after the change verifies**, and a restore reads its history (Task 3, case 6).
+5. **A start that waits is not counted as failed and needs no restart**: it loops in-process and
+   carries on when the time service synchronises (Task 5, case 3).
 
-### Slice 1b — a production start makes the change when a matching marker is present
+---
 
-**Result:** a production box whose chain was made under another producer, holding a marker that names
-its own running build, its own producer and its live installation, opens the new installation at
-start and trades. Without such a marker it refuses `sif.producer_changed` as today.
+## PR 1 — the fiscal module can open an identity-change installation (not yet called)
 
-**Files.**
-- `apps/server/src/boot.ts:2101-2104`: the refusal check stays on `!fencedOrMirror`; the change runs
-  only when `acceptingSales` (`:2047`). When the internet or clocks do not allow it yet, the start
-  waits in-process, retrying every 15 seconds and logging `sif.identity_change_pending` with its
-  reason. It never exits, so the three-failure recovery page (`RECOVERY_AT = 3`,
-  `recovery-state.ts:42`; served by `node-entry.ts:560-585` until a person presses Retry) is not
-  reached. Rule 3's wait (at most 150 seconds) runs the same way.
-- Marker (`identity-change.json` in `packages/store/src/state-layout.ts`, deleted on reset): honoured
-  only when its build version, producer and old installation all match; deleted only by a start of
-  the build it names that finds no difference left (after the change, or after a crash between the
-  commit and the delete). A start of any other build leaves it alone, so restarting the old release
-  never discards a pending upgrade's marker.
-- `packages/fiscal/src/backend.ts:605` and both backends: the check takes the marker.
-- CLAUDE.md §5's producer line (`:941`) becomes: a production start opens a new installation for a
-  different producer only with the upgrade's marker naming its build; otherwise it refuses
-  `sif.producer_changed`; do not change the tax number on a published image until A993's slice 3 has
-  landed. The publish job's `WAITRON_PRODUCER_CHANGE_ALLOWED` refusal stays as the deliberate act.
-  The new-chain line (`:949`) gains the identity change. `docs/backlog/fiscal.md` updated.
+Result: no behaviour change; `fiscal-verifactu` gains one seat method no route can reach. About 250
+production lines, 450 test lines.
 
-**Tests first** (new cases in `boot.producer-change.test.ts`, above the mirror case, which stays last,
-`:197-198`; the three existing cases unedited):
-1. Matching marker → trades; the first sale's record has `PrimerRegistro` S and the new name; the
-   node's recovery-key verifier (`readRecoveryKeyVerifier`, `@waitron/node-db`) is unchanged.
-2. Marker naming another producer, another build or another installation → `sif.producer_changed`,
-   no SIF row added. Proof by deletion of each comparison.
-3. Internet unavailable → the start is still waiting after two retries and the failure count is
-   unchanged; the internet returns → it changes and trades.
-4. A start of a different build with a marker present leaves the marker in place.
+### Task 1: the minute rule as a pure function
 
-**Guard runs:** `scripts/module-seams.test.ts`, `scripts/state-layout.test.ts`,
-`apps/server/src/boot.failed-start.test.ts`, the fiscal gates. **Size:** about 160 production / 320 tests.
+**Files:** Modify `packages/fiscal-verifactu/src/hour-selection.ts:541-566`; Test
+`packages/fiscal-verifactu/src/hour-minute.test.ts` (new).
 
-### Slice 2 — the upgrade checks first, as a step in A950's attempt
+**Produces:** `export function nextHourMinute(nowMs: number, usedMinutes: readonly number[], settleTargetMs: number): { kind: "take"; minuteMs: number } | { kind: "wait"; targetMs: number; remainingMs: number } | { kind: "refuse"; reason: "minute_in_use" | "minute_not_later"; allowedFromMs?: number; remainingMs?: number; recheckInMs?: number }`, with `settleTargetMs = -Infinity` meaning no settle (as `promote`).
 
-**Result:** an upgrade of a production box to a producer-changing release writes the marker and lets
-the new release start only when the internet's clock agrees; otherwise the old release keeps selling
-and the upgrade reports one of the design's three reasons.
+- [ ] Step 1: tests — free current minute → `take` of the current minute; current minute used →
+  `wait` with `remainingMs` to the next minute; target more than `WAIT_BOUND_MS` (150 000) ahead →
+  `refuse` `minute_in_use` with `allowedFromMs`; a target at `END_MS` → `minute_not_later`.
+- [ ] Step 2: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/hour-minute.test.ts` → FAIL (not exported).
+- [ ] Step 3: move the rule into `nextHourMinute`; `createHourSelection` calls it.
+- [ ] Step 4: the new file, `src/hour-selection.test.ts` and `src/minute-selection-unknown-name.test.ts` pass, the last two unedited.
+- [ ] Step 5: `git commit -s`.
 
-**Where it goes.** A950's approved plan rewrites `waitron.sh install` (its PR2 and PR8), keeps the old
-and new image ids, and puts the old images and files back when an attempt fails ("Copy/recovery").
-Today's `cmd_install` changes the box before any check could run: `refresh_self`, `fetch_box_files`,
-AppArmor and the box service, then `select_image`, which pulls `:main` (moving its tag) or writes
-`.env`'s image lines for a branch (`waitron.sh:765-783`, `select_image` at `:401-442`), so after a refusal the next
-`docker compose up` of any kind would start the new release. So slice 2 is **a step inside A950's
-attempt**, after the candidate image is resolved and before the old release stops, relying on A950's
-restore when it refuses. It is built after A950 PR2; the order is for the watcher to settle with
-lane F.
+### Task 2: the `identity-change` action and its private authority
 
-**Files.** `apps/server/src/server-command.ts` gains `prepare-identity-change` beside `check-producer`
-(`:9`), run with the candidate image and `--entrypoint node` (as `waitron.sh:676` does). It opens the
-venue database read-only beside the running server (`exclusive: false`, CLAUDE.md §3). On a mirror or
-fenced box (node mode from `node.db`, fence from the held membership, as boot reads them) it exits 0
-and writes nothing: a spare that was once the main box holds its own old chain (A940 plan, "The fifth
-point"). It clears a marker naming another build, compares, and on a difference writes the marker,
-reads the internet clock and waits for the allowed minute while the old release sells. Exits: 0
-proceed; 3 not now (no internet, clocks apart, minute in use); 4 cannot read (any read error or
-unknown table shape) — A950's attempt treats 3 and 4 as a failed check and never starts the new
-release.
+**Files:** Create `packages/fiscal-verifactu/src/identity-change-authority.ts`; Modify
+`allocation-envelope.ts:289,304`, `allocation-operation.ts:120`, `allocation.ts:169-171`; Test
+`identity-change-authority.test.ts`.
 
-**Tests first:** no difference → exit 0, no marker; difference with agreeing internet → marker names
-the candidate's build, producer and the live installation; no internet → exit 3, marker written; a
-missing column or table → exit 4; mirror or fenced → exit 0, no marker; no venue database (a box not
-set up) → exit 0; preproduction → exit 0, no marker. In A950's host tests: exit 3 or 4 → the new
-release is not started and the old images are restored. A `--reset` install wipes the box first, so
-there is no chain and the step exits 0 (one case).
+**Produces:** `withIdentityChangeAuthority<T>(binding: OperationBinding, release: string, run: (authority: OperationAuthority) => Promise<T>): Promise<T>` (calls `withOperationAuthority` with operator `identity-change:<release>`, adds the authority to a module-private `WeakSet`, removes it in `finally`); `isIdentityChangeAuthority(authority: unknown): boolean`. Neither is exported from `index.ts`. At each of the four lists, `identity-change` is accepted only when `isIdentityChangeAuthority` holds, and an identity-change authority is refused for every other action; `:304`'s relinquished check admits `identity-change` beside `promote`.
 
-**Guard runs:** `scripts/waitron-sh.test.mjs`, A950's host unit tests, `scripts/spawn-timeout-budget.test.ts`.
-**Size:** about 200 production / 350 tests.
+- [ ] Step 1: tests — an authority from `withOperationAuthority` with action `identity-change` →
+  `withHourAdmission` refuses `reauthentication_required`; an identity-change authority with action
+  `restore` → refused; the authority after `run` settles → refused; proof by deletion of the
+  `WeakSet` check (the first case must fail).
+- [ ] Step 2: run it → FAIL. Step 3: implement. Step 4: run it plus `src/hour-throwaway-allocation.test.ts`, `src/allocation-envelope.test.ts`, `src/allocation.test.ts` unedited → PASS.
+- [ ] Step 5: `git commit -s`.
 
-### Slice 3 — the stuck page: the internet, or a phone's or a till's clock, with countdowns
+### Task 3: `openIdentityChange`, the seat method
 
-**Result:** slice 1b's in-process wait gets a page. It keeps retrying the internet every 15 seconds,
-and accepts a reading from a phone or a till on the venue's network (never the box's own screen) after
-a sign-in (question 4), with the design's words and states (§5.6 table) and a live countdown.
+**Files:** Create `packages/fiscal-verifactu/src/identity-change.ts`; Modify
+`fiscal-verifactu/src/backend.ts:789` (add the method), `packages/fiscal/src/backend.ts:499`
+(optional interface member), `fiscal-verifactu/src/errors.ts` (`sif.identity_change_waiting`:
+`{ reason: string; remainingMs?: number }`); Test `identity-change.test.ts` (`useVenueDb`, mocked
+`readHourRelease` as existing hour tests do).
 
-**First step:** on a real till, check its browser can open the box's address while the box is not
-trading (design §12); if not, "or a till" leaves the words.
+**Consumes:** Task 1's `nextHourMinute`, Task 2's `withIdentityChangeAuthority`.
+**Produces:** `openIdentityChange(db: Database, nodeId: NodeId, marker: IdentityChangeMarker, clocks: { timeService: () => Promise<boolean> }): Promise<"opened" | "nothing-to-open" | "not-named">`, with `IdentityChangeMarker = { release: string; producerTaxId: string; fromProducerTaxId: string }` exported from `packages/fiscal/src/backend.ts`.
 
-**Files.** Reuse the waiting start (`waiting-start.ts:98`, `startWaiting`, used at `boot.ts:1875`),
-which already serves a page instead of trading, rechecks every 15 seconds (`:20`) and signs a person in
-over HTTPS (`carry-on.ts`). Browser readings go through `createSetupHourClock`'s browser samples;
-`request-from-box.ts:63` excludes the box's own screen; words reuse A947's
-(`packages/fiscal-verifactu/src/setup/wait-countdown.ts`). CLAUDE.md §5's "until slice 3" clause goes.
+Order inside: `not-named` unless `marker.release === softwareVersion()` and `marker.producerTaxId` is the running producer's NIF; `nothing-to-open` outside production; read the clock (`observeTimeServiceHourClock`, then a box sample, `compareHourClocks` with the release floor; `canSelectHour` false → throw `sif.identity_change_waiting` with `clockRefusal`'s reason) before the transaction; inside one `withTransaction`: head producer as `producer-change.ts:26-33` reads it (no head, or equal → `nothing-to-open`; ≠ `marker.fromProducerTaxId` → `not-named`); history through `readHourHistory` + `projectHourHistory` (contradictions → `sif.allocation_invalid` `history_invalid`); `nextHourMinute` (`wait`/`refuse` → throw `sif.identity_change_waiting`); build the input as `hour-throwaway-allocation.ts:47-72` does, with decision 5's approval and `liveSeriesBases`; binding `{ module: "fiscal-verifactu", action: "identity-change", eventId: randomUUID(), sourceId: <old SIF id>, targetNodeId: nodeId }`; then `withHourAdmission` → `createAllocationPreparation` → `activatePreparedModuleAllocation(tx, …)`.
 
-**Tests first:** a reading from the box's own address is ignored; a device 31 seconds off is refused
-with no SIF change; an agreeing signed-in reading makes the change and the start trades; a rule-3 wait
-answers the remaining milliseconds. The page is looked at in both themes and at phone width
-(CLAUDE.md §4). **Size:** about 450 production / 550 tests.
+- [ ] Step 1: tests — (1) head under producer A, running B, marker naming B and A, time service
+  synchronised → `opened`; the old SIF row revoked, a new one whose `numero_instalacion` is
+  `encodeMinuteIdentity` of the box time, old series retired, new `<base>-<name>` series, and the
+  next `recordSale` stores `PrimerRegistro` S with the new name while the old record's stored
+  `SistemaInformatico` is unchanged. (2) marker naming another release, another producer or another
+  `fromProducerTaxId` → `not-named`, nothing written (proof by deletion of each comparison).
+  (3) time service not synchronised → throws `sif.identity_change_waiting` `second_clock_missing`,
+  nothing written. (4) preproduction → `nothing-to-open`, nothing written. (5) the current minute already in the history →
+  `wait` reason. (6) `verifyBackupFiscalHistory` (`backup-verification-history.ts:492`) over the
+  changed database passes.
+- [ ] Step 2: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/identity-change.test.ts` → FAIL.
+- [ ] Step 3: implement. Step 4: the file, `src/producer-change.test.ts` unedited and the fiscal gates → PASS; root `scripts/errors-reachable.test.ts`.
+- [ ] Step 5: `git commit -s`.
 
-## Open questions (each with a recommended answer)
+## PR 2 — a start and the upgrade's checks make the change when a marker names it
 
-0. **Build it now?** With no new column, the design's reason to land before go-live ("so every
-   production chain stores its identity from its first record", end of §5.6) is already met: every
-   record names its producer. Design §10 has A940 slices 2–6 not depend on it. *Example:* the first
-   venue goes live in the spring under the owner as producer; Waitron S.L. is formed a year later.
-   Under A, A993 is built now and its upgrade step is kept working through A950's and A1308's changes
-   for a year. Under B, it is built when the company's release is scheduled; until then a box given
-   another tax number refuses `sif.producer_changed`, CLAUDE.md §5 forbids the change, and the publish
-   job refuses it without `WAITRON_PRODUCER_CHANGE_ALLOWED`. Under C, slices 1a and 1b only now.
-   **A**: as ordered on 2026-11-10. **B**: build when a producer change is scheduled. **C**: the
-   fiscal core now, the upgrade step after A950. **Recommended: B**, with slice 1a's asesor wording
-   done now as a docs change: nothing is lost by waiting, and slice 2 lands on an upgrade path A950 is
-   still writing. If the owner wants it before go-live anyway, C.
-1. **Scope to the producer, with no new column?** No mode, no code or taxpayer check, no record-time
-   guard, an activity line instead of a notice. *Example:* Bar Lucía's box sold `A-0CNNW/1…1234` under
-   the owner; release 1.4.0 names Waitron S.L.; the box opens `0JMV7` and sells `A-0JMV7/1`, with or
-   without a column. The only difference: a chain opened and upgraded before its first sale takes the
-   new producer on its first record, a consistent installation either way. **Recommended: yes.**
-2. **Production only?** *Example:* a dev stack switching `WAITRON_PRODUCER_TAX_ID` keeps trading on its
-   chain instead of using up a new minute name at every switch. **Recommended: yes.**
-3. **Make the change always at the new release's start, never inside the upgrade?** The upgrade only
-   checks first; the design's carried clock reading goes. *Example:* the check reads the internet at
-   10:15:02 and passes; the new release starts at 10:15:40, reads it again and opens `0JMV7`. If the
-   fibre dropped at 10:15:20, the box waits on slice 3's page until it returns or a manager uses a
-   phone. **Recommended: yes.**
-4. **Must a manager sign in before a phone's or till's clock counts on the stuck page?** Open since
-   design §12; no answer in the questions files. *Example:* without it, any phone on the venue's Wi-Fi
-   supplies the clock the new installation is named by. **Recommended: yes**, the waiting start's
-   existing sign-in.
-5. **A producer change inside A950.** A950's readiness makes a test sale on a copy and never reaches
-   AEAT ("Checks/trial"), and its PR8 may run those checks on manual installs too, so a copy needing
-   the change can neither change nor sell. **Recommended:** the copy's test sale skips only the
-   identity change (the copy is discarded and its name never used), and the live start then makes it;
-   to be settled with lane F, whose plan gains a line either way.
+Result: still unreachable on a box (nothing writes the marker until PR 4); with a marker present, a
+selling production start opens the new installation and trades, and the upgrade's checks do the same
+on their copies. About 200 production lines, 400 test lines.
+
+### Task 4: the marker file
+
+**Files:** Modify `packages/store/src/state-layout.ts` (export `IDENTITY_CHANGE_FILE = "identity-change.json"`; entry kind `file`, reset `deleted`, backup excluded "An upgrade's one-start instruction."); Create `apps/server/src/identity-change-marker.ts`; Test `identity-change-marker.test.ts`.
+
+**Produces:** `readIdentityChangeMarker(stateDir: string): Promise<IdentityChangeMarker | null>` (exact keys and `version: 1`, else `null`); `deleteIdentityChangeMarker(stateDir: string): Promise<void>` (remove, then flush the folder).
+
+- [ ] Steps: tests (absent → null; malformed, extra key, wrong version → null; well-formed → the three
+  fields; delete flushes and a second delete is quiet) → FAIL → implement → `pnpm --filter @waitron/server exec vitest run src/identity-change-marker.test.ts` and root `scripts/state-layout.test.ts` → PASS → `git commit -s`.
+
+### Task 5: the start
+
+**Files:** Modify `apps/server/src/boot.ts:2593-2598`; Test `apps/server/src/boot.producer-change.test.ts` (new cases above the mirror case, which stays last, `:193-195`; the three existing cases unedited).
+
+Before `checkFilingIdentity`, when `acceptingSales` and the marker is present: call
+`nodeBackend.openIdentityChange(db, node.nodeId, marker, { timeService: timeServiceSynchronised })`;
+on `sif.identity_change_waiting` log `sif.identity_change_pending` with its reason and try again
+after `seams.identityChangeRecheckMs ?? WAIT_RECHECK_MS`; on `opened` or `nothing-to-open`, delete
+the marker. Then `checkFilingIdentity` runs as today, so `not-named` still refuses.
+
+- [ ] Step 1: tests — (1) marker naming the running build and both producers, time service
+  synchronised → trades; the first sale's record is `PrimerRegistro` S under the new name. (2) no
+  marker, or one naming another build → `sif.producer_changed`, no SIF row added, and the marker
+  naming another build is still there. (3) time service unsynchronised → after two rechecks the start
+  has not settled and the failure count in `recovery.json` is unchanged; the time service reports
+  synchronised → it trades. (4) the change already made and the marker still present → trades and
+  the marker is gone.
+- [ ] Step 2: `pnpm --filter @waitron/server exec vitest run src/boot.producer-change.test.ts` → FAIL.
+- [ ] Step 3: implement. Step 4: the file, `src/boot.failed-start.test.ts`, root `scripts/module-seams.test.ts` → PASS.
+- [ ] Step 5: `git commit -s`.
+
+### Task 6: the upgrade's checks
+
+**Files:** Modify `apps/server/src/upgrade-checks.ts:35,88-90` (an `options: { socketPath?: string }` parameter, passed on by `upgrade-sale.ts:160`); Test `upgrade-trial.test.ts`, `upgrade-sale.test.ts`.
+
+Before line 90, when the copy's node would sell (`readNodeMode` and `isFenced(await readNodeMembership(db), id)` as `boot.ts:2247,2442-2470` read them) and the copy holds a marker: call `openIdentityChange` once with `timeServiceReader(boxHostClient(options))`; a waiting refusal is thrown, failing the check; `opened`/`nothing-to-open` delete the copy's marker. Report `identityChange: "opened"` in the details.
+
+- [ ] Step 1: tests — trial with a matching marker and a synchronised stub → passes and reports
+  `opened`; unsynchronised → throws `sif.identity_change_waiting`; no marker → still
+  `sif.producer_changed`; sale with a matching marker → the sale's record starts the new chain.
+- [ ] Step 2: `pnpm --filter @waitron/server exec vitest run src/upgrade-trial.test.ts src/upgrade-sale.test.ts` → FAIL. Step 3: implement. Step 4: → PASS. Step 5: `git commit -s`.
+
+## PR 3 — the stuck page: the time service, or a device under the box's recovery key
+
+Result: while Task 5's start waits, the box's usual address serves a page that says why, counts
+down a minute wait, and accepts a device's time confirmed with the box's recovery key (decision 4).
+About 250 production lines, 350 test lines.
+
+### Task 7: the page takes a key check and its own words
+
+**Files:** Modify `apps/server/src/start-clock-waiting.ts:27-41,92` (option `keyMatches?: (key: unknown) => Promise<boolean>`, default `matchesStagedNodeKey(stateDir, key)`; option `words`), `apps/server/src/i18n/start-clock-waiting.ts` (identity-change words, EN and ES); Test `start-clock-waiting.test.ts`.
+
+Words (EN): title "Opening this box's new fiscal installation"; why "This version of Waitron has a new software producer, so the box opens a new fiscal installation before it sells. It carries on by itself once it can check its time over the internet. Or enter this box's recovery key to confirm the time from this device." ES to match. A minute wait shows `wait-countdown.ts`'s countdown.
+
+- [ ] Steps: tests (a request without the key refused `promotion.break_glass_invalid`; with
+  `keyMatches` answering true → challenge/confirm work; the restore's existing cases unedited) → FAIL
+  → implement → `pnpm --filter @waitron/server exec vitest run src/start-clock-waiting.test.ts` → PASS → `git commit -s`.
+
+### Task 8: the start serves it and uses its confirmation
+
+**Files:** Modify `apps/server/src/boot.ts` (Task 5's loop), `fiscal-verifactu/src/identity-change.ts` and `packages/fiscal/src/backend.ts` (`clocks.confirmation?: () => KeptClockConfirmation | null`); Test `boot.producer-change.test.ts`, `identity-change.test.ts`.
+
+The loop serves `createStartClockWaiting({ keyMatches: <check against readRecoveryKeyVerifier(store.node)>, words: identity })` through `startTradingListener` as the peer waiting start does (`boot.ts:2334-2351`), closing it when the change is made. A confirmation becomes a confirmed device reading as `hosted-hour-recovery.ts:79-85` makes one; a refused try drops it (`dropConfirmation`).
+
+- [ ] Steps: tests (a confirmation from the box's own address is ignored; a device 31 seconds off is
+  refused and nothing is written; an agreeing confirmation with the key → opened and the start
+  trades; a minute wait answers its remaining milliseconds) → FAIL → implement → both files → PASS.
+  The page is opened and looked at in both themes and at phone width (CLAUDE.md §4) → `git commit -s`.
+
+## PR 4 — the upgrade writes the marker
+
+Result: the outcome. A950's driver writes the marker for a producer-changing release; the trial
+can read the time service. About 120 production lines, 250 test lines, plus documents.
+
+### Task 9: the host computes the marker and gives it to the trial
+
+**Files:** Modify `scripts/box/upgrades/host.mjs:246-307` (after the candidate ids, inspect `old.app`
+and `next.app` for `Config.Env` `WAITRON_PRODUCER_TAX_ID` and the `org.opencontainers.image.ref.name`
+label; decision 6's marker or `null`), `:758-803` (write it into the trial copy between capture and
+trial, chowned; mount a `clockStatusRelay` folder at `/run/waitron-box` read-only, as
+`candidate.mjs:72,81`), `:309-311` (save it as `identity-change.json` in the attempt directory);
+export `IDENTITY_CHANGE_FILE` beside `RETAINED_LOCK_PATHS`. Test `host.test.mjs`.
+
+- [ ] Steps: tests (a release with another producer → the trial's state holds the marker, owned by
+  the state folder's owner; same producer or a `main` candidate → no marker anywhere; the trial
+  carries the relay mount and still `--network none`; the host's file name equals
+  `state-layout.ts`'s, as `host.test.mjs:9` reads store constants) → FAIL → implement →
+  `pnpm exec vitest run scripts/box/upgrades/host.test.mjs` → PASS → `git commit -s`.
+
+### Task 10: the stopped checks and the live state get it; documents
+
+**Files:** Modify `scripts/box/upgrades/candidate.mjs:64-66` (copy the attempt's marker into
+`work/state`, chowned), `host.mjs:329-331` and `:398-409` (both `installCandidate`s write it into
+`paths[0]` with `writeFileDurable`, chowned). Tests `candidate.test.mjs`, `host.test.mjs`,
+`transaction.test.mjs`. Documents: CLAUDE.md §5 (the producer bullet, `:1026-1033`, becomes "A
+production start opens a new installation for another producer only when the upgrade's marker names
+it", naming this plan's guards; the restore/promotion bullet `:1034` gains the identity change);
+`recovery-page.ts:308-320` and its test (table above); `docs/backlog.md:238,242-246` and
+`docs/backlog/fiscal.md:1584-1624` (delete A993; the owner's constraint moves to `## Decisions and
+deliberate limits`, `:1086`); `docs/operations/release.md` (a short "Changing the producer" section:
+set the three secrets, set `WAITRON_PRODUCER_CHANGE_ALLOWED`, which stays the deliberate act at
+`.github/workflows/ci.yml:4695-4732`, and install as an upgrade).
+
+- [ ] Steps: tests (apply → the live state holds the marker after the copy and before the checks; a
+  failed check with Restore → the live state has no marker; Keep after a failed check → the marker
+  is written; the check copy holds it) → FAIL → implement → the three files and root
+  `scripts/claude-md-pointers.test.ts` → PASS; `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts` → PASS → `git commit -s`.
 
 ## Risks to which chain a record joins
 
 | Risk | Guard |
 | --- | --- |
-| A sale joins the old chain under the new producer | Task 8's refusal stays wherever the change is not made; `boot.producer-change.test.ts:175` unedited |
-| A stray setting or an old marker opens an installation | Production, a difference, and a marker naming this build, this producer and the live installation; proofs by deletion (1b, test 2) |
-| A route or another caller opens one | Private one-use token bound to node, old row and version; mode refused elsewhere (1a, tests 4–6) |
-| A name taken from a wrong clock or already reserved | A second clock within 30 seconds and a release floor always; unfinished reservations read (1a, tests 3, 7) |
-| A half-made change | One transaction through the unchanged activation; the marker outlives a crash and is deleted only once no difference is left |
-| A spare opens an installation | `acceptingSales` at start; prepare exits 0 on a mirror or fenced box |
-| The check misreads the old database | Fails closed (exit 4); the frozen-database test from go-live |
+| A sale joins the old chain under the new producer | `checkFilingIdentity` still runs after the step (`boot.ts:2595-2598`); `boot.producer-change.test.ts:171` unedited |
+| A stray setting or stale marker opens one | Production, a selling box, a marker naming this release, this producer and the head's; proofs by deletion (Task 3 case 2) |
+| Another caller opens one | Private one-use authority, refused for every other action (Task 2) |
+| A name from a wrong clock or already used | Time service or key-confirmed device within 30 s, release floor, history (Tasks 3, 8) |
+| A half-made change | One transaction through the unchanged activation; the marker outlives a crash (Task 5 case 4) |
+| The old release restored with a marker | Written after the stopped copy (Task 10) |
 | Two venues of one taxpayer take the same minute | A947's disclosed limit; one main box at a time |
 
-## Found no longer true in the design (October line numbers)
+## Not established
 
-- Activation actions are `setup`, `restore`, `promote`, `conflict-switch`; no `re-register`
-  (`allocation-envelope.ts:289`, `allocation.ts:169-171`). Admission uses the five-symbol minute form
-  (`:451`).
-- Activation writes are `allocation.ts:435-478`; `assertNotAhead` is `node-entry.ts:258`, called at
-  `:666`; the drain's grouping is `drain.ts:645`.
-- The producer check runs on every node neither fenced nor a mirror (`boot.ts:2101`), not behind
-  `singletonPass` (now `boot.ts:3726`).
-- The recovery-key verifier lives in `node.db` (`readRecoveryKeyVerifier`), not `packages/db`.
-- `waitron.sh install` has no separate stop or migrate step: it pulls, then `docker compose up`
-  recreates the container and the new server migrates as it starts (`waitron.sh:783-791`).
-- A page served instead of trading now exists (A1018's waiting start); A950 has an approved plan with
-  its own recovery service and rewrites the install path.
-- A1308 plans to rename `registro_sif` and remove `cadenas`, where the design adds columns.
-
-## Review answers
-
-- Finding 1 quotes the owner as "A993: keep as planned, after A1481"; the line under that heading
-  reads "**A1481 before A993** → A993", which is what Authority now quotes.
-- Finding 2 offered two fixes; the plan retries in-process, because A950 removes the Compose restart
-  policies (its "Copy/recovery"), so a fix relying on Docker's restarts would not last.
-- Finding 5 offered three fixes; the plan places the step inside A950's attempt, whose restore already
-  puts the old images and files back, rather than adding a second restore to today's script.
-- Finding 7, question 5: my first draft's "install by hand" escape is replaced, since A950's PR8 may run
-  readiness on manual installs; read from its plan, not checked against its code, which is not built.
+- Whether any boot-time watchdog stops a start that waits for many minutes in Task 5's loop (read
+  only `node-entry.ts:300-337`'s ordering notes, which say a hanging boot never throws).
+- A950's paired upgrades (a spare on the old release promoted after the main box changed) are not
+  built; such a promotion opens its chain under the old release's producer, which that release
+  declares. Read from the backlog, not checked against code.
