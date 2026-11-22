@@ -509,8 +509,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     printerLike?: true;
     /** The latest paired report's answer; absent when the agent could not tell. */
     pairedPrinterLike?: boolean;
-    /** The latest report of any kind; the entry is listed while it is fresh. */
+    /** Calendar time sent to the dashboard. */
     lastSeenAt: number;
+    /** Steady time of the latest report of any kind. */
+    reportedAt: number;
     /** Only a scan sets this, and only it authorizes Pair. */
     scannedAt?: number;
     /** Only a paired report sets this and qualifies the box for unpairing on Delete. */
@@ -518,16 +520,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     /** Only a visible report sets this: the agent can print to the device. */
     visibleAt?: number;
   }
-  const description = (entry: DiscoveredEntry | undefined) =>
+  const description = (entry: DiscoveredEntry | undefined, now: number) =>
     entry === undefined
       ? undefined
       : {
           ...Object.fromEntries(
             Object.entries(entry).filter(
-              ([key]) => !["lastSeenAt", "scannedAt", "pairedAt", "visibleAt"].includes(key),
+              ([key]) =>
+                !["lastSeenAt", "reportedAt", "scannedAt", "pairedAt", "visibleAt"].includes(key),
             ),
           ),
-          paired: entry.transport === "bluetooth" && isListed(entry.pairedAt, Date.now()),
+          paired: entry.transport === "bluetooth" && isListed(entry.pairedAt, now),
         };
   const discovered = new Map<string, DiscoveredEntry>();
   const agentBluetooth = new Map<
@@ -567,7 +570,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       ? report.value
       : null;
   };
-  const visibleNow = (now = Date.now()): Set<string> =>
+  const visibleNow = (now = steadyNow()): Set<string> =>
     new Set(
       [...discovered.values()]
         .filter((entry) => isFresh(entry.visibleAt, now))
@@ -586,7 +589,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     Math.max(0, Math.min(DISCOVERY_WINDOW_MS, Math.ceil(discoveryEnd - steadyNow())));
   /** The discovered list's own freshness, which also bounds the Pair and Forget it offers. */
   const isListed = (at: number | undefined, now: number): boolean =>
-    listedAt(at, now, now + discoveryLeftMs());
+    listedAt(at, now, discoveryEnd);
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
   const queueKeyOf = (device: DiscoveredDeviceWire): string | undefined => {
@@ -599,7 +602,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     agentId: string,
     address: string,
     stamp: "scannedAt" | "pairedAt",
-  ): boolean => isListed(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], Date.now());
+  ): boolean =>
+    isListed(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], steadyNow());
   // Host names and IPv6 literals compare without regard to case.
   const addressOf = (host: string, port: number | undefined): string =>
     `${host.toLowerCase()}:${port ?? 9100}`;
@@ -612,7 +616,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const officeAddresses = (now: number): Set<string> => {
     const marked = new Set<string>();
     for (const e of discovered.values()) {
-      if (e.host === undefined || !isListed(e.lastSeenAt, now)) continue;
+      if (e.host === undefined || !isListed(e.reportedAt, now)) continue;
       if (e.pagePrinter || e.ippOnly || e.office !== undefined)
         marked.add(addressOf(e.host, e.port));
       if (e.office !== undefined) marked.add(addressOf(e.host, e.office.port));
@@ -884,7 +888,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         pairedBluetooth.map((entry) => entry.localKey),
       );
 
-      const now = Date.now();
+      const now = steadyNow();
+      const lastSeenAt = Date.now();
       // A successful unpair clears the earlier pairing report. A report in this pull is newer.
       for (const address of unpaired) {
         const key = keyOf(agentId, "bluetooth", address);
@@ -897,7 +902,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const descriptionsBefore = new Map<string, ReturnType<typeof description>>();
       const rememberDescription = (key: string): void => {
         if (!descriptionsBefore.has(key))
-          descriptionsBefore.set(key, description(discovered.get(key)));
+          descriptionsBefore.set(key, description(discovered.get(key), now));
       };
       const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
@@ -912,7 +917,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           ...(describedThisPull.has(key) && prior?.office?.printable && !d.office?.printable
             ? { office: prior.office, pagePrinter: prior.pagePrinter }
             : {}),
-          lastSeenAt: now,
+          lastSeenAt,
+          reportedAt: now,
           scannedAt: prior?.scannedAt,
           pairedAt: prior?.pairedAt,
           pairedPrinterLike: prior?.pairedPrinterLike,
@@ -944,7 +950,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);
         rememberDescription(key);
-        const stamps = { lastSeenAt: now, pairedAt: now, pairedPrinterLike };
+        const stamps = { lastSeenAt, reportedAt: now, pairedAt: now, pairedPrinterLike };
         discovered.set(
           key,
           prior === undefined
@@ -955,7 +961,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (
         deps.bus &&
         [...descriptionsBefore].some(
-          ([key, before]) => !isDeepStrictEqual(before, description(discovered.get(key))),
+          ([key, before]) => !isDeepStrictEqual(before, description(discovered.get(key), now)),
         )
       )
         publishState(deps.bus, "printer_discovery", log);
@@ -1078,7 +1084,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printAgents.enrolledAt)),
       );
       const address = deps.listIpv4?.()[0];
-      const now = Date.now();
+      const now = steadyNow();
       return c.json(
         rows.map(({ setupPort, ...row }) => {
           const onThisBox = row.nodeId !== null && row.nodeId === deps.cfg.nodeId;
@@ -1211,8 +1217,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/discovered-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const now = Date.now();
-      for (const [k, e] of discovered) if (!isListed(e.lastSeenAt, now)) discovered.delete(k);
+      const now = steadyNow();
+      for (const [k, e] of discovered) if (!isListed(e.reportedAt, now)) discovered.delete(k);
       const { registered, agents } = await gated(sessionId, async (tx) => ({
         registered: await tx
           .select({
@@ -1333,10 +1339,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (e.office.port !== queue.port || e.office.resourcePath !== queue.resourcePath) continue;
       if (
         found === undefined ||
-        e.lastSeenAt > found.lastSeenAt ||
-        (e.lastSeenAt === found.lastSeenAt && e.office.printable)
+        e.reportedAt > found.reportedAt ||
+        (e.reportedAt === found.reportedAt && e.office.printable)
       ) {
-        found = { agentId: e.agentId, host: e.host, office: e.office, lastSeenAt: e.lastSeenAt };
+        found = { agentId: e.agentId, host: e.host, office: e.office, reportedAt: e.reportedAt };
       }
     }
     return found;
@@ -1346,10 +1352,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     {
       db: deps.db,
       findDiscovery: findPagePrinterDiscovery,
-      discoveryWindow: () => {
-        const now = Date.now();
-        return { now, discoveryUntil: now + discoveryLeftMs() };
-      },
+      discoveryWindow: () => ({ now: steadyNow(), discoveryEnd }),
       testPages,
       wakeAgent: wakePulls,
       ...(deps.now === undefined ? {} : { now: deps.now }),
@@ -1404,7 +1407,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         if (
           input.transport === "network_tcp" &&
           input.host !== undefined &&
-          officeAddresses(Date.now()).has(addressOf(input.host, input.port))
+          officeAddresses(steadyNow()).has(addressOf(input.host, input.port))
         ) {
           throw new AppError("printer.office_printer", {});
         }

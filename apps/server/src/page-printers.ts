@@ -20,14 +20,14 @@ export interface PagePrinterDiscovery {
   agentId: string;
   host: string;
   office?: OfficePrinterReport;
-  /** Epoch ms of the agent's latest report of the device. */
-  lastSeenAt: number;
+  /** Steady time of the agent's latest report of the device. */
+  reportedAt: number;
 }
 
-/** When the caller asks, and until when (epoch ms, 0 when closed) a discovery window is open. */
+/** The current steady time and the discovery window's steady deadline. */
 export interface DiscoveryWindow {
   now: number;
-  discoveryUntil: number;
+  discoveryEnd: number;
 }
 
 export const pagePrinterColumns = {
@@ -68,7 +68,7 @@ export async function registerPagePrinter(
   window: DiscoveryWindow,
 ): Promise<{ id: string; outcome: "created" | "enabled" | "repointed" }> {
   const { entry } = input;
-  if (entry === undefined || !isListed(entry.lastSeenAt, window.now, window.discoveryUntil)) {
+  if (entry === undefined || !isListed(entry.reportedAt, window.now, window.discoveryEnd)) {
     throw new AppError("page_printer.not_found", {});
   }
   // Revoking an agent leaves its discovery entries listed until they age out.

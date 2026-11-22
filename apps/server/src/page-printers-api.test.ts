@@ -342,30 +342,30 @@ describe("page-printer management routes", () => {
   it("refuses an entry just past the discovered list's bound, and serves one at it", async () => {
     const app = mountApp();
     const agent = await joinAgent(app, "Office agent");
-    const reportedAt = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    const reportedAt = Math.floor(performance.now());
+    const elapsed = vi.spyOn(performance, "now").mockReturnValue(reportedAt);
     await scan(app, agent.token, [officeEntry("10.61.4.1")]);
 
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
+    elapsed.mockReturnValue(reportedAt + 15_001);
     const stale = await register(app, target(agent.agentId, "10.61.4.1"));
     expect(stale.status).toBe(404);
     expect(await stale.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
 
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
+    elapsed.mockReturnValue(reportedAt + 15_000);
     expect((await registered(app, target(agent.agentId, "10.61.4.1"))).outcome).toBe("created");
   });
 
   it("keeps an entry listed for the longer bound while a discovery window is open", async () => {
     const app = mountApp();
     const agent = await joinAgent(app, "Office agent");
+    const reportedAt = Math.floor(performance.now());
+    const elapsed = vi.spyOn(performance, "now").mockReturnValue(reportedAt);
     const start = await send(app, "POST", "/management-api/printer-discovery/start", {
       cookie: managerCookie,
     });
     expect(start.status).toBe(200);
-    const reportedAt = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
     await scan(app, agent.token, [officeEntry("10.61.4.2")]);
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 30_000);
+    elapsed.mockReturnValue(reportedAt + 30_000);
     expect((await registered(app, target(agent.agentId, "10.61.4.2"))).outcome).toBe("created");
   });
 
@@ -395,10 +395,10 @@ describe("page-printer management routes", () => {
   it("takes the agent's latest report for a queue over an older printable one", async () => {
     const app = mountApp();
     const agent = await joinAgent(app, "Office agent");
-    const first = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(first);
+    const first = Math.floor(performance.now());
+    const elapsed = vi.spyOn(performance, "now").mockReturnValue(first);
     await scan(app, agent.token, [officeEntry("10.61.5.3")]);
-    vi.spyOn(Date, "now").mockReturnValue(first + 1_000);
+    elapsed.mockReturnValue(first + 1_000);
     await scan(app, agent.token, [{ ...officeEntry("10.61.5.3", UNANSWERED), port: 631 }]);
     const res = await register(app, target(agent.agentId, "10.61.5.3"));
     expect(res.status).toBe(409);
@@ -494,10 +494,10 @@ describe("page-printer management routes", () => {
     const app = mountApp();
     const { id, host, agentId } = await onePrinter(app, "10.61.8.2");
     const second = await joinAgent(app, "Second agent");
-    const reportedAt = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    const reportedAt = Math.floor(performance.now());
+    const elapsed = vi.spyOn(performance, "now").mockReturnValue(reportedAt);
     await scan(app, second.token, [officeEntry(host)]);
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
+    elapsed.mockReturnValue(reportedAt + 15_001);
 
     const res = await register(app, target(second.agentId, host));
     expect(res.status).toBe(404);

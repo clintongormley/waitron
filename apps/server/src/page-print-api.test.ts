@@ -1006,7 +1006,7 @@ describe("fetching a page job's document", () => {
           entry: {
             agentId: v.agentTwo,
             host: "192.0.2.90",
-            lastSeenAt: T0,
+            reportedAt: T0,
             office: {
               port: 631,
               resourcePath: "/ipp/print",
@@ -1018,7 +1018,7 @@ describe("fetching a page job's document", () => {
             },
           },
         },
-        { now: T0 + 1_000, discoveryUntil: 0 },
+        { now: T0 + 1_000, discoveryEnd: 0 },
       ),
     );
     expect(repointed).toEqual({ id: office, outcome: "repointed" });

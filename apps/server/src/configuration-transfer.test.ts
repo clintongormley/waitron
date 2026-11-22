@@ -796,7 +796,7 @@ describe("configuration transfer database path", () => {
           entry: {
             agentId: localAgent!.id,
             host: "192.0.2.20",
-            lastSeenAt: now,
+            reportedAt: now,
             office: {
               port: 8631,
               resourcePath: "/ipp/printer",
@@ -808,7 +808,7 @@ describe("configuration transfer database path", () => {
             },
           },
         },
-        { now, discoveryUntil: 0 },
+        { now, discoveryEnd: 0 },
       ),
     );
     expect(restored).toEqual({ id: imported!.id, outcome: "enabled" });

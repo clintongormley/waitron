@@ -47,7 +47,7 @@ import {
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const NOW = Date.parse("2026-10-12T10:00:00.000Z");
-const closed = { now: NOW, discoveryUntil: 0 };
+const closed = { now: NOW, discoveryEnd: 0 };
 const clock: TrustedClock = {
   now: () => ({
     instant: new Date("2026-10-12T09:00:00.000Z"),
@@ -104,7 +104,7 @@ async function agent(name: string): Promise<string> {
 }
 
 function entry(agentId: string, extra: Partial<PagePrinterDiscovery> = {}): PagePrinterDiscovery {
-  return { agentId, host: "192.0.2.40", office: pdfReport, lastSeenAt: NOW - 1_000, ...extra };
+  return { agentId, host: "192.0.2.40", office: pdfReport, reportedAt: NOW - 1_000, ...extra };
 }
 
 function register(discovery: PagePrinterDiscovery | undefined, window = closed) {
@@ -234,23 +234,23 @@ describe("registering a page printer from discovery", () => {
     await expect(register(undefined)).rejects.toMatchObject({
       code: "page_printer.not_found",
     });
-    await expect(register(entry(v.agentOne, { lastSeenAt: NOW - 15_001 }))).rejects.toMatchObject({
+    await expect(register(entry(v.agentOne, { reportedAt: NOW - 15_001 }))).rejects.toMatchObject({
       code: "page_printer.not_found",
     });
     // While a discovery window is open the list keeps an entry for 45 s, so registration does too.
-    const open = { now: NOW, discoveryUntil: NOW + 60_000 };
+    const open = { now: NOW, discoveryEnd: NOW + 60_000 };
     await expect(
-      register(entry(v.agentOne, { lastSeenAt: NOW - 45_001 }), open),
+      register(entry(v.agentOne, { reportedAt: NOW - 45_001 }), open),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     expect(await printerRows()).toEqual([]);
   });
 
   it("accepts an entry exactly at the discovered list's bound, with and without a window open", async () => {
     const v = await venue();
-    const first = await register(entry(v.agentOne, { lastSeenAt: NOW - 15_000 }));
+    const first = await register(entry(v.agentOne, { reportedAt: NOW - 15_000 }));
     const second = await register(
-      entry(v.agentOne, { host: "192.0.2.41", lastSeenAt: NOW - 45_000 }),
-      { now: NOW, discoveryUntil: NOW + 60_000 },
+      entry(v.agentOne, { host: "192.0.2.41", reportedAt: NOW - 45_000 }),
+      { now: NOW, discoveryEnd: NOW + 60_000 },
     );
     expect((await printerRows()).map((row) => row.id).sort()).toEqual([first.id, second.id].sort());
   });
@@ -314,7 +314,7 @@ describe("registering a page printer from discovery", () => {
     await register(entry(v.agentOne));
     const before = await printerRows();
     await expect(
-      register(entry(v.agentTwo, { office: urfReport, lastSeenAt: NOW - 15_001 })),
+      register(entry(v.agentTwo, { office: urfReport, reportedAt: NOW - 15_001 })),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     await expect(register(undefined)).rejects.toMatchObject({
       code: "page_printer.not_found",

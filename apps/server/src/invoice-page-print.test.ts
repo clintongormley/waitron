@@ -751,7 +751,7 @@ describe("reporting an A4 delivery", () => {
           entry: {
             agentId: v.agentTwo,
             host: "192.0.2.40",
-            lastSeenAt: T0,
+            reportedAt: T0,
             office: {
               port: 631,
               resourcePath: "/ipp/print",
@@ -763,7 +763,7 @@ describe("reporting an A4 delivery", () => {
             },
           },
         },
-        { now: T0 + 1_000, discoveryUntil: 0 },
+        { now: T0 + 1_000, discoveryEnd: 0 },
       ),
     );
     expect(repointed).toEqual({ id: office, outcome: "repointed" });
