@@ -28,8 +28,6 @@ export class TillReaderPicker extends LitElement {
       .option {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
       }
 
       .empty {
