@@ -95,14 +95,14 @@ describe("the restore's waiting app: pages", () => {
       const body = await res.text();
       expect(body).toContain(`<html lang="en-GB">`);
       expect(body).toContain(
-        "<h1>The server is restoring your backup and is waiting to confirm its time.</h1>",
+        "<h1>The box is restoring your backup and is waiting to confirm its time.</h1>",
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's server key below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's box key below to confirm the time from this device.",
         ),
       );
-      expect(body).toContain(escapeHtml("Selected backup’s server key"));
+      expect(body).toContain(escapeHtml("Selected backup’s box key"));
       expect(body).toMatch(/<input [^>]*type="password"[^>]*name="node-recovery-key"/);
     },
   );

@@ -113,7 +113,7 @@ it.each(["en", "es"] as const)(
       const pdf = await task.promise;
       const text = (await pageTexts(pdf)).join(" ");
       expect(text).toContain(PACK_WORDS[locale].title);
-      expect(text).toContain(locale === "en" ? "Server key" : "Clave del servidor");
+      expect(text).toContain(locale === "en" ? "Box key" : "Clave del servidor");
       expect(text).toContain("Olivo Restauración SL");
       expect(text).toContain("Olivo Centro");
       expect(text).toContain("89890001K");

@@ -80,42 +80,42 @@ export const START_AGAIN_PAGE_WORDS: Readonly<Record<SupportedLocale, StartAgain
     filesFound: "Archivos encontrados:",
     more: (n) => `y ${n} más`,
     password: "Contraseña de administrador",
-    choiceLegend: "¿Qué debe hacer el equipo? *",
+    choiceLegend: "¿Qué debe hacer el servidor? *",
     keepTitle: "Conservarlo todo y parar.",
     keepDetail:
-      "No se mueve nada. Esta página sigue hasta que se reinstale Waitron en este equipo.",
+      "No se mueve nada. Esta página sigue hasta que se reinstale Waitron en este servidor.",
     moveTitle: "Apartar estos archivos y terminar «Empezar de nuevo».",
     moveDetail:
-      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del servidor, y se quita el resto de la configuración interrumpida. Después el servidor empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
     moveUnsent:
-      "Si estos archivos son un local que ha vendido, los registros de facturas que aún no había enviado a la AEAT se quedan sin enviar: el equipo no envía nada desde archivos apartados.",
+      "Si estos archivos son un local que ha vendido, los registros de facturas que aún no había enviado a la AEAT se quedan sin enviar: el servidor no envía nada desde archivos apartados.",
     continue: "Continuar",
-    insecureForm: "Abre esta página con la conexión segura del equipo para elegir.",
+    insecureForm: "Abre esta página con la conexión segura del servidor para elegir.",
     passwordMissing: "Introduce la contraseña de administrador.",
     choiceMissing: "Elige una de las dos opciones.",
     fixFields: "Revisa los campos marcados arriba. No se ha cambiado nada.",
     wrongPassword:
       "No es la contraseña de administrador de la configuración interrumpida. No se ha cambiado nada. Revísala y vuelve a intentarlo: es la contraseña que se eligió al empezar esta configuración.",
     forgotten:
-      "Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
+      "Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
     throttled: (n) =>
       `Demasiadas contraseñas incorrectas. Vuelve a intentarlo dentro de ${n === 1 ? "1 minuto" : `${n} minutos`}. No se ha cambiado nada.`,
     filesChanged:
-      "Los archivos del equipo han cambiado desde que se abrió esta página. No se ha cambiado nada. Pulsa «Reintentar un arranque normal» para verlos como están ahora.",
+      "Los archivos del servidor han cambiado desde que se abrió esta página. No se ha cambiado nada. Pulsa «Reintentar un arranque normal» para verlos como están ahora.",
     notOffered:
       "Esta opción ya no está disponible. No se ha cambiado nada. Pulsa «Reintentar un arranque normal» para ver la página actual.",
     insecure:
-      "Abre esta página con la conexión segura del equipo para elegir. No se ha cambiado nada.",
+      "Abre esta página con la conexión segura del servidor para elegir. No se ha cambiado nada.",
     otherPage: "Esta elección debe enviarse desde esta página. No se ha cambiado nada.",
-    busy: "Otro programa de Waitron está usando los archivos del equipo. No se ha cambiado nada. Espera un momento y vuelve a pulsar «Continuar».",
+    busy: "Otro programa de Waitron está usando los archivos del servidor. No se ha cambiado nada. Espera un momento y vuelve a pulsar «Continuar».",
     diskFull:
-      "El disco del equipo está lleno, así que no se ha podido guardar la elección. No se ha movido nada. Pulsa «Reintentar un arranque normal»: al arrancar, el equipo libera espacio descartando sus propias copias temporales, registros antiguos e informes de fallos. Después vuelve a elegir. Si no basta, la elección no se puede guardar en este equipo; si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
+      "El disco del servidor está lleno, así que no se ha podido guardar la elección. No se ha movido nada. Pulsa «Reintentar un arranque normal»: al arrancar, el servidor libera espacio descartando sus propias copias temporales, registros antiguos e informes de fallos. Después vuelve a elegir. Si no basta, la elección no se puede guardar en este servidor; si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.",
     moveUnavailable:
-      "Estos archivos no se pueden apartar en este equipo: el sistema trata la carpeta donde están y la carpeta del equipo para archivos apartados como discos distintos, y «Empezar de nuevo» nunca copia estos archivos. No se ha cambiado nada. Puedes elegir «Conservarlo todo y parar».",
+      "Estos archivos no se pueden apartar en este servidor: el sistema trata la carpeta donde están y la carpeta del servidor para archivos apartados como discos distintos, y «Empezar de nuevo» nunca copia estos archivos. No se ha cambiado nada. Puedes elegir «Conservarlo todo y parar».",
     notSaved:
-      "El equipo no ha podido guardar la elección. No se ha movido nada. Pulsa «Continuar» para volver a intentarlo.",
+      "El servidor no ha podido guardar la elección. No se ha movido nada. Pulsa «Continuar» para volver a intentarlo.",
     notFinished:
-      "«Empezar de nuevo» no ha podido terminar. Los archivos que encontró no han cambiado. Pulsa «Reintentar un arranque normal»: el equipo continúa al arrancar.",
+      "«Empezar de nuevo» no ha podido terminar. Los archivos que encontró no han cambiado. Pulsa «Reintentar un arranque normal»: el servidor continúa al arrancar.",
     moved: (folder) =>
       `«Empezar de nuevo» ha terminado. Los archivos están en ${folder}. Waitron se está reiniciando en una configuración inicial nueva; recarga esta página dentro de un minuto.`,
   },

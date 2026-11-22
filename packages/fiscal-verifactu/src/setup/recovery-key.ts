@@ -15,7 +15,7 @@ interface Draft {
   file?: File;
 }
 const empty = (): Draft => ({ value: "" });
-function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
+export function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
   const held = error.heldBy;
   if (held) {
     const day = new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
@@ -23,7 +23,7 @@ function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
       dateStyle: "long",
     }).format(new Date(`${held.madeOn}T00:00:00.000Z`));
     const where = en
-      ? `This recovery pack does not hold the server key. It is on recovery pack ${held.number}, made on ${day}: choose that pack, or type the key from it.`
+      ? `This recovery pack does not hold the box key. It is on recovery pack ${held.number}, made on ${day}: choose that pack, or type the key from it.`
       : `Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación ${held.number}, hecho el ${day}: elige ese paquete o introduce su clave.`;
     if (held.received) return where;
     return en
@@ -32,10 +32,10 @@ function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
   }
   if (error.serverKeyName !== null)
     return en
-      ? `This recovery pack does not hold the server key: choose the pack or sheet whose key name is ${error.serverKeyName}.`
+      ? `This recovery pack does not hold the box key: choose the pack or sheet whose key name is ${error.serverKeyName}.`
       : `Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja cuyo nombre de clave es ${error.serverKeyName}.`;
   return en
-    ? "This recovery pack does not hold the server key: choose the pack or sheet that holds it, or type the key from it."
+    ? "This recovery pack does not hold the box key: choose the pack or sheet that holds it, or type the key from it."
     : "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.";
 }
 @customElement("vf-recovery-key")
@@ -250,7 +250,7 @@ export class RecoveryKeyEntry extends LitElement {
         type="password"
         autocomplete="off"
         ?required=${!this.loaded}
-        label=${en ? "Server key" : "Clave del servidor"}
+        label=${en ? "Box key" : "Clave del servidor"}
         placeholder="XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX X"
         .value=${this.draft.value}
         .error=${error}

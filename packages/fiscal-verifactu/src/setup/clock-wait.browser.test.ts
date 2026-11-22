@@ -438,7 +438,7 @@ describe("the two times the clock step shows", () => {
   it("names the server's time and this device's, each one time to the minute", () => {
     const target = draw([reading("box", at), reading("browser", at + 5 * 60_000)]);
     expect(rows(target)).toEqual([
-      ["Server time", "18 October 2026 at 14:30"],
+      ["Box time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:35"],
     ]);
     expect(text(target)).not.toContain(" – ");
@@ -451,7 +451,7 @@ describe("the two times the clock step shows", () => {
       reading("browser", minuteStart + 45_000),
     ]);
     expect(rows(target)).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:45"],
     ]);
   });
@@ -474,14 +474,14 @@ describe("the two times the clock step shows", () => {
       reading("internet", minuteStart + 125_000),
     ]);
     expect(rows(target)).toEqual([
-      ["Server time", "18 October 2026 at 14:30"],
+      ["Box time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:32"],
     ]);
   });
 
   it("a server with no reading of its own says so", () => {
     expect(rows(draw([reading("browser", at)]))).toEqual([
-      ["Server time", "Unavailable"],
+      ["Box time", "Unavailable"],
       ["This device", "18 October 2026 at 14:30"],
     ]);
   });
@@ -500,7 +500,7 @@ describe("the question when the clocks differ", () => {
     secondClockEnds: "",
   };
   const QUESTION =
-    "It is very important that the server time is set correctly. Which time is correct:";
+    "It is very important that the box's time is set correctly. Which time is correct:";
   const differing = {
     usable: [
       {
@@ -537,7 +537,7 @@ describe("the question when the clocks differ", () => {
         text(row.querySelector("dd")),
       ]),
     ).toEqual([
-      ["Server time", "18 October 2026 at 14:30"],
+      ["Box time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:35"],
     ]);
     expect(text(target)).not.toContain("No invoice series is created");
@@ -558,7 +558,7 @@ describe("the question when the clocks differ", () => {
           text(b),
         ]),
       ).toEqual([
-        ["server-correct", "The server"],
+        ["server-correct", "The box"],
         ["both-wrong", "Both times are wrong"],
       ]);
       target.querySelector<HTMLElement>(`[data-test=${choice}]`)!.click();
@@ -566,7 +566,7 @@ describe("the question when the clocks differ", () => {
       expect(text(target)).not.toContain(QUESTION);
       expect(target.querySelector("wt-button")).toBeNull();
       expect(text(target.querySelector("[data-test=correct-device]"))).toBe(
-        "Please correct the time on this device and then reconnect to the server.",
+        "Please correct the time on this device and then reconnect to the box.",
       );
       wait.show({ kind: "disagreement" });
       render(wait.renderProblem(choiceWords, undefined, "en", "Europe/Madrid"), target);
@@ -659,7 +659,7 @@ describe("This device sets the server's clock", () => {
     const setClock = vi.fn();
     const target = draw(disagreeing(), setClock);
     expect(buttons(target)).toEqual([
-      ["server-correct", "The server"],
+      ["server-correct", "The box"],
       ["device-correct", "This device"],
       ["both-wrong", "Both times are wrong"],
     ]);
@@ -701,7 +701,7 @@ describe("This device sets the server's clock", () => {
     expect(set.browser.instantMs).toBeLessThanOrEqual(Date.now());
     expect(sent).toHaveLength(2);
     expect(text(draw(wait).querySelector("[data-test=device-clock]"))).toBe(
-      "The server's time is now set from this device.",
+      "The box's time is now set from this device.",
     );
     expect(
       text(draw(wait, undefined, differing, "es").querySelector("[data-test=device-clock]")),
@@ -713,7 +713,7 @@ describe("This device sets the server's clock", () => {
     await wait.setFromDevice(box({ status: "set" }).send);
     wait.show(undefined, { status: "waiting", targetMs: at, remainingMs: 30_000 });
     expect(text(draw(wait).querySelector("[data-test=device-clock]"))).toBe(
-      "The server's time is now set from this device.",
+      "The box's time is now set from this device.",
     );
     wait.show();
     expect(draw(wait).querySelector("[data-test=device-clock]")).toBeNull();
@@ -728,11 +728,11 @@ describe("This device sets the server's clock", () => {
   });
 
   const INTERNET = [
-    "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+    "The box keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the box.",
     "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
   ];
   const OTHER = [
-    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
     "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
   ];
   it.each([
@@ -740,12 +740,12 @@ describe("This device sets the server's clock", () => {
     ["not_stopped", ...INTERNET],
     [
       "same_machine",
-      "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+      "This screen is on the box itself, so it cannot set the box's time. Open this page on a phone or computer.",
       "Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador.",
     ],
     [
       "later",
-      "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
       "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
     ],
     ...[
@@ -806,7 +806,7 @@ describe("This device sets the server's clock", () => {
     await wait.setFromDevice(box({ status: "set" }).send);
     wait.show({ kind: "later" });
     expect(text(draw(wait).querySelector("[data-test=minute-not-later]"))).toBe(
-      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
     );
     wait.show();
     wait.show({ kind: "later" });
@@ -887,7 +887,7 @@ describe("Confirm the time", () => {
     const target = draw(wait, agreeing, { press, busy: false });
     const section = target.querySelector("[data-test=clock-confirm]")!;
     expect(text(section.querySelector("[role=status]"))).toBe(
-      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+      "The box could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
     );
     expect(
       [...section.querySelectorAll("[data-test=clock-times] > div")].map((row) => [
@@ -895,7 +895,7 @@ describe("Confirm the time", () => {
         text(row.querySelector("dd")),
       ]),
     ).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:05"],
     ]);
     expect(text(section.querySelector("[data-test=confirm-time]"))).toBe("Confirm the time");

@@ -1687,7 +1687,7 @@ The owner's words (2026-11-22): “we've been using server or box interchangably
 change all references to use "box"”, then “box in english, servidor in spanish, not equipo”. The
 dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page".
 
-Three guards read named string tables; each is weaker than its name.
+Five guards read named string tables, and one of them two rendered pages; each is weaker than its name.
 
 - `apps/till/src/i18n/box-word.test.ts` reads English only: `en` in the till's `strings.ts`,
   `helpEn` in `help-strings.ts`, and every `en` string nested in `CODE_TABLES` in `codes.ts`. It
@@ -1709,10 +1709,31 @@ Three guards read named string tables; each is weaker than its name.
   hyphenated), "the Servers page" and the `{server}` placeholder; in Spanish it refuses every
   "equipo" or "equipos".
 
-None of them reads the user guides, setup, the pages `apps/server` renders itself (the recovery,
-waiting and restricted pages among them), the print agent's setup page, emails, the recovery pack,
-another module's dashboard strings (`packages/*/src/dashboard/strings.ts` other than
-fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
+- `apps/server/src/i18n/box-word.test.ts` reads English and Spanish: every export of every file in
+  `apps/server/src/i18n/` except `declaration-page.ts` (the released declaration, a legal text whose
+  versions never change), walking nested objects and arrays and calling each function export once
+  with placeholder arguments (a function that throws on them is skipped unread, and only the branch
+  those arguments reach is read); `holderStalledText` for each holder kind; `CONNECTION_TEXT` and
+  `CONNECTION_DEVICE_ES` in `connection-bootstrap-strings.ts`; and the visible text of the trust
+  page (`renderTrustPage`, eight combinations of its inputs) and of the setup placeholder page in
+  `setup-api.ts`. A value shaped like an error code is skipped. In English it allows "mail
+  server", "SMTP server" and "time server" (singular or plural, spaced or hyphenated), "the Servers
+  page", and an entry whose whole value is "Servers" (the guide frame's link name); in Spanish it
+  allows "todo el equipo" (a Windows computer a certificate is installed on). It does not read the
+  page builders' other inline words (`waiting-page.ts`, `restricted-page.ts`,
+  `start-clock-waiting.ts` and the recovery page draw theirs from the tables), the guide pages'
+  bodies, log lines or command-line output such as `restore-command.ts`'s.
+- `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts` reads English and Spanish:
+  `serverKeyPageWords` (the recovery pack's box key page), `checkVenueStrings`, `clockWaitStrings`,
+  `firstHourStrings`, `recoveryHourStrings`, `promotionWords`, `fiscalSetupStrings`, and the
+  sentences `keyElsewhere` builds in four cases. In English it allows "time server"; in Spanish it
+  refuses every "equipo". It does not read words written inside a component (the recovery-key
+  field's label among them), the series register PDF's or the emergency record's inline
+  sentences, or the offline custody tool.
+
+None of them reads the user guides, setup's own screens, the recovery pack's other pages, the print
+agent's setup page, emails other than those in `apps/server/src/i18n/`, another module's dashboard
+strings (`packages/*/src/dashboard/strings.ts` other than fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
 component or a message function, such as the sentences `codes.ts`'s `codeMessage` builds inline.
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons

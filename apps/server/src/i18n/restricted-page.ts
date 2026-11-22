@@ -28,13 +28,13 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
     failed: "This page could not be shown.",
   },
   "es-ES": {
-    title: "El local ya no funciona con este equipo",
+    title: "El local ya no funciona con este servidor",
     body: [
-      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es ",
+      "No hace ventas ni envía nada a Hacienda. El servidor que pasa a llevar el local es ",
       ".",
     ],
     progress: "Progreso",
-    openSuccessor: "Abrir el equipo que lleva el local",
+    openSuccessor: "Abrir el servidor que lleva el local",
     failed: "No se ha podido mostrar esta página.",
   },
 };
@@ -58,7 +58,7 @@ export const STANDING_DOWN_PAGE_WORDS: Readonly<
 /** The successor's role, after its address, where this box knows it is the main box. */
 export const RESTRICTED_MAIN_BOX_WORDS: Readonly<Record<SupportedLocale, string>> = {
   "en-GB": "main box",
-  "es-ES": "equipo principal",
+  "es-ES": "servidor principal",
 };
 
 /**
@@ -81,7 +81,7 @@ export const RESTRICTED_STEP_WORDS: Readonly<
   },
   source_superseded: {
     "en-GB": "Another box took over the venue",
-    "es-ES": "Otro equipo ha pasado a llevar el local",
+    "es-ES": "Otro servidor ha pasado a llevar el local",
   },
   copy_accepted: {
     "en-GB": "Copy of the venue accepted",
@@ -119,7 +119,7 @@ export const RESTRICTED_STEP_WORDS: Readonly<
   },
   return_confirmed: {
     "en-GB": "Invoice records confirmed by the main box",
-    "es-ES": "Registros de facturación confirmados por el equipo principal",
+    "es-ES": "Registros de facturación confirmados por el servidor principal",
   },
 };
 
@@ -144,18 +144,18 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
   },
   "es-ES": {
     waiting:
-      "Este equipo está esperando para devolver sus registros de facturación al equipo principal. Conserva sus datos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+      "Este servidor está esperando para devolver sus registros de facturación al servidor principal. Conserva sus datos. No restablezcas este servidor. Actualiza esta página para comprobar el estado.",
     sending:
-      "Este equipo está devolviendo sus registros de facturación al equipo principal. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+      "Este servidor está devolviendo sus registros de facturación al servidor principal. No restablezcas este servidor. Actualiza esta página para comprobar el estado.",
     "needs-attention":
-      "No se ha podido confirmar la devolución. Mantén este equipo encendido y conserva sus datos mientras vuelve a intentarlo. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+      "No se ha podido confirmar la devolución. Mantén este servidor encendido y conserva sus datos mientras vuelve a intentarlo. No restablezcas este servidor. Actualiza esta página para comprobar el estado.",
     clock:
-      "El equipo principal no puede aceptar registros de facturación adelantados respecto a su reloj. Mantén ambos equipos encendidos mientras se vuelve a intentar la devolución. Comprueba los relojes de ambos equipos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+      "El servidor principal no puede aceptar registros de facturación adelantados respecto a su reloj. Mantén ambos servidores encendidos mientras se vuelve a intentar la devolución. Comprueba los relojes de ambos servidores. No restablezcas este servidor. Actualiza esta página para comprobar el estado.",
     clash:
-      "El equipo principal ha encontrado diferencias en los datos devueltos. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. Algunas diferencias de pago pueden ser aceptadas expresamente mediante la API interna del principal; las demás diferencias no se pueden aceptar allí. Después de aceptar una diferencia de pago, apaga y enciende este equipo para reintentarlo. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
+      "El servidor principal ha encontrado diferencias en los datos devueltos. La devolución se ha detenido. Mantén ambos servidores encendidos y conserva sus datos. Algunas diferencias de pago pueden ser aceptadas expresamente mediante la API interna del principal; las demás diferencias no se pueden aceptar allí. Después de aceptar una diferencia de pago, apaga y enciende este servidor para reintentarlo. Restablecer este servidor borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
     "record-clash":
-      "La devolución se ha detenido porque un registro de facturación entra en conflicto con uno del equipo principal. Los datos de este equipo se han dejado como estaban. Sigue usando el equipo principal y conserva los datos de este equipo si aún los necesitas. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
+      "La devolución se ha detenido porque un registro de facturación entra en conflicto con uno del servidor principal. Los datos de este servidor se han dejado como estaban. Sigue usando el servidor principal y conserva los datos de este servidor si aún los necesitas. Restablecer este servidor borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
     confirmed:
-      "El principal ha dado por resuelta esta devolución. Para las diferencias aceptadas, ha conservado sus propios datos de pago. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen en esta devolución.",
+      "El principal ha dado por resuelta esta devolución. Para las diferencias aceptadas, ha conservado sus propios datos de pago. Restablecer este servidor borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen en esta devolución.",
   },
 };

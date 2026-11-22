@@ -106,7 +106,7 @@ export function renderTrustPage(input: TrustPageInput): string {
     ? ownAddress + input.httpsUrl.slice(new URL(input.httpsUrl).origin.length)
     : input.httpsUrl;
   const lead = ownAddress
-    ? `<p>Adding a spare? You don't need this server's certificate: open this address (<a href="${escapeHtml(httpsUrl)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
+    ? `<p>Adding a spare? You don't need this box's certificate: open this address (<a href="${escapeHtml(httpsUrl)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
     : "";
   const urlItems = reachUrls
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
@@ -124,14 +124,14 @@ export function renderTrustPage(input: TrustPageInput): string {
        or the file never reaches the disk.</p></section>
        ${installSection(device)}`
     : `<section><h2>1. Get the certificate</h2>
-       <p>This server has no certificate to download. Check its known HTTPS address below and stop
+       <p>This box has no certificate to download. Check its known HTTPS address below and stop
        if it shows a certificate warning. This page cannot replace a separately installed certificate.
        A certificate downloaded before a re-image may no longer apply.</p></section>`;
 
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Waitron — connect to this server</title>
+<title>Waitron — connect to this box</title>
 <style>
 :root { color-scheme: light dark; font: 17px/1.55 system-ui, sans-serif; }
 ${PAGE_THEME_STYLE}
@@ -162,7 +162,7 @@ code, a { overflow-wrap: anywhere; }
 :focus-visible { outline: 3px solid light-dark(#007392, #71cfeb); outline-offset: 4px; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
-<h1>Connect <span class="accent">securely</span> to this Waitron server</h1>
+<h1>Connect <span class="accent">securely</span> to this Waitron box</h1>
 ${lead}<p>${lead ? "Otherwise, you" : "You"} need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
 ${steps}
 <section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>

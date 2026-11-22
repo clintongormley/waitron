@@ -51,7 +51,7 @@ export async function inspectSetupRecoveryPack(bytes: Uint8Array, locale: "en" |
     );
     expect(cover).toContain("Olivo Restauración SL · NIF B12345674 · Olivo Centro");
     for (const expected of [
-      locale === "en" ? "Server key" : "Clave del servidor",
+      locale === "en" ? "Box key" : "Clave del servidor",
       "Olivo Restauración SL",
       "Olivo Centro",
       "B12345674",

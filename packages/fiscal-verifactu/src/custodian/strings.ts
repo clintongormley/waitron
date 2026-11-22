@@ -130,16 +130,16 @@ const es: typeof en = {
     "Esta copia puede estar desactualizada. No sustituye al original vigente en papel.",
   secretWarning: "Quien tenga este papel puede firmar.",
   printCare:
-    "Usa una impresora local fuera de la caja. Revisa su cola y recoge todas las hojas. Concilia las fallidas o estropeadas y destruye los residuos secretos de forma segura. Pueden quedar copias en el sistema y la impresora.",
+    "Usa una impresora local fuera del servidor. Revisa su cola y recoge todas las hojas. Concilia las fallidas o estropeadas y destruye los residuos secretos de forma segura. Pueden quedar copias en el sistema y la impresora.",
   separation:
-    "Guarda el archivo protegido y el papel secreto fuera de la caja y sus copias de seguridad, separados del original público. Limita el acceso a quien firma.",
+    "Guarda el archivo protegido y el papel secreto fuera del servidor y sus copias de seguridad, separados del original público. Limita el acceso a quien firma.",
   recovery:
     "Restaura la misma clave. Sigue con el mismo original vigente. Recuperar una clave o una copia no indica qué entradas están libres.",
   exhaustion:
     "Nunca reutilices una entrada consumida, aunque el intento falle o se abandone. Al agotarse, obtén otro bloque reservado por separado.",
   handoverCare:
     "Detén las asignaciones durante el relevo. Nombra a quien sigue; entrega este original, historial, archivo, acceso a la contraseña y papel secreto. Comprueba ambas recuperaciones y el consumo vigente. Registra las copias secretas retenidas; el acceso no desaparece.",
-  loss: "Detén las asignaciones si falta el original o toda copia de firma, hay dudas de vigencia o disputa de custodia. Conserva el historial para resolverlo fuera de la caja. No crees otro original ni supongas nombres libres.",
+  loss: "Detén las asignaciones si falta el original o toda copia de firma, hay dudas de vigencia o disputa de custodia. Conserva el historial para resolverlo fuera del servidor. No crees otro original ni supongas nombres libres.",
   unassigned: "SIN ASIGNAR",
   scope: "Ámbito",
   custodian: "Custodia",

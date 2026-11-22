@@ -369,7 +369,7 @@ describe("This device on the handover's clock step", () => {
     const { entry, posts } = await mount({ status: "refused", reason: "not_stopped" });
     await vi.waitFor(() =>
       expect(entry.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim()).toBe(
-        "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+        "The box keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the box.",
       ),
     );
     expect(actions(posts)).not.toContain("select");

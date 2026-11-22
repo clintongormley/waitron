@@ -101,7 +101,7 @@ describe("the words at the top", () => {
   it("marks the word securely, and says what the certificate is for", () => {
     const html = renderTrustPage(base);
     expect(html).toMatch(
-      /<h1>Connect <span class="accent">securely<\/span> to this Waitron server<\/h1>/,
+      /<h1>Connect <span class="accent">securely<\/span> to this Waitron box<\/h1>/,
     );
     expect(html).toContain(
       "You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:",
@@ -170,9 +170,12 @@ it.each([
   ["plain", {}],
   ["with the spare's lead line", { ownAddress: "https://192.168.1.50" }],
   ["in setup mode", { notSetUp: true }],
-])("calls it a server, never a box (%s)", (_name, extra) => {
+])("calls it a box, never a server (%s)", (_name, extra) => {
   const html = renderTrustPage({ ...base, ...extra });
-  expect(html).not.toMatch(/\bbox(es)?\b/i);
+  const visible = html
+    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+  expect(visible).not.toMatch(/\bservers?\b/i);
   expect(html).not.toContain("numeric network address");
 });
 
@@ -209,7 +212,7 @@ it("gives a safe device alternative when certificate removal or installation is 
 
 describe("a page opened while another box answers waitron.local", () => {
   const LEAD =
-    "Adding a spare? You don't need this server's certificate: open this address " +
+    "Adding a spare? You don't need this box's certificate: open this address " +
     '(<a href="https://192.168.1.50">https://192.168.1.50</a>) and accept your browser\'s warning once.';
 
   it("leads with the spare's way in, above the certificate steps, and keeps those steps", () => {

@@ -28,7 +28,7 @@ describe("recovery page wording", () => {
       "es-ES": {
         title: "Waitron no ha podido arrancar.",
         action:
-          "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este equipo.",
+          "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este servidor.",
       },
     });
   });
@@ -43,9 +43,9 @@ describe("recovery page wording", () => {
       },
       "es-ES": {
         title:
-          "La base de datos de este equipo la configuró una versión de Waitron distinta de la instalada.",
+          "La base de datos de este servidor la configuró una versión de Waitron distinta de la instalada.",
         action:
-          "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+          "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       },
     });
   });
@@ -70,7 +70,7 @@ describe("recovery page wording", () => {
         "If it fails again, switch the box off and on: that ends any program holding the database.",
       );
       expect(text["es-ES"].action).toContain(
-        "Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
+        "Si vuelve a fallar, apaga y enciende el servidor: así se cierra cualquier programa que tenga ocupada la base de datos.",
       );
       for (const lang of ["en-GB", "es-ES"] as const) {
         expect(text[lang].action, lang).not.toMatch(

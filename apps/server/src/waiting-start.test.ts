@@ -1163,7 +1163,7 @@ describe("the waiting start", () => {
         "handed over to <strong>spare.example</strong> (main box). It cannot",
       );
       expect(await shown("es-ES")).toContain(
-        "ha pasado el local a <strong>spare.example</strong> (equipo principal). No puede",
+        "ha pasado el local a <strong>spare.example</strong> (servidor principal). No puede",
       );
     });
 

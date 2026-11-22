@@ -404,7 +404,7 @@ it.each(["en", "es"] as const)(
       );
       expect(await page.locator("#connection-status").textContent()).toBe(
         locale === "en"
-          ? "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate."
+          ? "This box uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate."
           : CONNECTION_TEXT.es.operator,
       );
       if (locale === "es") {
@@ -449,7 +449,7 @@ it.each([
       );
       expect(await page.locator("#connection-status").textContent()).toBe(
         locale === "en"
-          ? "This page cannot repair a standby server’s secure connection. Switch the standby server off and on: as it starts, it renews a certificate that no longer matches its name or address."
+          ? "This page cannot repair a standby box’s secure connection. Switch the standby box off and on: as it starts, it renews a certificate that no longer matches its name or address."
           : "Esta página no puede reparar la conexión segura de un servidor en espera. Apaga y enciende el servidor en espera: al arrancar, renueva el certificado si ya no coincide con su nombre o su dirección.",
       );
       expect(await page.locator("#connection-repair, #connection-reconnect").count()).toBe(0);

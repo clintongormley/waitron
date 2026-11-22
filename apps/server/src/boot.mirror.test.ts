@@ -1089,7 +1089,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       expect(await status.json()).toEqual({ adoption: "pending" });
       const trust = await fetch(`${base}/setup/trust`);
       expect(trust.status).toBe(200);
-      expect(await trust.text()).toContain("to this Waitron server");
+      expect(await trust.text()).toContain("to this Waitron box");
       expect((await fetch(`${base}/help/en/products`)).status).toBe(200);
       const declaration = await fetch(`${base}/legal/declaration`);
       expect(declaration.status).toBe(404);

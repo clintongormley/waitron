@@ -17,7 +17,7 @@ export const checkVenueStrings = {
     tryAgain: "Try again",
     failed: "Could not complete this step.",
     chosen: "We've created these invoice series:",
-    blocked: "The server time is earlier than this Waitron release.",
+    blocked: "The box's time is earlier than this Waitron release.",
     rangeBlocked:
       "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
   },

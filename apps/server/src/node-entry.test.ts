@@ -1188,7 +1188,7 @@ describe("runEntry", () => {
       await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
     ).text();
     expect(body).toContain(
-      "The list of servers in the restored copy is damaged or does not carry a valid signature",
+      "The list of boxes in the restored copy is damaged or does not carry a valid signature",
     );
   });
 

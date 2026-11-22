@@ -86,7 +86,7 @@ async function update(
     const handover = `Emergency recovery / Recuperación de emergencia
 
 Keep this record outside the box and its backups.
-Guarda este registro fuera del equipo y sus copias de seguridad.
+Guarda este registro fuera del servidor y sus copias de seguridad.
 
 An interrupted attempt never releases this identity. Check the current outside record and the exact local result before retrying.
 Una interrupción no libera esta identidad. Antes de reintentar, comprueba el registro externo actual y el resultado local exacto.

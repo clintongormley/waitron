@@ -148,7 +148,7 @@ describe("renderStartAgainSection", () => {
 
   it("names the choice group with a legend marked required, in both languages", () => {
     expect(START_AGAIN_PAGE_WORDS["en-GB"].choiceLegend).toBe("What should the box do? *");
-    expect(START_AGAIN_PAGE_WORDS["es-ES"].choiceLegend).toBe("¿Qué debe hacer el equipo? *");
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].choiceLegend).toBe("¿Qué debe hacer el servidor? *");
     for (const locale of LANGS) {
       const html = render({ locale });
       const legend = `<fieldset>\n<legend>${escapeHtml(START_AGAIN_PAGE_WORDS[locale].choiceLegend)}</legend>`;

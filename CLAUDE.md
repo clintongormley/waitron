@@ -286,8 +286,9 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   languages hid recorded names.
 - **The Waitron machine is "box" in English and "servidor" in Spanish, never "equipo"; the
   dashboard page keeps its name "Servers"** (owner, 2026-11-22). Guards, weaker than their names:
-  `apps/till/src/i18n/box-word.test.ts`, `apps/dashboard/src/i18n/box-word.test.ts` and
-  `packages/fiscal-verifactu/src/dashboard/box-word.test.ts` read named string tables only.
+  `apps/till/src/i18n/box-word.test.ts`, `apps/dashboard/src/i18n/box-word.test.ts`,
+  `packages/fiscal-verifactu/src/dashboard/box-word.test.ts`, `apps/server/src/i18n/box-word.test.ts`
+  and `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts` read named tables and pages only.
   [Limits](docs/developers/conventions-ui.md#the-waitron-machine-is-box-and-servidor).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a fixture gives the three DIFFERENT text**. Which surface reads which: [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.**

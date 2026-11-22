@@ -3,12 +3,12 @@ import type { DeviceHelp, DeviceId } from "./trust-page-devices.js";
 export const CONNECTION_TEXT = {
   en: {
     title: "Set up secure connection",
-    intro: "Reconnect to the venue network and use your server’s known address.",
+    intro: "Reconnect to the venue network and use your box’s known address.",
     publicOnly:
-      "Do not enter passwords, recovery keys or server keys here. Reopen HTTPS without warnings before recovering setup.",
+      "Do not enter passwords, recovery keys or box keys here. Reopen HTTPS without warnings before recovering setup.",
     repair: "Set up secure connection",
     reconnect: "Reconnect",
-    needed: "The server’s secure connection needs repair.",
+    needed: "The box’s secure connection needs repair.",
     spaceLow: "The box is low on disk space.",
     spaceRetry: "Once more space is free, choose Check again, then set up the secure connection.",
     spaceCheckAgain: "Once more space is free, choose Check again.",
@@ -21,9 +21,9 @@ export const CONNECTION_TEXT = {
     failed:
       "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
     operator:
-      "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
+      "This box uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
     serverOnly:
-      "This page cannot repair a standby server’s secure connection. Switch the standby server off and on: as it starts, it renews a certificate that no longer matches its name or address.",
+      "This page cannot repair a standby box’s secure connection. Switch the standby box off and on: as it starts, it renews a certificate that no longer matches its name or address.",
     javascript: "Enable JavaScript in your browser, then reload this page to use these choices.",
     check: "Check again",
     stop: "Stop",
@@ -54,12 +54,12 @@ export const CONNECTION_TEXT = {
     repair: "Configurar conexión segura",
     reconnect: "Reconectar",
     needed: "La conexión segura del servidor necesita reparación.",
-    spaceLow: "Queda poco espacio en el disco del equipo.",
+    spaceLow: "Queda poco espacio en el disco del servidor.",
     spaceRetry:
       "Cuando haya más espacio libre, elige Comprobar de nuevo y configura la conexión segura.",
     spaceCheckAgain: "Cuando haya más espacio libre, elige Comprobar de nuevo.",
     spaceAction:
-      "Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. {retry} Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      "Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este servidor y archivos que no son de Waitron. {retry} Si en cambio reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     busy: "Configurando la conexión…",
     ready: "Certificado listo.",
     certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",

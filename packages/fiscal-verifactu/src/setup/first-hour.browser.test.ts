@@ -189,14 +189,14 @@ const actionsOf = (calls: { action: string; value?: unknown }[]) =>
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
 const WHY_SECOND =
-  "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.";
+  "So no invoice series is ever repeated, the box checks its time over the internet, or you confirm it against this device's time.";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
 const SETUP_DO =
   "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
 const SETUP_ENDS =
   "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.";
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
-const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
+const DIFFER = "It is very important that the box's time is set correctly. Which time is correct:";
 const fakeClock = () =>
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
 class LeaveShell extends LitElement {
@@ -836,7 +836,7 @@ it("a clock refusal shows each clock's reading and no countdown, and waits for C
     expect(text(el)).not.toContain(WHY_REFUSED);
     expect(text(el)).not.toMatch(/ask for help/);
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:45"],
     ]);
     expect(text(el)).not.toContain(new Date(instant).toISOString());
@@ -1185,7 +1185,7 @@ it.each([
     "Keep your recovery pack.",
     "Download recovery pack",
     "I kept the recovery pack.",
-    "Make the pack again with a new server key",
+    "Make the pack again with a new box key",
     "Recovery pack confirmed.",
   ],
   [
@@ -1893,7 +1893,7 @@ it.each([
       }
       await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
       expect(detailRows(el, "clock-times")).toEqual([
-        ["Server time", "18 October 2026 at 14:30:00"],
+        ["Box time", "18 October 2026 at 14:30:00"],
         ["This device", "18 October 2026 at 14:30:45"],
       ]);
       expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
@@ -1922,7 +1922,7 @@ it("a box clock before this release shows only the release line", async () => {
   });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull());
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-  expect(text(el)).toContain("The server time is earlier than this Waitron release.");
+  expect(text(el)).toContain("The box's time is earlier than this Waitron release.");
   expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
     "false",
   );
@@ -2003,7 +2003,7 @@ it.each<[string, string | undefined, boolean, () => Promise<LitElement>]>([
     async () => {
       const { el } = await mount({ decision: { ...clock, releaseBlocked: true } });
       await vi.waitFor(() =>
-        expect(text(el)).toContain("The server time is earlier than this Waitron release."),
+        expect(text(el)).toContain("The box's time is earlier than this Waitron release."),
       );
       return el;
     },
@@ -2348,7 +2348,7 @@ it.each([
   [
     "en",
     "Keep your recovery pack.",
-    "The recovery pack is a PDF holding this box's server key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
+    "The recovery pack is a PDF holding the box key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
   ],
   [
     "es",
@@ -2447,11 +2447,11 @@ it("when only this device agrees, the step shows both times above Proceed, and P
   await ready(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
+      "The box could not check its time over the internet. Check that both times below are right before you press Proceed.",
     ),
   );
   expect(detailRows(el, "clock-times")).toEqual([
-    ["Server time", "18 October 2026 at 14:30:00"],
+    ["Box time", "18 October 2026 at 14:30:00"],
     ["This device", "18 October 2026 at 14:30:00"],
   ]);
   expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull();
@@ -2479,9 +2479,9 @@ const boxOnly = {
 it.each([
   [
     "en",
-    "The server could not check its time over the internet. Check that the server's time below is right before you press Proceed.",
+    "The box could not check its time over the internet. Check that the box's time below is right before you press Proceed.",
     [
-      ["Server time", "18 October 2026 at 14:30"],
+      ["Box time", "18 October 2026 at 14:30"],
       ["This device", "Unavailable"],
     ],
   ],
@@ -2510,7 +2510,7 @@ it.each([
   },
 );
 const CONFIRM_PROCEED =
-  "The server could not check its time over the internet. Check that both times below are right before you press Proceed.";
+  "The box could not check its time over the internet. Check that both times below are right before you press Proceed.";
 it.each([
   ["the internet's time agreed", clock],
   ["the clocks differed", { ...deviceOnly, disagreement: true }],
@@ -2532,7 +2532,7 @@ it.each([
     expect(confirmStep()).not.toBeNull();
     expect(text(el)).toContain(CONFIRM_PROCEED);
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:00"],
     ]);
     await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
@@ -2557,7 +2557,7 @@ it("a wait the box recorded before the page loaded that ends with only this devi
     );
     expect(text(el)).toContain(CONFIRM_PROCEED);
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:00"],
     ]);
     expect(action(el)).toBe("Proceed");
@@ -2600,7 +2600,7 @@ it("a wait after a Proceed with the internet's time that ends with only this dev
     await shows(el, "clock-confirm");
     expect(text(el)).toContain(CONFIRM_PROCEED);
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:00"],
     ]);
     expect(actionsOf(calls).filter((a) => a === "compare-clocks")).toHaveLength(3);
@@ -2633,7 +2633,7 @@ it("Compare the clocks again with no internet time, once the clocks agree, shows
   );
   expect(text(el)).toContain(CONFIRM_PROCEED);
   expect(detailRows(el, "clock-times")).toEqual([
-    ["Server time", "18 October 2026 at 14:30:00"],
+    ["Box time", "18 October 2026 at 14:30:00"],
     ["This device", "18 October 2026 at 14:30:00"],
   ]);
   await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
@@ -2666,7 +2666,7 @@ it.each(["en", "es"] as const)(
       expect(detailRows(el, "clock-times")).toEqual(
         locale === "en"
           ? [
-              ["Server time", "18 October 2026 at 14:30"],
+              ["Box time", "18 October 2026 at 14:30"],
               ["This device", "18 October 2026 at 14:35"],
             ]
           : [
@@ -2687,7 +2687,7 @@ it.each(["en", "es"] as const)(
       expect(button(el, "server-correct")).toBeNull();
       expect(text(el)).toContain(
         locale === "en"
-          ? "Please correct the time on this device and then reconnect to the server."
+          ? "Please correct the time on this device and then reconnect to the box."
           : "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
       );
       expect(action(el)).toBe(
@@ -2796,7 +2796,7 @@ it("after Proceed on clocks that differ, This device sets the server's clock and
     [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
       b.textContent!.trim(),
     ),
-  ).toEqual(["The server", "This device", "Both times are wrong"]);
+  ).toEqual(["The box", "This device", "Both times are wrong"]);
   const before = calls.length;
   await userEvent.click(button(el, "device-correct"));
   await shows(el, "selected-hour");
@@ -2823,13 +2823,13 @@ it("says the server's time was set while the next comparison waits", async () =>
   await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
   await userEvent.click(button(el, "device-correct"));
   await vi.waitFor(() => expect(remaining(el)).toBeDefined());
-  expect(deviceLine(el)).toBe("The server's time is now set from this device.");
+  expect(deviceLine(el)).toBe("The box's time is now set from this device.");
 });
 it.each([
   [
     "en",
     "same_machine",
-    "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+    "This screen is on the box itself, so it cannot set the box's time. Open this page on a phone or computer.",
   ],
   [
     "es",
@@ -2868,7 +2868,7 @@ it("a box that already agrees shows no line and makes the series", async () => {
 it.each([
   [
     "en",
-    "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
   ],
   [
     "es",

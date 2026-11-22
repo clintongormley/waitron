@@ -6,7 +6,7 @@ describe("restore's clock-waiting page wording", () => {
   // Copied from apps/setup's `restore.allocation_node_key` and `restore.allocation_key_missing`,
   // so the key is named as on the restore page.
   it.each([
-    ["en-GB", "Selected backup’s server key", "Enter the selected backup’s server key."],
+    ["en-GB", "Selected backup’s box key", "Enter the selected backup’s box key."],
     [
       "es-ES",
       "Clave del servidor de la copia elegida",

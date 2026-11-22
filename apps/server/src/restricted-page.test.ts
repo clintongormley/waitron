@@ -145,8 +145,8 @@ describe("the restricted box's own page", () => {
     expect(spanish.status).toBe(200);
     expect(spanish.html).toContain('<html lang="es">');
     inOrder(spanish.html, [
-      "<h1>El local ya no funciona con este equipo</h1>",
-      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es <strong>bar-counter.example</strong> (equipo principal).",
+      "<h1>El local ya no funciona con este servidor</h1>",
+      "No hace ventas ni envía nada a Hacienda. El servidor que pasa a llevar el local es <strong>bar-counter.example</strong> (servidor principal).",
       "Traspaso iniciado",
       "Ha dejado de vender",
     ]);
@@ -203,7 +203,7 @@ describe("the restricted box's own page", () => {
     expect(english.html).not.toContain("Bar Pepe");
     const spanish = await page("es-ES");
     expect(spanish.html).toContain(
-      "El equipo que pasa a llevar el local es <strong>box-db91.waitron.local</strong> (equipo principal).",
+      "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong> (servidor principal).",
     );
     expect(spanish.html).not.toContain("Bar Pepe");
   });
@@ -219,9 +219,9 @@ describe("the restricted box's own page", () => {
     expect(english).not.toContain("spare box");
     const spanish = (await page("es-ES")).html;
     expect(spanish).toContain(
-      "El equipo que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
+      "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
     );
-    expect(spanish).not.toContain("equipo de reserva");
+    expect(spanish).not.toContain("servidor de reserva");
   });
 
   it.each([
@@ -249,9 +249,9 @@ describe("the restricted box's own page", () => {
       expect((await page("en-GB")).html).toContain(
         `The box taking over the venue is <strong>box-db91.waitron.local</strong>${role}.`,
       );
-      const spanish = toSuccessor ? " (equipo principal)" : "";
+      const spanish = toSuccessor ? " (servidor principal)" : "";
       expect((await page("es-ES")).html).toContain(
-        `El equipo que pasa a llevar el local es <strong>box-db91.waitron.local</strong>${spanish}.`,
+        `El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>${spanish}.`,
       );
     },
   );
@@ -275,7 +275,7 @@ describe("the restricted box's own page", () => {
         "The box taking over the venue is <strong>box-db91.waitron.local</strong>.",
       );
       expect((await page("es-ES")).html).toContain(
-        "El equipo que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
+        "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
       );
     },
   );
@@ -498,7 +498,7 @@ describe("the restricted box's own page", () => {
     const spanish = await page("es-ES");
     inOrder(spanish.html, [
       "Ha dejado de vender",
-      "Registros de facturación confirmados por el equipo principal",
+      "Registros de facturación confirmados por el servidor principal",
     ]);
     expect(spanish.html).not.toContain("return_confirmed");
   });
@@ -553,9 +553,9 @@ it("explains reset data loss in Spanish after confirmation", async () => {
   await handOver(await seedSuccessor("Bar counter box"));
   const html = await (await request("es-ES", suite.db, "confirmed")).text();
   expect(html).toContain(
-    "Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
+    "Restablecer este servidor borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
   );
-  expect(html).not.toContain("Puedes restablecer este equipo");
+  expect(html).not.toContain("Puedes restablecer este servidor");
 });
 
 it("distinguishes accepted payment differences from imported facts in both languages", async () => {
