@@ -103,6 +103,8 @@ export interface StaffingMonth {
   today: string | null;
   /** Every active area, in `listStaffingAreas` order, painted in the month or not. */
   areas: StaffingArea[];
+  /** The selected rota phase by Monday, absent for weeks with no rota. */
+  weekStatus: Partial<Record<string, "draft" | "published">>;
   /** The seasons the listed days touch, in the order they are first touched. */
   seasons: StaffingSeason[];
   days: {

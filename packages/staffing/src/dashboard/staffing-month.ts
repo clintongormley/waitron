@@ -85,24 +85,6 @@ export class StaffingMonthView extends LitElement {
         flex-direction: column;
         height: 100%;
       }
-      .rota-week {
-        flex: none;
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-1);
-        border: 0;
-        border-radius: var(--wt-radius-sm);
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
-        cursor: pointer;
-      }
-      .rota-week:hover {
-        background: var(--wt-color-surface-raised);
-      }
       .day {
         flex: 1;
         display: flex;
@@ -145,8 +127,7 @@ export class StaffingMonthView extends LitElement {
         width: 100%;
         cursor: pointer;
       }
-      button.day:focus-visible,
-      .rota-week:focus-visible {
+      button.day:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -545,6 +526,7 @@ export class StaffingMonthView extends LitElement {
       box.hide();
     };
     const monday = month.days[index - (index % 7)]!.date;
+    const status = month.weekStatus[monday] ?? "draft";
     return html`<calendar-day-box
       .heading=${formatDate(day.date)}
       .name=${special?.name ?? ""}
@@ -552,6 +534,7 @@ export class StaffingMonthView extends LitElement {
       .line=${line}
       .rows=${rows}
       .message=${day.closedAllDay ? t("staffing.month.closed") : ""}
+      .detailLine=${this.canOpenRota ? tf("staffing.rota.week_status", { status: t(`staffing.rota.${status}`) }) : ""}
       @calendar-day-box-close=${this.#boxClosed}
     >
       ${
@@ -640,7 +623,6 @@ export class StaffingMonthView extends LitElement {
         >
           ${body}
         </button>
-        ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<button type="button" class="rota-week" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</button>` : nothing}
       </div>
     </td>`;
   }

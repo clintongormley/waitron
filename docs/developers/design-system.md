@@ -5782,7 +5782,7 @@ Opening hours' Year.
   italic, with hidden “as <department>” context; own zone hours use normal text. Department and
   zone hours merge touching periods. Range entries wrap between entries, each “·” kept with the
   preceding range by a non-breaking space. The box uses `--wt-modal-standard-width`, constrained
-  to the viewport, and scrolls vertically when needed. Staffing retains its compact content-sized box, flat rows and slots.
+  to the viewport, and scrolls vertically when needed. Staffing retains its compact content-sized box, flat rows and slots. After the staffing rows or Closed message, show the week’s rota phase to people who can open the rota from the box.
   Managers then see a bold Prep stations section: the selected station, or all active stations
   when no station filter is set, in Year, Month and Week. Station names are normal weight; a
   station fed by several departments has one line per sender, retaining period names and times.

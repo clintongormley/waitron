@@ -199,6 +199,13 @@ describe("readStaffingMonth", () => {
     ]);
   });
 
+  it("reports week status for a rota starting in the previous month", async () => {
+    await painted();
+    await inTx((tx) => new WorkforceBackend().createRosterVersion(tx, { period: "2026-07-27" }));
+
+    expect((await read()).weekStatus).toEqual({ "2026-07-27": "draft" });
+  });
+
   it("lists an active area with no paint, on no day", async () => {
     const v = await painted();
     const [pastry] = await inTx((tx) =>
