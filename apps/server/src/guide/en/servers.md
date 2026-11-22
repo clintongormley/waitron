@@ -135,7 +135,7 @@ replay orders, stock changes, printing or drawer openings. Do not reset the old 
 still need its data.
 
 Switch the old box on and keep it connected: it returns its invoice records by itself. Until they
-arrive, its row in **System → Servers** on the new main box says **Waiting for the former main server to
+arrive, its row in **System → Servers** on the new main box says **Waiting for the former main box to
 return its invoice records**, and the venue cannot be handed over again or that box removed.
 
 If the old box will never come back with its data, choose **Will not return** in its row menu.

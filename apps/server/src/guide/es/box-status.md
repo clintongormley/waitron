@@ -48,7 +48,7 @@ Cada parte tiene una fila con un punto de color:
   confirme la hora del servidor. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
-filas **Copia en el bucket**, **Equipo de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
+filas **Copia en el bucket**, **Servidor de reserva**, **Impresoras** y **Lectores de tarjetas** tienen un botón **Ir a …**,
 como **Ir a Copias de seguridad**, que abre su propia página cuando puedes abrirla, y un aviso que
 tiene su propia página añade un botón para esa página. Los avisos que no corresponden a ninguna fila
 se cuentan bajo las filas, junto a **Ver todos los avisos**.
@@ -62,7 +62,7 @@ Cuando no pasa nada, cada fila dice:
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
-- **Equipo de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
+- **Servidor de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
   a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
   última copia. Deja ambos equipos encendidos cuando veas **Actualización pendiente** o
   **Reconstruyendo la copia**.
