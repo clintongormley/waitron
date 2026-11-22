@@ -100,9 +100,12 @@ payment details after it is my call, see Calls).
 Typography: Noto Sans throughout, with a real bold for the trading name, the title, the table
 heading row and TOTAL. Today the A4 page fakes bold by stroking the outline (`invoice-pdf.ts`,
 `invoice-raster.ts`). The shipped `apps/server/src/assets/invoice-noto-sans.ttf` is a variable font
-holding every weight, Bold included (builder check, 2026-11-22: fontkit's Bold instance draws bolder
-outlines; PDFKit's `font(bytes, "Bold")` gave bold advance widths); use that instance, no new font
-file. Confirm by rendering a PDF that the embedded glyphs are the bold ones. Grey labels (~#6b6b6b), a light grey
+holding every weight, but PDFKit cannot embed its Bold instance: `pdf.font(bytes, "Bold")` collapses
+into the regular face (same PostScript name), and a variation embedded alone throws at `pdf.end()`
+(`TypeError: First argument to DataView constructor must be an ArrayBuffer`, fontkit 2.0.4 subsetting
+against restructure 3.0.2; measured 2026-11-22 by the plan's fact-gathering). So the bold is a
+separate, unmodified static Noto Sans Bold TTF from Google's Noto release, with its OFL notice beside
+the regular face's. Grey labels (~#6b6b6b), a light grey
 table heading fill (~#e4e4e8) and a grey customer box (~#f2f2f4). The office-printer page is already
 8-bit greyscale (`invoice-raster.ts`, `sharp(...).greyscale()`), so greys survive printing.
 
@@ -181,17 +184,28 @@ The IBAN is validated (country format and the mod-97 check) and stored without s
 in groups of four. The bank name is free text. Both are optional; the bank name is printed only
 when given.
 
+**Where it is stored.** In the core `settings.venue` document (`VENUE_SETTINGS`,
+`packages/db/src/venue-settings.ts`) as `bankAccount: { iban, bankName } | null`, beside the venue's
+other business details; a module's configuration lives in its settings document, and the `taxpayer`
+row holds only the fiscal identity. Not carried by configuration exports.
+
 **Who may change it (owner, 2026-11-22: "with the email").** Swapping the IBAN on a business's
 invoices is a known fraud. Saving, changing or clearing the bank account takes the same gate as the
 legal name (`taxpayerFieldRoute` in `apps/server/src/venue-settings-api.ts`: `venue.configure` and a
 fresh sign-in), is written to the activity log, and sends an email to the venue's administrators
 naming who changed it and the old and new account with the middle digits hidden (first four and
-last four characters shown).
+last four characters shown). The email is a box notice (`box_alert`, one per `system.manage` holder
+with an email, `readManagerEmailRecipients`), sent through the venue's own mail server like every
+other notice today; the owner's 2026-11-21 decision that a paid Cloud plan sends every email the box
+would send covers it once Cloud does that. It survives a restart, as the upgrade-rolled-back notice
+does (`transientBoxAlertMail` in `apps/server/src/box-alert-email.ts`). The activity entry carries no
+account number (`data: {}`, like `taxpayer.domicile_changed`).
 
 **When it prints.** Only when the bill was closed as a deferred payment (`tender.method ===
 "deferred"`), and only from the current setting. A substitution or replacement of such an invoice
-(`deferred-payment-export.ts` follows them as `replacedBy`; `record-remedy-replacement.ts` after an
-AEAT refusal) records no payment of its own, yet it is the document the customer pays from: it
+(`sales.corrects_sale_id` with `replaces_original`, written for example by
+`record-remedy-replacement.ts` after an AEAT refusal; a substitution through `sale_substitutions`)
+records no payment of its own, yet it is the document the customer pays from: it
 prints the instructions when the sale it replaces, followed back through its replacements, was
 closed as a deferred payment. A reprint of an old deferred invoice prints the
 account as it is at reprint time; if the setting has been cleared, the reprint shows "Pago
