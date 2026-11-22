@@ -872,7 +872,6 @@ export class MenuPricesTable extends LitElement {
       return;
     }
     this.saving = true;
-    this.#scope?.changed();
     const { saved, refused } = await this.savePrices(saves);
     if (!this.isConnected) return;
     const drafts = new Map(this.drafts);
@@ -1158,7 +1157,7 @@ export class MenuPricesTable extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant=${action.variant}
+          variant=${this.saving ? "primary" : action.variant}
           data-test="prices-save"
           ?disabled=${action.unchanged || this.saving || this.loading || changes.some(({ key }) => this.#invalid(key))}
           @click=${() => void this.#save()}

@@ -88,9 +88,11 @@ it.each([
     if (via === "tab while saving") {
       await userEvent.click(prices()!.shadowRoot!.querySelector('[data-test="prices-save"]')!);
       expect(write).toHaveBeenCalledExactlyOnceWith("lunch", "burger", { grossPrice: "11" });
+      expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
       await userEvent.click(structureTab);
       await vi.waitFor(() => expect(location.pathname).toBe(destination));
       expect(dialog.open).toBe(false);
+      expect(tab().value).toBe("structure");
       return;
     }
 

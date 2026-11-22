@@ -8654,6 +8654,7 @@ it.each(["stored", "refused"] as const)(
     await vi.waitFor(() => expect(priceField(el, "mi-burger").readonly).toBe(true));
     expect(priceField(el, "mi-lemonade:v-small").readonly).toBe(true);
     expect(priceSave(el).disabled).toBe(true);
+    expect(priceSave(el).variant).toBe("primary");
     expect(
       prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
         '[data-test="prices-cancel"]',
