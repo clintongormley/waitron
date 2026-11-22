@@ -45,56 +45,62 @@ it("groups dishes in course order and links from No course to the product", asyn
   await expect.element(link).toHaveAttribute("href", "/products/product/hake");
 });
 
-it("names a hidden surcharge error and remembers the hidden column on reopen", async () => {
-  const key = "waitron.menus.set-menu.dishes.starters:columns";
-  localStorage.removeItem(key);
-  onTestFinished(() => localStorage.removeItem(key));
-  const { el } = await mountDishes();
-  await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
-  const table = page.elementLocator(
-    el
-      .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
-      .shadowRoot!.querySelector('wt-data-table[aria-label="Starters"]')!,
-  );
-  const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
-  await surcharge.fill("20000");
-  await userEvent.keyboard("{Enter}");
-  await expect.element(surcharge).toHaveAttribute("aria-invalid", "true");
-  const chooser = table.getByRole("button", { name: "Customise columns" });
-  await vi.waitFor(() => expect(chooser.element()).toBeVisible());
-  await chooser.click();
-  const hideSurcharge = page.getByRole("checkbox", { name: /Hide.*Surcharge/ });
-  await expect.element(hideSurcharge).toBeChecked();
-  await page.elementLocator(hideSurcharge.element().closest("label")!).click();
-  await page.getByRole("button", { name: "Done" }).click();
-  const actions = page.elementLocator(
-    el
-      .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
-      .shadowRoot!.querySelector("wt-form-actions")!,
-  );
-  const save = actions.getByRole("button", { name: "Save", exact: true });
-  await expect
-    .element(actions.getByRole("alert"))
-    .toHaveTextContent("Your change to Soup was not saved.");
-  await expect.element(save).toBeDisabled();
+it.each(["before", "after"])(
+  "names a hidden surcharge error when Save comes %s hiding the column",
+  async (order) => {
+    const key = "waitron.menus.set-menu.dishes.starters:columns";
+    localStorage.removeItem(key);
+    onTestFinished(() => localStorage.removeItem(key));
+    const { el } = await mountDishes();
+    await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
+    const table = page.elementLocator(
+      el
+        .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
+        .shadowRoot!.querySelector('wt-data-table[aria-label="Starters"]')!,
+    );
+    const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
+    await surcharge.fill("20000");
+    if (order === "before") {
+      await userEvent.keyboard("{Enter}");
+      await expect.element(surcharge).toHaveAttribute("aria-invalid", "true");
+    }
+    const chooser = table.getByRole("button", { name: "Customise columns" });
+    await vi.waitFor(() => expect(chooser.element()).toBeVisible());
+    await chooser.click();
+    const hideSurcharge = page.getByRole("checkbox", { name: /Hide.*Surcharge/ });
+    await expect.element(hideSurcharge).toBeChecked();
+    await page.elementLocator(hideSurcharge.element().closest("label")!).click();
+    await page.getByRole("button", { name: "Done" }).click();
+    const actions = page.elementLocator(
+      el
+        .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
+        .shadowRoot!.querySelector("wt-form-actions")!,
+    );
+    const save = actions.getByRole("button", { name: "Save", exact: true });
+    if (order === "after") await save.click();
+    await expect
+      .element(actions.getByRole("alert"))
+      .toHaveTextContent("Your change to Soup was not saved.");
+    await expect.element(save).toBeDisabled();
 
-  cleanupWidgets();
-  await mountDishes();
-  await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
-  expect(
-    page
-      .getByRole("region", { name: "Starters" })
-      .getByRole("columnheader", { name: "Surcharge" })
-      .elements(),
-  ).toHaveLength(0);
-  await expect
-    .element(
+    cleanupWidgets();
+    await mountDishes();
+    await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
+    expect(
       page
-        .getByRole("region", { name: "Sharing plates" })
-        .getByRole("columnheader", { name: "Surcharge" }),
-    )
-    .toBeVisible();
-});
+        .getByRole("region", { name: "Starters" })
+        .getByRole("columnheader", { name: "Surcharge" })
+        .elements(),
+    ).toHaveLength(0);
+    await expect
+      .element(
+        page
+          .getByRole("region", { name: "Sharing plates" })
+          .getByRole("columnheader", { name: "Surcharge" }),
+      )
+      .toBeVisible();
+  },
+);
 
 it("moves Bravas to Starters and explains both line changes, then restores its product course", async () => {
   const { api } = await mountDishes();
