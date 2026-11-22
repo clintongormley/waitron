@@ -1874,6 +1874,7 @@ interface CloudInstallation {
   }[];
 }
 export interface CloudConnectionStatus {
+  errorReportsEnabled?: boolean;
   sameTabSignIn?: boolean;
   isRemote?: boolean;
   remoteAccessEnabled?: boolean;
@@ -5211,6 +5212,9 @@ export class DashboardApi {
 
   refreshCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/refresh", "POST", {});
+  }
+  setCloudErrorReports(enabled: boolean): Promise<{ enabled: boolean }> {
+    return this.#request("/management-api/cloud/error-reports", "POST", { enabled });
   }
   setCloudRemoteAccess(enabled: boolean): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/remote-access", "POST", { enabled });

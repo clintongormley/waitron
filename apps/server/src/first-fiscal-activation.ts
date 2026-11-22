@@ -45,10 +45,15 @@ export async function firstFiscalPayload(
   body: Record<string, unknown>,
 ) {
   if (
-    Object.keys(body).some((key) => !["mode", "aeatCert", "email", "firstSetup"].includes(key)) ||
+    Object.keys(body).some(
+      (key) => !["mode", "aeatCert", "email", "firstSetup", "errorReportsEnabled"].includes(key),
+    ) ||
     body.mode !== "live"
   )
     throw new AppError("setup.request_invalid", { field: "body" });
+  if (body.errorReportsEnabled !== undefined && typeof body.errorReportsEnabled !== "boolean")
+    throw new AppError("setup.request_invalid", { field: "errorReportsEnabled" });
+  const errorReportsEnabled = body.errorReportsEnabled === true;
   if (body.firstSetup !== undefined) {
     const reference = body.firstSetup;
     if (
@@ -93,8 +98,12 @@ export async function firstFiscalPayload(
     body.email === undefined
       ? undefined
       : parseEmailSettings(body.email as Record<string, unknown>);
-  const digest = firstSetupPublicationDigest(state, { aeatCert: body.aeatCert, email });
-  return { contribution, secret, required, email, digest };
+  const digest = firstSetupPublicationDigest(state, {
+    aeatCert: body.aeatCert,
+    email,
+    errorReportsEnabled,
+  });
+  return { contribution, secret, required, email, errorReportsEnabled, digest };
 }
 export async function activateFirstFiscal(
   host: FirstFiscalHost,
@@ -121,6 +130,8 @@ export async function activateFirstFiscal(
   host.assertSelection(state);
   const payload = await firstFiscalPayload(host, state, body),
     req = firstFiscalProvisionRequest(state);
+  if (payload.errorReportsEnabled && !deps.initialiseErrorReports)
+    throw new AppError("setup.not_ready", {});
   if (state.frozen.environment === "production" && payload.email === undefined)
     throw new AppError("setup.email_required", { field: "email" });
   await deps.writeClockSteps?.();
@@ -249,6 +260,8 @@ export async function publishCheckedFirstFiscal(
         const email = payload.email;
         if (email !== undefined)
           await withTransaction(deps.db!, (tx) => saveSmtpSettings(tx, deps.ring!, email, null));
+        if (payload.errorReportsEnabled)
+          await deps.initialiseErrorReports!(state.frozen.environment);
       },
       persistTrading: (result, current) =>
         deps.persistTrading!({

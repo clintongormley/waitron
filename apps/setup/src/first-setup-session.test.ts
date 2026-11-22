@@ -733,6 +733,29 @@ describe("first setup tab ownership", () => {
     );
   });
 
+  it("resends the same error-report choice on a Live publication retry after reload", async () => {
+    const first = create((path) =>
+      ends(path, "claim") ? claim() : Promise.reject(new TypeError("lost response")),
+    );
+    await first.session.open();
+    await first.session.claim(venue);
+    const settings = { mode: "live" as const, errorReportsEnabled: true };
+    await expect(first.session.provision(settings)).rejects.toThrow("lost response");
+    const original = first.requests.find((request) => ends(request.path, "provision"))?.body;
+    expect(original).toMatchObject(settings);
+    await first.session.dispose();
+    const next = create((path) =>
+      ends(path, "provision")
+        ? json({ provisioned: true, restarting: true })
+        : json({ claimed: true, state: initial }),
+    );
+    await next.session.open();
+    await next.session.refresh();
+    expect(next.session.errorReportsEnabled).toBe(true);
+    await next.session.provision({ mode: "live" });
+    expect(next.requests.at(-1)?.body).toEqual(original);
+  });
+
   it("reads a lost activation result without a second activation, even after a reload", async () => {
     const first = create((path) =>
       ends(path, "claim") ? claim() : Promise.reject(new TypeError("lost response")),

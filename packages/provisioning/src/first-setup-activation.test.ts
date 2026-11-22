@@ -13,6 +13,7 @@ import { box } from "@waitron/node-db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { planVenue } from "./venue-plan.js";
 import { applyVenue, type VenueResult } from "./venue-apply.js";
@@ -144,9 +145,11 @@ async function fixture(kept = true) {
   const deps = { provision, check, assertReady, confirmCommitted, publish };
   const owner = prepared.owner;
   const digest = "a".repeat(64);
-  const activate = () =>
+  const activate = (publicationDigest = digest) =>
     runtime.resolution.withVenueExclusion(() =>
-      runtime.coordinator.run((hold) => activateFirstSetup(runtime, deps, owner, digest, hold)),
+      runtime.coordinator.run((hold) =>
+        activateFirstSetup(runtime, deps, owner, publicationDigest, hold),
+      ),
     );
   return { root, runtime, owner, digest, deps, states, activate, recover, io };
 }
@@ -300,16 +303,17 @@ it.each(["throw", "return", "check-refuses"])(
   },
 );
 
-it("refuses a changed publication digest before replaying or writing", async () => {
+it("refuses a changed error-report choice before replaying or writing", async () => {
   const f = await fixture();
-  await f.activate();
+  const before = (await f.runtime.store.read())!;
+  const optedIn = firstSetupPublicationDigest(before, { errorReportsEnabled: true });
+  await f.activate(optedIn);
   const state = (await f.runtime.store.read())!;
   f.owner.revision = state.revision;
-  await expect(
-    f.runtime.coordinator.run((hold) =>
-      activateFirstSetup(f.runtime, f.deps, f.owner, "b".repeat(64), hold),
-    ),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  const optedOut = firstSetupPublicationDigest(state, { errorReportsEnabled: false });
+  expect(optedOut).toBe(firstSetupPublicationDigest(state, {}));
+  expect(firstSetupPublicationDigest(state, { errorReportsEnabled: true })).toBe(optedIn);
+  await expect(f.activate(optedOut)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await f.runtime.store.read()).toEqual(state);
   expect(f.deps.check).toHaveBeenCalledOnce();
   expect(f.deps.provision).toHaveBeenCalledOnce();

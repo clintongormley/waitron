@@ -163,6 +163,9 @@ export const venueEn = {
   "venue.back": "Back",
   "venue.next": "Next",
 
+  "review.error_reports": "Send automatic error reports to Waitron Cloud",
+  "review.error_reports_detail":
+    "Help fix Waitron by sending error codes, sources, the Waitron version, times and counts. Reports are linked to this box’s Cloud registration. You can change this choice in Cloud services.",
   "review.heading": "Review and provision",
   "review.intro": "Check the details below, then provision this server.",
   "review.demo_defaults":
@@ -435,6 +438,9 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.back": "Volver",
   "venue.next": "Siguiente",
 
+  "review.error_reports": "Enviar informes automáticos de errores a Waitron Cloud",
+  "review.error_reports_detail":
+    "Ayuda a corregir Waitron enviando códigos de error, orígenes, la versión de Waitron, fechas y recuentos. Los informes se vinculan al registro de este servidor en Cloud. Puedes cambiar esta opción en Servicios Cloud.",
   "review.heading": "Revisar y configurar",
   "review.intro": "Comprueba los datos de abajo y configura este servidor.",
   "review.demo_defaults":

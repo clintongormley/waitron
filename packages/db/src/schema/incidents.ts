@@ -36,6 +36,7 @@ export const incidents = table(
     // tsString: a JS Date takes on the host timezone as soon as something formats it in local time
     // (`toString()` moves with `TZ`; `toISOString()` does not), and nothing formatted is ever stored.
     detectedAt: tsString("detected_at").notNull(),
+    releaseVersion: label("release_version"),
     acknowledgedAt: tsString("acknowledged_at"),
     acknowledgedBy: id("acknowledged_by").references(() => persons.id, { onDelete: "restrict" }),
     acknowledgedNote: label("acknowledged_note"),

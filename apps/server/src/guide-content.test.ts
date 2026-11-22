@@ -155,6 +155,7 @@ describe("the user guides", () => {
       "carry-on",
       "setup-cloud-sign-in",
       "remote-access",
+      "error-reports",
       "cloud-owner-recovery",
       "cloud-emergency",
     ]);

@@ -371,6 +371,20 @@ El estado junto al botón es la opción que has guardado. Abre la dirección del
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
 que detiene todos los servicios de Cloud.
 
+## Enviar informes automáticos de errores {#error-reports}
+
+Puedes activar el envío en **Revisar y configurar** durante la configuración o en
+**Sistema → Servicios Cloud**. Elige **Activar los informes de errores** para
+ayudar a Waitron a detectar errores en una versión. La opción se aplica a este
+servidor. Los servidores nuevos o de sustitución empiezan con el envío desactivado.
+
+Cuando se conecta a Waitron Cloud, el servidor envía los códigos de error, sus
+orígenes, la versión de Waitron, las fechas y los recuentos de incidencias bajo
+el registro de este servidor en Cloud. Si se repite la misma incidencia abierta,
+cuenta una sola vez. El servidor guarda los informes mientras no pueda conectar
+con Cloud. Elige **Desactivar los informes de errores** para descartar los que
+queden pendientes de envío.
+
 ## Aprobar la recuperación del propietario de Cloud {#cloud-owner-recovery}
 
 Si estás recuperando una cuenta propietaria de Cloud, verifica primero tu correo en la página de recuperación de Cloud.

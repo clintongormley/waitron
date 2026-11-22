@@ -178,6 +178,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
     delete body.aeatCert;
   }
   if (draft.mode === "demo") delete body.email;
+  if (draft.mode === "demo" || body.errorReportsEnabled !== true) delete body.errorReportsEnabled;
   if (draft.mode !== "prepare" || body.cloudStaffEmail !== true) delete body.cloudStaffEmail;
   if (draft.mode !== "demo") delete body.demoVenueNameSource;
   delete body.registeredAddress;
@@ -210,6 +211,7 @@ function switchMode(
   delete switched.registeredAddress;
   delete switched.configurationImport;
   delete switched.newTaxpayer;
+  delete switched.errorReportsEnabled;
   return switched;
 }
 
@@ -1630,6 +1632,9 @@ export class SetupApp extends LitElement {
     this.draft = {
       ...this.draft,
       mode: "live",
+      ...(this.draft.errorReportsEnabled === undefined && this.#firstSession!.errorReportsEnabled
+        ? { errorReportsEnabled: true }
+        : {}),
       venue: {
         ...structuredClone(state.venue),
         admin: {
@@ -1994,6 +1999,7 @@ export class SetupApp extends LitElement {
               mode: "live",
               aeatCert: request.aeatCert,
               email: submitted.email as ProvisionBody["email"],
+              errorReportsEnabled: submitted.errorReportsEnabled,
             },
             locale,
             ...cloudSignInArgs,

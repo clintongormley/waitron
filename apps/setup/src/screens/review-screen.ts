@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { errorStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
-import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
+import { dispatchProvisionRequested, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial, Screen } from "../setup-app.js";
 import { countryName } from "../country-name.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -63,6 +63,15 @@ export class SetupReviewScreen extends LitElement {
       .group-help {
         margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
+      }
+      .report-choice {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-block-size: var(--wt-tap-min);
+      }
+      .report-choice input {
+        accent-color: var(--wt-color-primary);
       }
       .group-header wt-button {
         margin-inline-start: auto;
@@ -224,6 +233,29 @@ export class SetupReviewScreen extends LitElement {
           `,
         )}
       </div>
+      ${
+        mode === "prepare" || mode === "live"
+          ? html` <div class="group">
+              <label class="report-choice" for="error-reports">
+                <input
+                  id="error-reports"
+                  type="checkbox"
+                  name="error-reports"
+                  aria-describedby="error-reports-detail"
+                  .checked=${this.draft.errorReportsEnabled === true}
+                  @change=${(event: Event) =>
+                    dispatchSetupPatch(this, {
+                      errorReportsEnabled: (event.currentTarget as HTMLInputElement).checked,
+                    })}
+                />
+                ${t("review.error_reports")}
+              </label>
+              <p class="group-help" id="error-reports-detail">
+                ${t("review.error_reports_detail")}
+              </p>
+            </div>`
+          : nothing
+      }
       ${this.errorMessage === undefined ? nothing : html`<p class="error" role="alert" data-test="error">${this.errorMessage}</p>`}
       <wt-form-actions>
         <wt-button

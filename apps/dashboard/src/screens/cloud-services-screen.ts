@@ -525,7 +525,7 @@ export class CloudServicesScreen extends LitElement {
       const result = await request();
       if (generation === this.#generation) {
         this.#actionResults++;
-        this.status = result;
+        this.status = { errorReportsEnabled: this.status?.errorReportsEnabled, ...result };
         if (result.installation?.state === "revoked") this.confirmingStop = false;
         this.requestUnavailable = false;
       }
@@ -1040,6 +1040,35 @@ export class CloudServicesScreen extends LitElement {
                           ${s.isPrimary && (this.requestUnavailable || (!!s.expiresAt && Date.parse(s.expiresAt) < Date.now())) ? button("restart", t("cloud.restart"), () => this.api.startCloudConnection(true)) : nothing}
                         `
                 }`
+        }
+        ${
+          s?.errorReportsEnabled === undefined
+            ? nothing
+            : html` <section aria-labelledby="error-reports-heading">
+                <h2 id="error-reports-heading">${t("cloud.error_reports")}</h2>
+                <p>${t("cloud.error_reports_help")}</p>
+                <p role="status">
+                  ${t(s.errorReportsEnabled ? "cloud.error_reports_on" : "cloud.error_reports_off")}
+                </p>
+                ${
+                  s.isPrimary
+                    ? button(
+                        "error-reports-toggle",
+                        t(
+                          s.errorReportsEnabled
+                            ? "cloud.error_reports_turn_off"
+                            : "cloud.error_reports_turn_on",
+                        ),
+                        async () => {
+                          const { enabled } = await this.api.setCloudErrorReports(
+                            !s.errorReportsEnabled,
+                          );
+                          return { ...(this.status ?? s), errorReportsEnabled: enabled };
+                        },
+                      )
+                    : nothing
+                }
+              </section>`
         }
       </wt-card>`;
   }

@@ -15,6 +15,7 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { CloudChoice, CloudConnection } from "./cloud-client.js";
+import type { createCloudErrorReports } from "./cloud-error-reports.js";
 import { mountCloudSignInCallback } from "./cloud-sign-in-callback.js";
 import { cloudSignInId, readCloudSignInReturn } from "./cloud-sign-in.js";
 import type { CloudReplacement } from "./cloud-replacement.js";
@@ -23,6 +24,7 @@ import { readEmergencyPeople } from "./cloud-emergency-people.js";
 export interface CloudApiDeps {
   db: Database;
   connection?: CloudConnection;
+  errorReports?: Pick<ReturnType<typeof createCloudErrorReports>, "enabled" | "setEnabled">;
   replacement?: Pick<
     CloudReplacement,
     | "status"
@@ -196,9 +198,11 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       }
       const replacementApproval = (await deps.replacement?.approval()) ?? null;
       const replacementEligible = (await deps.replacement?.eligible()) ?? false;
+      const errorReportsEnabled = await deps.errorReports?.enabled();
       await authorize(c, true);
       return c.json({
         ...status,
+        ...(errorReportsEnabled === undefined ? {} : { errorReportsEnabled }),
         ...("sameTabSignIn" in status && isRemoteStaffRequest(c) ? { sameTabSignIn: false } : {}),
         replacement,
         replacementPending,
@@ -314,6 +318,19 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         });
       }),
     );
+  app.post("/management-api/cloud/error-reports", (c) =>
+    run(c, log, async () => {
+      if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
+        return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+      await authorize(c);
+      primary();
+      const body = await readRawJsonBody<{ enabled?: unknown } | null>(c);
+      if (!body || Object.keys(body).length !== 1 || typeof body.enabled !== "boolean")
+        throw new AppError("cloud.request_invalid", {});
+      if (!deps.errorReports) throw new AppError("cloud.not_configured", {});
+      return c.json({ enabled: await deps.errorReports.setEnabled(body.enabled) });
+    }),
+  );
   app.post("/management-api/cloud/remote-access", (c) =>
     run(c, log, async () => {
       if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))

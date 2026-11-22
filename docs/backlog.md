@@ -1039,10 +1039,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   leaves open.
   [Detail](backlog/alerts.md#a1047-send-a-problem-report-to-waitron-cloud).
 
-- **A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
-  in").** Setup asks plainly, unticked; settings can change it.
-  [Detail](backlog/alerts.md#a1048-opt-in-automatic-error-reports-to-waitron-cloud).
-
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).

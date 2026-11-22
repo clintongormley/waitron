@@ -78,11 +78,10 @@ the report and sends it later, and the sender sees which. Before reports are sen
 recipient to the venue privacy-notice checklist and update both language guides (adviser privacy
 research, Q57-3).
 
-## A1048. Opt-in automatic error reports to Waitron Cloud
+## Decisions and deliberate limits
 
-(owner, 2026-10-24: "Should be opt
-in"). Setup asks plainly, unticked; settings can change it. A report holds only the error's
-code and source, the version, counts and masked log lines (A980 O9; the log's own mask covers only listed detail names, not
-free text), is signed with the box's
-Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
-by version to catch a bad release (design section 10).
+- **A1048. Automatic reports are opt-in** (owner, 2026-10-24: “Should be opt in”).
+  An opted-in box sends error-severity incident codes, sources, versions, times
+  and counts through its Cloud registration. The Cloud receiver contract carries
+  an empty log list from this sender. Masked log text and crash files remain in
+  the logging and diagnostics work above. [Cloud receiver contract](https://github.com/waitron-io/waitron-cloud/blob/8a01c948da6abe35b03967e9e09b3e62bc2c7465/docs/box-error-reports.md#send-a-report).

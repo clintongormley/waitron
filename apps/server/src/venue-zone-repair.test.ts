@@ -121,6 +121,7 @@ describe("atomic unusable-zone confirmation", () => {
         code: "venue.time_zone_repaired",
         severity: "warning",
         detectedAt: AT.toISOString(),
+        releaseVersion: null,
         acknowledgedAt: AT.toISOString(),
         acknowledgedBy: actor,
         acknowledgedNote: null,

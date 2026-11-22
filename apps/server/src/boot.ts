@@ -47,6 +47,7 @@ import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
+import { cloudErrorReportsJob, createCloudErrorReports } from "./cloud-error-reports.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import {
@@ -1441,6 +1442,12 @@ async function bootServer(
   await noteFullAtStart(diskFull, { dir: config.venueDir, log, spareReleased: released });
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
+  const cloudReportOptions = {
+    db,
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    environment: config.environment,
+  };
   if (config.node === undefined) moduleConfig = await readModuleConfig(db);
   assertAppendOnlyIntact(db, appendOnlyTables, expectedTriggers);
   // A missing trigger also shows up after a crash between a set's migration and its trigger
@@ -1656,6 +1663,12 @@ async function bootServer(
           guard: firstSetup.assertOtherAllowed,
         }),
         writeClockSteps: () => setupClock.writePending(),
+        initialiseErrorReports: async (environment) => {
+          await createCloudErrorReports({ ...cloudReportOptions, environment }).setEnabled(
+            true,
+            true,
+          );
+        },
         cloudRecovery,
         cloudSignIn,
         requestFromBox: seams.requestFromBox,
@@ -4241,6 +4254,10 @@ async function bootServer(
     log,
   );
 
+  const errorReports = createCloudErrorReports({
+    ...cloudReportOptions,
+    connection: cloudConnection,
+  });
   mountCloudApi(
     app,
     {
@@ -4250,6 +4267,7 @@ async function bootServer(
       // Roles can change live; fencing takes effect through a server restart.
       isPrimary: cloudPrimary,
       connection: cloudConnection,
+      errorReports,
       replacement: cloudReplacement,
     },
     log,
@@ -4821,6 +4839,7 @@ async function bootServer(
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       }),
     );
+  if (cloudConnection) jobRunner.add(cloudErrorReportsJob(errorReports, cloudPrimary));
   if (suggestionRunner)
     jobRunner.add(
       suggestionsJob(suggestionRunner, cloudPrimary, (error) =>
