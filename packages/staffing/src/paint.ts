@@ -376,6 +376,7 @@ export async function readSpecialDayStaffing(
   return {
     cutover,
     name: specialDayName,
+    dates,
     guides: namedGuides(
       areas,
       forecast,

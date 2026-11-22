@@ -3188,9 +3188,9 @@ painter's dashed in the special-day purple from the moment it opens. The season 
 heading "<season>: standard week", ‹ the season chip ›, a department-or-prep-station picker, and
 Cancel and Save, with the line "Every week from <first day> to <last day> needs this staffing,
 except on special days." under it, over a column per weekday. The special-day painter's bar holds
-✕, the heading "<name>: special day, <dates>" (the dates of its read's first area, written as runs as
-in the Opening hours editor; "<name>: special day" when it has none; "Staffing" while it loads), the
-picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
+✕, the heading "<name>: special day, <dates>" (the special day's dates, written as runs as in
+the Opening hours editor; "<name>: special day" when the day has none; "Staffing" while it loads),
+the picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
 + New staff role, which opens the staff-role dialog with “Add and paint with it” and chooses the
 role it saves, and How many, from 1 to 50. The paint row reuses the “Drag down a day to paint”
 clause from Opening hours' hint; staffing adds overlapping blocks rather than replacing them.

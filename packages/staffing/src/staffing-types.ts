@@ -53,6 +53,8 @@ export interface SpecialDayStaffing {
   /** The current changeover, `HH:MM`. */
   cutover: string;
   name: string;
+  /** Every date of the special day, by date; each area's `dates` lists the same ones. */
+  dates: { dateId: string; date: string }[];
   /** areaKey → dateId → opening ranges or station sending ranges. */
   guides: Record<string, Record<string, StaffingGuideRange[]>>;
   areas: {

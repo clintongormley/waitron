@@ -88,9 +88,7 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
         if (!kept.has(dateId) && !sameBlocks(day, this.baseline.get(key)?.get(dateId)))
           lost.add(dateId);
     }
-    const goneDates = lost.size
-      ? previous!.areas[0]!.dates.filter(({ dateId }) => lost.has(dateId))
-      : [];
+    const goneDates = lost.size ? previous!.dates.filter(({ dateId }) => lost.has(dateId)) : [];
     if (gone.length || goneDates.length)
       this.notice = droppedNotice(
         gone,
@@ -170,7 +168,7 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
 
   /** Kept while the dates and the language stay, so the grid sees the same columns. */
   private columns(read: SpecialDayStaffing): readonly StaffingColumn[] {
-    const dates = read.areas[0]!.dates;
+    const { dates } = read;
     const key = `${currentLocale()} ${dates.map(({ dateId, date }) => `${dateId}=${date}`).join(",")}`;
     if (this.dateColumns?.key !== key)
       this.dateColumns = {
@@ -187,7 +185,7 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
         : html`<p class="message" data-test="loading">${t("staffing.painter.loading")}</p>`;
     if (!read.areas.length)
       return html`<p class="message" data-test="no-areas">${t("staffing.painter.no_areas")}</p>`;
-    if (!read.areas[0]!.dates.length)
+    if (!read.dates.length)
       return html`<p class="message" data-test="no-dates">${t("staffing.painter.no_dates")}</p>`;
     const columns = this.columns(read);
     return html`<staffing-grid
@@ -209,7 +207,7 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
   }
 
   private heading(read: SpecialDayStaffing) {
-    const dates = read.areas[0]?.dates.map(({ date }) => date) ?? [];
+    const dates = read.dates.map(({ date }) => date);
     return dates.length
       ? tf("staffing.painter.special_day", { name: read.name, dates: formatDateRuns(dates) })
       : tf("staffing.painter.special_day_undated", { name: read.name });
@@ -220,7 +218,7 @@ export class StaffingSpecialDayPainter extends StaffingPainterBase<
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
     const shownArea = read?.areas.find(({ area }) => areaKey(area) === shown);
-    const paintable = !!read?.areas[0]?.dates.length;
+    const paintable = !!read?.areas.length && !!read.dates.length;
     return html`<painter-frame
         .open=${true}
         .band=${"special"}

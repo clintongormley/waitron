@@ -825,6 +825,10 @@ describe("the staffing paint routes", () => {
     await answers(await p.call("GET", path, p.supervisor), 200, {
       cutover: "06:00",
       name: "Fiesta",
+      dates: [
+        { dateId: p.aug14, date: "2026-08-14" },
+        { dateId: p.aug15, date: "2026-08-15" },
+      ],
       guides: { [`department:${p.departmentId}`]: noGuide, [`station:${p.stationId}`]: noGuide },
       areas: [
         {

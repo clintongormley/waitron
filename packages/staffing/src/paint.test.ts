@@ -376,6 +376,10 @@ describe("special-day staffing", () => {
     expect(await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId))).toEqual({
       cutover: "06:00",
       name: "Fiesta",
+      dates: [
+        { dateId: v.aug14, date: "2026-08-14" },
+        { dateId: v.aug15, date: "2026-08-15" },
+      ],
       guides: {
         [`department:${v.departmentId}`]: noGuide,
         [`station:${v.passId}`]: noGuide,
@@ -408,6 +412,18 @@ describe("special-day staffing", () => {
         },
       ],
     });
+  });
+
+  it("lists the special day's dates when the venue has no departments or prep stations", async () => {
+    const v = await venue();
+    for (const area of [dept(v), grill(v), { kind: "station" as const, id: v.passId }])
+      await switchOff(area, false);
+    const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
+    expect(read.areas).toEqual([]);
+    expect(read.dates).toEqual([
+      { dateId: v.aug14, date: "2026-08-14" },
+      { dateId: v.aug15, date: "2026-08-15" },
+    ]);
   });
 
   it("guides each department per date with its hours that day, none on a date closed all day", async () => {
@@ -974,6 +990,7 @@ it("A724 returns empty guide maps for a special day with no dates", async () => 
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(Object.values(read.guides)).toEqual([{}, {}, {}]);
   expect(read.areas.every((a) => a.dates.length === 0)).toBe(true);
+  expect(read.dates).toEqual([]);
 });
 
 it("A724 adjacent periods with the same colour keep their own names and endpoints", async () => {

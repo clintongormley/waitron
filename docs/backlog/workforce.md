@@ -33,11 +33,6 @@ slots it produces. Opening hours' special-day painter draws from the first date'
 says so when the dates' changeovers differ. Needs a
 decision on how one grid with one time ruler shows dates with different changeovers. Special-day saves also validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
 
-## A711. Special-day staffing dates come from the first area
-
-The special-day painter takes its list of dates, and the dates in its heading, from the read's
-first area, as no top-level list exists in `SpecialDayStaffing`.
-
 ## Pay-period changes after closure
 
 A January month closed with 480 minutes keeps that snapshot after the cadence changes to weekly.

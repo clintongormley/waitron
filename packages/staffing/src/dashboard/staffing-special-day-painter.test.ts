@@ -588,7 +588,7 @@ it("says the venue has no departments or prep stations, and draws no grid to pai
   const { painter } = await mount({
     read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }),
   });
-  expect(frame(painter).heading).toBe("Christmas: special day");
+  expect(frame(painter).heading).toBe("Christmas: special day, 24–⁠25 Dec");
   expect(byTest(painter, "no-areas")!.textContent).toContain("no departments or prep stations");
   expect(grid(painter)).toBeNull();
   expect(picker(painter)).toBeNull();
@@ -624,6 +624,7 @@ it("drops an edit on a date a re-read no longer has, and names the date beside S
   await settle(painter);
   await paint(painter, "eve", []);
   const fresh = specialDayStaffing();
+  fresh.dates = fresh.dates.filter(({ dateId }) => dateId !== "eve");
   for (const area of fresh.areas) area.dates = area.dates.filter(({ dateId }) => dateId !== "eve");
   held.answer(fresh);
   await settle(painter);
@@ -649,6 +650,7 @@ it("names a removed area and removed dates together, and in Spanish", async () =
   fresh.areas = fresh.areas
     .filter(({ name }) => name !== "Bar")
     .map((area) => ({ ...area, dates: [] }));
+  fresh.dates = [];
   held.answer(fresh);
   await settle(painter);
   expect(frame(painter).refusal).toBe(
@@ -661,6 +663,7 @@ it("says the special day has no dates, and draws no grid to paint", async () => 
   const { painter } = await mount({
     read: async () => ({
       ...specialDayStaffing(),
+      dates: [],
       areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
       guides: {},
     }),
@@ -677,6 +680,7 @@ it("says in Spanish that the special day has no dates", async () => {
   const { painter } = await mount({
     read: async () => ({
       ...specialDayStaffing(),
+      dates: [],
       areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
     }),
   });
@@ -998,16 +1002,17 @@ it("titles the special day '<name>: special day, <dates>'", async () => {
   expect(frame(spanish).heading).toBe("Christmas: día especial, 24–⁠25 dic");
 });
 
-it("with no areas or no dates the heading is '<name>: special day'", async () => {
+it("with no areas the heading names the dates; with no dates it is '<name>: special day'", async () => {
   const noAreas = (
     await mount({ read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }) })
   ).painter;
-  expect(frame(noAreas).heading).toBe("Christmas: special day");
+  expect(frame(noAreas).heading).toBe("Christmas: special day, 24–⁠25 Dec");
   noAreas.remove();
   const noDates = (
     await mount({
       read: async () => ({
         ...specialDayStaffing(),
+        dates: [],
         areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
         guides: {},
       }),
@@ -1019,7 +1024,7 @@ it("with no areas or no dates the heading is '<name>: special day'", async () =>
   const spanish = (
     await mount({ read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }) })
   ).painter;
-  expect(frame(spanish).heading).toBe("Christmas: día especial");
+  expect(frame(spanish).heading).toBe("Christmas: día especial, 24–⁠25 dic");
 });
 
 it("carries the special-day band from the moment it opens, while loading, and to a viewer", async () => {
@@ -1049,6 +1054,7 @@ it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Can
     const { painter } = await mount({
       read: async () => {
         const read = specialDayStaffing();
+        read.dates = scattered.map((date) => ({ dateId: date, date }));
         for (const area of read.areas)
           area.dates = scattered.map((date) => ({ dateId: date, date, blocks: null }));
         read.guides = {};
