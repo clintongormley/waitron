@@ -1,5 +1,5 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
-import { asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   departments,
   floorZones,
@@ -281,7 +281,7 @@ export async function keptOpenConflicts(
     })
     .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(eq(floorZones.keptOpenDay, tonight))
+    .where(and(eq(floorZones.keptOpenDay, tonight), eq(departments.active, true)))
     .orderBy(asc(floorZones.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
