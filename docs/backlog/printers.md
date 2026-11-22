@@ -566,6 +566,11 @@ Hardware and inbox checks to complete in the owner session.
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
   `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
 
+- **The A4 invoice's title and the venue's name are printed larger than the VERI\*FACTU caption
+  (owner, 2026-11-22, approving the A4 invoice layout).** It extends the TOTAL entry above to these
+  two lines. The venue's name is the trading name, or the legal name when no trading name prints.
+  [Design](../superpowers/specs/2026-11-22-a4-invoice-layout-design.md).
+
 - **A ruled line between TOTAL and the tax table on every simplified receipt (owner, 2026-11-05,
   A404).** It reverses A663's "TOTAL, then the rates, nothing between them" for that one line; the
   sample receipt matches (`buildReceiptDocument`, `apps/server/src/receipt-document.ts`).
