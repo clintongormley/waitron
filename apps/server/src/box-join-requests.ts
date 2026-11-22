@@ -63,7 +63,6 @@ export interface ListedJoinRequest {
   id: string;
   address: string;
   askedAt: string;
-  expiresAt: string;
   startedAgain: boolean;
 }
 
@@ -91,9 +90,8 @@ interface JoinRequest extends Omit<HeldJoinRequest, "revealed"> {
   id: string;
   mainNonce: Buffer;
   helloAt: number;
-  /** Wall times taken once at the hello, so every read reports the same ones. */
+  /** A wall time taken once at the hello, so every read reports the same one. */
   askedAt: string;
-  expiresAt: string;
   lastSeq: number;
   latestAt: string;
   latestAtReceived: number;
@@ -258,7 +256,6 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       mainNonce,
       helloAt: now,
       askedAt: wallAt(now),
-      expiresAt,
       lastSeq: 0,
       latestAt: input.at,
       latestAtReceived: now,
@@ -396,28 +393,18 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         id: r.id,
         address: r.address,
         askedAt: r.askedAt,
-        expiresAt: r.expiresAt,
         startedAgain: r.revealed!.startedAgain,
       }));
     },
 
-    /** The three codes in a random order, and the new box's latest clock reading. */
-    check(requestId: string):
-      | {
-          address: string;
-          askedAt: string;
-          startedAgain: boolean;
-          choices: string[];
-          at: string;
-          atReceivedAt: string;
-        }
-      | JoinNotFound {
+    /** The hello, the three codes in a random order, and the new box's latest clock reading. */
+    check(
+      requestId: string,
+    ): { hello: JoinHello; choices: string[]; at: string; atReceivedAt: string } | JoinNotFound {
       const r = held(requestId);
       if (!r || !isListed(r)) return { refused: "not_found" };
       return {
-        address: r.address,
-        askedAt: r.askedAt,
-        startedAgain: r.revealed!.startedAgain,
+        hello: r.hello,
         choices: [...r.revealed!.choices],
         at: r.latestAt,
         atReceivedAt: wallAt(r.latestAtReceived),

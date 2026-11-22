@@ -419,7 +419,6 @@ const asking: ServerListing = {
       id: JOIN,
       address: "192.168.1.23",
       askedAt: "2026-11-21T10:00:00.000Z",
-      expiresAt: "2026-11-21T10:15:00.000Z",
       startedAgain: true,
     },
   ],
@@ -443,12 +442,7 @@ describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) =
       {
         api: stubApi({
           listServers: vi.fn().mockResolvedValue(asking),
-          checkBoxJoin: vi.fn().mockResolvedValue({
-            address: "192.168.1.23",
-            askedAt: "2026-11-21T10:00:00.000Z",
-            startedAgain: true,
-            choices: ["482913", "105770", "930264"],
-          }),
+          checkBoxJoin: vi.fn().mockResolvedValue({ choices: ["482913", "105770", "930264"] }),
           ...overrides,
         }),
       },

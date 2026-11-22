@@ -320,15 +320,8 @@ describe("the main box's person routes for a joining box", () => {
       const { requestId, code } = await listedRequest(`192.168.1.${30 + n}`);
       const first = await check(requestId);
       expect(first.status).toBe(200);
-      const answer = first.body as {
-        address: string;
-        askedAt: string;
-        startedAgain: boolean;
-        choices: string[];
-      };
-      expect(Object.keys(answer).sort()).toEqual(["address", "askedAt", "choices", "startedAgain"]);
-      expect(answer.address).toBe(`192.168.1.${30 + n}`);
-      expect(answer.startedAgain).toBe(false);
+      const answer = first.body as { choices: string[] };
+      expect(Object.keys(answer)).toEqual(["choices"]);
       expect(new Set(answer.choices).size).toBe(3);
       expect(answer.choices).toContain(code);
       expect(((await check(requestId)).body as { choices: string[] }).choices).toEqual(
@@ -343,7 +336,8 @@ describe("the main box's person routes for a joining box", () => {
   it("shows the started-again flag for a box that cancelled and asked again", async () => {
     await cancel(await listedRequest("192.168.1.20"));
     const { requestId } = await listedRequest("192.168.1.20");
-    expect(((await check(requestId)).body as { startedAgain: boolean }).startedAgain).toBe(true);
+    expect((await check(requestId)).status).toBe(200);
+    expect(requests.listed().find((r) => r.id === requestId)?.startedAgain).toBe(true);
   });
 
   it("lists waiting requests on the Servers listing when given them", async () => {
@@ -369,7 +363,6 @@ describe("the main box's person routes for a joining box", () => {
         id: requestId,
         address: "192.168.1.20",
         askedAt: expect.any(String),
-        expiresAt: expect.any(String),
         startedAgain: false,
       },
     ]);

@@ -28,7 +28,6 @@ const asking = {
   id: REQUEST,
   address: "192.168.1.23",
   askedAt: "2026-11-21T10:00:00.000Z",
-  expiresAt: "2026-11-21T10:15:00.000Z",
   startedAgain: false,
 };
 
@@ -39,9 +38,6 @@ const listing = (joinRequests = [asking]): ServerListing => ({
 });
 
 const checked: BoxJoinCheck = {
-  address: "192.168.1.23",
-  askedAt: asking.askedAt,
-  startedAgain: false,
   choices: ["482913", "105770", "930264"],
 };
 

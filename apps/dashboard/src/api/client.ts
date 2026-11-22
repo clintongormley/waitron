@@ -2002,16 +2002,12 @@ export interface BoxJoinRequestRow {
   id: string;
   address: string;
   askedAt: string;
-  expiresAt: string;
   /** A box at this address started again recently: tap only a code it showed after that. */
   startedAgain: boolean;
 }
 
 /** The Check answer (`apps/server/src/box-join-api.ts`): three six-digit codes, one the new box's. */
 export interface BoxJoinCheck {
-  address: string;
-  askedAt: string;
-  startedAgain: boolean;
   choices: string[];
 }
 

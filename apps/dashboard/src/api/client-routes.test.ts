@@ -1546,7 +1546,7 @@ describe("DashboardApi routes", () => {
   });
 
   it("checks, approves and dismisses a box's join by its request id", async () => {
-    const checked = { address: "192.168.1.23", askedAt: "t", startedAgain: false, choices: ["1"] };
+    const checked = { choices: ["1"] };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(checked))

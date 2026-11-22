@@ -371,22 +371,16 @@ export function mountBoxJoinPersonApi(
 
   function listedView(requestId: string) {
     const view = requests.check(requestId);
-    const held = requests.requestFor(requestId);
-    if ("refused" in view || held === null) throw new AppError("mirror.join_not_found", {});
-    return { view, held };
+    if ("refused" in view) throw new AppError("mirror.join_not_found", {});
+    return view;
   }
 
   app.post("/management-api/box-joins/:id/check", (c) =>
     run(c, log, async () => {
       await guard(c, true);
-      const { view, held } = listedView(c.req.param("id"));
-      await refuseJoinBeforeApproving(deps, held.hello.newNodeId, newBoxNow(view));
-      return c.json({
-        address: view.address,
-        askedAt: view.askedAt,
-        startedAgain: view.startedAgain,
-        choices: view.choices,
-      });
+      const view = listedView(c.req.param("id"));
+      await refuseJoinBeforeApproving(deps, view.hello.newNodeId, newBoxNow(view));
+      return c.json({ choices: view.choices });
     }),
   );
 
@@ -400,7 +394,8 @@ export function mountBoxJoinPersonApi(
       const approverId = await guard(c, true);
       const body = await readJsonBody<{ code?: unknown; moduleOperation?: unknown }>(c);
       const requestId = c.req.param("id");
-      const { view, held } = listedView(requestId);
+      const view = listedView(requestId);
+      const { hello } = view;
       const begun = requests.approve.begin(
         requestId,
         typeof body.code === "string" ? body.code : "",
@@ -417,9 +412,9 @@ export function mountBoxJoinPersonApi(
         const lock = prepareJoinLock({ requestId, encryptionKey: begun.encryptionKey });
         if (lock === null) throw new AppError("mirror.standby_invalid", {});
         const spare = {
-          standby: { nodeId: held.hello.newNodeId, publicKey: held.hello.newPublicKey },
-          contactUrl: held.hello.contactUrl,
-          storeUrl: held.hello.storeUrl,
+          standby: { nodeId: hello.newNodeId, publicKey: hello.newPublicKey },
+          contactUrl: hello.contactUrl,
+          storeUrl: hello.storeUrl,
           at: newBoxNow(view),
         };
         let issue = () => issueMirrorBundle(deps, spare);

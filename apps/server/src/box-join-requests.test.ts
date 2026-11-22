@@ -169,7 +169,6 @@ describe("reveal", () => {
         id: "req-1",
         address: "10.0.0.1",
         askedAt: iso(0),
-        expiresAt: iso(15 * 60_000),
         startedAgain: false,
       },
     ]);
@@ -251,15 +250,12 @@ describe("reveal", () => {
 
   it("reports the same asked time on every read, however the two clocks have moved", () => {
     const { store, revealFrom, clock } = setup();
-    const { id } = revealFrom("10.0.0.1");
-    const asked = () => {
-      const check = store.check(id);
-      return "refused" in check ? null : check.askedAt;
-    };
+    revealFrom("10.0.0.1");
+    const asked = () => store.listed()[0]!.askedAt;
     const first = asked();
     clock.steady += 5;
     clock.wall += 7;
-    expect([asked(), store.listed()[0]!.askedAt]).toEqual([first, first]);
+    expect([asked(), asked()]).toEqual([first, first]);
   });
 
   it("hands Check a copy of the codes, so a caller cannot reorder the stored list", () => {
