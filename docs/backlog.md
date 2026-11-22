@@ -109,9 +109,8 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 **4. Released by the hold, once A760 lands.** Build order (A446's pre-bill is not scheduled, owner
 2026-11-17):
-close the day, then A947 and its handover bundles.
+A947 and its handover bundles.
 
-- [Finish drawer reporting, reminders and waiter floats](backlog/till.md#bundle-finish-drawer-reporting-reminders-and-waiter-floats)
 - [Series and module-preparation gaps at handover](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 - [Finish the clock work: a check at every start and every change](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
@@ -821,7 +820,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Nothing covers the order screen's bar** (bundle of 1, size S, needs the owner). Holds A1211. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
-- **Finish drawer reporting, reminders and waiter floats** (bundle of 2, 1 go-live, 1 important, size L, design approved 2026-11-06). The remaining drawer work is the warning for an unfinished close and adding drawer counts and differences to the daily email. [Detail](backlog/till.md#bundle-finish-drawer-reporting-reminders-and-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
+- **Waiter cash floats (A240)** (size L, needs a spec). [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another

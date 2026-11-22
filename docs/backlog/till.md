@@ -417,19 +417,6 @@ Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were look
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
 address has not been looked at.
 
-## A1325. Close the day: count the cash and save the day's close
-
-**Design approved by the owner, 2026-11-06:** [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md).
-A close is a counted withdrawal from one drawer, at any time, covering everything since that drawer's
-last close. It takes in A239, so the two are built together, and A240 can land after them. The
-[implementation plan](../superpowers/plans/2026-11-21-a1325-close-a-drawer.md) replaces `daily_closes`
-and builds on the completed refund flow (#3971). Sales and the daily email keep each figure on its
-existing reporting date, including later writes dated to that day. A saved drawer close keeps its
-count and withdrawal, and later cash movement belongs to the next close. Sales shows drawer counts
-and withdrawals and can reprint a finished close. Staff count and close a drawer from **More**
-on the till and record cash top-ups and withdrawals there. The remaining slice warns when a drawer
-was due for a close and adds the drawer figures to the daily email.
-
 ## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
 Piece 3 of
@@ -1116,18 +1103,6 @@ Printer identity is separate from the till route inventory.
 
 - **Qualify printer identity at enrolment.** Complete the device enrolment design's printer track.
   [Detail](till.md#printer-identity-at-enrolment).
-
-## Bundle: Finish drawer reporting, reminders and waiter floats
-
-2 entries, size L.
-
-- **A1325. Warn about missing drawer closes and include the counts in the daily email.**
-  Warn when a drawer had cash movement and missed its close. Include counts and differences in the
-  daily summary.
-  [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
-- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
-  A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Part of A1325’s design (owner, 2026-11-04).
-  [Detail](till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
 ## Bundle: Show a table's short name where the full name does not fit
 

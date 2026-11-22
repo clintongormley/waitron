@@ -18,6 +18,14 @@ export const DAILY_REPORT_EMAIL_WORDS = {
     gross: "Total including VAT",
     noDepartment: "No department",
     topSellers: "Top sellers",
+    drawerCloses: "Drawer closes",
+    drawerCounted: "Counted",
+    drawerDifference: "Difference",
+    drawerReminders: "Drawer close reminders",
+    drawerOverdue: (drawer: string) => `${drawer} needs a close.`,
+    drawerNeedsTill: (drawer: string) =>
+      `${drawer} needs a close. Assign it to a till so staff can close it.`,
+    salesHistory: "Find earlier closes in Sales.",
     methods: {
       cash: "Cash",
       card: "Card",
@@ -45,6 +53,14 @@ export const DAILY_REPORT_EMAIL_WORDS = {
     gross: "Total con IVA",
     noDepartment: "Sin departamento",
     topSellers: "Más vendidos",
+    drawerCloses: "Cierres de caja",
+    drawerCounted: "Recuento",
+    drawerDifference: "Diferencia",
+    drawerReminders: "Avisos de cierre de caja",
+    drawerOverdue: (drawer: string) => `Falta cerrar ${drawer}.`,
+    drawerNeedsTill: (drawer: string) =>
+      `Falta cerrar ${drawer}. Asígnalo a un TPV para que el personal pueda cerrarlo.`,
+    salesHistory: "Consulta los cierres anteriores en Ventas.",
     methods: {
       cash: "Efectivo",
       card: "Tarjeta",

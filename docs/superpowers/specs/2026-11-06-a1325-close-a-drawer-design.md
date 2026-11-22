@@ -1,7 +1,7 @@
 # Closing a drawer (A1325, with A239)
 
 Status: approved by the owner on 6 November 2026, after a fresh reviewer read it. Nothing is built. It replaces the
-"close the day" framing in [A1325](../../backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
+"close the day" framing in [A1325](https://github.com/clintongormley/waitron/blob/e40d2721cd1d8e6b70e203c45a3714a57d803f02/docs/backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 and absorbs [A239](#cash-in-and-out-a239).
 
 ## Intent

@@ -226,6 +226,7 @@ import {
   invoiceDeliveryAlertSource,
   passScreenAlertSource,
   printingAlertSource,
+  drawerCloseAlertSource,
   contentSuggestionsAlertSource,
   jobFailingAlertSource,
   stationOutputAlertSource,
@@ -3185,6 +3186,7 @@ async function bootServer(
         readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
       }),
       dailyReportMail({
+        managementOrigin: config.managementOrigin,
         nodeId: tradingContext.nodeId,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
@@ -4038,6 +4040,7 @@ async function bootServer(
     ),
     clockUnconfirmedAlertSource(startClockWaits),
     printingAlertSource(tradingContext.nodeId),
+    drawerCloseAlertSource(),
     contentSuggestionsAlertSource(translationContext),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
