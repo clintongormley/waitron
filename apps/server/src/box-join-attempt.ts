@@ -33,9 +33,9 @@ import {
   fetchPrimaryCertificate,
   isIsoTime,
   isMirrorBundle,
-  isRecord,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
+import { isRecord } from "./boot-peer-check.js";
 import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
 import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
