@@ -8,6 +8,7 @@ import { Hono, type Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
+  devices,
   insertReservedNodeTx,
   nodes,
   readNodeMembership,
@@ -16,7 +17,7 @@ import {
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
 import { endorseKey, routableServers } from "@waitron/membership";
@@ -24,7 +25,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, type WaitronModule } from "@waitron/module";
 import { readHandoverOperation, readHandoverRestriction, readNodeMode } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { nodeId as asNodeId } from "@waitron/shared";
 import { MODULE_RECORDS_DIR } from "@waitron/store";
+import { mountDeviceApi } from "./device-api.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 import {
   acceptFinalCopy,
   readStoredAcceptance,
@@ -46,11 +50,13 @@ import { readNodeIdentityKey } from "./node-identity.js";
 import { removeStandby } from "./membership-removal.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { runReturnRecordsPass } from "./return-records.js";
 import { knownHandoverSuccessor } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fiscalRows } from "./testing/fiscal-rows.js";
 import {
   boxRequest,
@@ -67,6 +73,7 @@ import {
   mirrorBundleApp,
   veriFactuMainBox,
 } from "./testing/veri-factu-join.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The new installation's name is chosen against these two clocks; the browser's is `Date.now()`.
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
@@ -348,6 +355,73 @@ async function controlledTakeover(
     waitUntil,
   }).takeOver();
   return { boxes, mainId, spareId, c, cVenue, modules };
+}
+
+/** The spare declares an emergency switch on a copy of the main box's file and takes over. */
+async function emergencyTakeover(
+  boxes: Awaited<ReturnType<typeof joined>>,
+  waitUntil: (targetMs: number) => void,
+  opened: Array<{ close(): Promise<void> }>,
+) {
+  const { mainId, spareId } = boxes;
+  const signIn = { email: boxes.main.email, password: ADMIN_PASSWORD };
+  // The spare's copy of the venue is a vacuum of the main box's file.
+  const bVenue = join(scratch, "b-venue");
+  await mkdir(bVenue);
+  mainBox.db.run(sql`vacuum into ${join(bVenue, "venue.db")}`);
+  spareBox.node.run(sql`vacuum into ${join(bVenue, "node.db")}`);
+  const b = await openVenueDatabase(bVenue);
+  opened.push(b);
+  const modules = enabledModules(ALL_MODULES, await readModuleConfig(b.venue));
+
+  const declaration = new Hono();
+  const emergency = mountHandoverEmergencyApi(declaration, {
+    db: b.venue,
+    node: b.node,
+    nodeId: spareId,
+    ring: RING,
+    stateDir: spareState,
+    venueDir: bVenue,
+    modules,
+    origin: "https://box.test",
+    rpId: "box.test",
+    credentialKeyRing: TOTP_KEY_RING,
+    fetch: async () => {
+      throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
+    },
+  });
+  const preview = await boxRequest(declaration, "/api/node/handover/emergency/preview", {
+    signIn,
+  });
+  expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+  const { copy } = preview.body as { copy: { identifier: string; lastChangeAtMs: number } };
+  const declared = await boxRequest(declaration, "/api/node/handover/emergency/declare", {
+    operationId: EMERGENCY_OP,
+    expectedCopy: copy,
+    signIn,
+    statements: {
+      sourceSwitchedOff: true,
+      noParallelRecovery: true,
+      missingTailAccepted: true,
+    },
+    reason: "The main box is switched off",
+    locale: "en",
+  });
+  expect(declared.status, JSON.stringify(declared.body)).toBe(200);
+  await takeoverRoutes({
+    store: b,
+    nodeId: spareId,
+    sourceId: mainId,
+    operationId: EMERGENCY_OP,
+    stateDir: spareState,
+    venueDir: bVenue,
+    modules,
+    ring: RING,
+    signIn,
+    emergency,
+    waitUntil,
+  }).takeOver();
+  return { b, bVenue };
 }
 
 /** The new main box's real receive route. */
@@ -844,65 +918,9 @@ describe("the owner's case: an emergency switch while the old main box stays off
     try {
       const boxes = await joined();
       const { mainId, spareId } = boxes;
-      const signIn = { email: boxes.main.email, password: ADMIN_PASSWORD };
       await saleOn(mainBox.db, mainId);
       await boxes.writeSpareRow();
-      // The spare's copy of the venue is a vacuum of the main box's file.
-      const bVenue = join(scratch, "b-venue");
-      await mkdir(bVenue);
-      mainBox.db.run(sql`vacuum into ${join(bVenue, "venue.db")}`);
-      spareBox.node.run(sql`vacuum into ${join(bVenue, "node.db")}`);
-      const b = await openVenueDatabase(bVenue);
-      opened.push(b);
-      const modules = enabledModules(ALL_MODULES, await readModuleConfig(b.venue));
-
-      const declaration = new Hono();
-      const emergency = mountHandoverEmergencyApi(declaration, {
-        db: b.venue,
-        node: b.node,
-        nodeId: spareId,
-        ring: RING,
-        stateDir: spareState,
-        venueDir: bVenue,
-        modules,
-        origin: "https://box.test",
-        rpId: "box.test",
-        credentialKeyRing: TOTP_KEY_RING,
-        fetch: async () => {
-          throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
-        },
-      });
-      const preview = await boxRequest(declaration, "/api/node/handover/emergency/preview", {
-        signIn,
-      });
-      expect(preview.status, JSON.stringify(preview.body)).toBe(200);
-      const { copy } = preview.body as { copy: { identifier: string; lastChangeAtMs: number } };
-      const declared = await boxRequest(declaration, "/api/node/handover/emergency/declare", {
-        operationId: EMERGENCY_OP,
-        expectedCopy: copy,
-        signIn,
-        statements: {
-          sourceSwitchedOff: true,
-          noParallelRecovery: true,
-          missingTailAccepted: true,
-        },
-        reason: "The main box is switched off",
-        locale: "en",
-      });
-      expect(declared.status, JSON.stringify(declared.body)).toBe(200);
-      await takeoverRoutes({
-        store: b,
-        nodeId: spareId,
-        sourceId: mainId,
-        operationId: EMERGENCY_OP,
-        stateDir: spareState,
-        venueDir: bVenue,
-        modules,
-        ring: RING,
-        signIn,
-        emergency,
-        waitUntil,
-      }).takeOver();
+      const { b, bVenue } = await emergencyTakeover(boxes, waitUntil, opened);
       expect(await readHandoverOperation(b.node, spareId, EMERGENCY_OP)).toMatchObject({
         scenario: "emergency",
         state: "activated",
@@ -975,6 +993,77 @@ describe("the owner's case: an emergency switch while the old main box stays off
       expect(await readHandoverOperation(resetBox.node, newSpare.newId, NEXT_OP)).toMatchObject({
         state: "prepared",
       });
+    } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+
+  it("a till enrolled on the main box still signs in on the box that took over after an emergency switch", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    try {
+      const boxes = await joined();
+      const { mainId, spareId } = boxes;
+      await saleOn(mainBox.db, mainId);
+      await boxes.writeSpareRow();
+      const cfgOn = (id: string): TradingContext => ({
+        nodeId: asNodeId(id),
+        locale: "es-ES",
+        tipsEnabled: false,
+        simplifiedInvoiceLimit: null,
+      });
+      const [profile] = await seedDeviceProfiles(mainBox.db, {
+        name: "Bar till",
+        formFactor: "till",
+        capabilities: ["take-orders"],
+      });
+      const enrolled = await enrolDeviceForTest(mainBox.db, cfgOn(mainId), {
+        name: "Bar till",
+        profileId: profile!.id,
+      });
+      const cookie = `${DEVICE_COOKIE}=${enrolled.deviceId}.${enrolled.token}`;
+      const wrongToken = `${DEVICE_COOKIE}=${enrolled.deviceId}.not-the-token`;
+      const me = async (db: typeof mainBox.db, deviceCookie: string) => {
+        const app = new Hono();
+        mountDeviceApi(
+          app,
+          { db, cfg: cfgOn(spareId), secureCookies: true, pairingMode: createPairingMode() },
+          () => {},
+        );
+        const response = await app.request("https://waitron.local/api/device/me", {
+          headers: { cookie: deviceCookie },
+        });
+        return { status: response.status, body: (await response.json()) as unknown };
+      };
+      const signedIn = {
+        status: 200,
+        body: {
+          deviceId: enrolled.deviceId,
+          name: "Bar till",
+          profileId: profile!.id,
+          formFactor: "till",
+        },
+      };
+      const refused = { status: 401, body: { error: { code: "device.unauthorized" } } };
+
+      const { b, bVenue } = await emergencyTakeover(boxes, waitUntil, opened);
+      // Renamed on the old main box only, so a read of the wrong file shows the wrong name.
+      await withTransaction(mainBox.db, (tx) =>
+        tx.update(devices).set({ label: "Old box only" }).where(eq(devices.id, enrolled.deviceId)),
+      );
+      expect((await readNodeMode(b.node, spareId)).mode).toBe("primary");
+      expect(await me(b.venue, cookie)).toMatchObject(signedIn);
+      expect(await me(b.venue, wrongToken)).toMatchObject(refused);
+
+      await b.close();
+      opened.splice(opened.indexOf(b), 1);
+      const reopened = await openVenueDatabase(bVenue);
+      opened.push(reopened);
+      expect(await me(reopened.venue, cookie)).toMatchObject(signedIn);
+      expect(await me(reopened.venue, wrongToken)).toMatchObject(refused);
     } finally {
       for (const store of opened) await store.close();
     }
