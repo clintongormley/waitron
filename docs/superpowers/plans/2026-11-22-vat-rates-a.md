@@ -84,6 +84,15 @@ from reading the code, except the commands quoted, which were run.
   Read with Python: 31 sales, 68 lines, 40 lines not at 10%, 25 sales with such a line, the first
   record (secuencia 1) among them, VAT summed over the copy €73.66.
 
+- **The VAT return reports four rates.** `mapModelo303` (`packages/reporting/src/modelo-303.ts:35-59`)
+  has boxes for `4.00`, `10.00`, `21.00` and `0.00` only, and throws a plain `Error` for any other
+  rate ("modelo 303 has no devengado box for rate …"); its comment says the 5% row is gone from the
+  2026 form. The route `GET /management-api/reports/modelo-303` calls it (`apps/server/src/report-api.ts:315`).
+  `pnpm --filter @waitron/reporting exec vitest run src/modelo-303.test.ts` passed 11, including
+  "refuses a rate with no verified box (the retired 5%)" (`:152-162`). Labels could only reach those
+  four rates; the owner's pick list of seven could not (D18). The spec's "reports … None of them
+  needs to change" does not hold for this one.
+
 **Premises checked by running a command:**
 
 - *Nothing after a sale reads a label.* `git grep -n -i "vatclass\|vat_class" packages/reporting packages/core packages/fiscal packages/fiscal-verifactu packages/adjustments packages/payments`
@@ -130,8 +139,9 @@ before the tasks that depend on them start** (each task names its gate).
   set-menu form's eat-in field decides nothing from PR 3; piece B removes it (hiding it earlier
   would need a stand-in value for `menus_set_terms_ck`, `menus.ts:71-72`). *Recommended.*
 - **D3. Every top-level product has a rate from the beginning of time; a variant may have one.**
-  `createProduct` writes it (the requested rate, else the venue default); `seedMenuItem`
-  (`packages/db/src/testing/seed.ts:162-170`, which inserts a product raw) writes one; the
+  `createProduct` writes it (the requested rate, else the venue default); the two fixtures that
+  insert products raw write one — `seedMenuItem` (`packages/db/src/testing/seed.ts:162-170`) and
+  `packages/venue-service/src/testing/set-menu-fixtures.ts:53-66`; the
   configuration import refuses a top-level product without exactly one such row; the demo creates
   products through `createProduct`. A product line with no rate is refused `vat_rate.unavailable`,
   never guessed — no venue can reach it. A variant with no rows takes its parent's (the spec's "my
@@ -162,9 +172,12 @@ before the tasks that depend on them start** (each task names its gate).
   *Recommended: yes.*
 - **D11. Fiscal and guard tests that change — needs the owner:**
   - (a) `packages/fiscal-verifactu/src/write-path.e2e.test.ts` "a variant line is filed at its own
-    effective VAT rate" (`:697-787`) rewritten for takeaway rates, same filed figures (Task 2.4,
-    exact text there). For PR 2's life, eat-in variant-label coverage remains only in
-    `vat-class-at-line-add.test.ts` (deleted in PR 3, when eat-in has no variant rate at all).
+    effective VAT rate" (`:697-787`, eaten in, a variant with its own `general` label at 21%). PR 2
+    leaves it untouched, so a variant with its own eat-in label stays covered while eat-in still
+    reads labels, and ADDS a takeaway twin beside it (Task 2.4, exact text there; adding a test
+    needs no yes). PR 3 Task 3.1 DELETES the eat-in describe, because from PR 3 no line eaten in
+    has a variant rate; its replacement is Task 3.1's "a variant with its own `general` label files
+    10% eaten here". The deletion is what needs the owner's yes.
   - (b) `apps/server/src/vat-class-at-line-add.test.ts` deleted in PR 3: its label-frozen-at-add
     property is reversed by the spec (consequences in D4). Replaced by Task 2.3's takeaway file and
     Task 3.1's eat-in file.
@@ -215,6 +228,26 @@ before the tasks that depend on them start** (each task names its gate).
     records still cover four rates. Every row changes (the takeaway draw consumes the random
     sequence), so nothing above can be checked as unchanged.
 
+- **D18. Which takeaway rates a person may pick while the VAT return reports four — needs the
+  owner.** The pack's `vatRates` stays the owner's seven (0, 2, 4, 5, 7.5, 10, 21), but modelo 303
+  can carry only 0, 4, 10 and 21 today (above), so one product taken away at 5% would make that
+  period's modelo 303 download fail with a server error.
+  - **(a, recommended)** piece A offers only the rates in both lists: `readVenueVatRates` returns
+    `pickable` = the area's `vatRates` filtered by `MODELO_303_RATES`, a new export of
+    `packages/reporting/src/modelo-303.ts` (the keys of its box table), with a comment at that site
+    saying the list is limited to what the VAT return can report and that the pack's list is the
+    full one. In Spain that is 0, 4, 10 and 21. The editor, the API, the venue default and the
+    bundle import all go through it. 2, 5 and 7.5 are offered once a separate item maps them in
+    modelo 303; this plan does not say whether the form has boxes for them (no source read).
+    Cost: a filter, one dependency (`@waitron/menu` on `@waitron/reporting`, which depends on
+    neither menu nor anything that does), and tests.
+  - (b) map 2, 5 and 7.5 in modelo 303 inside piece A. Cost: reading the committed AEAT record
+    design (`packages/reporting/reference/DR303e26.xlsx`) and its layout for rows at those rates;
+    if they exist, boxes in `DEVENGADO_BOXES`, the DR303 writer and its tests; if one does not
+    exist (the code says the 5% row is gone), that rate cannot be reported at all and (a)'s limit
+    is needed anyway. Changing a filing document makes this an owner-landed fiscal change of its
+    own, outside the approved design's piece A.
+
 ---
 
 ## Global Constraints
@@ -231,12 +264,17 @@ Every place piece A touches. Every task's requirements include this list.
   "Sale-path read changed: issuing a takeaway order, and pricing a new takeaway basket, read the
   products' takeaway rates in one query (`readTakeawayVatSchedules`)." PR 3's carries "Sale-path
   read changed: issuing an order, pricing a new basket and issuing an advance read the venue's area
-  (taxpayer row and venue settings) once for the dine-in list." PR 4's, if Task 4.3 adds the copy
-  read: "Sale-path read changed: issuing a takeaway order holding a set-menu line reads its recorded
-  copy once." Rates are read **only** by `readLockedLinesForIssuance` and `priceOrderLines`;
+  (taxpayer row and venue settings) once for the dine-in list." PR 4's: "Sale-path read changed:
+  issuing a takeaway order holding a set-menu line reads its recorded menu document once
+  (`readRecordedDocuments`)." Rates are read **only** by `readLockedLinesForIssuance` and `priceOrderLines`;
   `readLockedLines` and every gross-only reader read none.
 - **Compiling:** each task says which packages do not typecheck until which later task in the same
-  PR. No PR ends with a package that does not typecheck.
+  PR. No PR ends with a package that does not typecheck: each PR's last task runs `pnpm -r typecheck`.
+  Suites failing at runtime inside a PR are named in the task that starts them (only PR 3's D10
+  window, Tasks 3.1–3.14).
+- **Failing test first:** every task that adds behaviour starts with a test that fails. Tasks that
+  only delete or sweep, or that only rewrite tests, have none and say so: 2.5, 3.2–3.14, 4.3,
+  4.4, the sweeps (4.5–4.18) and the drop (4.19).
 - **Fiscal gates:** `computeHuella`, the chain, invoice numbering, `registros_facturacion` and its
   triggers, `recordSale`/`recordCorrection`/`recordSubstitution` do not change. Every task touching
   `packages/menu/src/pricing.ts`, `issue-moment.ts`, `sale-day.ts`, the issuing reader or
@@ -261,7 +299,7 @@ Every place piece A touches. Every task's requirements include this list.
 - **Pack fields (PR 1)** on `FiscalJurisdiction`: `dineInVatRates?: readonly DatedVatRate[]`,
   `vatRates?: readonly string[]`, `defaultTakeawayVatRate?: string`. `ES-common`:
   `[{ from: null, rate: "10.00" }]`, `["0.00", "2.00", "4.00", "5.00", "7.50", "10.00", "21.00"]`,
-  `"10.00"`; `GB-vat`: D6. `CountryPack.defaultProductVatClass` (`country.ts:155`) and Spain's value
+  `"10.00"`; `GB-vat`: D6. What a person may pick is that list limited by D18. `CountryPack.defaultProductVatClass` (`country.ts:155`) and Spain's value
   go in PR 4.
 - **Shared names:** new `rateOn` (PR 1). Deleted in PR 4: `vatRatesOn`, `ADVANCE_VAT_CLASS`,
   `appliedVatClass`; the label fields of `MenuOffer`, `MenuOfferVariant`, `AvailableProduct`,
@@ -269,9 +307,11 @@ Every place piece A touches. Every task's requirements include this list.
   (`product-types.ts:85-86, 120-122, 173-176, 214-217`), and `SetMenuCopy.terms`
   (`set-menu-bill.ts:16, 56-62`). **Kept until piece B (D2):** `VatClass`, `VAT_CLASSES`,
   `VAT_RATE_TABLE`, `vatRateOn`, `vat_rate.table_invalid`, `ServedSetMenuCopy.terms` labels.
-- **Pricer (PR 2):** `LockedLine`, `GrossLine`, `SelectedOption` carry `vatRates: readonly DatedRate[]`
-  instead of `vatClass`; `PriceableProduct` gains optional `vatRates` (rated by its `vatClass` label
-  when absent, until PR 4 removes both and makes `vatRates` required).
+- **Pricer (PR 2):** `GrossLine` and `SelectedOption` carry `vatRates: readonly DatedRate[]` instead
+  of `vatClass`. `LockedLine` loses `vatClass` and carries no rate: the issuing reader passes one
+  list per line to `grossLockedLines(lines, rates?)`, and without `rates` every gross line's list
+  is `[]` (which `rateLines` refuses). `PriceableProduct` gains optional `vatRates` (rated by its
+  `vatClass` label when absent, until PR 4 removes the label and makes `vatRates` required).
 - **Module contract (PR 4):** `packages/module/src/module.ts:252-253, 308, 771`.
 - **Settings:** `MENU_SETTINGS` gains `defaultTakeawayVatRate` (PR 2) and loses
   `defaultProductVatClass` (PR 4; hidden from people in PR 3). It is a module settings document
@@ -321,7 +361,7 @@ Every place piece A touches. Every task's requirements include this list.
   - Hidden products' `vat_class = 'reduced'` and the `"unchosen"` one's `takeaway_vat_class = NULL`:
     after PR 2 each rate product has one `product_takeaway_vat_rates` row from the beginning at its
     key's rate and the `"unchosen"` one the venue default (D3); PR 4 drops the labels. The rate
-    products cover the pack's seven rates, not four.
+    products cover `readVenueVatRates(tx).pickable` (0, 4, 10, 21 under D18(a)).
   - `customItemProduct`/`customItemRatesOn` (its Task 1) and the till's `customItemRates` (Task 8)
     take the pick list from `readVenueVatRates(tx).pickable` (the till from the setup read), not
     `VAT_RATE_TABLE`.
@@ -340,9 +380,10 @@ Every place piece A touches. Every task's requirements include this list.
    follows the order's way at issue. Tasks 2.3 and 3.1.
 4. **A meal that ended before midnight, ticketed after it, on the day a dated rate changes:** the
    meal's day's rate — a product's dated row (Task 2.3) and the dine-in list (Task 3.1).
-5. **A rate that is not a whole percent** (`"7.50"`, 750): editor (Task 2.9), API (2.8), storage and
-   bundle round trip (1.3), and a takeaway ticket that files a 7.50 line (2.3); and `"7.5"` written
-   in a list groups with a stored 750 as one breakdown row (1.1).
+5. **A rate the pack lists but the VAT return cannot report** (2, 5, 7.5, D18): not offered by the
+   editor (Task 2.9) or the venue default (2.10), refused by the API (2.8), `setTakeawayVatRate`
+   (1.3) and the bundle import (1.5); and `"7.5"` written in a list reads `"7.50"`, one spelling
+   with a stored 750 (1.1).
 
 ---
 
@@ -352,7 +393,7 @@ Every place piece A touches. Every task's requirements include this list.
 from then on has a takeaway rate row at the area's default; bundles carry the rows and an import
 refuses a product without one. Nothing reads the rows or lists yet. First line: "Reset test venues:
 FISCAL: store each product's takeaway VAT rate and Spain's rate lists (VAT rates A, PR 1)".
-**Risks:** creating a product now needs a taxpayer (D7); about eight test files seed one.
+**Risks:** creating a product now needs a taxpayer (D7); the test files that lack one seed one (Task 1.4).
 
 ### Task 1.1: The pack's lists and a dated-list lookup
 
@@ -416,46 +457,79 @@ FISCAL: store each product's takeaway VAT rate and Spain's rate lists (VAT rates
   `behavioural-triggers`; the fiscal gate command; `seed.madrid-baseline.test.ts`.
 - [ ] **Step 5: Commit** — "VAT rates: a table for each product's dated takeaway rate".
 
-### Task 1.3: The one reader and writer; every new product gets a row
+### Task 1.3: The one reader and writer
 
-**Compiles:** every package, throughout (the new input is optional).
+**Compiles:** every package, throughout (nothing calls the new module yet).
 
 **Files:**
 - Create: `packages/menu/src/takeaway-vat-rates.ts`; export from `packages/menu/src/index.ts`
-- Modify: `packages/menu/src/operations.ts:990-1036` (`insertProduct` writes the row),
-  `configuration-transfer.ts:220-270` (import checks), `packages/db/src/testing/seed.ts:162-170`
-  (`seedMenuItem` writes a row at 1000), the madrid baseline (the table moves from `ADDED_TABLES`
-  to a transform: one row at 1000 per captured top-level product), and the test files that create
-  products with no taxpayer (Step 4)
-- Test: `packages/menu/src/takeaway-vat-rates.test.ts`, `configuration-transfer.test.ts`,
-  `packages/provisioning/src/configuration-transfer.json-lists.test.ts`
+- Modify: `packages/reporting/src/modelo-303.ts` (export `MODELO_303_RATES`, the keys of
+  `DEVENGADO_BOXES`, D18), `packages/reporting/src/index.ts`, `packages/menu/package.json`
+  (`@waitron/reporting` dependency)
+- Test: `packages/menu/src/takeaway-vat-rates.test.ts`, `packages/reporting/src/modelo-303.test.ts`
 
 **Interfaces:**
 - Consumes: `vatRatesFor`, `rateOn` (1.1), `productTakeawayVatRates` (1.2).
-- Produces (`@waitron/menu`): `readVenueVatRates(tx): Promise<AreaVatRates>` (D7 refusal);
-  `setTakeawayVatRate(tx, productId: string, rate: string | null): Promise<void>` (D4 replacement;
-  null clears a variant's rows, refused on a top-level product; a rate outside `pickable` refused
-  `product.invalid` `{ field: "takeawayVatRate" }`); `readTakeawayVatSchedules(tx, productIds: readonly string[]): Promise<Map<string, readonly DatedRate[]>>`
-  (one query, oldest first; a variant without rows maps to its parent's; a top-level product
-  without rows is absent); `CreateProductInput.takeawayVatRate?: string` — `insertProduct` writes it,
-  else the area's `defaultTakeaway` (Task 2.1 puts the venue setting in front).
+- Produces (`@waitron/menu`): `readVenueVatRates(tx): Promise<AreaVatRates>` — D7 refusal;
+  `pickable` is the area's `vatRates` filtered by `MODELO_303_RATES` (D18, said in a comment at that
+  line). `setTakeawayVatRate(tx, productId: string, rate: string | null): Promise<void>` — D4
+  replacement; null clears a variant's rows and is refused on a top-level product; a rate outside
+  `pickable` refused `product.invalid` `{ field: "takeawayVatRate" }`.
+  `readTakeawayVatSchedules(tx, productIds: readonly string[]): Promise<Map<string, readonly DatedRate[]>>`
+  — one query, oldest first, two-place rates; a variant without rows maps to its parent's; a
+  top-level product without rows is absent.
 
-- [ ] **Step 1: Failing tests:** a new product starts at the area default (`[{ from: null, rate: "10.00" }]`);
-  `"7.50"` stored 750 and read `"7.50"`; `"3.00"` refused; a variant without rows takes its
-  parent's, with its own row its own; saving replaces a list holding a dated row with exactly one
-  first row; null clears a variant and is refused on a product; no taxpayer refuses
-  `vat_rate.area_unsupported`. Import: a top-level product with no first row, or two, refused
-  `setup.request_invalid` `{ field: "product_takeaway_vat_rates" }`; a rate outside the importing
-  area's list refused; a variant without rows accepted; an export round-trips its rows, 750 included.
-- [ ] **Step 2: Run; they fail** (`pnpm --filter @waitron/menu exec vitest run src/takeaway-vat-rates.test.ts src/configuration-transfer.test.ts`).
+- [ ] **Step 1: Failing tests:** `MODELO_303_RATES` is `["4.00", "10.00", "21.00", "0.00"]` in some
+  order; `readVenueVatRates` on a Spanish venue gives `pickable` 0, 4, 10, 21 and the seven-entry
+  pack list untouched (`vatRatesFor`); with no taxpayer it refuses `vat_rate.area_unsupported`;
+  `setTakeawayVatRate(…, "21.00")` stores 2100; `"5.00"`, `"7.50"` and `"3.00"` are refused; a row of
+  750 inserted directly reads back `"7.50"`; a variant without rows takes its parent's, with its own
+  row its own; saving replaces a list holding a dated row with exactly one first row; null clears a
+  variant and is refused on a product.
+- [ ] **Step 2: Run; they fail** (`pnpm --filter @waitron/menu exec vitest run src/takeaway-vat-rates.test.ts`).
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `pnpm --filter @waitron/menu exec vitest run`, the provisioning transfer
-  suites, `seed.madrid-baseline.test.ts`, `write-path-tables`, `english-only`. 134 server test files
-  call `createProduct` (`git grep -l "createProduct(" -- apps/server | wc -l`), so run the server
-  package once (`pnpm --filter @waitron/server exec vitest run`, headroom first: a change every
-  product creator goes through) and seed a taxpayer in each file that now refuses; do the same for
-  `packages/menu` (seven files by the heuristic grep, which is not a complete list).
-- [ ] **Step 5: Commit** — "VAT rates: every product gets a takeaway rate, and bundles carry them".
+- [ ] **Step 4: Run** the two files, `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/write-path-tables.test.ts`,
+  typecheck menu and reporting.
+- [ ] **Step 5: Commit** — "VAT rates: one reader and writer for products' takeaway rates".
+
+### Task 1.4: Every new product gets a row
+
+**Compiles:** throughout (`CreateProductInput.takeawayVatRate?` is optional). Suites that create a
+product with no taxpayer fail at runtime until this task's Step 4 fixes them.
+
+**Files:** `packages/menu/src/operations.ts:990-1036` (`insertProduct` writes
+`input.takeawayVatRate ?? (await readVenueVatRates(tx)).defaultTakeaway`; Task 2.1 puts the venue
+setting in front); the two raw fixtures (D3); the madrid baseline (the table moves from
+`ADDED_TABLES` to a transform: one row at 1000 per captured top-level product); the test files that
+now create a product with no taxpayer. Test: `packages/menu/src/operations.test.ts`.
+
+- [ ] **Step 1: Failing tests:** a new product reads `[{ from: null, rate: "10.00" }]`; one created
+  with `takeawayVatRate: "4.00"` reads `"4.00"`; a variant created by `setProductVariants` has no
+  row.
+- [ ] **Step 2–3:** run (fails), implement.
+- [ ] **Step 4:** 134 server test files call `createProduct` (`git grep -l "createProduct(" -- apps/server | wc -l`),
+  so run the server package once (`pnpm --filter @waitron/server exec vitest run`, headroom first),
+  and the menu, venue-service, media, staffing and fiscal-verifactu suites that call it (list:
+  `git grep -l "createProduct(\|updateProduct(" -- packages apps`). Seed a taxpayer (`seedTaxpayer`)
+  in each file that now refuses. **If more than 20 files need one, stop at a green point, commit,
+  and hand the rest to a Task 1.4b with the list.** Run `seed.madrid-baseline.test.ts`.
+- [ ] **Step 5: Commit** — "VAT rates: every new product starts at the area's takeaway rate".
+
+### Task 1.5: Bundles carry the rows
+
+**Compiles:** throughout.
+
+**Files:** `packages/menu/src/configuration-transfer.ts:220-270`; `packages/provisioning/test/configuration-bundle.ts`.
+Tests: `packages/menu/src/configuration-transfer.test.ts`,
+`packages/provisioning/src/configuration-transfer.json-lists.test.ts`.
+
+- [ ] **Step 1: Failing tests:** a top-level product with no first row, or two, is refused
+  `setup.request_invalid` `{ field: "product_takeaway_vat_rates" }`; a rate outside the importing
+  venue's `pickable` (a 500 row) is refused the same; a variant without rows is accepted; an
+  exported venue round-trips its rows.
+- [ ] **Step 2–4:** run (fails), implement, run both files and `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer`.
+- [ ] **Step 5: Commit** — "VAT rates: configuration bundles carry products' takeaway rates".
+  Then `pnpm -r typecheck` and `/finish-branch`.
 
 **Changed test checks, PR 1:** madrid baseline — new table, rows at 1000 per demo product
 ("A product's takeaway rate"); `scripts/schema-constraints.test.ts` — gains entries only.
@@ -464,8 +538,8 @@ FISCAL: store each product's takeaway VAT rate and Spain's rate lists (VAT rates
 
 ## PR 2 — Taken away, each product's own rate
 
-**When it lands:** a manager picks "VAT when taken away" as a percentage (0, 2, 4, 5, 7.5, 10, 21)
-for a product, a variant and an extra, where the area charges takeaway VAT; a variant can keep its
+**When it lands:** a manager picks "VAT when taken away" as a percentage (0, 4, 10 or 21 under
+D18(a); the pack's 2, 5 and 7.5 wait for modelo 303) for a product, a variant and an extra, where the area charges takeaway VAT; a variant can keep its
 product's rate; new products start at the venue default "New products start at". A takeaway ticket
 files each product line at its product's takeaway rate on the day the meal ended; a change applies
 to every takeaway ticket issued afterwards, open orders and re-issued credited orders included, with
@@ -489,12 +563,14 @@ back to the eat-in label) and read only for set-menu lines (D2).
 effective string; `saveMenuDefaultTakeawayVatRate(tx, rate: unknown, personId: string | null): Promise<MenuDefaults>`,
 a rate outside `pickable` refused `product.invalid` `{ field: "defaultTakeawayVatRate" }`),
 `operations.ts` (`insertProduct` default: setting, else pack); `apps/server/src/menu-api.ts:135-142`
-(answer gains `vatRates: string[]`, `defaultTakeawayVatRate: string`),
+(answer gains `vatRates: string[]` — `readVenueVatRates(tx).pickable`, so four in Spain under
+D18 — and `defaultTakeawayVatRate: string`),
 `venue-settings-api.ts:119-142, 419-423`, `venue-detail-types.ts:50`. Tests: `packages/menu/src/settings.test.ts`,
 `apps/server/src/menu-api.test.ts` (venue-defaults cases `:6859-6900`), `venue-details.test.ts`.
 
-- [ ] **Step 1: Failing tests:** with no saved default the answer shows `"10.00"` and seven rates;
-  PUT `{ defaultTakeawayVatRate: "4.00" }` then a new product starts at 4%; `"3.00"` refused.
+- [ ] **Step 1: Failing tests:** with no saved default the answer shows `"10.00"` and the rates
+  `0.00, 4.00, 10.00, 21.00`; PUT `{ defaultTakeawayVatRate: "4.00" }` then a new product starts at
+  4%; `"5.00"` and `"3.00"` refused.
 - [ ] **Step 2–4:** run (fails), implement, run the three files and `errors-reachable`.
 - [ ] **Step 5: Commit** — "VAT rates: a venue default for new products' takeaway rate".
 
@@ -504,14 +580,19 @@ a rate outside `pickable` refused `product.invalid` `{ field: "defaultTakeawayVa
 inside this task only; every package at the end. `priceBasket` and `PriceableProduct.vatClass` keep
 working, so the till and the fiscal suite are untouched.
 
-**Files:** `packages/menu/src/pricing.ts` (`LockedLine`, `GrossLine`, `SelectedOption`: `vatClass`
-→ `vatRates`; `PriceableProduct.vatRates?`; `rateLines` uses `rateOn` and refuses an empty list
+**Files:** `packages/menu/src/pricing.ts` (`GrossLine`, `SelectedOption`: `vatClass` → `vatRates`;
+`LockedLine` loses `vatClass` and carries no rate; `PriceableProduct.vatRates?`; `rateLines` uses `rateOn` and refuses an empty list
 `vat_rate.unavailable` `{ lineNo }`; `grossLockedLines(lines, rates?: readonly (readonly DatedRate[])[])`
 — without `rates` every line's list is `[]`); `apps/server/src/working-order.ts`
 (`readLockedLinesForIssuance` `:1250-1278` and `priceOrderLines` `:905-1140` pass
 `VAT_RATE_TABLE[label]`, the label picked by dining exactly as today; `readLockedLines` passes no
 rates); `bill-advances.ts:132-158` (`VAT_RATE_TABLE[ADVANCE_VAT_CLASS]`); `scripts/demo-seed/seed-sales.ts:255-280`
-(the input product's label's table entry). Tests: `packages/menu/src/pricing.test.ts`,
+(the input product's label's table entry). Server tests that build priced lines by hand move to
+`vatRates` (`git grep -lE "GrossLine|LockedLine|grossLockedLines|rateLines" -- apps packages ':!packages/menu'`,
+then those naming `vatClass`): `portion-sale-projection.test.ts:53-81` (its `locked()` helper),
+`receipt-document.test.ts:740-743`, `adjustments-apply.test.ts:254-262` (`breakdownOf`, cast, so
+it fails at runtime, not typecheck), `advance-deduction.test.ts:25-38`, and
+`vat-class-at-line-add.test.ts` (its `rateLines` use). Tests: `packages/menu/src/pricing.test.ts`,
 `pricing.dated.test.ts`, `apps/server/src/issue-moment.test.ts`.
 
 - [ ] **Step 1: Failing tests** (they fail to compile against today's pricer): `rateLines` with one
@@ -520,8 +601,9 @@ rates); `bill-advances.ts:132-158` (`VAT_RATE_TABLE[ADVANCE_VAT_CLASS]`); `scrip
   gives `[]` lists.
 - [ ] **Step 2–3:** run (fails), implement.
 - [ ] **Step 4: Run** the menu package, `issue-moment`, `issuance-pass`, `till-sale`,
-  `vat-rate-at-issue`, `order-dining.filing`, `set-menu-money`, `seed-sales.golden` (must pass
-  unchanged), the fiscal gate command; typecheck menu and server.
+  `vat-rate-at-issue`, `order-dining.filing`, `set-menu-money`, `portion-sale-projection`,
+  `receipt-document`, `adjustments-apply`, `advance-deduction`, `vat-class-at-line-add`,
+  `seed-sales.golden` (must pass unchanged), the fiscal gate command; `pnpm -r typecheck`.
 - [ ] **Step 5: Commit** — "VAT rates: lines are rated from a list of dated rates".
 
 ### Task 2.3: Taken away, each product line at its product's rate
@@ -529,7 +611,9 @@ rates); `bill-advances.ts:132-158` (`VAT_RATE_TABLE[ADVANCE_VAT_CLASS]`); `scrip
 **Compiles:** throughout.
 
 **Files:** create `apps/server/src/line-vat-rates.ts` and `takeaway-vat-rate-at-issue.test.ts`;
-modify `working-order.ts` (the two rating readers call it once per order or basket),
+modify `working-order.ts` (the two rating readers call it once per order or basket; its two
+`appliedVatClass` calls at `:955, 1016` and the import at `:36` go), `packages/shared/src/dining.ts`
+and `index.ts` (delete `appliedVatClass`, now unused, with its test),
 `testing/takeaway-menu.ts:20-41` (each product gets `takeawayVatRate` equal to its label's rate:
 cola `"21.00"`, cheese `"4.00"`, cheese board `"4.00"`, burger `"21.00"`, lemon soda `"0.00"`),
 `vat-rate-at-issue.test.ts:495-515` (the juice gets rows `{null, 1000}` and `{"2027-01-01", 400}`
@@ -544,26 +628,27 @@ directly instead of the mocked table; same expectations).
   - a takeaway line files its product's rate as it stands at issue (park at 10%, set 21%, pay → 21%);
   - a variant without its own rate files at its parent's new rate (Review Focus 2);
   - a burger at 21% with a lemon-soda extra at 0% gives a 21% and a 0% group (Review Focus 1);
-  - a product at `"7.50"` files a 7.50 line and breakdown row (Review Focus 5);
   - switched to eaten here after lines were added, the order files at the eat-in labels, and back
     (Review Focus 3);
   - a takeaway meal ended on the eve of a dated row, ticketed next day, files the eve's rate
     (Review Focus 4, `mealEndedAt` as in `close-of-day.later-sale-date.test.ts`);
   - a product inserted raw with no row refuses `vat_rate.unavailable`;
   - a takeaway set-menu bill paid by a captured card (as `set-menu-money.test.ts:307-352`, made
-    takeaway) files its set-menu line at its set menu's takeaway label (D2).
+    takeaway) files its set-menu line at its set menu's takeaway label (D2) — this one passes
+    before and after: it guards that D2 keeps today's behaviour.
 - [ ] **Step 2–3:** run (fails), implement.
 - [ ] **Step 4: Run** the new file, the five `order-dining.*` files, `vat-rate-at-issue`,
   `set-menu-money`, `set-menu-bill`, the fiscal gate command.
 - [ ] **Step 5: Commit** — "VAT rates: a takeaway line files at its product's own rate".
 
-### Task 2.4: The fiscal variant test (needs the owner's yes on D11(a))
+### Task 2.4: A takeaway twin of the fiscal variant test
 
-**Compiles:** throughout (`PriceableProduct.vatRates` is optional).
+**Compiles:** throughout (`PriceableProduct.vatRates` is optional). Adds a describe; the eat-in
+describe at `:697-787` stays untouched until Task 3.1 (D11(a)).
 
-**Files:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts:697-787` only.
+**Files:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (a new describe after `:787`).
 
-Before (the lines that change):
+The existing eat-in describe, which PR 3 deletes (the lines the twin differs in):
 
 ```ts
 describe("a variant line is filed at its own effective VAT rate", () => {
@@ -580,7 +665,7 @@ describe("a variant line is filed at its own effective VAT rate", () => {
     const priced = priceBasket([lineFor(offer, wine125), lineFor(offer, wine175)]);
 ```
 
-After:
+The twin added now:
 
 ```ts
 describe("a takeaway variant line is filed at its own effective takeaway VAT rate", () => {
@@ -598,13 +683,15 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
     const priced = priceBasket([lineFor(offer, wine125, schedules), lineFor(offer, wine175, schedules)]);
 ```
 
-The expected Desglose stays exactly `[{ TipoImpositivo: "10.00", BaseImponibleOimporteNoSujeto: "4.09" }, { TipoImpositivo: "21.00", BaseImponibleOimporteNoSujeto: "4.55" }]`;
-the comment above the describe now says the basket's rates come from `readTakeawayVatSchedules`, as
-`readLineVatRates` reads them. `vatClass: "reduced"` is removed in PR 4.
+The twin expects the same Desglose as the eat-in describe, exactly
+`[{ TipoImpositivo: "10.00", BaseImponibleOimporteNoSujeto: "4.09" }, { TipoImpositivo: "21.00", BaseImponibleOimporteNoSujeto: "4.55" }]`;
+its comment says the basket's rates come from `readTakeawayVatSchedules`, as `readLineVatRates`
+reads them. Its `vatClass: "reduced"` argument is removed in PR 4.
 
-- [ ] **Step 1:** Rewrite; control: set wine175 to `"10.00"`, see the second row read 10.00/5.00,
-  restore it. **Step 2:** run the fiscal gate command (golden and `inmutabilidad` untouched).
-  **Step 3: Commit** — "Fiscal test: a takeaway variant files at its own or its parent's rate".
+- [ ] **Step 1:** Write the twin with wine175's row left at the parent's 10% and see it fail (the
+  second row reads 10.00/5.00, not 21.00/4.55); add the `setTakeawayVatRate` line; it passes.
+  **Step 2:** run the fiscal gate command (golden, `inmutabilidad` and the eat-in describe
+  untouched). **Step 3: Commit** — "Fiscal test: a takeaway variant files at its own or its parent's rate".
 
 ### Task 2.5: The till stops pricing a VAT preview
 
@@ -629,8 +716,10 @@ stops passing it).
 `:1230, 1266, 1342` `"21.00"`; the cheeses keep their `super_reduced` eat-in label until PR 4);
 `country-es/src/demo/data.test.ts:354-428` (the takeaway-class cases become takeaway-rate cases,
 same products and rates; `:341-352` stays until PR 4); `apps/server/scripts/demo-seed/data-set.ts:39-44`,
-`seed.ts:120-131`, `seed-menus.ts:185-195`, `seed-sales.ts` (`SeedSalesProduct.takeawayVatRate?`;
-takeaway lines rated `[{ from: null, rate }]`); the madrid baseline transform (rows at 400 and 2100
+`seed.ts:120-131`, `seed-menus.ts:185-195`, `seed-sales.ts` (`deliProducts` becomes
+`readonly (SeedSalesProduct & { takeawayVatRate: string })[]`, so a deli product cannot lack a
+rate; its takeaway lines are rated `[{ from: null, rate: takeawayVatRate }]`; eaten-in lines keep
+their label's table entry until Task 3.2); the madrid baseline transform (rows at 400 and 2100
 for those products); `packages/provisioning/test/configuration-bundle.ts`.
 
 - [ ] **Step 1:** Change `data.test.ts` first; run; it fails. **Step 2:** implement. **Step 3:** run
@@ -669,10 +758,14 @@ package's tests. Tests: `product-editor.test.ts`, `product-editor-input.test.ts`
 
 **Files:** every test file and fixture outside `packages/menu` that `pnpm -r typecheck` reports for
 `takeawayVatClass` on a product input (raw `working_order_lines` inserts keep the column until
-PR 4); `apps/server/src/menu-api.test.ts` product cases.
+PR 4) — measured beforehand: 14 server files and 6 elsewhere (`packages/media/src/images.test.ts`,
+five in `packages/venue-service`) call a product function and name `takeawayVatClass`; convert only
+the lines the typecheck reports, label to rate (`general` 21.00, `reduced` 10.00, `super_reduced`
+4.00, `zero` 0.00); `apps/server/src/menu-api.test.ts` product cases.
 
-- [ ] **Step 1: Failing tests** in `menu-api.test.ts`: POST a product with `"7.50"` and read it back;
-  `takeawayVatClass` refused `management.request_invalid` `{ field: "takeawayVatClass" }`.
+- [ ] **Step 1: Failing tests** in `menu-api.test.ts`: POST a product with `"21.00"` and read it
+  back; `"5.00"` refused `product.invalid` `{ field: "takeawayVatRate" }` (D18); `takeawayVatClass`
+  refused `management.request_invalid` `{ field: "takeawayVatClass" }`.
 - [ ] **Step 2–3:** run (fails), convert. **Step 4:** run `pnpm -r typecheck` and each changed file.
 - [ ] **Step 5: Commit** — "VAT rates: callers name a takeaway rate".
 
@@ -688,8 +781,8 @@ option "Same as {product} — {rate}%"); `i18n/strings.ts` (`editor.takeaway_vat
 `help.products.vat` no longer says a change needs a publish), `i18n/codes.ts`. Tests:
 `widgets/product-editor.test.ts`, its `*.unsaved.test.ts` and `*.a11y.test.ts`.
 
-- [ ] **Step 1: Failing tests:** exactly the seven percentages; saves `"7.50"`; hidden without
-  `takeawayVat`; required on a product (Forms contract); "Same as" on a variant saves `null`; axe in
+- [ ] **Step 1: Failing tests:** exactly the answer's `vatRates` (0%, 4%, 10%, 21% under D18);
+  saves `"4.00"`; hidden without `takeawayVat`; required on a product (Forms contract); "Same as" on a variant saves `null`; axe in
   both themes.
 - [ ] **Step 2–4:** run (fails), implement with the field primitives, run, and look in the dev
   stack (`wa-wt demo <worktree>`) in both themes and at phone width.
@@ -734,7 +827,7 @@ English paragraph (write the Spanish twin from it):
 
 | File | Before | After | Spec |
 | --- | --- | --- | --- |
-| `write-path.e2e.test.ts:697-787` (D11(a)) | eat-in labels | takeaway rates, same Desglose | "A variant may have its own rows" |
+| `write-path.e2e.test.ts` (D11(a)) | eat-in describe | unchanged; a takeaway twin added, same Desglose | "A variant may have its own rows" |
 | `vat-rate-at-issue.test.ts:495-515` | mocked `reduced` table | dated product rows, same figures | "A product's takeaway rate has dates too" |
 | `testing/takeaway-menu.ts` | labels | rates equal to the labels' | "Taken away: each line's product's takeaway rate" |
 | till `vatBreakdown` cases | basket split | deleted | "deleted rather than ported" |
@@ -756,24 +849,29 @@ changed:" line.
 because `products_top_level_owns_ck` requires it), `working_order_lines.vat_class`/`offer_vat_class`,
 copies' `vatClass`; none decides a rate.
 
-**Order:** 3.1 (needs D10, D11(b)) makes the switch and leaves the D10 suites failing at runtime;
+**Order:** 3.1 (needs D10, D11(a), D11(b)) makes the switch and leaves the D10 suites failing at runtime;
 3.3–3.14 fix them; the branch is green after 3.14. 3.2 (needs D17) any time after 3.1. 3.15–3.18
 follow. Every package typechecks after every task.
 
-### Task 3.1: The switch
+### Task 3.1: The switch (needs the owner's yes on D10, D11(a) and D11(b))
+
+**Compiles:** throughout. The D10 suites fail at runtime from here until Task 3.14.
 
 **Files:** `apps/server/src/line-vat-rates.ts` (eaten here: `readVenueVatRates(tx).dineIn` for every
 line, set-menu lines included; `vatClass` leaves the input), its two callers; `bill-advances.ts`
-(`vatRates: dineIn`); delete `vat-class-at-line-add.test.ts` (D11(b)); create `dine-in-vat-rate.test.ts`.
+(`vatRates: dineIn`); delete `vat-class-at-line-add.test.ts` (D11(b)) and the eat-in describe at
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts:697-787` (D11(a); Task 2.4's takeaway twin
+stays); create `dine-in-vat-rate.test.ts`.
 Tests also: `advance-money`, `advance-final`, `advance-deduction`.
 
 - [ ] **Step 1: Failing tests** (setup from the deleted file): a walk-up, a held order, a tab round,
   a card payment and a card recovery of a product labelled `general` each file 10%; its extra 10%;
-  a product whose takeaway rate is 21% files 10% eaten here; an eaten-in set-menu bill recovered from
+  a product whose takeaway rate is 21% files 10% eaten here; a variant given its own `general`
+  label files 10% eaten here (the replacement for the deleted fiscal describe); an eaten-in set-menu bill recovered from
   a captured card (as `set-menu-money.test.ts:307-352`) files 10%; an order switched from takeaway to
   eaten here files 10% (Review Focus 3); with `vatRatesFor` mocked to
-  `[{null,"10.00"},{"2027-01-01","5.00"}]`, a meal ended 31 December ticketed 1 January files 10%
-  (Review Focus 4) and an advance paid 1 January files 5%.
+  `[{null,"10.00"},{"2027-01-01","4.00"}]`, a meal ended 31 December ticketed 1 January files 10%
+  (Review Focus 4) and an advance paid 1 January files 4%.
 - [ ] **Step 2–3:** run (fails), implement.
 - [ ] **Step 4: Run** the new file, the advance files, `set-menu-money`, the fiscal gate command; list
   the failing server files with one package run (headroom first) and put the list in the commit body.
@@ -846,7 +944,7 @@ commit.
 refuse `vatClass` as retired), `packages/menu/src/product-editor-input.ts`, `operations.ts`
 (`insertProduct` writes `vat_class` from `defaultProductVatClass`; a variant's own `vat_class` is
 never written), `menu-patch.ts`/`menu-patch-types.ts` (no `vatClass`, D12),
-`apps/server/src/venue-settings-api.ts` (no `defaultProductVatClass`). Tests: `menu-api.test.ts`,
+`apps/server/src/venue-settings-api.ts` and `venue-detail-types.ts:50` (no `defaultProductVatClass`). Tests: `menu-api.test.ts`,
 `product-editor-input.test.ts`, `menu-patch.test.ts`.
 
 - [ ] **Step 1: Failing tests:** the answer carries `dineInVatRate: "10.00"`; a body naming
@@ -894,6 +992,7 @@ English paragraph (Spanish twin from it):
 | File | Before | After | Spec |
 | --- | --- | --- | --- |
 | `vat-class-at-line-add.test.ts` (D11(b)) | label frozen at add | deleted; `dine-in-vat-rate.test.ts` | "Nothing about VAT is stored on an order line" |
+| `write-path.e2e.test.ts:697-787` (D11(a)) | eat-in variant with its own label at 21% | deleted; Task 3.1's eat-in variant case at 10%; Task 2.4's takeaway twin stays | "Eaten here: one rate for everything" |
 | `spanish-practice-sales.golden.json` (D17) | eat-in at 21/10/4/0 | re-recorded, all 10% | "Eaten here: the dine-in rate" |
 | the D10 files (3.4–3.14) | eat-in `general` at 21% | 10%, or takeaway at the two rates | same |
 | LATER-SALE-DATE, `vat-rate-at-issue`, `seed-sales.dated` | mocked label table | mocked pack list, same figures | "the day the meal ends" |
@@ -906,79 +1005,93 @@ English paragraph (Spanish twin from it):
 
 **When it lands:** nothing a person sees changes. The product and order-line label columns, their
 checks and trigger lines, the type fields, the settings key, the pack field, `vatRatesOn`,
-`ADVANCE_VAT_CLASS`, `appliedVatClass` and every fixture's mention go; set menus keep theirs (D2).
-First line: "Reset test venues: remove VAT labels from products, order lines and menu copies (VAT
-rates A, PR 4)". If Task 4.3 adds the copy read, the description carries its "Sale-path read
-changed:" line.
+`ADVANCE_VAT_CLASS` and every fixture's mention go (`appliedVatClass` went in Task 2.3); set menus
+keep theirs (D2). First line: "Reset test venues: remove VAT labels from products, order lines and
+menu copies (VAT rates A, PR 4)". The description carries PR 4's "Sale-path read changed:" line
+(Global Constraints).
 
-**Order:** 4.1 relaxes → 4.2–4.4 stop the source naming labels → 4.5–4.14 sweep fixtures → 4.15
-drops. Every package typechecks after every task (fields are optional from 4.1 to 4.15).
+**Order, so every package typechecks after every task:** 4.1 makes the columns nullable → 4.2–4.3
+stop every reader (the fields still exist and are still filled) → 4.4 stops the producers and makes
+the type fields optional → 4.5–4.18 sweep fixtures (an optional field still accepts a fixture that
+names it) → 4.19 deletes the fields and drops the columns.
 
-**The sweep script** (Tasks 4.5–4.14), run on the group's listed files only:
+**The sweep script** (Tasks 4.5–4.18), run on the group's listed files only:
 `perl -0pi -e 's/^[ \t]*(vatClass|takeawayVatClass|offerVatClass|defaultProductVatClass|vat_class|takeaway_vat_class|offer_vat_class):[ \t]*[^,{\n]*,[ \t]*\n//mg' <files>`.
 It deletes single-line properties only (measured: 280 of 287 label mentions in `apps/till`, 196 of
 413 in `apps/dashboard`, 371 of 615 in `packages/menu`, 551 of 829 in `apps/server`). Then: revert
 any deletion inside a set-menu `terms` object or naming `set_*` (`git diff -U3 | /usr/bin/grep -n terms`),
 hand-edit the rest (raw SQL column lists, inline objects), run the group's suites. A test that
 asserted a label is deleted only where the label was its whole subject, listed in the commit body;
-any other assertion change stops the task.
+any other assertion change stops the task. If a group needs more than about 40 hand edits, stop at
+a green point, commit, and hand the rest on.
 
-### Task 4.1: Relax
+### Task 4.1: The label columns become nullable
 
 **Files:** `packages/db/src/schema/menus.ts` (`products_top_level_owns_ck` loses `vat_class`),
 `orders.ts` (`vat_class`, `takeaway_vat_class` lose NOT NULL; the context check loses
-`offer_vat_class`), baseline rebuild; label fields optional in `menu-types.ts`, `product-types.ts`,
-`pricing.ts`, `packages/module/src/module.ts:252-253, 308, 771`.
-- [ ] Run the db schema suites, the Task 1.2 guards, the fiscal gate command, `pnpm -r typecheck`;
-  commit — "VAT labels: optional before removal".
+`offer_vat_class`), baseline rebuild; any server line that the nullable select types break (cast
+sites in `working-order.ts`).
+- [ ] **Failing test first** (`packages/db/src/schema/menus.test.ts`, `orders.test.ts`): a top-level
+  product with no `vat_class` and an order line with no label are accepted. Run the db schema suites,
+  the Task 1.2 guards, the fiscal gate command, `pnpm -r typecheck`; commit.
 
-### Task 4.2: Shared, menu and country source
-
-**Files:** `packages/shared/src/dining.ts` (delete `appliedVatClass`), `set-menu-bill.ts` (drop the
-`terms` pick), `set-menu-bill.fixtures.ts`; `packages/menu/src/` `menu-document.ts`, `menu-copy.ts`,
-`menu-navigation.ts`, `offered-modifiers.ts`, `operations.ts`, `product-editor.ts`, `variants.ts`,
-`variant-fallback.ts`, `settings.ts`/`settings-types.ts`/`provisioning.ts` (no
-`defaultProductVatClass`), `pricing.ts` (`priceBasket` rates by `vatRates` only); `packages/country/src/country.ts:155`,
-`demo.ts`; `packages/country-es/src/spain.ts:317` and the demo files.
-- [ ] Run the menu, shared and country-es suites; commit.
-
-### Task 4.3: Server and venue-service source
+### Task 4.2: Server and venue-service stop reading and writing labels
 
 **Files:** `apps/server/src/working-order.ts` (line writes `:1128-1133`, moves `:4899-4900,
 5102-5103`, offer context `:4943`, retrieved product `:5400, 5664`), `line-vat-rates.ts` (no label
 input; a takeaway set-menu line reads its recorded copy's `terms.takeawayVatClass` through
-`serveRecordedSetMenus`, once for all its set-menu lines, D2), `set-menu-count.ts:88-89`,
-`modifier-selection.ts:23-24, 41-42, 155-156, 523-524`, `upgrade-sale.ts:95`, `menu-api.ts`,
-`venue-detail-types.ts`, demo seed and bench scripts; `packages/venue-service/src/operations.ts:1212-1255, 1422`.
-- [ ] Failing test first: Task 2.3's takeaway set-menu case with the line's `takeaway_vat_class`
-  set to something else in the test still files the copy's label. Run the server suites for these
-  files, `set-menu-money`, the fiscal gate command; commit.
+`readRecordedDocuments` (`packages/menu/src/menu-publication.ts:324`), once for all its set-menu
+lines, D2 — not `serveRecordedSetMenus`, which also applies live fields and can refuse),
+`set-menu-count.ts:88-89`, `modifier-selection.ts:23-24, 41-42, 155-156, 523-524`, `upgrade-sale.ts:95`,
+`menu-api.ts`, demo seed and bench scripts; `packages/venue-service/src/operations.ts:1212-1255, 1422`.
+- [ ] **Failing test first:** Task 2.3's takeaway set-menu case, with the line's `takeaway_vat_class`
+  set to another label in the test, still files the copy's label. Run the server suites for these
+  files, `set-menu-money`, the fiscal gate command, `pnpm -r typecheck`; commit.
 
-### Task 4.4: Till and dashboard source
+### Task 4.3: Till and dashboard stop reading labels
 
 **Files:** `apps/till/src/api/client.ts:368-421, 515-516`, `state/draft-lines.ts:199`;
 `apps/dashboard/src/api/client.ts:569` (`VatClass` kept for set menus), product widgets' leftover
-types. Run the changed files' suites; commit.
+types. No failing test (deletions). Run the changed files' suites, `pnpm -r typecheck`; commit.
 
-### Tasks 4.5–4.14: Fixture sweeps
+### Task 4.4: Producers stop; the type fields become optional
+
+**Files:** label fields optional in `packages/shared/src/menu-document/menu-types.ts`,
+`product-types.ts`, `packages/menu/src/pricing.ts`, `packages/module/src/module.ts:252-253, 308, 771`;
+producers stop: `packages/shared/src/set-menu-bill.ts` (drop the `terms` pick),
+`set-menu-bill.fixtures.ts`; `packages/menu/src/` `menu-document.ts`, `menu-copy.ts`,
+`menu-navigation.ts`, `offered-modifiers.ts`, `operations.ts`, `product-editor.ts`, `variants.ts`,
+`variant-fallback.ts`, `settings.ts`/`settings-types.ts`/`provisioning.ts` (no
+`defaultProductVatClass`), `pricing.ts` (`priceBasket` rates by `vatRates` only);
+`packages/country/src/country.ts:155`, `demo.ts`; `packages/country-es/src/spain.ts:317` and the
+demo files. No failing test (deletions). Run the menu, shared and country-es suites,
+`pnpm -r typecheck`; commit.
+
+### Tasks 4.5–4.18: Fixture sweeps
 
 List each group's files with
 `git grep -lE 'vat_class|vatClass|takeawayVatClass|offer_vat_class|offerVatClass|defaultProductVatClass' -- <paths>`.
+File counts measured on `e2f075c59e`:
 
-- **4.5:** `apps/till` (107 files; almost all scripted).
-- **4.6:** `apps/dashboard` tests `a…m`. **4.7:** `apps/dashboard` tests `n…z` and `scripts/behavioural-triggers.test.ts:231`.
-- **4.8:** `packages/menu` tests `a…m`. **4.9:** `packages/menu` tests `n…z` and `packages/menu/test/`.
-- **4.10:** `packages/db`, `venue-service`, `shared`, `country-es` (the captured JSON only if the
-  madrid test reads labels from it), `adjustments`, `reporting`, `media`, `provisioning`,
-  `staffing`, `fiscal-verifactu` (Task 2.4's `vatClass: "reduced"`).
-- **4.11:** `apps/server/src/testing/*` and server tests `a…c`. **4.12:** server tests `d…m`.
-  **4.13:** server tests `n…s`. **4.14:** server tests `t…z` and `apps/server/scripts/**/*.test.ts`
-  (the madrid baseline's dropped-column transforms).
+- **4.5:** `apps/till` (107; almost all scripted).
+- **4.6:** `apps/dashboard` tests `a…m`. **4.7:** `apps/dashboard` tests `n…z` and
+  `scripts/behavioural-triggers.test.ts:231` (62 together).
+- **4.8:** `packages/menu` tests `a…m`. **4.9:** `packages/menu` tests `n…z` and
+  `packages/menu/test/` (68 together).
+- **4.10:** `packages/db` (21), `shared` (13), `adjustments` (3), `reporting` (1), `media` (3),
+  `provisioning` (1), `staffing` (1), `fiscal-verifactu` (1: Task 2.4's `vatClass: "reduced"`).
+- **4.11:** `packages/venue-service` (19) and `country-es` (10; the captured JSON only if the
+  madrid test reads labels from it).
+- **4.12:** `apps/server/src/testing/*` (12) and server tests `a…b` (13).
+- **4.13:** server tests `c…f` (18). **4.14:** `g…m` (34). **4.15:** `n…r` (31).
+- **4.16:** `s` and `u…z` (27). **4.17:** `t` (38).
+- **4.18:** `apps/server/scripts/**/*.test.ts` (12), with the madrid baseline's dropped-column
+  transforms.
 
-Each: script, revert set-menu deletions, hand-edit, run the group's suites, commit with the deleted
-assertions listed.
+Each: script, revert set-menu deletions, hand-edit, run the group's suites, `pnpm -r typecheck`,
+commit with the deleted assertions listed.
 
-### Task 4.15: Drop
+### Task 4.19: Drop
 
 **Files:** `menus.ts`, `orders.ts` (drop the five columns and their checks), `core.sql` (the trigger
 lines), baseline rebuild; `vat-rates.ts` (delete `vatRatesOn`, `ADVANCE_VAT_CLASS`; keep `VatClass`,
