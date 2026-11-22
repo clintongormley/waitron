@@ -13,28 +13,32 @@ attribution. An included override two menus down keeps the existing link to the 
   and variant product IDs. Store the resolved origin from `CombinedOffer` as the product, this menu,
   or the first included menu’s ID and name. Follow `ValueSource.from` to distinguish an override
   from a product price carried through an include. A variant that takes the dish price takes its
-  origin. A clashing draft has no resolved origin for that price.
-- Compare the frozen and proposed origins in `diffEntries` and `productFields`. Keep the existing
-  menu’s own setting and Undo rules. Prefer the proposed included override when one exists and
-  use the previously published one when it was cleared. If either origin is missing, use the
-  existing attribution. Keep format 4 with this optional field. Existing published copies keep
-  serving, and their next publication records the origins. Adding origins can mark a menu ready
-  to publish even when its prices match. The change list still compares the amounts and settings.
-- In `packages/menu/src/menu-patch.ts`, mark an actual live dish or variant price correction as a
-  price set on this menu. Keep the existing behavior for other fields, unchanged prices and extras.
-  Scheduling already stores the same built document. Set-menu surcharges have their own settings.
+  origin. A clash has no resolved origin. Equal candidates keep the existing first source.
+- Compare origins only for changed prices. A change to this menu’s own setting keeps its current
+  attribution and inherited-price reporting. With both origins known, take the proposed included override if
+  present, else the published included override if present, else use the product attribution.
+  If either origin is missing, keep the current attribution. Existing editions will therefore
+  still offer the old link until a changed menu is published. Keep format 4 and leave the origin
+  map out of `menuDocumentHash` so adding it alone leaves a published menu current. The same hash
+  verifies content in backups. Scheduled editions record the map when they are built.
+- In `packages/menu/src/menu-patch.ts`, record a live dish or variant correction’s origin as
+  this menu when its price changes. This keeps a later comparison from crediting the included
+  menu for a price the local correction replaced. Keep current Preview attribution for a live-only
+  correction and leave extras, same-price corrections and set-menu surcharges out of this change.
 - Cloud reads the same published menu through `readGuestMenuPages` in `apps/server/src/guest-menu-api.ts`.
   It receives the existing JSON of rendered pages by language. `publicGuestMenu` projects customer
   fields and amounts, so no price origin goes into the HTML. Republishing can change the displayed
   publication time as usual. Keep the existing Dashboard actions and Cloud delivery path.
 - Start red in `packages/menu/src/menu-publication.test.ts`. Change the pinned Dinner/Lunch case
   to expect the shared product while keeping Lunch out of **Also on**. Keep the clearing-override
-  cases and check the nested product and inherited variant paths. Read a published copy to check
-  its origin. In `packages/menu/src/menu-patch.test.ts` extend the existing price case to assert the
-  corrected origin and preserve its no-op behavior. Run those files and `menu-schedule.test.ts`.
+  cases and check the nested product and inherited variant paths. Read back the origin from a
+  published copy. Check that a copy without origins stays current and uses the old attribution.
+  Extend existing live price patch cases to check the origin and preserve the no-op assertion.
+  In `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, compare the same historical menu
+  content by omitting only the new field. Run these files and `menu-schedule.test.ts`.
   Run the Dashboard `menu-preview.edit-links.test.ts` for both destinations, server
   `guest-menu-api.test.ts` for the rendered pages, and `guide-content.test.ts` for the guide twins.
-- Clarify the Preview instructions in `apps/server/src/guide/{en,es}/products.md` and the Preview
-  contract in `docs/developers/design-system.md`. Remove A1373 from both backlog files and add a
-  dated pointer to the A353 plan. Estimate +75–120 production lines, +45–85 test lines and +10–20
-  documentation lines beyond this plan.
+- Clarify the Preview instructions in `apps/server/src/guide/{en,es}/products.md` and the Edit link
+  paragraph under Menus in `docs/developers/design-system.md`. Remove A1373 from both backlog files
+  and add a dated pointer to the A353 plan. Estimate +75–120 production lines, +55–95 test lines
+  and +10–20 documentation lines beyond this plan.
