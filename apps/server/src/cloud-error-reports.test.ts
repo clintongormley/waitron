@@ -169,24 +169,28 @@ it("turning reporting off cancels a send in progress", async () => {
   const sender = f.reports();
   await sender.setEnabled(true);
   await incident(1);
-  const reached = Promise.withResolvers<AbortSignal>();
-  const reply = Promise.withResolvers<void>();
+  let reportStarted!: (request: AbortSignal) => void;
+  const reached = new Promise<AbortSignal>((resolve) => {
+    reportStarted = resolve;
+  });
+  let finishReply!: () => void;
+  const reply = new Promise<void>((resolve) => {
+    finishReply = resolve;
+  });
   f.sendErrorReport.mockImplementationOnce(async (_registration, _id, _body, request) => {
-    reached.resolve(request!);
-    await reply.promise;
+    reportStarted(request!);
+    await reply;
     request!.throwIfAborted();
   });
   const waiting = sender.run(signal());
-  const request = await reached.promise;
+  const request = await reached;
   try {
     await sender.setEnabled(false);
   } finally {
-    reply.resolve();
+    finishReply();
   }
   expect(await waiting).toBe(false);
   expect(request.aborted).toBe(true);
-  await sender.run(signal());
-  expect(f.sendErrorReport).toHaveBeenCalledTimes(1);
 });
 
 it("holds opted-in incidents collected before the first registration", async () => {

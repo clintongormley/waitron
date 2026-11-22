@@ -145,9 +145,11 @@ async function fixture(kept = true) {
   const deps = { provision, check, assertReady, confirmCommitted, publish };
   const owner = prepared.owner;
   const digest = "a".repeat(64);
-  const activate = () =>
+  const activate = (publicationDigest = digest) =>
     runtime.resolution.withVenueExclusion(() =>
-      runtime.coordinator.run((hold) => activateFirstSetup(runtime, deps, owner, digest, hold)),
+      runtime.coordinator.run((hold) =>
+        activateFirstSetup(runtime, deps, owner, publicationDigest, hold),
+      ),
     );
   return { root, runtime, owner, digest, deps, states, activate, recover, io };
 }
@@ -305,18 +307,13 @@ it("refuses a changed error-report choice before replaying or writing", async ()
   const f = await fixture();
   const before = (await f.runtime.store.read())!;
   const optedIn = firstSetupPublicationDigest(before, { errorReportsEnabled: true });
-  await f.runtime.coordinator.run((hold) =>
-    activateFirstSetup(f.runtime, f.deps, f.owner, optedIn, hold),
-  );
+  await f.activate(optedIn);
   const state = (await f.runtime.store.read())!;
   f.owner.revision = state.revision;
   const optedOut = firstSetupPublicationDigest(state, { errorReportsEnabled: false });
   expect(optedOut).toBe(firstSetupPublicationDigest(state, {}));
-  await expect(
-    f.runtime.coordinator.run((hold) =>
-      activateFirstSetup(f.runtime, f.deps, f.owner, optedOut, hold),
-    ),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(firstSetupPublicationDigest(state, { errorReportsEnabled: true })).toBe(optedIn);
+  await expect(f.activate(optedOut)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await f.runtime.store.read()).toEqual(state);
   expect(f.deps.check).toHaveBeenCalledOnce();
   expect(f.deps.provision).toHaveBeenCalledOnce();

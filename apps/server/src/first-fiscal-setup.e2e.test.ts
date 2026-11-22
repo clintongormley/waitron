@@ -11,7 +11,14 @@ import { ALL_MODULES } from "@waitron/composition";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { planVenue, savePrivacyContact, venueFiscalSelection } from "@waitron/provisioning";
+import {
+  firstSetupPublicationDigest,
+  planVenue,
+  parseEmailSettings,
+  savePrivacyContact,
+  venueFiscalSelection,
+  type FirstSetupState,
+} from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { enabledModules } from "@waitron/module";
 import { createProduct } from "@waitron/menu";
@@ -466,6 +473,16 @@ it.each([
           await readFile(join(stateDir, CLOUD_ERROR_REPORTS_FILE), "utf8"),
         );
         expect(localChoice).toMatchObject({ enabled: true, cursor: null });
+        const { attempt } = JSON.parse(
+          await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+        ) as { attempt: FirstSetupState };
+        expect(attempt.inputs.$publication).toEqual({
+          digest: firstSetupPublicationDigest(attempt, {
+            aeatCert: live.aeatCert,
+            email: parseEmailSettings(live.email),
+            errorReportsEnabled: true,
+          }),
+        });
       }
       await server!.close();
       server = undefined;
