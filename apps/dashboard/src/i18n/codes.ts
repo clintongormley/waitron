@@ -1024,6 +1024,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer no longer exists",
     es: "Esa impresora ya no existe",
   },
+  "drawer.close_not_found": {
+    en: "This drawer close is unavailable. Choose another close.",
+    es: "Este cierre de caja no está disponible. Elige otro cierre.",
+  },
   "working_order.not_found": {
     en: "That bill was not found",
     es: "No se encontró esa cuenta",

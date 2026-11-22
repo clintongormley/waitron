@@ -1,4 +1,5 @@
 import "../widgets/handover-report-warning.js";
+import "../widgets/drawer-close-history.js";
 import {
   renderDepartmentTakings,
   departmentTakingsStyles,
@@ -494,7 +495,20 @@ export class SalesScreen extends LitElement {
       }
       ${this.close ? this.#renderClose(this.close) : nothing}
       ${this.period ? this.#renderPeriod(this.period) : nothing}
-      ${this.#rangeRunsBackwards() ? nothing : this.#renderCategories()}
+      ${
+        this.#rangeRunsBackwards()
+          ? nothing
+          : html`
+              ${this.#renderReportPrinter()}
+              <dashboard-drawer-close-history
+                .api=${this.api}
+                .from=${this.from}
+                .to=${this.to}
+                .printer=${this.printers?.find(({ id }) => id === this.printerId)}
+              ></dashboard-drawer-close-history>
+              ${this.#renderCategories()}
+            `
+      }
     `;
   }
 
@@ -700,7 +714,7 @@ export class SalesScreen extends LitElement {
     return rows;
   }
 
-  #renderPrint(): TemplateResult {
+  #renderReportPrinter(): TemplateResult {
     const printers = this.printers ?? [];
     return html`
       <div class="print">
@@ -719,16 +733,30 @@ export class SalesScreen extends LitElement {
               ></wt-combobox>`
             : nothing
         }
+      </div>
+      ${this.printers !== null && printers.length === 0 ? this.#renderNoPrinters() : nothing}
+      ${
+        this.printersErrorKey
+          ? html`<p class="error" role="alert" data-test="printers-error">
+              ${codeMessage(this.printersErrorKey)}
+            </p>`
+          : nothing
+      }
+    `;
+  }
+
+  #renderPrint(): TemplateResult {
+    return html`
+      <div class="print">
         <wt-button
           variant="secondary"
           data-test="print-categories"
-          ?disabled=${printers.length === 0}
+          ?disabled=${this.printerId === null}
           ?loading=${this.printing}
           @click=${() => void this.#print()}
           >${t("sales.print_categories")}</wt-button
         >
       </div>
-      ${this.printers !== null && printers.length === 0 ? this.#renderNoPrinters() : nothing}
       ${
         this.printSentTo === null
           ? nothing
@@ -740,13 +768,6 @@ export class SalesScreen extends LitElement {
         this.printErrorKey
           ? html`<p class="error" role="alert" data-test="print-error">
               ${codeMessage(this.printErrorKey)}
-            </p>`
-          : nothing
-      }
-      ${
-        this.printersErrorKey
-          ? html`<p class="error" role="alert" data-test="printers-error">
-              ${codeMessage(this.printersErrorKey)}
             </p>`
           : nothing
       }

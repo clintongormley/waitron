@@ -833,7 +833,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Nothing covers the order screen's bar** (bundle of 1, size S, needs the owner). Holds A1211. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
-- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06). A1325 next adds drawer close history and slip reprinting to Sales. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
+- **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06). A1325 shows drawer counts in Sales and can reprint a finished close. The till close comes next. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats) · [A1325 implementation plan](superpowers/plans/2026-11-21-a1325-close-a-drawer.md)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another

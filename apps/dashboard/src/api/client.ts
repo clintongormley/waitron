@@ -1706,6 +1706,37 @@ export interface CategorySalesDto {
   linesWithoutGross: number;
 }
 
+interface DrawerCountDto {
+  at: string;
+  person: string;
+  expected: string;
+  counted: string;
+  difference: string;
+  cashMoved: boolean;
+}
+
+export interface DrawerCloseHistoryDto {
+  timeZone: string;
+  closes: {
+    id: string;
+    drawerId: string;
+    drawerName: string;
+    assigned: boolean;
+    deleted: boolean;
+    first: DrawerCountDto;
+    recount: DrawerCountDto | null;
+    finished: {
+      id: string;
+      person: string;
+      at: string;
+      bankWithdrawal: string;
+      amountLeft: string;
+      difference: string;
+      cashAfterCount: string;
+    } | null;
+  }[];
+}
+
 export interface ReportPrinter {
   id: string;
   name: string;
@@ -5073,6 +5104,22 @@ export class DashboardApi {
     return this.#request<CategorySalesDto>(
       `/management-api/reports/categories?from=${from}&to=${to}&mode=${mode}&extrasIntoDish=${extrasIntoDish}`,
       "GET",
+    );
+  }
+
+  getDrawerCloses(from: string, to: string): Promise<DrawerCloseHistoryDto> {
+    const params = new URLSearchParams({ from, to });
+    return this.#request<DrawerCloseHistoryDto>(
+      `/management-api/reports/drawer-closes?${params}`,
+      "GET",
+    );
+  }
+
+  printDrawerClose(closeId: string, printerId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/reports/drawer-closes/${encodeURIComponent(closeId)}/print`,
+      "POST",
+      { printerId },
     );
   }
 
