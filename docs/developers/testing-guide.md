@@ -3678,14 +3678,15 @@ clock added the real `performance.now`, and CI's set-clock case (job 13674348721
 
 ## Exact elapsed cutoffs use whole milliseconds
 
-Pin the steady clock to a whole millisecond before a report when you assert the exact instant it
-expires. With a fractional starting time, adding the cutoff and subtracting the start can yield
+Pin the steady clock to whole milliseconds when the code subtracts two readings and you assert
+the exact cutoff. Adding the cutoff to a fractional start and then subtracting that start can yield
 slightly more than the cutoff.
 
-On 22 November 2026, running `pnpm --filter @waitron/server exec vitest run src/print-api.test.ts
--t 'accepts Pair up to fifteen seconds'` with a start of `50977.687828019225` failed because the
-report was already absent at the inclusive limit. With the fixture using whole milliseconds, the
-same case passed. The product clock still uses the full reading.
+On 22 November 2026, in the “accepts Pair up to fifteen seconds” case in `print-api.test.ts`, replace
+`const scannedAt = Math.floor(performance.now());` with `const scannedAt = 50977.687828019225;`.
+Run `pnpm --filter @waitron/server exec vitest run src/print-api.test.ts -t 'accepts Pair up to fifteen seconds'`.
+The list assertion before Pair failed with “expected [] to have a length of 1 but got +0”.
+Repeating the experiment with `const scannedAt = 50_977;` passed.
 
 ## A floor test pins the till API's clock away from the day change
 
