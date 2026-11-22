@@ -91,11 +91,6 @@ export function checkBackupSettings(value: unknown): BackupSettingsCheck {
   return { ok: true, settings };
 }
 
-/**
- * Only the settings holding a value, so a file with no values left, or a dangling link, is the same
- * as no file: `null`. An empty value is unset (`isUnset`), the same as no line unless it hides that
- * name in `trading.env` or `secrets.env`, which this does not read.
- */
 export async function readBackupSettings(stateDir: string): Promise<Record<string, string> | null> {
   let text: string;
   try {

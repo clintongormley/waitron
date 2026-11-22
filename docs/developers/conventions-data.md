@@ -4088,9 +4088,13 @@ reader still decides its own fallback. Declare print-agent inputs in
 
 The server reads `trading.env`, `secrets.env` and `backup.env` for their own names. For example, put
 `WAITRON_NODE_ID` in `trading.env`. If you put it in `backup.env`, startup skips it and names it in
-the `config.unknown_variables` warning. A non-empty process value still takes precedence.
-`scripts/environment-variables.test.ts` matches names in tracked text. It cannot follow how a
-program constructs a name or uses a value at runtime.
+the `config.unknown_variables` warning. The warning reports setting names and skips malformed
+lines because they can contain key material. A non-empty process value takes precedence.
+The development launcher passes its env files to Node before the server starts, so those values
+have process precedence.
+
+`scripts/environment-variables.test.ts` checks names in tracked text. Review the code to verify
+which accessor reads a setting and to follow names assembled at runtime.
 
 ## Every read of printers names its kind
 

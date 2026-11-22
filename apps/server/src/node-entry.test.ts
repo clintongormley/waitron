@@ -121,10 +121,12 @@ describe("runEntry", () => {
     ]);
   });
 
-  it("reports the name of a setting stored in the wrong box file", async () => {
+  it("reports misplaced settings and keeps stray lines private", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-env-"));
     onTestFinished(() => rm(stateDir, { recursive: true, force: true }));
     await writeFile(join(stateDir, "backup.env"), "WAITRON_ENV=production\n");
+    const strayKey = Buffer.alloc(32, 7).toString("base64");
+    await writeFile(join(stateDir, "secrets.env"), `${strayKey}\n`);
     const log = vi.fn<EntryDeps["log"]>();
     await runEntry(deps({ loadBoxEnv, stateDir, log }));
     expect(log.mock.calls.filter(([, code]) => code === "config.unknown_variables")).toEqual([

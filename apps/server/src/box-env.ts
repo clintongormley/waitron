@@ -8,6 +8,7 @@ import { isUnset } from "./env-value.js";
 
 /** Order matters: a later file's value wins over an earlier one's. */
 const FILES = [SECRETS_ENV_FILE, TRADING_ENV_FILE, BACKUP_ENV_FILE] as const;
+const SETTING_NAME = /^WAITRON_[A-Z0-9_]*[A-Z0-9]$/;
 
 /**
  * The box's env files merged under the real environment. A non-empty variable in `base` wins over a
@@ -32,7 +33,8 @@ export async function loadBoxEnv(
     const ignored: string[] = [];
     for (const [name, value] of Object.entries(parsed)) {
       if (owned.has(name)) fromFiles[name] = value;
-      else ignored.push(name);
+      // A malformed line can contain key material where the parser expects a setting name.
+      else if (SETTING_NAME.test(name)) ignored.push(name);
     }
     if (ignored.length > 0) onIgnored?.(file, ignored.sort());
   }
