@@ -1591,7 +1591,8 @@ declare module "@waitron/shared" {
     "mirror.join_approving": Record<string, never>;
     /**
      * A right tap while another request's copy is being prepared, or was approved less than 2
-     * minutes ago; the request stays waiting.
+     * minutes ago unless a newer request from its address has since ended it; the request stays
+     * waiting.
      */
     "mirror.join_other_approved": Record<string, never>;
     /**

@@ -325,8 +325,9 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         end(r, "code_taken", now);
         return { refused: "code_taken" };
       }
-      // An approved request from this address goes too: its box has started again, so it no longer
-      // holds back a tap on this one. One from another address still does.
+      // An approved request from this address goes too. A new request from the same address is
+      // taken as its box starting again, so the older one no longer holds back a tap on this one.
+      // One from another address still does.
       for (const older of requests.values()) {
         if (older.address === r.address && (isListed(older) || older.phase === "approved"))
           end(older, "replaced", now);
@@ -450,7 +451,8 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
           return { refused: "wrong_code" };
         }
         // The venue holds one pending pair link, so a second approval would take the first box's.
-        // Once the first is forgotten, a new approval may replace its pair if it never finished.
+        // Once the first is forgotten, or a newer request from its address has ended it, a new
+        // approval may replace its pair if it never finished.
         for (const other of requests.values()) {
           if (other.phase === "building" || other.phase === "approved")
             return { refused: "other_approved" };
