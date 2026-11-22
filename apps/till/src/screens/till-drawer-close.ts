@@ -68,6 +68,7 @@ export class TillDrawerClose extends LitElement {
   @state() private manual = false;
   @state() private input = "";
   @state() private error = "";
+  @state() private switchOperator = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -99,12 +100,22 @@ export class TillDrawerClose extends LitElement {
       } else {
         this.#showCount(snapshot);
       }
-    } catch {
-      this.snapshot = null;
-      this.error = t("drawer_close.read_failed");
+    } catch (error) {
+      if (!this.#permissionRefused(error)) {
+        this.snapshot = null;
+        this.error = t("drawer_close.read_failed");
+      }
     } finally {
       this.busy = false;
     }
+  }
+
+  #permissionRefused(error: unknown): boolean {
+    if ((error as { code?: string } | null)?.code !== "authorization.not_permitted") return false;
+    this.snapshot = null;
+    this.switchOperator = true;
+    this.error = t("drawer_close.permission");
+    return true;
   }
 
   #showCount(snapshot: SavedDrawerCount): void {
@@ -160,6 +171,7 @@ export class TillDrawerClose extends LitElement {
         });
       }
     } catch (error) {
+      if (this.#permissionRefused(error)) return;
       const code = (error as { code?: string } | null)?.code;
       if (
         snapshot.state === "counted" &&
@@ -270,6 +282,16 @@ export class TillDrawerClose extends LitElement {
           @click=${() => void this.renderRoot.querySelector<WtDialog>("wt-dialog")?.requestClose("navigation")}
           >${t("action.back")}</wt-button
         >
+        ${
+          this.switchOperator
+            ? html`<wt-button
+                data-drawer-action="sign-in"
+                variant="primary"
+                @click=${() => this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }))}
+                >${t("drawer_close.switch_operator")}</wt-button
+              >`
+            : nothing
+        }
         ${
           canRecount && !finished
             ? html`<wt-button

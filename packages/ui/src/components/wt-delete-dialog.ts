@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, query, state } from "lit/decorators.js";
+import { customElement, property, query } from "lit/decorators.js";
 import type { DeleteImpact, DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import type { WtModal } from "./wt-modal.js";
@@ -27,7 +27,7 @@ export type DeleteDialogCopy = {
   alternative?: (impact: DeleteImpact) =>
     | {
         warning: string;
-        label: string;
+        heading: string;
         guidance: string;
         link?: { href: string; label: string };
         confirm: string;
@@ -107,8 +107,6 @@ export class WtDeleteDialog extends LitElement {
   @property({ attribute: false }) copy?: DeleteDialogCopy;
   @property({ attribute: false }) opener: HTMLElement | null = null;
 
-  @state() private guidanceShown = false;
-
   @query("wt-modal") private modal!: WtModal;
   @query('[data-test="delete-cancel"]') private cancelButton!: WtButton;
 
@@ -126,7 +124,6 @@ export class WtDeleteDialog extends LitElement {
   override updated(): void {
     const shown = this.open && this.copy !== undefined;
     if (shown && !this.shown) void this.focusCancel();
-    if (!shown) this.guidanceShown = false;
     this.shown = shown;
   }
 
@@ -223,13 +220,12 @@ export class WtDeleteDialog extends LitElement {
                   alternative
                     ? html`
                         <p>${alternative.warning}</p>
-                        <div role="status" data-test="delete-guidance">
+                        <div data-test="delete-guidance">
+                          <h3>${alternative.heading}</h3>
+                          ${alternative.guidance}
                           ${
-                            this.guidanceShown
-                              ? html`
-                                  ${alternative.guidance}
-                                  ${alternative.link ? html`<a href=${alternative.link.href}>${alternative.link.label}</a>` : nothing}
-                                `
+                            alternative.link
+                              ? html`<a href=${alternative.link.href}>${alternative.link.label}</a>`
                               : nothing
                           }
                         </div>
@@ -259,21 +255,6 @@ export class WtDeleteDialog extends LitElement {
                   @click=${this.onRetry}
                   >${copy.retry}</wt-button
                 >`
-          }
-          ${
-            alternative && ready
-              ? html`<wt-button
-                  slot="secondary"
-                  data-test="delete-alternative"
-                  variant="secondary"
-                  ?disabled=${this.submitting}
-                  @click=${(event: Event) => {
-                    event.stopPropagation();
-                    this.guidanceShown = true;
-                  }}
-                  >${alternative.label}</wt-button
-                >`
-              : nothing
           }
           <wt-button
             data-test="delete-confirm"

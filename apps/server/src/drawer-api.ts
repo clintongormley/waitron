@@ -1,6 +1,8 @@
 import type { Context, Hono } from "hono";
+import { eq } from "drizzle-orm";
 import {
   finishDrawerClose,
+  persons,
   readDrawerClose,
   readHistoryNodes,
   recountDrawer,
@@ -12,7 +14,7 @@ import { authorize } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveVenueClock } from "@waitron/reporting";
 import { readJsonBody } from "@waitron/server-kit";
-import { AppError, decimal, deviceOrigin } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, resolveActiveLocale } from "@waitron/shared";
 import "./errors.js";
 import { readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
@@ -129,7 +131,14 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
           const close = await readDrawerCloseForPrint(tx, nodeIds, id);
           if (close === null) throw new AppError("drawer.close_not_found", {});
           const { timeZone } = await resolveVenueClock(tx, deps.cfg.nodeId);
-          const locale = resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale);
+          const [person] = await tx
+            .select({ locale: persons.locale })
+            .from(persons)
+            .where(eq(persons.id, actor.personId));
+          const locale = resolveActiveLocale(
+            person?.locale,
+            resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+          );
           await enqueuePrintJob(
             tx,
             printer.id,

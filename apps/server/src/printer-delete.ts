@@ -176,7 +176,14 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     impact: {
       target: { id: printer.id, name: printer.name },
       refusals: [],
-      ...(needsClose ? { drawerClose: { devices: closeDevices } } : {}),
+      ...(needsClose
+        ? {
+            drawerClose: {
+              devices: closeDevices,
+              ...(printer.hasCashDrawer ? {} : { needsDrawerSetting: true as const }),
+            },
+          }
+        : {}),
       ends: ends.filter((item) => item.count > 0),
       removes: removes.filter((item) => item.count > 0),
     },

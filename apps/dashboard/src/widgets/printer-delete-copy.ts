@@ -1,5 +1,5 @@
 import type { DeleteImpactItem, DeleteImpactRefusal, PrinterDeleteImpact } from "@waitron/shared";
-import type { DeleteDialogCopy } from "@waitron/ui";
+import { encodePathSegment, type DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { countedDeleteLine, deleteTargetNames } from "./delete-copy-lines.js";
@@ -76,13 +76,24 @@ export function printerDeleteCopy(page = false, bluetooth = false): DeleteDialog
       if (!drawer) return undefined;
       return {
         warning: t("printers.drawer_delete_retained"),
-        label: t("printers.drawer_delete_close_first"),
-        guidance: drawer.devices.length
-          ? fill("printers.drawer_delete_use_till", { names: deleteTargetNames(drawer.devices) })
-          : t("printers.drawer_delete_assign"),
-        ...(drawer.devices.length === 0
-          ? { link: { href: "/devices", label: t("printers.drawer_delete_devices") } }
-          : {}),
+        heading: t("printers.drawer_delete_close_first"),
+        guidance: drawer.needsDrawerSetting
+          ? fill("printers.drawer_delete_attach", { setting: t("printers.drawer_attached") })
+          : drawer.devices.length
+            ? fill("printers.drawer_delete_use_till", { names: deleteTargetNames(drawer.devices) })
+            : fill("printers.drawer_delete_assign", {
+                capability: t("device_profiles.capability.open-cash-drawer"),
+              }),
+        ...(drawer.needsDrawerSetting
+          ? {
+              link: {
+                href: `/printers/view/printers/printer/${encodePathSegment(impact.target.id)}/editor/calibrate/step/3`,
+                label: t("printers.calibrate"),
+              },
+            }
+          : drawer.devices.length === 0
+            ? { link: { href: "/devices", label: t("printers.drawer_delete_devices") } }
+            : {}),
         confirm: t("printers.drawer_delete_anyway"),
         cancel: t("printers.drawer_delete_stop"),
       };

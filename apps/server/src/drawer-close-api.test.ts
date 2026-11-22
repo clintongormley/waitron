@@ -4,8 +4,11 @@ import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { devices, drawerEntries, personRoles, printers, printJobs } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { setPersonLocale } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
+import { readDrawerCloseForPrint } from "./drawer-close-report.js";
+import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import {
@@ -176,6 +179,28 @@ it.each([true, false])(
   },
 );
 
+it("prints the close in the staff member's saved language on a till set to another language", async () => {
+  await inTx(venue, (tx) => setPersonLocale(tx, { personId: venue.operatorId, locale: "es-ES" }));
+  const saved = await postCount({});
+  const firstId = (saved.json.first as { id: string }).id;
+  const response = await venue.app.request(`${path}/${firstId}/finish`, {
+    method: "POST",
+    headers: {
+      cookie: venue.cookie,
+      "content-type": "application/json",
+      "accept-language": "en-GB",
+    },
+    body: JSON.stringify({ confirmSequence: 1, amountLeft: "2.00" }),
+  });
+  expect(response.status).toBe(200);
+  const { id } = (await response.json()) as { id: string };
+  const close = (await inTx(venue, (tx) => readDrawerCloseForPrint(tx, [venue.cfg.nodeId], id)))!;
+  const [job] = await store.db.select().from(printJobs);
+  const paper = { paperWidth: "80mm", resolution: "180dpi" } as const;
+  expect(job?.payload).toEqual(formatDrawerCloseTicket(close, paper, "es-ES", "Europe/Madrid"));
+  expect(job?.payload).not.toEqual(formatDrawerCloseTicket(close, paper, "en-GB", "Europe/Madrid"));
+});
+
 it("offers a close for cash on an assigned till and keeps the balance when the same printer returns", async () => {
   const order = await tabWith(venue, "Croquettes");
   expect((await cashPayment(venue, venue.cookie, order, "10.00")).status).toBe(200);
@@ -184,6 +209,16 @@ it("offers a close for cash on an assigned till and keeps the balance when the s
   expect(await read(printerId)).toMatchObject({
     drawerClose: { devices: expect.arrayContaining([{ id: venue.deviceId, name: "Barra" }]) },
   });
+
+  const drawerSetting = (hasCashDrawer: boolean) =>
+    inTx(venue, (tx) =>
+      tx.update(printers).set({ hasCashDrawer }).where(eq(printers.id, printerId)),
+    );
+  await drawerSetting(false);
+  expect(await read(printerId)).toMatchObject({
+    drawerClose: { devices: [], needsDrawerSetting: true },
+  });
+  await drawerSetting(true);
 
   const [printer] = await store.db.select().from(printers).where(eq(printers.id, printerId));
   await inTx(venue, (tx) => deletePrinter(tx, printerId));

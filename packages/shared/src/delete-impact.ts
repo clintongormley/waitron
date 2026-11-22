@@ -17,7 +17,7 @@ export type DeleteImpact = {
 };
 
 export type PrinterDeleteImpact = DeleteImpact & {
-  drawerClose?: { devices: DeleteTarget[] };
+  drawerClose?: { devices: DeleteTarget[]; needsDrawerSetting?: true };
 };
 
 export function deleteTargetName(target: DeleteTarget, deletedLabel: string): string {

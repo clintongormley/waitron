@@ -152,6 +152,33 @@ test("lists refusals, then work that ends, then settings removed, then the irrev
   expect(modalOf(el).size).toBe("compact");
 });
 
+test("shows guidance before either choice and retains the safe initial focus", async () => {
+  const el = await openDialog({ loading: true });
+  el.copy = {
+    ...copy,
+    alternative: () => ({
+      warning: "There is still cash in this drawer.",
+      heading: "Close first",
+      guidance: "Assign the drawer to a till.",
+      link: { label: "Open Devices", href: "/devices" },
+      cancel: "Stop",
+      confirm: "Delete anyway",
+    }),
+  };
+  await settle(el);
+  expect(inner(el, "confirm").disabled).toBe(true);
+  expect(deepActiveElement()).toBe(inner(el, "cancel"));
+  el.loading = false;
+  await settle(el);
+
+  const guide = el.shadowRoot!.querySelector("[data-test=delete-guidance]")!;
+  expect(guide.textContent).toContain("Close first");
+  expect(guide.textContent).toContain("Assign the drawer to a till.");
+  expect(guide.querySelector("a")?.getAttribute("href")).toBe("/devices");
+  expect(button(el, "cancel").textContent?.trim()).toBe("Stop");
+  expect(button(el, "confirm").textContent?.trim()).toBe("Delete anyway");
+});
+
 test("renders names as text, never as markup, and wraps a long one inside the dialog", async () => {
   const el = await openDialog({ impact: refusedImpact() });
   const root = el.shadowRoot!;

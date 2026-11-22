@@ -2037,7 +2037,9 @@ export const en = {
   "printers.drawer_delete_use_till":
     "On {names}, open More, choose Close drawer and leave zero cash.",
   "printers.drawer_delete_assign":
-    "Assign the drawer to a till, then use Close drawer on that till.",
+    "Assign the drawer to a till whose profile allows {capability}. Then use Close drawer on that till.",
+  "printers.drawer_delete_attach":
+    "Turn on {setting}, then close the drawer from a till that can open it.",
   "printers.drawer_delete_devices": "Open Devices",
   "printers.drawer_delete_anyway": "Delete anyway",
   "printers.drawer_delete_stop": "Stop",
@@ -6743,7 +6745,9 @@ export const es: Record<StringKey, string> = {
   "printers.drawer_delete_use_till":
     "En {names}, abre Más, elige Cerrar cajón y deja el cajón vacío.",
   "printers.drawer_delete_assign":
-    "Asigna el cajón a un terminal y elige Cerrar cajón en ese terminal.",
+    "Asigna el cajón a un terminal cuyo perfil permita {capability}. Después, elige Cerrar cajón en ese terminal.",
+  "printers.drawer_delete_attach":
+    "Activa {setting} y cierra el cajón desde un terminal que pueda abrirlo.",
   "printers.drawer_delete_devices": "Abrir Dispositivos",
   "printers.drawer_delete_anyway": "Eliminar de todos modos",
   "printers.drawer_delete_stop": "Detener",
