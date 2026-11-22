@@ -2652,7 +2652,10 @@ async function bootServer(
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
+  const usesSavedAccountSmtp = async (tx: Transaction) => !captureOnly && (await hasSavedSmtp(tx));
   const accountMailMode = async (tx: Transaction) => {
+    if (await usesSavedAccountSmtp(tx))
+      return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
     try {
       if (await cloudConnection?.emailRelayEnabled()) return "cloud" as const;
     } catch {
@@ -2661,8 +2664,10 @@ async function bootServer(
     return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
   };
   const cloudMail = {
-    resolveAccountRelay: (signal: AbortSignal) =>
-      cloudConnection?.emailRelay(signal) ?? Promise.resolve(null),
+    resolveAccountRelay: async (signal: AbortSignal) => {
+      if (!cloudConnection || (await usesSavedAccountSmtp(db))) return null;
+      return cloudConnection.emailRelay(signal);
+    },
     sendCloudEmail: cloudConnection?.sendEmail,
     ...(cloudConnection &&
       !captureAccountEmail && {

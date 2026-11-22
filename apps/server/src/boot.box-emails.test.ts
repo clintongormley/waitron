@@ -452,6 +452,104 @@ describe("the running server's notice and email checks", () => {
     },
   );
   it.each([
+    ["prepare", false, "venue@example.test", "smtp"],
+    ["prepare", false, "one@example.test, two@example.test", "unconfigured"],
+    ["demo", true, "venue@example.test", "smtp"],
+    ["demo", false, "venue@example.test", "cloud"],
+  ] as const)(
+    "routes paired %s account mail with development=%s and saved sender %s through %s",
+    async (intent, development, from, mode) => {
+      const venue = await setupVenue(suite.db);
+      const booted: Booted = {};
+      let submitted: Record<string, unknown> | undefined;
+      const f = await installationFixture(undefined, {
+        emailConfiguration: true,
+        managementOrigin: "http://localhost:5191",
+        email: async (v, _saved, _req, res) => {
+          submitted = JSON.parse(String(v[7]));
+          res.end(
+            JSON.stringify({
+              version: 1,
+              messageId: v[4],
+              state: "accepted",
+              statusRevision: 2,
+              expiresAt: submitted!.expiresAt,
+              reason: null,
+            }),
+          );
+        },
+      });
+      const origin = vi.spyOn(cloudClient, "loadCloudOrigin").mockReturnValue(f.options.origin);
+      try {
+        const [person] = await seedPersons(suite.db, {
+          displayName: "Reset recipient",
+          email: "reset@example.test",
+          locale: "en-GB",
+        });
+        await withTransaction(suite.db, async (tx) => {
+          await saveCloudVenueId(tx, f.venueId);
+          await queueAccountMail(tx, { personId: person!.id, purpose: "password_reset" });
+        });
+        f.patch({
+          emailRelay: {
+            version: 1,
+            grant: {
+              id: randomUUID(),
+              revision: 1,
+              enabled: true,
+              expiresAt: new Date(Date.now() + 3600000).toISOString(),
+            },
+          },
+        });
+        holder.pauseMail = true;
+        await bootServer(
+          booted,
+          venue,
+          { intent, development },
+          undefined,
+          {},
+          {
+            origin: f.options.origin,
+            stateDir: f.stateDir,
+          },
+        );
+        await holder.cloudPass;
+        expect(await holder.mail!.resolveAccountRelay!(holder.mail!.signal)).toMatchObject({
+          revision: 1,
+        });
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe("cloud");
+        const url = "smtp://smtp.example.test:2525";
+        const ring = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, { url, from }));
+        const requestsBeforeSend = f.requests.length;
+
+        await runMailPass(holder.mail!);
+
+        if (mode === "cloud") {
+          expect(submitted).toMatchObject({
+            class: "password_reset",
+            recipient: "reset@example.test",
+          });
+        } else {
+          expect(f.requests.slice(requestsBeforeSend).map((request) => request[2])).toEqual([]);
+        }
+        expect(holder.smtp).toEqual(mode === "smtp" ? [expect.objectContaining({ url })] : []);
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe(mode);
+        expect(await withTransaction(suite.db, holder.profileMode!)).toBe(mode);
+        expect(
+          suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
+        ).toMatchObject({ status: mode === "unconfigured" ? "pending" : "sent" });
+      } finally {
+        await shutDown(booted);
+        origin.mockRestore();
+        await f.close();
+      }
+    },
+  );
+  it.each([
     ["security_change", false],
     ["box_alert", false],
     ["box_alert", true],

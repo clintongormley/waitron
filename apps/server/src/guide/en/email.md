@@ -44,27 +44,25 @@ You can also receive that report after a box restart. After a closure spanning s
 ## Choose staff email during test setup {#cloud-staff-email}
 
 In Prepare on a test box, sign in to Waitron Cloud and tick **Send staff email through Waitron
-Cloud** on the email step. Leave the mail server blank and continue, or enter and test your own
-server. Once the box restarts and connects, Cloud can send staff invitations, password-reset links
-and email-change codes.
+Cloud** on the email step. Leave the mail server blank and continue. Once the box restarts and
+connects, Cloud can send staff invitations, password-reset links and email-change codes.
 
 If you choose Cloud and leave the mail server blank, Cloud also sends account security notices,
 role change notices and the warning to a staff member's previous address when someone else
 changes it in **Users**. Managers with an email address can also receive box alerts about low
 space, deleted backups, backup runs that stopped, rolled-back upgrades and clock corrections.
-Your mail server takes priority for those notices when you add one. To email
-customers, send the daily report or receive other box alerts by email, add a mail server in
-**System → Email**.
+If you add your own mail server, Waitron uses it for those messages. To email customers, send the
+daily report or receive other box alerts by email, add a mail server in **System → Email**.
 
 If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
 the mail server you use for staff email.
 
 ## Account email through test Cloud {#cloud-account-email}
 
-When you pair your box with the test Cloud and enable its email relay, invitations,
-password-reset links and email-change codes use Cloud, including in Demo. Check the recipient's
-real inbox rather than Demo's Email inbox. Keep a mail server configured for receipts and other
-notices.
+Invitations, password-reset links and email-change codes use your saved mail server. If you
+leave the server blank and enable email through test Cloud, Cloud sends those messages.
+In Demo outside development, enable Cloud email to send to the recipient's real inbox. Otherwise,
+open Demo's **Email inbox**.
 
 On a box configured for test filings, managers with an email address can receive certificate
 expiry reminders through test Cloud when Cloud email is on and the box has no mail server.
@@ -72,10 +70,10 @@ expiry reminders through test Cloud when Cloud email is on and the box has no ma
 Cloud account links lead back to your box. Open them on a network that can reach it. Cloud's
 invitation does not list your roles or include the venue's optional privacy link. If an email
 does not arrive, request a fresh link or code; an earlier message may still arrive later.
-Turning the relay off restores your normal mail-server or Demo-capture route for new sends.
-Pairing alone keeps your existing route until the box has used an enabled relay. If Cloud then
-becomes unavailable, account email waits for it; saving SMTP settings does not reroute those
-messages. Restore Cloud or explicitly turn its relay off before requesting a fresh link or code.
+If you rely on Cloud email and it becomes unavailable, restore Cloud. Outside Demo, you can
+also add a mail server in **System → Email**. If your saved mail settings are unusable,
+invitations, password resets and email-change codes wait for working settings. Correct the
+settings and send another test.
 
 ## Check the test result {#test-results}
 
@@ -100,8 +98,7 @@ Continue becomes available after the server accepts a test of those settings for
 With box administration (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the server clears its saved login details too; enter them again if you set it up later.
 
-In Prepare or Live, receipts and notices need a configured server. Account email follows the
-[Cloud route](email.md#cloud-account-email) when enabled, or your normal mail-server route. Sales continue.
-On a development box, mail using the normal route
-goes back to its test inbox. If the settings fail to reload after removal, retry loading them;
-the removal has already succeeded.
+Outside development, removing the server stops receipt email. If you have enabled test Cloud
+email, Cloud can send [account email](email.md#cloud-account-email). Sales continue. On a
+development box without Cloud email, check the test inbox. If the settings fail to reload after
+removal, retry loading them. The removal has already succeeded.
