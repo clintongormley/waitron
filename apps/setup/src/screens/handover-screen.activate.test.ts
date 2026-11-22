@@ -175,7 +175,7 @@ it("starts the venue only after Continue is pressed under the new series", async
     [...clockEntry.shadowRoot!.querySelectorAll("[data-test=selected-hour] li")].map((li) =>
       li.textContent!.trim(),
     ),
-  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]);
+  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"]);
   await new Promise((resolve) => setTimeout(resolve, 50));
   await el.updateComplete;
   expect(activations(requests)).toHaveLength(0);
