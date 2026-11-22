@@ -36,7 +36,7 @@ Station hours follow your painted periods, their menus, routing and the closures
 
 In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.
 
-When the dates have different business-day starts, read the time ruler beside each date as you paint. With **Every year**, use the shared ruler. If changing **Every year** names a date, clear or repaint that date before trying again. If **Copy to…** names a date whose start the hours cross, paint that date separately.
+When the dates have different business-day starts, read the time ruler beside each date as you paint. With **Every year**, use the shared ruler. If changing **Every year** names a department or zone and a date, clear or repaint its hours on that date before trying again. If **Copy to…** refuses a date, paint it separately.
 
 ## Holiday names {#holiday-names}
 

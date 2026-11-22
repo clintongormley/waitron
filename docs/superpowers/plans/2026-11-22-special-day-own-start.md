@@ -38,7 +38,9 @@ both directions in Chromium.
    Follow the existing save refusal path for times that fit only a waiting start (A869).
 3. In `paint-grid.ts` and `paint-grid-parts.ts`, apply each column’s start to painted blocks,
    underlays, hour lines, pointer snapping, preview, release and block menu edits. Export the per-date labels next to `timeRuler` in `paint-grid-parts.ts` so
-   the staffing painter can reuse them. For mixed starts, replace the pinned ruler track with a ruler inside
+   the staffing painter can reuse them. The watcher’s 11:03 instruction was
+   “lane K will reuse them rather than build its own.” Expose them through the existing
+   `@waitron/venue-service/painter` entry point. For mixed starts, replace the pinned ruler track with a ruler inside
    each date and give its track enough extra width to keep the current minimum paint area.
    Keep the single ruler when starts agree. Pass the column key to `ColumnStroke` and keep its
    existing zero-argument staffing caller. Give the shared `CopyChooser` an optional

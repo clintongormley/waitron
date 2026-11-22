@@ -249,16 +249,34 @@ describe("the season under the paint", () => {
     });
   });
 
-  it("uses one ruler at the start in force for yearly repeats", async () => {
+  it("changes the ruler when existing paint fits both recurrence choices", async () => {
     const { painter, writes } = await mount({
-      days: { sd1: storedDay({ repeatsYearly: true }) },
+      days: {
+        sd1: storedDay({
+          paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("12:00", "14:00")] }],
+        }),
+      },
       season: (date) => ({ dayCutover: date === DEC_14 ? "05:00" : "06:10" }),
     });
-    expect(grid(painter).shadowRoot!.querySelectorAll(".times")).toHaveLength(1);
+    for (const [value, rulers] of [
+      ["yes", 1],
+      ["no", 3],
+      ["yes", 1],
+    ] as const) {
+      painter
+        .shadowRoot!.querySelector<HTMLInputElement>(
+          `input[name="repeatsYearly"][value="${value}"]`,
+        )!
+        .click();
+      await settle(painter);
+      expect(grid(painter).shadowRoot!.querySelectorAll(".times")).toHaveLength(rulers);
+      expect(grid(painter).days.get(DEC_15)).toEqual([lunch("12:00", "14:00")]);
+    }
     await drag(painter, DEC_14, 0, 60);
     saveButton(painter).click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0]!.body).toMatchObject({
+      repeatsYearly: true,
       paint: [{ departmentId: "d1", date: DEC_14, ranges: [lunch("06:00", "07:00")] }],
     });
   });
@@ -298,6 +316,29 @@ describe("the season under the paint", () => {
       expect(saveButton(painter).disabled).toBe(true);
     },
   );
+
+  it("names the zone that needs attention even while showing the department", async () => {
+    const { painter } = await mount({
+      days: {
+        sd1: storedDay({
+          zonePaint: [
+            {
+              zoneId: "z2",
+              date: DEC_14,
+              ranges: [{ kind: "closed", startsAt: "05:30", endsAt: "07:00" }],
+            },
+          ],
+        }),
+      },
+      season: (date) => ({ dayCutover: date === DEC_14 ? "05:00" : "06:10" }),
+    });
+    painter
+      .shadowRoot!.querySelector<HTMLInputElement>('input[name="repeatsYearly"][value="yes"]')!
+      .click();
+    await settle(painter);
+    expect(part(painter, "repeat-refusal")?.textContent).toMatch(/Terrace.*14 Dec/);
+    expect(frame(painter).refusal).toBe("");
+  });
 
   it("keeps one ruler when every date starts at the same time", async () => {
     const { painter } = await mount();

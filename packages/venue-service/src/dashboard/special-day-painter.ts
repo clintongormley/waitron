@@ -1214,15 +1214,18 @@ export class SpecialDayPainter extends LitElement {
   }
 
   private setRepeatsYearly(value: boolean): void {
-    const painted = [...this.draft.paint.values()];
-    const incompatible = this.draft.dates.find(({ date }) => {
+    const painted = [...this.draft.paint];
+    for (const { date } of this.draft.dates) {
       const cutover = this.columnCutover(date, value);
-      return painted.some((days) => paintCrossesStart(days.get(date) ?? [], cutover));
-    });
-    if (incompatible) {
+      const incompatible = painted.find(([, days]) =>
+        paintCrossesStart(days.get(date) ?? [], cutover),
+      );
+      if (!incompatible) continue;
+      const name = ownerName(this.model, incompatible[0]);
+      const message = format("special.repeat_crosses_start", { date: columnLabel(date) });
       this.refused = {
         field: "repeatsYearly",
-        message: format("special.repeat_crosses_start", { date: columnLabel(incompatible.date) }),
+        message: name ? format("painter.refused_in", { name, message }) : message,
       };
       return;
     }
