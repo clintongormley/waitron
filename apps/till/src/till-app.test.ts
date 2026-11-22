@@ -446,6 +446,23 @@ function fixtureOffers(
  * to a resolved value; a test overrides any with its own `vi.fn()`. Cast through `unknown` because the
  * app touches only this method surface, never the rest of the class.
  */
+function counterOrderAfterCard(id: string): HeldOrder {
+  return {
+    id,
+    zoneId: "zone-counter",
+    serviceMode: "prepay",
+    expectedEdit: null,
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    orderNumber: 5,
+    label: null,
+    revision: 0,
+    invoiceType: "F2",
+    dining: "eat_in",
+    diningChoice: "none",
+    lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+  };
+}
+
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   const api = {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
@@ -12188,7 +12205,7 @@ describe("till-app", () => {
 
     it("declined: stays on the counter with the basket intact and records the outcome for the widget", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
-      const { el } = await mountApp({ pay });
+      const { el } = await mountApp({ pay, retrieveWorkingOrder: vi.fn(counterOrderAfterCard) });
       const c = await toCounter(el);
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -12213,7 +12230,7 @@ describe("till-app", () => {
       "%s: also stays on the counter with the basket intact and records the outcome",
       async (outcome) => {
         const pay = vi.fn().mockResolvedValue({ outcome });
-        const { el } = await mountApp({ pay });
+        const { el } = await mountApp({ pay, retrieveWorkingOrder: vi.fn(counterOrderAfterCard) });
         const c = await toCounter(el);
         c.store.addProduct(coffee, "2");
         await el.updateComplete;
@@ -12540,7 +12557,7 @@ describe("till-app", () => {
       // The other side: once `pay` IS called, a network failure of THAT request is
       // `sale.unconfirmed` — the charge may have captured and filed, so a human checks before retrying.
       const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const { el } = await mountApp({ pay });
+      const { el } = await mountApp({ pay, retrieveWorkingOrder: vi.fn(counterOrderAfterCard) });
       const c = await toCounter(el);
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -26812,7 +26829,7 @@ it("A767 keeps edits made while the card request was pending protected after a d
         decline = resolve;
       }),
   );
-  const { el } = await mountApp({ pay });
+  const { el } = await mountApp({ pay, retrieveWorkingOrder: vi.fn(counterOrderAfterCard) });
   const c = await toCounter(el);
   c.store.addProduct(coffee, "2");
   emit(c, "collect-card", {});
@@ -26821,6 +26838,8 @@ it("A767 keeps edits made while the card request was pending protected after a d
   decline({ outcome: "declined" });
   await flush(el);
   expect(c.store.lines[0]!.quantity).toBe("3");
+  expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith(c.store.id);
+  vi.mocked(currentApi.retrieveWorkingOrder).mockClear();
   emit(c, "retrieve-order", { id: "wo-1" });
   await flush(el);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
