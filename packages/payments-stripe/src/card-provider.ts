@@ -202,13 +202,23 @@ export function createStripeCardProvider(
       canUnpair: false,
       async list(deps) {
         const secretKey = await sealedSecretKey(deps);
-        // The default account page only; this does not enumerate subsequent pages.
-        const page = await makeStripe(secretKey, {
+        const stripe = makeStripe(secretKey, {
           httpClient: Stripe.createFetchHttpClient(),
           timeout: 20_000,
           maxNetworkRetries: 0,
-        }).terminal.readers.list();
-        return page.data.map((reader) => ({
+        });
+        const readers: Stripe.Terminal.Reader[] = [];
+        let startingAfter: string | undefined;
+        for (;;) {
+          const page = await stripe.terminal.readers.list({
+            limit: 100,
+            ...(startingAfter === undefined ? {} : { starting_after: startingAfter }),
+          });
+          readers.push(...page.data);
+          if (!page.has_more || page.data.length === 0) break;
+          startingAfter = page.data.at(-1)!.id;
+        }
+        return readers.map((reader) => ({
           providerRef: reader.id,
           name: reader.label,
           model: reader.device_type,

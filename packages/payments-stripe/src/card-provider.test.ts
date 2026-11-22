@@ -227,34 +227,59 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     return { deps: { db: suite.db, ring }, seat: createStripeCardProvider(makeStripe) };
   }
 
-  it("lists the default account page without a location filter", async () => {
+  it("lists every account page in order without a location filter", async () => {
     const args: unknown[][] = [];
+    const pages = [
+      {
+        data: [
+          { id: "tmr_a", label: "Counter", device_type: "bbpos_wisepos_e", serial_number: "s-1" },
+          { id: "tmr_b", label: "Bar", device_type: "stripe_s700", serial_number: "s-2" },
+        ],
+        has_more: true,
+      },
+      {
+        data: [
+          { id: "tmr_c", label: "Terrace", device_type: "bbpos_wisepos_e", serial_number: "s-3" },
+        ],
+        has_more: false,
+      },
+    ];
     const { deps, seat } = await readerDeps(
       fakeMakeStripe(
         {
           list: async (...input) => {
             args.push(input);
-            return {
-              data: [
-                {
-                  id: "tmr_abc",
-                  label: "Counter",
-                  device_type: "bbpos_wisepos_e",
-                  serial_number: "serial-1",
-                },
-              ],
-              has_more: true,
-            };
+            return pages[args.length - 1];
           },
         },
         freshCalls(),
       ),
     );
     expect(await seat.readers.list(deps)).toEqual([
-      { providerRef: "tmr_abc", name: "Counter", model: "bbpos_wisepos_e", serial: "serial-1" },
+      { providerRef: "tmr_a", name: "Counter", model: "bbpos_wisepos_e", serial: "s-1" },
+      { providerRef: "tmr_b", name: "Bar", model: "stripe_s700", serial: "s-2" },
+      { providerRef: "tmr_c", name: "Terrace", model: "bbpos_wisepos_e", serial: "s-3" },
     ]);
-    expect(args).toEqual([[]]);
+    expect(args).toEqual([[{ limit: 100 }], [{ limit: 100, starting_after: "tmr_b" }]]);
     expect(seat.readers.canUnpair).toBe(false);
+  });
+
+  it("stops at an empty page even when Stripe says more follow", async () => {
+    const args: unknown[][] = [];
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe(
+        {
+          list: async (...input) => {
+            args.push(input);
+            if (args.length > 1) throw new Error("listed past an empty page");
+            return { data: [], has_more: true };
+          },
+        },
+        freshCalls(),
+      ),
+    );
+    expect(await seat.readers.list(deps)).toEqual([]);
+    expect(args).toEqual([[{ limit: 100 }]]);
   });
 
   it("maps the millisecond last-seen epoch to its 2026 ISO date with no battery", async () => {
@@ -625,7 +650,9 @@ describe("Stripe reader HTTP deadlines", () => {
         expect(received?.maxNetworkRetries).toBe(0);
         expect(received?.httpClient?.getClientName()).toBe("fetch");
         expect(paths).toEqual([
-          method === "status" ? "GET /v1/terminal/readers/tmr_abc" : "GET /v1/terminal/readers",
+          method === "status"
+            ? "GET /v1/terminal/readers/tmr_abc"
+            : "GET /v1/terminal/readers?limit=100",
         ]);
       } finally {
         server.closeAllConnections();

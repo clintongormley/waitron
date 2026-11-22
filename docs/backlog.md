@@ -900,7 +900,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 
 
 
-- **Stripe adapter upkeep** (bundle of 4, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
+- **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 
 - **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
@@ -926,7 +926,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
-  same moment (an accepted race); Stripe's reader list is one page.
+  same moment (an accepted race).
 
 - **The SumUp reconciler** — other-provider and cash-only qualification. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
