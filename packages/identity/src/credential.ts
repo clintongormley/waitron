@@ -80,12 +80,13 @@ export interface PinAttempts {
 
 /**
  * {@link verifyPersonCredential} under a wrong-PIN limit: refuses `pin.throttled` before any PIN
- * check while the person is inside a wait, counts a `pin.invalid`, and clears the count on success.
+ * check while the person is inside a wait, counts a `pin.invalid` (a PIN that is not text among
+ * them, refused unhashed), and clears the count on success.
  */
 export async function verifyThrottledCredential(
   tx: Database | Transaction,
   personId: string,
-  pin: string,
+  pin: unknown,
   attempts: PinAttempts,
   checked?: SecretCheck,
 ): Promise<{ authority: PersonAuthority; locale: string | null }> {
@@ -93,6 +94,7 @@ export async function verifyThrottledCredential(
   throttle.check(slot, personId);
   let cred;
   try {
+    if (typeof pin !== "string") throw new AppError("pin.invalid", {}, { reason: "malformed" });
     cred = await verifyPersonCredential(tx, personId, pin, checked);
   } catch (error) {
     if (isAppError(error) && error.code === "pin.invalid") throttle.recordFailure(slot, personId);

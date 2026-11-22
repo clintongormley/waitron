@@ -241,11 +241,10 @@ Left open:
   rather than counting down the seconds the server sends, as the sign-in screen does, and the
   approver prompt hides the message as soon as someone types; the limit is an optional
   argument, so a future route taking an approver's PIN could leave it off unnoticed; and the
-  dashboard's `verifyManagerPin` (`apps/server/src/payments-api.ts`) and the till's sign-in
-  route each still repeat the steps `verifyThrottledCredential`
+  till's sign-in route still repeats the steps `verifyThrottledCredential`
   (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
-  wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
-  are separate, or that the count is per device. **Next action:** the owner decides whether to
+  wrong PINs share the drawer's and adjustments' count, or that the sign-in and override counts
+  are separate. **Next action:** the owner decides whether to
   add the countdown and make the limit required.
 - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
   (B11g) but the till's cancel dialog still says only that it comes off the bill, because the

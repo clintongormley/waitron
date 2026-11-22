@@ -118,6 +118,44 @@ describe("verifyThrottledCredential", () => {
     expect(cred).not.toHaveProperty("role");
   });
 
+  it.each<[string, unknown]>([
+    ["a number", 1234],
+    ["null", null],
+    ["a missing PIN", undefined],
+    ["an array", ["1234"]],
+  ])("counts %s as a wrong PIN, refused as malformed without checking it", async (_, pin) => {
+    const personId = await seedPerson(suite.db, "supervisor");
+    const { attempts, throttle } = spiedAttempts();
+
+    const refusal = await refusalOf(() =>
+      run((tx) => verifyThrottledCredential(tx, personId, pin, attempts)),
+    );
+
+    expect(refusal).toEqual({ code: "pin.invalid", params: {}, reason: "malformed" });
+    expect(throttle.recordFailure).toHaveBeenCalledTimes(1);
+    expect(throttle.recordFailure).toHaveBeenCalledWith("override:device-1", personId);
+    expect(throttle.clear).not.toHaveBeenCalled();
+    expect(verifyPin).not.toHaveBeenCalled();
+  });
+
+  it("refuses a malformed PIN pin.throttled while the person is inside a wait", async () => {
+    const personId = await seedPerson(suite.db, "supervisor");
+    const { attempts, throttle } = spiedAttempts();
+    for (let i = 0; i < 4; i += 1) {
+      expect(
+        await codeOf(() => run((tx) => verifyThrottledCredential(tx, personId, "9999", attempts))),
+      ).toBe("pin.invalid");
+    }
+    throttle.recordFailure.mockClear();
+
+    const code = await codeOf(() =>
+      run((tx) => verifyThrottledCredential(tx, personId, 1234, attempts)),
+    );
+
+    expect(code).toBe("pin.throttled");
+    expect(throttle.recordFailure).not.toHaveBeenCalled();
+  });
+
   it("does not count a failure that is not a wrong PIN", async () => {
     const { attempts, throttle } = spiedAttempts();
     const broken = {
