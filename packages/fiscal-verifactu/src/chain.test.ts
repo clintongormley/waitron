@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, quoteLiteral } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { appendToChain, readChainHead } from "./chain.js";
+import { appendToChain, readChainHead, type PendingRegistro } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import {
   altaFor,
@@ -117,7 +117,7 @@ describe("appendToChain", () => {
   });
 
   it("opens a fresh chain on identity activation and continues its sequence under the supplied identity", async () => {
-    const inputs = [];
+    const inputs: PendingRegistro[] = [];
     for (let number = 1; number <= 4; number++) {
       const saleId = await seedSale(suite.db, node, number);
       inputs.push(altaFor(node, saleId, number, number));
