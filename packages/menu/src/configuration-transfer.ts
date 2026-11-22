@@ -13,7 +13,7 @@ import { menus, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkSectionMemberRows } from "./include-folder.js";
 import { syncMenuOffers } from "./menu-structure.js";
-import { readVenueVatRates } from "./takeaway-vat-rates.js";
+import { vatRatesOfArea } from "./takeaway-vat-rates.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -126,10 +126,14 @@ function checkTakeawayVatRates(tables: Readonly<Record<string, Rows>>): void {
 }
 
 /** A takeaway rate the importing venue's area does not offer for picking is refused, as a save
- * refuses it. */
-async function checkPickableTakeawayVatRates(tx: Transaction, rows: Rows | undefined) {
+ * refuses it. The area is looked up only when there are rows to check. */
+function checkPickableTakeawayVatRates(
+  rows: Rows | undefined,
+  country: string,
+  territory: string,
+): void {
   if (rows === undefined || rows.length === 0) return;
-  const pickable = new Set((await readVenueVatRates(tx)).pickable.map(stringToBasisPoints));
+  const pickable = new Set(vatRatesOfArea(country, territory).pickable.map(stringToBasisPoints));
   for (const row of rows)
     if (!pickable.has(row.rate as number))
       throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates.rate" });
@@ -342,11 +346,13 @@ export const MENU_CONFIGURATION_TRANSFER = {
   ): Promise<void> {
     const country = (await readTaxpayer(tx))?.country;
     if (country === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
-    checkContentLanguages(bundle?.contentLanguages ?? null, {
+    const venue = await readVenue(tx);
+    checkContentLanguages(bundle?.contentLanguages ?? null, { country, area: venue.province });
+    checkPickableTakeawayVatRates(
+      tables.product_takeaway_vat_rates,
       country,
-      area: (await readVenue(tx)).province,
-    });
-    await checkPickableTakeawayVatRates(tx, tables.product_takeaway_vat_rates);
+      venue.fiscalTerritory,
+    );
   },
   async afterImport(tx: Transaction): Promise<void> {
     const rows = await tx.select({ id: menus.id }).from(menus);
