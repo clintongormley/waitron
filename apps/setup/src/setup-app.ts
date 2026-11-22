@@ -1009,6 +1009,10 @@ export class SetupApp extends LitElement {
   /** The venue-name watch's state as last read; "not-asked" until the box's first ask finishes. */
   #venueName?: VenueNameState;
   #venueNameTimer?: ReturnType<typeof setTimeout>;
+  /** Bumped by every showing and leaving of the first page, so a reply sent before it is dropped. */
+  #venueNameVisit = 0;
+  /** Set when the load's own read opens the first page, so that showing does not read twice. */
+  #venueNameJustRead = false;
 
   /** Seeded with the defaults every ES deli shares, so a screen only has to collect what differs. */
   @state() private draft: DeepPartial<ProvisionBody> = {
@@ -1052,32 +1056,44 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * The box's first ask of the network takes about two seconds (`askedAndHeardOthers`'s time
-   * limit), so a page that loads sooner reads "not-asked". A box with its LAN answer off never
-   * asks, so the re-reads are bounded rather than kept up until an answer comes.
+   * Each showing of the first page reads the answer afresh, since the box's watch asks again every
+   * 30 to 40 seconds (`SETUP_ASK_INTERVAL_MS` in the server's `mdns.ts`). The box's first ask takes
+   * about two seconds (`askedAndHeardOthers`'s time limit), so a page that loads sooner reads
+   * "not-asked"; a box with its LAN answer off never asks, so the re-reads are bounded rather than
+   * kept up until an answer comes.
    */
   #startVenueNameReads(): void {
     this.#stopVenueNameReads();
-    if (this.#venueName !== "not-asked" || this.screen !== "mode" || !this.isConnected) return;
-    const read = (left: number) => {
+    const justRead = this.#venueNameJustRead;
+    this.#venueNameJustRead = false;
+    if (this.screen !== "mode" || !this.isConnected) return;
+    const visit = this.#venueNameVisit;
+    const live = () => visit === this.#venueNameVisit;
+    const next = (left: number) => {
+      if (this.#venueName !== "not-asked" || left === 0) return;
       this.#venueNameTimer = setTimeout(() => {
         this.#venueNameTimer = undefined;
-        void this.api.getDiscovery().then(
-          (discovery) => {
-            if (!this.isConnected || this.screen !== "mode") return;
-            this.#applyVenueName(discovery.venueName);
-            if (this.#venueName === "not-asked" && left > 1) read(left - 1);
-          },
-          () => {
-            if (this.isConnected && this.screen === "mode" && left > 1) read(left - 1);
-          },
-        );
+        read(left - 1);
       }, VENUE_NAME_READ_EVERY_MS);
     };
-    read(VENUE_NAME_REREADS);
+    const read = (left: number) => {
+      void this.api.getDiscovery().then(
+        (discovery) => {
+          if (!live()) return;
+          this.#applyVenueName(discovery.venueName);
+          next(left);
+        },
+        () => {
+          if (live()) next(left);
+        },
+      );
+    };
+    if (justRead) next(VENUE_NAME_REREADS);
+    else read(VENUE_NAME_REREADS);
   }
 
   #stopVenueNameReads(): void {
+    ++this.#venueNameVisit;
     clearTimeout(this.#venueNameTimer);
     this.#venueNameTimer = undefined;
   }
@@ -1217,8 +1233,10 @@ export class SetupApp extends LitElement {
         !this.#resumeCloudSignIn() &&
         this.screen === "connection" &&
         !discovery.caDownloadAvailable
-      )
+      ) {
+        this.#venueNameJustRead = true;
         this.screen = "mode";
+      }
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
     }
@@ -1312,10 +1330,15 @@ export class SetupApp extends LitElement {
 
   #joinAbort = new AbortController();
 
+  #connectBackScreen: "mode" | "role" = "role";
+
   override willUpdate(changed: PropertyValues): void {
     // The connection screen's Join question must not outlive the screen that asked it.
     if (!changed.has("screen")) return;
     if (this.screen !== "connection") this.#joinAbort.abort();
+    const from = changed.get("screen") as Screen | undefined;
+    if (this.screen === "connect" && (from === "mode" || from === "role"))
+      this.#connectBackScreen = from;
     this.#startVenueNameReads();
     this.#loadCloudAddressProvider();
     this.#loadCloudStaffEmail();
@@ -3126,6 +3149,7 @@ export class SetupApp extends LitElement {
       case "connect":
         return html`<setup-connect-screen
           data-test="screen-connect"
+          .backScreen=${this.#connectBackScreen}
           .api=${this.#joinApi}
           .handle=${this.#joinValue(JOIN_HANDLE_KEY)}
           .refusal=${this.joinRefusal}

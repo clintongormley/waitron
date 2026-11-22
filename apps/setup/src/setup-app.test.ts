@@ -454,7 +454,8 @@ describe("setup-app", () => {
         parent.appendChild(el);
         await flush(el);
       }
-      expect(getDiscovery).toHaveBeenCalledOnce();
+      // The load's read, and, once the first page shows, that page's own.
+      expect(getDiscovery).toHaveBeenCalledTimes(reattachFirst ? 2 : 1);
       expect(getStatus).toHaveBeenCalledTimes(2);
       if (!reattachFirst) {
         const control = (

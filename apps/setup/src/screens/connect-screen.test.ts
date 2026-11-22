@@ -685,4 +685,12 @@ describe("setup-connect-screen: Back", () => {
     await press(el, "back");
     expect(goto).toHaveBeenCalledWith({ screen: "role" });
   });
+
+  it("steps back to the first page when the shell says the person came from there", async () => {
+    const { el } = await mount(stubApi(), { backScreen: "mode" } as Partial<SetupConnectScreen>);
+    const goto = vi.fn();
+    el.addEventListener("setup-goto", (e) => goto((e as CustomEvent).detail));
+    await press(el, "back");
+    expect(goto).toHaveBeenCalledWith({ screen: "mode" });
+  });
 });

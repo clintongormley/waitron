@@ -59,6 +59,31 @@ async function modeScreen(el: SetupApp): Promise<SetupModeScreen> {
 const otherBoxLine = async (el: SetupApp) =>
   (await modeScreen(el)).shadowRoot!.querySelector("[data-test=other-box]");
 
+async function press(el: SetupApp, screen: string, button: string): Promise<void> {
+  const owner = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
+    `[data-test=screen-${screen}]`,
+  )!;
+  await owner.updateComplete;
+  owner.shadowRoot!.querySelector<HTMLElement>(`[data-test=${button}]`)!.click();
+  await settle(el);
+}
+
+const answer = (venueName: VenueNameState) => ({ caDownloadAvailable: false, venueName });
+
+function held(): {
+  promise: Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
+} {
+  let resolve!: (value: unknown) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
 async function wait(el: SetupApp, ms: number): Promise<void> {
   await vi.advanceTimersByTimeAsync(ms);
   await settle(el);
@@ -193,5 +218,108 @@ describe("setup's first page and another box answering the venue's name", () => 
     await wait(el, 1_000);
     expect(getDiscovery).toHaveBeenCalledTimes(2);
     expect(await otherBoxLine(el)).not.toBeNull();
+  });
+
+  it.each([
+    [
+      "said no other box answers",
+      () => Promise.resolve({ caDownloadAvailable: true, venueName: "no-other-box" }),
+    ],
+    ["failed", () => Promise.reject(Object.assign(new Error("unavailable"), { status: 503 }))],
+  ] as const)(
+    "reads afresh on Continue to the first page when the load's read %s",
+    async (_, first) => {
+      const getDiscovery = vi
+        .fn()
+        .mockImplementationOnce(first)
+        .mockResolvedValue(answer("other-box-answers"));
+      const el = await mount(getDiscovery);
+      expect((el as unknown as State).screen).toBe("connection");
+      await press(el, "connection", "continue");
+      expect((el as unknown as State).screen).toBe("mode");
+      expect(getDiscovery).toHaveBeenCalledTimes(2);
+      expect(await otherBoxLine(el)).not.toBeNull();
+      await wait(el, 10_000);
+      expect(getDiscovery).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("reads afresh on Back to the first page, once", async () => {
+    const getDiscovery = answers("no-other-box", "other-box-answers");
+    const el = await mount(getDiscovery);
+    expect(await otherBoxLine(el)).toBeNull();
+    await press(el, "mode", "choose-existing");
+    await press(el, "role", "back");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect(getDiscovery).toHaveBeenCalledTimes(2);
+    expect(await otherBoxLine(el)).not.toBeNull();
+    await wait(el, 10_000);
+    expect(getDiscovery).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the last answer when the read on returning fails, and reads no more", async () => {
+    const getDiscovery = vi
+      .fn()
+      .mockResolvedValueOnce(answer("other-box-answers"))
+      .mockRejectedValue(new TypeError("network"));
+    const el = await mount(getDiscovery);
+    await press(el, "mode", "choose-recover");
+    await press(el, "role", "back");
+    expect(getDiscovery).toHaveBeenCalledTimes(2);
+    expect(await otherBoxLine(el)).not.toBeNull();
+    await wait(el, 10_000);
+    expect(getDiscovery).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops an answer an earlier visit asked for once the person has left and come back", async () => {
+    const earlier = held();
+    const getDiscovery = vi
+      .fn()
+      .mockResolvedValueOnce(answer("not-asked"))
+      .mockReturnValueOnce(earlier.promise)
+      .mockResolvedValue(answer("no-other-box"));
+    const el = await mount(getDiscovery);
+    await wait(el, 1_000);
+    expect(getDiscovery).toHaveBeenCalledTimes(2);
+    await press(el, "mode", "choose-existing");
+    await press(el, "role", "back");
+    expect(getDiscovery).toHaveBeenCalledTimes(3);
+    expect(await otherBoxLine(el)).toBeNull();
+    earlier.resolve(answer("other-box-answers"));
+    await settle(el);
+    expect(await otherBoxLine(el)).toBeNull();
+  });
+
+  it("drops a failure an earlier visit's read met, so it starts no reads of its own", async () => {
+    const earlier = held();
+    const getDiscovery = vi
+      .fn()
+      .mockResolvedValueOnce(answer("not-asked"))
+      .mockReturnValueOnce(earlier.promise)
+      .mockResolvedValue(answer("not-asked"));
+    const el = await mount(getDiscovery);
+    await wait(el, 1_000);
+    await press(el, "mode", "choose-existing");
+    await press(el, "role", "back");
+    expect(getDiscovery).toHaveBeenCalledTimes(3);
+    earlier.reject(new TypeError("network"));
+    await wait(el, 60_000);
+    // The load's read, the held one, the return's read and its three re-reads.
+    expect(getDiscovery).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    ["the first page's Join it as a spare", ["mode", "choose-join-spare"], "mode"],
+    [
+      "the join-or-recover choice page",
+      ["mode", "choose-recover", "role", "choose-mirror"],
+      "role",
+    ],
+  ] as const)("Back on the join page reached from %s returns there", async (_, route, back) => {
+    const el = await mount(answers("other-box-answers"));
+    for (let i = 0; i < route.length; i += 2) await press(el, route[i]!, route[i + 1]!);
+    expect((el as unknown as State).screen).toBe("connect");
+    await press(el, "connect", "back");
+    expect((el as unknown as State).screen).toBe(back);
   });
 });
