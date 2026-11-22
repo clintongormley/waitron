@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { captureError, CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { MENU_TABLES } from "./classification.js";
@@ -542,6 +542,7 @@ describe("option list CRUD", () => {
     const carried = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const idle = await run((tx) => createOptionList(tx, { ...cookedList(), name: "Idle" }, "en"));
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await run(async (tx) => {
       const lunch = await createMenu(tx, { name: "Lunch" });
       const dinner = await createMenu(tx, { name: "Dinner" });
@@ -578,6 +579,7 @@ describe("option list CRUD", () => {
   it("names the products carrying the list, and not the menu offers of those dishes", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     const dishes = await run(async (tx) => {
       const menu = await createMenu(tx, { name: "Deli" });
       const made: Record<string, string> = {};

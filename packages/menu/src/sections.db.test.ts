@@ -3,7 +3,7 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { menus, menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";
 import { readMenuHome } from "./menu-home.js";
@@ -29,6 +29,7 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 async function fixture() {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const menu = await createMenu(tx, { name: "Lunch menu" });

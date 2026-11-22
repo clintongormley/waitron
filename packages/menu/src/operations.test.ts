@@ -8,11 +8,12 @@ import { menusFixture } from "../test/menus-fixture.js";
 import {
   menuItems,
   products,
+  productTakeawayVatRates,
   sections,
   withTransaction,
   readActivityForSubject,
 } from "@waitron/db";
-import { seedTaxpayer, seedPerson } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedPerson, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
@@ -25,6 +26,7 @@ import {
 } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { readDefaultMenuId } from "./operations.js";
+import { readTakeawayVatSchedules } from "./takeaway-vat-rates.js";
 import {
   assignMenuToVenue,
   menuExists,
@@ -1912,6 +1914,7 @@ describe("a product's own colour", () => {
   let variantId: string;
   beforeEach(async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await seedLegacySellingUnits(fx.db);
     ({ productId, variantId } = await app(async (tx) => {
       const menu = await createMenu(tx, { name: "Menu" });
@@ -2044,6 +2047,10 @@ describe("a product's own colour", () => {
 
 describe("declared product facts", () => {
   const asVenue = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
+  beforeEach(async () => {
+    await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
+  });
   const input = {
     categoryId: null,
     name: "Tea",
@@ -2111,4 +2118,56 @@ it("records an archived menu once with its name and the given person", async () 
   });
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   expect(await readActivityForSubject(fx.db, { kind: "menu", id: menu.id })).toEqual(entries);
+});
+
+describe("a new product's takeaway VAT rate", () => {
+  const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
+  const tea = { categoryId: null, name: "Tea", unitId: null, unitPrice: "2.00" } as const;
+  beforeEach(async () => {
+    await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
+  });
+
+  it("starts at the area's takeaway rate from the beginning of time", async () => {
+    const product = await run((tx) => createProduct(tx, { ...tea, vatClass: "general" }));
+    const schedules = await run((tx) => readTakeawayVatSchedules(tx, [product.id]));
+    expect(schedules.get(product.id)).toEqual([{ from: null, rate: "10.00" }]);
+  });
+
+  it("starts at the rate the request names", async () => {
+    const product = await run((tx) =>
+      createProduct(tx, { ...tea, vatClass: "general", takeawayVatRate: "4.00" }),
+    );
+    const schedules = await run((tx) => readTakeawayVatSchedules(tx, [product.id]));
+    expect(schedules.get(product.id)).toEqual([{ from: null, rate: "4.00" }]);
+  });
+
+  it("gives a variant no rate of its own", async () => {
+    const variantId = await run(async (tx) => {
+      const parent = await createProduct(tx, { ...tea, vatClass: "general" });
+      const [variant] = await setProductVariants(
+        tx,
+        parent.id,
+        [
+          {
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            available: true,
+          },
+        ],
+        "en",
+      );
+      return variant!.id;
+    });
+    const rows = await run((tx) =>
+      tx
+        .select()
+        .from(productTakeawayVatRates)
+        .where(eq(productTakeawayVatRates.productId, variantId)),
+    );
+    expect(rows).toEqual([]);
+  });
 });

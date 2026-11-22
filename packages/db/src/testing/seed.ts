@@ -32,6 +32,7 @@ import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
 import { menuItems } from "../schema/menu/menu.js";
 import { menus, products } from "../schema/menus.js";
+import { productTakeawayVatRates } from "../schema/menu/product-takeaway-vat-rates.js";
 import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } from "../venue.js";
 
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
@@ -165,6 +166,9 @@ export async function seedMenuItem(db: Database | Transaction, id?: string): Pro
     .insert(products)
     .values({ name: "Test product", unitPrice: 100, vatClass: "general" })
     .returning({ id: products.id });
+  await db
+    .insert(productTakeawayVatRates)
+    .values({ productId: product!.id, startsOn: null, rate: 1000 });
   const [item] = await db
     .insert(menuItems)
     .values({ id, menuId: menu!.id, productId: product!.id })

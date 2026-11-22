@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { createCategory, listCategories, readCategory } from "./categories.js";
 import { createMenu, createProduct, deactivateProduct } from "./operations.js";
@@ -20,6 +20,7 @@ let d: string, b: string, f: string, cola: string, lager: string, burger: string
 
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await seedLegacySellingUnits(suite.db);
   await app(async (tx) => {
     d = (await createCategory(tx, { name: "Drinks" })).id;

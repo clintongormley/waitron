@@ -346,7 +346,6 @@ const ADDED_TABLES = [
   "set_menu_dish_courses",
   "bill_set_menu_copies",
   "bill_advances",
-  "product_takeaway_vat_rates",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
@@ -635,6 +634,8 @@ for (const locale of ["en", "es"] as const) {
       expect(expected.seeded.tables[name]!.rows).toEqual({});
       historicalSeeded.tables[name] = structuredClone(expected.seeded.tables[name]!);
     }
+    // The capture predates takeaway rates; they are added back once the products' keys settle.
+    historicalSeeded.tables.product_takeaway_vat_rates!.rows = {};
     const publicationTemplate = expected.seeded.tables.menu_publications!;
     const rows = Object.values(historicalSeeded.tables.menu_releases!.rows).map((row) => ({
       menu_id: row.menu_id,
@@ -1026,6 +1027,11 @@ for (const locale of ["en", "es"] as const) {
         expected[phase].tables[name] = structuredClone(added!);
         phases[phase]![name] = 0;
       }
+      // Added after the capture; its rows are filled once the products' final keys are known.
+      expected[phase].tables.product_takeaway_vat_rates = {
+        ...structuredClone(canonical[phase].tables.product_takeaway_vat_rates!),
+        rows: {},
+      };
       const roleDefaults = {
         admin: [],
         staff: ["payment.take", "cash.drawer", "adjustment.apply"],
@@ -3012,6 +3018,14 @@ for (const locale of ["en", "es"] as const) {
         (column) => column.name !== "payment_attempt_at",
       );
       for (const row of Object.values(retainedOrders.rows)) delete row.payment_attempt_at;
+      // Every top-level product starts at the area's takeaway rate, 10.00, from the beginning of time.
+      const takeawayRates = expected[phase].tables.product_takeaway_vat_rates!;
+      for (const product of Object.values(expected[phase].tables.products!.rows)) {
+        if (product.parent_id !== null) continue;
+        const id = `@product_takeaway_vat_rates:${stable([product.id, null])}`;
+        takeawayRates.rows[id] = { id, product_id: product.id, starts_on: null, rate: 1000 };
+      }
+      phases[phase]!.product_takeaway_vat_rates = Object.keys(takeawayRates.rows).length;
       phases[phase] = byName(phases[phase]!);
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

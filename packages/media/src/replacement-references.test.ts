@@ -44,6 +44,7 @@ const replacement = await samplePreparedImage({ width: 51 });
 
 it("changes presentation without rewriting product, variant, section, folder, receipt or frozen menu references", async () => {
   await seedTaxpayer(suite.db);
+  await seedVenue(suite.db, { name: "Restaurant", invoiceLocales: ["es-ES"] });
   const at = new Date("2026-10-17T10:00:00Z");
   const due = new Date("2026-10-17T11:00:00Z");
   const image = await withTransaction(suite.db, async (tx) => {
@@ -86,10 +87,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
     });
     await queueMenuPublication(tx, menu.id, (await previewMenu(tx, menu.id)).hash, due, "manager", {
       at,
-    });
-    await seedVenue(tx, {
-      name: "Restaurant",
-      invoiceLocales: ["es-ES"],
     });
     for (const active of [true, false]) {
       const [department] = await tx

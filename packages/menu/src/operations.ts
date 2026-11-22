@@ -34,6 +34,7 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
+import { readVenueVatRates, setTakeawayVatRate } from "./takeaway-vat-rates.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -131,6 +132,8 @@ export interface CreateProductInput {
   vatClass: VatClass;
   /** Omitted or null leaves it empty. */
   takeawayVatClass?: VatClass | null;
+  /** One of the area's pickable rates ("10.00"); omitted takes the area's takeaway default. */
+  takeawayVatRate?: string;
   /** Omitted leaves it null (unreviewed). */
   allergens?: ProductAllergens;
   /** The staff diet override. Omitted or `null` leaves no override. */
@@ -1023,7 +1026,14 @@ async function insertProduct(
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
+  const areaRates = await readVenueVatRates(tx);
   const [row] = await tx.insert(products).values(values).returning({ id: products.id });
+  await setTakeawayVatRate(
+    tx,
+    row!.id,
+    input.takeawayVatRate ?? areaRates.defaultTakeaway,
+    areaRates,
+  );
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
   const [created] = await tx
     .select(PRODUCT_COLUMNS)

@@ -13,7 +13,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   addProductToMenu,
@@ -78,6 +78,7 @@ interface Fixture {
 
 async function fixture(): Promise<Fixture> {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const lunch = await createMenu(tx, { name: "Lunch menu" });
@@ -169,6 +170,7 @@ const offerNames = async (menuId: string) =>
 describe("creating a menu", () => {
   it("makes a root and a Home section the menu owns, with default display settings", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>
       tx
@@ -212,6 +214,7 @@ describe("creating a menu", () => {
 
   it("keeps the root's internal name the menu's name when the menu is renamed", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     await app((tx) => updateMenuDetails(tx, menu.id, { name: "Weekday lunch" }));
     const { rootSectionId } = await app((tx) => readMenuStructure(tx, menu.id));
@@ -227,6 +230,7 @@ describe("creating a menu", () => {
 
   it("reads saved menu presentation back when reopening its details", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     const menu = await app((tx) =>
       createMenu(tx, {
         name: "Lunch menu",
@@ -257,6 +261,7 @@ describe("creating a menu", () => {
 
   it("refuses the structure of a menu that does not exist", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await expect(app((tx) => readMenuStructure(tx, crypto.randomUUID()))).rejects.toMatchObject({
       code: "menu.not_found",
     });
@@ -659,6 +664,7 @@ describe("putting a product on a menu's top level", () => {
 describe("syncing menus that have no structure", () => {
   it("does nothing for no menus, or a menu with no details row", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await app((tx) => syncMenuOffers(tx, []));
     await app((tx) => syncMenuOffers(tx, [crypto.randomUUID()]));
     expect(await app((tx) => tx.select().from(menuItems))).toEqual([]);
@@ -1052,6 +1058,7 @@ describe("a menu's prices", () => {
 
   it("refuses a menu that does not exist", async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await expect(app((tx) => menuPrices(tx, crypto.randomUUID()))).rejects.toMatchObject({
       code: "menu.not_found",
     });
