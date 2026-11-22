@@ -1,11 +1,11 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { kitchenStations, printJobs, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPrinter } from "@waitron/printing";
+import { createPrinter, MAX_DELIVERY_ATTEMPTS, resendPrintJob } from "@waitron/printing";
 import type { AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import {
   OPERATOR,
@@ -37,8 +37,10 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { allergyTargets, applyPartyAllergyPatch, readPartyAllergyView } from "./party-allergy.js";
+import { printersInTrouble } from "./print-job-trouble.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
-import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
+import { ALLERGEN_NAMES, KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -426,6 +428,44 @@ describe("A669 lifecycle", () => {
         .map(({ workingOrderId, quantity }) => ({ workingOrderId, quantity })),
     ).toEqual([{ workingOrderId: split.billId, quantity: "1.000" }]);
   });
+  it.each(["changed", "removed"] as const)(
+    "keeps failed allergy %s paper in the printer alert after Reprint repeats old instructions",
+    async (kind) => {
+      const p = await sent();
+      await edit(p, kind === "removed");
+      const jobs = () =>
+        v.db
+          .select()
+          .from(printJobs)
+          .orderBy(sql`${printJobs}.rowid`);
+      const [originalJob, slip] = await jobs();
+      const slipText = printedLines(slip!.payload!).join(" ");
+      expect(slipText).toContain(KITCHEN_ALLERGY_WORDS.es[kind]);
+      if (kind === "changed") expect(slipText).toContain(current.note);
+      const printed = (id: string) =>
+        v.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, id));
+      await printed(originalJob!.id);
+      await v.db
+        .update(printJobs)
+        .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+        .where(eq(printJobs.id, slip!.id));
+      const trouble = () => inTx(v, (tx) => printersInTrouble(tx, new Date()));
+      expect(await trouble()).toHaveLength(1);
+
+      await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
+      const reprint = (await jobs()).at(-1)!;
+      const reprintText = printedLines(reprint.payload!).join(" ");
+      expect(reprintText).toContain(original.note);
+      expect(reprintText).not.toContain(current.note);
+      await printed(reprint.id);
+      expect(await trouble()).toHaveLength(1);
+
+      const copy = await inTx(v, (tx) => resendPrintJob(tx, slip!.id));
+      await printed(copy.jobId);
+      expect(await trouble()).toEqual([]);
+    },
+  );
+
   it("reprints alone do not send another allergy notice", async () => {
     const p = await sent();
     await edit(p);

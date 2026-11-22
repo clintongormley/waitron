@@ -1382,6 +1382,27 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
   });
 
+  it("keeps a VOID slip with the original bill when its last station dish moves to a check", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish", "beer"]);
+    await voidDish(v, table4, "fish");
+    const slip = (await jobsAt(v.kitchenPrinterId)).at(-1)!;
+    await setJob(slip.id, exhausted);
+    expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBe(true);
+
+    const lineNo = await lineNoOf(table4.tabId, "burger");
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, table4.tabId, [{ lineNo }], {
+        expectedPartyRevision: (await command(table4.partyId)).expectedPartyRevision,
+        operatorId: ALEX,
+      }),
+    );
+
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect((await stationCard(v.kitchenStationId, checkId)).printProblem).toBeUndefined();
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+  });
+
   it.each(["VOID", "TO STATION"] as const)(
     "keeps a failed %s slip in the printer alert after the kitchen card goes away",
     async (kind) => {

@@ -1725,7 +1725,10 @@ async function printCorrectionSlips(
       );
       for (const printer of group) {
         const { jobId } = await enqueuePrintJob(tx, printer.printerId, bytes, "document");
-        await linkKitchenJob(tx, jobId, orderId, [stationId], "correction");
+        // A Reprint repeats the original allergy instructions. Only resending delivers the change.
+        if (change.kind !== "ALLERGY") {
+          await linkKitchenJob(tx, jobId, orderId, [stationId], "correction");
+        }
       }
     }
   }
@@ -2867,7 +2870,9 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
   );
 }
 
-/** A correction can still be resent from the printer alert after its station card disappears. */
+/** Return the IDs of jobs the printer alert can omit. A correction can still be resent
+ * after its station card disappears. Jobs without a kitchen link keep their own alert.
+ */
 export async function kitchenJobsNotWaiting(
   tx: Transaction,
   jobs: readonly { id: string; printerId: string; sourceId: string }[],
@@ -2931,7 +2936,7 @@ export async function kitchenJobsNotWaiting(
       ),
     );
   }
-  const waitingLinks = [...uncleared.values()].flat();
+  const waitingLinks = [...uncleared.values()].flat().filter((row) => !row.correctionSlip);
   const movedPaperPrinted = await printedMovedDishes(tx, waitingLinks);
   const waitingOrders = [...new Set(waitingLinks.map((row) => row.workingOrderId))];
   const targets =
@@ -2954,8 +2959,8 @@ export async function kitchenJobsNotWaiting(
 
 /**
  * `orderId`'s link rows that no reprint for the same station, on the same printer, queued after
- * them and printed itself or through a resend ({@link printedOrResent}), has covered: the ones still
- * still needed for printing problems. Oldest first.
+ * them and printed itself or through a resend ({@link printedOrResent}), has covered.
+ * These links can still raise printing problems. Oldest first.
  */
 async function readUncoveredLinks(tx: Transaction, orderId: string) {
   const rows = await tx
