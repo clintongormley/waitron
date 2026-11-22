@@ -80,16 +80,23 @@ it("keeps a refused takeover's message in the confirmation", async () => {
   expect(prompt.close).not.toHaveBeenCalled();
 });
 
-it("after resolving a whole-table conflict, tells staff to try again and offers Close", async () => {
-  const { button, root, prompt } = await mount();
-  await userEvent.click(button('[data-split-take-over="b2"]'));
-  await userEvent.click(button("[data-confirm-take-over]"));
-  const close = button("[data-finish-conflicts]");
-  expect(close?.textContent?.trim()).toBe("Close");
-  expect(root.querySelector("p")?.textContent?.trim()).toBe("Try again.");
-  await userEvent.click(close);
-  await vi.waitFor(() => expect(prompt.close).toHaveBeenCalledWith(false));
-});
+it.each([
+  ["en", "Close", "Close this message, then try the action again."],
+  ["es-ES", "Cerrar", "Cierra este aviso y vuelve a intentarlo."],
+])(
+  "after resolving a whole-table conflict, explains how to retry in %s",
+  async (language, label, message) => {
+    setLocale(language);
+    const { button, root, prompt } = await mount();
+    await userEvent.click(button('[data-split-take-over="b2"]'));
+    await userEvent.click(button("[data-confirm-take-over]"));
+    const close = button("[data-finish-conflicts]");
+    expect(close?.textContent?.trim()).toBe(label);
+    expect(root.querySelector("p")?.textContent?.trim()).toBe(message);
+    await userEvent.click(close);
+    await vi.waitFor(() => expect(prompt.close).toHaveBeenCalledWith(false));
+  },
+);
 
 it("the shared row distinguishes orders taken from this waiter from other held orders", () => {
   const container = document.createElement("div");
