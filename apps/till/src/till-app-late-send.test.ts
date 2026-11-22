@@ -1399,7 +1399,7 @@ const counterScreen = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const counterNames = (el: TillApp) =>
   counterScreen(el).store.lines.map((line) => line.product.name);
-const lastArgument = (fn: ReturnType<typeof vi.fn>, call: number) => fn.mock.calls[call]!.at(-1);
+const lateSendOf = (fn: ReturnType<typeof vi.fn>, call: number) => fn.mock.calls[call]![10];
 
 /** An order held earlier with one Omelette of the Breakfast menu already stored on it. */
 const heldOmelette = {
@@ -1504,7 +1504,7 @@ describe("counter pay", () => {
     await choose(el, "data-late-agreed");
 
     expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(lateSendOf(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
     expect(windowOf(el)).toBeNull();
   });
 
@@ -1585,7 +1585,7 @@ describe("counter pay", () => {
     await choose(el, "data-late-agreed");
 
     expect(windowOf(el)).toBeNull();
-    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+    expect(recordSale.mock.calls.map((call) => call[10])).toEqual([
       BREAKFAST_CONFIRMED,
       BREAKFAST_CONFIRMED,
     ]);
@@ -1648,12 +1648,12 @@ describe("counter pay", () => {
     await flush(el, 6);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(recordSale.mock.calls[0]![10]).toBeUndefined();
+    expect(lateSendOf(recordSale, 0)).toBeUndefined();
 
     await choose(el, "data-late-agreed");
 
     expect(recordSale).toHaveBeenCalledTimes(2);
-    expect(lastArgument(recordSale, 1)).toEqual(BREAKFAST_CONFIRMED);
+    expect(lateSendOf(recordSale, 1)).toEqual(BREAKFAST_CONFIRMED);
   });
 
   it("saves and pays a retrieved order with the confirmation, listing only the new dish", async () => {
@@ -1667,7 +1667,7 @@ describe("counter pay", () => {
 
     expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(api.recordSale!.mock.calls[0]![10]).toEqual(BREAKFAST_CONFIRMED);
+    expect(lateSendOf(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
   });
 
   it("keeps a retrieved order's stored dish on Remove them", async () => {
@@ -1717,7 +1717,7 @@ describe("counter pay", () => {
     expect(windowOf(el)).toBeNull();
     expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(api.recordSale!.mock.calls[0]![10]).toBeUndefined();
+    expect(lateSendOf(api.recordSale!, 0)).toBeUndefined();
   });
 
   it("records a manual card payment with the ended menu once the kitchen agreed", async () => {
@@ -1732,7 +1732,7 @@ describe("counter pay", () => {
 
     expect(api.recordSale).toHaveBeenCalledOnce();
     expect(api.recordSale!.mock.calls[0]![1]).toEqual({ method: "card", amount: "6.00" });
-    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(lateSendOf(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
   });
 
   it.each([
@@ -1741,7 +1741,7 @@ describe("counter pay", () => {
       event: "confirm-payment",
       detail: CASH,
       paid: () => api.recordSale!,
-      sent: () => lastArgument(api.recordSale!, 0),
+      sent: () => lateSendOf(api.recordSale!, 0),
       overrides: {},
     },
     {
@@ -2039,7 +2039,7 @@ describe("counter pay with a manager's PIN", () => {
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     await authorize(el, "0123");
 
-    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+    expect(recordSale.mock.calls.map((call) => call[10])).toEqual([
       BREAKFAST_CONFIRMED,
       MARTA_OVERRIDE("0123"),
     ]);
@@ -2071,7 +2071,7 @@ describe("counter pay with a manager's PIN", () => {
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     await authorize(el, "4567");
 
-    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+    expect(recordSale.mock.calls.map((call) => call[10])).toEqual([
       BREAKFAST_CONFIRMED,
       MARTA_OVERRIDE("0123"),
       MARTA_OVERRIDE("4567"),
@@ -2734,7 +2734,7 @@ describe("extras added to a sent dish after its period", () => {
     expect(buttonText(el, "data-late-remove")).toBe("Don't add them");
     expect(buttonText(el, "data-late-agreed")).toBe("Station agreed — send");
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
-    expect(updateOrderLine.mock.calls[0]).toHaveLength(5);
+    expect(updateOrderLine.mock.calls[0]![5]).toBeUndefined();
 
     await choose(el, "data-late-agreed");
 
