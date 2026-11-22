@@ -1148,12 +1148,17 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      ["taxpayer", "settings", "nodes", "invoice_series", "verifactu_identities", "fiscal_allocations"].map(
-        (table) => [
-          table,
-          suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
-        ],
-      ),
+      [
+        "taxpayer",
+        "settings",
+        "nodes",
+        "invoice_series",
+        "verifactu_identities",
+        "fiscal_allocations",
+      ].map((table) => [
+        table,
+        suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
+      ]),
     );
     const changed = request("B55664422");
     Object.assign(changed, { [field]: value });

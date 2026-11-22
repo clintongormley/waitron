@@ -149,9 +149,7 @@ describe("final fiscal builder conflict check", () => {
     it(`${kind} still builds beside an unrelated filing refusal`, async () => {
       await conflict("fiscal.registro_rechazado");
       await expect(build(kind)).resolves.toMatchObject({ backend: "verifactu", state: "pending" });
-      expect((await suite.db.execute(sql`select id from verifactu_records`)).rows).toHaveLength(
-        2,
-      );
+      expect((await suite.db.execute(sql`select id from verifactu_records`)).rows).toHaveLength(2);
     });
   }
 });

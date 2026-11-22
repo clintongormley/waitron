@@ -84,7 +84,10 @@ export async function applyAbsentOriginalCancellation(
     return { registroId: stored.remedyRegistroId, eventId: stored.id };
   }
   const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, registroId));
+  const [delivery] = await tx
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, registroId));
   const [replacement] = await tx
     .select({ id: verifactuRecords.id })
     .from(verifactuRecords)

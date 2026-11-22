@@ -536,9 +536,7 @@ it.each([
         expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
           { environment: "preproduction" },
         ]);
-        expect(isolated.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(
-          1,
-        );
+        expect(isolated.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(1);
         expect(
           isolated
             .prepare("select count(*) as n from products where name = 'Prepared gazpacho'")

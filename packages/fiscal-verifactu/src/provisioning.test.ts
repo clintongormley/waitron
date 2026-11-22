@@ -69,7 +69,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
       seed.run(tx, NODE, operation),
     );
     const sif = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
-    expect(sif.nif).toBe("89890001K"); // seedTenants' tax_id for TENANT_A, never an argument
+    expect(sif.nif).toBe("89890001K"); // seedTaxpayers' tax_id for TAXPAYER_A, never an argument
     expect(sif.idSistemaInformatico).toBe(WAITRON_ID_SISTEMA);
     expect(sif.numeroInstalacion).toBe("S000001");
     expect(report).toContain(sif.id);
@@ -306,7 +306,9 @@ function activeSifs() {
   return db
     .select()
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, NODE_2.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, NODE_2.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
 }
 function malformedState(
   state: ReturnType<typeof spareFixture>["state"],

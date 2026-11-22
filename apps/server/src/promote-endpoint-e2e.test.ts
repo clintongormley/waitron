@@ -538,9 +538,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
         huella: string;
         node_id: string;
         sif_id: string;
-      }>(
-        sql`select huella, node_id, sif_id from verifactu_records where node_id = ${seed.nodeId}`,
-      );
+      }>(sql`select huella, node_id, sif_id from verifactu_records where node_id = ${seed.nodeId}`);
       expect(registros.rows).toHaveLength(1);
       expect(registros.rows[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
       expect(registros.rows[0]!.sif_id).toBe(reservedSif.rows[0]!.id);

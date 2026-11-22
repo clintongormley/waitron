@@ -88,11 +88,11 @@ export async function seedTaxpayerNodeSif(db: Database): Promise<void> {
 
 /**
  * Seeds the parents registro-sif.test.ts needs: the taxpayer row, and three nodes across
- * one venue — `TENANT_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
- * installation-number counter is per (NIF, IdSIF), not per node) and `TENANT_B.nodeId` (a node
+ * one venue — `TAXPAYER_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
+ * installation-number counter is per (NIF, IdSIF), not per node) and `TAXPAYER_B.nodeId` (a node
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
  *
- * Deliberately narrower than `seedTenantNodeSif` above: no invoice series, no sale, no
+ * Deliberately narrower than `seedTaxpayerNodeSif` above: no invoice series, no sale, no
  * pre-existing `verifactu_identities` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
  * even runs. The SIF is the node, so `registerSif` keys on these nodes.
@@ -220,7 +220,7 @@ export interface SeededNodeWithSif {
   seriesId: SeriesId;
 }
 
-// Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
+// Module-scope, not per-call: every test file that imports `seedTaxpayerWithSif` shares this
 // counter across its whole run, which is what keeps each call's SIF identity collision-free in
 // `verifactu_identities_instalacion_uq`.
 let nifSequence = 0;
@@ -252,14 +252,14 @@ async function insertNodeAndSeries(
 /**
  * Seeds a node, invoice series and till device at the venue, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
- * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantNodeSif` above is
+ * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTaxpayerNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
  * own fixed ids), which would collide with `write-path.e2e.test.ts`'s own first allocated invoice
  * number.
  *
  * Each call mints its OWN fresh NIF and its own node; `options.nif` overrides that minting. The
  * minted NIF comes from a module-level counter (`freshNif` above), so which one a test gets is
- * decided by how many `seedTenantWithSif` calls ran before it in the same file. The NIF is a HASHED
+ * decided by how many `seedTaxpayerWithSif` calls ran before it in the same file. The NIF is a HASHED
  * field (`IDEmisorFactura`, hashed by `@waitron/verifactu`), so a test that asserts a recorded
  * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured
  * when the counter still minted a `K` for every NIF: the same basket filed 16th in

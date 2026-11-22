@@ -11,7 +11,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 describe("fiscal fixture venue reuse", () => {
   it.each([
-    ["seedTenantWithSif", () => seedTaxpayerWithSif(suite.db)],
+    ["seedTaxpayerWithSif", () => seedTaxpayerWithSif(suite.db)],
     ["seedNode", () => seedNode(suite.db)],
   ] as const)("%s keeps the existing venue when adding another node", async (_name, seed) => {
     await seed();

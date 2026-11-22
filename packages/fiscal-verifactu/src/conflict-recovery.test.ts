@@ -162,7 +162,11 @@ beforeEach(async () => {
     deploymentEnvironment: "preproduction",
   });
   const original = await withTransaction(suite.db, (tx) =>
-    recordSale(tx, backend, saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId: seriesId(series!.id) })),
+    recordSale(
+      tx,
+      backend,
+      saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId: seriesId(series!.id) }),
+    ),
   );
   const [record] = await suite.db.select().from(verifactuRecords);
   const opened = await withTransaction(suite.db, async (tx) => {
@@ -480,7 +484,10 @@ it.each(["pendiente", "aceptado", "aceptado_con_errores"] as const)(
   "recovers a retained lookup conflict without replacing its %s submission result",
   async (estado) => {
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, conflict.registroId));
+      await tx
+        .update(verifactuSubmissions)
+        .set({ estado })
+        .where(eq(verifactuSubmissions.registroId, conflict.registroId));
       await retainLookupConflict(
         tx,
         conflict.registroId,

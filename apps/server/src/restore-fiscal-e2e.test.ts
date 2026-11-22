@@ -463,9 +463,7 @@ describe("fiscal restore, end to end", () => {
         const restored = await readImageBytes(tx, images[0]!.filename);
         expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
       });
-      const ledger = await db
-        .select({ huella: verifactuRecords.huella })
-        .from(verifactuRecords);
+      const ledger = await db.select({ huella: verifactuRecords.huella }).from(verifactuRecords);
       expect(ledger).toHaveLength(1);
       // `execute()` throws the engine's error itself; drizzle's `run()` wraps it, so
       // `restore-fiscal-receipt.test.ts` reads `.cause` instead.
@@ -482,7 +480,7 @@ describe("fiscal restore, end to end", () => {
         "the restored ledger accepted an UPDATE — the append-only trigger is inert",
       ).toBeDefined();
       expect(blocked?.errcode).toBe(SQLITE_CONSTRAINT_TRIGGER);
-      expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
+      expect(blocked?.message).toMatch(/verifactu_records is append-only/);
       expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           modulesWithSets(ALL_MODULES).map((m) => [

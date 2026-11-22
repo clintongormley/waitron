@@ -191,7 +191,9 @@ it("combines real key authentication, configured paper files and the complete ac
       { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
-      await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
+      await suite.db
+        .select({ identity: verifactuIdentities.numeroInstalacion })
+        .from(verifactuIdentities),
     ).toEqual([{ identity: "P000042" }]);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);

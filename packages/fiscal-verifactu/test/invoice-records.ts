@@ -142,5 +142,8 @@ export async function seedWaitingRecords(
 
 /** Marks one record's sending as stopped. */
 export async function stopRecord(db: Database, recordId: string): Promise<void> {
-  await db.update(verifactuSubmissions).set({ estado: "detenido" }).where(eq(verifactuSubmissions.registroId, recordId));
+  await db
+    .update(verifactuSubmissions)
+    .set({ estado: "detenido" })
+    .where(eq(verifactuSubmissions.registroId, recordId));
 }

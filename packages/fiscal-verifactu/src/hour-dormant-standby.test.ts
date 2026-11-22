@@ -502,7 +502,8 @@ it.each(["taxpayer", "country", "environment", "primary-sif", "sif-nif"])(
     if (fault === "taxpayer") await suite.db.delete(taxpayer);
     if (fault === "country") await suite.db.update(taxpayer).set({ country: "FR" });
     if (fault === "environment") await suite.db.delete(deployment);
-    if (fault === "primary-sif") await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
+    if (fault === "primary-sif")
+      await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
     if (fault === "sif-nif") await suite.db.update(verifactuIdentities).set({ nif: "50000000R" });
     const before = await rows();
     await expect(reserve()).rejects.toMatchObject({

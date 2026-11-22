@@ -79,7 +79,9 @@ export async function prepareStandbyDatabase(
   const sif = await source
     .select()
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   const series = await source
     .select()
     .from(invoiceSeries)

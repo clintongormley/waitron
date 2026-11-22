@@ -221,7 +221,9 @@ async function configuration(
   const [activeSif] = await tx
     .select()
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .where(
+      and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    )
     .limit(1);
   const [activeSeries] = await tx
     .select()
@@ -242,7 +244,9 @@ async function configuration(
   const [sif] = await tx
     .select()
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .where(
+      and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    )
     .limit(1);
   if (sif === undefined) return refuse("primary_not_registered");
   if (sif.nif !== taxpayer.taxId) return refuse("scope_mismatch");

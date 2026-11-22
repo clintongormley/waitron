@@ -343,7 +343,10 @@ export class VerifactuBackend implements FiscalBackend {
     >,
   ): Promise<boolean> {
     const deliveries = await tx
-      .select({ estado: verifactuSubmissions.estado, codigoError: verifactuSubmissions.codigoError })
+      .select({
+        estado: verifactuSubmissions.estado,
+        codigoError: verifactuSubmissions.codigoError,
+      })
       .from(verifactuRecords)
       .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
       .where(

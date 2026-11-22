@@ -754,8 +754,11 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
 
 /** The filing state one record's row says, on either box. */
 const filingStateOf = (file: string, recordId: string): string | undefined =>
-  readRows<{ estado: string }>(file, "select estado from verifactu_submissions where registro_id = ?", recordId)[0]
-    ?.estado;
+  readRows<{ estado: string }>(
+    file,
+    "select estado from verifactu_submissions where registro_id = ?",
+    recordId,
+  )[0]?.estado;
 
 /** What the run saw up to M1's restart after its stepdown. */
 interface StepdownSeen {

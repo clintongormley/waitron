@@ -369,12 +369,8 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     ).toBe("record-clash");
     expect(status).toBe(409);
     expect(refusal).toMatchObject({ error: { code: "fiscal.return_record_clash" } });
-    expect(old.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
-      originals.records,
-    );
-    expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
-      heldBeforeStop,
-    );
+    expect(old.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(originals.records);
+    expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(heldBeforeStop);
   } finally {
     read.mockRestore();
   }

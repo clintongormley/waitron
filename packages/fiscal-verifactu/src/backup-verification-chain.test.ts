@@ -153,9 +153,7 @@ function rehash(side: "before" | "after", keepPredecessorAt?: number) {
       .prepare("select name, sql from sqlite_schema where type = 'trigger'")
       .all() as { name: string; sql: string }[];
     for (const trigger of triggers) db.exec(`drop trigger "${trigger.name.replaceAll('"', '""')}"`);
-    const rows = db
-      .prepare("select * from verifactu_records order by node_id, secuencia")
-      .all();
+    const rows = db.prepare("select * from verifactu_records order by node_id, secuencia").all();
     let previous: ReturnType<typeof decodeRegistroRow> | undefined;
     for (const raw of rows) {
       const row = decodeRegistroRow(raw);
@@ -258,9 +256,7 @@ describe("complete captured fiscal chains", () => {
     ],
     [
       "predecessor hash",
-      "update verifactu_records set anterior_huella = '" +
-        "E".repeat(64) +
-        "' where secuencia = 3",
+      "update verifactu_records set anterior_huella = '" + "E".repeat(64) + "' where secuencia = 3",
     ],
     ["sequence gap", "delete from verifactu_records where secuencia = 2"],
     [
@@ -288,10 +284,7 @@ describe("complete captured fiscal chains", () => {
       "wrong taxpayer identity",
       "update verifactu_identities set nif = '00000000T' where id = (select id from verifactu_identities where revocado_en is not null limit 1)",
     ],
-    [
-      "invalid record payload",
-      "update verifactu_records set desglose = '[]' where secuencia = 3",
-    ],
+    ["invalid record payload", "update verifactu_records set desglose = '[]' where secuencia = 3"],
     [
       "malformed JSON",
       "update verifactu_records set sistema_informatico = '{' where secuencia = 1",
@@ -317,10 +310,7 @@ describe("complete captured fiscal chains", () => {
       "offset out of range",
       "update verifactu_records set offset_minutos = 841 where secuencia = 1",
     ],
-    [
-      "fractional offset",
-      "update verifactu_records set offset_minutos = 1.5 where secuencia = 1",
-    ],
+    ["fractional offset", "update verifactu_records set offset_minutos = 1.5 where secuencia = 1"],
     ["malformed identity time", "update verifactu_identities set registrado_en = 'invalid'"],
     [
       "malformed retirement time",
@@ -372,7 +362,10 @@ describe("complete captured fiscal chains", () => {
       "malformed system object",
       "update verifactu_records set sistema_informatico = 'null' where secuencia = 1",
     ],
-    ["all identities retired", "update verifactu_identities set revocado_en = '2026-10-20T00:00:00Z'"],
+    [
+      "all identities retired",
+      "update verifactu_identities set revocado_en = '2026-10-20T00:00:00Z'",
+    ],
   ])("rejects %s even when both copies contain the same damage", async (_label, statement) => {
     await capture();
     expect(await verify()).toBe(true);
@@ -527,10 +520,7 @@ describe("complete captured fiscal chains", () => {
 
   it("rejects an independently valid replacement history", async () => {
     await capture();
-    damage(
-      "after",
-      "update verifactu_records set importe_total = '123.46' where secuencia = 3",
-    );
+    damage("after", "update verifactu_records set importe_total = '123.46' where secuencia = 3");
     rehash("after");
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(a, a)).toBe(true);

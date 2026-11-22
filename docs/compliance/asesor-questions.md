@@ -3940,7 +3940,7 @@ during the stop, the list may be short, and the alert says so. If the stop ended
 next witness disagreed with the box, nothing is listed and the alert says the box cannot tell which
 sales were dated wrongly
 ([design §4.9 f](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#f-wrongly-dated-records-go-to-the-owner)).
-Nothing is rewritten: `registros_facturacion` is append-only, and records already sent to AEAT stay
+Nothing is rewritten: `verifactu_records` is append-only, and records already sent to AEAT stay
 as sent. Today only records dated later than the real time are listed; the design plans (slice 9c,
 not built) to list records after a change of the clock in either direction. Whether anything more is
 required is what this asks.

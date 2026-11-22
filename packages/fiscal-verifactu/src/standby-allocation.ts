@@ -57,7 +57,9 @@ export async function validateStandbyAllocation(
   const [sif] = await tx
     .select({ nif: verifactuIdentities.nif, softwareId: verifactuIdentities.idSistemaInformatico })
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   if (sif === undefined) return { ok: false, reason: "primary_not_registered" };
   if (sif.nif !== taxpayer.taxId) return { ok: false, reason: "scope_mismatch" };
   const bases = await liveSeriesBases(tx, primary);
@@ -131,7 +133,9 @@ export async function establishDormantAllocation(
   const [activeSif] = await tx
     .select({ id: verifactuIdentities.id })
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .where(
+      and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    )
     .limit(1);
   const [activeSeries] = await tx
     .select({ id: invoiceSeries.id })

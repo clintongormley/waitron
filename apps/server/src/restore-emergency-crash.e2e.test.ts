@@ -9,11 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase, readStandardSeriesId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import {
-  fiscalAllocations,
-  verifactuRecords,
-  VerifactuBackend,
-} from "@waitron/fiscal-verifactu";
+import { fiscalAllocations, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { orderedMigrationSets } from "@waitron/module";

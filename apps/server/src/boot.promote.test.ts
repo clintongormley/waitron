@@ -232,7 +232,9 @@ async function readEnvio(
 /** Keeps the shared directory order-independent; `incidents` has no registro id, so it is cleared
  * wholesale. Every caller runs after `server.close()`. */
 async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
-  await appDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
+  await appDb.execute(
+    sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`,
+  );
   await appDb.execute(sql`delete from incidents `);
 }
 
@@ -540,7 +542,9 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
         expect(mirrorDb.all(sql`select * from verifactu_records order by secuencia`)).toEqual(
           records,
         );
-        expect(mirrorDb.all(sql`select * from verifactu_submissions order by registro_id`)).toEqual(attempts);
+        expect(mirrorDb.all(sql`select * from verifactu_submissions order by registro_id`)).toEqual(
+          attempts,
+        );
         expect((await readNodeMode(mirrorNode, seed.nodeId)).mode).toBe("primary");
       } finally {
         await restarted.close();

@@ -237,9 +237,9 @@ describe("on a full disk, a restart", () => {
     const venue = join(f.roots.venueDir, "venue.db");
     const mainFileAlone = openImmutable(venue);
     try {
-      expect(
-        mainFileAlone.prepare("select count(*) as n from verifactu_records").get(),
-      ).toEqual({ n: 0 });
+      expect(mainFileAlone.prepare("select count(*) as n from verifactu_records").get()).toEqual({
+        n: 0,
+      });
     } finally {
       mainFileAlone.close();
     }

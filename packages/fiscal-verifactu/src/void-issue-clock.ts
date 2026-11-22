@@ -14,9 +14,7 @@ export async function prepareFiscalVoidClock(
   const [original] = await tx
     .select({ nodeId: verifactuRecords.nodeId })
     .from(verifactuRecords)
-    .where(
-      and(eq(verifactuRecords.saleId, saleId), eq(verifactuRecords.tipoRegistro, "alta")),
-    )
+    .where(and(eq(verifactuRecords.saleId, saleId), eq(verifactuRecords.tipoRegistro, "alta")))
     .limit(1);
   if (original === undefined) throw new AppError("fiscal.sale_not_recorded", { saleId });
   const [sale] = await tx.select({ nodeId: sales.nodeId }).from(sales).where(eq(sales.id, saleId));

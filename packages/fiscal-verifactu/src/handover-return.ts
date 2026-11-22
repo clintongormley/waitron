@@ -204,9 +204,7 @@ export async function inspectReturnedPayments(
     const original = { sale: normalized("sales", sale), records };
     const eligible =
       originalsMatch &&
-      records.every(
-        (row) => row.node_id === sourceNodeId && matches("verifactu_records", row),
-      ) &&
+      records.every((row) => row.node_id === sourceNodeId && matches("verifactu_records", row)) &&
       !forSale(returned.captures).length &&
       !returned.orders.some((row) => row.id === sale.working_order_id) &&
       incoming.refunds.every((row) => row.state === "completed") &&

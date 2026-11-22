@@ -217,8 +217,8 @@ async function readPracticeSales() {
     sales: saleRows,
     sale_lines: lineRows,
     tenders: tenderRows,
-    registros_facturacion: registroRows,
-    envios: envioRows,
+    verifactu_records: registroRows,
+    verifactu_submissions: envioRows,
   };
 }
 
@@ -248,7 +248,7 @@ describe("seedSales on a Spanish venue", () => {
     }
     const golden: unknown = JSON.parse(readFileSync(FIXTURE, "utf8"));
 
-    expect(actual.registros_facturacion.length).toBeGreaterThan(0);
+    expect(actual.verifactu_records.length).toBeGreaterThan(0);
     expect(actual).toEqual(golden);
   });
 });

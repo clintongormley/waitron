@@ -63,9 +63,9 @@ describe("developer allocation boundary", () => {
         { code: "FA-0CNNW", purpose: "full" },
         { code: "R-0CNNW", purpose: "corrective" },
       ]);
-      expect(suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`)).toEqual([
-        { numero_instalacion: "0CNNW", node_id: venue.nodeId },
-      ]);
+      expect(
+        suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
+      ).toEqual([{ numero_instalacion: "0CNNW", node_id: venue.nodeId }]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: "B00000000", environment: "preproduction" },
       ]);

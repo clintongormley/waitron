@@ -226,9 +226,9 @@ describe("allocation activation with host-issued operator authority", () => {
       params: { reason: "reauthentication_required" },
     });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-    expect((await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows).toEqual([
-      { n: 0 },
-    ]);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows,
+    ).toEqual([{ n: 0 }]);
     expect(
       (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
     ).toEqual([{ n: 0 }]);
@@ -371,9 +371,9 @@ describe("allocation activation checks inside the venue transaction", () => {
     const before = await suite.db.select().from(invoiceSeries);
     expect(await validate()).toEqual({ ok: true, allocation, approval });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-    expect((await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows).toEqual([
-      { n: 0 },
-    ]);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows,
+    ).toEqual([{ n: 0 }]);
   });
 
   it("uses the stored taxpayer even when the caller context agrees with the wrong allocation", async () => {

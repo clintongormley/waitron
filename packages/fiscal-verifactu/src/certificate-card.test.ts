@@ -251,7 +251,9 @@ describe("readCertificateCard", () => {
       return tx.execute<{ detail: string }>(sql`explain query plan ${sql.join(chunks)}`);
     });
     const detail = plan.rows.map((row) => row.detail).join("\n");
-    expect(detail).toContain("SEARCH verifactu_submissions USING INDEX verifactu_submissions_confirmado_idx (confirmado_en>?)");
+    expect(detail).toContain(
+      "SEARCH verifactu_submissions USING INDEX verifactu_submissions_confirmado_idx (confirmado_en>?)",
+    );
     expect(detail).not.toContain("TEMP B-TREE");
   });
 

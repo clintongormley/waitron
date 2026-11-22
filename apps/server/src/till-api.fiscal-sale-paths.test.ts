@@ -2564,9 +2564,7 @@ describe("handheld sales and device capability gates", () => {
       ]);
     }
 
-    expect(await withTransaction(suite.db, (tx) => tx.select().from(verifactuRecords))).toEqual(
-      [],
-    );
+    expect(await withTransaction(suite.db, (tx) => tx.select().from(verifactuRecords))).toEqual([]);
     expect(await withTransaction(suite.db, (tx) => tx.select().from(sales))).toEqual([]);
     for (const [id, deviceCookie] of [
       [byHandheld, handheldCookie],

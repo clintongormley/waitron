@@ -119,7 +119,7 @@ describe("startAgainKept with the certificate table missing", () => {
     "refuses rather than counting nothing when the certificate table is missing, in %s",
     async (_, seat) => {
       await expect(seat.startAgainKept!(suite.db)).rejects.toThrow(
-        /no such table: fiscal_certificate_installs/,
+        /no such table: verifactu_certificates/,
       );
     },
   );
@@ -137,7 +137,7 @@ describe("startAgainHoldings on a database missing the fiscal tables", () => {
 
   it.each(contributions)("refuses rather than counting nothing in %s", async (_, seat) => {
     await expect(seat.startAgainHoldings!(suite.db)).rejects.toThrow(
-      /no such table: registros_facturacion/,
+      /no such table: verifactu_records/,
     );
   });
 });
@@ -171,13 +171,12 @@ describe("startAgainHoldings with no invoice record and the verifactu_submission
   });
 
   it.each(contributions)("refuses rather than counting nothing in %s", async (_, seat) => {
-    await expect(seat.startAgainHoldings!(suite.db)).rejects.toThrow(/no such table: envios/);
+    await expect(seat.startAgainHoldings!(suite.db)).rejects.toThrow(
+      /no such table: verifactu_submissions/,
+    );
   });
 });
 
 it("lists the append-only tables the fiscal activation writes as deletable", () => {
-  expect(FISCAL_START_AGAIN_DELETABLE).toEqual([
-    "fiscal_allocations",
-    "verifactu_certificates",
-  ]);
+  expect(FISCAL_START_AGAIN_DELETABLE).toEqual(["fiscal_allocations", "verifactu_certificates"]);
 });

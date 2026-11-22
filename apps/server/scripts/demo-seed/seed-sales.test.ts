@@ -485,9 +485,7 @@ describe("seedSales", () => {
 
     const read = await withTransaction(suite.db, async (tx) => ({
       sales: await tx.select({ id: sales.id }).from(sales),
-      registros: await tx
-        .select({ entorno: verifactuRecords.entorno })
-        .from(verifactuRecords),
+      registros: await tx.select({ entorno: verifactuRecords.entorno }).from(verifactuRecords),
     }));
     expect(read.sales.length).toBe(0);
     expect(read.registros.length).toBe(0);
@@ -528,13 +526,16 @@ describe("seedSales", () => {
     const { rows: backends } = await suite.db.execute<{ fiscal_backend: string }>(
       sql`select fiscal_backend from sales`,
     );
-    const { rows: fiscalRows } = await suite.db.execute<{ registros: number; envios: number }>(
+    const { rows: fiscalRows } = await suite.db.execute<{
+      registros: number;
+      verifactu_submissions: number;
+    }>(
       sql`select (select count(*) from verifactu_records) as registros,
                  (select count(*) from verifactu_submissions) as verifactu_submissions`,
     );
     expect(count).toBeGreaterThan(0);
     expect(backends.length).toBe(count);
     expect(new Set(backends.map((row) => row.fiscal_backend))).toEqual(new Set(["none"]));
-    expect(fiscalRows[0]).toEqual({ registros: 0, envios: 0 });
+    expect(fiscalRows[0]).toEqual({ registros: 0, verifactu_submissions: 0 });
   });
 });

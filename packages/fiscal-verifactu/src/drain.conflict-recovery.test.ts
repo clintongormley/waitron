@@ -380,9 +380,9 @@ describe("durable conflict observations", () => {
       expect(await observations()).toEqual([]);
       expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
       expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
-      expect((await suite.db.execute(sql`select estado, csv from verifactu_submissions`)).rows).toEqual([
-        { estado: "pendiente", csv: null },
-      ]);
+      expect(
+        (await suite.db.execute(sql`select estado, csv from verifactu_submissions`)).rows,
+      ).toEqual([{ estado: "pendiente", csv: null }]);
     } finally {
       await suite.db.execute(sql`drop trigger fail_after_conflict`);
     }

@@ -111,7 +111,7 @@ describe("the write path against the real Veri*Factu backend", () => {
   });
 
   it("marks the first record of a chain as PrimerRegistro", async () => {
-    // **Deviation from the brief.** `db.select().from(registrosFacturacion)` with no `where` at
+    // **Deviation from the brief.** `db.select().from(verifactuRecords)` with no `where` at
     // all reads whichever row happens to be first in the WHOLE table, and this suite seeds a new
     // node per test on one shared database rather than asserting against an empty table. Scoped by
     // `saleId`, so the row read here is this test's own however many others the table holds.
@@ -195,7 +195,10 @@ describe("the write path against the real Veri*Factu backend", () => {
       .select()
       .from(verifactuRecords)
       .where(eq(verifactuRecords.saleId, saleId));
-    const [sidecar] = await pg.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, registro!.id));
+    const [sidecar] = await pg.db
+      .select()
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, registro!.id));
     expect(sidecar?.estado).toBe("pendiente");
     expect(sidecar?.intentos).toBe(0);
     // The CSV is unrecoverable once lost and arrives only with a submission response, so it must
@@ -240,7 +243,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     expect(await pg.db.select().from(sales)).toHaveLength(0);
     expect(await pg.db.select().from(verifactuRecords)).toHaveLength(0);
     expect(await pg.db.select().from(verifactuSubmissions)).toHaveLength(0);
-    // The chain head row itself still exists — `seedTenantWithSif`'s own `registerSif` call
+    // The chain head row itself still exists — `seedTaxpayerWithSif`'s own `registerSif` call
     // created it at provisioning time, in a transaction that already committed — but its
     // `secuencia` is untouched by the rolled-back sale.
     const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
@@ -283,10 +286,7 @@ describe("the write path against the real Veri*Factu backend", () => {
 
     expect(await pg.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
     expect(
-      await pg.db
-        .select()
-        .from(verifactuRecords)
-        .where(eq(verifactuRecords.saleId, saleId)),
+      await pg.db.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
     ).toHaveLength(1);
     expect(await pg.db.select().from(incidents)).toHaveLength(0);
   });
@@ -580,7 +580,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   //
   // The GOLDEN amounts were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
   // code existed, in a throwaway `git worktree` detached at that commit. The capture appended a
-  // temporary test to this same file which seeded `seedTenantWithSif(pg.db, { nif: PINNED_NIF })`,
+  // temporary test to this same file which seeded `seedTaxpayerWithSif(pg.db, { nif: PINNED_NIF })`,
   // filed this exact basket in `main`'s own line shape — the options answer on the dish line's
   // `modifierSnapshots`, the extra as a child line at `parentLineNo: 1` — and read
   // `huella, importe_total, cuota_total` straight out of `verifactu_records`. The command run
@@ -592,7 +592,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // `29999999H`); @waitron/verifactu 0.1.0 and 0.2.1 hash the basket alike (receipt: that commit).
   //
   // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
-  // fields the huella hashes (in `@waitron/verifactu`), and `seedTenantWithSif` mints it
+  // fields the huella hashes (in `@waitron/verifactu`), and `seedTaxpayerWithSif` mints it
   // from a counter that advances once per call in a file, so the same basket run standalone and
   // run 16th in THIS file hashed differently. Both are correct records of their own inputs. Without the pin, a golden literal here would fail the day anyone adds or removes a test
   // ABOVE it — a gate that cries wolf. With it, the literal is a property of the basket: recorded

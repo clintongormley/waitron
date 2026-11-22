@@ -68,7 +68,7 @@ function snapshot() {
     .all<{ name: string }>(sql`select name from sqlite_schema where type = 'table' order by name`)
     .map((row) => row.name)
     .filter((name) =>
-      /^(working_|order_|bill_|ticket_|kitchen_|service_commands|parties$|party_|sales$|sale_|tenders$|print_jobs$|drawer_opens$|invoice_series$|cadenas$|registros_facturacion$|envios$|attendance_|unpaid_departures$)/.test(
+      /^(working_|order_|bill_|ticket_|kitchen_|service_commands|parties$|party_|sales$|sale_|tenders$|print_jobs$|drawer_opens$|invoice_series$|cadenas$|verifactu_records$|verifactu_submissions$|attendance_|unpaid_departures$)/.test(
         name,
       ),
     );

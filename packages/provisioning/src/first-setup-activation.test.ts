@@ -173,7 +173,9 @@ it("commits a real prepared hour only after kept consent and publishes its check
   expect(f.deps.provision).toHaveBeenCalledOnce();
   expect(f.deps.check).toHaveBeenCalledOnce();
   expect(f.deps.publish).toHaveBeenCalledOnce();
-  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
+  expect(
+    await venue.db.execute("select count(*) as count from verifactu_identities"),
+  ).toMatchObject({
     rows: [{ count: 1 }],
   });
   expect(
@@ -252,7 +254,9 @@ it("records the exact commit after a lost response and never activates it twice"
   expect(f.deps.provision).toHaveBeenCalledOnce();
   expect(f.deps.confirmCommitted).toHaveBeenCalledOnce();
   expect(f.deps.publish).toHaveBeenCalledOnce();
-  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
+  expect(
+    await venue.db.execute("select count(*) as count from verifactu_identities"),
+  ).toMatchObject({
     rows: [{ count: 1 }],
   });
 });
@@ -267,7 +271,9 @@ it("readiness refusal leaves the venue unactivated and consumes the one-use kept
   f.deps.assertReady.mockResolvedValue();
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.deps.assertReady).toHaveBeenCalledOnce();
-  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
+  expect(
+    await venue.db.execute("select count(*) as count from verifactu_identities"),
+  ).toMatchObject({
     rows: [{ count: 0 }],
   });
 });
@@ -297,7 +303,9 @@ it.each(["throw", "return", "check-refuses"])(
     });
     expect((await f.runtime.store.read())!.status).toBe("uncertain");
     expect(f.deps.publish).not.toHaveBeenCalled();
-    expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
+    expect(
+      await venue.db.execute("select count(*) as count from verifactu_identities"),
+    ).toMatchObject({
       rows: [{ count: 0 }],
     });
   },

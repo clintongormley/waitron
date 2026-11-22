@@ -77,7 +77,9 @@ async function validateForActivation(
   const [liveSif] = await tx
     .select({ softwareId: verifactuIdentities.idSistemaInformatico })
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   const storedBases = dormantBases ?? (await liveSeriesBases(tx, node));
   if (storedBases.length === 0 && context.mode !== "initial-setup")
     return { ok: false, reason: "series_mismatch" };
@@ -330,7 +332,9 @@ async function activateDormant(
     const [activeSif] = await tx
       .select({ id: verifactuIdentities.id })
       .from(verifactuIdentities)
-      .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)))
+      .where(
+        and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
+      )
       .limit(1);
     const [activeSeries] = await tx
       .select({ id: invoiceSeries.id })
@@ -404,7 +408,9 @@ async function activate(
         identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
       })
       .from(verifactuIdentities)
-      .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
+      .where(
+        and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
+      );
     const live = await tx
       .select({ id: invoiceSeries.id, code: invoiceSeries.code, purpose: invoiceSeries.purpose })
       .from(invoiceSeries)
@@ -437,7 +443,9 @@ async function activate(
   await tx
     .update(verifactuIdentities)
     .set({ revocadoEn: retiredAt })
-    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   await tx.insert(verifactuIdentities).values({
     id: sifId,
     nodeId: node.nodeId,

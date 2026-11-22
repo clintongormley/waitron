@@ -117,7 +117,10 @@ async function sending(versions: string[]) {
 }
 
 async function state(id: string) {
-  const [row] = await suite.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, id));
+  const [row] = await suite.db
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, id));
   return row!;
 }
 
@@ -205,7 +208,10 @@ it("keeps a brake-held cancellation held when the current version is unknown and
   const latest = await version(3, "enviando", first);
   const cancel = await cancellation();
   const later = await laterSale();
-  await suite.db.update(verifactuSubmissions).set({ estado: "detenido" }).where(eq(verifactuSubmissions.registroId, cancel));
+  await suite.db
+    .update(verifactuSubmissions)
+    .set({ estado: "detenido" })
+    .where(eq(verifactuSubmissions.registroId, cancel));
   const before = await immutableRows();
   const wire = await sending([original, first]);
 

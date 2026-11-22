@@ -41,8 +41,7 @@ export async function appendOriginalForReturn(
   pending.input.IDEmisorFactura = identity.nif;
   pending.input.SistemaInformatico.NumeroInstalacion = identity.installation;
   await withTransaction(db, (tx) => appendToChain(tx, node.nodeId, pending));
-  return db.get<{ id: string }>(sql`select id from verifactu_records where sale_id = ${sale}`)!
-    .id;
+  return db.get<{ id: string }>(sql`select id from verifactu_records where sale_id = ${sale}`)!.id;
 }
 
 export async function seedReturnNodeForVenue(

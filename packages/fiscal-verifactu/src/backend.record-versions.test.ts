@@ -157,10 +157,7 @@ it.each(["credit", "substitution"] as const)(
 
 it("a void retains the issued sale's origin after corrections from another origin", async () => {
   await versions("F2", "F2");
-  const before = await suite.db
-    .select()
-    .from(verifactuRecords)
-    .orderBy(verifactuRecords.secuencia);
+  const before = await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
   const result = await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`pragma reverse_unordered_selects = on`);
     try {
@@ -183,9 +180,10 @@ it("a void retains the issued sale's origin after corrections from another origi
     anteriorHuella: before[2]!.huella,
   });
   expect(
-    (
-      await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia)
-    ).slice(0, 3),
+    (await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia)).slice(
+      0,
+      3,
+    ),
   ).toEqual(before);
 });
 

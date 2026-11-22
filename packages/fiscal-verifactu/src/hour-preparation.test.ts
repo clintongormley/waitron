@@ -197,9 +197,9 @@ it("activates every exact base through the real prepared seed boundary without a
     { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
   expect(f.revisions).toHaveLength(2);
-  expect((await suite.db.select().from(verifactuIdentities)).map((row) => row.numeroInstalacion)).toEqual([
-    "0CNNW",
-  ]);
+  expect(
+    (await suite.db.select().from(verifactuIdentities)).map((row) => row.numeroInstalacion),
+  ).toEqual(["0CNNW"]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 

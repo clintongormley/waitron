@@ -81,9 +81,7 @@ it("appends successive corrections at the live chain head while preserving invoi
     expect([row.subsanacion, row.rechazoPrevio]).toEqual(["S", "X"]);
     expect(row.saleId).toBe(saleId);
     expect(row.huella).not.toBe(original.huella);
-    const raw = await suite.db.execute(
-      sql`select * from verifactu_records where id = ${row.id}`,
-    );
+    const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${row.id}`);
     expect(computeHuella(fromRegistroRow(decodeRegistroRow(raw.rows[0]!)))).toBe(row.huella);
   }
   expect(await readChainHead(suite.db, node.nodeId)).toEqual({

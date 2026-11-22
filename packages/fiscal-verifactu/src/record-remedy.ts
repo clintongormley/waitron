@@ -171,7 +171,10 @@ export async function applyRecordCorrection(
   if (filingCase === undefined)
     throw new AppError("filing_case.not_found", { caseId: request.caseId });
   const [cancellation] = await tx
-    .select({ sinRegistroPrevio: verifactuRecords.sinRegistroPrevio, estado: verifactuSubmissions.estado })
+    .select({
+      sinRegistroPrevio: verifactuRecords.sinRegistroPrevio,
+      estado: verifactuSubmissions.estado,
+    })
     .from(verifactuRecords)
     .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
     .where(

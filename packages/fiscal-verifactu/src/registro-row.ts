@@ -262,7 +262,7 @@ export function pointerTo(row: {
 /**
  * One `select * from verifactu_records` row after {@link decodeRegistroRow} — snake_case
  * columns, each value in the shape Drizzle's read mapping produces. Deliberately NOT `typeof
- * registrosFacturacion.$inferSelect` (camelCase, the shape Drizzle's own typed `.select()` query
+ * verifactuRecords.$inferSelect` (camelCase, the shape Drizzle's own typed `.select()` query
  * builder produces): a raw `sql` execution is not tied to any schema column, so Drizzle has no
  * column to run `mapFromDriverValue` through and hands back whatever the driver gives it.
  *

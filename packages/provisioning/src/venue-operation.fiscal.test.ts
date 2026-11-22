@@ -178,9 +178,9 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
   it("writes exactly the signed initial identity and every purpose, attributed to the new account", async () => {
     const result = await establish();
     expect(result.seeded).toEqual([{ module: "fiscal-verifactu", report: "setup-42" }]);
-    expect((await suite.db.execute(sql`select numero_instalacion from verifactu_identities`)).rows).toEqual(
-      [{ numero_instalacion: "S000042" }],
-    );
+    expect(
+      (await suite.db.execute(sql`select numero_instalacion from verifactu_identities`)).rows,
+    ).toEqual([{ numero_instalacion: "S000042" }]);
     expect(
       await suite.db
         .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
@@ -259,6 +259,7 @@ it("reapplies allocated setup without creating another SIF, allocation or series
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   expect(
-    (await suite.db.execute(sql`select numero_instalacion, revocado_en from verifactu_identities`)).rows,
+    (await suite.db.execute(sql`select numero_instalacion, revocado_en from verifactu_identities`))
+      .rows,
   ).toEqual([{ numero_instalacion: "S000042", revocado_en: null }]);
 });

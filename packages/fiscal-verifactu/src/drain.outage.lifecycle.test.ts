@@ -56,9 +56,9 @@ it.each([false, true])(
       );
       expect(failed.skipped).toHaveLength(1);
       expect(failed.recordsSubmitted).toBe(0);
-      expect((await suite.db.execute(sql`select estado, intentos from verifactu_submissions`)).rows).toEqual([
-        { estado: "pendiente", intentos: 0 },
-      ]);
+      expect(
+        (await suite.db.execute(sql`select estado, intentos from verifactu_submissions`)).rows,
+      ).toEqual([{ estado: "pendiente", intentos: 0 }]);
     } finally {
       if (refuseWrites) await suite.db.execute(sql`drop trigger outage_metadata_refusal`);
     }
@@ -189,7 +189,11 @@ it.each(["lost", "http", "xml", "save"])(
     expect(recovered.recordsSubmitted).toBe(1);
     expect(t.xml[1]).toContain(flag);
     expect(
-      (await suite.db.execute(sql`select estado, intentos, technical_incidence from verifactu_submissions`)).rows,
+      (
+        await suite.db.execute(
+          sql`select estado, intentos, technical_incidence from verifactu_submissions`,
+        )
+      ).rows,
     ).toEqual([{ estado: "aceptado", intentos: 2, technical_incidence: 1 }]);
   },
 );
@@ -217,8 +221,9 @@ it("a late success keeps a newer failure token open for newly arriving work", as
     return authority.fetch(input, init);
   });
   await drain(t.deps, at(1));
-  const original = (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`))
-    .rows[0];
+  const original = (
+    await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`)
+  ).rows[0];
   fail = false;
   const recovery = drain(t.deps, at(3));
   try {
@@ -227,13 +232,15 @@ it("a late success keeps a newer failure token open for newly arriving work", as
     await seedSecondChain(suite.db, seeded, 2);
     fail = true;
     await drain(t.deps, at(3));
-    const newer = (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`))
-      .rows[0];
+    const newer = (
+      await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`)
+    ).rows[0];
     expect(newer).not.toEqual(original);
     release();
     expect((await recovery).recordsAccepted).toBe(1);
     expect(
-      (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`)).rows[0],
+      (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`))
+        .rows[0],
     ).toEqual(newer);
   } finally {
     release();
@@ -243,7 +250,8 @@ it("a late success keeps a newer failure token open for newly arriving work", as
   await drain(t.deps, at(6));
   expect(t.xml.at(-1)).toContain(flag);
   expect(
-    (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`)).rows,
+    (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`))
+      .rows,
   ).toEqual([{ technical_incident_token: null }]);
 });
 
@@ -270,8 +278,9 @@ it("marks due held probes but excludes terminal, set-aside, not-yet-due holds", 
     },
     at(63),
   );
-  const rows = (await suite.db.execute(sql`select registro_id, technical_incidence from verifactu_submissions`))
-    .rows;
+  const rows = (
+    await suite.db.execute(sql`select registro_id, technical_incidence from verifactu_submissions`)
+  ).rows;
   expect(rows.find((row) => row.registro_id === firstHeld.registroId)?.technical_incidence).toBe(1);
   expect(rows.find((row) => row.registro_id === laterHeld.registroId)?.technical_incidence).toBe(0);
   expect(rows.find((row) => row.registro_id === ordinary.registroId)?.technical_incidence).toBe(1);
@@ -323,9 +332,9 @@ it("retains failed-probe evidence through a reopened database and an ordinary re
         )
       ).rows,
     ).toEqual([{ estado: "rechazado", intentos: 3, technical_incidence: 1 }]);
-    expect((await db.execute(sql`select technical_incident_token from verifactu_sending_state`)).rows).toEqual([
-      { technical_incident_token: null },
-    ]);
+    expect(
+      (await db.execute(sql`select technical_incident_token from verifactu_sending_state`)).rows,
+    ).toEqual([{ technical_incident_token: null }]);
     const healthyAuthority = createFakeAeat({ serverNow: at(0) });
     const healthy = transport(healthyAuthority.fetch);
     const accepted = await drain({ ...healthy.deps, db }, at(182));
@@ -381,14 +390,15 @@ it("remembers a failed metadata write after a committed claim until stale recove
   const failedTransport = transport(async () => {
     throw new Error("network down");
   });
-  await suite.db.execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
+  await suite.db
+    .execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
     begin select raise(abort, 'test metadata unavailable'); end`);
   try {
     const failed = await drain(failedTransport.deps, at(1));
     expect(failed.skipped).toHaveLength(1);
-    expect((await suite.db.execute(sql`select estado, intentos from verifactu_submissions`)).rows).toEqual([
-      { estado: "enviando", intentos: 1 },
-    ]);
+    expect(
+      (await suite.db.execute(sql`select estado, intentos from verifactu_submissions`)).rows,
+    ).toEqual([{ estado: "enviando", intentos: 1 }]);
   } finally {
     await suite.db.execute(sql`drop trigger outage_metadata_refusal`);
   }
@@ -436,13 +446,16 @@ it.each(["warning", "unknown"])(
     const result = await drain(t.deps, at(1));
     expect(result.recordsSubmitted).toBe(1);
     expect(t.xml[0]).not.toContain(flag);
-    expect((await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows).toEqual([
-      { technical_incidence: 0 },
-    ]);
     expect(
-      (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`)).rows,
+      (await suite.db.execute(sql`select technical_incidence from verifactu_submissions`)).rows,
+    ).toEqual([{ technical_incidence: 0 }]);
+    expect(
+      (await suite.db.execute(sql`select technical_incident_token from verifactu_sending_state`))
+        .rows,
     ).toEqual([{ technical_incident_token: null }]);
-    expect((await suite.db.execute(sql`select estado, incidencia from verifactu_submissions`)).rows).toEqual([
+    expect(
+      (await suite.db.execute(sql`select estado, incidencia from verifactu_submissions`)).rows,
+    ).toEqual([
       {
         estado: kind === "warning" ? "aceptado_con_errores" : "pendiente",
         incidencia: kind === "warning" ? 0 : 1,
@@ -477,7 +490,8 @@ it("flushes a concurrent failed metadata write before a delayed resolver may cla
   const failedTransport = transport(async () => {
     throw new Error("network down");
   });
-  await suite.db.execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
+  await suite.db
+    .execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
     begin select raise(abort, 'test metadata unavailable'); end`);
   let resumed: Awaited<ReturnType<typeof drain>>;
   try {
@@ -530,7 +544,8 @@ it.each([false, true])(
     const probe = transport(async () => {
       throw new Error("probe transport failed");
     });
-    await suite.db.execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
+    await suite.db
+      .execute(sql`create trigger outage_metadata_refusal before insert on verifactu_sending_state
     begin select raise(abort, 'test metadata unavailable'); end`);
     try {
       expect(

@@ -450,9 +450,9 @@ it("does not round a supplied installation identity through the numeric declarat
   await withOperationAuthority(binding, operator, (authority) =>
     withTransaction(suite.db, (tx) => run(tx, { input, binding, authority })),
   );
-  expect((await suite.db.execute(sql`select numero_instalacion from verifactu_identities`)).rows).toEqual([
-    { numero_instalacion: "P000042" },
-  ]);
+  expect(
+    (await suite.db.execute(sql`select numero_instalacion from verifactu_identities`)).rows,
+  ).toEqual([{ numero_instalacion: "P000042" }]);
 });
 
 it("detaches submitted signed input before reading the database", async () => {
@@ -663,8 +663,10 @@ it.each([
     await suite.db
       .insert(invoiceSeries)
       .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
-  if (field === "software") await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
-  if (field === "sif-retired") await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
+  if (field === "software")
+    await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
+  if (field === "sif-retired")
+    await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
   const before = await snapshot();
   await expect(readAllocated()).rejects.toMatchObject({
     code: "sif.allocation_invalid",

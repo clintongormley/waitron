@@ -83,7 +83,10 @@ async function checkOriginal(
     incident?.registroId !== conflict.registroId
   )
     return refuse("event_mismatch");
-  const [reply] = await tx.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, conflict.registroId));
+  const [reply] = await tx
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, conflict.registroId));
   const [lookup] = await tx
     .select()
     .from(fiscalLookupConflicts)

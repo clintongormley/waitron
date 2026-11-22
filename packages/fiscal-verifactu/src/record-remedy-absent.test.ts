@@ -118,10 +118,7 @@ function send(
 
 async function snapshot() {
   return {
-    records: await suite.db
-      .select()
-      .from(verifactuRecords)
-      .orderBy(verifactuRecords.secuencia),
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     deliveries: await suite.db.select().from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
@@ -208,7 +205,10 @@ it("serialises simultaneous retries into one saved result", async () => {
 it.each(["pendiente", "enviando", "detenido", "retenido", "aceptado", "aceptado_con_errores"])(
   "refuses the original outcome %s rather than choosing a cancellation",
   async (estado) => {
-    await suite.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, body.registroId));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, body.registroId));
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -263,7 +263,9 @@ it("refuses an already generated ordinary cancellation and preserves its held pa
       node.nodeId,
       anulacionFor(node, brandSaleId(original!.saleId), 1, 2, "preproduction"),
     );
-    await tx.insert(verifactuSubmissions).values({ registroId: cancellation.id, estado: "retenido" });
+    await tx
+      .insert(verifactuSubmissions)
+      .values({ registroId: cancellation.id, estado: "retenido" });
   });
   const before = await snapshot();
   const response = await send();
@@ -458,7 +460,10 @@ it.each([
 });
 
 it.each([null, "1162"])("refuses inconsistent rejection evidence %s", async (codigoError) => {
-  await suite.db.update(verifactuSubmissions).set({ codigoError }).where(eq(verifactuSubmissions.registroId, body.registroId));
+  await suite.db
+    .update(verifactuSubmissions)
+    .set({ codigoError })
+    .where(eq(verifactuSubmissions.registroId, body.registroId));
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);

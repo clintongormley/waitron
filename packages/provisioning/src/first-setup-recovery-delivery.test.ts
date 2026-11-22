@@ -152,7 +152,9 @@ it("recovers the exact public delivery from retained bytes without granting acti
   });
   expect(f.bytes.toString()).not.toContain(f.staged.key.secret);
   expect(f.bytes.toString()).not.toContain(PASSWORD);
-  expect(await venue.db.execute("select count(*) as count from verifactu_identities")).toMatchObject({
+  expect(
+    await venue.db.execute("select count(*) as count from verifactu_identities"),
+  ).toMatchObject({
     rows: [{ count: 0 }],
   });
 });

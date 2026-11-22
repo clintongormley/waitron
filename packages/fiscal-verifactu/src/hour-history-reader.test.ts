@@ -313,26 +313,28 @@ it.each([
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 
-it.each([{ evidence: [] }, { evidence: "bad" }, { bases: [] }, { sourceNodeId: TAXPAYER_A.nodeId2 }])(
-  "a malformed reservation %j cannot masquerade as complete history",
-  async (change) => {
-    await seedRows();
-    await suite.db.insert(fiscalReservations).values({
-      eventKey: "damaged",
-      allocationKey: "reserved",
-      nodeId: TAXPAYER_A.nodeId2,
-      sourceNodeId: TAXPAYER_A.nodeId,
-      taxpayerNif: "89890001K",
-      softwareId: "W1",
-      environment: "preproduction",
-      installationIdentity: "0CNPG",
-      evidence: { public: "retained" },
-      bases: [{ code: "A", purpose: "standard" }],
-      ...change,
-    });
-    expect((await projection()).contradictions).toContain("venue:incomplete");
-  },
-);
+it.each([
+  { evidence: [] },
+  { evidence: "bad" },
+  { bases: [] },
+  { sourceNodeId: TAXPAYER_A.nodeId2 },
+])("a malformed reservation %j cannot masquerade as complete history", async (change) => {
+  await seedRows();
+  await suite.db.insert(fiscalReservations).values({
+    eventKey: "damaged",
+    allocationKey: "reserved",
+    nodeId: TAXPAYER_A.nodeId2,
+    sourceNodeId: TAXPAYER_A.nodeId,
+    taxpayerNif: "89890001K",
+    softwareId: "W1",
+    environment: "preproduction",
+    installationIdentity: "0CNPG",
+    evidence: { public: "retained" },
+    bases: [{ code: "A", purpose: "standard" }],
+    ...change,
+  });
+  expect((await projection()).contradictions).toContain("venue:incomplete");
+});
 
 it("retains a later recorded approval time even when its database commit timestamp is earlier", async () => {
   await seedAllocation({
@@ -445,7 +447,7 @@ it("reads the shared history without touching verifactu_records", async () => {
   try {
     await expect(readInventory()).resolves.toMatchObject({ reference: "venue" });
     await expect(suite.db.select().from(verifactuRecords)).rejects.toThrow(
-      /no such table: registros_facturacion/,
+      /no such table: verifactu_records/,
     );
   } finally {
     await suite.db.execute(sql`alter table registros_hidden rename to verifactu_records`);

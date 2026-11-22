@@ -147,11 +147,11 @@ async function acceptCurrent() {
 }
 async function snapshot() {
   return {
-    records: await suite.db
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
+    deliveries: await suite.db
       .select()
-      .from(verifactuRecords)
-      .orderBy(verifactuRecords.secuencia),
-    deliveries: await suite.db.select().from(verifactuSubmissions).orderBy(verifactuSubmissions.registroId),
+      .from(verifactuSubmissions)
+      .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
     tenders: await suite.db.select().from(tenders),
@@ -274,7 +274,10 @@ it("serializes simultaneous release requests into one case event", async () => {
 it.each(["pendiente", "enviando", "rechazado", "detenido", "retenido", "aceptado_con_errores"])(
   "refuses current original state %s",
   async (estado) => {
-    await suite.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, currentId));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, currentId));
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -487,7 +490,12 @@ it.each(["current", "held"])("refuses a missing %s delivery", async (which) => {
   await acceptCurrent();
   await suite.db
     .delete(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, which === "current" ? currentId : (body.registroId as string)));
+    .where(
+      eq(
+        verifactuSubmissions.registroId,
+        which === "current" ? currentId : (body.registroId as string),
+      ),
+    );
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);
@@ -549,7 +557,9 @@ it("refuses an absent-original cancellation even with a matching accepted invoic
       ...pending,
       input: { ...pending.input, SinRegistroPrevio: "S" },
     });
-    await tx.insert(verifactuSubmissions).values({ registroId: cancellation.id, estado: "retenido" });
+    await tx
+      .insert(verifactuSubmissions)
+      .values({ registroId: cancellation.id, estado: "retenido" });
     const filingCase = await openFilingCase(tx, {
       registroId: cancellation.id,
       cause: "fiscal.anulacion_retenida",
@@ -571,7 +581,10 @@ it("refuses an absent-original cancellation even with a matching accepted invoic
 });
 
 async function deliveryOf(registroId: string) {
-  const [delivery] = await suite.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, registroId));
+  const [delivery] = await suite.db
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, registroId));
   return delivery;
 }
 

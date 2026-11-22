@@ -343,7 +343,9 @@ describe("the fiscal readiness rejection reader", () => {
       await tx.execute(
         sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1161', mensaje_error = 'Importe total incorrecto' where registro_id = ${rejected}`,
       );
-      await tx.execute(sql`update verifactu_submissions set estado = 'detenido' where registro_id = ${halted}`);
+      await tx.execute(
+        sql`update verifactu_submissions set estado = 'detenido' where registro_id = ${halted}`,
+      );
       await tx.execute(
         sql`update verifactu_submissions set codigo_error = '999', mensaje_error = 'Retry later' where registro_id = ${pending}`,
       );

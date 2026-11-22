@@ -198,9 +198,9 @@ describe("new-record fingerprint refusal", () => {
       fault.mode = "none";
       await withIssuanceTransaction(suite.db, issue);
       const after = snapshot();
-      const previousRecords = before.registros_facturacion as unknown[];
-      expect(after.registros_facturacion).toHaveLength(previousRecords.length + 1);
-      expect(after.envios).toHaveLength(previousRecords.length + 1);
+      const previousRecords = before.verifactu_records as unknown[];
+      expect(after.verifactu_records).toHaveLength(previousRecords.length + 1);
+      expect(after.verifactu_submissions).toHaveLength(previousRecords.length + 1);
       const counters = await suite.db.select().from(invoiceSeries);
       expect(counters.map((row) => row.nextNumber)).toEqual(
         kind === "cancellation"

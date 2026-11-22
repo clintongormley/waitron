@@ -207,7 +207,9 @@ async function allocatedVenue() {
   expect((await suite.db.select().from(nodes)).map((row) => row.id)).toEqual([NODE]);
   expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
   expect(
-    await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
+    await suite.db
+      .select({ identity: verifactuIdentities.numeroInstalacion })
+      .from(verifactuIdentities),
   ).toEqual([{ identity: "S000042" }]);
   expect(
     (await suite.db.select().from(invoiceSeries))

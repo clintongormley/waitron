@@ -90,7 +90,9 @@ describe("latestFutureDateRefusal", () => {
     expect(acceptedState.rows).toEqual([{ estado: "aceptado_con_errores" }]);
     expect(await refusalOn(accepted.nodeId)).toBeNull();
 
-    await suite.db.execute(sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1100'`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1100'`,
+    );
 
     expect(await refusalOn(accepted.nodeId)).toBeNull();
   });

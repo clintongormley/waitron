@@ -92,9 +92,9 @@ describe("provisionVenue with a throwaway allocation", () => {
         initialAllocation: throwaway("preproduction"),
       });
 
-      expect(suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`)).toEqual([
-        { numero_instalacion: "0CNNW", node_id: result.nodeId },
-      ]);
+      expect(
+        suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
+      ).toEqual([{ numero_instalacion: "0CNNW", node_id: result.nodeId }]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: identity.taxId, environment: "preproduction" },
       ]);

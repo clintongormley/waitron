@@ -88,9 +88,9 @@ describe("the throwaway allocation seat", () => {
     it("activates a preproduction hour allocation for any taxpayer", async () => {
       const administratorId = randomUUID();
       const series = await activate(signFor(administratorId), administratorId);
-      expect(suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`)).toEqual([
-        { numero_instalacion: "0CNNW", node_id: node.nodeId },
-      ]);
+      expect(
+        suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
+      ).toEqual([{ numero_instalacion: "0CNNW", node_id: node.nodeId }]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: TAXPAYER, environment: "preproduction" },
       ]);

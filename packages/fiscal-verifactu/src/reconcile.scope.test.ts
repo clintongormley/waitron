@@ -23,7 +23,9 @@ const NOW = new Date("2026-07-21T00:01:00Z");
 
 async function snapshot() {
   return {
-    deliveries: (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
+    deliveries: (
+      await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
+    ).rows,
     acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,

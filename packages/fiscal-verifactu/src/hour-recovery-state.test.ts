@@ -183,15 +183,16 @@ it("includes higher retired names on another node under another software identif
   expect(facts.bases).toHaveLength(3);
 });
 
-it.each([{ module: "another-module" }, { action: "promote" }, { targetNodeId: TAXPAYER_A.nodeId2 }])(
-  "refuses a changed operation %j before reading fiscal state",
-  async (change) => {
-    await expect(read({ ...binding, ...change })).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "event_mismatch" },
-    });
-  },
-);
+it.each([
+  { module: "another-module" },
+  { action: "promote" },
+  { targetNodeId: TAXPAYER_A.nodeId2 },
+])("refuses a changed operation %j before reading fiscal state", async (change) => {
+  await expect(read({ ...binding, ...change })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+});
 
 it("refuses a missing taxpayer rather than manufacturing a scope", async () => {
   await expect(read()).rejects.toMatchObject({

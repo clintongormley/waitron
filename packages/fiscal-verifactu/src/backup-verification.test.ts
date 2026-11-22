@@ -324,7 +324,9 @@ it("accepts a genuinely empty zero-schema predecessor", async () => {
 it.each(["before", "after"] as const)("checks every stored hour source in %s", async (side) => {
   await capture();
   edit(side, (db) =>
-    db.exec("update verifactu_identities set numero_instalacion='0CNJR' where revocado_en is not null"),
+    db.exec(
+      "update verifactu_identities set numero_instalacion='0CNJR' where revocado_en is not null",
+    ),
   );
   expect((await verify()).status).toBe("invalid");
 });
@@ -387,7 +389,9 @@ it("rejects a malformed stored history time", async () => {
 it("keeps a stored non-hour identity unsupported rather than certifying an hourly floor", async () => {
   await capture();
   both((db) =>
-    db.exec("update verifactu_identities set numero_instalacion='S000001' where revocado_en is not null"),
+    db.exec(
+      "update verifactu_identities set numero_instalacion='S000001' where revocado_en is not null",
+    ),
   );
   expectCheck(await verify(), "entries", "unsupported");
 });

@@ -125,11 +125,11 @@ function send(value: unknown = body, enabled: RemedyKind[] | null = [KIND], runt
 
 async function snapshot() {
   return {
-    records: await suite.db
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
+    deliveries: await suite.db
       .select()
-      .from(verifactuRecords)
-      .orderBy(verifactuRecords.secuencia),
-    deliveries: await suite.db.select().from(verifactuSubmissions).orderBy(verifactuSubmissions.registroId),
+      .from(verifactuSubmissions)
+      .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
     held: await withTransaction(suite.db, heldRecords),
     acks: await pendingAcks(suite.db),
@@ -236,7 +236,10 @@ it("replays reordered simultaneous requests and later submissions without anothe
 it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado", "retenido"])(
   "refuses a %s target without changing it",
   async (estado) => {
-    await suite.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, ids[3]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, ids[3]!));
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -276,7 +279,10 @@ it.each([
   if (scenario === "wrong case")
     body.caseId = (await withTransaction(suite.db, listFilingCases))[0]!.id;
   if (scenario === "broken run")
-    await suite.db.update(verifactuSubmissions).set({ estado: "aceptado" }).where(eq(verifactuSubmissions.registroId, ids[0]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado: "aceptado" })
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
   if (scenario === "different code" || scenario === "missing code")
     await suite.db
       .update(verifactuSubmissions)
@@ -370,7 +376,10 @@ it.each(["pendiente", "enviando", "detenido"])(
   "keeps the brake behind an older %s record even with three later matching refusals",
   async (estado) => {
     const holdingCase = await refuseFourth();
-    await suite.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, ids[0]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
     body = { ...body, registroId: ids[4], caseId: holdingCase.id };
     const before = await snapshot();
     const response = await send();
@@ -411,7 +420,10 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
         now: NOW,
       });
       if (scenario === "accepted original")
-        await tx.update(verifactuSubmissions).set({ estado: "aceptado" }).where(eq(verifactuSubmissions.registroId, ids[0]!));
+        await tx
+          .update(verifactuSubmissions)
+          .set({ estado: "aceptado" })
+          .where(eq(verifactuSubmissions.registroId, ids[0]!));
       const pending = anulacionFor(node, saleId(original!.saleId), 1, 6, "preproduction");
       if (scenario === "absent-original marker") pending.input.SinRegistroPrevio = "S";
       const record = await appendToChain(tx, node.nodeId, pending);

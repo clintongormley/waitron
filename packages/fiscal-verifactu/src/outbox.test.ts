@@ -42,12 +42,16 @@ async function envioRow(registroId: string) {
 
 async function allEnvios() {
   return (
-    await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_submissions order by registro_id`)
+    await suite.db.execute<Record<string, unknown>>(
+      sql`select * from verifactu_submissions order by registro_id`,
+    )
   ).rows;
 }
 
 async function flujo() {
-  return (await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)).rows;
+  return (
+    await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)
+  ).rows;
 }
 
 describe("readOutbox", () => {

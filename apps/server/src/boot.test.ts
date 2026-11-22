@@ -2905,7 +2905,9 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       // Only the `verifactu_submissions` row keeps the directory due.
-      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(
+        sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`,
+      );
     }
   }, 60_000);
 
@@ -2950,7 +2952,9 @@ describe("startServer, against a migrated venue directory", () => {
         await server.close();
       }
     } finally {
-      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(
+        sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`,
+      );
     }
   }, 60_000);
 
@@ -3160,7 +3164,9 @@ describe("startServer, against a migrated venue directory", () => {
       closeSpy.mockRestore();
       // Only the `verifactu_submissions` row keeps the directory due. `incidents` is cleared too, so a change to how
       // a failed submission is handled cannot leave a row behind for a later test.
-      await sharedDb.execute(sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(
+        sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`,
+      );
       await sharedDb.execute(sql`delete from incidents `);
     }
   }, 60_000);

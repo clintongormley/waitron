@@ -533,7 +533,9 @@ describe("drain chain ordering", () => {
       anteriorHuella: foreign.huella,
       huella: "C".repeat(64),
     });
-    await suite.db.insert(verifactuSubmissions).values({ registroId: cancellationId, proximoIntentoEn: NOW });
+    await suite.db
+      .insert(verifactuSubmissions)
+      .values({ registroId: cancellationId, proximoIntentoEn: NOW });
 
     const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 

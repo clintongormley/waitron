@@ -45,7 +45,9 @@ export async function readModuleAllocationSeries(
       identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
     })
     .from(verifactuIdentities)
-    .where(and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   if (sif === undefined) return refuse("activation_superseded");
   const [retained] = await tx
     .select()

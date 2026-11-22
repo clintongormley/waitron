@@ -672,7 +672,8 @@ export async function recordedRecoveryRows(db: Database) {
     tenders: (await db.execute(sql`select * from tenders order by id`)).rows,
     settlements: (await db.execute(sql`select * from sale_settlements order by id`)).rows,
     records: (await db.execute(sql`select * from verifactu_records order by secuencia`)).rows,
-    submissions: (await db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
+    submissions: (await db.execute(sql`select * from verifactu_submissions order by registro_id`))
+      .rows,
   };
 }
 

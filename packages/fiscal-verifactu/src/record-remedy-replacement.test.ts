@@ -182,10 +182,7 @@ function send(value: unknown = body) {
 }
 async function snapshot() {
   return {
-    records: await suite.db
-      .select()
-      .from(verifactuRecords)
-      .orderBy(verifactuRecords.secuencia),
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     series: await suite.db.select().from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),

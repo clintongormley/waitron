@@ -114,7 +114,9 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     const sweep = createReconciliationSweep(deps);
     await sweep(START);
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`);
+      await tx.execute(
+        sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`,
+      );
       await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
@@ -130,7 +132,9 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     const sweep = createReconciliationSweep(deps);
     await sweep(START);
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`);
+      await tx.execute(
+        sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`,
+      );
       await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
@@ -173,7 +177,9 @@ describe("a scoped startup and daily reconciliation sweep", () => {
 
   it("reports unavailable certificate resolution as unknown and does not alter deliveries", async () => {
     const { deps } = await fixture();
-    const before = (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows;
+    const before = (
+      await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
+    ).rows;
     const sweep = createReconciliationSweep({
       ...deps,
       resolveClient: async () => {
@@ -186,15 +192,17 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     expect(result.periods.map(({ outcome }) => outcome)).toEqual(["unknown", "unknown"]);
     expect(result.nextDueAt).toEqual(new Date("2027-02-01T12:05:00Z"));
     expect(await acknowledgements()).toEqual([]);
-    expect((await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows).toEqual(
-      before,
-    );
+    expect(
+      (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
+    ).toEqual(before);
   });
 
   it("retries a month with a live filing claim instead of treating its checked count as a completed observation", async () => {
     const { deps, ids } = await fixture();
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update verifactu_submissions set estado = 'enviando' where registro_id = ${ids[2]}`),
+      tx.execute(
+        sql`update verifactu_submissions set estado = 'enviando' where registro_id = ${ids[2]}`,
+      ),
     );
     const sweep = createReconciliationSweep(deps);
 
@@ -296,11 +304,9 @@ it("abandons an in-flight lookup and starts no later month after stepdown", asyn
   await pending;
   expect(months).toEqual(["12"]);
   expect(await acknowledgements()).toEqual([]);
-  expect((await suite.db.execute(sql`select estado from verifactu_submissions order by rowid`)).rows).toEqual([
-    { estado: "pendiente" },
-    { estado: "pendiente" },
-    { estado: "pendiente" },
-  ]);
+  expect(
+    (await suite.db.execute(sql`select estado from verifactu_submissions order by rowid`)).rows,
+  ).toEqual([{ estado: "pendiente" }, { estado: "pendiente" }, { estado: "pendiente" }]);
 });
 
 it("looks up empty months between its oldest local period and the current month", async () => {

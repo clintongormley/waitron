@@ -4,7 +4,12 @@ import { nodes, readVenue } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedNode, seedNodesForSifContention } from "./testing/seed.js";
-import { seedTaxpayerNodeSif, seedTaxpayerWithSif, seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
+import {
+  seedTaxpayerNodeSif,
+  seedTaxpayerWithSif,
+  seedTaxpayers,
+  TAXPAYER_A,
+} from "../test/fixtures.js";
 import {
   seedIndependentChain,
   seedPendingEnvios,
@@ -24,8 +29,8 @@ it("adds fiscal nodes at the existing venue without replacing its settings", asy
 });
 
 it.each([
-  { name: "seedTenantNodeSif", seed: seedTaxpayerNodeSif },
-  { name: "seedTenants", seed: seedTaxpayers },
+  { name: "seedTaxpayerNodeSif", seed: seedTaxpayerNodeSif },
+  { name: "seedTaxpayers", seed: seedTaxpayers },
 ])("reuses an existing venue for fixed-id parents: $name", async ({ seed }) => {
   await seedVenueSettings(suite.db, {
     name: "Retained venue",

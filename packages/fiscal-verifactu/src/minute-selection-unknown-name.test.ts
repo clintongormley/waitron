@@ -68,7 +68,9 @@ const backupHistory: HourHistorySource[] = [
 const survivingWithSwitch: HourHistorySource = {
   reference: "surviving-venue/switch",
   complete: true,
-  records: [row("surviving-venue/switch/verifactu_identities/2", "activation", SPARE, UNSEEN, SWITCH)],
+  records: [
+    row("surviving-venue/switch/verifactu_identities/2", "activation", SPARE, UNSEEN, SWITCH),
+  ],
 };
 
 interface Row {
@@ -336,7 +338,13 @@ describe("refused", () => {
       reference: "surviving-venue/switch",
       complete: true,
       records: [
-        row("surviving-venue/switch/verifactu_identities/2", "activation", SPARE, SETTLED, MAIN_SETUP),
+        row(
+          "surviving-venue/switch/verifactu_identities/2",
+          "activation",
+          SPARE,
+          SETTLED,
+          MAIN_SETUP,
+        ),
       ],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({

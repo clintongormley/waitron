@@ -652,7 +652,9 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
           offsetMinutes: 60,
         },
       });
-      await tx.insert(verifactuSubmissions).values({ registroId: appended.id, estado, codigoError });
+      await tx
+        .insert(verifactuSubmissions)
+        .values({ registroId: appended.id, estado, codigoError });
     });
   }
 
@@ -740,7 +742,10 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
       cuotaTotal: originalRow!.cuotaTotal,
       importeTotal: originalRow!.importeTotal,
     });
-    const [sidecar] = await suite.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, row.id));
+    const [sidecar] = await suite.db
+      .select()
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, row.id));
     expect(sidecar?.estado).toBe("pendiente");
 
     const record = fromRegistroRow(row) as RegistroAlta;

@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import names from "./fiscal-rename-map.json" with { type: "json" };
 
@@ -21,19 +20,23 @@ function pattern(words) {
 const mappedText = { ...names.sql, ...names.strings, ...names.files, ...otherIdentifiers };
 const textPattern = pattern(mappedText);
 
-export function renameDocument(text, file) {
+function textRenamer(file, source) {
+  const replace = (text) => text.replace(textPattern, (name) => mappedText[name]);
   const keep = names.keep.filter((entry) => entry.file === file).map((entry) => entry.text);
+  if (keep.length === 0) return replace;
   for (const original of keep) {
-    if (!text.includes(original)) throw Error(`Missing keep text in ${file}: ${original}`);
+    if (!source.includes(original)) throw Error(`Missing keep text in ${file}: ${original}`);
   }
-  const pieces = keep.length
-    ? text.split(new RegExp(`(${keep.map(RegExp.escape).join("|")})`))
-    : [text];
-  return pieces
-    .map((piece) =>
-      keep.includes(piece) ? piece : piece.replace(textPattern, (name) => mappedText[name]),
-    )
-    .join("");
+  const split = new RegExp(`(${keep.map(RegExp.escape).join("|")})`);
+  return (text) =>
+    text
+      .split(split)
+      .map((piece) => (keep.includes(piece) ? piece : replace(piece)))
+      .join("");
+}
+
+export function renameDocument(text, file) {
+  return textRenamer(file, text)(text);
 }
 
 function modulePath(file, specifier) {
@@ -95,16 +98,12 @@ function renameEnvios(node, hasBinding) {
 export function renameSource(file, text) {
   const parsed = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const hasBinding = hasEnviosBinding(parsed);
+  const renameText = textRenamer(file, text);
   const edits = new Map();
   const edit = (start, end, updated) => {
     if (updated !== text.slice(start, end)) edits.set(start, { start, end, updated });
   };
-  const renameTextAt = (start, end) =>
-    edit(
-      start,
-      end,
-      text.slice(start, end).replace(textPattern, (name) => mappedText[name]),
-    );
+  const renameTextAt = (start, end) => edit(start, end, renameText(text.slice(start, end)));
 
   function visit(node) {
     const start = node.getStart(parsed);
@@ -226,6 +225,4 @@ export function main(args, root = process.cwd(), log = console.log) {
   return Number(check && changes.length > 0);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exitCode = main(process.argv.slice(2));
-}
+if (import.meta.main) process.exitCode = main(process.argv.slice(2));

@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { invoiceSeries, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
-import { cadenas, verifactuSubmissions, verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
+import {
+  cadenas,
+  verifactuSubmissions,
+  verifactuIdentities,
+  verifactuRecords,
+} from "@waitron/fiscal-verifactu";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 

@@ -182,9 +182,7 @@ it("does not requeue a version superseded while the consulta request is in fligh
     submit: (...args) => client.submit(...args),
     consultar: async (...args) => {
       latest = await version(3, "pendiente", first);
-      const raw = await suite.db.execute(
-        sql`select * from verifactu_records where id = ${latest}`,
-      );
+      const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${latest}`);
       const record = fromRegistroRow(decodeRegistroRow(raw.rows[0]!)) as RegistroAlta;
       const response = await client.submit(
         { ObligadoEmision: { NIF: TEST_NIF, NombreRazon: "Waitron SL" } },

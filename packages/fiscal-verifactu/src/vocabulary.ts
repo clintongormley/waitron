@@ -71,7 +71,7 @@ export const FISCAL_VOCABULARY: readonly string[] = [
   "sistema",
   // submission vocabulary
   "envio",
-  "verifactu_submissions",
+  "envios",
   "incidencia",
   "incidencias",
   "suministro",

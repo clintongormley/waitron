@@ -38,7 +38,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 /** A second database, for the one case whose subject is an EMPTY one. */
 const idle = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  // Wrapped: `seedTenantWithSif` resolves to the seeded till, and `setup` returns `Promise<void>`.
+  // Wrapped: `seedTaxpayerWithSif` resolves to the seeded till, and `setup` returns `Promise<void>`.
   setup: async (db) => {
     await seedTaxpayerWithSif(db);
   },
@@ -160,7 +160,7 @@ describe("drain resolves a client only when it has work", () => {
 
 /**
  * The due-work gate's two thresholds, each probed on BOTH sides, through `drain`'s
- * `tenantsWithWork` since `workIsDue` is not exported.
+ * `passesWithWork` since `workIsDue` is not exported.
  *
  * Each case probes "not due" first: the due half claims and rewrites the row.
  */

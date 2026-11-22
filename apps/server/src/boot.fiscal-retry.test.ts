@@ -299,7 +299,9 @@ describe("boot's Retry now wiring", () => {
             nif: "B12345678",
           },
         });
-        await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${future}`);
+        await suite.db.execute(
+          sql`update verifactu_submissions set proximo_intento_en = ${future}`,
+        );
       },
     });
     const snapshot = async () => {

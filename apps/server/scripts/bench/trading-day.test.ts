@@ -376,9 +376,12 @@ describe("tradeDay", () => {
       );
       await tradeDay(reopened, "2025-11-04", 2);
       expect(countRows(reopened).sales).toBe(4);
-      expect(rows(reopened, sql`select estado, count(*) as n from verifactu_submissions group by estado`)).toEqual(
-        [{ estado: "aceptado", n: 4 }],
-      );
+      expect(
+        rows(
+          reopened,
+          sql`select estado, count(*) as n from verifactu_submissions group by estado`,
+        ),
+      ).toEqual([{ estado: "aceptado", n: 4 }]);
     },
     CASE_TIMEOUT_MS,
   );

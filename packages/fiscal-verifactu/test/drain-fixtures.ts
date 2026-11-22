@@ -231,7 +231,7 @@ export async function insertPendingAlta(
 }
 
 /**
- * Seeds a till device + live SIF identity (`seedTenantWithSif`), then `opts.count` pending altas, each
+ * Seeds a till device + live SIF identity (`seedTaxpayerWithSif`), then `opts.count` pending altas, each
  * with its `pendiente` `verifactu_submissions` row due at the fake AEAT's `serverNow`.
  */
 export async function seedPendingEnvios(

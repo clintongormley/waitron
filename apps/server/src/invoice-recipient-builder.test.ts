@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
-import { cadenas, verifactuSubmissions, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import {
+  cadenas,
+  verifactuSubmissions,
+  verifactuRecords,
+  VerifactuBackend,
+} from "@waitron/fiscal-verifactu";
 import {
   decodeRegistroRow,
   fromRegistroRow,

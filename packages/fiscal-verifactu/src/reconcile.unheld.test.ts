@@ -177,7 +177,9 @@ it.each(["taxpayer", "retired-series", "retired-sif", "other-node", "known-numbe
     if (change === "retired-series")
       await suite.db.execute(sql`update invoice_series set retired_at = ${NOW.toISOString()}`);
     if (change === "retired-sif")
-      await suite.db.execute(sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`);
+      await suite.db.execute(
+        sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`,
+      );
     if (change === "other-node") f.seeded.nodeId = "other-node" as typeof f.seeded.nodeId;
     if (change === "known-number") f.returned.registros = f.real.registros;
     await run(f);
@@ -223,7 +225,9 @@ it.each(["series", "identity"] as const)(
     expect(
       await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
     ).toEqual([]);
-    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual(
+      [],
+    );
   },
 );
 it("keeps a sale committed during the lookup from becoming missing-history evidence", async () => {
@@ -407,7 +411,9 @@ it.each(["missing", "different"] as const)(
     await expect(run(f, f.client, { year: "2026", month: "08" })).rejects.toThrow(
       "reconciliation requires the scoped venue taxpayer",
     );
-    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual(
+      [],
+    );
   },
 );
 

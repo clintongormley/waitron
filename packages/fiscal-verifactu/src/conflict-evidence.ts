@@ -103,7 +103,10 @@ export async function readActiveConflicts(
     });
   }
   const external = await tx
-    .select({ lookup: verifactuSeriesConflicts, installationIdentity: verifactuIdentities.numeroInstalacion })
+    .select({
+      lookup: verifactuSeriesConflicts,
+      installationIdentity: verifactuIdentities.numeroInstalacion,
+    })
     .from(verifactuSeriesConflicts)
     .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuSeriesConflicts.sifId))
     .innerJoin(

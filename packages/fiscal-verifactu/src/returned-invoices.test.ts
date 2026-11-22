@@ -110,9 +110,10 @@ it("marks an imported prefix even when a later record is refused", async () => {
   batch.records[2]!.num_serie_factura = batch.records[0]!.num_serie_factura!;
   expect(await receive(node, batch)).toEqual({ refusal: "fiscal.return_record_clash" });
   expect(markers()).toEqual([{ record_id: prefix, received_at: receivedAt.toISOString() }]);
-  expect(
-    receiver.db.all(sql`select secuencia from verifactu_records order by secuencia`),
-  ).toEqual([{ secuencia: 1 }, { secuencia: 2 }]);
+  expect(receiver.db.all(sql`select secuencia from verifactu_records order by secuencia`)).toEqual([
+    { secuencia: 1 },
+    { secuencia: 2 },
+  ]);
 });
 
 it("marks originals in an incomplete payment batch and rolls back with the caller", async () => {

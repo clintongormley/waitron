@@ -310,7 +310,8 @@ async function recordLaterNameInCopy(minute: number) {
 }
 const minuteOf = (identity: string) => EPOCH_MS + decodeMinuteIdentity(identity) * MINUTE_MS;
 const thisMinute = () => Math.floor(Date.now() / 60_000) * 60_000;
-const firstName = async () => (await suite.db.select().from(verifactuIdentities))[0]!.numeroInstalacion;
+const firstName = async () =>
+  (await suite.db.select().from(verifactuIdentities))[0]!.numeroInstalacion;
 
 it("a later name M1 recorded in the copy is not reused: the spare waits past its minute", async () => {
   const s = spareService();

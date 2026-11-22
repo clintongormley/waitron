@@ -12,7 +12,11 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { deviceOrigin, seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
-import { fiscalAllocations, verifactuIdentities, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import {
+  fiscalAllocations,
+  verifactuIdentities,
+  VerifactuBackend,
+} from "@waitron/fiscal-verifactu";
 import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import * as internetClock from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";

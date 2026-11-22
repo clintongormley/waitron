@@ -32,7 +32,7 @@ function nextSecuencia(): number {
 
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
-/** A fresh node under TENANT_A's seeded location. */
+/** A fresh node under TAXPAYER_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
   return seedNode(suite.db);
 }

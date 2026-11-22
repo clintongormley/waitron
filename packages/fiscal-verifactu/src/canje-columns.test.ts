@@ -117,7 +117,7 @@ describe("verifactu_records_facturas_sustituidas_f3_ck — a substitution block 
       insertRegistro(suite.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
+    expect(engineErrorMessage(error)).toMatch(/verifactu_records_facturas_sustituidas_f3_ck/);
   });
 
   it("rejects a facturas_sustituidas sitting on a NULL tipo_factura", async () => {
@@ -127,7 +127,7 @@ describe("verifactu_records_facturas_sustituidas_f3_ck — a substitution block 
       insertRegistro(suite.db, { tipoFactura: null, facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
+    expect(engineErrorMessage(error)).toMatch(/verifactu_records_facturas_sustituidas_f3_ck/);
   });
 });
 

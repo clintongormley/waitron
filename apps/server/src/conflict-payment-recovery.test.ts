@@ -158,7 +158,9 @@ it("finalises an already captured bill once after the actual administrator switc
   venue.card.collect = async (input) => {
     const result = await collect(input);
     const incident = await withTransaction(suite.db, async (tx) => {
-      await tx.run(sql`update verifactu_submissions set estado = 'rechazado' where registro_id = ${original.id}`);
+      await tx.run(
+        sql`update verifactu_submissions set estado = 'rechazado' where registro_id = ${original.id}`,
+      );
       return openFilingCase(tx, {
         registroId: original.id,
         cause: "fiscal.huella_divergente",

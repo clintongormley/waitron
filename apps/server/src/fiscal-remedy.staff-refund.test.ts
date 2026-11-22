@@ -191,7 +191,10 @@ async function rejectOriginal(code = 1161) {
 async function fiscalFacts() {
   return withTransaction(store.db, async (tx) => ({
     records: await tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
-    deliveries: await tx.select().from(verifactuSubmissions).orderBy(verifactuSubmissions.registroId),
+    deliveries: await tx
+      .select()
+      .from(verifactuSubmissions)
+      .orderBy(verifactuSubmissions.registroId),
     cases: await listFilingCases(tx),
     head: await readChainHead(tx, venue.cfg.nodeId),
   }));
@@ -217,7 +220,10 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
   expect((await drain(deps, NOW)).recordsAccepted).toBe(0);
   expect(aeat.stored()).toEqual([]);
   expect(submissions).not.toHaveBeenCalled();
-  const [held] = await store.db.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, cancellationId));
+  const [held] = await store.db
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, cancellationId));
   expect(held).toMatchObject({ estado: "retenido", intentos: 1, enviadoEn: NOW });
   const cases = await withTransaction(store.db, (tx) => listFilingCases(tx));
   const heldCase = cases.find((row) => row.registroId === cancellationId)!;
@@ -320,7 +326,10 @@ it.each(["pendiente", "enviando", "detenido"])(
   async (estado) => {
     const originalCase = await rejectOriginal();
     const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
-    await store.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, originalId));
+    await store.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, originalId));
     const before = await fiscalFacts();
     for (const kind of ["record-correction", "absent-original-cancellation"] as const) {
       const refused = await remedy(
@@ -465,7 +474,10 @@ it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado
   async (estado) => {
     const originalCase = await rejectOriginal();
     const { cancellationId, facts } = await cancelAndRefund();
-    await store.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, cancellationId));
+    await store.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, cancellationId));
     const before = await fiscalFacts();
     const response = await remedy(
       {

@@ -73,6 +73,10 @@
     {
       "file": "docs/backlog/architecture.md",
       "text": "including `registros` and `envios`"
+    },
+    {
+      "file": "packages/fiscal-verifactu/src/vocabulary.ts",
+      "text": "\"envios\""
     }
   ]
 }

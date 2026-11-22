@@ -447,7 +447,10 @@ it("promotes a retained dormant reservation once, without resetting counters on 
   );
   const reservation = await suite.db.select().from(fiscalReservations);
   expect(
-    await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.nodeId, target.nodeId)),
+    await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, target.nodeId)),
   ).toEqual([]);
   expect(
     await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, target.nodeId)),

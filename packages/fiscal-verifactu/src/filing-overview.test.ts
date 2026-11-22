@@ -40,7 +40,10 @@ async function setEnvio(
   registroId: string,
   values: Partial<typeof verifactuSubmissions.$inferInsert>,
 ): Promise<void> {
-  await suite.db.update(verifactuSubmissions).set(values).where(eq(verifactuSubmissions.registroId, registroId));
+  await suite.db
+    .update(verifactuSubmissions)
+    .set(values)
+    .where(eq(verifactuSubmissions.registroId, registroId));
 }
 
 async function openCase(

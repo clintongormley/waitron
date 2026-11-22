@@ -159,7 +159,9 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   // An envío takes `proximo_intento_en` from the wall clock; pin it so the drain is deterministic.
   const pinDue = () =>
     withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update verifactu_submissions set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
+      await tx.execute(
+        sql`update verifactu_submissions set proximo_intento_en = ${DRAIN_AT.toISOString()}`,
+      );
     });
   await pinDue();
   await drain(drainDeps(resolveClient), DRAIN_AT);

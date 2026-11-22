@@ -1484,7 +1484,9 @@ describe("File now and Close", () => {
     const { refunds } = await cash(correction.id, "15.00");
     const [record] = (await original(saleId)).records as { id: string }[];
     const filingState = (to: string) =>
-      venue.db.run(sql`update verifactu_submissions set estado = ${to} where registro_id = ${record!.id}`);
+      venue.db.run(
+        sql`update verifactu_submissions set estado = ${to} where registro_id = ${record!.id}`,
+      );
     const [{ state }] = venue.db.all<{ state: string }>(
       sql`select estado as state from verifactu_submissions where registro_id = ${record!.id}`,
     ) as [{ state: string }];

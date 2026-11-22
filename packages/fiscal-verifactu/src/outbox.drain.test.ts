@@ -59,7 +59,9 @@ async function envioRow(registroId: string) {
 }
 
 async function flujo() {
-  return (await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)).rows;
+  return (
+    await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)
+  ).rows;
 }
 
 /** Three records, two failed sends: each record backs off an hour (to 01:02:01) while AEAT's

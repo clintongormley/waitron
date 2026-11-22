@@ -350,9 +350,7 @@ describe("a counter sale", () => {
       expect(written()).toEqual(before);
       expect(venue.db.all(sql`select * from working_orders where id = ${id}`)).toEqual(beforeOrder);
       expect(venue.db.all(sql`select * from invoice_series order by id`)).toEqual(beforeSeries);
-      expect(venue.db.all(sql`select * from verifactu_records order by id`)).toEqual(
-        beforeFiscal,
-      );
+      expect(venue.db.all(sql`select * from verifactu_records order by id`)).toEqual(beforeFiscal);
       expect(venue.db.all(sql`select * from print_jobs order by id`)).toEqual(beforeJobs);
     },
   );

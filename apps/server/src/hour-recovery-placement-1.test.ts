@@ -228,9 +228,10 @@ describe("selected-hour admission before archive placement", () => {
         lines: (await db.execute(sql`select * from sale_lines order by sale_id, line_no`)).rows,
         tenders: (await db.execute(sql`select * from tenders order by id`)).rows,
         settlements: (await db.execute(sql`select * from sale_settlements order by id`)).rows,
-        records: (await db.execute(sql`select * from verifactu_records order by secuencia`))
-          .rows,
-        submissions: (await db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
+        records: (await db.execute(sql`select * from verifactu_records order by secuencia`)).rows,
+        submissions: (
+          await db.execute(sql`select * from verifactu_submissions order by registro_id`)
+        ).rows,
       });
       const before = await snapshot(suite.db);
       expect(before.records.map((row) => row.num_serie_factura)).toEqual([

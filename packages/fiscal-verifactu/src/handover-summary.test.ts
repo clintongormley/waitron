@@ -345,7 +345,9 @@ describe("summariseChains", () => {
     const [row] = suite.db.all<{ sql: string }>(
       sql`select sql from sqlite_schema where type = 'table' and name = 'verifactu_submissions'`,
     );
-    const vocabulary = /"envios_estado_ck" CHECK\(.*? in \(([^)]+)\)/s.exec(row!.sql);
+    const vocabulary = /"verifactu_submissions_estado_ck" CHECK\(.*? in \(([^)]+)\)/s.exec(
+      row!.sql,
+    );
     expect(vocabulary).not.toBeNull();
     const states = [...vocabulary![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
     expect(states.length).toBeGreaterThan(0);

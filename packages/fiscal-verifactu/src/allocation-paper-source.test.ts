@@ -154,7 +154,9 @@ it("activates only the complete signed allocation confirmed by the separate file
       { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
-      await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
+      await suite.db
+        .select({ identity: verifactuIdentities.numeroInstalacion })
+        .from(verifactuIdentities),
     ).toEqual([{ identity: "P000042" }]);
     expect(
       await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),

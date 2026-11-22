@@ -208,7 +208,8 @@ it.each([false, true])(
     });
     await checkFixture();
     if (retained)
-      await suite.db.execute(sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en)
+      await suite.db
+        .execute(sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en)
     select id, case when tipo_registro = 'alta' then 'rechazado' else 'retenido' end,
       '2026-07-20T17:21:00.000Z' from verifactu_records where node_id = ${source.nodeId}`);
 
@@ -561,7 +562,9 @@ it("receives original bytes and delivery evidence once, and advances only the so
     returned.records,
   );
   expect(receiver.db.all<ReturnRow>(sql`select * from cadenas`)).toEqual(returned.heads);
-  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual(returned.deliveries);
+  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual(
+    returned.deliveries,
+  );
   await receiver.db.execute(
     sql`update verifactu_submissions set csv = 'receiver-csv' where registro_id = ${source.recordId}`,
   );
@@ -994,9 +997,9 @@ it("rolls back every imported fact when an original's hash does not verify", asy
     ),
   ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
   expect(receiver.db.all<{ n: number }>(sql`select count(*) n from sales`)).toEqual([{ n: 0 }]);
-  expect(receiver.db.all<{ n: number }>(sql`select count(*) n from verifactu_records`)).toEqual(
-    [{ n: 0 }],
-  );
+  expect(receiver.db.all<{ n: number }>(sql`select count(*) n from verifactu_records`)).toEqual([
+    { n: 0 },
+  ]);
   expect(receiver.db.all<{ secuencia: number }>(sql`select secuencia from cadenas`)).toEqual([
     { secuencia: 0 },
   ]);
@@ -1030,7 +1033,8 @@ it.each([
   ["aceptado_con_errores", "fiscal.aceptado_con_errores"],
 ])("recreates the case for a newly returned %s record", async (state, cause) => {
   const source = await original("Source", 1, copyBase);
-  await suite.db.execute(sql`insert into verifactu_submissions (registro_id, estado, codigo_error, mensaje_error,
+  await suite.db
+    .execute(sql`insert into verifactu_submissions (registro_id, estado, codigo_error, mensaje_error,
     proximo_intento_en) values (${source.recordId}, ${state}, '1161', 'Wrong detail',
       '2026-07-20T17:21:00.000Z')`);
   const returned = await withTransaction(suite.db, (tx) =>

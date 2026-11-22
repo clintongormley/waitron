@@ -1471,8 +1471,7 @@ it("the readiness option refuses an unowned command before opening the venue", a
 
 it("the production command records a readable certificate against the committed setup node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
-  const { verifactuCertificates } =
-    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
   const candidate = makeAuthority().issue();
   const certificate = {
     pfxBase64: candidate.pfx.toString("base64"),

@@ -182,10 +182,7 @@ async function apply(value = input): Promise<Result> {
 }
 async function snapshot() {
   return {
-    records: await suite.db
-      .select()
-      .from(verifactuRecords)
-      .orderBy(verifactuRecords.secuencia),
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
     tenders: await suite.db.select().from(tenders),
@@ -490,7 +487,9 @@ it("refuses a missing case", async () => {
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses a missing delivery", async () => {
-  await suite.db.delete(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, input.request.registroId));
+  await suite.db
+    .delete(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, input.request.registroId));
   await refuses("fiscal.remedy_invalid");
 });
 it.each([null, "3000", "different-code"])(

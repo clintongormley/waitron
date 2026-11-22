@@ -1464,7 +1464,9 @@ describe("drain — resolving a case releases nothing", () => {
 
     expect(wire.sent).toEqual([]);
     expect((await envioOf(cancellation)).estado).toBe("retenido");
-    const after = await suite.db.execute(sql`select * from verifactu_submissions where registro_id = ${original}`);
+    const after = await suite.db.execute(
+      sql`select * from verifactu_submissions where registro_id = ${original}`,
+    );
     expect(after.rows).toEqual(before.rows);
     expect((await cases()).map((c) => [c.registroId, c.status])).toEqual([
       [original, "resolved"],

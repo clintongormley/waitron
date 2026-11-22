@@ -227,12 +227,12 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
         authenticated(token, { ...context, reauthentication: null }),
       ),
     ).resolves.toMatchObject({ activationEventId: "takeover-1", series: candidate.series });
-    expect((await rows("verifactu_identities")).find((row) => row.node_id === target.nodeId)).toMatchObject(
-      {
-        numero_instalacion: "P000042",
-        revocado_en: null,
-      },
-    );
+    expect(
+      (await rows("verifactu_identities")).find((row) => row.node_id === target.nodeId),
+    ).toMatchObject({
+      numero_instalacion: "P000042",
+      revocado_en: null,
+    });
   });
 
   it.each(["plain", "cloned", "operator", "join", "reservation"])(
@@ -280,7 +280,10 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
       revocado_en: null,
     });
     expect(
-      await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.nodeId, primary.nodeId)),
+      await suite.db
+        .select()
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.nodeId, primary.nodeId)),
     ).toEqual(primarySif);
     expect(
       await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, primary.nodeId)),

@@ -146,7 +146,7 @@ describe("future order customer fallback", () => {
     const before = frozen();
     expect(before.sales).toHaveLength(1);
     expect(before.sale_lines).toHaveLength(1);
-    expect(before.registros_facturacion).toHaveLength(1);
+    expect(before.verifactu_records).toHaveLength(1);
     expect(before.menu_versions!.length).toBeGreaterThan(0);
     const receiptBefore = await withTransaction(venue.db, (tx) =>
       readSettledTicket(venue.backend, tx, venue.cfg, id),

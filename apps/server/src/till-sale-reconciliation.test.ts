@@ -113,8 +113,11 @@ describe("cash sales while reconciliation is unknown", () => {
             .rows,
         ).toEqual([{ n: 2, paid: 7000 }]);
         expect(
-          (await suite.db.execute(sql`select estado, count(*) as n from verifactu_submissions group by estado`))
-            .rows,
+          (
+            await suite.db.execute(
+              sql`select estado, count(*) as n from verifactu_submissions group by estado`,
+            )
+          ).rows,
         ).toEqual([{ estado: "pendiente", n: 2 }]);
       } finally {
         held.resolve();

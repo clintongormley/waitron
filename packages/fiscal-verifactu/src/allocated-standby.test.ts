@@ -189,7 +189,10 @@ it("establishes only the signed dormant reservation and retains all three purpos
     bases,
   });
   expect(
-    await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.nodeId, standby.nodeId)),
+    await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, standby.nodeId)),
   ).toEqual([]);
   expect(
     await suite.db

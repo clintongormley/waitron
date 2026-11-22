@@ -136,8 +136,7 @@ it("installs the staged named verifier after exact fiscal commit and before trad
 
 it("browser setup records a readable certificate against its committed node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
-  const { verifactuCertificates } =
-    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
   const candidate = makeAuthority().issue();
   const f = await fixture({
     pfxBase64: candidate.pfx.toString("base64"),

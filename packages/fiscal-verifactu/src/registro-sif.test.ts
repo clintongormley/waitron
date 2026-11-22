@@ -80,7 +80,9 @@ describe("registerSif", () => {
   });
 
   it("permits the same supplied identity under a different taxpayer", async () => {
-    await withTransaction(db, (tx) => registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }));
+    await withTransaction(db, (tx) =>
+      registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
+    );
     const other = await withTransaction(db, (tx) =>
       registerSif(tx, {
         nif: "12345678Z",
@@ -113,7 +115,9 @@ describe("registerSif", () => {
     const before = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );
-    await withTransaction(db, (tx) => registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }));
+    await withTransaction(db, (tx) =>
+      registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
+    );
     const rows = await db.execute<{
       id: string;
       numero_instalacion: string;

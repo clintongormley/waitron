@@ -157,8 +157,6 @@ it("the sale fixture keeps the venue issue date when the host is on the previous
       .from(sales),
   ).toEqual([{ issuedAt: "2026-11-01T23:30:00.000Z", offsetMinutes: 60 }]);
   expect(
-    await suite.db
-      .select({ date: verifactuRecords.fechaExpedicionFactura })
-      .from(verifactuRecords),
+    await suite.db.select({ date: verifactuRecords.fechaExpedicionFactura }).from(verifactuRecords),
   ).toEqual([{ date: "2026-11-02" }]);
 });

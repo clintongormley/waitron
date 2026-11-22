@@ -3009,6 +3009,8 @@ to green across eight files and left three red that were the bug. When a fixture
 something an authority will judge, run the real check over it. Pointer:
 `packages/fiscal-verifactu/src/chain.record-validation.test.ts`.
 
+**2026-11-22.** A1308 fiscal 1 renamed the fiscal records table in this example to `verifactu_records`.
+
 ## `toMatchObject` checks only the keys you list.
 
 A key you never list is never checked at all; `toEqual` is what put `memberOf` under a matcher for

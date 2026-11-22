@@ -107,7 +107,11 @@ async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
   const rows = await db
-    .select({ estado: verifactuSubmissions.estado, intentos: verifactuSubmissions.intentos, incidencia: verifactuSubmissions.incidencia })
+    .select({
+      estado: verifactuSubmissions.estado,
+      intentos: verifactuSubmissions.intentos,
+      incidencia: verifactuSubmissions.incidencia,
+    })
     .from(verifactuSubmissions)
     .where(eq(verifactuSubmissions.registroId, registroId));
   return rows[0]!;
@@ -159,9 +163,7 @@ describe("promoted primary awaiting the fiscal certificate", () => {
     expect(awaitingCert.current).toBe(true);
     expect(lines.filter((line) => line.includes("fiscal.awaiting_certificate"))).toHaveLength(1);
     expect(
-      lines.some(
-        (line) => line.includes("drain.skipped") && line.includes("credentials.missing"),
-      ),
+      lines.some((line) => line.includes("drain.skipped") && line.includes("credentials.missing")),
     ).toBe(true);
 
     expect(await readEnvio(registroId)).toEqual({

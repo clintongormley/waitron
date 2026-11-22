@@ -638,7 +638,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
   it("prints Spanish fixed words on a Catalan sale, with its lines, totals, QR and legend, marked as a copy", async () => {
     const { v, sale, original } = await catalanSale();
     const before = saleTables(suite.db);
-    expect(before.registros_facturacion).toHaveLength(1);
+    expect(before.verifactu_records).toHaveLength(1);
     expect(before.drawer_opens).toHaveLength(1);
 
     const answer = await reprint(v, sale.id, { language: "es-ES" });

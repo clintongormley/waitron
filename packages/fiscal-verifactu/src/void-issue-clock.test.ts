@@ -62,10 +62,9 @@ const annul = (id: SaleId) =>
   );
 function snapshot() {
   return Object.fromEntries(
-    ["sales", "invoice_series", "verifactu_records", "cadenas", "verifactu_submissions"].map((name) => [
-      name,
-      suite.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
-    ]),
+    ["sales", "invoice_series", "verifactu_records", "cadenas", "verifactu_submissions"].map(
+      (name) => [name, suite.db.all(sql`select * from ${sql.identifier(name)} order by rowid`)],
+    ),
   );
 }
 function records(id: string) {

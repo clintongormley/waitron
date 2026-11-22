@@ -48,7 +48,9 @@ async function states(ids: string[]) {
 describe("drain after the clock steps back — a record's retry time", () => {
   it("files a chain's records together when their retry times lie further ahead than the longest retry wait", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 
@@ -71,7 +73,9 @@ describe("drain after the clock steps back — a record's retry time", () => {
 
   it("waits for a retry time that lies exactly the longest retry wait ahead", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${ahead(BACKOFF_MAX_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(BACKOFF_MAX_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 
@@ -82,7 +86,9 @@ describe("drain after the clock steps back — a record's retry time", () => {
 
   it("reports the skip retry, not the stored time, for a due record another environment's guard refuses", async () => {
     await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
-    await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 

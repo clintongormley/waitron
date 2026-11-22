@@ -137,7 +137,9 @@ describe("acks migration", () => {
 describe("verifactu_submissions.reconciled_resubmit_at migration", () => {
   it("adds verifactu_submissions.reconciled_resubmit_at (nullable)", async () => {
     const db = suite.db;
-    expect(await nullabilityOf(db, "verifactu_submissions")).toMatchObject({ reconciled_resubmit_at: "YES" });
+    expect(await nullabilityOf(db, "verifactu_submissions")).toMatchObject({
+      reconciled_resubmit_at: "YES",
+    });
   });
 });
 

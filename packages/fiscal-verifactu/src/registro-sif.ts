@@ -122,7 +122,9 @@ export async function registerSif(
   await tx
     .update(verifactuIdentities)
     .set({ revocadoEn: now() })
-    .where(and(eq(verifactuIdentities.nodeId, params.nodeId), isNull(verifactuIdentities.revocadoEn)));
+    .where(
+      and(eq(verifactuIdentities.nodeId, params.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
 
   const numeroInstalacion = params.numeroInstalacion;
 

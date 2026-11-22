@@ -3675,9 +3675,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       await expectInvoicedOnDevice(billId, amount);
       const [sale] = await saleOf(billId);
       expect(
-        suite.db.all(
-          sql`select tipo_factura from verifactu_records where sale_id = ${sale!.id}`,
-        ),
+        suite.db.all(sql`select tipo_factura from verifactu_records where sale_id = ${sale!.id}`),
       ).toEqual([{ tipo_factura: "F1" }]);
       expect(sale).toMatchObject({
         taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",

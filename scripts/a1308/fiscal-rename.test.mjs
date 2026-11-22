@@ -9,13 +9,13 @@ describe("VeriFactu name map", () => {
   it("renames exact SQL names in comments, strings and interpolated templates", () => {
     const before = [
       "// One envios row per registros_facturacion row.",
-      'const table = "registros_facturacion";',
+      'const table = "registros_facturacion"; // registros_facturacion table',
       "const query = sql`select * from envios where id = ${id} and registros_facturacion.id = ${id}`;",
       'const check = "registros_facturacion_source_ck registros_identidad_uq registros_identidad_uq_extra";',
     ].join("\n");
     const after = [
       "// One verifactu_submissions row per verifactu_records row.",
-      'const table = "verifactu_records";',
+      'const table = "verifactu_records"; // verifactu_records table',
       "const query = sql`select * from verifactu_submissions where id = ${id} and verifactu_records.id = ${id}`;",
       'const check = "verifactu_records_source_ck verifactu_records_identidad_uq registros_identidad_uq_extra";',
     ].join("\n");
@@ -73,8 +73,18 @@ describe("VeriFactu name map", () => {
     ],
     [
       "apps/server/src/test.ts",
+      'import { envios } from "@waitron/fiscal-verifactu";',
+      'import { verifactuSubmissions } from "@waitron/fiscal-verifactu";',
+    ],
+    [
+      "apps/server/src/test.ts",
       'import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";',
       'import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";',
+    ],
+    [
+      "packages/fiscal-verifactu/src/testing/sample.ts",
+      'import { registroSif } from "../schema/sif.js";',
+      'import { verifactuIdentities } from "../schema/verifactu-identities.js";',
     ],
     [
       "packages/fiscal-verifactu/src/schema/index.ts",
@@ -88,11 +98,24 @@ describe("VeriFactu name map", () => {
     ],
     [
       "packages/fiscal-verifactu/src/query.ts",
+      'await import("./schema/envio-flujo.js");',
+      'await import("./schema/verifactu-sending-state.js");',
+    ],
+    [
+      "packages/fiscal-verifactu/src/query.ts",
       'import { lookup as envios } from "./other.js"; select(envios);',
       'import { lookup as envios } from "./other.js"; select(envios);',
     ],
   ])("rewrites table exports and paths in %s", (path, before, after) => {
     expect(renameSource(path, before)).toBe(after);
+  });
+
+  it("keeps envios in the module's Spanish vocabulary", () => {
+    const path = "packages/fiscal-verifactu/src/vocabulary.ts";
+    const before = 'const vocabulary = ["envios"]; // See registros_facturacion.';
+    const after = 'const vocabulary = ["envios"]; // See verifactu_records.';
+    expect(renameSource(path, before)).toBe(after);
+    expect(() => renameSource(path, 'const vocabulary = ["envio"];')).toThrow(/keep text/);
   });
 
   it("recognizes the table name in a document", () => {
@@ -113,7 +136,12 @@ describe("VeriFactu name map", () => {
     const before = {
       owningSet: { "table envios": "fiscal-verifactu" },
       schema: {
-        tables: [{ name: "envios", columns: [{ name: "registro_id" }] }],
+        tables: [
+          {
+            name: "envios",
+            columns: [{ name: "registro_id", primaryKeyPosition: 1, defaultValue: null }],
+          },
+        ],
         triggers: [
           {
             name: "registros_facturacion_append_only_update",
@@ -125,7 +153,12 @@ describe("VeriFactu name map", () => {
     const after = {
       owningSet: { "table verifactu_submissions": "fiscal-verifactu" },
       schema: {
-        tables: [{ name: "verifactu_submissions", columns: [{ name: "registro_id" }] }],
+        tables: [
+          {
+            name: "verifactu_submissions",
+            columns: [{ name: "registro_id", primaryKeyPosition: 1, defaultValue: null }],
+          },
+        ],
         triggers: [
           {
             name: "verifactu_records_append_only_update",
@@ -155,7 +188,7 @@ describe("fiscal rename command", () => {
       for (const path of [baseline, source, backlog]) {
         mkdirSync(join(scratch, dirname(path)), { recursive: true });
       }
-      copyFileSync(new URL("../../" + baseline, import.meta.url), join(scratch, baseline));
+      copyFileSync(join(import.meta.dirname, "../..", baseline), join(scratch, baseline));
       const old = 'export const envios = table("envios", fields);';
       writeFileSync(join(scratch, source), old);
       writeFileSync(join(scratch, backlog), "including `registros` and `envios`");
@@ -164,6 +197,13 @@ describe("fiscal rename command", () => {
       const log = (line) => output.push(line);
       expect(main(["--check"], scratch, log)).toBe(1);
       expect(readFileSync(join(scratch, source), "utf8")).toBe(old);
+
+      writeFileSync(join(scratch, target), "existing target");
+      expect(() => main([], scratch, log)).toThrow(/Both .*envios.*verifactu-submissions.* exist/);
+      expect(readFileSync(join(scratch, source), "utf8")).toBe(old);
+      expect(readFileSync(join(scratch, target), "utf8")).toBe("existing target");
+      rmSync(join(scratch, target));
+
       expect(main([], scratch, log)).toBe(0);
       expect(readFileSync(join(scratch, target), "utf8")).toBe(
         'export const verifactuSubmissions = table("verifactu_submissions", fields);',
@@ -176,6 +216,10 @@ describe("fiscal rename command", () => {
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
+  });
+
+  it("refuses a protection-list command that has no output directory", () => {
+    expect(() => main(["--protection-list", "before"])).toThrow(/Usage:/);
   });
 
   it("writes a mapped protection-list in a separate directory", () => {

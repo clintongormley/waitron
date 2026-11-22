@@ -63,7 +63,9 @@ async function fixture() {
 }
 
 async function states() {
-  return (await suite.db.execute(sql`select estado from verifactu_submissions order by registro_id`)).rows;
+  return (
+    await suite.db.execute(sql`select estado from verifactu_submissions order by registro_id`)
+  ).rows;
 }
 
 describe("the module-owned runtime reconciliation seat", () => {

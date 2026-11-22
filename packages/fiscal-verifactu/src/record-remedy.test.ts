@@ -175,7 +175,10 @@ it("refuses a disabled remedy for an administrator without changing the case or 
 it.each(["pendiente", "enviando", "detenido"])(
   "refuses an unknown original outcome (%s)",
   async (estado) => {
-    await suite.db.update(verifactuSubmissions).set({ estado }).where(eq(verifactuSubmissions.registroId, request.registroId));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, request.registroId));
     const before = await snapshot();
     await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
     expect(await snapshot()).toEqual(before);

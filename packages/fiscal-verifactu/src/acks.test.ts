@@ -171,7 +171,9 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT);
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update verifactu_submissions set estado = 'pendiente', confirmado_en = null, csv = null `),
+      tx.execute(
+        sql`update verifactu_submissions set estado = 'pendiente', confirmado_en = null, csv = null `,
+      ),
     );
     // No append-only trigger on `acks` refuses the delete.
     await suite.db.execute(sql`delete from acks`);

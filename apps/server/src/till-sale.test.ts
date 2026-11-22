@@ -384,9 +384,7 @@ describe("counter basket payment", () => {
       join payments p on p.sale_id = s.id where s.working_order_id = ${id}`);
     expect(rows.rows).toEqual([{ amount: 255, tip_amount: 30, paid: 255, total: 225 }]);
     expect(
-      await suite.db
-        .select({ total: verifactuRecords.importeTotal })
-        .from(verifactuRecords),
+      await suite.db.select({ total: verifactuRecords.importeTotal }).from(verifactuRecords),
     ).toEqual([{ total: "2.25" }]);
   });
 
@@ -3043,11 +3041,8 @@ describe("per-answer receipt presentation", () => {
         receiptSettings: first.receiptSettings,
       }).toEqual(first);
       expect(
-        (
-          await suite.db.execute<{ n: number }>(
-            sql`select count(*) as n from verifactu_records`,
-          )
-        ).rows,
+        (await suite.db.execute<{ n: number }>(sql`select count(*) as n from verifactu_records`))
+          .rows,
       ).toEqual(before.rows);
     },
   );

@@ -172,7 +172,9 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
     const [activeSif] = await tx
       .select({ id: verifactuIdentities.id })
       .from(verifactuIdentities)
-      .where(and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)))
+      .where(
+        and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)),
+      )
       .limit(1);
     const [activeSeries] = await tx
       .select({ id: invoiceSeries.id })

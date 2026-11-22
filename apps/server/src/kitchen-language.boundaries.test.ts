@@ -348,8 +348,8 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
     expect((await v.db.select().from(invoiceSeries)).map((row) => row.id).sort()).toEqual(
       frozenSeries.map((row) => row.id).sort(),
     );
-    expect(
-      v.db.all(sql`select * from verifactu_records`).slice(0, frozenRecords.length),
-    ).toEqual(frozenRecords);
+    expect(v.db.all(sql`select * from verifactu_records`).slice(0, frozenRecords.length)).toEqual(
+      frozenRecords,
+    );
   }
 });

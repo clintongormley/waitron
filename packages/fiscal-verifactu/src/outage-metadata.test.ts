@@ -66,7 +66,9 @@ it("keeps the interruption across flow upserts and retains row evidence after re
   unavailable = false;
   const recovered = await drain(deps, new Date("2026-07-21T00:03:01Z"));
   expect(recovered.recordsAccepted).toBe(1);
-  expect((await suite.db.execute(sql`select * from verifactu_sending_state`)).rows[0]).toMatchObject({
+  expect(
+    (await suite.db.execute(sql`select * from verifactu_sending_state`)).rows[0],
+  ).toMatchObject({
     technical_incident_token: null,
   });
   expect((await suite.db.execute(sql`select * from verifactu_submissions`)).rows[0]).toMatchObject({

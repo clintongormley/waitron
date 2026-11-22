@@ -160,7 +160,9 @@ it("activates every purpose through the public module preparation seat", async (
   expect(rows[0]?.approval).toEqual(approval);
   expect(rows[0]?.result).toEqual(result);
   expect(
-    await suite.db.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities),
+    await suite.db
+      .select({ identity: verifactuIdentities.numeroInstalacion })
+      .from(verifactuIdentities),
   ).toEqual([{ identity: "P000042" }]);
 });
 

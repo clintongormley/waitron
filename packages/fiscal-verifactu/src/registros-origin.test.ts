@@ -47,9 +47,7 @@ describe("verifactu_records — the source and device", () => {
   it("refuses a record filed from the dashboard", async () => {
     const error = await captureError(() => insertRegistro("dashboard", null));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toBe(
-      "CHECK constraint failed: verifactu_records_source_ck",
-    );
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: verifactu_records_source_ck");
   });
 
   it("refuses a device source with no device", async () => {
@@ -63,9 +61,7 @@ describe("verifactu_records — the source and device", () => {
   it("refuses a record with no source", async () => {
     const error = await captureError(() => insertRegistro(null, null));
     expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toBe(
-      "NOT NULL constraint failed: verifactu_records.source",
-    );
+    expect(engineErrorMessage(error)).toBe("NOT NULL constraint failed: verifactu_records.source");
   });
 
   it("accepts a record from a device, and one from the readiness test with no device", async () => {

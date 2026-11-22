@@ -287,9 +287,7 @@ it("does not accept an older source-node certificate", async () => {
 it("accepts a source with one genuine installation", async () => {
   await capture();
   both((db) => db.prepare("delete from fiscal_certificate_reminders;").run());
-  both((db) =>
-    db.prepare("delete from verifactu_certificates where installed_at=?").run(oldAt),
-  );
+  both((db) => db.prepare("delete from verifactu_certificates where installed_at=?").run(oldAt));
   expect(await verify()).toEqual(result("passed"));
 });
 it.each(["before", "after"] as const)("checks the source-node relationship in %s", async (side) => {
@@ -314,9 +312,7 @@ it.each([
   await capture();
   both((db) =>
     db
-      .prepare(
-        `update verifactu_certificates set ${column}=? where node_id=? and installed_at=?`,
-      )
+      .prepare(`update verifactu_certificates set ${column}=? where node_id=? and installed_at=?`)
       .run(value, TAXPAYER_A.nodeId, createdAt),
   );
   expect(await verify()).toEqual(result("invalid"));

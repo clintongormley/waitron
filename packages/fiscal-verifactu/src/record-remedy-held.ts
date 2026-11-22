@@ -63,7 +63,10 @@ export async function releaseHeldCancellation(
     return { registroId, eventId: stored.id };
   }
   const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx.select().from(verifactuSubmissions).where(eq(verifactuSubmissions.registroId, registroId));
+  const [delivery] = await tx
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, registroId));
   const [accepted] = await tx
     .select({ record: verifactuRecords, delivery: verifactuSubmissions })
     .from(verifactuRecords)
@@ -93,7 +96,12 @@ export async function releaseHeldCancellation(
   await tx
     .update(verifactuSubmissions)
     .set({ estado: "pendiente", proximoIntentoEn: now })
-    .where(and(eq(verifactuSubmissions.registroId, registroId), eq(verifactuSubmissions.estado, "retenido")));
+    .where(
+      and(
+        eq(verifactuSubmissions.registroId, registroId),
+        eq(verifactuSubmissions.estado, "retenido"),
+      ),
+    );
   await deleteAck(tx, registroId);
   const event = await recordCaseEvent(tx, {
     caseId,

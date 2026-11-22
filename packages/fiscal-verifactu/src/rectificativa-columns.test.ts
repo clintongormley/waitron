@@ -98,7 +98,7 @@ describe("verifactu_records_tipo_rectificativa_ck — the value domain", () => {
       insertRegistro(suite.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/registros_tipo_rectificativa_ck/);
+    expect(engineErrorMessage(error)).toMatch(/verifactu_records_tipo_rectificativa_ck/);
   });
 });
 
@@ -108,7 +108,7 @@ describe("verifactu_records_tipo_factura_rectificativa_ck — rule 1115 at the D
       insertRegistro(suite.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
+    expect(engineErrorMessage(error)).toMatch(/verifactu_records_tipo_factura_rectificativa_ck/);
   });
 
   it("accepts a tipo_rectificativa on an R1 invoice too", async () => {
@@ -124,7 +124,7 @@ describe("verifactu_records_tipo_factura_rectificativa_ck — rule 1115 at the D
       insertRegistro(suite.db, { tipoFactura: null, tipoRectificativa: "I" }),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
+    expect(engineErrorMessage(error)).toMatch(/verifactu_records_tipo_factura_rectificativa_ck/);
   });
 });
 

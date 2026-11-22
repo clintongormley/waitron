@@ -52,15 +52,16 @@ export const FISCAL_SLOT: FiscalContribution = {
     const rows = await db
       .select({ id: verifactuRecords.id })
       .from(verifactuRecords)
-      .where(
-        or(isNull(verifactuRecords.entorno), ne(verifactuRecords.entorno, "production")),
-      )
+      .where(or(isNull(verifactuRecords.entorno), ne(verifactuRecords.entorno, "production")))
       .limit(1);
     return rows.length > 0;
   },
   readinessRejections: (db) =>
     db
-      .select({ code: verifactuSubmissions.codigoError, message: verifactuSubmissions.mensajeError })
+      .select({
+        code: verifactuSubmissions.codigoError,
+        message: verifactuSubmissions.mensajeError,
+      })
       .from(verifactuSubmissions)
       .where(eq(verifactuSubmissions.estado, "rechazado"))
       .orderBy(verifactuSubmissions.registroId),
