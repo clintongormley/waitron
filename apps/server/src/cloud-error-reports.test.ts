@@ -8,6 +8,7 @@ import { AppError } from "@waitron/shared";
 import { VENUE_FILE } from "@waitron/store";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import type { CloudConnection } from "./cloud-client.js";
 import { createCloudErrorReports } from "./cloud-error-reports.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -20,9 +21,7 @@ async function fixture() {
   onTestFinished(() => rm(dir, { recursive: true, force: true }));
   await writeFile(join(dir, VENUE_FILE), "first file");
   let registration: string | undefined = "registration-one";
-  const sendErrorReport = vi.fn(
-    async (_registration: string, _id: string, _body: string, _signal?: AbortSignal) => {},
-  );
+  const sendErrorReport = vi.fn<CloudConnection["sendErrorReport"]>(async () => {});
   return {
     sendErrorReport,
     registration(next: string | undefined) {
