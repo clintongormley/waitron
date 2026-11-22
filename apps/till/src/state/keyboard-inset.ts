@@ -1,3 +1,5 @@
+import { renderedParent } from "@waitron/ui";
+
 export interface VisibleArea {
   readonly height: number;
   readonly offsetTop: number;
@@ -40,20 +42,30 @@ export function watchKeyboardInsets(win: KeyboardWindow, root: HTMLElement): () 
   if (!viewport) return () => {};
   let current = NONE;
   let frame: number | undefined;
+  let opening = false;
   const update = (): void => {
     const insets = keyboardInsets(win.innerHeight, viewport);
     if (insets.top === current.top && insets.bottom === current.bottom) return;
     const resized = insets.top + insets.bottom !== current.top + current.bottom;
+    const wasDown = current.top + current.bottom === 0;
     current = insets;
     setLength(root, "--wt-keyboard-inset", insets.bottom);
     setLength(root, "--wt-keyboard-top", insets.top);
-    // A window that shrinks to the new band can leave the field being typed in hidden below its
-    // scrolled body. A pan keeps the band's height, and scrolling then would undo the person's pan.
+    // A pan keeps the band's height, and scrolling then would undo the person's pan.
     if (!resized) return;
-    if (frame !== undefined) cancelAnimationFrame(frame);
+    if (frame === undefined) opening = wasDown;
+    else cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {
       frame = undefined;
-      focusedTextControl(root.ownerDocument)?.scrollIntoView({ block: "nearest" });
+      const field = focusedTextControl(root.ownerDocument);
+      if (field === undefined) return;
+      // A window that shrinks to the new band can leave the field being typed in hidden below its
+      // scrolled body.
+      if (inOpenSurface(field)) field.scrollIntoView({ block: "nearest" });
+      // A page field goes to the top of the band as the keyboard opens, so what lies beneath it
+      // shows too; later, that would undo the person's scrolling.
+      else if (opening && current.top + current.bottom > 0)
+        field.scrollIntoView({ block: "start" });
     });
   };
   update();
@@ -64,6 +76,13 @@ export function watchKeyboardInsets(win: KeyboardWindow, root: HTMLElement): () 
     viewport.removeEventListener("resize", update);
     viewport.removeEventListener("scroll", update);
   };
+}
+
+/** Whether `node` is drawn inside an open modal dialog or popover. */
+function inOpenSurface(node: Node): boolean {
+  for (let at: Node | null = node; at; at = renderedParent(at))
+    if (at instanceof Element && at.matches(":popover-open, dialog:modal")) return true;
+  return false;
 }
 
 const TEXT_INPUT_TYPES = new Set(["text", "search", "email", "tel", "url", "password", "number"]);

@@ -14,6 +14,11 @@
     <link rel="manifest" href="/till/manifest.webmanifest" />
     <title>Waitron Till</title>
     <style>
+      /* Room to scroll a field up to the top of what a keyboard drawn over the page leaves. */
+      html {
+        padding-bottom: var(--wt-keyboard-inset, 0px);
+      }
+
       body {
         box-sizing: border-box;
         height: 100dvh;

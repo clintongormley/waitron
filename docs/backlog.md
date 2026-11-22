@@ -650,10 +650,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Check the till above a tablet's own keyboard again (left open by A1563, typing on the till
   with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
   tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a
-  window's buttons sat under it. Windows now fit in the part of the page left visible (#3986);
-  that was checked only by setting the keyboard's measurements by hand in a desktop browser, which
-  draws no keyboard. The owner opens a line note, the bill name window and
-  Find a bill's search on the tablet in landscape. Safari is untested: there is no Apple device.
+  window's buttons sat under it. Windows now fit in the part of the page left visible (#3986), and
+  on 22 November the tablet showed it for the station note and the table name. The Counter's
+  product search and Find a bill's search were left at or under the keyboard's edge; a field on a
+  page now moves to the top of the visible part, with room below the page to scroll into. That was
+  checked only by setting the keyboard's measurements by hand in a desktop browser, which draws no
+  keyboard. The owner opens the bill name window, the Counter's search and Find a bill's search on
+  the tablet in landscape. Safari is untested: there is no Apple device.
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 

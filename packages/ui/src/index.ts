@@ -120,7 +120,7 @@ export type {
 } from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
 export { modalOpen, surfaceOutside, underModal } from "./modal-layer.js";
-export { inInertTree } from "./tabbable.js";
+export { inInertTree, renderedParent } from "./tabbable.js";
 export { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
 export { FormFeedback, bottomMessage } from "./form-feedback.js";
 export {

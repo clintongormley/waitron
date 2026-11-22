@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "@waitron/ui/src/components/wt-dialog.js";
+import type { WtDialog } from "@waitron/ui/src/components/wt-dialog.js";
 import { keyboardInsets, watchKeyboardInsets, type VisibleArea } from "./keyboard-inset.js";
 
 // Readings estimated from screenshots of the owner's Pixel tablet in landscape, 2026-11-21.
@@ -142,18 +144,19 @@ describe("watchKeyboardInsets and the focused field", () => {
     vi.restoreAllMocks();
   });
 
-  function start(viewport: FakeViewport, control: HTMLElement): () => HTMLElement[] {
+  type Scroll = [HTMLElement, boolean | ScrollIntoViewOptions | undefined];
+
+  function start(viewport: FakeViewport, control: HTMLElement): () => Scroll[] {
     root = document.createElement("div");
     root.append(control);
     document.body.append(root);
     control.focus();
-    const scrolled: HTMLElement[] = [];
+    const scrolled: Scroll[] = [];
     vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
       this: HTMLElement,
       options?: boolean | ScrollIntoViewOptions,
     ) {
-      expect(options).toEqual({ block: "nearest" });
-      scrolled.push(this);
+      scrolled.push([this, options]);
     });
     stop = watchKeyboardInsets({ visualViewport: viewport, innerHeight: 640 }, root);
     return () => scrolled;
@@ -161,6 +164,8 @@ describe("watchKeyboardInsets and the focused field", () => {
 
   const frame = (): Promise<void> =>
     new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const TOP = { block: "start" };
+  const AS_NEEDED = { block: "nearest" };
 
   it("brings a focused text input into view once, after the last change", async () => {
     const viewport = new FakeViewport();
@@ -169,7 +174,7 @@ describe("watchKeyboardInsets and the focused field", () => {
     viewport.move(256, 0, "resize");
     viewport.move(192, 87, "scroll");
     await frame();
-    expect(scrolled()).toEqual([input]);
+    expect(scrolled()).toEqual([[input, TOP]]);
   });
 
   it("finds the focused field inside a shadow root", async () => {
@@ -181,7 +186,7 @@ describe("watchKeyboardInsets and the focused field", () => {
     textarea.focus();
     viewport.move(256, 0, "resize");
     await frame();
-    expect(scrolled()).toEqual([textarea]);
+    expect(scrolled()).toEqual([[textarea, TOP]]);
   });
 
   it("leaves a focused control that takes no text where it is", async () => {
@@ -209,10 +214,88 @@ describe("watchKeyboardInsets and the focused field", () => {
     const scrolled = start(viewport, input);
     viewport.move(192, 87, "resize");
     await frame();
+    expect(scrolled()).toEqual([[input, TOP]]);
     scrolled().length = 0;
     viewport.move(192, 120, "scroll");
     await frame();
     expect(scrolled()).toEqual([]);
+  });
+
+  it("leaves a page field where it is when the keyboard changes height while it stays up", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    await frame();
+    viewport.move(220, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([[input, TOP]]);
+  });
+
+  it("takes a page field to the top once when the keyboard opens and changes height in one frame", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    viewport.move(220, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([[input, TOP]]);
+  });
+
+  it("does not scroll a page field when the keyboard opens and goes in one frame", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    viewport.move(640, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([]);
+  });
+
+  it("does not scroll a page field when the keyboard goes", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([[input, TOP]]);
+    scrolled().length = 0;
+    viewport.move(640, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([]);
+  });
+
+  it("brings a field in an open window only as far as needed, as the keyboard opens and goes", async () => {
+    const viewport = new FakeViewport();
+    const window = document.createElement("wt-dialog") as WtDialog;
+    const input = document.createElement("input");
+    window.append(input);
+    const scrolled = start(viewport, window);
+    window.open = true;
+    await window.updateComplete;
+    input.focus();
+    viewport.move(256, 0, "resize");
+    await frame();
+    viewport.move(640, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([
+      [input, AS_NEEDED],
+      [input, AS_NEEDED],
+    ]);
+  });
+
+  it("brings a field in an open popover only as far as needed", async () => {
+    const viewport = new FakeViewport();
+    const popover = document.createElement("div");
+    popover.popover = "manual";
+    const input = document.createElement("input");
+    popover.append(input);
+    const scrolled = start(viewport, popover);
+    popover.showPopover();
+    input.focus();
+    viewport.move(256, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([[input, AS_NEEDED]]);
   });
 
   it("does not scroll after being stopped with a change waiting", async () => {
