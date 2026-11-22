@@ -11,7 +11,7 @@ import {
   type CloudEmailGrant,
   type CloudEmailOutcome,
 } from "./cloud-email.js";
-import type { EmailDelivery } from "./email-delivery.js";
+import { hasSavedSmtp, type EmailDelivery } from "./email-delivery.js";
 import type { JobDefinition } from "./job-runner.js";
 import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
@@ -26,7 +26,7 @@ export interface CertificateReminderPassDeps {
   resolveDelivery(): Promise<EmailDelivery>;
   send: CertificateReminderSender;
   cloud?: {
-    allowed(tx: Transaction): Promise<boolean>;
+    enabled(): Promise<boolean>;
     resolveGrant(signal: AbortSignal): Promise<CloudEmailGrant | null>;
     send(
       grant: CloudEmailGrant,
@@ -44,8 +44,10 @@ export async function runCertificateReminderPass(
   if (!active()) return { processed: false };
   const delivery = await deps.resolveDelivery();
   const cloud = delivery.mode === "unconfigured" ? deps.cloud : undefined;
+  const cloudAllowed = async (tx: Transaction) =>
+    cloud !== undefined && !(await hasSavedSmtp(tx)) && (await cloud.enabled());
   const grant =
-    cloud && (await cloud.allowed(deps.db))
+    cloud && (await cloudAllowed(deps.db))
       ? await cloud.resolveGrant(deps.signal).catch(() => null)
       : null;
   if (delivery.mode === "unconfigured" && !grant) return { processed: false };
@@ -53,7 +55,7 @@ export async function runCertificateReminderPass(
   while (active()) {
     // Commit the claim before sending so a crash mid-send cannot repeat the message.
     const claimed = await withTransaction(deps.db, async (tx) => {
-      if ((cloud && !(await cloud.allowed(tx))) || !active()) return null;
+      if ((cloud && !(await cloudAllowed(tx))) || !active()) return null;
       const recipients = await readManagerEmailRecipients(tx, deps.venueLanguage);
       const reminder = await deps.seat.reminders.claim(
         tx,

@@ -3175,7 +3175,7 @@ async function bootServer(
         ...(cloudConnection &&
           !captureAccountEmail && {
             cloud: {
-              allowed: boxNoticeRelayAllowed,
+              enabled: cloudConnection.emailRelayEnabled,
               resolveGrant: cloudConnection.emailRelay,
               send: cloudConnection.sendEmail,
             },

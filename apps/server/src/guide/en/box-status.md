@@ -423,7 +423,9 @@ full-disk email cannot be saved on a full disk, so the box sends it straight awa
 each minute while the disk stays full; every other email waits until the disk has room again. A full disk that is only partly freed is still nearly out of space, so
 anyone the full-disk email did not reach is sent the nearly-out-of-space email instead. A
 restart while the disk, a backup or the clock stays in trouble can send the same email again.
-While no mail server is set up, nothing is sent.
+In Prepare on a test box, turn on Cloud email to receive alerts about low space, backups, rolled-back
+upgrades and clock corrections when you leave your mail server blank. Add your own mail server in
+**System → Email** for alerts about a full disk or an unusable clock.
 
 Each time the box sets its clock it sends its own email, even when it sets the clock again within a
 minute, which marks the first change's alert handled. Once a change's alert is handled, the box

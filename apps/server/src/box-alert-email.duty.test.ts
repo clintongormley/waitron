@@ -121,7 +121,7 @@ function duty({ startedAt = at(0) } = {}) {
     lowSince: null as Date | null,
     recipients: [ANNA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
-    cloudRelayEnabled: false,
+    cloudRelayEnabled: false as boolean | Error,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     incidents: [] as readonly EmailedIncident[],
     backupStopped: undefined as BackupOutcomeHolder["runStopped"],
@@ -155,7 +155,10 @@ function duty({ startedAt = at(0) } = {}) {
     emailedIncidents,
     backupStopped: () => state.backupStopped,
     context,
-    cloudRelayEnabled: async () => state.cloudRelayEnabled,
+    cloudRelayEnabled: async () => {
+      if (state.cloudRelayEnabled instanceof Error) throw state.cloudRelayEnabled;
+      return state.cloudRelayEnabled;
+    },
     send: (message) =>
       send(message).then((outcome) => (outcome === "uncertain" ? "unknown" : outcome)),
     isPrimary: () => state.primary,
@@ -279,6 +282,22 @@ it("leaves full-disk mail on its direct path even with Cloud enabled", async () 
   expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
     "storage.disk_full",
   ]);
+});
+
+it("still checks the alerts when the saved Cloud choice cannot be read", async () => {
+  const d = duty();
+  d.state.cloudRelayEnabled = new Error("Cloud settings unreadable");
+  d.state.delivery = { mode: "unconfigured" };
+  d.state.lowSince = at(0);
+  d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+  await d.check();
+  await d.check();
+  expect(await d.rows()).toEqual([]);
+  expect(d.events("box_email.not_configured").map(([, , fields]) => fields?.code)).toEqual([
+    "storage.space_low",
+    "clock.unusable",
+  ]);
+  expect(d.events("box_email.check_failed")).toEqual([]);
 });
 
 const OLD_BACKUPS: EmailedIncident = {

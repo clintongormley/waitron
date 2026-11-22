@@ -454,7 +454,7 @@ export function createBoxEmailDuty(deps: {
         ctx?.delivery.mode === "unconfigured" &&
         ctx.recipients.length > 0 &&
         due.some(({ episode }) => isCloudBoxAlert(episode.code)) &&
-        (await deps.cloudRelayEnabled?.());
+        (await deps.cloudRelayEnabled?.().catch(() => false));
       if (stopped) {
         episodes = previous;
         return;

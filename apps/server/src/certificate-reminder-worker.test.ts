@@ -1,5 +1,7 @@
 import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadKeyRing } from "@waitron/credentials";
+import { withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
@@ -15,9 +17,10 @@ import {
   runCertificateReminderPass,
 } from "./certificate-reminder-worker.js";
 import type { CloudEmailGrant, CloudEmailOutcome } from "./cloud-email.js";
-import type { EmailDelivery } from "./email-delivery.js";
+import { resolveEmailDelivery, type EmailDelivery } from "./email-delivery.js";
 import { realSleep } from "./loop.js";
 import { runTestJob } from "./testing/run-job.js";
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const seat = FISCAL_SLOT.certificate!;
@@ -38,7 +41,7 @@ const grant: CloudEmailGrant = {
 const unconfigured = async (): Promise<EmailDelivery> => ({ mode: "unconfigured" });
 const cloudDelivery = {
   resolveGrant: async () => grant,
-  allowed: async () => true,
+  enabled: async () => true,
 };
 
 const deps = () => ({
@@ -234,6 +237,37 @@ describe("certificate reminder job", () => {
     expect(cloudSend).not.toHaveBeenCalled();
     expect(await reminders()).toEqual([]);
   });
+
+  it.each(["before lookup", "during lookup"] as const)(
+    "keeps a saved mail server with an unusable sender ahead of Cloud when saved %s",
+    async (timing) => {
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const save = () =>
+        withTransaction(suite.db, (tx) =>
+          saveSmtpForTest(tx, ring, {
+            url: smtp.url,
+            from: "venue@example.test, other@example.test",
+          }),
+        );
+      if (timing === "before lookup") await save();
+      const resolveGrant = vi.fn(async () => {
+        if (timing === "during lookup") await save();
+        return grant;
+      });
+      const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => ({ status: "sent" }));
+      await runCertificateReminderPass({
+        ...deps(),
+        resolveDelivery: () => resolveEmailDelivery(suite.db, ring, false),
+        cloud: { ...cloudDelivery, resolveGrant, send: cloudSend },
+      });
+      expect(cloudSend).not.toHaveBeenCalled();
+      expect(resolveGrant).toHaveBeenCalledTimes(timing === "before lookup" ? 0 : 1);
+      expect(await reminders()).toEqual([]);
+    },
+  );
 
   it.each([
     [{ status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }, "failed"],
