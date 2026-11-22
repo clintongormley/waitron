@@ -293,6 +293,8 @@ it.each([
   ["a repeated ref", job([item("product:1", "PINTA", ["ca"]), item("product:1", "CANYA", ["es"])])],
   ["version 2", job(pinta, { version: 2 })],
   ["a country that is not two capitals", job(pinta, { country: "es" })],
+  ["the unknown region as the country", job(pinta, { country: "ZZ" })],
+  ["a country no region name exists for", job(pinta, { country: "XX" })],
   ["a default that is not enabled", job(pinta, { languages: { default: "en", enabled: ["ca"] } })],
   [
     "21 enabled languages",

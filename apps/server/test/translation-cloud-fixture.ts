@@ -96,6 +96,22 @@ const namesIn = (v: unknown, enabled: Set<string>) =>
   !Array.isArray(v) &&
   Object.entries(v).every(([language, name]) => enabled.has(language) && text(name));
 
+const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], { type: "language" });
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+/** Cloud's rule: `region` in waitron-cloud's `packages/translation/src/job-body.ts`. */
+const country = (v: unknown) =>
+  typeof v === "string" && /^[A-Z]{2}$/.test(v) && v !== "ZZ" && REGION_NAMES.of(v) !== v;
+/** Cloud's rule: `language` in waitron-cloud's `packages/translation/src/job-body.ts`. */
+function languageTag(tag: unknown): boolean {
+  if (typeof tag !== "string" || tag === "und" || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag))
+    return false;
+  try {
+    return LANGUAGE_NAMES.of(tag) !== tag;
+  } catch {
+    return false;
+  }
+}
+
 /** The fake's fingerprint check (contract, "Submit", step 3). */
 export function verifySubmitVector(c: { body: string; signedBody: string }): boolean {
   const signed = JSON.parse(c.signedBody) as { jobSha256: string; jobBytes: number };
@@ -156,8 +172,7 @@ function readJob(body: string): FakeJobBody | null {
   if (
     !keysAre(v, ["version", "country", "languages", "items", "houseStyle"]) ||
     v.version !== 1 ||
-    typeof v.country !== "string" ||
-    !/^[A-Z]{2}$/.test(v.country)
+    !country(v.country)
   )
     return null;
   const l = v.languages;
@@ -235,18 +250,6 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
       ? [{ field: "internal", wrong: "ZURRITO", right: "ZURITO" }]
       : [],
   };
-}
-
-// Cloud's rule, `language` in waitron-cloud's packages/translation/src/job-body.ts.
-const languageNames = new Intl.DisplayNames(["en"], { type: "language" });
-function languageTag(tag: unknown): boolean {
-  if (typeof tag !== "string" || tag === "und" || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag))
-    return false;
-  try {
-    return languageNames.of(tag) !== tag;
-  } catch {
-    return false;
-  }
 }
 
 /**
