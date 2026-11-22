@@ -1,5 +1,9 @@
 # A585 — Staffing needs and the rota: who the venue needs, when, and who fills it
 
+> 2026-11-22: A763 point 9 adds the week's rota phase to the Staffing day box and drops the
+> Monday grid shortcut. The Rota tab opens the week you last picked in Staffing, or the venue's
+> current week. See the [point 9 plan](../plans/2026-11-22-d-a763-9-staffing-rota-week.md).
+
 > 2026-10-17: A763 points 1–8 are built (see the [plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a763-rota-redesign.md));
 > point 9 waits for A724 Part 2.
 

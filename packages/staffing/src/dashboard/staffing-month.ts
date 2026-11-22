@@ -249,6 +249,7 @@ export class StaffingMonthView extends LitElement {
   @property({ type: Boolean }) canOpenRota = false;
   /** Moves the Calendar's address. */
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
+  @property({ attribute: false }) pickDate?: (day: string) => void;
 
   @state() private read?: StaffingMonth;
   @state() private loadError?: string;
@@ -615,6 +616,7 @@ export class StaffingMonthView extends LitElement {
           tabindex=${stop ? 0 : -1}
           aria-current=${isToday ? "date" : nothing}
           @click=${() => {
+            this.pickDate?.(day.date);
             this.boxDate = day.date;
           }}
           @focus=${() => {

@@ -878,9 +878,11 @@ A module adds a view to the Calendar (the page at `/opening-hours`) through
 `calendarViews` on its `DashboardContribution` (`packages/dashboard-kit/src/contract.ts`), never by
 venue-service importing it. The app hands the page only the views the person may read, each with
 `canWrite` worked out from its `requiresPermission`, and refuses a repeated id or one of the page's
-own view words (`CALENDAR_OWN_VIEW_IDS`). The view gets a `CalendarViewHost`: the shown `month`, the
-`<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`. Those
-pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
+own view words (`CALENDAR_OWN_VIEW_IDS`). Its `CalendarViewHost` provides the shown `month`, the
+`<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`.
+The optional `today` is the venue's business date once the opening-hours read settles, with the
+browser's date as a fallback. The tab carries the shown month by default. Set `carryMonthOnTab: false`
+when the view chooses its own starting date. Those address pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
 `opening-hours` in `keepUnlisted`; a view never adds its address words to that file. A view whose
 read builds on venue-service's `readCalendarMonthPlan` spreads `CALENDAR_MONTH_PLAN_READS`
 (`packages/venue-service/src/dashboard/live-queries.ts`) into its live dependencies rather than

@@ -3,6 +3,7 @@ import { render, type LitElement } from "lit";
 import type { CalendarViewHost, DashboardRequest } from "@waitron/dashboard-kit";
 import { STAFFING_DASHBOARD } from "./index.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
+import type { RotaView } from "./rota-view.js";
 import type { StaffingMonthView } from "./staffing-month.js";
 import type { StaffingSeasonPainter } from "./staffing-season-painter.js";
 import type { StaffingSpecialDayPainter } from "./staffing-special-day-painter.js";
@@ -274,6 +275,55 @@ describe("STAFFING_DASHBOARD", () => {
 });
 
 describe("the Rota contribution", () => {
+  it("opens the Rota tab on the week last picked, defaulting to the venue's current week", async () => {
+    const [staffing, rota] = STAFFING_DASHBOARD.calendarViews!;
+    expect(rota!.carryMonthOnTab).toBe(false);
+    const request = (async (path: string) =>
+      path.includes("/month?")
+        ? staffingMonth(path.slice(-7))
+        : path.includes("/roster/breaches?")
+          ? { breaches: [], ruleset: null }
+          : rotaWeek(path.slice(-10))) as DashboardRequest;
+    const ctx = { request };
+    const host: CalendarViewHost = {
+      month: "2026-12",
+      today: "2026-12-16",
+      params: {},
+      canWrite: true,
+      open: (_view, params) => {
+        if (params.month) {
+          host.month = params.month;
+          render(staffingHandle.render(), monthContainer);
+        }
+      },
+    };
+    const staffingHandle = staffing!.create(ctx, host);
+    const rotaHandle = rota!.create(ctx, host);
+    const monthContainer = document.createElement("div");
+    const rotaContainer = document.createElement("div");
+    document.body.append(monthContainer, rotaContainer);
+    containers.push(monthContainer, rotaContainer);
+    render(staffingHandle.render(), monthContainer);
+    const month = monthContainer.querySelector<StaffingMonthView>("staffing-month")!;
+    const day = (date: string) =>
+      month.shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button.day`);
+    await vi.waitFor(() => expect(day("2026-12-23")).not.toBeNull());
+    day("2026-12-23")!.focus();
+    month.shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!.click();
+    await vi.waitFor(() => expect(day("2027-01-08")).not.toBeNull());
+    render(rotaHandle.render(), rotaContainer);
+    const rotaEl = rotaContainer.querySelector<RotaView>("staffing-rota")!;
+    const beforePick = rotaEl.week;
+
+    day("2027-01-08")!.click();
+    render(null, monthContainer);
+    render(rotaHandle.render(), rotaContainer);
+    expect([beforePick, rotaEl.week]).toEqual(["2026-12-14", "2027-01-04"]);
+    host.params = { month: "2027-01" };
+    render(rotaHandle.render(), rotaContainer);
+    expect(rotaEl.week).toBe("2026-12-28");
+  });
+
   it("uses the host's week and area, and falls back to the month's Monday for an invalid week address", async () => {
     const view = STAFFING_DASHBOARD.calendarViews!.find((v) => v.id === "rota")!;
     const fixture = await import("../testing/rota-fixture.js");
