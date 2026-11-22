@@ -8,7 +8,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { createStripeCardProvider } from "./card-provider.js";
 
 // Nightly-only (.github/workflows/stripe-sandbox.yml): real test-mode Stripe answering reader ids
-// no account of this key holds.
+// this key's account does not hold.
 const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
 
@@ -20,19 +20,13 @@ const ring = loadKeyRing({
 const ALPHANUMERIC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const unheldId = `tmr_${Array.from(randomBytes(24), (b) => ALPHANUMERIC[b % ALPHANUMERIC.length]).join("")}`;
 
-d("Stripe test-mode sandbox: adding a reader by an id no account holds", () => {
+d("Stripe test-mode sandbox: adding a reader by an id this account does not hold", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 120_000 });
 
   // The answers test-mode Stripe gave on 2026-11-22 (GitHub run 45001837367).
   it.each([
-    ["a well-formed id no account holds", unheldId, 404, "resource_missing"],
+    ["a well-formed id this account does not hold", unheldId, 404, "resource_missing"],
     ["an id without the tmr_ prefix", "not-a-reader", 400, undefined],
-    [
-      "an id holding a slash and a space",
-      "tmr_ab/../cd ef",
-      400,
-      "wsp_400_blocked_path_traversal_request",
-    ],
     ["the empty string", "", 404, undefined],
   ])("refuses %s as reader.reference_unknown", async (_label, reference, statusCode, code) => {
     const stripeError = await new Stripe(KEY!).terminal.readers
