@@ -82,9 +82,6 @@ aparece un terminal, asigna el cajón en **Dispositivos**. Si el ajuste del caj�
 actívalo en la calibración. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
-Si el cajón asignado no se abre, puedes usar la llave y
-[registrar el movimiento de efectivo en el terminal](table-service.md#drawer-cash-entry).
-
 ## Cola de impresión {#print-queue}
 
 Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora
@@ -98,6 +95,8 @@ para solicitar otra impresión en A4.
 Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
+
+Si moviste efectivo a mano, [regístralo en el terminal](table-service.md#drawer-cash-entry).
 
 Elige **Reimprimir** para enviar un ticket o una factura a cualquier impresora de tickets.
 Si el original ya se imprimió, obtendrás un duplicado. Para una copia en A4, abre **Pedidos**.

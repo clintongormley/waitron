@@ -46,6 +46,8 @@ llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la difer
 y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
 **Cerrar cajón** en cualquier terminal asignado al mismo cajón para continuar.
 
+Si Waitron te pide que vuelvas a contar tras un movimiento de efectivo, elige **Volver a contar** e indica cuánto hay ahora en el cajón.
+
 Introduce el efectivo que quieres dejar y comprueba el importe **Para el banco** antes de retirar
 el resto. Elige **Finalizar cierre**. Puedes reimprimir el justificante en
 [Ventas](sales.md#drawer-close-history).

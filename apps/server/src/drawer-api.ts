@@ -64,7 +64,7 @@ function invalidEntry(field: string): never {
 
 async function recordCashEntry(tx: Transaction, actor: Actor, body: Record<string, unknown>) {
   const printerId = canonicaliseUuid(body.printerId) ?? invalidEntry("printerId");
-  if (printerId !== actor.printerId) throw new AppError("drawer.entry_changed", {});
+  if (printerId !== actor.printerId) throw new AppError("drawer.assignment_changed", {});
   const id = canonicaliseUuid(body.submissionId) ?? invalidEntry("submissionId");
   const { kind } = body;
   if (kind !== "cash_in" && kind !== "cash_out") return invalidEntry("kind");

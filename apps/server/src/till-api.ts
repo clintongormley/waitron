@@ -677,7 +677,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "drawer.not_attached": 400,
   "drawer.close_not_found": 404,
   "drawer.close_changed": 409,
-  "drawer.entry_changed": 409,
+  "drawer.assignment_changed": 409,
   "drawer.recount_unavailable": 409,
   // No till address holds a reason id: only a request body can name a missing one.
   "adjustment_reason.not_found": 400,
@@ -2784,7 +2784,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             body.expectedPrinterId !== undefined &&
             canonicaliseUuid(body.expectedPrinterId) !== printer.id
           ) {
-            throw new AppError("drawer.entry_changed", {});
+            throw new AppError("drawer.assignment_changed", {});
           }
           if (!printer.hasCashDrawer) {
             throw new AppError("drawer.not_attached", { printerId: printer.id });

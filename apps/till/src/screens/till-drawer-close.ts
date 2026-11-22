@@ -220,12 +220,16 @@ export class TillDrawerClose extends LitElement {
     const saved = snapshot?.state === "counted" ? snapshot : null;
     const counting = snapshot?.state === "new" || recounting;
     const count = saved?.recount ?? saved?.first;
+    const stale = saved !== null && compareDecimal(decimal(saved.available), decimal("0.00")) < 0;
+    const needsRecount = stale && !counting;
     const canRecount =
-      saved !== null && saved.recount === null && saved.first.difference !== "0.00" && !recounting;
+      saved !== null &&
+      !recounting &&
+      (stale || (saved.recount === null && saved.first.difference !== "0.00"));
     const error = this.#amountError();
     const amount = cashAmount(this.input);
     const bank =
-      saved && !counting && amount && !error
+      saved && !counting && !needsRecount && amount && !error
         ? money(subtractDecimal(decimal(saved.available), amount))
         : null;
     const canSave = snapshot !== null && finished === null && amount !== null && !error && !busy;
@@ -268,12 +272,15 @@ export class TillDrawerClose extends LitElement {
                 <div
                   @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>(counting ? '[data-drawer-action="count"]' : '[data-drawer-action="finish"]'))}
                 >
-                  ${this.#field(counting, error)}
+                  ${needsRecount ? html`<p role="status">${t("drawer_close.stale_recount")}</p>` : this.#field(counting, error)}
                 </div>
                 ${bank ? html`<p class="bank">${t("drawer_close.bank")} · ${bank}</p>` : nothing}
               `
       }
-      <wt-form-actions slot="footer" .error=${error ? t("drawer_close.check_amount") : this.error}>
+      <wt-form-actions
+        slot="footer"
+        .error=${needsRecount ? "" : error ? t("drawer_close.check_amount") : this.error}
+      >
         <wt-button
           slot="cancel"
           data-drawer-action="back"
@@ -305,7 +312,7 @@ export class TillDrawerClose extends LitElement {
             : nothing
         }
         ${
-          snapshot && !finished
+          snapshot && !finished && !needsRecount
             ? html`<wt-button
                 data-drawer-action=${counting ? "count" : "finish"}
                 variant=${canSave || busy ? "primary" : "secondary"}

@@ -2,7 +2,7 @@
 
 Status: approved by the owner on 6 November 2026, after a fresh reviewer read it. Nothing is built. It replaces the
 "close the day" framing in [A1325](../../backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
-and absorbs [A239](../../backlog/till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03).
+and absorbs [A239](#cash-in-and-out-a239).
 
 ## Intent
 
@@ -91,6 +91,9 @@ The till's menu offers **Close drawer** on a device with a drawer. Steps:
 5. The rest is the withdrawal, shown as **For the bank**. Where the venue uses it, they can move part of
    it to **For tips**.
 6. They confirm. The close is saved and the slip prints.
+
+On 22 November 2026 at 04:01, the watcher cleared a recovery for a stale count. If later cash
+movements make the amount available negative, staff can recount again and keep all counts on record.
 
 **An unfinished close.** The first count is saved at step 3, not at the end, or backing out would give a
 fresh first count with the expected figure already known. If the person stops or the till dies, the next

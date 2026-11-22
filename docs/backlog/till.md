@@ -454,10 +454,9 @@ Piece 3 of
 A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
 open float may take cash on any handheld, and it adds to their float; the waiter settles the float
 at a till before leaving, entering what they hold, the difference is recorded against them and the
-cash goes into that till's drawer as an A239 entry; the daily summary email lists any float still open.
+cash goes into that till's drawer as a cash-in entry; the daily summary email lists any float still open.
 Cash taken on a handheld whose profile allows cash, with no float, is counted against the
-handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
-A238 (landed as #1164) and A239.
+handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in).
 
 ## Other till surfaces have not been checked against the forms rule
 
@@ -1136,7 +1135,7 @@ Printer identity is separate from the till route inventory.
 - **Qualify printer identity at enrolment.** Complete the device enrolment design's printer track.
   [Detail](till.md#printer-identity-at-enrolment).
 
-## Bundle: Close the day: count the cash, record cash in and out, waiter floats
+## Bundle: Finish drawer reporting, reminders and waiter floats
 
 2 entries, size L.
 
@@ -1146,8 +1145,7 @@ Printer identity is separate from the till route inventory.
   and the daily warning and email remain.
   [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
-  A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
-  (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).
+  A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Part of A1325’s design (owner, 2026-11-04).
   [Detail](till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
 ## Bundle: Show a table's short name where the full name does not fit

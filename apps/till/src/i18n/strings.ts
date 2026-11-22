@@ -1730,6 +1730,7 @@ export const en = {
   "drawer_close.cash_moved": "Cash moved while you were counting.",
   "drawer_close.save_count": "Save count",
   "drawer_close.recount": "Recount",
+  "drawer_close.stale_recount": "Cash moved after the count. Recount the drawer to finish.",
   "drawer_close.left": "Cash to leave in the drawer",
   "drawer_close.bank": "For the bank",
   "drawer_close.finish": "Finish close",
@@ -4013,6 +4014,8 @@ export const es: Record<StringKey, string> = {
   "drawer_close.cash_moved": "Hubo movimientos de efectivo durante el recuento.",
   "drawer_close.save_count": "Guardar recuento",
   "drawer_close.recount": "Volver a contar",
+  "drawer_close.stale_recount":
+    "Se movió efectivo después del recuento. Vuelve a contar el cajón para terminar.",
   "drawer_close.left": "Efectivo que queda en el cajón",
   "drawer_close.bank": "Para el banco",
   "drawer_close.finish": "Finalizar cierre",

@@ -57,7 +57,8 @@ async function readDrawer(tx: Transaction, printerId: string) {
         inArray(drawerEntries.kind, ["count", "recount"]),
       ),
     )
-    .orderBy(asc(drawerEntries.sequence))
+    // There is one first count in the interval, followed by the newest recount.
+    .orderBy(asc(drawerEntries.kind), desc(drawerEntries.sequence))
     .limit(2);
   return { printerId, openingCash, afterClose, sequence: last?.sequence ?? 0, first, recount };
 }
@@ -184,18 +185,22 @@ export async function recountDrawer(
   const drawer = await readDrawer(tx, actor.printerId);
   const { first, recount } = drawer;
   if (first?.id !== input.firstCountId) throw new AppError("drawer.close_not_found", {});
-  if (recount !== undefined) {
-    const facts = recount.facts as CountFacts;
-    if (
-      facts.startSequence === input.startSequence &&
-      recount.amount === decimalToCents(input.counted)
-    )
-      return pendingClose(tx, drawer, first);
+  const pending = await pendingClose(tx, drawer, first);
+  const facts = recount?.facts as CountFacts | undefined;
+  if (
+    recount !== undefined &&
+    facts?.startSequence === input.startSequence &&
+    recount.amount === decimalToCents(input.counted)
+  ) {
+    return pending;
+  }
+  if (
+    compareDecimal(pending.available, zero) >= 0 &&
+    (recount !== undefined || compareDecimal(pending.first.difference, zero) === 0)
+  ) {
     throw new AppError("drawer.recount_unavailable", {});
   }
-  if (compareDecimal(savedCount(first).difference, zero) === 0)
-    throw new AppError("drawer.recount_unavailable", {});
-  checkStartSequence(drawer, input.startSequence, first.sequence);
+  checkStartSequence(drawer, input.startSequence, (recount ?? first).sequence);
 
   const saved = await writeCount(tx, actor, drawer, input, first.id);
   return pendingClose(tx, { ...drawer, sequence: saved.sequence }, first, saved);

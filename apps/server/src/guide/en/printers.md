@@ -74,9 +74,6 @@ assign the drawer in **Devices** first. If the drawer setting is off, turn it on
 **Delete anyway** keeps the balance and any pending count if you later add a printer at the same
 address and Waitron restores its registration.
 
-If an assigned drawer stays shut, you can use its key to
-[record the cash movement on the till](table-service.md#drawer-cash-entry).
-
 ## Print Queue {#print-queue}
 
 Open **Print Queue** to see why a job is waiting. To add or remove a computer that prints, see [Print agents](printers.md#print-agents). If no print agent sees a USB or Bluetooth
@@ -90,6 +87,8 @@ request another A4 print.
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.
+
+If you moved cash by hand, [record it on the till](table-service.md#drawer-cash-entry).
 
 Choose **Reprint** to send a receipt or invoice to any receipt printer. If the original
 already printed, you get a marked copy. Use **Orders** for an A4 copy. You can also reprint a

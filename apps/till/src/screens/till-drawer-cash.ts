@@ -103,7 +103,7 @@ export class TillDrawerCash extends LitElement {
         request: t(
           this.switchOperator
             ? "drawer_entry.permission"
-            : code === "drawer.entry_changed" || code === "drawer.no_printer"
+            : code === "drawer.assignment_changed" || code === "drawer.no_printer"
               ? "drawer_entry.reopen"
               : code === "submission.id_reused"
                 ? "drawer_entry.reused"
@@ -122,7 +122,7 @@ export class TillDrawerCash extends LitElement {
       this.opened = true;
     } catch (error) {
       const code = (error as { code?: string } | null)?.code;
-      if (code === "drawer.entry_changed" || code === "authorization.not_permitted")
+      if (code === "drawer.assignment_changed" || code === "authorization.not_permitted")
         this.#showRefusal(error);
       else this.manual = true;
     } finally {

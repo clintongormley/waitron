@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setPersonLocale } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
-import { readDrawerCloseForPrint } from "./drawer-close-report.js";
+import { listDrawerCloses, readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -58,10 +58,12 @@ it("records signed movement once per submission and leaves the drawer mechanism 
   const first = await postEntry({ submissionId });
   expect(first).toEqual({ status: 200, json: { id: submissionId, printerId } });
   expect(await postEntry({ submissionId, amount: "10.2" })).toEqual(first);
-  expect(await postEntry({ submissionId, reason: "A different movement" })).toEqual({
-    status: 409,
-    json: { code: "submission.id_reused", params: { submissionId } },
-  });
+  for (const change of [{ reason: "A different movement" }, { amount: "10.21" }]) {
+    expect(await postEntry({ submissionId, ...change })).toEqual({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId } },
+    });
+  }
   await inTx(venue, (tx) =>
     tx.update(printers).set({ active: false }).where(eq(printers.id, printerId)),
   );
@@ -114,7 +116,7 @@ it.each([
 it("refuses cash entry for a different drawer and for staff without the drawer grant", async () => {
   expect(await postEntry({ printerId: randomUUID() })).toEqual({
     status: 409,
-    json: { code: "drawer.entry_changed", params: {} },
+    json: { code: "drawer.assignment_changed", params: {} },
   });
   await inTx(venue, (tx) =>
     tx.delete(personRoles).where(eq(personRoles.personId, venue.operatorId)),
@@ -131,7 +133,7 @@ it("keeps the audited Open drawer action bound to the drawer the cash-entry form
     send(venue.app, venue.cookie, "POST", "/api/drawer/open", { expectedPrinterId });
   expect(await open(randomUUID())).toEqual({
     status: 409,
-    json: { code: "drawer.entry_changed", params: {} },
+    json: { code: "drawer.assignment_changed", params: {} },
   });
   expect(await store.db.select().from(printJobs)).toEqual([]);
   expect((await open(printerId)).status).toBe(200);
@@ -139,6 +141,60 @@ it("keeps the audited Open drawer action bound to the drawer the cash-entry form
     await store.db.select({ printerId: printJobs.printerId, kind: printJobs.kind }).from(printJobs),
   ).toEqual([{ printerId, kind: "drawer" }]);
 });
+
+it.each([false, true])(
+  "recounts and closes after a withdrawal leaves negative cash (already recounted: %s)",
+  async (alreadyRecounted) => {
+    const order = await tabWith(venue, "Croquettes");
+    expect((await cashPayment(venue, venue.cookie, order, "10.00")).status).toBe(200);
+    const first = await postCount({
+      counted: alreadyRecounted ? "9.00" : "10.00",
+      startSequence: 1,
+    });
+    const id = (first.json.first as { id: string }).id;
+    const recount = (counted: string, startSequence: number) =>
+      send(venue.app, venue.cookie, "POST", `${path}/${id}/recount`, { counted, startSequence });
+    if (alreadyRecounted) expect((await recount("10.00", 2)).status).toBe(200);
+    expect((await postEntry({ kind: "cash_out", amount: "50.00" })).status).toBe(200);
+    const pending = await send(venue.app, venue.cookie, "GET", path);
+    expect(pending.json.available).toBe("-40.00");
+    const restart = pending.json.confirmSequence as number;
+    const saved = await recount("3.00", restart);
+    expect(saved).toMatchObject({
+      status: 200,
+      json: { available: "3.00", recount: { counted: "3.00" } },
+    });
+    expect(await recount("3.00", restart)).toEqual(saved);
+    expect(await send(venue.app, venue.cookie, "GET", path)).toEqual(saved);
+    const done = await send(venue.app, venue.cookie, "POST", `${path}/${id}/finish`, {
+      confirmSequence: saved.json.confirmSequence,
+      amountLeft: "0.00",
+    });
+    expect(done).toMatchObject({
+      status: 200,
+      json: { bankWithdrawal: "3.00", difference: "43.00", slip: "queued" },
+    });
+    const nodes = [venue.cfg.nodeId];
+    const finishId = done.json.id as string;
+    const report = await inTx(venue, (tx) => readDrawerCloseForPrint(tx, nodes, finishId));
+    expect(report?.count.counted).toBe("3.00");
+    const history = await inTx(venue, (tx) =>
+      listDrawerCloses(tx, nodes, {
+        startAt: "0000-01-01T00:00:00.000Z",
+        endAt: "9999-01-01T00:00:00.000Z",
+      }),
+    );
+    expect(history).toMatchObject([
+      { id, recount: { counted: "3.00" }, finished: { cashAfterCount: "0.00" } },
+    ]);
+    const counts = await store.db
+      .select({ amount: drawerEntries.amount })
+      .from(drawerEntries)
+      .where(eq(drawerEntries.kind, "recount"))
+      .orderBy(drawerEntries.sequence);
+    expect(counts.map(({ amount }) => amount)).toEqual(alreadyRecounted ? [1000, 300] : [300]);
+  },
+);
 
 it("shows expected cash only after saving a count and lets another assigned till resume it", async () => {
   const order = await tabWith(venue, "Croquettes");

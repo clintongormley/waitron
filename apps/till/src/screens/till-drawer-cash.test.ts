@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { mountEquipmentApp, signIn } from "../../test/equipment-app.js";
+import { mountEquipmentApp, signIn, till } from "../../test/equipment-app.js";
 import { TillApi } from "../api/client.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 
@@ -25,52 +26,58 @@ async function choose(dialog: HTMLElement, direction: number) {
   await userEvent.click(choices.shadowRoot!.querySelectorAll("button")[direction]!);
 }
 
-it("records cash out from a signed-in Spanish till, using the key when the drawer fails to open", async () => {
-  const openDrawer = vi.fn().mockRejectedValue({ code: "drawer.no_printer" });
-  const bodies: unknown[] = [];
-  const api = new TillApi("", async (url, init) => {
-    expect(String(url)).toBe("/api/drawer/entries");
-    expect(init?.method).toBe("POST");
-    bodies.push(JSON.parse(String(init?.body)));
-    return Response.json({ id: "entry", printerId: "bar" });
-  });
-  const { el } = await mountEquipmentApp({
-    getDeviceEquipment: vi
-      .fn()
-      .mockResolvedValue({ roles: [], drawerPrinterId: "bar", opensDrawer: true }),
-    openDrawer,
-    saveDrawerEntry: api.saveDrawerEntry.bind(api),
-  });
-  await signIn(el, "es-ES");
-  const menu = () =>
-    el.shadowRoot!.querySelector("till-shell")?.shadowRoot?.querySelector("[data-test=more-menu]");
-  await vi.waitFor(() => expect(menu()?.querySelector(".drawer-cash")).toBeTruthy());
-  await userEvent.click(menu()!.shadowRoot!.querySelector("button")!);
-  await userEvent.click(menu()!.querySelector<HTMLElement>(".drawer-cash")!);
-  const dialog = el.shadowRoot!.querySelector("till-drawer-cash")!;
-  await userEvent.click(page.elementLocator(action(dialog, "open")));
-  await vi.waitFor(() =>
-    expect(dialog.shadowRoot!.textContent).toContain("Abre el cajón con la llave"),
-  );
-  await choose(dialog, 1);
-  await userEvent.fill(input(dialog, "amount"), "12.50");
-  expect(input(dialog, "amount").value).toBe("12,50");
-  await userEvent.fill(input(dialog, "reason"), "Proveedor");
-  await userEvent.click(action(dialog, "save"));
-  await expect
-    .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent)
-    .toContain("Movimiento guardado");
-  expect(bodies).toEqual([
-    {
-      printerId: "bar",
-      submissionId: expect.any(String),
-      kind: "cash_out",
-      amount: "12.50",
-      reason: "Proveedor",
-    },
-  ]);
-  expect(openDrawer).toHaveBeenCalledExactlyOnceWith(undefined, "bar");
-});
+it.each(["till", "phone-portrait"])(
+  "records cash out from a signed-in Spanish %s, using the key if needed",
+  async (formFactor) => {
+    const openDrawer = vi.fn().mockRejectedValue({ code: "drawer.no_printer" });
+    const bodies: unknown[] = [];
+    const api = new TillApi("", async (url, init) => {
+      expect(String(url)).toBe("/api/drawer/entries");
+      expect(init?.method).toBe("POST");
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ id: "entry", printerId: "bar" });
+    });
+    const { el } = await mountEquipmentApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValue({ roles: [], drawerPrinterId: "bar", opensDrawer: true }),
+      openDrawer,
+      saveDrawerEntry: api.saveDrawerEntry.bind(api),
+    });
+    await signIn(el, "es-ES");
+    const menu = () =>
+      el
+        .shadowRoot!.querySelector("till-shell")
+        ?.shadowRoot?.querySelector("[data-test=more-menu]");
+    await vi.waitFor(() => expect(menu()?.querySelector(".drawer-cash")).toBeTruthy());
+    await userEvent.click(menu()!.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu()!.querySelector<HTMLElement>(".drawer-cash")!);
+    const dialog = el.shadowRoot!.querySelector("till-drawer-cash")!;
+    await userEvent.click(page.elementLocator(action(dialog, "open")));
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.textContent).toContain(es["drawer_close.use_key"]),
+    );
+    await choose(dialog, 1);
+    await userEvent.fill(input(dialog, "amount"), "12.50");
+    expect(input(dialog, "amount").value).toBe("12,50");
+    await userEvent.fill(input(dialog, "reason"), "Paid supplier");
+    await userEvent.click(action(dialog, "save"));
+    await expect
+      .poll(() => dialog.shadowRoot!.querySelector('[role="status"]')?.textContent)
+      .toContain(es["drawer_entry.saved"]);
+    expect(bodies).toEqual([
+      {
+        printerId: "bar",
+        submissionId: expect.any(String),
+        kind: "cash_out",
+        amount: "12.50",
+        reason: "Paid supplier",
+      },
+    ]);
+    expect(openDrawer).toHaveBeenCalledExactlyOnceWith(undefined, "bar");
+  },
+);
 
 it("marks the reason after an invalid Save and uses the same submission on a retry", async () => {
   setLocale("en-GB");
