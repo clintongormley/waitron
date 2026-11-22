@@ -1516,7 +1516,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
-  A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
+  A80, and `poll` too, bar `boot.mirror.test.ts`'s copy; the rest remain); a shared
+  `useFiscalMirrorPair()` for the two-clone fiscal suites.
 
 - **What the stream pause test's last-restore fix (A387, #1398) left open:** a local Linux run
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a

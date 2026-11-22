@@ -5,7 +5,6 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -32,6 +31,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { freePort } from "./testing/free-ports.js";
+import { pollOrThrow } from "./testing/boot-harness.js";
 import { useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
@@ -257,16 +257,6 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-/** Throws on timeout: every call is a barrier, so a request never goes to a server still booting. */
-async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {
-  for (let i = 0; i < 200; i += 1) {
-    const value = await predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  throw new Error("poll: predicate did not become defined within ~10s");
-}
-
 async function postPromote(base: string, body: unknown): Promise<Response> {
   return fetch(`${base}/management-api/promote`, {
     method: "POST",
@@ -299,7 +289,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      await poll(async () => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => server.health.lastPassAt ?? undefined);
 
       const res = await postPromote(base, { oldNodeNeutralised: true });
       expect(res.status).toBe(401);
@@ -331,7 +321,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const server = await bootTrading(port);
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      await poll(async () => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => server.health.lastPassAt ?? undefined);
 
       const res = await postPromote(base, {
         oldNodeNeutralised: true,
@@ -359,7 +349,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const server = await bootTrading(port);
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      await poll(async () => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(async () => server.health.lastPassAt ?? undefined);
 
       // Control: the read-only gate IS mounted on this fenced node.
       const write = await fetch(`${base}/management-api/menus`, {

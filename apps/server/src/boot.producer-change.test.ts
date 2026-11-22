@@ -4,7 +4,6 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
@@ -25,6 +24,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { insertFiscalRegistro, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import { freePort } from "./testing/free-ports.js";
+import { pollOrThrow } from "./testing/boot-harness.js";
 import { useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
@@ -120,15 +120,6 @@ afterAll(async () => {
   }
 });
 
-async function poll<T>(predicate: () => T | undefined): Promise<T> {
-  for (let i = 0; i < 200; i += 1) {
-    const value = predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  throw new Error("poll: predicate did not become defined within ~10s");
-}
-
 /** Starts a production server on the venue, with `taxId` as the running producer's tax number. */
 async function startWith(taxId: string | undefined) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-producer-change-state-"));
@@ -183,7 +174,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
   it("trades when the running producer is the one the chain was recorded under", async () => {
     const { server, cleanUp } = await startWith(HEAD_PRODUCER_NIF);
     try {
-      await poll(() => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(() => server.health.lastPassAt ?? undefined);
     } finally {
       await server.close();
       await cleanUp();
@@ -202,7 +193,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
     await setNodeMode({ venue: db, node }, NODE_ID, "mirror", "adopt");
     const { server, cleanUp } = await startWith(undefined);
     try {
-      await poll(() => server.health.lastPassAt ?? undefined);
+      await pollOrThrow(() => server.health.lastPassAt ?? undefined);
     } finally {
       await server.close();
       await cleanUp();

@@ -1113,7 +1113,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(typeof provision.recoveryPackPdf).toBe("string");
           const pack = await readRecoveryPackPdf(Buffer.from(provision.recoveryPackPdf, "base64"));
           expect(pack.serverKeyName).toBe(provision.breakGlassKeyName);
-          await poll(() => shuttingDown);
+          await poll(() => (shuttingDown === undefined ? undefined : true));
           await shuttingDown;
           // The setup boot's state folder holds the keys the venue was sealed with; it is removed
           // when the setup boot closes, so the trading start runs from a copy.
