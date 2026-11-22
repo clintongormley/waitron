@@ -149,6 +149,15 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
 ### Fiscal records, invoices and the asesor
 
+- **A1566. A clearer A4 invoice, and bank-transfer instructions on deferred bills** (owner,
+  2026-11-22; fiscal, the owner lands it). The A4 invoice gets a layout of its own: the QR beside a
+  letterhead, the number and date in a band, the customer in a shaded box, a six-column table, the
+  VAT summary and a payment footer. Bills closed as a deferred payment show how to pay by bank
+  transfer, on A4 and on the till receipt, from a new bank-account setting whose changes are emailed
+  to administrators. Design `docs/superpowers/specs/2026-11-22-a4-invoice-layout-design.md`, plan
+  `docs/superpowers/plans/2026-11-22-a4-invoice-layout.md`; queued to lane L, branch
+  `a4-invoice-layout` (Task 1 built, unreviewed).
+
 - **Make `packages/provisioning`'s tests regime-agnostic** (fiscal; the owner lands it): point the
   ones that do not test a fiscal regime at `fiscal-none` rather than `fiscal-verifactu`. Left open
   by #3461, which removed the Verifactu backend's unused `resolveClient` and `skipRetryMs`.
