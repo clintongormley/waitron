@@ -613,7 +613,7 @@ describe("till-app: an adjustment someone must approve", () => {
     await pinPad(el, "0000");
 
     expect(approval(el)).not.toBeNull();
-    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(approval(el)!.error?.code).toBe("pin.invalid");
     expect(
       (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
         .textContent,
@@ -621,14 +621,10 @@ describe("till-app: an adjustment someone must approve", () => {
     expect(dialog(el)).not.toBeNull();
   });
 
-  it("keeps the PIN prompt open after too many wrong PINs, saying to wait", async () => {
+  it("keeps the PIN prompt open after too many wrong PINs, saying to wait when the refusal carries no seconds", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
-      applyAdjustment: vi.fn().mockRejectedValue({
-        code: "pin.throttled",
-        params: { retryAfterSeconds: 2 },
-        status: 429,
-      }),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "pin.throttled", status: 429 }),
     });
     const order = await openTable4(el);
     await previewComp(el, order);
@@ -637,7 +633,7 @@ describe("till-app: an adjustment someone must approve", () => {
     await pinPad(el, "7777");
 
     expect(approval(el)).not.toBeNull();
-    expect(approval(el)!.error).toBe("pin.throttled");
+    expect(approval(el)!.error?.code).toBe("pin.throttled");
     expect(
       (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
         .textContent,
@@ -1804,7 +1800,7 @@ describe("till-app: service cancellation consent", () => {
     expect(methods.cancelItem).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
     await pinPad(el, "1234");
-    expect(approval(el)?.error).toBe("pin.invalid");
+    expect(approval(el)?.error?.code).toBe("pin.invalid");
     emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "5678" });
     await flush(el);
     expect(methods.cancelItem).toHaveBeenCalledTimes(2);
@@ -2797,7 +2793,7 @@ describe("till-app: service cancellation consent", () => {
     await removeCharge(el);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
     await pinPad(el, "1234");
-    expect(approval(el)?.error).toBe("pin.invalid");
+    expect(approval(el)?.error?.code).toBe("pin.invalid");
     expect(cancelDialog(el)).not.toBeNull();
     const retry = approval(el)!;
     for (const digit of "5678") {
@@ -3377,7 +3373,7 @@ describe("till-app: service cancellation consent", () => {
       await chooseRefund(el);
       expect(approval(el)).not.toBeNull();
       await pinPad(el, "1111");
-      expect(approval(el)?.error).toBe("pin.invalid");
+      expect(approval(el)?.error?.code).toBe("pin.invalid");
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       const prompt = approval(el)!;
       for (const digit of "7777") {
@@ -4252,7 +4248,7 @@ describe("till-app: service cancellation consent", () => {
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
         await pinPad(el, "1234");
         await expect
-          .poll(() => (refundPrompt(el) as TillSupervisorOverrideDialog).error)
+          .poll(() => (refundPrompt(el) as TillSupervisorOverrideDialog).error?.code)
           .toBe("pin.throttled");
       });
 
@@ -4295,7 +4291,7 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
         await pinPad(el, "1111");
-        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error).toBe("pin.invalid");
+        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error?.code).toBe("pin.invalid");
         emit(refundPrompt(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
         await flush(el);
         await expect.poll(() => sent()).toHaveLength(3);

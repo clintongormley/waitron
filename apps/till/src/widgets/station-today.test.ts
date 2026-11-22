@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { page } from "vitest/browser";
 import { TillApi } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { TillStationToday } from "./station-today.js";
@@ -203,7 +203,7 @@ it.each(["pin.invalid", "pin.throttled"])(
       override.shadowRoot!.querySelector<HTMLElement>(".authorize")!.click();
     };
     await enterPin("1234");
-    await expect.poll(() => override.error).toBe(pinCode);
+    await expect.poll(() => override.error?.code).toBe(pinCode);
     expect(changed).toBe(0);
     await override.updateComplete;
     expect(
@@ -218,6 +218,43 @@ it.each(["pin.invalid", "pin.throttled"])(
     ]);
   },
 );
+it("counts the manager's wait down in the PIN prompt after too many wrong PINs", async () => {
+  let writes = 0;
+  const { el } = await mount(
+    {
+      station: {
+        ...station,
+        open: false,
+        byHand: "closed",
+        why: "closed_by_hand",
+        sendsTo: "pass",
+      },
+    },
+    (path, init) => {
+      if (path === "/api/service-day/authorizers") return json(managers);
+      if (init.method === "PUT")
+        return ++writes === 1
+          ? refused("authorization.not_permitted")
+          : json({ error: { code: "pin.throttled", params: { retryAfterSeconds: 30 } } }, 429);
+      return json({ destinations, openDishCount: 0 });
+    },
+  );
+  act(el);
+  const override = await pinStep(el);
+  override.shadowRoot!.querySelector<HTMLElement>("[data-person=manager]")!.click();
+  await override.updateComplete;
+  const pad = override.shadowRoot!.querySelector("till-numeric-pad")!;
+  await pad.updateComplete;
+  for (const digit of "1234")
+    pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!.click();
+  await override.updateComplete;
+  override.shadowRoot!.querySelector<HTMLElement>(".authorize")!.click();
+  await expect.poll(() => override.error?.code).toBe("pin.throttled");
+  await override.updateComplete;
+  expect(
+    (await formMessageOf(override.shadowRoot!.querySelector("wt-form-actions")!))!.textContent,
+  ).toContain(t("override.throttled").replace("{n}", "30"));
+});
 it("a closed close-for-today dialog goes away, writes nothing and frees the action", async () => {
   const { el, calls } = await mount();
   act(el);
@@ -457,7 +494,7 @@ it.each(["pin.invalid", "pin.throttled"])(
     pin.dispatchEvent(
       new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
     );
-    await expect.poll(() => pin.error).toBe(code);
+    await expect.poll(() => pin.error?.code).toBe(code);
     expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBe(close);
     expect(close.shadowRoot!.querySelector("wt-combobox")!.value).toBe("bar");
     pin.dispatchEvent(

@@ -7,7 +7,6 @@ import { codeMessage } from "../i18n/codes.js";
 import {
   TillSupervisorOverrideDialog,
   approverRefusal,
-  refusalCode,
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
 import type { StaffMember } from "../api/client.js";
@@ -144,7 +143,7 @@ describe("till-supervisor-override-dialog", () => {
   it("shows the pin.invalid retry copy when the parent passes that error after a failed attempt", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
-    el.error = "pin.invalid";
+    el.error = { code: "pin.invalid", personId: "sup-1" };
     await el.updateComplete;
     const alert = await shownError(el);
     expect(alert).not.toBeNull();
@@ -154,7 +153,7 @@ describe("till-supervisor-override-dialog", () => {
   it("shows the wait-then-retry copy when the parent passes pin.throttled", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
-    el.error = "pin.throttled";
+    el.error = { code: "pin.throttled", personId: "sup-1" };
     await el.updateComplete;
     const alert = await shownError(el);
     expect(alert!.textContent).toContain(t("pin.throttled"));
@@ -162,12 +161,12 @@ describe("till-supervisor-override-dialog", () => {
   });
 
   it("dismisses a shown error as soon as the operator starts retyping", async () => {
-    const { el } = await mount({ error: "pin.invalid" });
+    const { el } = await mount({ error: { code: "pin.invalid", personId: "sup-1" } });
     await pick(el, "sup-1");
     // Selecting dismissed the error; a fresh one re-arms it.
     el.error = null;
     await el.updateComplete;
-    el.error = "pin.invalid";
+    el.error = { code: "pin.invalid", personId: "sup-1" };
     await el.updateComplete;
     expect(await shownError(el)).not.toBeNull();
 
@@ -178,7 +177,7 @@ describe("till-supervisor-override-dialog", () => {
   it("maps any other code to the generic override.error copy, never the raw code", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
-    el.error = "server.internal";
+    el.error = { code: "server.internal", personId: "sup-1" };
     await el.updateComplete;
     const alert = await shownError(el);
     expect(alert!.textContent).toContain(t("override.error"));
@@ -188,7 +187,7 @@ describe("till-supervisor-override-dialog", () => {
   it("says the approver may not do it when the parent passes authorization.not_permitted", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
-    el.error = "authorization.not_permitted";
+    el.error = { code: "authorization.not_permitted", personId: "sup-1" };
     await el.updateComplete;
     const alert = await shownError(el);
     expect(alert!.textContent!.trim()).toBe(codeMessage("authorization.not_permitted"));
@@ -233,7 +232,7 @@ it("hands a refusal to the footer row while Authorize remains usable for retry",
   const { el } = await mount();
   await pick(el, "sup-1");
   await typePin(el, "1234");
-  el.error = "pin.invalid";
+  el.error = { code: "pin.invalid", personId: "sup-1" };
   await el.updateComplete;
   const actions = root(el).querySelector<
     HTMLElement & { error: string; updateComplete: Promise<unknown> }
@@ -315,25 +314,29 @@ describe("a throttled approval PIN counts down like sign-in", () => {
   const countdown = (n: number) => t("override.throttled").replace("{n}", String(n));
   const authorize = (el: TillSupervisorOverrideDialog) =>
     root(el).querySelector<HTMLElement & { disabled: boolean }>(".authorize")!;
+  const padWrap = (el: TillSupervisorOverrideDialog) =>
+    root(el).querySelector<HTMLElement>(".pad-wrap")!;
+  const dots = (el: TillSupervisorOverrideDialog) =>
+    root(el).querySelector(".pin-display")!.textContent!.trim();
+  const useClockTimers = () =>
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
 
-  async function throttledFor(seconds: number) {
+  async function throttledFor(seconds: number, pin = "") {
     const { el } = await mount();
     await pick(el, "sup-1");
-    el.error = { code: "pin.throttled", retryAfterSeconds: seconds };
+    if (pin !== "") await typePin(el, pin);
+    el.error = { code: "pin.throttled", retryAfterSeconds: seconds, personId: "sup-1" };
     await el.updateComplete;
     return el;
   }
 
-  it("shows the seconds left, keeps them while the person types, and ticks down", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  it("shows the seconds left and ticks down, letting the approver try again at zero", async () => {
+    useClockTimers();
     try {
       const el = await throttledFor(3);
       expect((await shownError(el))!.textContent!.trim()).toBe(
         "Too many wrong PINs. Try again in 3s",
       );
-
-      await typePin(el, "12");
-      expect((await shownError(el))!.textContent!.trim()).toBe(countdown(3));
       expect(authorize(el).disabled).toBe(true);
 
       await vi.advanceTimersByTimeAsync(1000);
@@ -344,19 +347,66 @@ describe("a throttled approval PIN counts down like sign-in", () => {
       await vi.advanceTimersByTimeAsync(2000);
       await el.updateComplete;
       expect(await shownError(el)).toBeNull();
+      await typePin(el, "1");
       expect(authorize(el).disabled).toBe(false);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("does not authorize with Enter or a click while counting", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  it("ends the wait at the server's deadline even when the page was too busy to tick", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    let now = 10_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
     try {
-      const el = await throttledFor(2);
+      const el = await throttledFor(3, "12");
+      expect((await shownError(el))!.textContent!.trim()).toBe(countdown(3));
+      // The page was paused for 3.5 s; only one timer callback runs when it wakes.
+      now += 3500;
+      await vi.advanceTimersByTimeAsync(1000);
+      await el.updateComplete;
+      expect(await shownError(el)).toBeNull();
+      expect(authorize(el).disabled).toBe(false);
+    } finally {
+      clock.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("greys the number pad and takes no keys while counting, as sign-in does", async () => {
+    const el = await throttledFor(1);
+    expect(padWrap(el).inert).toBe(true);
+    expect(getComputedStyle(padWrap(el)).opacity).toBe("0.5");
+    await userEvent.keyboard("12");
+    await el.updateComplete;
+    expect(dots(el)).toBe("");
+
+    await vi.waitFor(() => expect(padWrap(el).inert).toBe(false), { timeout: 3000 });
+    expect(getComputedStyle(padWrap(el)).opacity).toBe("1");
+    await userEvent.keyboard("12");
+    await el.updateComplete;
+    expect(dots(el)).toBe("●●");
+  });
+
+  it("keeps Back and the approver list usable while counting", async () => {
+    useClockTimers();
+    try {
+      const el = await throttledFor(30);
+      expect(root(el).querySelector<HTMLElement>(".back")!.closest("[inert]")).toBeNull();
+      root(el).querySelector<HTMLElement>(".back")!.click();
+      await el.updateComplete;
+      expect(root(el).querySelector('[data-person="adm-1"]')!.closest("[inert]")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not authorize with Enter or a click while counting", async () => {
+    useClockTimers();
+    try {
+      const el = await throttledFor(2, "1234");
       const confirmed = vi.fn();
       el.addEventListener("override-confirm", confirmed);
-      await typePin(el, "1234");
       authorize(el).click();
       pad(el)!.dispatchEvent(new CustomEvent("pad-enter"));
       await el.updateComplete;
@@ -367,13 +417,13 @@ describe("a throttled approval PIN counts down like sign-in", () => {
   });
 
   it("restarts the count for a new refusal", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    useClockTimers();
     try {
       const el = await throttledFor(3);
       await vi.advanceTimersByTimeAsync(2000);
       el.error = null;
       await el.updateComplete;
-      el.error = { code: "pin.throttled", retryAfterSeconds: 5 };
+      el.error = { code: "pin.throttled", retryAfterSeconds: 5, personId: "sup-1" };
       await el.updateComplete;
       expect((await shownError(el))!.textContent!.trim()).toBe(countdown(5));
     } finally {
@@ -382,7 +432,7 @@ describe("a throttled approval PIN counts down like sign-in", () => {
   });
 
   it("ends the count when the person goes Back, so another approver can try at once", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    useClockTimers();
     try {
       const el = await throttledFor(30);
       root(el).querySelector<HTMLElement>(".back")!.click();
@@ -396,9 +446,29 @@ describe("a throttled approval PIN counts down like sign-in", () => {
     }
   });
 
+  it("stops counting when the prompt closes, and starts no count for a refusal arriving after", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      const el = await throttledFor(30);
+      expect(vi.getTimerCount()).toBe(1);
+      root(el)
+        .querySelector("wt-dialog")!
+        .dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(vi.getTimerCount()).toBe(0);
+
+      el.error = { code: "pin.throttled", retryAfterSeconds: 30, personId: "sup-1" };
+      await el.updateComplete;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the wait-a-moment wording when the refusal carries no seconds", async () => {
     const el = await throttledFor(0);
     expect((await shownError(el))!.textContent!.trim()).toBe(t("pin.throttled"));
+    expect(padWrap(el).inert).toBe(false);
     await typePin(el, "1");
     expect(authorize(el).disabled).toBe(false);
   });
@@ -407,7 +477,7 @@ describe("a throttled approval PIN counts down like sign-in", () => {
     const { el } = await mount();
     setLocale("es-ES");
     await pick(el, "sup-1");
-    el.error = { code: "pin.throttled", retryAfterSeconds: 4 };
+    el.error = { code: "pin.throttled", retryAfterSeconds: 4, personId: "sup-1" };
     await el.updateComplete;
     expect((await shownError(el))!.textContent!.trim()).toBe(
       es["override.throttled"].replace("{n}", "4"),
@@ -415,18 +485,68 @@ describe("a throttled approval PIN counts down like sign-in", () => {
   });
 });
 
+describe("a refusal belongs to the approver whose PIN was sent", () => {
+  const authorize = (el: TillSupervisorOverrideDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>(".authorize")!;
+
+  /** The first approver's PIN is sent; the person goes Back and starts on another before the
+   * answer comes. */
+  async function secondApproverTyping() {
+    const { el } = await mount();
+    await pick(el, "sup-1");
+    await typePin(el, "1111");
+    authorize(el).click();
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>(".back")!.click();
+    await el.updateComplete;
+    await pick(el, "adm-1");
+    await typePin(el, "2222");
+    return el;
+  }
+
+  it("does not count the first approver's wait down under the second", async () => {
+    const el = await secondApproverTyping();
+    el.error = { code: "pin.throttled", retryAfterSeconds: 30, personId: "sup-1" };
+    await el.updateComplete;
+    expect(await shownError(el)).toBeNull();
+    expect(root(el).querySelector(".pad-wrap")!.hasAttribute("inert")).toBe(false);
+    expect(authorize(el).disabled).toBe(false);
+  });
+
+  it("does not show the first approver's wrong PIN under the second", async () => {
+    const el = await secondApproverTyping();
+    el.error = { code: "pin.invalid", personId: "sup-1" };
+    await el.updateComplete;
+    expect(await shownError(el)).toBeNull();
+  });
+
+  it("shows the second approver's own refusal", async () => {
+    const el = await secondApproverTyping();
+    el.error = { code: "pin.invalid", personId: "adm-1" };
+    await el.updateComplete;
+    expect((await shownError(el))!.textContent).toContain(t("pin.invalid"));
+  });
+});
+
 describe("approverRefusal", () => {
-  it("keeps a throttled refusal's seconds and reduces everything else to its code", () => {
-    expect(approverRefusal({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 })).toEqual({
+  it("names the approver, and keeps the seconds only on a throttled refusal", () => {
+    expect(
+      approverRefusal({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 }, "sup-1"),
+    ).toStrictEqual({ code: "pin.throttled", retryAfterSeconds: 5, personId: "sup-1" });
+    expect(approverRefusal({ code: "pin.throttled", status: 429 }, "sup-1")).toStrictEqual({
       code: "pin.throttled",
-      retryAfterSeconds: 5,
+      personId: "sup-1",
     });
-    expect(approverRefusal({ code: "pin.throttled", status: 429 })).toBe("pin.throttled");
-    expect(approverRefusal({ code: "pin.throttled", retryAfterSeconds: 0 })).toBe("pin.throttled");
-    expect(approverRefusal({ code: "pin.invalid", retryAfterSeconds: 5 })).toBe("pin.invalid");
-    expect(approverRefusal(new Error("boom"))).toBe("server.internal");
-    expect(refusalCode({ code: "pin.throttled", retryAfterSeconds: 5 })).toBe("pin.throttled");
-    expect(refusalCode("pin.invalid")).toBe("pin.invalid");
-    expect(refusalCode(null)).toBeNull();
+    expect(approverRefusal({ code: "pin.throttled", retryAfterSeconds: 0 }, "sup-1")).toStrictEqual(
+      { code: "pin.throttled", personId: "sup-1" },
+    );
+    expect(approverRefusal({ code: "pin.invalid", retryAfterSeconds: 5 }, "sup-1")).toStrictEqual({
+      code: "pin.invalid",
+      personId: "sup-1",
+    });
+    expect(approverRefusal(new Error("boom"), "sup-1")).toStrictEqual({
+      code: "server.internal",
+      personId: "sup-1",
+    });
   });
 });

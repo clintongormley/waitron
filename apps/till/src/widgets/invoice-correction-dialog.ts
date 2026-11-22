@@ -499,14 +499,15 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.busy = true;
     this.sendRefusal = null;
     this.lostKey = lost;
+    const approverId = this.#override?.personId;
     try {
       await step();
       this.approvers = null;
       this.#override = undefined;
     } catch (error) {
       const refusal = refusalOf(error);
-      if (this.approvers !== null && PIN_REFUSALS.has(refusal.code)) {
-        this.pinError = approverRefusal(error);
+      if (this.approvers !== null && approverId !== undefined && PIN_REFUSALS.has(refusal.code)) {
+        this.pinError = approverRefusal(error, approverId);
       } else if (refusal.code === "authorization.not_permitted") {
         this.#retry = step;
         this.#retryLost = lost;

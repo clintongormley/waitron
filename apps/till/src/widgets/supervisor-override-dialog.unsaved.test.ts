@@ -126,7 +126,7 @@ it("Authorize sends exact leading-zero proof once and clears the warning without
   expect(pad(form).value).toBe("");
   expect(unload()).toBe(false);
   expect((await question(app)).open).toBe(false);
-  form.error = "pin.invalid";
+  form.error = { code: "pin.invalid", personId: "manager-1" };
   await form.updateComplete;
   await key(form, "2");
   button(form, ".back").click();
@@ -141,7 +141,7 @@ it("a refusal or roster refresh cannot clear unsubmitted digits or a pending que
   await key(form, "3");
   button(form, ".back").click();
   expect((await question(app)).open).toBe(true);
-  form.error = "pin.throttled";
+  form.error = { code: "pin.throttled", personId: "manager-1" };
   form.authorizers = [{ personId: "manager-1", displayName: "Ana refreshed" }];
   await form.updateComplete;
   expect((await question(app)).open).toBe(true);

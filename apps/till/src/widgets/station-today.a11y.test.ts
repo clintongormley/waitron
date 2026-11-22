@@ -104,7 +104,7 @@ describe.each(["light", "dark"] as const)("device station today %s", (theme) => 
             pin.dispatchEvent(
               new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
             );
-            await expect.poll(() => pin.error).toBe("pin.invalid");
+            await expect.poll(() => pin.error?.code).toBe("pin.invalid");
             await pin.updateComplete;
           }
         }

@@ -15,7 +15,11 @@ import { codeMessage } from "../i18n/codes.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./keep-open-dialog.js";
 import "./supervisor-override-dialog.js";
-import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+import {
+  approverRefusal,
+  type ApproverRefusal,
+  type OverrideConfirmDetail,
+} from "./supervisor-override-dialog.js";
 
 @customElement("till-keep-open")
 export class TillKeepOpen extends LitElement {
@@ -36,7 +40,7 @@ export class TillKeepOpen extends LitElement {
   @state() private refusal: string | null = null;
   @state() private refusalField: string | null = null;
   @state() private authorizers: StaffMember[] | null = null;
-  @state() private pinError: string | null = null;
+  @state() private pinError: ApproverRefusal | null = null;
   #intent?: ZoneExtensionWrite;
   #generation = 0;
   override disconnectedCallback(): void {
@@ -133,8 +137,8 @@ export class TillKeepOpen extends LitElement {
         code === "authorization.not_permitted"
       )
         this.refusal = code;
-      else if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
-        this.pinError = code;
+      else if (override && this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
+        this.pinError = approverRefusal(error, override.personId);
       else if (code === "authorization.not_permitted") {
         const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {
