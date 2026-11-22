@@ -268,19 +268,27 @@ it("keeps the same columns from one render to the next", async () => {
 it("steps to the previous and next season through the address, keeping the month and area", async () => {
   const { painter, open } = await mount({ area: "station:st-kitchen" });
   byTest(painter, "next-season")!.click();
-  expect(open).toHaveBeenLastCalledWith("staffing", {
-    month: "2026-12",
-    area: "station:st-kitchen",
-    painter: "season",
-    season: "spring",
-  });
+  expect(open).toHaveBeenLastCalledWith(
+    "staffing",
+    {
+      month: "2026-12",
+      area: "station:st-kitchen",
+      painter: "season",
+      season: "spring",
+    },
+    { replace: true },
+  );
   byTest(painter, "previous-season")!.click();
-  expect(open).toHaveBeenLastCalledWith("staffing", {
-    month: "2026-12",
-    area: "station:st-kitchen",
-    painter: "season",
-    season: "autumn",
-  });
+  expect(open).toHaveBeenLastCalledWith(
+    "staffing",
+    {
+      month: "2026-12",
+      area: "station:st-kitchen",
+      painter: "season",
+      season: "autumn",
+    },
+    { replace: true },
+  );
 });
 
 it("reads the new season when the address steps to it", async () => {
@@ -546,13 +554,29 @@ it("a refusal with no field shows the code's message", async () => {
   expect(grid(painter).columnErrors.size).toBe(0);
 });
 
+it.each([
+  ["department:dep-bar", { season: "winter", department: "dep-bar" }],
+  ["station:st-kitchen", { season: "winter" }],
+])("opens the matching Opening hours season from %s", async (area, params) => {
+  const { painter, open } = await mount({ readOnly: true });
+  await pick(painter, area);
+  const control = root(painter).querySelector("wt-segmented-control[slot=picker]")!;
+  expect(control.value).toBe("staffing");
+  await page.getByRole("radio", { name: "Opening hours", exact: true }).click();
+  expect(open).toHaveBeenCalledWith("season", params, { replace: true });
+});
+
 it("✕ returns to the month at the address's area", async () => {
   const { painter, open } = await mount({ area: "department:dep-bar" });
   const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
   await close;
   await vi.waitFor(() =>
-    expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12", area: "department:dep-bar" }),
+    expect(open).toHaveBeenCalledWith(
+      "staffing",
+      { month: "2026-12", area: "department:dep-bar" },
+      { replace: true },
+    ),
   );
 });
 
@@ -561,7 +585,9 @@ it("✕ without an area in the address returns to the month alone", async () => 
   const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
   await close;
-  await vi.waitFor(() => expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12" }));
+  await vi.waitFor(() =>
+    expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12" }, { replace: true }),
+  );
 });
 
 it("read-only: only ✕, no chips, and a grid that cannot change", async () => {

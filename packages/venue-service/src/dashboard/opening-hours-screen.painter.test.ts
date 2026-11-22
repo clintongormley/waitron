@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { setLocale, type CalendarViewHost, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
 import { isDashboardPath } from "@waitron/shared";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -59,6 +59,7 @@ class PainterApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly writes: unknown[] = [];
   model = withBar();
+  calendar?: Screen["calendar"];
   readonly api = new OpeningHoursApi(request(() => this.model, this.writes));
   private releaseLinks?: () => void;
   override connectedCallback() {
@@ -70,7 +71,10 @@ class PainterApp extends LitElement {
     this.releaseLinks?.();
   }
   override render() {
-    return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
+    return html`<dashboard-opening-hours-screen
+        .api=${this.api}
+        .calendar=${this.calendar}
+      ></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
@@ -108,15 +112,16 @@ async function mount(
   return el;
 }
 /** Mounts at `address`, or where the guard has already gone, keeping its history positions. */
-async function mountApp(address?: string) {
+async function mountApp(address?: string, calendar?: Screen["calendar"]) {
   if (address) history.replaceState(null, "", address);
   const app = document.createElement("opening-hours-painter-test-app") as PainterApp;
+  app.calendar = calendar;
   applyTokens(app);
   hosts.push(app);
   document.body.append(app);
   await app.updateComplete;
   const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-  await expect.poll(() => drawnView(el)).toBeDefined();
+  if (!calendar) await expect.poll(() => drawnView(el)).toBeDefined();
   return { app, el };
 }
 /** Records each pushed entry's path. Chromium caps a tab's history at 50 entries, and earlier
@@ -157,6 +162,47 @@ async function choose(app: PainterApp, decision: "keep" | "discard") {
 }
 
 describe("the season painter's address", () => {
+  it("replaces a Staffing season step and switch through the app's history guard", async () => {
+    let host: CalendarViewHost | undefined;
+    const address = "/opening-hours/view/staffing/month/2026-12/painter/season/season/winter";
+    const { el } = await mountApp(address, {
+      ctx: { request: request(withBar) },
+      views: [
+        {
+          canWrite: true,
+          view: {
+            id: "staffing",
+            order: 10,
+            labelKey: "staffing",
+            requiresPermission: "schedule.manage",
+            create(_ctx, viewHost) {
+              host = viewHost;
+              return { render: () => html`<p>Staffing</p>` };
+            },
+          },
+        },
+      ],
+    });
+    await expect.poll(() => host).toBeDefined();
+    const pushed = vi.spyOn(history, "pushState");
+    const replaced = vi.spyOn(history, "replaceState");
+    const step = "/opening-hours/view/staffing/month/2026-12/painter/season/season/spring";
+    const switchTo = "/opening-hours/view/season/season/spring/department/d1";
+    host!.open(
+      "staffing",
+      { month: "2026-12", painter: "season", season: "spring" },
+      { replace: true },
+    );
+    await expect.poll(() => location.pathname).toBe(step);
+    host!.open("season", { season: "spring", department: "d1" }, { replace: true });
+    await expect.poll(() => painterOf(el)?.seasonId).toBe("spring");
+    expect(location.pathname).toBe(switchTo);
+    expect(pushed).not.toHaveBeenCalled();
+    expect(
+      replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+    ).toEqual([step, switchTo]);
+  });
+
   it("opens over the Year on a direct load, fed the screen's live model and api", async () => {
     const el = await mount("/opening-hours/view/season/season/spring/department/d1/zone/z2");
     const painter = await shownPainter(el);

@@ -835,16 +835,16 @@ describe("the staffing paint routes", () => {
           area: p.dept,
           name: "Dining room",
           dates: [
-            { dateId: p.aug14, date: "2026-08-14", blocks: [lunch] },
-            { dateId: p.aug15, date: "2026-08-15", blocks: [] },
+            { dateId: p.aug14, date: "2026-08-14", blocks: [lunch], seasonBlocks: [] },
+            { dateId: p.aug15, date: "2026-08-15", blocks: [], seasonBlocks: [] },
           ],
         },
         {
           area: p.grill,
           name: "Grill",
           dates: [
-            { dateId: p.aug14, date: "2026-08-14", blocks: null },
-            { dateId: p.aug15, date: "2026-08-15", blocks: null },
+            { dateId: p.aug14, date: "2026-08-14", blocks: null, seasonBlocks: [] },
+            { dateId: p.aug15, date: "2026-08-15", blocks: null, seasonBlocks: [] },
           ],
         },
       ],

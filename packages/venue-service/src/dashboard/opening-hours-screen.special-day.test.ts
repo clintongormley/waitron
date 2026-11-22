@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { commands, userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { setLocale, type CalendarViewHost, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
 import { isDashboardPath } from "@waitron/shared";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
@@ -163,16 +163,18 @@ async function mount(
   readOnly = false,
   failing: string[] = [],
   holding: string[] = [],
+  calendar?: Screen["calendar"],
 ) {
   history.replaceState(null, "", address);
   const recorded: Recorded = { writes: [], months: [], failing, holding };
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(request(recorded));
   el.readOnly = readOnly;
+  el.calendar = calendar;
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
-  await expect.poll(() => drawnView(el)).toBeDefined();
+  if (!calendar) await expect.poll(() => drawnView(el)).toBeDefined();
   await el.updateComplete;
   return { el, ...recorded };
 }
@@ -211,6 +213,46 @@ const drawnView = (el: Screen) =>
       : undefined;
 
 describe("the special-day painter's address", () => {
+  it("replaces a Staffing close and opens the stored Opening hours day through an unguarded host", async () => {
+    let host: CalendarViewHost | undefined;
+    const address =
+      "/opening-hours/view/staffing/month/2026-12/painter/special-day/special-day/sd1";
+    const { el } = await mount(address, true, [], [], {
+      ctx: { request: request({ writes: [], months: [], failing: [], holding: [] }) },
+      views: [
+        {
+          canWrite: false,
+          view: {
+            id: "staffing",
+            order: 10,
+            labelKey: "staffing",
+            requiresPermission: "schedule.manage",
+            create(_ctx, viewHost) {
+              host = viewHost;
+              return { render: () => html`<p>Staffing</p>` };
+            },
+          },
+        },
+      ],
+    });
+    await expect.poll(() => host).toBeDefined();
+    const pushed = vi.spyOn(history, "pushState");
+    const replaced = vi.spyOn(history, "replaceState");
+    const month = "/opening-hours/view/staffing/month/2026-12";
+    const switchTo = "/opening-hours/view/special-day/special-day/sd1";
+    host!.open("staffing", { month: "2026-12" }, { replace: true });
+    await expect.poll(() => location.pathname).toBe(month);
+    host!.open("special-day", { "special-day": "sd1" }, { replace: true });
+    const painter = await shownPainter(el);
+    expect(painter.specialDayId).toBe("sd1");
+    expect(painter.readOnly).toBe(true);
+    expect(location.pathname).toBe(switchTo);
+    expect(pushed).not.toHaveBeenCalled();
+    expect(
+      replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+    ).toEqual([month, switchTo]);
+  });
+
   it("opens a stored special day over the Year on a direct load, fed the screen's model and api, and closes to the Year", async () => {
     const { el, writes } = await mount("/opening-hours/view/special-day/special-day/sd1");
     const painter = await shownPainter(el);

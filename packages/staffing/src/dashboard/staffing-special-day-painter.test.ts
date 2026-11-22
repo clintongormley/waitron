@@ -135,6 +135,29 @@ it("titles the special day and draws one column per date, which may follow the s
   );
 });
 
+it("shows inherited blocks only while the date follows, with no edit controls", async () => {
+  const read = specialDayStaffing();
+  const dates = read.areas[0]!.dates;
+  dates[0]!.seasonBlocks = [sous];
+  dates[1]!.seasonBlocks = [{ ...headChef, startsAt: "06:00" }];
+  const { painter } = await mount({ read: async () => read });
+  const inherited = (key: string) =>
+    grid(painter).shadowRoot!.querySelector(`.day[data-column="${key}"] [role=img]`);
+  expect(inherited("eve")).toBeNull();
+  expect(inherited("day")?.getAttribute("aria-label") ?? "").toContain("Head chef");
+  const note = grid(painter).shadowRoot!.querySelector(".follows")!;
+  expect(note.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    inherited("day")!.getBoundingClientRect().top,
+  );
+  expect(
+    grid(painter).shadowRoot!.querySelector('.day[data-column="day"] button.block'),
+  ).toBeNull();
+  await paint(painter, "eve", null);
+  expect(inherited("eve")?.getAttribute("aria-label") ?? "").toContain("Sous chef");
+  await paint(painter, "day", []);
+  expect(inherited("day")).toBeNull();
+});
+
 it("keeps the same columns from one render to the next", async () => {
   const { painter } = await mount();
   const columns = grid(painter).columns;
@@ -385,13 +408,29 @@ it("any other refusal shows its message beside Save and keeps the draft", async 
   expect(saveButton(painter).disabled).toBe(false);
 });
 
+it("opens Opening hours for the same stored special day", async () => {
+  const { painter, open } = await mount({ readOnly: true });
+  const control = root(painter).querySelector("wt-segmented-control[slot=picker]")!;
+  expect(control.value).toBe("staffing");
+  await page.getByRole("radio", { name: "Opening hours", exact: true }).click();
+  expect(open).toHaveBeenCalledWith(
+    "special-day",
+    { "special-day": painter.specialDayId },
+    { replace: true },
+  );
+});
+
 it("✕ returns to the month at the address's area", async () => {
   const { painter, open } = await mount({ area: "department:dep-bar" });
   const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
   await close;
   await vi.waitFor(() =>
-    expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12", area: "department:dep-bar" }),
+    expect(open).toHaveBeenCalledWith(
+      "staffing",
+      { month: "2026-12", area: "department:dep-bar" },
+      { replace: true },
+    ),
   );
 });
 
@@ -400,7 +439,9 @@ it("✕ without an area in the address returns to the month alone", async () => 
   const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
   await close;
-  await vi.waitFor(() => expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12" }));
+  await vi.waitFor(() =>
+    expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12" }, { replace: true }),
+  );
 });
 
 it("read-only: only ✕, no chips, and a grid that cannot change", async () => {
@@ -786,6 +827,12 @@ it.each(a724LookCases)(
       await page.viewport(width, 900);
       setLocale(locale);
       const read = specialDayStaffing();
+      const area = read.areas[kind === "department" ? 0 : 2]!;
+      area.dates[1]!.blocks = null;
+      area.dates[1]!.seasonBlocks = [
+        { ...headChef, startsAt: "06:00", endsAt: "15:00" },
+        { ...sous, startsAt: "11:00", endsAt: "16:00" },
+      ];
       const longName = "Restaurant and terrace with a long department name";
       read.areas[0]!.name = longName;
       for (const columns of Object.values(read.guides))

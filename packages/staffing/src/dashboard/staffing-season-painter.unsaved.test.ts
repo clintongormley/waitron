@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens, LeaveController, registerIcons } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
@@ -90,6 +90,19 @@ function unload() {
   return event.defaultPrevented;
 }
 
+it("keeps Staffing selected and its draft when the leave question is declined", async () => {
+  const painter = await mount();
+  painter.open = () => {
+    void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed: app.open });
+  };
+  await paint(painter, "3", [dinner]);
+  await page.getByRole("radio", { name: "Opening hours", exact: true }).click();
+  await choose("keep");
+  expect(painter.shadowRoot!.querySelector("wt-segmented-control")!.value).toBe("staffing");
+  expect(grid(painter).days.get("3")).toEqual([dinner]);
+  expect(app.open).not.toHaveBeenCalled();
+});
+
 it("keeps Save quiet until a day changes, and quiet again once the change is undone", async () => {
   const painter = await mount();
   expect(frameButton(painter, "save").disabled).toBe(true);
@@ -118,7 +131,7 @@ it.each(["dismiss"])(
     await choose("discard");
     await close;
     await expect.poll(() => app.open.mock.calls.length).toBe(1);
-    expect(app.open).toHaveBeenCalledWith("staffing", { month: "2026-12" });
+    expect(app.open).toHaveBeenCalledWith("staffing", { month: "2026-12" }, { replace: true });
     expect(grid(painter).days.get("2")).toEqual([headChef]);
   },
 );

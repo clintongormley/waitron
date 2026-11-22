@@ -392,11 +392,25 @@ export class OpeningHoursScreen extends LitElement {
       (this.moduleToday() || browserToday()).slice(0, 7)
     );
   }
-  private openCalendarView(view: string, params: Record<string, string>) {
+  private openCalendarView(view: string, params: Record<string, string>, replace?: boolean) {
     if (!this.isConnected) return;
-    if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
+    if (view === "hours") return void this.writeAddress(this.hoursUrl(params), replace);
+    if (view === "season" && params["season"])
+      return void this.writeAddress(
+        this.painterUrl({
+          seasonId: params["season"],
+          departmentId: params["department"] ?? "",
+          zoneId: "",
+        }),
+        replace,
+      );
+    if (view === "special-day" && params["special-day"])
+      return void this.writeAddress(
+        this.specialUrl({ specialDayId: params["special-day"], date: null }),
+        replace,
+      );
     if (!this.calendarView(view)) return;
-    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)));
+    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)), replace);
   }
   private calendarUrl(pathname: string) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
@@ -440,8 +454,8 @@ export class OpeningHoursScreen extends LitElement {
       return this.screen.calendarView(this.id)?.canWrite ?? false;
     }
     /** A field, so a view may hand `host.open` on alone. */
-    readonly open = (view: string, params: Record<string, string>) =>
-      this.screen.openCalendarView(view, params);
+    readonly open: CalendarViewHost["open"] = (view, params, options) =>
+      this.screen.openCalendarView(view, params, options?.replace);
   };
   private viewHandle({ view }: CalendarViewEntry) {
     let handle = this.viewHandles.get(view.id);

@@ -358,12 +358,16 @@ export async function readSpecialDayStaffing(
   const areas = await listStaffingAreas(tx);
   const clock = await readVenueClock(tx);
   const cutover = clock.dayCutover;
+  const seasonIds = [...new Set(dates.flatMap(({ date }) => plan.seasonIdOn.get(date) ?? []))];
   const paint = await readPaint(
     tx,
     areas,
-    inArray(
-      staffingDays.specialDayDateId,
-      dates.map((d) => d.dateId),
+    or(
+      inArray(
+        staffingDays.specialDayDateId,
+        dates.map(({ dateId }) => dateId),
+      ),
+      inArray(staffingDays.seasonId, seasonIds),
     ),
     cutover,
   );
@@ -382,15 +386,23 @@ export async function readSpecialDayStaffing(
       forecast,
       dates.map(({ dateId, date }) => [dateId, date]),
     ),
-    areas: areas.map(({ area, name }) => ({
-      area,
-      name,
-      dates: dates.map(({ dateId, date }) => ({
-        dateId,
-        date,
-        blocks: paint.get(areaKey(area))?.get(dateDayKey(dateId)) ?? null,
-      })),
-    })),
+    areas: areas.map(({ area, name }) => {
+      const byDay = paint.get(areaKey(area));
+      return {
+        area,
+        name,
+        dates: dates.map(({ dateId, date }) => {
+          const seasonId = plan.seasonIdOn.get(date);
+          return {
+            dateId,
+            date,
+            blocks: byDay?.get(dateDayKey(dateId)) ?? null,
+            seasonBlocks:
+              (seasonId ? byDay?.get(seasonDayKey(seasonId, weekdayOf(date))) : undefined) ?? [],
+          };
+        }),
+      };
+    }),
   };
 }
 

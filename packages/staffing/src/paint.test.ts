@@ -364,6 +364,31 @@ describe("season staffing", () => {
 });
 
 describe("special-day staffing", () => {
+  it("reads inherited paint from each date's season and weekday, even behind an empty override", async () => {
+    const v = await venue();
+    const friday = block(v.waiter, { startsAt: "11:00" });
+    const saturday = block(v.cook, { headcount: 3 });
+    await inTx(async (tx) => {
+      const [autumn] = await tx
+        .insert(seasons)
+        .values({ name: "Autumn", startsOn: "08-15", colour: "blue" })
+        .returning({ id: seasons.id });
+      await saveSeasonStaffing(tx, v.seasonId, [
+        { area: dept(v), weekday: 5, blocks: [friday] },
+        { area: dept(v), weekday: 6, blocks: [block(v.waiter)] },
+      ]);
+      await saveSeasonStaffing(tx, autumn!.id, [{ area: dept(v), weekday: 6, blocks: [saturday] }]);
+      await saveSpecialDayStaffing(tx, v.specialDayId, [
+        { area: dept(v), dateId: v.aug15, blocks: [] },
+      ]);
+    });
+    const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
+    expect(read.areas.find(({ area }) => area.id === v.departmentId)?.dates).toEqual([
+      { dateId: v.aug14, date: "2026-08-14", blocks: null, seasonBlocks: [friday] },
+      { dateId: v.aug15, date: "2026-08-15", blocks: [], seasonBlocks: [saturday] },
+    ]);
+  });
+
   it("reads every date of the special day, null where it follows the season", async () => {
     const v = await venue();
     await inTx((tx) =>
@@ -390,24 +415,24 @@ describe("special-day staffing", () => {
           area: dept(v),
           name: "Dining room",
           dates: [
-            { dateId: v.aug14, date: "2026-08-14", blocks: null },
-            { dateId: v.aug15, date: "2026-08-15", blocks: [block(v.waiter)] },
+            { dateId: v.aug14, date: "2026-08-14", blocks: null, seasonBlocks: [] },
+            { dateId: v.aug15, date: "2026-08-15", blocks: [block(v.waiter)], seasonBlocks: [] },
           ],
         },
         {
           area: grill(v),
           name: "Grill",
           dates: [
-            { dateId: v.aug14, date: "2026-08-14", blocks: [] },
-            { dateId: v.aug15, date: "2026-08-15", blocks: null },
+            { dateId: v.aug14, date: "2026-08-14", blocks: [], seasonBlocks: [] },
+            { dateId: v.aug15, date: "2026-08-15", blocks: null, seasonBlocks: [] },
           ],
         },
         {
           area: { kind: "station", id: v.passId },
           name: "Pass",
           dates: [
-            { dateId: v.aug14, date: "2026-08-14", blocks: null },
-            { dateId: v.aug15, date: "2026-08-15", blocks: null },
+            { dateId: v.aug14, date: "2026-08-14", blocks: null, seasonBlocks: [] },
+            { dateId: v.aug15, date: "2026-08-15", blocks: null, seasonBlocks: [] },
           ],
         },
       ],

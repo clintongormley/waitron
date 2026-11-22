@@ -124,7 +124,7 @@ it.each(["dismiss"])(
     await choose("discard");
     await close;
     await expect.poll(() => app.open.mock.calls.length).toBe(1);
-    expect(app.open).toHaveBeenCalledWith("staffing", { month: "2026-12" });
+    expect(app.open).toHaveBeenCalledWith("staffing", { month: "2026-12" }, { replace: true });
     expect(grid(painter).days.get("eve")).toEqual([headChef]);
   },
 );

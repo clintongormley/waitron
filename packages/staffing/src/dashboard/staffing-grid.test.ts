@@ -61,6 +61,9 @@ async function grid(
 function column(el: StaffingGrid, key: string) {
   return el.shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
 }
+function followsNote(el: StaffingGrid, key: string) {
+  return el.shadowRoot!.querySelector(`.heading[data-column="${key}"] .follows`);
+}
 function point(
   el: StaffingGrid,
   key: string,
@@ -1296,10 +1299,10 @@ test("followable: each ⋮ offers Follow the season, which sends null; a followi
   expect(seen).toEqual([{ key: "mon", blocks: null }]);
 });
 
-test("a day that follows the season says so; Clear and painting on it start from an empty day", async () => {
+test("clear and paint can start an override where the season has no staffing", async () => {
   const el = await grid({ mon: null }, { followable: true, chosen: "hc" });
   const seen = changes(el);
-  expect(column(el, "mon").querySelector(".follows")!.textContent).toContain("Follows the season");
+  expect(followsNote(el, "mon")!.textContent).toContain("Follows the season");
   await drag(el, "mon", 120, 240);
   await userEvent.click(columnMenu(el, "mon"));
   await userEvent.click(columnAction(el, "mon", "Clear")!);
@@ -1312,7 +1315,21 @@ test("a day that follows the season says so; Clear and painting on it start from
   ]);
   el.days = new Map([["mon", []]]);
   await el.updateComplete;
-  expect(column(el, "mon").querySelector(".follows")).toBeNull();
+  expect(followsNote(el, "mon")).toBeNull();
+});
+
+test("the first stroke on a following date adds to the inherited blocks", async () => {
+  const el = await grid({ mon: null }, { followable: true, chosen: "sc" });
+  el.seasonBlocks = new Map([["mon", [headChef]]]);
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 660, 780);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "17:00", endsAt: "19:00" }],
+    },
+  ]);
 });
 
 test("guides are drawn faintly behind the blocks, inert, at their times", async () => {
@@ -1403,7 +1420,7 @@ test("a block whose staff role is unknown draws uncoloured and nameless rather t
 test("the text is Spanish under the Spanish locale", async () => {
   setLocale("es");
   const el = await grid({ mon: null }, { followable: true });
-  expect(column(el, "mon").querySelector(".follows")!.textContent).toContain("Sigue la temporada");
+  expect(followsNote(el, "mon")!.textContent).toContain("Sigue la temporada");
   await userEvent.click(columnMenu(el, "mon"));
   expect(columnAction(el, "mon", "Seguir la temporada")).toBeDefined();
   const named = await grid({ tue: [headChef, sous] });
@@ -1426,7 +1443,7 @@ test("a column the days map does not hold draws as an empty day and paints into 
   el.columns = [...el.columns, { key: "tue", label: "Tuesday" }];
   await el.updateComplete;
   const seen = changes(el);
-  expect(column(el, "tue").querySelector(".follows")).toBeNull();
+  expect(followsNote(el, "tue")).toBeNull();
   await drag(el, "tue", 120, 240);
   expect(seen).toEqual([
     {
@@ -1822,12 +1839,12 @@ test.each([
     if (locale === "es") expect(orders).not.toBe(STAFFING_STRINGS.en["staffing.grid.no_orders"]);
     const el = await grid({ mon: null });
     expect(column(el, "mon").querySelector(".guide-empty")?.textContent).toBe(closed);
-    expect(column(el, "mon").querySelector(".follows")?.textContent).not.toBe("");
+    expect(followsNote(el, "mon")?.textContent).not.toBe("");
     el.guideKind = "station";
     el.requestUpdate();
     await el.updateComplete;
     expect(column(el, "mon").querySelector(".guide-empty")?.textContent).toBe(orders);
-    expect(column(el, "mon").querySelector(".follows")).not.toBeNull();
+    expect(followsNote(el, "mon")).not.toBeNull();
   },
 );
 

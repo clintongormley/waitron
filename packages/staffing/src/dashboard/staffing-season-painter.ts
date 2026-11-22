@@ -135,7 +135,11 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     const seasons = this.read!.seasons;
     const at = seasons.findIndex(({ id }) => id === this.seasonId);
     const next = seasons[(at + by + seasons.length) % seasons.length]!;
-    this.open("staffing", { ...this.addressParams(), painter: "season", season: next.id });
+    this.open(
+      "staffing",
+      { ...this.addressParams(), painter: "season", season: next.id },
+      { replace: true },
+    );
   }
 
   private paint(key: string, event: CustomEvent<StaffingChange>): void {
@@ -300,8 +304,18 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
         @painter-save=${() => {
           if (!invalid) void this.save();
         }}
-        @painter-close=${() => this.open("staffing", this.addressParams())}
+        @painter-close=${() => this.closePainter()}
       >
+        ${this.viewSwitch(() =>
+          this.open(
+            "season",
+            {
+              season: this.seasonId,
+              ...(shownArea?.area.kind === "department" ? { department: shownArea.area.id } : {}),
+            },
+            { replace: true },
+          ),
+        )}
         ${read ? this.seasonChip(read) : nothing}
         ${
           read
