@@ -53,7 +53,7 @@ import "../widgets/menu-copy-dialog.js";
 import "../widgets/set-menu-editor.js";
 import "../widgets/guest-menu-preview.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
-import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
+import type { MenuPricesTable, PriceSave, PriceSaveResult } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import "../widgets/include-folder-form.js";
@@ -175,9 +175,6 @@ function namesThePrice(error: unknown, save: PriceSave): boolean {
     (code === "product.variant_not_found" && save.variantId !== null)
   );
 }
-
-const without = (errors: Record<string, string>, keys: readonly string[]) =>
-  Object.fromEntries(Object.entries(errors).filter(([key]) => !keys.includes(key)));
 
 /** Refusals about the target a shortcut picker chose, which belong under the picker. */
 const SHORTCUT_TARGET_REFUSALS = new Set([
@@ -347,6 +344,7 @@ function withOrder(
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
   @property({ attribute: false }) reportLateSave?: (name: string) => void;
+  @property({ attribute: false }) reportLatePriceSave?: (name: string) => void;
   static override styles = [
     baseStyles,
     pageTitleStyles,
@@ -698,9 +696,6 @@ export class MenusScreen extends LitElement {
   @state() private pricesError = false;
   @state() private showPriceClashes = false;
   /** The prices table's row keys with a save queued or out. */
-  @state() private savingPrices: ReadonlySet<string> = new Set();
-  @state() private priceRefusals: Readonly<Record<string, string>> = {};
-  @state() private priceOutcome: PriceOutcome | null = null;
 
   /** Every menu's publication state, followed while the list is shown; null until read. */
   @state() private statuses: Record<string, MenuStatus> | null = null;
@@ -883,11 +878,6 @@ export class MenusScreen extends LitElement {
   #tileProducts: { id: string; name: string }[] = [];
   #tileSections: { id: string; internalName: string }[] = [];
   readonly #writes = new ListWriteQueue();
-  readonly #priceWrites = new ListWriteQueue();
-  #priceSavesMade = 0;
-  /** Fields whose save was stored while a later save waited behind it. They stay listed as saving
-   * until the last save made ends, after the re-read that carries their prices when one runs. */
-  readonly #pricesUnread = new Set<string>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
    * moves that were not shown because another write to the list waited behind them. */
@@ -1301,11 +1291,8 @@ export class MenusScreen extends LitElement {
     this.#followStatus();
     if (view !== "preview" && view !== "home") this.#releasePreview();
     if (view !== "home") this.#releaseHome();
-    if (view !== "prices") {
-      this.priceRefusals = {};
-      this.priceOutcome = null;
-      this.#releasePrices();
-    } else if (this.menuId !== null && this.#pricesFor !== this.menuId)
+    if (view !== "prices") this.#releasePrices();
+    else if (this.menuId !== null && this.#pricesFor !== this.menuId)
       void this.#watchPrices(this.menuId);
   }
 
@@ -1355,8 +1342,6 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
-    this.priceRefusals = {};
-    this.priceOutcome = null;
     this.publishResult = null;
     this.patching = false;
     this.#releasePrices();
@@ -1408,7 +1393,7 @@ export class MenusScreen extends LitElement {
   }
 
   #backToList(): void {
-    if (this.view !== "set-menu" || !navigationGuardFor(window)) this.#select(null);
+    if (!navigationGuardFor(window)) this.#select(null);
     this.#url.write({ dashboard: "menus", menu: null, view: null, "price-filter": null });
   }
 
@@ -2199,72 +2184,57 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  /** Unmarks the field of the save ending, `key`, and the fields a re-read has just carried, each
-   * unless another save of it waits. Called by the save's own task before it ends, so the queue
-   * still counts that save. */
-  #priceSaveDone(key: string, carried: readonly string[] = []): void {
-    const saving = new Set(this.savingPrices);
-    for (const done of [key, ...carried])
-      if (this.#priceWrites.pending(done) <= (done === key ? 1 : 0)) saving.delete(done);
-    if (saving.size !== this.savingPrices.size) this.savingPrices = saving;
+  #priceTable(): MenuPricesTable | null {
+    return this.renderRoot.querySelector("dashboard-menu-prices-table");
   }
 
-  /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
-   * said in the tab's floating outcome message, and under the field when it names the price; once the menu,
-   * the tab or the row has gone, it is named beside the list instead. The prices are read again
-   * only after the last save made, and only when it or an earlier one was stored. A success is said
-   * only for the last save made, so its Undo never reaches past a later write; never over a refusal
-   * said since it was made and not yet closed, which would hide that refusal; and not over a
-   * failed re-read, which the list reports as a load failure. */
-  #savePrice(save: PriceSave): void {
-    const menuId = this.menuId;
-    if (menuId === null) return;
-    const made = ++this.#priceSavesMade;
-    this.priceRefusals = without(this.priceRefusals, [save.key]);
-    this.priceOutcome = null;
-    this.savingPrices = new Set(this.savingPrices).add(save.key);
-    this.#priceWrites.run(save.key, async () => {
-      let stored = true;
+  readonly #savePrices = async (saves: readonly PriceSave[]): Promise<PriceSaveResult> => {
+    const menuId = this.menuId!;
+    const table = this.#priceTable();
+    const report = this.reportLatePriceSave;
+    const saved = new Set<string>();
+    const refused: PriceSaveResult["refused"] = {};
+    const failures: { save: PriceSave; reason: string; namesField: boolean }[] = [];
+    for (const save of saves) {
       try {
         if (save.variantId === null)
           await this.api.updateMenuItem(menuId, save.menuItemId, { grossPrice: save.price });
         else
           await this.api.setMenuVariantPrice(menuId, save.menuItemId, save.variantId, save.price);
+        saved.add(save.key);
       } catch (error) {
-        stored = false;
-        const reason = codeMessage(codeOf(error));
-        const shown =
-          this.menuId === menuId &&
-          this.view === "prices" &&
-          (this.prices ?? []).some(({ menuItemId }) => menuItemId === save.menuItemId);
-        if (shown) {
-          if (namesThePrice(error, save))
-            this.priceRefusals = { ...this.priceRefusals, [save.key]: reason };
-          this.priceOutcome = { kind: "refused", save, reason };
-        } else this.memberError = fill("menus.change_not_saved", { name: save.name, reason });
+        failures.push({
+          save,
+          reason: codeMessage(codeOf(error)),
+          namesField: namesThePrice(error, save),
+        });
       }
-      // Saves are answered in the order made, so a refusal under this field came from an earlier
-      // save, and the field now holds a price that was stored.
-      if (stored && save.key in this.priceRefusals)
-        this.priceRefusals = without(this.priceRefusals, [save.key]);
-      if (made !== this.#priceSavesMade) {
-        if (stored) this.#pricesUnread.add(save.key);
-        else this.#priceSaveDone(save.key);
-        return;
+    }
+    if (!this.isConnected && failures.length > 0) {
+      report?.(failures.map(({ save }) => save.name).join(", "));
+    } else {
+      const late: string[] = [];
+      const showingBatch =
+        this.view === "prices" && this.menuId === menuId && this.#priceTable() === table;
+      for (const { save, reason, namesField } of failures) {
+        const row = this.prices?.find(({ menuItemId }) => menuItemId === save.menuItemId);
+        if (
+          showingBatch &&
+          row &&
+          (save.variantId === null ||
+            row.variants.some(({ variantId }) => variantId === save.variantId))
+        )
+          refused[save.key] = { reason, namesField };
+        else late.push(fill("menus.change_not_saved", { name: save.name, reason }));
       }
-      const reread =
-        (stored || this.#pricesUnread.size > 0) && this.menuId === menuId && this.view === "prices";
-      if (reread) {
-        await this.#watchPrices(menuId);
-        const shown = this.menuId === menuId && this.view === "prices" && !this.pricesError;
-        if (stored && shown && made === this.#priceSavesMade && this.priceOutcome === null)
-          this.priceOutcome = { kind: "saved", save };
-      }
-      const carried = [...this.#pricesUnread];
-      this.#pricesUnread.clear();
-      this.#priceSaveDone(save.key, carried);
-    });
-  }
+      if (late.length > 0) this.memberError = late.join(" ");
+    }
+    return { saved, refused };
+  };
+
+  readonly #refreshPrices = async (): Promise<void> => {
+    if (this.menuId !== null && this.view === "prices") await this.#watchPrices(this.menuId);
+  };
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
 
@@ -3200,40 +3170,34 @@ export class MenusScreen extends LitElement {
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
 
-  #renderPrices() {
-    return html`<dashboard-menu-prices-table
-        .clashesFor=${this.showPriceClashes ? this.menuId! : ""}
-        .rows=${this.prices ?? []}
-        .loading=${this.prices === null && !this.pricesError}
-        .failed=${this.pricesError}
-        .sections=${this.sections}
-        .categories=${this.categories}
-        .products=${this.products}
-        menuName=${this.#menuName()}
-        .saving=${this.savingPrices}
-        .refusals=${this.priceRefusals}
-        .outcome=${this.priceOutcome}
-        @wt-price-save=${(event: CustomEvent<PriceSave>) => {
-          event.stopPropagation();
-          this.#savePrice(event.detail);
-        }}
-        @wt-price-outcome-close=${(event: Event) => {
-          event.stopPropagation();
-          this.priceOutcome = null;
-        }}
-      ></dashboard-menu-prices-table>
-      ${
-        this.pricesError
-          ? html`<div>
-              <wt-button
-                data-test="prices-retry"
-                variant="secondary"
-                @click=${() => void this.#watchPrices(this.menuId!)}
-                >${t("menus.retry")}</wt-button
-              >
-            </div>`
-          : nothing
-      }`;
+  #renderPrices(menuId: string) {
+    return keyed(
+      menuId,
+      html`<dashboard-menu-prices-table
+          .clashesFor=${this.showPriceClashes ? this.menuId! : ""}
+          .rows=${this.prices ?? []}
+          .loading=${this.prices === null && !this.pricesError}
+          .failed=${this.pricesError}
+          .sections=${this.sections}
+          .categories=${this.categories}
+          .products=${this.products}
+          menuName=${this.#menuName()}
+          .savePrices=${this.#savePrices}
+          .refreshPrices=${this.#refreshPrices}
+        ></dashboard-menu-prices-table>
+        ${
+          this.pricesError
+            ? html`<div>
+                <wt-button
+                  data-test="prices-retry"
+                  variant="secondary"
+                  @click=${() => void this.#watchPrices(this.menuId!)}
+                  >${t("menus.retry")}</wt-button
+                >
+              </div>`
+            : nothing
+        }`,
+    );
   }
 
   readonly #lateScheduleRefusalFor = (name: string): (() => void) => {
@@ -4035,13 +3999,20 @@ export class MenusScreen extends LitElement {
           },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
-          this.showPriceClashes = false;
-          this.#showView(event.detail.value as Tab);
-          this.#url.write({ view: event.detail.value, "price-filter": null });
+          if (event.target !== event.currentTarget || !isTab(event.detail.value)) return;
+          if (navigationGuardFor(window)) {
+            (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
+          } else {
+            this.showPriceClashes = false;
+            this.#showView(event.detail.value);
+          }
+          void this.#url.write({ view: event.detail.value, "price-filter": null });
         }}
       >
         <div slot="structure">${this.#renderStructure()}</div>
-        <div slot="prices" class="prices">${this.#renderPrices()}</div>
+        <div slot="prices" class="prices">
+          ${this.view === "prices" ? this.#renderPrices(menuId) : nothing}
+        </div>
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">
           <dashboard-guest-menu-preview

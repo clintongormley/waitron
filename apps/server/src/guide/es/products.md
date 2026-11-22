@@ -236,6 +236,8 @@ la cerveza a 3,00 € y Noche incluye solo la cerveza de Bebidas, Noche cobra 3,
 pone esa cerveza en una sección propia al precio del producto, 2,80 €, los precios no coinciden. Fija
 el precio de la cerveza en Noche para resolver ese desacuerdo antes de publicar. La pestaña **Precios
 propios** de la carta muestra de dónde viene cada precio y qué ajustes aún necesitan tu decisión.
+Edita los precios ahí y elige **Guardar** al pie de la tabla. Elige **Cancelar** para descartar
+los cambios.
 
 ## Declara los alérgenos y la aptitud dietética directamente {#allergens}
 

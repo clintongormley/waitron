@@ -3789,45 +3789,17 @@ register no draft scope, never ask, and never request the unload warning (owner,
 
 #### A value saved from its own table row
 
-A few lists edit a value in its own row, saving each change as it is made, with no `wt-modal`
-(owner-approved exceptions, listed under "One action per row or card"). The course list
-(`apps/dashboard/src/widgets/course-list.ts`) is the first; a menu's Price overrides tab
-(`apps/dashboard/src/widgets/menu-prices-table.ts`) is the second. Each field is a one-field edit
-of its own, so the rules above for a form with a primary action apply like this instead:
+The course list (`apps/dashboard/src/widgets/course-list.ts`) edits one field in its own row.
+Enter or leaving the field saves it. Escape restores the saved value. A malformed name or a refusal
+naming that field appears under it. The field stays read-only while the request is out. A refused
+Delete appears in the confirmation dialog, and a refusal without a field appears under the list.
 
-- the field takes `hide-label`, so its `label` is read to a screen reader but not drawn;
-- typing sends nothing; Enter, or leaving the field, saves it, and Escape puts back the saved value;
-- the field's own check runs when it is saved, and a failure puts its sentence under the field and
-  sends nothing;
-- a refusal that names the field puts its sentence under that field; any other refusal is said for
-  the list as a whole;
-- there is no form-level message above the buttons and no Save button to disable.
-
-Where the two differ, and why:
-
-- The course list makes its one field read-only while its save is out. The price table keeps every
-  field editable. `wt-price-input` inherits `readonly` from `wt-input`. The price table leaves it off
-  because many fields are in view at once and a slow save could freeze the field you want to correct. Its saves go one at a
-  time in the order they were made (`ListWriteQueue`, `apps/dashboard/src/widgets/section-writes.ts`),
-  and a save of a value the field already holds sends nothing.
-- The price table's `label` names its row ("Price override for Lemonade — Large"), adding ", set on
-  this menu" while this menu stores a price for it, so a screen reader hears which row the field belongs to. The course list's label names no row: a course's
-  field is labelled "Name", and the new course's field "New course" (`#nameField`).
-- The price table moves focus to the field a refusal names, even when the person has moved on to
-  another row, opening a size's product first if it is folded shut (`#focusField`). The course list
-  marks the field and moves focus nowhere (`#commit`).
-- The course list shows a Delete refused while its confirmation dialog is open in that dialog, and any other refusal as an alert
-  under the list. The price table says each
-  refusal, including one already shown under its field, in a message floating at the bottom end of
-  the window (a `wt-toast`), because a save made far down the list must still be seen; a refusal
-  stays until it is closed or replaced, because some are said nowhere else. It says a success there
-  for 5 seconds, longer while the pointer or focus is on it, only for the last save made, once the
-  prices have been read again after it and the tab still shows them, and only when no refusal said
-  since it was made is still open, with an Undo inside it that writes the previous value back; an
-  earlier save is not said, so an Undo never reaches past a later write (`#savePrice`, `apps/dashboard/src/screens/menus-screen.ts`). A refusal
-  that arrives after the person has left the menu or the tab, or after its row has left the list,
-  is said in the Menus screen's own message above the tabs or the menus list instead
-  (`memberError`, `apps/dashboard/src/screens/menus-screen.ts`).
+A menu's Price overrides tab (`apps/dashboard/src/widgets/menu-prices-table.ts`) stages the
+product and size prices together. Save and Cancel stay in view below the table. A field's label names
+its product and size and says when the menu sets its own price. Save opens a collapsed row to focus
+the first marked field it can show. The footer names errors in filtered-out rows and keeps the
+filter. The existing price requests run in sequence, so a refusal can leave other prices saved.
+The edits that were refused stay ready to retry.
 
 #### The field box
 
@@ -4686,9 +4658,8 @@ Edit translations opens a dialog where the missing names for one language are ty
 together, with its Kind and Why filters, links to the relevant editors, and Translate all. A second exception (A212): the course
 list, on the Courses page and in the product editor's Courses window, adds and renames
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
-button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
-and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
-its own table row"). A fourth exception (owner, 2026-10-16, A755): Venue settings' Venue details
+button. A menu's Price overrides tab edits each product and size in its own row and saves with a
+shared Save bar. In the Venue settings exception (owner, 2026-10-16, A755), the Venue details
 tab draws five cards — Business, Venue, Business day, Defaults and Privacy (A980 S1a), in that
 order — with `apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a sixth,
 the AEAT certificate card, comes after them from

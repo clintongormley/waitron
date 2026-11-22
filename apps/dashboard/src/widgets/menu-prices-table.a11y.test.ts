@@ -3,7 +3,6 @@ import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { t, currentLocale, setLocale } from "../i18n/t.js";
-import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -178,75 +177,50 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible fields, one refused and one saving", async () => {
-    const { el, host } = await mount(theme, {
-      refusals: { "mi-lemonade": "Refused" },
-      saving: new Set(["mi-burger"]),
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = table.shadowRoot!;
-    root
-      .querySelector<HTMLButtonElement>('tr[data-row-key="mi-lemonade"] button.tree-toggle')!
-      .click();
-    await table.updateComplete;
-    const field = (key: string) =>
-      root.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
-        `wt-price-input[data-row="${key}"]`,
+  it.each([true, false])(
+    "accessible Save bar after a refusal with field=%s",
+    async (namesField) => {
+      const { el, host } = await mount(theme, {
+        savePrices: async () => ({
+          saved: new Set(),
+          refused: { "mi-burger": { reason: "Refused", namesField } },
+        }),
+      });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const field = table.shadowRoot!.querySelector("wt-price-input")!;
+      const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="prices-save"]',
       )!;
-    expect(field("mi-lemonade").error).toBe("Refused");
-    expect(field("mi-lemonade:v-small")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("accessible saved outcome with its Undo", async () => {
-    const { el, host } = await mount(theme, {
-      outcome: {
-        kind: "saved",
-        save: {
-          key: "mi-burger",
-          menuItemId: "mi-burger",
-          variantId: null,
-          name: "Burger",
-          price: "11.00",
-          previous: null,
-        },
-      },
-    });
-    const toast = el.shadowRoot!.querySelector<WtToast>('[data-test="price-outcome"]')!;
-    await toast.updateComplete;
-    expect(toast.open).toBe(true);
-    expect(toast.shadowRoot!.querySelector('[role="status"] .message')!.textContent).toBe(
-      t("menu_prices.saved").replace("{name}", "Burger").replace("{price}", "11,00\u00a0€"),
-    );
-    expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')!.parentElement).toBe(toast);
-    await expectNoA11yViolations(host);
-  });
-
-  it("accessible refused outcome", async () => {
-    const { el, host } = await mount(theme, {
-      outcome: {
-        kind: "refused",
-        reason: "Refused",
-        save: {
-          key: "mi-burger",
-          menuItemId: "mi-burger",
-          variantId: null,
-          name: "Burger",
-          price: "11.00",
-          previous: null,
-        },
-      },
-    });
-    const toast = el.shadowRoot!.querySelector<WtToast>('[data-test="price-outcome"]')!;
-    await toast.updateComplete;
-    expect(toast.shadowRoot!.querySelector('[role="status"] .message')!.textContent).toBe(
-      t("menus.change_not_saved").replace("{name}", "Burger").replace("{reason}", "Refused"),
-    );
-    await expectNoA11yViolations(host);
-  });
+      expect(save.disabled).toBe(true);
+      field.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "11.00" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      expect(save.disabled).toBe(false);
+      save.click();
+      const footer = el.shadowRoot!.querySelector("wt-form-actions")!;
+      await vi.waitFor(() =>
+        expect(footer.error).toBe(
+          namesField
+            ? t("form.fix_fields")
+            : t("menus.change_not_saved")
+                .replace("{name}", "Burger")
+                .replace("{reason}", "Refused"),
+        ),
+      );
+      expect(field.error).toBe(namesField ? "Refused" : "");
+      await footer.updateComplete;
+      expect(footer.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(footer.error);
+      expect(save.disabled).toBe(false);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("accessible field refusing a malformed price", async () => {
-    const { el, host } = await mount(theme, {});
+    const { el, host } = await mount(theme, {
+      savePrices: async () => ({ saved: new Set(), refused: {} }),
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
       'wt-price-input[data-row="mi-lemonade"]',

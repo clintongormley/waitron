@@ -223,7 +223,8 @@ Leave a menu price empty to let those contributions decide it. For example, if D
 €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that beer
 in its own section at the product's €2.80, the prices disagree. Set Evening's beer price to resolve
 that disagreement before publishing. The menu's **Price overrides** tab shows where each price comes
-from and which settings still need your decision.
+from and which settings still need your decision. Edit the prices there and choose **Save** at the
+bottom. Choose **Cancel** to discard the edits.
 
 ## Declare allergens and dietary suitability directly {#allergens}
 
