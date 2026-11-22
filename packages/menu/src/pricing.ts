@@ -293,11 +293,14 @@ export function priceBasket(items: readonly BasketItem[], on: string = localToda
 }
 
 /** Stored working-order lines at their stored gross unit prices, each with the list at its index in
- * `rates`; without `rates` every line's list is empty, so the result totals but cannot be rated. */
+ * `rates`, which must hold one list per line; without `rates` every line's list is empty, so the
+ * result totals but cannot be rated. */
 export function grossLockedLines(
   lines: readonly LockedLine[],
   rates?: readonly (readonly DatedRate[])[],
 ): GrossLines {
+  if (rates !== undefined && rates.length !== lines.length)
+    throw new Error(`grossLockedLines: ${rates.length} rate lists for ${lines.length} lines`);
   return grossRows(
     lines.map((line, i) => ({
       grossUnit: decimal(line.grossUnitPrice),

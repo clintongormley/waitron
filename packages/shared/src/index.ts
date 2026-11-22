@@ -177,7 +177,6 @@ export { isPlainWebAddress } from "./web-address.js";
 export { isValidTelephone } from "./telephone.js";
 export { defaultGuestCount, isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
 export {
-  appliedVatClass,
   DINING_POLICIES,
   DININGS,
   type Dining,

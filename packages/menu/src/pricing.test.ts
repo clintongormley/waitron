@@ -434,6 +434,23 @@ describe("rateLines — each line's own list of dated rates", () => {
     const gross = grossLockedLines([stored, stored], [general, reduced]);
     expect(gross.lines.map((l) => l.vatRates)).toEqual([general, reduced]);
   });
+
+  it("grossLockedLines refuses a list of rates that is not one per line", () => {
+    const stored = {
+      grossUnitPrice: "1.00",
+      quantity: "1",
+      name: "item",
+      descriptions: { en: "item" },
+      category: null,
+    };
+    const general = [{ from: null, rate: "21.00" }];
+    expect(() => grossLockedLines([stored, stored], [general])).toThrow(
+      "grossLockedLines: 1 rate lists for 2 lines",
+    );
+    expect(() => grossLockedLines([stored], [general, general])).toThrow(
+      "grossLockedLines: 2 rate lists for 1 lines",
+    );
+  });
 });
 
 describe("a VAT class", () => {

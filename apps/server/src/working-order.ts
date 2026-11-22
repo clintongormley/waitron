@@ -32,15 +32,15 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type DatedRate,
   type Dining,
-  appliedVatClass,
-  VAT_RATE_TABLE,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
   worstBand,
 } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
+import { readLineVatRates } from "./line-vat-rates.js";
 import { readOrderPreviewItems, type OrderPreviewItem } from "./order-preview.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import {
@@ -953,8 +953,9 @@ export async function priceOrderLines(
       unitPrice: selection.unitPrice,
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
-      vatClass: appliedVatClass(dining, classes),
-      vatRates: VAT_RATE_TABLE[appliedVatClass(dining, classes)],
+      vatClass: classes.vatClass,
+      // Set below from `readLineVatRates`, once every line's extras are known.
+      vatRates: [] as readonly DatedRate[],
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -1015,7 +1016,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatRates: VAT_RATE_TABLE[appliedVatClass(dining, child)],
+        vatRates: [] as readonly DatedRate[],
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -1078,6 +1079,23 @@ export async function priceOrderLines(
     }
     if (line[RETAINED_COURSE] === true) await requireCourse(tx, courseId);
     else await requireLiveCourse(tx, courseId);
+  }
+
+  const rates = await readLineVatRates(
+    tx,
+    dining,
+    lineMeta.map((meta) => ({
+      productId: meta.productId,
+      setMenuRole: meta.setMenuOffer === undefined ? null : "dish",
+      vatClass: meta.vatClass,
+      takeawayVatClass: meta.takeawayVatClass,
+    })),
+  );
+  // `lineMeta` lists each item's product, then its options, as `items` does.
+  let rated = 0;
+  for (const item of items) {
+    item.product.vatRates = rates[rated++]!;
+    for (const option of item.options) option.vatRates = rates[rated++]!;
   }
 
   const gross = grossBasketWithOptions(items);
@@ -1202,7 +1220,7 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // A line files at the class for its order's way of selling, so both readers join the order.
+  // The label for the order's way of selling, so both readers join the order.
   vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
     when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
     else ${workingOrderLines.vatClass} end`,
@@ -1253,11 +1271,19 @@ async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
   refuseSetMenus: boolean,
-): Promise<{ lines: (StoredOrderLine & { payable: boolean })[]; grouped: StoredOrderLine[] }> {
+): Promise<{
+  lines: (StoredOrderLine & { payable: boolean })[];
+  grouped: StoredOrderLine[];
+  /** Each grouped line's dated rates, at its index. */
+  rates: (readonly DatedRate[])[];
+}> {
   const rows = await tx
     .select({
       ...storedLineColumns,
       ...portionColumns,
+      dining: workingOrders.dining,
+      eatInVatClass: workingOrderLines.vatClass,
+      takeawayVatClass: workingOrderLines.takeawayVatClass,
       setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
@@ -1270,13 +1296,28 @@ async function readLockedLinesForIssuance(
     .orderBy(workingOrderLines.lineNo);
   if (refuseSetMenus) await refuseSetMenuMoney(tx, workingOrderId, rows);
   const stored = toStoredLines(rows);
+  const grouped = groupedByPortion(rows, stored);
+  const rowRates = await readLineVatRates(
+    tx,
+    rows[0]!.dining,
+    rows.map((row) => ({
+      productId: row.productId,
+      setMenuRole: row.setMenuRole,
+      vatClass: row.eatInVatClass as VatClass,
+      takeawayVatClass: row.takeawayVatClass as VatClass,
+    })),
+  );
+  // A grouped row carries the id of the first working line it stands for; the lines it stands for
+  // share the product and the label for the order's way of selling, all their rates depend on.
+  const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
   return {
     lines: stored.map((line, i) => ({
       ...line,
       payable:
         line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.active),
     })),
-    grouped: groupedByPortion(rows, stored),
+    grouped,
+    rates: grouped.map((line) => ratesById.get(line.identity.id)!),
   };
 }
 
@@ -1343,8 +1384,8 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity, its locked composition, and the VAT class it files at
- * for its order's way of selling. */
+/** A stored working-order line: its identity, its locked composition, and its VAT label for its
+ * order's way of selling, which grouping bound portions compares. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
@@ -1449,7 +1490,7 @@ export async function priceStoredOrderForIssuance(
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<GrossOrder> {
-  const { lines, grouped } = await readLockedLinesForIssuance(
+  const { lines, grouped, rates } = await readLockedLinesForIssuance(
     tx,
     workingOrderId,
     options.refuseUnsentUnavailable,
@@ -1461,7 +1502,7 @@ export async function priceStoredOrderForIssuance(
   return {
     gross: grossLockedLines(
       grouped.map(({ locked }) => locked),
-      grouped.map(({ vatClass }) => VAT_RATE_TABLE[vatClass]),
+      rates,
     ),
     identities: grouped.map(({ identity }) => identity),
   };
