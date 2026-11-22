@@ -26,7 +26,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
-import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { openInvoiceCorrection, parseInvoiceCorrection } from "./invoice-corrections.js";
 import { fingerprint } from "./parties.js";
@@ -98,7 +98,7 @@ async function cancel(
   const answer = await inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, b.partyId));
     const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
-    const ask: CancelItemAsk = {
+    const ask: Omit<CancelItemCommand, "admission"> = {
       quantity,
       expectedEdit: await readBillEditState(tx, b.billId),
       outcome: "keep_charge",

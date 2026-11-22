@@ -25,6 +25,7 @@ import {
   provisionAdjustmentVenue,
   todayLine,
   type AdjustmentVenue,
+  approverPin,
 } from "./testing/adjustment-venue.js";
 import { send } from "./testing/bill-venue.js";
 
@@ -342,7 +343,7 @@ it("cancelling sent work keeps a remaining fresh dish owned", async () => {
     action: "cancel" as const,
     quantity: "3",
     reasonId: venue.reasonId.houseVoid,
-    approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    approver: approverPin(venue.supervisorId, PINS.supervisor),
   };
   await inTx(venue, (tx) =>
     applyAdjustment(

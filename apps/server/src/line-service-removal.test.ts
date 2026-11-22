@@ -30,6 +30,7 @@ import {
   PINS,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
+  approverPin,
 } from "./testing/adjustment-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -141,7 +142,7 @@ async function ask(order: Fixture, quantity: string | undefined) {
     note: null,
     operatorId: venue.staffId,
     submissionId: randomUUID(),
-    approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    approver: approverPin(venue.supervisorId, PINS.supervisor),
   };
 }
 

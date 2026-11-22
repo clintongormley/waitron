@@ -16,7 +16,12 @@ import {
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
-import { cancelItem, type CancelItemAsk, type RefundLink } from "./line-cancel.js";
+import {
+  cancelItem,
+  type CancelItemAsk,
+  type CancelItemCommand,
+  type RefundLink,
+} from "./line-cancel.js";
 import type { OriginConfig } from "./trading-context.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
@@ -65,7 +70,7 @@ export type FinishPartyArgs = Parameters<typeof finishTable>[1] & {
   submissionId?: string;
   cancellations?: FinishCancellation[];
   collect?: CounterCollection;
-  approver?: CancelItemAsk["approver"];
+  approver?: CancelItemCommand["approver"];
   refundApprovedBy?: CancelItemAsk["refundApprovedBy"];
 };
 

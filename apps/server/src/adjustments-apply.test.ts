@@ -84,6 +84,7 @@ import {
   todayLineNos,
   type AdjustmentVenue,
   type RoundLine,
+  approverPin,
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -294,7 +295,7 @@ describe("comps by permission", () => {
     });
     await adjust(billId, {
       ...ask,
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     });
     const recorded = await inTx(venue, (tx) =>
       tx.select().from(adjustments).where(eq(adjustments.workingOrderId, billId)),
@@ -1008,10 +1009,7 @@ describe("approval (plan D6)", () => {
   it("applies it with a supervisor's PIN, recording who asked and who approved", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
 
-    await adjust(
-      billId,
-      await comp(billId, { personId: venue.supervisorId, pin: PINS.supervisor }),
-    );
+    await adjust(billId, await comp(billId, approverPin(venue.supervisorId, PINS.supervisor)));
 
     expect((await recordedOn(billId))[0]).toMatchObject({
       requestedBy: venue.staffId,
@@ -1029,7 +1027,7 @@ describe("approval (plan D6)", () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await refusedWith(
       billId,
-      await comp(billId, { personId: venue.staffId, pin: PINS.staff }),
+      await comp(billId, approverPin(venue.staffId, PINS.staff)),
       "adjustment.approval_required",
       { approval: "limit" },
     );
@@ -1061,7 +1059,7 @@ describe("approval (plan D6)", () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await refusedWith(
       billId,
-      await comp(billId, { personId: venue.managerId, pin: "0000" }),
+      await comp(billId, approverPin(venue.managerId, "0000")),
       "pin.invalid",
     );
   });
@@ -1164,7 +1162,7 @@ describe("a cancel's approval (A758 D12, D13)", () => {
 
     await adjust(
       billId,
-      await cancel(billId, { approver: { personId: venue.supervisorId, pin: PINS.supervisor } }),
+      await cancel(billId, { approver: approverPin(venue.supervisorId, PINS.supervisor) }),
     );
 
     expect(await recordedOn(billId)).toMatchObject([
@@ -1182,7 +1180,7 @@ describe("a cancel's approval (A758 D12, D13)", () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await refusedWith(
       billId,
-      await cancel(billId, { approver: { personId: venue.staffId, pin: PINS.staff } }),
+      await cancel(billId, { approver: approverPin(venue.staffId, PINS.staff) }),
       "adjustment.approval_required",
       { approval: "refund" },
     );
@@ -1882,7 +1880,7 @@ describe("a stale bill (plan D19)", () => {
 });
 
 describe("cumulative limits (plan D6)", () => {
-  const MANAGER_PIN = () => ({ personId: venue.managerId, pin: PINS.manager });
+  const MANAGER_PIN = () => approverPin(venue.managerId, PINS.manager);
 
   it("asks past the reason's €30 on the bill", async () => {
     const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }, { name: "Burger" }]);
@@ -2506,8 +2504,8 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     );
   afterEach(() => setLimit(null));
 
-  const MANAGER_PIN = () => ({ personId: venue.managerId, pin: PINS.manager });
-  const SUPERVISOR_PIN = () => ({ personId: venue.supervisorId, pin: PINS.supervisor });
+  const MANAGER_PIN = () => approverPin(venue.managerId, PINS.manager);
+  const SUPERVISOR_PIN = () => approverPin(venue.supervisorId, PINS.supervisor);
   const byStaff = () => ({ operatorId: venue.staffId });
   const billOff = (amount: string, extra: Partial<Ask> = {}): Ask => ({
     action: "discount_amount",
@@ -2665,7 +2663,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
     await refusedWith(
       billId,
-      billOff("50.00", { approver: { personId: venue.staffId, pin: PINS.staff } }),
+      billOff("50.00", { approver: approverPin(venue.staffId, PINS.staff) }),
       "adjustment.approval_required",
       PAST_BILL,
     );
@@ -3130,7 +3128,7 @@ describe("an extra on its own (B11d)", () => {
       needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
     await refusedWith(billId, ask, "adjustment.approval_required", { approval: "limit" });
-    await adjust(billId, { ...ask, approver: { personId: venue.managerId, pin: PINS.manager } });
+    await adjust(billId, { ...ask, approver: approverPin(venue.managerId, PINS.manager) });
     expect((await recordedOn(billId))[0]).toMatchObject({
       requestedBy: venue.staffId,
       approvedBy: venue.managerId,
@@ -4095,7 +4093,7 @@ describe("a counter order (B11c)", () => {
     });
     expect(await counterStateOf(billId)).toEqual(before);
 
-    await adjust(billId, await comp({ personId: venue.managerId, pin: PINS.manager }));
+    await adjust(billId, await comp(approverPin(venue.managerId, PINS.manager)));
     expect(await recordedOn(billId)).toMatchObject([
       { requestedBy: venue.staffId, approvedBy: venue.managerId },
     ]);
@@ -4139,10 +4137,7 @@ describe("a counter order (B11c)", () => {
       });
       expect(await counterStateOf(billId)).toEqual(before);
 
-      await adjust(
-        billId,
-        off("10.01", { approver: { personId: venue.managerId, pin: PINS.manager } }),
-      );
+      await adjust(billId, off("10.01", { approver: approverPin(venue.managerId, PINS.manager) }));
       expect((await recordedOn(billId)).map((row) => [row.reduction, row.approvedBy])).toEqual([
         [3000, null],
         [1001, venue.managerId],

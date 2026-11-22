@@ -70,7 +70,13 @@ import { VENUE_SERVICE } from "./modules.js";
 import { mountTillClockApi } from "./till-clock-api.js";
 import { mountTillAttendanceApi } from "./till-attendance-api.js";
 import type { TradingContext } from "./trading-context.js";
-import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import {
+  inPinTurn,
+  overrideToCheck,
+  withCheck,
+  withCheckUnder,
+  withPinCheckAhead,
+} from "./pin-check-ahead.js";
 import { mountTillBoxClockApi, type TillBoxClockDeps } from "./till-box-clock-api.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
@@ -3046,7 +3052,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             {
               ...resolution,
               admission: deps.admission,
-              approver: withCheck(approver, checked),
+              approver: withCheckUnder(approver, checked, attempts),
               refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
               partyId,
               expectedPartyRevision,

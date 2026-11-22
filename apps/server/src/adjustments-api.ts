@@ -25,7 +25,7 @@ import { issueIfFullyPaid } from "./bill-payments.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { asObject, optionalMoney, submissionIdOf } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
-import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { withCheckUnder, withPinCheckAhead } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import {
   overridePinAttempts,
@@ -212,7 +212,7 @@ export function mountAdjustmentsApi(
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
-        const approver = withCheck(parsedApprover, checked);
+        const approver = withCheckUnder(parsedApprover, checked, attempts);
         const saleCfg = sendingCfg(cfg, c, session.device);
         return withIssuanceTransaction(
           deps.db,
@@ -241,7 +241,6 @@ export function mountAdjustmentsApi(
                 ...(approver === undefined ? {} : { approver }),
               },
               deps.venueLocale,
-              attempts,
               deps.attendance === undefined
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
