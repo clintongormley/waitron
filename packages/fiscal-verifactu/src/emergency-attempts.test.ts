@@ -29,7 +29,7 @@ const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const approval = {
   version: 1,

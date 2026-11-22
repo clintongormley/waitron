@@ -925,7 +925,7 @@ describe("recordSale — series validation", () => {
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
     ).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
-      params: { seriesId: rectSeriesId, expected: "standard", actual: "rectificative" },
+      params: { seriesId: rectSeriesId, expected: "standard", actual: "corrective" },
     });
   });
 

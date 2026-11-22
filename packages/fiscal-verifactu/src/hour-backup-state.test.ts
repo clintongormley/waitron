@@ -19,7 +19,7 @@ function intent(identity = "0CNNW", issuedAt = "2026-10-16T11:40:00.000Z") {
     bases: [
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
     contextKey: "context",
     answer: "no",

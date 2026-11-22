@@ -34,7 +34,7 @@ const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerpr
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const request: VenueRequest = {
   country: "ES",
@@ -72,7 +72,7 @@ const candidate = {
   series: [
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ],
 };
 const approval = {
@@ -219,10 +219,10 @@ it("joins initial outside collection with the new account and exactly the alloca
   ).toEqual([
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ]);
   expect(result.seriesIds).toEqual(
-    ["standard", "full", "rectificative"].map(
+    ["standard", "full", "corrective"].map(
       (purpose) => series.find((row) => row.purpose === purpose)!.id,
     ),
   );
@@ -263,10 +263,10 @@ it("runs the fiscal seed and its series resolver through initial provisioning an
   ).toEqual([
     { code: "A-S000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000042", purpose: "full", nextNumber: 1 },
-    { code: "R-S000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(result.seriesIds).toEqual(
-    ["standard", "full", "rectificative"].map(
+    ["standard", "full", "corrective"].map(
       (purpose) => allSeries.find((row) => row.purpose === purpose)!.id,
     ),
   );

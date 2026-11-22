@@ -90,13 +90,13 @@ const bases = [
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const series = [
   { code: "a/B_1.2-3-0CZZW", purpose: "standard" },
   { code: "B-0CZZW", purpose: "standard" },
   { code: "FF-0CZZW", purpose: "full" },
-  { code: "R-0CZZW", purpose: "rectificative" },
+  { code: "R-0CZZW", purpose: "corrective" },
 ];
 
 describe("complete configured minute series", () => {

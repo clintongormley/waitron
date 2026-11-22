@@ -694,7 +694,7 @@ describe("module-owned recovery facts from the actual database", () => {
     ).toEqual([
       { code: "A-0CNQT", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNQT", purpose: "full", nextNumber: 1 },
-      { code: "R-0CNQT", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-0CNQT", purpose: "corrective", nextNumber: 1 },
     ]);
     for (const row of before)
       expect(after.find((entry) => entry.id === row.id)).toEqual({
@@ -761,7 +761,7 @@ describe("module-owned recovery facts from the actual database", () => {
           series: [
             { code: "A-0CNQT", purpose: "standard" },
             { code: "FF-0CNQT", purpose: "full" },
-            { code: "R-0CNQT", purpose: "rectificative" },
+            { code: "R-0CNQT", purpose: "corrective" },
           ],
         },
       },

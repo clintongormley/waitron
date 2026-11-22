@@ -35,7 +35,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
   { code: "FF", purpose: "full" },
 ];
 

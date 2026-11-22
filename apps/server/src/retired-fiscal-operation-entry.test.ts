@@ -30,7 +30,7 @@ const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 let root: string;
 let secret: string;

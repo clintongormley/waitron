@@ -375,7 +375,7 @@ async function rawPaymentsFor(
 /** The venue's rectificative series. */
 function rectificativeSeries(cfg: DeviceRequestConfig): string {
   return suite.db.all<{ id: string }>(sql`
-    select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
+    select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'corrective'
   `)[0]!.id;
 }
 

@@ -33,7 +33,7 @@ const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerpr
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const binding = {
   module: "fiscal-verifactu",
@@ -65,7 +65,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T07:00:00.000Z",
@@ -220,7 +220,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
       series: [
         { code: "A-S000001", purpose: "standard" },
         { code: "FF-S000001", purpose: "full" },
-        { code: "R-S000001", purpose: "rectificative" },
+        { code: "R-S000001", purpose: "corrective" },
       ],
     },
     permission,
@@ -240,7 +240,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
-    { code: "R-S000001", purpose: "rectificative" },
+    { code: "R-S000001", purpose: "corrective" },
   ]);
   expect(await suite.db.select().from(invoiceSeries)).toHaveLength(3);
   expect((await suite.db.select().from(fiscalAllocations))[0]!.approval.operatorId).toBe(
@@ -315,7 +315,7 @@ it("activates the exact retained dormant reservation at promotion", async () => 
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ]);
   expect(await suite.db.select().from(fiscalReservations)).toEqual(before);
   expect((await suite.db.select().from(fiscalAllocations))[0]!.nodeId).toBe(target.nodeId);
@@ -564,7 +564,7 @@ it("activates all purposes from opaque module input with the independently authe
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ]);
   const [sif] = await suite.db.select().from(registroSif);
   expect(sif!.id).toBe(result.sifId);

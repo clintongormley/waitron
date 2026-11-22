@@ -38,7 +38,7 @@ const request: VenueRequest = {
 const allocated = [
   { id: "c0000000-0000-4000-8000-000000000001", code: "A-S000042", purpose: "standard" },
   { id: "c0000000-0000-4000-8000-000000000002", code: "FF-S000042", purpose: "full" },
-  { id: "c0000000-0000-4000-8000-000000000003", code: "R-S000042", purpose: "rectificative" },
+  { id: "c0000000-0000-4000-8000-000000000003", code: "R-S000042", purpose: "corrective" },
 ];
 type Reference = (typeof allocated)[number];
 type Resolve = (
@@ -53,7 +53,7 @@ const read: Resolve = async (tx, node, bases) => {
     JSON.stringify([
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ])
   )
     throw new Error("requested bases differ from this allocation");
@@ -275,7 +275,7 @@ it("refuses duplicated requested purposes even if a module returns a different c
       .where(eq(invoiceSeries.nodeId, node.nodeId)),
   );
   const plan = planVenue(request, [module]).map((action) =>
-    action.kind === "create-series" && action.purpose === "rectificative"
+    action.kind === "create-series" && action.purpose === "corrective"
       ? { ...action, purpose: "standard" as const }
       : action,
   );

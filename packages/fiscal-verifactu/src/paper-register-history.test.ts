@@ -13,7 +13,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
@@ -163,7 +163,7 @@ describe("owner-declared paper register", () => {
       { code: "A-S000001", purpose: "standard" },
       { code: "B-S000001", purpose: "standard" },
       { code: "FF-S000001", purpose: "full" },
-      { code: "R-S000001", purpose: "rectificative" },
+      { code: "R-S000001", purpose: "corrective" },
     ]);
     expect(result.history).toEqual(input);
     expect(result.history.revisions[0]?.events).toEqual([reserve(), consume()]);

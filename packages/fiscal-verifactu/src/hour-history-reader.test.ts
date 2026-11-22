@@ -29,7 +29,7 @@ async function readInventory() {
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 it("enumerates the higher retired other-node hour that current-node readers omit", async () => {
   await seedTenants(suite.db);
@@ -197,7 +197,7 @@ it("an unassignable series refuses completeness instead of disappearing", async 
   await seedRows();
   await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "rectificative" });
+    .values({ nodeId: TENANT_A.nodeId2, code: "R-0CNPG", purpose: "corrective" });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 it("a malformed hour suffix cannot become empty history", async () => {

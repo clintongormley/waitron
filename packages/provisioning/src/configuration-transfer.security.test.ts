@@ -112,7 +112,7 @@ it("refuses export while a future cutover change would be lost", async () => {
   ).toEqual([{ day_cutover: "04:30:00" }]);
 });
 
-it.each(["standard", "full", "rectificative"])(
+it.each(["standard", "full", "corrective"])(
   "refuses export without an active %s series",
   async (purpose) => {
     const target = await seed();

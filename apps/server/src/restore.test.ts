@@ -1020,7 +1020,7 @@ describe("restore hooks (identity phase)", () => {
       expect(sif.numeroInstalacion).toBe("S000001");
       await tx
         .insert(invoiceSeries)
-        .values({ nodeId: T.nodeId, code: "FA-1", purpose: "rectificative" });
+        .values({ nodeId: T.nodeId, code: "FA-1", purpose: "corrective" });
     });
     await stampDeployment(suite.db, "preproduction");
     const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, T.nodeId);
@@ -1032,7 +1032,7 @@ describe("restore hooks (identity phase)", () => {
       bases: [
         { code: "FA", purpose: "standard" },
         { code: "FF", purpose: "full" },
-        { code: "FA-1", purpose: "rectificative" },
+        { code: "FA-1", purpose: "corrective" },
       ],
     });
     const held = fixture.request("restore");
@@ -1055,7 +1055,7 @@ describe("restore hooks (identity phase)", () => {
     `);
     expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
-      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "rectificative" },
+      { code: `FA-1-${sif.numeroInstalacion}`, purpose: "corrective" },
       { code: `FF-${sif.numeroInstalacion}`, purpose: "full" },
     ]);
     expect(parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"))).toEqual(

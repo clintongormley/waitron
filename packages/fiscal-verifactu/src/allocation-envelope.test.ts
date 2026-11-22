@@ -21,7 +21,7 @@ const candidate = {
   installationIdentity: "P000042",
   series: [
     { code: "A-P000042", purpose: "standard" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper",
   issuedAt: "2026-10-12T08:00:00.000Z",
@@ -79,7 +79,7 @@ const context = {
   incidentEvidence: "master/recovery-9",
   requiredBases: [
     { code: "A", purpose: "standard" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
   reauthentication: { operatorId: "administrator", eventId: "recovery-9" },
   priorActivation: "none",
@@ -155,7 +155,7 @@ describe("an allocation and its independently authorised recovery", () => {
       [],
       allocation.series.slice(0, 1),
       [...allocation.series, allocation.series[0]],
-      [{ code: "A-P000042", purpose: "rectificative" }, allocation.series[1]],
+      [{ code: "A-P000042", purpose: "corrective" }, allocation.series[1]],
     ].map((series) => [series]),
   )("refuses an incomplete, repeated or substituted purpose set %#", (series) => {
     expect(validate({ ...allocation, series })).toEqual({ ok: false, reason: "series_mismatch" });
@@ -279,7 +279,7 @@ describe("an allocation and its independently authorised recovery", () => {
       installationIdentity: "S000042",
       series: [
         { code: "A-S000042", purpose: "standard" },
-        { code: "R-S000042", purpose: "rectificative" },
+        { code: "R-S000042", purpose: "corrective" },
       ],
     };
     const input = { ...initial, reservationEvidence: signedEvidence(initial) };
@@ -311,7 +311,7 @@ describe("an allocation and its independently authorised recovery", () => {
           installationIdentity: "C000042",
           series: [
             { code: "A-C000042", purpose: "standard" },
-            { code: "R-C000042", purpose: "rectificative" },
+            { code: "R-C000042", purpose: "corrective" },
           ],
         },
         approval,
@@ -343,7 +343,7 @@ describe("an approval saying the old machine relinquished filing", () => {
       installationIdentity: "S000042",
       series: [
         { code: "A-S000042", purpose: "standard" },
-        { code: "R-S000042", purpose: "rectificative" },
+        { code: "R-S000042", purpose: "corrective" },
       ],
     };
     const input = { ...initial, reservationEvidence: signedEvidence(initial) };
@@ -409,7 +409,7 @@ describe("emergency allocation authority", () => {
       installationIdentity: draw.identity,
       series: [
         { code: `A-${draw.identity}`, purpose: "standard" },
-        { code: `R-${draw.identity}`, purpose: "rectificative" },
+        { code: `R-${draw.identity}`, purpose: "corrective" },
       ],
       reservationEvidence: { checksum: draw.checksum },
     };

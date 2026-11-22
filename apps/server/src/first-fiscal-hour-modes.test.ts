@@ -163,7 +163,7 @@ it.each(["demo", "prepare"])(
     ).toEqual([
       { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
-      { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-0CNNW", purpose: "corrective", nextNumber: 1 },
     ]);
     await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
       code: "ENOENT",

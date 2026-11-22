@@ -278,7 +278,7 @@ describe("sales — the commercial record", () => {
   it("permits the same invoice number in two different series", async () => {
     const [other] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: nodeA, code: "RA", purpose: "rectificative" })
+      .values({ nodeId: nodeA, code: "RA", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     await recordCompleteSale(suite.db);
     const second = await recordCompleteSale(suite.db, { seriesId: other!.id });

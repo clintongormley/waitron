@@ -51,7 +51,7 @@ beforeEach(async () => {
       [
         { code: `A-${code}`, purpose: "standard" as const },
         { code: `FF-${code}`, purpose: "full" as const },
-        { code: `R-${code}`, purpose: "rectificative" as const },
+        { code: `R-${code}`, purpose: "corrective" as const },
       ].map((value) => ({ ...value, nodeId, nextNumber: 123 })),
     );
   }

@@ -1101,7 +1101,7 @@ async function correctiveOf(
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       ),
   );
   return projectionInvoice({
@@ -1241,7 +1241,7 @@ it("raises no undelivered-invoice alert when a replacement of a full invoice's o
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       ),
   );
   const replacement = await projectionInvoice({

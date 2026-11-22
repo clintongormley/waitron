@@ -125,7 +125,7 @@ beforeEach(async () => {
     });
     const [series] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
       .returning();
     input = {
       managementSessionId: token,
@@ -628,7 +628,7 @@ async function takeOverWithCorrectiveSeries(): Promise<SeededNode> {
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: successor.nodeId, code: "RB", purpose: "rectificative", nextNumber: 1 })
+    .values({ nodeId: successor.nodeId, code: "RB", purpose: "corrective", nextNumber: 1 })
     .returning();
   input.request.correction.seriesId = brandSeriesId(series!.id);
   return successor;

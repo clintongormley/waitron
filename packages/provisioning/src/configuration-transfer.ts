@@ -112,7 +112,7 @@ export async function buildConfigurationBundle(
       t.taxpayer_domicile as "taxpayerDomicile",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
-      max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
+      max(s.code) filter (where s.purpose = 'corrective') as "rectificativeSeriesCode"
     from taxpayer t
     join nodes n on n.id = ${source.nodeId}
     join invoice_series s on s.node_id = n.id and s.retired_at is null

@@ -24,7 +24,7 @@ const binding: OperationBinding = {
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" };
 const read = () => FISCAL_OPERATIONS.readRecoveryHistory!(suite.db);

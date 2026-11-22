@@ -336,7 +336,7 @@ describe("planVenue", () => {
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
       { kind: "create-series", code: "FF", purpose: "full" },
-      { kind: "create-series", code: "R", purpose: "rectificative" },
+      { kind: "create-series", code: "R", purpose: "corrective" },
     ]);
   });
 
@@ -506,7 +506,7 @@ describe("describeVenueAction", () => {
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
       "create full series FF",
-      "create rectificative series R",
+      "create corrective series R",
       "seed module probe: seed the probe",
     ]);
   });

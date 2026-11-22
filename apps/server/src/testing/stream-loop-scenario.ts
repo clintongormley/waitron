@@ -509,7 +509,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       bases: [
         { code: "A", purpose: "standard" },
         { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
+        { code: "R", purpose: "corrective" },
       ],
     });
     const allocationEnv = await writeAllocationInput(scratch, recoveryFixture, "restore");

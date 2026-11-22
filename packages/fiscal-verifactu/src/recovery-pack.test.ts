@@ -14,7 +14,7 @@ const node = {
 };
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
   { code: "FF", purpose: "full" },
 ];
 beforeEach(async () => {

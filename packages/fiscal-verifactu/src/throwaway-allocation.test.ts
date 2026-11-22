@@ -25,7 +25,7 @@ const node = {
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 
 function seat(): ThrowawayAllocation {
@@ -100,7 +100,7 @@ describe("the throwaway allocation seat", () => {
       expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
-        { code: "R-0CNNW", purpose: "rectificative" },
+        { code: "R-0CNNW", purpose: "corrective" },
       ]);
     });
 

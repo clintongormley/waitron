@@ -43,7 +43,7 @@ declare module "@waitron/shared" {
      */
     "series.no_standard_for_node": { nodeId: string };
     "series.no_full_for_node": { nodeId: string };
-    /** A node has no live `purpose='rectificative'` invoice series to number a corrective invoice
+    /** A node has no live `purpose='corrective'` invoice series to number a corrective invoice
      * from (`readLiveSeriesIdTx`). */
     "series.no_rectificative_for_node": { nodeId: string };
     /**

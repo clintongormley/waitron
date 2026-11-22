@@ -241,7 +241,7 @@ async function credit(billId: string, base: string, total: string): Promise<void
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       );
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,

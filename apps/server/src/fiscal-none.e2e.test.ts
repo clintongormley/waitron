@@ -134,7 +134,7 @@ async function setupGbVenue(): Promise<GbVenue> {
     .where(eq(invoiceSeries.nodeId, nodeId));
   const standard = seriesRows.find((r) => r.purpose === "standard");
   const full = seriesRows.find((r) => r.purpose === "full");
-  const rectificative = seriesRows.find((r) => r.purpose === "rectificative");
+  const rectificative = seriesRows.find((r) => r.purpose === "corrective");
   if (standard === undefined || full === undefined || rectificative === undefined) {
     throw new Error("fiscal-none.e2e: venue plan did not seed all series");
   }

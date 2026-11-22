@@ -38,7 +38,7 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const digest = (v: unknown) => createHash("sha256").update(declaredHistoryBytes(v)).digest("hex");
 const invalid = expect.objectContaining({ code: "sif.allocation_invalid" });
@@ -216,7 +216,7 @@ it.each(["S", "P"] as const)(
       { code: `A-${prefix}000043`, purpose: "standard" },
       { code: `B-${prefix}000043`, purpose: "standard" },
       { code: `FF-${prefix}000043`, purpose: "full" },
-      { code: `R-${prefix}000043`, purpose: "rectificative" },
+      { code: `R-${prefix}000043`, purpose: "corrective" },
     ]);
     const [retained] = await suite.db.select().from(fiscalAllocations);
     expect(retained?.allocation).toEqual(f.input.allocation);

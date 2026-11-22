@@ -20,14 +20,14 @@ export async function insertCorrective(
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
     .where(
-      and(eq(invoiceSeries.nodeId, corrected!.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+      and(eq(invoiceSeries.nodeId, corrected!.nodeId), eq(invoiceSeries.purpose, "corrective")),
     );
   const series =
     found ??
     (
       await tx
         .insert(invoiceSeries)
-        .values({ nodeId: corrected!.nodeId, code: "R", purpose: "rectificative" })
+        .values({ nodeId: corrected!.nodeId, code: "R", purpose: "corrective" })
         .returning({ id: invoiceSeries.id })
     )[0];
   const invoiceNumber = await allocateInvoiceNumber(tx, series!.id);

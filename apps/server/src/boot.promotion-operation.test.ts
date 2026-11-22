@@ -81,7 +81,7 @@ vi.mock("./modules.js", async (original) => {
                   await tx.insert(invoiceSeries).values([
                     { nodeId: node.nodeId, code: "A-P000042", purpose: "standard" },
                     { nodeId: node.nodeId, code: "FF-P000042", purpose: "full" },
-                    { nodeId: node.nodeId, code: "R-P000042", purpose: "rectificative" },
+                    { nodeId: node.nodeId, code: "R-P000042", purpose: "corrective" },
                   ]);
                 },
               },

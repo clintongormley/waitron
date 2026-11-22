@@ -42,7 +42,7 @@ const NODE = nodeId("c0000000-0000-4000-8000-000000000001");
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -313,7 +313,7 @@ it.each(["archive", "bucket"])(
     ).toEqual([
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-      { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+      { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
     ]);
     expect(after.allocations.map((row) => row.approval)).toEqual([approval]);
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(NODE);

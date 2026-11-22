@@ -77,7 +77,7 @@ const ring = loadKeyRing({
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const joinBinding: OperationBinding = {
   module: "fiscal-verifactu",
@@ -444,7 +444,7 @@ it("retains the selected hour across restart but discards transient comparison a
   expect((await rows()).allocations).toHaveLength(2);
 });
 
-it.each(["standard", "full", "rectificative"])(
+it.each(["standard", "full", "corrective"])(
   "refuses a second %s prefix before dormant admission or hour selection",
   async (purpose) => {
     await suite.db.insert(invoiceSeries).values({

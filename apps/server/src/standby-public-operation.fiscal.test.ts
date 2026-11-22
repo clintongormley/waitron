@@ -72,7 +72,7 @@ const fingerprint = paperCustodianFingerprint(publicKey)!;
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const allocation = {
   version: 1 as const,
@@ -84,7 +84,7 @@ const allocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -388,7 +388,7 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
   ).toEqual([
     { code: "A-P000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-    { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(live.allocations[0]?.approval.operatorId).toEqual({
     kind: "recovery-key",

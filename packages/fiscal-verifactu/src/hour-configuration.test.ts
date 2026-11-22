@@ -53,7 +53,7 @@ it("a setup without a host cannot generate names from paper serials", () => {
     bases: [
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
   };
   expect(() => FISCAL_INITIAL_SETUP.candidates(context, { serials: [1] })).toThrowError(
@@ -88,7 +88,7 @@ it.each([
         requiredBases: [
           { code: "A", purpose: "standard" },
           { code: "FF", purpose: "full" },
-          { code: "R", purpose: "rectificative" },
+          { code: "R", purpose: "corrective" },
         ],
       };
       const trustPath = join(root, "trust.json");

@@ -21,7 +21,7 @@ const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const 
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const instant = Date.parse("2026-10-16T11:40:00.000Z");
 function clock(at = instant, monotonic = 0, browserAt = at) {

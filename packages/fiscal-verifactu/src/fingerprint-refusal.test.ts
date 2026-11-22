@@ -63,7 +63,7 @@ beforeEach(async () => {
     .insert(invoiceSeries)
     .values([
       { nodeId: node.nodeId, code: "F", purpose: "full" },
-      { nodeId: node.nodeId, code: "R", purpose: "rectificative" },
+      { nodeId: node.nodeId, code: "R", purpose: "corrective" },
     ])
     .returning();
   fullSeries = brandSeriesId(full!.id);

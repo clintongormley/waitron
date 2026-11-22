@@ -336,7 +336,7 @@ it.each([
               .all(),
           ).toEqual([
             { code: "FF-0CNNY", purpose: "full", nextNumber: 1 },
-            { code: "R-0CNNY", purpose: "rectificative", nextNumber: 1 },
+            { code: "R-0CNNY", purpose: "corrective", nextNumber: 1 },
             { code: "A-0CNNY", purpose: "standard", nextNumber: 1 },
           ]);
           expect(

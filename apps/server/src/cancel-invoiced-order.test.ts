@@ -312,7 +312,7 @@ async function activeRectificative() {
       .where(
         and(
           eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-          eq(invoiceSeries.purpose, "rectificative"),
+          eq(invoiceSeries.purpose, "corrective"),
           isNull(invoiceSeries.retiredAt),
         ),
       ),
@@ -829,7 +829,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }
@@ -852,7 +852,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }
@@ -997,7 +997,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const code = `R${randomUUID().slice(0, 8)}`;
     await inTx(venue, (tx) =>
-      insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "rectificative" }]),
+      insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "corrective" }]),
     );
     try {
       const before = fiscalSnapshot();

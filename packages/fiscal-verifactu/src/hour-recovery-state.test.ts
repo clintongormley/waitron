@@ -28,7 +28,7 @@ const binding: OperationBinding = {
 const bases = [
   { code: "a/b_.-", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
@@ -213,7 +213,7 @@ it("refuses a changed active series instead of treating it as newly configured b
   await seed();
   await suite.db
     .update(invoiceSeries)
-    .set({ purpose: "rectificative" })
+    .set({ purpose: "corrective" })
     .where(eq(invoiceSeries.code, "FF-0CNNW"));
   await expect(read()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -237,7 +237,7 @@ describe("recorded country", () => {
   });
 });
 
-it.each(["standard", "full", "rectificative"])(
+it.each(["standard", "full", "corrective"])(
   "refuses recovery with two %s prefixes without changing fiscal rows",
   async (purpose) => {
     await seed([...bases, { code: "second", purpose }]);

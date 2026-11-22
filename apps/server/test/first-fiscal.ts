@@ -70,7 +70,7 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
           bases: [
             { code: "A", purpose: "standard" },
             { code: "FF", purpose: "full" },
-            { code: "R", purpose: "rectificative" },
+            { code: "R", purpose: "corrective" },
           ],
           binding: {
             module: MODULE,

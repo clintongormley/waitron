@@ -17,7 +17,7 @@ const scope = {
   recipientVenueId: "venue-one",
   requiredBases: [
     { code: "A", purpose: "standard" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
     { code: "FF", purpose: "full" },
   ],
 };
@@ -41,7 +41,7 @@ function block() {
           installationIdentity: "P000042",
           series: [
             { code: "A-P000042", purpose: "standard" },
-            { code: "R-P000042", purpose: "rectificative" },
+            { code: "R-P000042", purpose: "corrective" },
             { code: "FF-P000042", purpose: "full" },
           ],
           source: "paper",

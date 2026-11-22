@@ -57,7 +57,7 @@ it.each([
     bases: [
       { code: "standard.Exact", purpose: "standard" },
       { code: expectedFull, purpose: "full" },
-      { code: "rectified-Exact", purpose: "rectificative" },
+      { code: "rectified-Exact", purpose: "corrective" },
     ],
     request: { ready: true },
   });

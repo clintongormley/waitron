@@ -52,7 +52,7 @@ const vault = Buffer.alloc(32, 19).toString("base64");
 const key = "disposable-verification-archive-key";
 const bases = [
   { code: "A", purpose: "standard" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const pair = forge.pki.rsa.generateKeyPair(2048);
 const issuer = { cn: "Verification fixture CA", key: pair.privateKey };

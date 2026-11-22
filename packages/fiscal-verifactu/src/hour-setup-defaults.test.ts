@@ -23,7 +23,7 @@ const binding = {
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 beforeEach(async () => {
   await seedTenants(suite.db);

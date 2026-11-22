@@ -191,7 +191,7 @@ function replace(saleId: SaleId): Promise<SaleId> {
       operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
-      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "rectificative")),
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
       correctsSaleId: saleId,
       authz: { sessionId: session.id },
       clock: venue.clock,

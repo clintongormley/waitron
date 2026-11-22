@@ -68,7 +68,7 @@ function setup() {
     bases: [
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
     identity: "0CNPH",
     issuedAt: "2026-10-16T12:01:00.000Z",

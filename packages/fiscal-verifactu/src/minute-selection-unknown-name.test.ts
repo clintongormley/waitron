@@ -32,7 +32,7 @@ const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const 
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const binding: OperationBinding = {
   module: "fiscal-verifactu",

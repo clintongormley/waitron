@@ -734,7 +734,7 @@ describe("rows written within one millisecond, read in the order they were writt
       const [series] = await tx
         .select({ id: invoiceSeries.id })
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.purpose, "rectificative"));
+        .where(eq(invoiceSeries.purpose, "corrective"));
       for (const invoiceNumber of [900001, 900002, 900003])
         await tx.insert(sales).values({
           id: id(),

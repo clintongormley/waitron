@@ -61,7 +61,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
       node: NODE,
       bases: [
         { code: "FA", purpose: "standard" },
-        { code: "RF", purpose: "rectificative" },
+        { code: "RF", purpose: "corrective" },
       ],
       identity: "S000001",
     });
@@ -87,7 +87,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
   it("restoring an existing node mints a fresh installation number and a new chain", async () => {
     const bases = [
       { code: "FA", purpose: "standard" },
-      { code: "RF", purpose: "rectificative" },
+      { code: "RF", purpose: "corrective" },
     ];
     const initial = allocationFixture({ node: NODE, bases, identity: "S000001" });
     const recovery = allocationFixture({ node: NODE, bases, identity: "P000042" });
@@ -115,7 +115,7 @@ describe("allocated fiscal standby contract", () => {
     );
     await db.insert(invoiceSeries).values([
       { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard" },
-      { nodeId: TENANT_A.nodeId, code: "RF", purpose: "rectificative" },
+      { nodeId: TENANT_A.nodeId, code: "RF", purpose: "corrective" },
     ]);
   });
 
@@ -140,25 +140,25 @@ describe("allocated fiscal standby contract", () => {
       {
         nodeId: TENANT_A.nodeId,
         code: `RE-${primarySif.numeroInstalacion}`,
-        purpose: "rectificative",
+        purpose: "corrective",
         retiredAt: null,
       },
     ]);
     const fixture = spareFixture([
       { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "rectificative" },
+      { code: "RE", purpose: "corrective" },
     ]);
     const reservation = await reserve(fixture);
     expect(reservation.series).toBeUndefined();
     expect(fixture.allocation.series).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RE-P000042", purpose: "rectificative" },
+      { code: "RE-P000042", purpose: "corrective" },
     ]);
     expect(reservation.state).toEqual(fixture.state);
     await takeover(fixture, reservation.state);
     expect(await activeSeries()).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RE-P000042", purpose: "rectificative" },
+      { code: "RE-P000042", purpose: "corrective" },
     ]);
   });
 
@@ -170,17 +170,17 @@ describe("allocated fiscal standby contract", () => {
     expect(fixture.allocation.installationIdentity).toBe("P000042");
     expect(fixture.allocation.series).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
     expect(fixture.allocation.series.find((s) => s.code === "RF-P000042")?.purpose).toBe(
-      "rectificative",
+      "corrective",
     );
     expect(await activeSeries()).toEqual([]);
     expect(await activeSifs()).toEqual([]);
     await takeover(fixture, r.state);
     expect(await activeSeries()).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
   });
 
@@ -203,7 +203,7 @@ describe("allocated fiscal standby contract", () => {
     expect(sif.nif).toBe("89890001K");
     expect(await activeSeries()).toEqual([
       { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
   });
 
@@ -277,7 +277,7 @@ describe("allocated fiscal standby contract", () => {
 function spareFixture(
   bases = [
     { code: "FA", purpose: "standard" },
-    { code: "RF", purpose: "rectificative" },
+    { code: "RF", purpose: "corrective" },
   ],
 ) {
   return allocationFixture({ node: NODE_2, primary: NODE, bases, identity: "P000042" });

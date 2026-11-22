@@ -326,7 +326,7 @@ async function withFixtureOperation(
     [
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "RF", purpose: "rectificative" },
+      { code: "RF", purpose: "corrective" },
     ],
     await personIdForLoginEmail(db, request.email),
   );
@@ -1197,12 +1197,12 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     expect(allocation.series).toEqual([
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
     const byCode = new Map(allocation.series.map((s) => [s.code, s.purpose]));
     expect(byCode.get("FA-P000042")).toBe("standard");
     expect(byCode.get("FF-P000042")).toBe("full");
-    expect(byCode.get("RF-P000042")).toBe("rectificative");
+    expect(byCode.get("RF-P000042")).toBe("corrective");
     const primary = {
       nodeId: nodeId(designated.nodeId),
     };
@@ -1210,7 +1210,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
@@ -2372,7 +2372,7 @@ async function allocatedReply(
     [
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "RF", purpose: "rectificative" },
+      { code: "RF", purpose: "corrective" },
     ],
     adminPersonId,
   );

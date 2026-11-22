@@ -17,7 +17,7 @@ const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerpr
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const candidate = {
   version: 1 as const,
@@ -31,7 +31,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
 };
 const block = signPaperBlock(
@@ -87,7 +87,7 @@ const consumption = {
             [
               ["A-P000042", "standard"],
               ["FF-P000042", "full"],
-              ["R-P000042", "rectificative"],
+              ["R-P000042", "corrective"],
             ],
             "paper",
             "2026-10-12T08:00:00.000Z",
@@ -271,7 +271,7 @@ describe("signed recovery-key allocation", () => {
       series: [
         { code: "A-S000042", purpose: "standard" },
         { code: "FF-S000042", purpose: "full" },
-        { code: "R-S000042", purpose: "rectificative" },
+        { code: "R-S000042", purpose: "corrective" },
       ],
     };
     expect(

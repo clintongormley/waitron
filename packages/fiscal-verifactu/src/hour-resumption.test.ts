@@ -35,7 +35,7 @@ function fixture() {
     bases: [
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
-      { code: "R", purpose: "rectificative" },
+      { code: "R", purpose: "corrective" },
     ],
     contextKey: "owner-1",
     waitKey: "identical-frozen-context",

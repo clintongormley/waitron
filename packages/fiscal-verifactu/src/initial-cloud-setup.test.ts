@@ -39,7 +39,7 @@ const context: InitialSetupContext = {
     { code: "A", purpose: "standard" },
     { code: "B", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
 };
 const venueId = "10000000-0000-4000-8000-000000000002";
@@ -404,7 +404,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       { code: "A-C000042", purpose: "standard" },
       { code: "B-C000042", purpose: "standard" },
       { code: "FF-C000042", purpose: "full" },
-      { code: "R-C000042", purpose: "rectificative" },
+      { code: "R-C000042", purpose: "corrective" },
     ]);
     f.current.priorActivation = "committed";
     const replay = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>

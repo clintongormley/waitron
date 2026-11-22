@@ -205,7 +205,7 @@ export async function credit(
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
       );
     const session = await adminSession(venue, tx);
     await recordCorrection(tx, venue.backend, {

@@ -49,7 +49,7 @@ const selected = {
       series: [
         { code: "A-0CSQW", purpose: "standard" },
         { code: "FF-0CSQW", purpose: "full" },
-        { code: "R-0CSQW", purpose: "rectificative" },
+        { code: "R-0CSQW", purpose: "corrective" },
       ],
     },
   },

@@ -243,14 +243,14 @@ const valueLabels: Record<CustodyLocale, Readonly<Record<string, string>>> = {
   en: {
     standard: "Ordinary",
     full: "Full",
-    rectificative: "Corrections",
+    corrective: "Corrections",
     production: "Production",
     preproduction: "Preproduction",
   },
   es: {
     standard: "Ordinarias",
     full: "Completas",
-    rectificative: "Rectificativas",
+    corrective: "Rectificativas",
     production: "Producción",
     preproduction: "Preproducción",
   },

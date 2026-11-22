@@ -66,7 +66,7 @@ export function seriesMatchBases(
       base.code.length === 0 ||
       base.code.length > 21 ||
       !/^[A-Za-z0-9/_.-]+$/.test(base.code) ||
-      !["standard", "full", "rectificative"].includes(base.purpose)
+      !["standard", "full", "corrective"].includes(base.purpose)
     )
       return false;
     const code = `${base.code}-${installationIdentity}`;

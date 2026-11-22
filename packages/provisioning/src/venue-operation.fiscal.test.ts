@@ -30,7 +30,7 @@ const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerpr
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const request: VenueRequest = {
   country: "ES",
@@ -68,7 +68,7 @@ const candidate = {
   series: [
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ],
 };
 const approval = {
@@ -193,7 +193,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
     ).toEqual([
       { code: "A-S000042", purpose: "standard" },
       { code: "FF-S000042", purpose: "full" },
-      { code: "R-S000042", purpose: "rectificative" },
+      { code: "R-S000042", purpose: "corrective" },
     ]);
     const [held] = await suite.db.select().from(fiscalAllocations);
     expect(held!.approval.operatorId).toBe(ADMIN);

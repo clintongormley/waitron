@@ -15,12 +15,12 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const firstSeries = [
   { code: "A-0CNNW", purpose: "standard" },
   { code: "FF-0CNNW", purpose: "full" },
-  { code: "R-0CNNW", purpose: "rectificative" },
+  { code: "R-0CNNW", purpose: "corrective" },
   { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
 ];
 
@@ -117,7 +117,7 @@ it.each(["restore"])(
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-0CNPG", purpose: "standard" },
       { code: "FF-0CNPG", purpose: "full" },
-      { code: "R-0CNPG", purpose: "rectificative" },
+      { code: "R-0CNPG", purpose: "corrective" },
       { code: "a/B_1.2-3-0CNPG", purpose: "standard" },
     ]);
     const after = await snapshot();

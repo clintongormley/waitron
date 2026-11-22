@@ -72,7 +72,7 @@ const ring = loadKeyRing({
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const joinBinding: OperationBinding = {
   module: "fiscal-verifactu",

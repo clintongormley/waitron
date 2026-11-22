@@ -36,7 +36,7 @@ const context: AllocationContext = {
   requiredBases: [
     { code: "A", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
   reauthentication: { eventId: "event-1", operatorId: "operator-1" },
   priorActivation: "none",
@@ -106,7 +106,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
     expect(result.allocation.series).toEqual([
       { code: "A-C000042", purpose: "standard" },
       { code: "FF-C000042", purpose: "full" },
-      { code: "R-C000042", purpose: "rectificative" },
+      { code: "R-C000042", purpose: "corrective" },
     ]);
     expect(Object.isFrozen(result.allocation.series[0])).toBe(true);
     expect(Object.isFrozen(result.allocation.reservationEvidence)).toBe(true);
@@ -182,7 +182,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
         requiredBases: [
           { code: "A", purpose: "standard" },
           { code: "FF", purpose: "standard" },
-          { code: "R", purpose: "rectificative" },
+          { code: "R", purpose: "corrective" },
         ],
       }),
     ).toEqual({ ok: false, reason: "series_mismatch" });

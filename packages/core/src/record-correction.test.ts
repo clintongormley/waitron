@@ -35,7 +35,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTaxpayer creates
-let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
+let rectSeriesId: SeriesId; // a purpose='corrective' series on the same node
 // `supervisorId` holds `sale.rectify`, so `supervisorSessionId` authorizes every green-path
 // correction; `staffId` holds no `sale.rectify`; `managerId` is the second person whose PIN unlocks
 // an override, and also holds `sale.void`, so `managerSessionId` authorizes the one precondition
@@ -320,7 +320,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     const { saleId } = await sell(backend);
     await expect(correct(backend, saleId, { seriesId })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
-      params: { seriesId, expected: "rectificative", actual: "standard" },
+      params: { seriesId, expected: "corrective", actual: "standard" },
     });
   });
 

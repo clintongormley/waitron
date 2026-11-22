@@ -1,4 +1,4 @@
-export const seriesPurposes = ["standard", "full", "rectificative"] as const;
+export const seriesPurposes = ["standard", "full", "corrective"] as const;
 export const fiscalSetupStrings = {
   en: {
     heading: "First fiscal identity",
@@ -15,7 +15,7 @@ export const fiscalSetupStrings = {
     source: "Setup source",
     standard: "Standard",
     full: "Full invoice",
-    rectificative: "Correction",
+    corrective: "Correction",
     production: "Live / Production",
     preproduction: "Live / Preproduction",
     question: "Does this scope already have a current master?",
@@ -69,7 +69,7 @@ export const fiscalSetupStrings = {
     source: "Origen de configuración",
     standard: "Simplificada",
     full: "Factura completa",
-    rectificative: "Rectificativa",
+    corrective: "Rectificativa",
     production: "Real / Producción",
     preproduction: "Real / Preproducción",
     question: "¿Este ámbito ya tiene un registro maestro vigente?",

@@ -426,7 +426,7 @@ it("reads back a completed activation after a lost response and offers no second
         series: [
           { code: "A-0CRHE", purpose: "standard" },
           { code: "FF-0CRHE", purpose: "full" },
-          { code: "R-0CRHE", purpose: "rectificative" },
+          { code: "R-0CRHE", purpose: "corrective" },
         ],
       },
     },

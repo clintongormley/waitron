@@ -157,7 +157,7 @@ it("freezes a password-confirmed real hour request and imports only its matching
         series: [
           { code: "A-0CNNY", purpose: "standard" },
           { code: "FF-0CNNY", purpose: "full" },
-          { code: "R-0CNNY", purpose: "rectificative" },
+          { code: "R-0CNNY", purpose: "corrective" },
         ],
       },
     },

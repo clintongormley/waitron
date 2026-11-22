@@ -585,7 +585,7 @@ describe("promoteMirrorToPrimary", () => {
           series: [
             { code: "FA-7", purpose: "standard" },
             { code: "FF-7", purpose: "full" },
-            { code: "FR-7", purpose: "rectificative" },
+            { code: "FR-7", purpose: "corrective" },
           ],
           endorsement,
         },

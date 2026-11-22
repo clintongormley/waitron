@@ -28,7 +28,7 @@ const context: InitialSetupContext = {
   bases: [
     { code: "A", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
 };
 const input = {
@@ -42,7 +42,7 @@ const input = {
     series: [
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
-      { code: "R-0CNNW", purpose: "rectificative" },
+      { code: "R-0CNNW", purpose: "corrective" },
     ],
     source: "hour",
     reservationEvidence: null,
@@ -940,7 +940,7 @@ it("refuses a delivered sheet that still carries an installation code", () => {
   );
 });
 
-it.each(["standard", "full", "rectificative", "unknown"])(
+it.each(["standard", "full", "corrective", "unknown"])(
   "refuses a matching setup allocation with a second %s prefix",
   (purpose) => {
     const saved = fixture();
@@ -955,7 +955,7 @@ it.each(["standard", "full", "rectificative", "unknown"])(
   },
 );
 
-it.each(["standard", "full", "rectificative"])(
+it.each(["standard", "full", "corrective"])(
   "refuses a matching setup allocation missing its %s prefix",
   (purpose) => {
     const saved = fixture();
@@ -972,7 +972,7 @@ it.each(["standard", "full", "rectificative"])(
   },
 );
 
-it.each(["standard", "rectificative", "unknown"])(
+it.each(["standard", "corrective", "unknown"])(
   "refuses three setup prefixes whose full purpose is replaced by %s",
   (purpose) => {
     const saved = fixture();

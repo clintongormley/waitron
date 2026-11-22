@@ -184,13 +184,13 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(allocation.series).toEqual([
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
     await prepareStandbyDatabase(db, spare.db, primaryNode());
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "rectificative" },
+      { code: "RF-P000042", purpose: "corrective" },
     ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
@@ -326,13 +326,13 @@ describe("assembleMirrorBundle (primary side)", () => {
       expect(fiscal.evidence.block.payload.allocations[0]!.series).toEqual([
         { code: "FA-P000042", purpose: "standard" },
         { code: "FF-P000042", purpose: "full" },
-        { code: "RF-P000042", purpose: "rectificative" },
+        { code: "RF-P000042", purpose: "corrective" },
       ]);
       await prepareStandbyDatabase(db, spare.db, primaryNode());
       expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
         { code: "FA-P000042", purpose: "standard" },
         { code: "FF-P000042", purpose: "full" },
-        { code: "RF-P000042", purpose: "rectificative" },
+        { code: "RF-P000042", purpose: "corrective" },
       ]);
     } finally {
       (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
@@ -378,7 +378,7 @@ async function allocatedBundle(
   const fixture = await standbyContract(db, primaryNode(), standby.nodeId, [
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "RF", purpose: "rectificative" },
+    { code: "RF", purpose: "corrective" },
   ]);
   const original = [...ALL_MODULES];
   (ALL_MODULES as WaitronModule[]).splice(

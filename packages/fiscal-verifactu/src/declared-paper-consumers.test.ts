@@ -27,7 +27,7 @@ const primary = { nodeId: TENANT_A.nodeId },
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const time = "2026-10-16T00:00:00.000Z";
 function checkpoint(prefix: "S" | "P", floor = 42): DeclaredRegisterHistory {

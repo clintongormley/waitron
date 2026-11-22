@@ -63,7 +63,7 @@ beforeEach(async () => {
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },
     { nodeId: NODE, code: "FF", purpose: "full" },
-    { nodeId: NODE, code: "R", purpose: "rectificative" },
+    { nodeId: NODE, code: "R", purpose: "corrective" },
   ]);
   nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });

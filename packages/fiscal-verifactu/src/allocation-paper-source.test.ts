@@ -36,7 +36,7 @@ const operatorId = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const candidate = {
   version: 1 as const,
@@ -48,7 +48,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -154,7 +154,7 @@ it("activates only the complete signed allocation confirmed by the separate file
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
       await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),

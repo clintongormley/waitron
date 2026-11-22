@@ -40,7 +40,7 @@ export const invoiceSeries = table(
       foreignColumns: [nodes.id],
       name: "invoice_series_node_fk",
     }),
-    check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'full', 'rectificative')`),
+    check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'full', 'corrective')`),
     check("invoice_series_next_number_ck", sql`${t.nextNumber} >= 1`),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),
   ],

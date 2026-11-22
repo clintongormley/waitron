@@ -993,7 +993,7 @@ describe("the invoice at full payment", () => {
       tx
         .select({ nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.purpose, "rectificative")),
+        .where(eq(invoiceSeries.purpose, "corrective")),
     );
     expect(before).toEqual([]);
     expect(settledBefore).toHaveLength(1);
@@ -1025,7 +1025,7 @@ describe("the invoice at full payment", () => {
       tx
         .select({ nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.purpose, "rectificative")),
+        .where(eq(invoiceSeries.purpose, "corrective")),
     );
     expect(rectificativeAfter).toEqual(rectificativeBefore);
   });

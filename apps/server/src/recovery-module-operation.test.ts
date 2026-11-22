@@ -51,7 +51,7 @@ beforeEach(async () => {
   await suite.db.insert(invoiceSeries).values([
     { nodeId: target.nodeId, code: "A", purpose: "standard" },
     { nodeId: target.nodeId, code: "FF", purpose: "full" },
-    { nodeId: target.nodeId, code: "R", purpose: "rectificative" },
+    { nodeId: target.nodeId, code: "R", purpose: "corrective" },
   ]);
   await seedPersons(suite.db, {
     id: ADMIN,

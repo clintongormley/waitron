@@ -37,7 +37,7 @@ const fingerprint = paperCustodianFingerprint(publicKey)!;
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const request: VenueRequest = {
   country: "ES",
@@ -75,7 +75,7 @@ const candidate = {
   series: [
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
-    { code: "R-S000042", purpose: "rectificative" },
+    { code: "R-S000042", purpose: "corrective" },
   ],
 };
 const approval = {
@@ -219,7 +219,7 @@ async function allocatedVenue() {
   ).toEqual([
     { code: "A-S000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000042", purpose: "full", nextNumber: 1 },
-    { code: "R-S000042", purpose: "rectificative", nextNumber: 1 },
+    { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
   ]);
   expect(
     await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),

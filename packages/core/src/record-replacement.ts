@@ -27,7 +27,7 @@ export interface RecordReplacementInput {
   operationDescription: string;
   /** The node that issues the replacement and whose chain it extends. */
   nodeId: NodeId;
-  /** Must be this node's live `rectificative` series. */
+  /** Must be this node's live `corrective` series. */
   seriesId: SeriesId;
   /** The invoice the replacement takes the place of. */
   correctsSaleId: SaleId;

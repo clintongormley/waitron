@@ -37,7 +37,7 @@ export async function initialSetupInput(
     bases: [
       { code: venue.seriesCode, purpose: "standard" },
       { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
-      { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
+      { code: venue.rectificativeSeriesCode, purpose: "corrective" },
     ],
   });
   const held = fixture.request("setup");

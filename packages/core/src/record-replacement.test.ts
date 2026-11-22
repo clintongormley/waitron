@@ -429,7 +429,7 @@ describe("recordReplacement — refusals use no number", () => {
       { seriesId },
       {
         code: "sale.series_wrong_purpose",
-        params: { seriesId, expected: "rectificative", actual: "standard" },
+        params: { seriesId, expected: "corrective", actual: "standard" },
       },
     );
   });

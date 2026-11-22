@@ -52,7 +52,7 @@ export async function creditWholeInvoice(
 ): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
-  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
+  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
   const total = centsToDecimal(-invoice.total);
   // A replaced invoice is credited through its replacement, whose lines repeat the invoice's.
   const target = await correctionTargetFor(tx, invoice.id);

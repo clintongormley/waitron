@@ -120,8 +120,8 @@ export async function renderRegisterPdf(
                 ? t.standard
                 : series.purpose === "full"
                   ? t.full
-                  : series.purpose === "rectificative"
-                    ? t.rectificative
+                  : series.purpose === "corrective"
+                    ? t.corrective
                     : series.purpose;
             write(`${series.code} / ${purpose}`);
           }

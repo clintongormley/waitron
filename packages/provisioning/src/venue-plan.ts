@@ -110,7 +110,7 @@ export type VenueAction =
       }[];
     }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
-  | { kind: "create-series"; code: string; purpose: "standard" | "full" | "rectificative" }
+  | { kind: "create-series"; code: string; purpose: "standard" | "full" | "corrective" }
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
   | { kind: "seed-module"; module: string; summary: string; staffLanguage?: "en" | "es" };
@@ -229,7 +229,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
     { kind: "create-series", code: request.fullSeriesCode ?? "FF", purpose: "full" },
-    { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "rectificative" },
+    { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "corrective" },
     // Module seeds run LAST, once every core row exists.
     ...modules.flatMap((m) =>
       m.provisioning?.seed === undefined

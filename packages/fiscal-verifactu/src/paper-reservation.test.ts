@@ -21,7 +21,7 @@ const allocation = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-12T08:00:00.000Z",
@@ -55,7 +55,7 @@ const blockBytes = Buffer.from(
         [
           ["A-P000042", "standard"],
           ["FF-P000042", "full"],
-          ["R-P000042", "rectificative"],
+          ["R-P000042", "corrective"],
         ],
         "paper",
         "2026-10-12T08:00:00.000Z",
@@ -117,7 +117,7 @@ const context = {
   requiredBases: [
     { code: "A", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
 };
 

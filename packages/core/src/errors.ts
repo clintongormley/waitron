@@ -45,7 +45,7 @@ declare module "@waitron/shared" {
      * downstream can detect. */
     "sale.series_wrong_node": { seriesId: string; expected: string; actual: string };
     /** The series is the wrong kind for the operation: `recordSale` and `recordSubstitution` demand
-     * a `standard` series, `recordCorrection` a `rectificative` one. Corrective invoices are
+     * a `standard` series, `recordCorrection` a `corrective` one. Corrective invoices are
      * numbered in their own series (RD 1619/2012 art. 6.1.a). */
     "sale.series_wrong_purpose": { seriesId: string; expected: string; actual: string };
     /** The series is retired: a restore retired it and opened a replacement, so numbering from it

@@ -19,7 +19,7 @@ export const liveConflictNode = {
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 export async function seedLiveConflict(
   db: Database,

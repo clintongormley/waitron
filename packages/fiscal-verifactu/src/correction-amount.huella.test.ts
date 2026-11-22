@@ -38,7 +38,7 @@ beforeEach(async () => {
   }));
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+    .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
   // A supervisor holds `sale.rectify`.

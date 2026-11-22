@@ -235,7 +235,7 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
         series: [
           { code: "B-0CNPK", purpose: "standard" },
           { code: "FULL-0CNPK", purpose: "full" },
-          { code: "RECT-0CNPK", purpose: "rectificative" },
+          { code: "RECT-0CNPK", purpose: "corrective" },
         ],
       },
     },

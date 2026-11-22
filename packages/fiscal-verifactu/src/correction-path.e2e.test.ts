@@ -29,7 +29,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
 let node: SeededNode;
-// A SECOND series, `purpose = 'rectificative'`, for the corrective sales — a rectificativa draws
+// A SECOND series, `purpose = 'corrective'`, for the corrective sales — a rectificativa draws
 // its number from its own series (RD 1619/2012 art. 6.1.a), and `sales` is unique on
 // (series_id, invoice_number), so the corrective cannot reuse the original's series+number.
 let rectificativeSeriesId: string;
@@ -40,7 +40,7 @@ beforeEach(async () => {
   // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: node.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+    .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectificativeSeriesId = series!.id;
   backend = new VerifactuBackend({
@@ -59,7 +59,7 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
     nodeId: node.nodeId,
     saleId: brandSaleId(saleId),
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
-    // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `rectificative`
+    // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `corrective`
     // series is a core concern, not the backend's.
     seriesId: brandSeriesId(rectificativeSeriesId),
     seriesCode: "R",

@@ -442,7 +442,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
-      params: { seriesId: rectSeries, expected: "full", actual: "rectificative" },
+      params: { seriesId: rectSeries, expected: "full", actual: "corrective" },
     });
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);

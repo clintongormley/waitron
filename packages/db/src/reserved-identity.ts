@@ -77,7 +77,7 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
 export async function readLiveSeriesIdTx(
   tx: Transaction,
   nodeId: string,
-  purpose: "standard" | "full" | "rectificative",
+  purpose: "standard" | "full" | "corrective",
 ): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })

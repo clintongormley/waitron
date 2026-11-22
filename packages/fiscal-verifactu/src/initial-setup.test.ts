@@ -40,7 +40,7 @@ const context: InitialSetupContext = {
   bases: [
     { code: "A", purpose: "standard" },
     { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
 };
 const keys = generateKeyPairSync("ed25519");
@@ -465,7 +465,7 @@ it("the historical paper collector activates independently bound evidence", asyn
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
-    { code: "R-S000001", purpose: "rectificative" },
+    { code: "R-S000001", purpose: "corrective" },
   ]);
   expect((await suite.db.select().from(fiscalAllocations))[0]?.allocation).toEqual(
     f.input.allocation,

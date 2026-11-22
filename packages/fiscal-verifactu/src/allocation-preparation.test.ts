@@ -38,7 +38,7 @@ const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: 
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const candidate = {
   version: 1 as const,
@@ -50,7 +50,7 @@ const candidate = {
   series: [
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -156,7 +156,7 @@ it("activates every purpose through the public module preparation seat", async (
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ]);
   const rows = await suite.db.select().from(fiscalAllocations);
   expect(rows).toHaveLength(1);

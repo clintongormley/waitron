@@ -207,7 +207,7 @@ it.each([undefined, "en", "es"] as const)(
       bases: [
         { code: "A", purpose: "standard" },
         { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
+        { code: "R", purpose: "corrective" },
       ],
     }).request("setup");
     const calls: unknown[][] = [];
@@ -484,7 +484,7 @@ describe("applyVenue", () => {
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
-    expect(series.rows.map((r) => r.purpose)).toEqual(["full", "rectificative", "standard"]);
+    expect(series.rows.map((r) => r.purpose)).toEqual(["full", "corrective", "standard"]);
 
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
@@ -955,7 +955,7 @@ describe("applyVenue", () => {
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
-      { kind: "create-series", code: "A", purpose: "rectificative" },
+      { kind: "create-series", code: "A", purpose: "corrective" },
     ];
 
     const result = await realApplyVenue(collidingPlan, {

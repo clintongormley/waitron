@@ -151,7 +151,7 @@ beforeEach(async () => {
     await setFreshManagementSignIn(tx, token);
     const [series] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
       .returning();
     rectificativeId = series!.id;
   });

@@ -37,7 +37,7 @@ function complete(): RegisterDocument {
     installationIdentity: "S000001",
     series: ["A", "B", "FF", "R"].map((code) => ({
       code: `${code}-S000001`,
-      purpose: code === "FF" ? "full" : code === "R" ? "rectificative" : "standard",
+      purpose: code === "FF" ? "full" : code === "R" ? "corrective" : "standard",
     })),
     source: "initial-paper" as const,
     issuedAt: time,

@@ -575,7 +575,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
         .where(
           and(
             eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-            eq(invoiceSeries.purpose, "rectificative"),
+            eq(invoiceSeries.purpose, "corrective"),
             isNull(invoiceSeries.retiredAt),
           ),
         ),
@@ -591,7 +591,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
         ]),
       );
     }

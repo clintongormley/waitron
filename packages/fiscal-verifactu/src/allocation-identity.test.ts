@@ -108,12 +108,12 @@ describe("manual emergency identity checksum", () => {
 const BASES = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ] as const;
 const PAPER_SERIES = [
   { code: "A-P000042", purpose: "standard" },
   { code: "FF-P000042", purpose: "full" },
-  { code: "R-P000042", purpose: "rectificative" },
+  { code: "R-P000042", purpose: "corrective" },
 ];
 
 describe("a frozen allocation's complete series set", () => {
@@ -176,7 +176,7 @@ describe("a frozen allocation's complete series set", () => {
     [
       [],
       [{ code: "A", purpose: "other" }],
-      [{ code: "R", purpose: "rectificative" }],
+      [{ code: "R", purpose: "corrective" }],
       [
         { code: "A", purpose: "standard" },
         { code: "A", purpose: "full" },

@@ -626,7 +626,7 @@ describe("accountant period selection", () => {
     });
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const correction = await seedSale(
       suite.db,
@@ -680,7 +680,7 @@ describe("accountant period selection", () => {
     });
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const replacement = await seedSale(
       suite.db,
@@ -728,7 +728,7 @@ describe("accountant period selection", () => {
       .insert(invoiceSeries)
       .values([
         { nodeId: venue.nodeId, code: "F", purpose: "full" },
-        { nodeId: venue.nodeId, code: "R", purpose: "rectificative" },
+        { nodeId: venue.nodeId, code: "R", purpose: "corrective" },
       ])
       .returning({ id: invoiceSeries.id });
     const [person] = await seedPersons(suite.db, {
@@ -818,7 +818,7 @@ describe("accountant period selection", () => {
   it("lists a sale with ordinary refunds once, under its own type", async () => {
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const refundSeries = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
     const once = await seedSale(suite.db, venue, {
@@ -904,7 +904,7 @@ describe("accountant period selection", () => {
   it("puts every row in its sale's period, and over both quarters matches the returns and the corrections", async () => {
     const [series] = await suite.db
       .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "corrective" })
       .returning({ id: invoiceSeries.id });
     const rectificative = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
     const later = await seedSale(suite.db, venue, {

@@ -17,7 +17,7 @@ const allocation = {
   installationIdentity: "P000042",
   series: [
     { code: "A-P000042", purpose: "standard" },
-    { code: "R-P000042", purpose: "rectificative" },
+    { code: "R-P000042", purpose: "corrective" },
   ],
   source: "paper",
   issuedAt: "2026-10-12T08:00:00.000Z",
@@ -50,7 +50,7 @@ const blockBytes = Buffer.from(
         "P000042",
         [
           ["A-P000042", "standard"],
-          ["R-P000042", "rectificative"],
+          ["R-P000042", "corrective"],
         ],
         "paper",
         "2026-10-12T08:00:00.000Z",
@@ -112,7 +112,7 @@ const context = {
   consumptionConfirmed: true,
   requiredBases: [
     { code: "A", purpose: "standard" },
-    { code: "R", purpose: "rectificative" },
+    { code: "R", purpose: "corrective" },
   ],
 };
 
@@ -342,7 +342,7 @@ describe("paper evidence payload qualification", () => {
       { ...allocation, series: [null] },
       { ...allocation, series: [{ code: 1, purpose: "standard" }] },
       { ...allocation, series: [{ code: "A-P000042", purpose: "other" }] },
-      { ...allocation, series: [{ code: "R-P000042", purpose: "rectificative" }] },
+      { ...allocation, series: [{ code: "R-P000042", purpose: "corrective" }] },
       { ...allocation, series: [{ code: "A-P000043", purpose: "standard" }] },
       { ...allocation, series: [allocation.series[0], allocation.series[0]] },
       { ...allocation, recoveryKey: "never belongs in evidence" },

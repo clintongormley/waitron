@@ -99,7 +99,7 @@ function signedCloudInput(f: Awaited<ReturnType<typeof stage>>) {
       requiredBases: [
         { code: "A", purpose: "standard" },
         { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
+        { code: "R", purpose: "corrective" },
       ],
     }),
   );
@@ -123,7 +123,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
     series: [
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ],
   };
   Reflect.deleteProperty(allocation, "reservationEvidence");
@@ -179,7 +179,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
         requiredBases: [
           { code: "A", purpose: "standard" },
           { code: "FF", purpose: "full" },
-          { code: "R", purpose: "rectificative" },
+          { code: "R", purpose: "corrective" },
         ],
       },
     ),
@@ -204,7 +204,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
       requiredBases: [
         { code: "A", purpose: "standard" },
         { code: "FF", purpose: "full" },
-        { code: "R", purpose: "rectificative" },
+        { code: "R", purpose: "corrective" },
       ],
       recipientVenueId,
       generationId: "generation-1",
@@ -263,7 +263,7 @@ it.each(["archive", "stream"] as const)(
     expect(activation.result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-0CNQR", purpose: "standard" },
       { code: "FF-0CNQR", purpose: "full" },
-      { code: "R-0CNQR", purpose: "rectificative" },
+      { code: "R-0CNQR", purpose: "corrective" },
     ]);
     expect(f.journal()).not.toContain(f.key.secret);
     expect(f.journal()).not.toContain(f.encryptionKey);

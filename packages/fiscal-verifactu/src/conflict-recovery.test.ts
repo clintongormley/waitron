@@ -40,7 +40,7 @@ const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });

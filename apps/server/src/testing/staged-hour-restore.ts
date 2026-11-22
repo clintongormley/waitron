@@ -79,7 +79,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 export async function stagedHourRestore(
   { db, node: nodeDb }: { db: Database; node: NodeDatabase },

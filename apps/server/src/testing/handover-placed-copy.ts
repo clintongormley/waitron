@@ -67,7 +67,7 @@ export const fiscalModules = ALL_MODULES.filter((module) => module.name === MODU
 export const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "R", purpose: "rectificative" },
+  { code: "R", purpose: "corrective" },
 ];
 const handoverBinding = {
   operationId: OPERATION,

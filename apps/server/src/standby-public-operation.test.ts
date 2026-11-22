@@ -157,7 +157,7 @@ beforeEach(async () => {
             await tx.insert(invoiceSeries).values([
               { nodeId: node.nodeId, purpose: "standard", code: "A-P000042" },
               { nodeId: node.nodeId, purpose: "full", code: "FF-P000042" },
-              { nodeId: node.nodeId, purpose: "rectificative", code: "R-P000042" },
+              { nodeId: node.nodeId, purpose: "corrective", code: "R-P000042" },
             ]);
           },
         },
@@ -267,7 +267,7 @@ it.each(["account", "key"])(
     ).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "rectificative" },
+      { code: "R-P000042", purpose: "corrective" },
     ]);
     expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
     expect(collected).toEqual(["promote"]);
