@@ -276,6 +276,8 @@ describe("configuration", () => {
 describe("the lists", () => {
   it("keeps exactly the files whose job needs non-English text, each with a reason", () => {
     expect(Object.keys(KEEPS_NON_ENGLISH).sort()).toEqual([
+      "apps/server/scripts/bench/grow-fiscal.test.ts",
+      "apps/server/scripts/bench/grow-fiscal.ts",
       "apps/server/scripts/bench/measure.ts",
       "apps/server/scripts/bench/trading-day.test.ts",
       "apps/server/scripts/receipt-look.ts",
