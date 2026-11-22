@@ -1,36 +1,37 @@
 # Remove Menu Preview Undo
 
 On 22 November 2026 at 19:16 the owner asked, “meh, i think let's remove undo altogether. better
-than having it half done”. The watcher assigned REMOVE-MENU-UNDO in Lane D's queue. Menu Preview
-will still show unpublished changes, their sources and the existing Edit links.
+than having it half done”. The watcher assigned the Menu Preview change list in Lane D's queue.
+Managers will still see unpublished changes, which menu made a price change and links to edit it.
 
-1. In `apps/dashboard/src/widgets/menu-preview.undo.test.ts`, add a case that renders a published
-   menu with an unpublished rename, a shared-product edit and an included menu's price edit.
-   Assert that the rename row has View and Hide but offers no Undo, and that the other rows still
-   link to the product and the included menu's Price overrides. Run it first and watch the rename's
-   Undo assertion fail. Keep the existing Edit-link cases in `menu-preview.test.ts`, including
-   link order and click behavior, and retire assertions specific to Undo.
-2. In `widgets/menu-preview.ts` keep the existing Edit link decisions for shared products,
-   included menus, extras lists and set menus. Use the change's own fields to select the links.
-   Remove Undo rendering, state, focus and announcement handling there, and remove the Undo-only
-   sender, event, state and publish or schedule gates from `screens/menus-screen.ts` and
-   `widgets/menu-publications.ts`. Delete `apps/dashboard/src/api/menu-undo.ts` and
-   `packages/menu/src/menu-undo.ts` and their Undo-only tests, including
-   `menus-screen.preview-undo.test.ts` and `apps/server/src/menu-undo-photo.test.ts`. Remove the
-   Undo-only strings in both locales from `i18n/strings.ts`, dedicated a11y and scheduling cases,
-   the one Undo assertion in `packages/menu/src/set-menu-document.test.ts`, and retired entries
-   in the dashboard/server duration tables and browser-purity and English-only guards. Keep the
-   existing menu writes, publication rules, price attribution and separate Price overrides toast.
-3. Update both Products guides in `apps/server/src/guide/` at their existing section address, and
-   correct the live contract in `docs/developers/design-system.md`. Remove A353 and A1377 from
-   `docs/backlog.md` and `docs/backlog/menu.md`. Add a dated withdrawal note linking here at the
-   top of `2026-11-06-a353-preview-undo.md`. Verify the parked
-   `feat/d-a353-preview-undo-sections` checkout is clean and has no PR or remote branch, then
-   remove that registered worktree and local branch.
-4. Rerun the Preview, navigation, accessibility, scheduled publication and menus-screen browser
-   files. Run `menu-publication.test.ts` and `set-menu-document.test.ts` in the menu package for
-   attribution, and the guide-content, guide-link, browser-purity, English-only and duration
-   checks. Inspect Preview in English and Spanish, light and dark, at phone and desktop widths.
+1. In `apps/dashboard/src/widgets/menu-preview.undo.test.ts`, render a published menu with an
+   unpublished rename, a shared-product edit and an included menu's price edit. Assert that the
+   rename row has View and Hide and that those are its only controls. Check both Edit destinations
+   in the same render. Run it first and watch the extra Undo control fail the assertion.
+2. Keep Edit link behavior in `widgets/menu-preview.ts`, using each change's existing source and
+   fields. Rename the widget test to `menu-preview.edit-links.test.ts`. Keep link order, wrapping and
+   normal and modified click cases. Bring over distinct destinations from `packages/menu/src/menu-undo.test.ts`
+   and `menu-undo.db.test.ts` where they add coverage: deleted and removed products, extras items'
+   unit, portion and maximum changes, included variants, an unnamed included menu, and section and
+   product changes from an included menu. Keep the attribution assertions in the menu package.
+3. Delete `packages/menu/src/menu-undo.ts`, `apps/dashboard/src/api/menu-undo.ts` and their retired
+   tests, including `screens/menus-screen.preview-undo.test.ts` and server's `menu-undo-photo.test.ts`.
+   Remove Undo rendering, state, focus and announcements in the widget, Undo-only event and state in
+   `screens/menus-screen.ts`, and Undo gates on publishing and scheduling in it and
+   `widgets/menu-publications.ts`. Drop Preview's `structure` input, its binding, Undo-only fixtures in
+   `widgets/test-helpers.ts`, and unused English and Spanish strings in `i18n/strings.ts`. Remove
+   Undo-only assertions in the Preview and publications accessibility suites, the publications widget
+   test and menu's `set-menu-document.test.ts`. Update the dashboard/server duration tables and
+   browser-purity and English-only guards. Keep the usual menu editing and publication paths and the
+   separate Price overrides save message.
+4. Update both Products guides at their existing section address and both affected sections of
+   `docs/developers/design-system.md`. Remove A353 and A1377 from both backlog files. Date the
+   withdrawal at the top of `2026-11-06-a353-preview-undo.md` and point to that note from the two
+   landed slice plans. Verify `feat/d-a353-preview-undo-sections` is clean and unpushed before removal.
+5. Rerun Preview, navigation, accessibility, scheduled publication and menus-screen browser files.
+   Run `menu-publication.test.ts` and `set-menu-document.test.ts` for attribution and the guide-content,
+   guide-link, browser-purity, English-only and duration checks. Inspect Preview in English and Spanish,
+   light and dark, at phone and desktop widths.
 
-Estimate production +25 to 60 / −850 to 1,050, tests +10 to 45 / −3,500 to 3,900, test support
-and configuration +0 / −5 to 25, and documentation +15 to 25 / −45 to 75 plus this plan.
+Estimate production +25 to 60 / −850 to 1,050, tests +35 to 100 / −3,500 to 3,900, test support
+and configuration +1 / −20 to 65, and documentation +15 to 30 / −45 to 75 plus this plan.
