@@ -41,7 +41,6 @@ const EXPECTED = [
   "clock_checks",
   "clock_confirmations",
   "clock_stop_restarts",
-  "daily_closes",
   "declaraciones_responsables",
   "deferred_closures",
   "document_page_reprints",

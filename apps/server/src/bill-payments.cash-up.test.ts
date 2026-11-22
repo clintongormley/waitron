@@ -2,13 +2,11 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { and, eq, inArray } from "drizzle-orm";
-import { billPayments, captureError, drawerEntries, withTransaction } from "@waitron/db";
+import { billPayments, drawerEntries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { computeDailyClose, recordDailyClose } from "@waitron/reporting";
-import type { CashCountInput } from "@waitron/reporting";
+import { computeDailyClose } from "@waitron/reporting";
 import {
-  AppError,
   decimal,
   deviceOrigin,
   workingOrderId as brandOrderId,
@@ -40,8 +38,6 @@ useVenueDb({
     venue = await provisionBillVenue(db);
   },
 });
-
-const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
 /** Noon in Madrid (CET, UTC+1) on `day`, well past the venue's 05:00 cutover. */
 function noonOn(day: string): TrustedClock {
@@ -112,18 +108,6 @@ function closeInput(businessDay: string) {
 function dailyClose(businessDay: string) {
   const { nodeId, ...input } = closeInput(businessDay);
   return withTransaction(venue.db, (tx) => computeDailyClose(tx, { ...input, nodeIds: [nodeId] }));
-}
-
-function freeze(businessDay: string, cashCounts: CashCountInput[]) {
-  return withTransaction(venue.db, (tx) =>
-    recordDailyClose(tx, { ...closeInput(businessDay), closedBy: CLOSED_BY, cashCounts }),
-  );
-}
-
-async function refusedClose(businessDay: string, cashCounts: CashCountInput[]) {
-  const error = await captureError(() => freeze(businessDay, cashCounts));
-  expect(error).toBeInstanceOf(AppError);
-  return error as AppError;
 }
 
 describe("the cash-up counts money on the day and device it moves (bill payments design §9a)", () => {
@@ -246,20 +230,9 @@ describe("the cash-up counts money on the day and device it moves (bill payments
       tipTotal: "0.00",
     });
     expect(day2.vat.grossTotal).toBe("120.00");
-
-    expect(await refusedClose("2026-03-10", [])).toMatchObject({
-      code: "close.invalid_cash_input",
-      params: { deviceId: deviceA, reason: "uncounted_cash_device" },
-    });
-    const frozen = await freeze("2026-03-10", [
-      { deviceId: deviceA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
-    ]);
-    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
-      { deviceId: deviceA, cashTakings: "50.00", cashVariance: "0.00" },
-    ]);
   });
 
-  it("subtracts a refund given on another day on another device, and forces that device's count (test 25)", async () => {
+  it("subtracts a refund given on another day on another device (test 25)", async () => {
     const deviceA = brandDeviceId(venue.deviceId);
     const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(
@@ -303,17 +276,6 @@ describe("the cash-up counts money on the day and device it moves (bill payments
       tenderTotal: "-20.00",
       tipTotal: "0.00",
     });
-
-    expect(await refusedClose("2026-03-13", [])).toMatchObject({
-      code: "close.invalid_cash_input",
-      params: { deviceId: deviceB, reason: "uncounted_cash_device" },
-    });
-    const frozen = await freeze("2026-03-13", [
-      { deviceId: deviceB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
-    ]);
-    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
-      { deviceId: deviceB, cashTakings: "-20.00", cashVariance: "0.00" },
-    ]);
   });
 
   it("counts a walk-up cash sale's tender exactly once, as before (test 26)", async () => {
@@ -351,7 +313,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     });
   });
 
-  it("forces a count for a device whose cash nets to zero, but not for a card-only device (test 27)", async () => {
+  it("shows zero net cash and reports card-only takings separately (test 27)", async () => {
     const billId = await tabWith(
       venue,
       "Paella",
@@ -372,25 +334,18 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     );
 
     const day = await dailyClose("2026-03-15");
+    const deviceB = brandDeviceId(venue.device2Id);
+    expect(day.cash.byOrigin.find((t) => t.deviceId === deviceB)).toEqual({
+      source: "device",
+      deviceId: deviceB,
+      byMethod: [{ method: "card", amount: "30.00", tip: "0.00" }],
+      cashTakings: "0.00",
+    });
     expect(day.cash.byOrigin.find((t) => t.deviceId === deviceC)).toEqual({
       source: "device",
       deviceId: deviceC,
       byMethod: [{ method: "cash", amount: "0.00", tip: "0.00" }],
       cashTakings: "0.00",
     });
-
-    expect(await refusedClose("2026-03-15", [])).toMatchObject({
-      code: "close.invalid_cash_input",
-      params: { deviceId: deviceC, reason: "uncounted_cash_device" },
-    });
-    const frozen = await freeze("2026-03-15", [
-      { deviceId: deviceC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
-    ]);
-    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
-      { deviceId: deviceC, cashTakings: "0.00", cashVariance: "0.00" },
-    ]);
-    expect(frozen.snapshot.close.cash.byOrigin.map((t) => t.deviceId).sort()).toEqual(
-      [deviceC, brandDeviceId(venue.device2Id)].sort(),
-    );
   });
 });

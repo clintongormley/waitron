@@ -95,7 +95,7 @@ declare module "@waitron/shared" {
     "venue.detail_read_only": { field: string };
     "venue.detail_locked": {
       field: string;
-      reason: "sales" | "orders" | "daily_close" | "geography_context" | "business_day_history";
+      reason: "sales" | "orders" | "geography_context" | "business_day_history";
     };
     "venue.detail_changed": { field: string };
     "fiscal.clock_drift": { seconds: number };
@@ -802,8 +802,6 @@ declare module "@waitron/shared" {
     };
     /** The request's invoice type or total is not the bill's. */
     "deferred_close.conflict": { workingOrderId: string };
-    /** This node's business day of the closure is already frozen by its daily close. */
-    "deferred_close.day_frozen": { nodeId: string; businessDay: string };
     "draft.taken_over":
       | { draftId: string; ownerId: string; ownerName: string }
       | {

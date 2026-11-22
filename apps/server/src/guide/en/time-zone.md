@@ -2,6 +2,8 @@
 
 ## Change the time zone in Venue details {#venue-details}
 
+Set the time zone before you start taking orders.
+
 Open **Venue settings → Venue details** and choose **Edit**. If **Time zone** is editable, pick your zone from the list. For a Spanish venue, choose **Mainland Spain** or **Canary Islands**.
 
 Check the proposed local time and business date, then choose **I have reviewed these changes** and **Save**.

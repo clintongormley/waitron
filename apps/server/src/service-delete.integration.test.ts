@@ -65,7 +65,7 @@ import { handOverOrder, listTablesWithState, parkOrder } from "./working-order.j
 import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { WorkforceBackend } from "@waitron/workforce";
-import { recordDailyClose } from "@waitron/reporting";
+import { seedFinishedDrawer } from "./testing/drawer-history-fixture.js";
 import { jobOrigin } from "@waitron/shared";
 
 const NOW = new Date("2026-10-11T12:00:00Z");
@@ -859,8 +859,7 @@ const HISTORY_ROWS = [
   "working_order_lines",
   "department_transfer_requests",
   "time_entries",
-  "daily_closes",
-  "daily_close_chain",
+  "drawer_entries",
 ] as const;
 
 async function retainedHistory(tx: Transaction): Promise<Record<string, unknown[]>> {
@@ -1083,12 +1082,10 @@ it.each(["zone", "department"] as const)(
       };
       await workforce.clockIn(tx, { ...event, at: "2026-10-01T10:00:00Z" });
       await workforce.clockOut(tx, { ...event, at: "2026-10-01T11:00:00Z" });
-      await recordDailyClose(tx, {
+      await seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
-        businessDay: "2026-10-01",
-        timeZone: "Europe/Madrid",
-        closedBy: venue.operator.personId,
-        cashCounts: [],
+        personId: venue.operator.personId,
+        recordedAt: NOW.toISOString(),
       });
     });
     const replacementZone = await run(async (tx) => {
@@ -1166,8 +1163,7 @@ it.each(["zone", "department"] as const)(
       "orderContexts",
       "department_transfer_requests",
       "time_entries",
-      "daily_closes",
-      "daily_close_chain",
+      "drawer_entries",
     ])
       expect(history[name], name).not.toEqual([]);
     const before = await run(completeSnapshot);

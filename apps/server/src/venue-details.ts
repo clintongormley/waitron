@@ -122,10 +122,9 @@ export async function readVenueDetails(
     taxId: taxpayer.taxId,
   };
   const pack = getCountryPack(issuer.country);
-  const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
+  const { rows } = await tx.execute<{ sales: number; orders: number }>(sql`
     select exists(select 1 from sales limit 1) as sales,
-      exists(select 1 from working_orders limit 1) as orders,
-      exists(select 1 from daily_closes limit 1) as closes`);
+      exists(select 1 from working_orders limit 1) as orders`);
   const history = rows[0]!;
   const businessDayClock = clockModel ?? (await readBusinessDayClockModel(tx, at));
   const clockReason =
@@ -135,9 +134,7 @@ export async function readVenueDetails(
         ? "sales"
         : history.orders
           ? "orders"
-          : history.closes
-            ? "daily_close"
-            : undefined;
+          : undefined;
   const clockPolicy: VenueDetailsModel["policy"]["timeZone"] =
     clockReason === undefined
       ? { decision: "allow_with_warning", reasons: ["clock_effects"] }
@@ -161,7 +158,6 @@ export async function readVenueDetails(
     taxpayerDomicile: taxpayer.domicile,
     hasSales: Boolean(history.sales),
     hasOrderHistory: Boolean(history.orders),
-    hasDailyClose: Boolean(history.closes),
     policy: {
       name: { decision: "allow_with_warning", reasons: ["current_details_only"] },
       addressLine1: { decision: "allow", reasons: [] },
@@ -281,9 +277,7 @@ export async function writeVenueDetails(
               ? "geography_context"
               : model.hasOrderHistory
                 ? "orders"
-                : model.hasDailyClose
-                  ? "daily_close"
-                  : undefined;
+                : undefined;
       if (reason !== undefined) throw new AppError("venue.detail_locked", { field, reason });
     }
     Object.assign(delta, { [field]: normalized });

@@ -1108,18 +1108,6 @@ BEGIN
 END;
 
 --> statement-breakpoint
--- Weaker than its name: without a daily close, code protects past days using the venue's zone.
--- A1325 replaces daily_closes and changes this trigger in the same pull request.
-CREATE TRIGGER day_cutover_changes_keep_closed
-BEFORE DELETE ON day_cutover_changes
-FOR EACH ROW
-WHEN exists (SELECT 1 FROM daily_closes c
-             WHERE c.business_day >= date(old.effective_business_day, '-1 day'))
-BEGIN
-  SELECT raise(abort, 'day start history cannot change');
-END;
-
---> statement-breakpoint
 CREATE TRIGGER party_allergy_guests_need_answer_insert
 BEFORE INSERT ON party_allergy_guests
 WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL

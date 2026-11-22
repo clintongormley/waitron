@@ -1,4 +1,3 @@
-import { verifyBackupCloseHistory } from "@waitron/reporting";
 import type { BackupVerificationContribution } from "@waitron/module";
 import { CORE_BACKUP_TABLE_POLICIES, verifyCoreBackupData } from "@waitron/db";
 
@@ -22,14 +21,13 @@ export const CORE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   zeroSchema: "absent_tables_and_entries",
   targetOnly: "unsupported",
   async verifyRestoredData(context) {
-    const data =
-      (await verifyCoreBackupData({
-        before: context.before,
-        after: context.after,
-        ...context.source,
-      })) && (await verifyBackupCloseHistory(context.before, context.after))
-        ? "passed"
-        : "invalid";
+    const data = (await verifyCoreBackupData({
+      before: context.before,
+      after: context.after,
+      ...context.source,
+    }))
+      ? "passed"
+      : "invalid";
     return { status: data, checks: [{ code: "data", status: data }] };
   },
 };

@@ -1,9 +1,8 @@
-import { and, eq, exists, or, sql } from "drizzle-orm";
+import { eq, exists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { createHash } from "node:crypto";
 import {
   correctivesOf,
-  dailyCloses,
   saleSettlements,
   saleSubstitutions,
   saleVoids,
@@ -100,14 +99,6 @@ export async function closeBillDeferredTx(
   const clock = await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
   const closedAt = clock.now().instant;
   const businessDay = businessDayAt(await resolveVenueClock(tx, cfg.nodeId), closedAt);
-  const [frozen] = await tx
-    .select({ nodeId: dailyCloses.nodeId })
-    .from(dailyCloses)
-    .where(and(eq(dailyCloses.nodeId, cfg.nodeId), eq(dailyCloses.businessDay, businessDay)))
-    .limit(1);
-  if (frozen !== undefined)
-    throw new AppError("deferred_close.day_frozen", { nodeId: cfg.nodeId, businessDay });
-
   const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
   if (order === undefined) throw new AppError("working_order.not_open", { workingOrderId: billId });
   const ineligible = (reason: IneligibleReason) =>

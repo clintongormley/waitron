@@ -29,7 +29,6 @@ export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): V
     taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     hasSales: false,
     hasOrderHistory: false,
-    hasDailyClose: false,
     policy: {
       name: { decision: "allow_with_warning", reasons: ["current_details_only"] },
       addressLine1: { decision: "allow", reasons: [] },

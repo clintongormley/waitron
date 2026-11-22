@@ -61,12 +61,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("ticket_items", "ledger", LEDGER),
   appendOnly("drawer_entries", "ledger", "cash and card movements recorded against a drawer"),
   classify("drawer_opens", "ledger", LEDGER),
-  appendOnly("daily_closes", "ledger", LEDGER),
-  classify(
-    "daily_close_chain",
-    "ledger",
-    "hash-chained close records; drained back from a returned box",
-  ),
   classify("purchase_invoices", "ledger", LEDGER),
   classify("purchase_invoice_vat", "ledger", LEDGER),
   classify(

@@ -120,13 +120,11 @@ async function protectHistory(
   candidate: BusinessDayClock,
   effectiveDay: string,
 ): Promise<void> {
-  const previous = addDays(effectiveDay, -1);
   const oldBoundary = businessDayBoundaryAt(before, effectiveDay);
   const newBoundary = businessDayBoundaryAt(candidate, effectiveDay);
   const earliest = oldBoundary < newBoundary ? oldBoundary : newBoundary;
-  const { rows } = await tx.execute<{ closed: number; future: number }>(sql`
-    select exists(select 1 from daily_closes c where c.business_day >= ${previous}) as closed,
-      exists(select 1 from (
+  const { rows } = await tx.execute<{ future: number }>(sql`
+    select exists(select 1 from (
         select s.issued_at as at from sales s
         union all select v.voided_at from sale_voids v
         union all select t.settled_at from tenders t
@@ -136,7 +134,6 @@ async function protectHistory(
         union all select w.opened_at from working_orders w
         union all select k.created_at from kitchen_notices k
       ) where at >= ${earliest}) as future`);
-  if (rows[0]!.closed) throw new AppError("venue.business_day_locked", { reason: "daily_close" });
   if (rows[0]!.future)
     throw new AppError("venue.business_day_locked", { reason: "future_history" });
 }

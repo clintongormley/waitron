@@ -102,8 +102,7 @@ export const CORE_BACKUP_TABLE_POLICIES: readonly BackupTablePolicy[] = CORE_OWN
   (entry) => ({
     table: entry.table,
     immutable:
-      entry.appendOnly === true ||
-      ["invoice_series", "daily_close_chain", "node_membership"].includes(entry.table),
+      entry.appendOnly === true || ["invoice_series", "node_membership"].includes(entry.table),
     addedColumns: {},
   }),
 );

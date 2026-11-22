@@ -1,3 +1,4 @@
+import { seedFinishedDrawer } from "./testing/drawer-history-fixture.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -13,7 +14,7 @@ import { jobOrigin } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { VenueDetailPatch, VenueDetailWrite } from "./venue-detail-types.js";
-import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/reporting";
+import { businessDayStart, computeDailyClose } from "@waitron/reporting";
 import { createOpenOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -319,11 +320,7 @@ describe("venue detail edits", () => {
       legalName: "Deli Test SL",
       taxId: expect.any(String),
     });
-    expect([model.hasSales, model.hasOrderHistory, model.hasDailyClose]).toEqual([
-      false,
-      false,
-      false,
-    ]);
+    expect([model.hasSales, model.hasOrderHistory]).toEqual([false, false]);
     expect(model.policy.name).toEqual({
       decision: "allow_with_warning",
       reasons: ["current_details_only"],
@@ -475,11 +472,7 @@ describe("venue history locks", () => {
       else if (status !== "open")
         await suite.db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
       const initial = await read();
-      expect([initial.hasSales, initial.hasOrderHistory, initial.hasDailyClose]).toEqual([
-        false,
-        true,
-        false,
-      ]);
+      expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, true]);
       expect(initial.policy.timeZone).toEqual({ decision: "refuse", reasons: ["orders"] });
       for (const changes of [{ timeZone: "Atlantic/Canary" }, { dayCutover: "04:00" }]) {
         await expect(
@@ -520,73 +513,35 @@ describe("venue history locks", () => {
       ).toBe(false);
     },
   );
-  it("locks both clock fields after an empty daily close", async () => {
+  it("allows changing the zone after a drawer close without sales or order history", async () => {
     const { rows } = await suite.db.execute<{ id: string }>(
       sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     await withTransaction(suite.db, (tx) =>
-      recordDailyClose(tx, {
+      seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
-        businessDay: "2026-10-01",
-        timeZone: "Europe/Madrid",
-        closedBy: rows[0]!.id,
-        cashCounts: [],
+        personId: rows[0]!.id,
+        recordedAt: "2026-10-01T12:00:00.000Z",
       }),
     );
+    const before = suite.db.all(sql`select * from drawer_entries order by sequence`);
     const initial = await read();
-    expect([initial.hasSales, initial.hasOrderHistory, initial.hasDailyClose]).toEqual([
-      false,
-      false,
-      true,
-    ]);
-    for (const field of ["timeZone", "dayCutover"] as const) {
-      expect(initial.policy[field]).toEqual(
-        field === "dayCutover"
-          ? { decision: "allow_with_warning", reasons: ["clock_effects"] }
-          : { decision: "refuse", reasons: ["daily_close"] },
-      );
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          writeVenueDetails(tx, {
-            expected: initial.details,
-            changes: { [field]: field === "timeZone" ? "Atlantic/Canary" : "04:00" },
-          }),
-        ),
-      ).rejects.toMatchObject({
-        code: field === "dayCutover" ? "venue.business_day_invalid" : "venue.detail_locked",
-        params: {
-          field,
-          reason: field === "dayCutover" ? "effective_date_required" : "daily_close",
-        },
-      });
-    }
-    expect((await read()).details).toEqual(initial.details);
-    const retained = {
-      closes: suite.db.all(sql`select * from daily_closes`),
-      chain: suite.db.all(sql`select * from daily_close_chain`),
-    };
-    const noOp = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, {
-        expected: initial.details,
-        changes: { timeZone: "Europe/Madrid", dayCutover: "05:00:00" },
-      }),
-    );
-    expect(noOp.changed).toBe(false);
-    expect(noOp.model.details).toEqual(initial.details);
+    expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, false]);
+    expect(initial.policy.timeZone).toEqual({
+      decision: "allow_with_warning",
+      reasons: ["clock_effects"],
+    });
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { name: "Current empty-close display" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
-    expect(saved.model.details).toEqual({
-      ...initial.details,
-      name: "Current empty-close display",
+    expect(saved).toMatchObject({
+      changed: true,
+      model: { details: { timeZone: "Atlantic/Canary" } },
     });
-    expect({
-      closes: suite.db.all(sql`select * from daily_closes`),
-      chain: suite.db.all(sql`select * from daily_close_chain`),
-    }).toEqual(retained);
+    expect(suite.db.all(sql`select * from drawer_entries order by sequence`)).toEqual(before);
   });
   it("locks province and clock after a real locally recorded sale", async () => {
     await (
@@ -1244,7 +1199,7 @@ describe("venue detail consumer reads", () => {
     expect((await read()).hasOrderHistory).toBe(false);
   });
 
-  it("keeps operational reports and the frozen close after allowed corrections and a refused clock edit", async () => {
+  it("keeps operational reports and the drawer close after allowed corrections and a refused clock edit", async () => {
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     const cfg = await deviceRequestCfg(suite.db, venue.cfg);
     const clock: TrustedClock = {
@@ -1317,24 +1272,14 @@ describe("venue detail consumer reads", () => {
       sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     await withTransaction(suite.db, (tx) =>
-      recordDailyClose(tx, {
+      seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
-        businessDay: "2026-10-06",
-        timeZone: "Europe/Madrid",
-        closedBy: rows[0]!.id,
-        cashCounts: [
-          {
-            deviceId: cfg.origin.deviceId,
-            openingFloat: "0.00",
-            payouts: "0.00",
-            countedCash: "1.50",
-          },
-        ],
+        personId: rows[0]!.id,
+        recordedAt: "2026-10-06T15:00:00.000Z",
       }),
     );
     const retained = () => ({
-      closes: suite.db.all(sql`select * from daily_closes`),
-      heads: suite.db.all(sql`select * from daily_close_chain`),
+      drawerEntries: suite.db.all(sql`select * from drawer_entries order by sequence`),
       fiscal: suite.db.all(sql`select * from registros_facturacion`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
     });
@@ -1598,11 +1543,7 @@ describe("workforce facts after venue corrections", () => {
     const history = retained();
     expect(history.entries).toHaveLength(2);
     const initial = await read();
-    expect([initial.hasSales, initial.hasOrderHistory, initial.hasDailyClose]).toEqual([
-      false,
-      false,
-      false,
-    ]);
+    expect([initial.hasSales, initial.hasOrderHistory]).toEqual([false, false]);
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,

@@ -20,10 +20,8 @@ import {
   computeVatReturn,
   computeVatSummaryForPeriod,
   mapModelo303,
-  recordDailyClose,
   resolveVenueClock,
   toDr303Record,
-  verifyDailyCloseChain,
 } from "@waitron/reporting";
 import {
   addDecimal,
@@ -261,7 +259,7 @@ describe("reporting over recorded sales", () => {
     await expectAugustMadridSales(3);
   });
 
-  it("freezes two tills' cash variances, refuses a duplicate day and chains the next close", async () => {
+  it("reports each till's takings alongside the day's VAT totals", async () => {
     for (const [device, base, rate, tax, method] of [
       [tillOne, "100.00", "21.00", "21.00", "cash"],
       [tillOne, "40.00", "10.00", "4.00", "card"],
@@ -269,24 +267,14 @@ describe("reporting over recorded sales", () => {
       [tillTwo, "20.00", "21.00", "4.20", "card"],
     ] as const)
       await sell({ day: "2026-08-04", device, base, rate, tax, method });
-    const cashCounts = [
-      { deviceId: tillOne, openingFloat: "50.00", payouts: "0.00", countedCash: "172.50" },
-      { deviceId: tillTwo, openingFloat: "30.00", payouts: "0.00", countedCash: "83.00" },
-    ];
-    const closeDay = (businessDay: string, counts = cashCounts) =>
-      withTransaction(suite.db, (tx) =>
-        recordDailyClose(tx, {
-          nodeId: issuer.nodeId,
-          businessDay,
-          timeZone: "Europe/Madrid",
-          closedBy: "supervisor",
-          cashCounts: counts,
-        }),
-      );
-    const first = await closeDay("2026-08-04");
-    expect(first.sequenceNo).toBe(1);
-    expect(first.prevEntryHash).toBe("");
-    expect(first.snapshot.close.vat).toEqual({
+    const day = await withTransaction(suite.db, async (tx) =>
+      computeDailyClose(tx, {
+        ...(await resolveVenueClock(tx, issuer.nodeId)),
+        businessDay: "2026-08-04",
+        nodeIds: [issuer.nodeId],
+      }),
+    );
+    expect(day.vat).toEqual({
       byRate: [
         { rate: "10.00", base: "90.00", tax: "9.00" },
         { rate: "21.00", base: "120.00", tax: "25.20" },
@@ -295,45 +283,12 @@ describe("reporting over recorded sales", () => {
       taxTotal: "34.20",
       grossTotal: "244.20",
     });
-    expect(first.snapshot.close.counts).toEqual({ sales: 4, corrections: 0, voids: 0 });
-    expect(first.snapshot.close.cash.tenderTotal).toBe("244.20");
+    expect(day.counts).toEqual({ sales: 4, corrections: 0, voids: 0 });
+    expect(day.cash.tenderTotal).toBe("244.20");
     expect(
-      Object.fromEntries(
-        first.snapshot.cashReconciliation.byDevice.map((row) => [
-          row.deviceId,
-          {
-            cashTakings: row.cashTakings,
-            cashVariance: row.cashVariance,
-          },
-        ]),
-      ),
-    ).toEqual({
-      [tillOne]: { cashTakings: "121.00", cashVariance: "1.50" },
-      [tillTwo]: { cashTakings: "55.00", cashVariance: "-2.00" },
-    });
-    expect(first.snapshot.cashReconciliation.nodeVariance).toBe("-0.50");
-    expect(
-      await withTransaction(suite.db, (tx) => verifyDailyCloseChain(tx, issuer.nodeId)),
-    ).toMatchObject({ ok: true });
-    await expect(closeDay("2026-08-04")).rejects.toMatchObject({ code: "close.already_closed" });
-    await sell({
-      day: "2026-08-05",
-      device: tillOne,
-      base: "80.00",
-      rate: "21.00",
-      tax: "16.80",
-      method: "cash",
-    });
-    const second = await closeDay("2026-08-05", [
-      { deviceId: tillOne, openingFloat: "100.00", payouts: "0.00", countedCash: "196.80" },
-    ]);
-    expect(second.sequenceNo).toBe(2);
-    expect(second.prevEntryHash).toBe(first.entryHash);
-    expect(second.snapshot.cashReconciliation.nodeVariance).toBe("0.00");
-    expect(
-      await withTransaction(suite.db, (tx) => verifyDailyCloseChain(tx, issuer.nodeId)),
-    ).toMatchObject({ ok: true });
-    await expectAugustMadridSales(5);
+      Object.fromEntries(day.cash.byOrigin.map((row) => [row.deviceId, row.cashTakings])),
+    ).toEqual({ [tillOne]: "121.00", [tillTwo]: "55.00" });
+    await expectAugustMadridSales(4);
   });
 
   it("reconciles the worked Spain VAT return across nodes, weeks, months and DR303 files", async () => {

@@ -5,6 +5,11 @@
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../../packages/reporting/examples/modelo-303.md)
 > carries the reporting example. References below describe the earlier scripts.
 
+> **2026-11-22 (A1325 slice 6).** The saved day report and its chain are retired.
+> Sales reads recorded transactions. See the
+> [retirement slice](../../plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md) for the change.
+
+
 # Target design: fiscal filing and chain, card payments, adjustments
 
 Area: Veri\*Factu filing and the fiscal chain (`fiscal-verifactu` set, plus `invoice_series`,

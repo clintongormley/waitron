@@ -9,7 +9,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { computeDailyClose, recordDailyClose } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import { partyFamily } from "../parties.js";
@@ -161,44 +160,8 @@ export function deferredCloseKit(venue: BillVenue, counterZone: string) {
     return new Date(row!.at).getTime();
   }
 
-  /** One fixed instant, no earlier than now or the latest record, for every close in a case. */
-  function sameDayClock(): TrustedClock {
-    return clockAt(Math.max(Date.now(), latestRecordMs()));
-  }
-
-  /** Freeze this node's business day by its daily close, counting each drawer as expected. */
-  async function freezeDay(businessDay: string): Promise<void> {
-    const day = {
-      cutoverChanges: [],
-      businessDay,
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-    };
-    await inTx(venue, async (tx) => {
-      const close = await computeDailyClose(tx, { ...day, nodeIds: [venue.cfg.nodeId] });
-      await recordDailyClose(tx, {
-        ...day,
-        nodeId: venue.cfg.nodeId,
-        closedBy: venue.adminId,
-        cashCounts: close.cash.byOrigin.flatMap((row) =>
-          row.deviceId === null
-            ? []
-            : [
-                {
-                  deviceId: row.deviceId,
-                  openingFloat: "0.00",
-                  payouts: "0.00",
-                  countedCash: row.cashTakings,
-                },
-              ],
-        ),
-      });
-    });
-  }
-
   return {
     venue,
-    freezeDay,
     counterZone,
     depsWith,
     close,
@@ -206,7 +169,6 @@ export function deferredCloseKit(venue: BillVenue, counterZone: string) {
     counterOrder,
     ledger,
     latestRecordMs,
-    sameDayClock,
   };
 }
 

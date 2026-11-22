@@ -109,7 +109,6 @@ const EXPECTED_TRIGGERS = [
   "party_allergy_guests_need_answer_insert",
   "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",
-  "day_cutover_changes_keep_closed",
   "bill_payments_guard_update",
   "bill_payments_no_delete",
   "device_profile_form_factor_locked",
@@ -2082,31 +2081,18 @@ describe("day-start history", () => {
   it.each([
     [
       "refuses updates",
-      "2026-11-02",
       "update day_cutover_changes set day_cutover = '07:00:00' where effective_business_day = '2026-11-03'",
       DAY_START_HISTORY_REFUSAL,
     ],
     [
-      "keeps a row covered by a close on the previous day",
-      "2026-11-02",
-      "delete from day_cutover_changes where effective_business_day = '2026-11-03'",
-      DAY_START_HISTORY_REFUSAL,
-    ],
-    [
-      "allows deleting a waiting row when the last close is two days before",
-      "2026-11-01",
+      "allows deleting a waiting row",
       "delete from day_cutover_changes where effective_business_day = '2026-11-03'",
       undefined,
     ],
-  ])("%s", (_name, closedDay, statement, expected) => {
+  ])("%s", (_name, statement, expected) => {
     connection.exec("savepoint day_start_case");
     try {
       connection.exec("insert into day_cutover_changes values ('2026-11-03', '06:00:00')");
-      connection
-        .prepare(
-          "insert into daily_closes (id,node_id,business_day,sequence_no,prev_entry_hash,entry_hash,closed_at,closed_by,snapshot) values ('day-start-close','node',?,1,'','hash','2026-11-03T12:00:00Z','person','{}')",
-        )
-        .run(closedDay);
       expect(refusalFor(connection, statement!)).toBe(expected);
       expect(
         connection

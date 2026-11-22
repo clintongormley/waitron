@@ -15,7 +15,6 @@ export type VenueDetailPatch = Partial<VenueDetailValues>;
 export type DetailReason =
   | "sales"
   | "orders"
-  | "daily_close"
   | "geography_context"
   | "current_details_only"
   | "holiday_geography"
@@ -29,7 +28,6 @@ export interface VenueDetailsModel {
   taxpayerDomicile: string | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
-  hasDailyClose: boolean;
   policy: Record<
     VenueDetailField,
     { decision: "allow" | "allow_with_warning" | "refuse"; reasons: DetailReason[] }

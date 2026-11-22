@@ -13,7 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
 
-import { recordDailyClose } from "@waitron/reporting";
+import { seedFinishedDrawer } from "./testing/drawer-history-fixture.js";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -62,17 +62,14 @@ it.each(["archive", "bucket"] as const)(
       role: "manager",
     });
     await withTransaction(suite.db, (tx) =>
-      recordDailyClose(tx, {
+      seedFinishedDrawer(tx, {
         nodeId: node.nodeId,
-        businessDay: "2026-10-16",
-        timeZone: "Europe/Madrid",
-        closedBy: manager!.id,
-        cashCounts: [],
+        personId: manager!.id,
+        recordedAt: "2026-10-16T12:00:00.000Z",
       }),
     );
-    const closes = suite.db.all(sql`select * from daily_closes order by rowid`);
-    const closeHeads = suite.db.all(sql`select * from daily_close_chain order by rowid`);
-    expect(closes).toHaveLength(1);
+    const closes = suite.db.all(sql`select * from drawer_entries order by sequence`);
+    expect(closes).toHaveLength(2);
     const before = await recordedRecoveryRows(suite.db);
     const allocations = suite.db.all(sql`select * from fiscal_allocations order by rowid`);
     const identities = suite.db.all<Record<string, unknown>>(
@@ -110,8 +107,7 @@ it.each(["archive", "bucket"] as const)(
         });
       expect(restoredIdentities).toHaveLength(identities.length + 1);
       expect(await recordedRecoveryRows(db)).toEqual(before);
-      expect(db.all(sql`select * from daily_closes order by rowid`)).toEqual(closes);
-      expect(db.all(sql`select * from daily_close_chain order by rowid`)).toEqual(closeHeads);
+      expect(db.all(sql`select * from drawer_entries order by sequence`)).toEqual(closes);
       expect(
         db.all(sql`select * from fiscal_allocations order by rowid`).slice(0, allocations.length),
       ).toEqual(allocations);
@@ -208,8 +204,7 @@ it.each(["archive", "bucket"] as const)(
       assertValid(rebuilt, { now: new Date("2026-10-20T00:00:00Z") });
       expect(computeHuella(rebuilt)).toBe(added.huella);
       expect(next.records).toHaveLength(before.records.length + 1);
-      expect(db.all(sql`select * from daily_closes order by rowid`)).toEqual(closes);
-      expect(db.all(sql`select * from daily_close_chain order by rowid`)).toEqual(closeHeads);
+      expect(db.all(sql`select * from drawer_entries order by sequence`)).toEqual(closes);
     } finally {
       await placed.close();
     }

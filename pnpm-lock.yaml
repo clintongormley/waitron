@@ -734,9 +734,6 @@ importers:
       '@waitron/payments-sumup':
         specifier: workspace:*
         version: link:../payments-sumup
-      '@waitron/reporting':
-        specifier: workspace:*
-        version: link:../reporting
       '@waitron/staffing':
         specifier: workspace:*
         version: link:../staffing

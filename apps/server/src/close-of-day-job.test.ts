@@ -16,7 +16,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import { readDailyClose } from "@waitron/reporting";
+import { computeDailyClose } from "@waitron/reporting";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
 import type { ClockServiceStatus } from "./box-host-client.js";
@@ -304,7 +304,7 @@ describe("bills.close_of_day", () => {
 
     const businessDay = addDays(today, -4);
     const close = await inTx(venue, (tx) =>
-      readDailyClose(tx, { ...venueClock, nodeIds: [venue.cfg.nodeId], businessDay }),
+      computeDailyClose(tx, { ...venueClock, nodeIds: [venue.cfg.nodeId], businessDay }),
     );
     expect(salesOf(bill)).toEqual([
       expect.objectContaining({

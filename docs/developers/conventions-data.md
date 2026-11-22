@@ -1157,8 +1157,8 @@ wrong the next time a table lands. To see today's set:
 `grep -rn '\bmoney(' packages apps --include='*.ts' | grep -v '\.test\.ts'` — read the lines rather
 than counting them. The pattern matches any line naming the helper, so a COMMENT that mentions
 `money()` is a hit like a declaration, and the next comment to mention it will be another one:
-check each line is a column. The one prose hit on 2026-09-22 is
-`packages/db/src/schema/daily-closes.ts`.
+check each line is a column. The one prose hit on 2026-09-22 was in the
+[former day report schema](https://github.com/clintongormley/waitron/blob/26adc685d3c7061795f1ce7da169f0cd8a713d47/packages/db/src/schema/daily-closes.ts).
 
 **Where the boundary is, and why it is there.** The database is the edge and only the database.
 A read turns the stored count into the exact `Decimal` that `packages/shared/src/money.ts`
@@ -1235,9 +1235,8 @@ whenever a money column is added:
   (`apps/server/src/configuration-transfer.test.ts`, 2026-11). Whether that was
   the only one in the tree is not established; what was run was a hand sweep, not a check anything
   re-runs.
-- Money held as strings inside a JSON document — `sales.vat_breakdown` and the hashed
-  `daily_closes.snapshot`. Both are above the line and stay decimal strings, so a reader applying the
-  cents rule to them would break working code. **The grouping and the summing moved out of SQL
+- Money inside the `sales.vat_breakdown` JSON document stays in decimal strings. A reader
+  applying the cents rule there would change the amounts. **The grouping and the summing moved out of SQL
   altogether**, because this engine has no exact decimal type and summing filed cuotas in SQL would
   sum them as binary floating point. `packages/reporting/src/vat-summary.ts` reads one row per
   breakdown ELEMENT and folds them with `@waitron/shared`'s Decimal arithmetic at the money scale,
@@ -2787,7 +2786,7 @@ and after an insert of 4 and `commit` the table held 1, 2 and 4; a column declar
 need it.** Among the nested calls, `enqueueSuccessor` (`packages/payments/src/reconciliation-schedule/store.ts`), the two
 `appendToChain` functions (`packages/fiscal-verifactu/src/chain.ts`,
 `packages/workforce/src/chain.ts`) and `insertClose`
-(`packages/reporting/src/record-daily-close.ts`) wrap a statement that may be refused in a nested
+([source before A1325](https://github.com/clintongormley/waitron/blob/26adc685d3c7061795f1ce7da169f0cd8a713d47/packages/reporting/src/record-daily-close.ts)) wrap a statement that may be refused in a nested
 `tx.transaction(...)`, which the adapter emits as `savepoint` / `release` / `rollback to` whenever a
 transaction is already open (`packages/store/src/node-sqlite-adapter.ts` — SQLite refuses a `begin`
 inside a `begin`). What that buys is CONFINEMENT: a losing attempt's own partial writes are backed

@@ -23,6 +23,7 @@ import { tradeDay, type DayResult } from "./trading-day.js";
 
 export const WORKING_DIR = "venue";
 export const COPY_DIR = "last-day";
+const COPY_DATE = "bench-copy-date";
 export const SESSION_FILE = "bench-session.json";
 export const VOLUME_FILE = "volume.json";
 export const REQUEST_TIMINGS_FILE = "request-timings.jsonl";
@@ -195,20 +196,16 @@ function sessionCopy(out: string, session: BenchSession): string {
   return copy;
 }
 
-/** The copy whose venue's last close is the session's day, whichever name it is under. */
+/** The completed copy for the session's date, whichever name it is under. */
 function copyFor(out: string, session: BenchSession): string {
   const copy = join(out, COPY_DIR);
   const found: string[] = [];
   for (const candidate of [copy, `${copy}.old`]) {
     if (!existsSync(join(candidate, VENUE_FILE))) continue;
-    const last = readVenue(candidate, (db) => {
-      const row = db.prepare("select max(business_day) as day from daily_closes").get() as {
-        day: string | null;
-      };
-      return row.day;
-    });
+    const marker = join(candidate, COPY_DATE);
+    const last = existsSync(marker) ? readFileSync(marker, "utf8").trim() : null;
     if (last === session.date) return candidate;
-    found.push(`${candidate} ends on ${last ?? "no close"}`);
+    found.push(`${candidate} ends on ${last ?? "no completed date"}`);
   }
   throw new Error(
     `bench: no copy ends on day ${session.date}: ${found.join("; ") || "none found"}`,
@@ -251,6 +248,7 @@ async function checkpoint(
   copyFolder(join(out, WORKING_DIR), next);
   for (const name of readdirSync(next))
     if (name.endsWith(WAL_SUFFIX) || name.endsWith(SHM_SUFFIX)) rmSync(join(next, name));
+  writeFileSync(join(next, COPY_DATE), `${session.date}\n`);
   rmSync(old, { recursive: true, force: true });
   if (existsSync(copy)) renameSync(copy, old);
   renameSync(next, copy);

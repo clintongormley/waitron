@@ -291,7 +291,6 @@ describe("core backup source binding", () => {
     seed();
     expect(await verify()).toBe(true);
     expect(after.db.all(sql`select * from node_membership`)).toEqual([]);
-    expect(after.db.all(sql`select * from daily_close_chain`)).toEqual([]);
   });
 
   function seedOrderContext() {
@@ -675,18 +674,7 @@ describe("core backup source binding", () => {
     expect(await verify()).toBe(false);
   });
 
-  it("retains captured heads and refuses a deleted target head without recreating it", async () => {
-    seed();
-    for (const db of [before.db, after.db])
-      db.run(
-        sql`insert into daily_close_chain (node_id, sequence_no, last_entry_hash) values ('source', 3, ${"A".repeat(64)})`,
-      );
-    expect(await verify()).toBe(true);
-    after.db.run(sql`delete from daily_close_chain`);
-    expect(await verify()).toBe(false);
-    expect(after.db.all(sql`select * from daily_close_chain`)).toEqual([]);
-  });
-  it("refuses missing identity without creating a missing head", async () => {
+  it("refuses missing identity without creating a membership document", async () => {
     expect(
       await queries(before.db, after.db, (a, b) =>
         verifyCoreBackupData({
@@ -697,8 +685,8 @@ describe("core backup source binding", () => {
         }),
       ),
     ).toBe(false);
-    expect(before.db.all(sql`select * from daily_close_chain`)).toEqual([]);
-    expect(after.db.all(sql`select * from daily_close_chain`)).toEqual([]);
+    expect(before.db.all(sql`select * from node_membership`)).toEqual([]);
+    expect(after.db.all(sql`select * from node_membership`)).toEqual([]);
   });
 });
 

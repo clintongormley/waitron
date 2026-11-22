@@ -1,5 +1,9 @@
 # A1308 fiscal 2: the chain head is read from the records — implementation plan
 
+_2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
+saved day report and its chain described below are historical. See the
+[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than

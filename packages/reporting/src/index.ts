@@ -10,7 +10,6 @@ export {
   venueMomentAt,
 } from "./business-day.js";
 export type { VenueMoment } from "./business-day.js";
-export { readDailyClose } from "./read-daily-close.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";
@@ -35,21 +34,6 @@ export { mapModelo303 } from "./modelo-303.js";
 export type { Modelo303 } from "./modelo-303.js";
 export { toDr303Record } from "./dr303.js";
 export type { Dr303Options } from "./dr303.js";
-export { recordDailyClose } from "./record-daily-close.js";
-export { computeCloseEntryHash } from "./daily-close-hash.js";
-export type { CloseHashContent } from "./daily-close-hash.js";
-export { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
-export type {
-  CloseChainBreakReason,
-  DailyCloseChainVerification,
-} from "./verify-daily-close-chain.js";
-export type {
-  CashCountInput,
-  DailyCloseRecord,
-  DailyCloseSnapshot,
-  DeviceReconciliation,
-  RecordDailyCloseInput,
-} from "./close-types.js";
 export type {
   CashUp,
   CloseCounts,
@@ -79,9 +63,3 @@ export type {
   VatReturnInput,
   VatSummary,
 } from "./types.js";
-
-// Side-effect only: keeps errors.ts's augmentation reachable from this package's public barrel
-// (the rule is in packages/shared/src/errors.ts).
-import "./errors.js";
-
-export { verifyBackupCloseHistory } from "./backup-verification.js";

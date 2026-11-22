@@ -25,7 +25,7 @@ import { drain, resetInFlightClaims } from "@waitron/fiscal-verifactu/src/drain.
 import { reconcile } from "@waitron/fiscal-verifactu/src/reconcile.js";
 import { listFilingCases, recordCaseEvent } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { exportConfigurationTables } from "@waitron/provisioning";
-import { recordDailyClose } from "@waitron/reporting";
+import { seedFinishedDrawer } from "./testing/drawer-history-fixture.js";
 import { ALL_MODULES } from "./modules.js";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
@@ -54,8 +54,7 @@ function facts() {
       "invoice_series",
       "registros_facturacion",
       "cadenas",
-      "daily_closes",
-      "daily_close_chain",
+      "drawer_entries",
     ].map((name) => [name, v.db.all(sql`select * from ${sql.identifier(name)} order by rowid`)]),
   );
 }
@@ -102,12 +101,10 @@ async function issue() {
 }
 async function closeHistory() {
   await withTransaction(v.db, (tx) =>
-    recordDailyClose(tx, {
+    seedFinishedDrawer(tx, {
       nodeId: v.cfg.nodeId,
-      businessDay: "2026-10-31",
-      timeZone: "Europe/Madrid",
-      closedBy: v.operator.personId,
-      cashCounts: [],
+      personId: v.operator.personId,
+      recordedAt: AT,
     }),
   );
 }
@@ -164,27 +161,14 @@ it.each(["cash", "reader"] as const)(
     const take = kind === "cash" ? takeBillPayment : takeReaderBillPayment;
     const original = await take(v.deps, v.cfg, id, request, v.operator);
     const collections = v.card.collectCalls.length;
-    await withTransaction(v.db, (tx) =>
-      recordDailyClose(tx, {
-        nodeId: v.cfg.nodeId,
-        businessDay: "2026-10-14",
-        timeZone: "Europe/Madrid",
-        closedBy: v.operator.personId,
-        cashCounts:
-          kind === "reader"
-            ? []
-            : [
-                {
-                  deviceId: v.cfg.origin.deviceId,
-                  openingFloat: "0.00",
-                  payouts: "0.00",
-                  countedCash: "24.20",
-                },
-              ],
-      }),
-    );
+    await closeHistory();
     const before = facts();
-    expect(before.daily_closes).toHaveLength(1);
+    expect(before.drawer_entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "count", amount: 800 }),
+        expect.objectContaining({ kind: "finish", amount: 800 }),
+      ]),
+    );
     if (kind === "reader") expect(before.payments).toHaveLength(1);
     const saved = records();
     const saleId = String(
@@ -234,7 +218,12 @@ it.each(["failed-send", "lost-answer", "restart", "duplicate-lookup", "no-trace"
     });
     await closeHistory();
     const before = facts();
-    expect(before.daily_closes).toHaveLength(1);
+    expect(before.drawer_entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "count", amount: 800 }),
+        expect.objectContaining({ kind: "finish", amount: 800 }),
+      ]),
+    );
     const aeat = createFakeAeat({ serverNow: SEND });
     const tracked = wire(aeat.client());
     await breakCurrentZone();

@@ -1,27 +1,33 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, withTransaction } from "@waitron/db";
+import { departments, devices, drawerEntries, withTransaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountReportApi } from "./report-api.js";
+import { readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { randomUUID } from "node:crypto";
-import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-close-fixture.js";
+import {
+  clockAt,
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
 import { cashPayment, send } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// Its own database: the case closes bills in today's business day, which the overview reads.
 let t: DeferredCloseKit;
-useVenueDb({
-  resetPerTest: false,
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
-  setup: async (db) => {
-    t = await deferredCloseVenue(db);
-  },
 });
+beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-22T12:00:00.000Z"));
+  t = await deferredCloseVenue(suite.db);
+});
+afterEach(() => vi.useRealTimers());
 
 async function get(path: string) {
   const { token } = await withTransaction(t.venue.db, (tx) =>
@@ -111,24 +117,102 @@ describe("reports, a bill closed as a deferred payment", () => {
       received: "0.00",
     });
   });
-  it("uses saved department figures for a frozen day after its department is renamed", async () => {
+  it("reads the department name again after it changes", async () => {
     const order = await t.counterOrder("open");
     const paid = await cashPayment(t.venue, t.venue.cookie, order, "18.00");
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const overview = await get("/management-api/reports/overview");
     const path = `/management-api/reports/daily-close?businessDay=${overview.businessDay}`;
     const before = await get(path);
-    await t.freezeDay(overview.businessDay);
     const [department] = await t.venue.db.select().from(departments);
     await t.venue.db
       .update(departments)
       .set({ name: "Renamed dining" })
       .where(eq(departments.id, department!.id));
     const after = await get(path);
-    expect(after.departmentTakings).toEqual(before.departmentTakings);
+    expect(after.departmentTakings).toEqual([
+      expect.objectContaining({ departmentName: "Renamed dining" }),
+    ]);
     expect((await get("/management-api/reports/overview")).departmentTakings).not.toEqual(
       before.departmentTakings,
     );
     expect(after.closureSummary).toEqual(before.closureSummary);
+  });
+  it("updates an earlier date without revising a finished drawer close", async () => {
+    const { venue } = t;
+    const overview = await get("/management-api/reports/overview");
+    const yesterday = dayBefore(overview.businessDay);
+    const reportPath = `/management-api/reports/daily-close?businessDay=${yesterday}`;
+    const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+    const printerId = device!.cashDrawerPrinterId!;
+    const post = (path: string, body: Record<string, unknown>) =>
+      send(venue.app, venue.cookie, "POST", path, body);
+    expect(
+      await post("/api/drawer/entries", {
+        submissionId: randomUUID(),
+        printerId,
+        kind: "cash_in",
+        amount: "10.00",
+        reason: "Starting change",
+      }),
+    ).toMatchObject({ status: 200 });
+    const count = await post("/api/drawer/close/count", {
+      printerId,
+      startSequence: 1,
+      counted: "10.00",
+    });
+    expect(count.status).toBe(200);
+    const first = count.json.first as { id: string };
+    const done = await post(`/api/drawer/close/${first.id}/finish`, {
+      confirmSequence: count.json.confirmSequence,
+      amountLeft: "4.00",
+    });
+    expect(done).toMatchObject({ status: 200, json: { bankWithdrawal: "6.00" } });
+
+    const drawerPath = `/management-api/reports/drawer-closes?from=${overview.businessDay}&to=${overview.businessDay}`;
+    const drawerHistory = await get(drawerPath);
+    expect(drawerHistory).toMatchObject({
+      closes: [{ first: { counted: "10.00" }, finished: { bankWithdrawal: "6.00" } }],
+    });
+    expect((await get(reportPath)).closureSummary).toEqual({
+      billsClosed: { count: 0, total: "0.00" },
+      deferredPayments: "0.00",
+      received: "0.00",
+    });
+
+    const order = await t.counterOrder("placed");
+    const request = await t.requestFor(order, "18.00", null);
+    const clock = clockAt(Date.parse(`${yesterday}T12:00:00Z`));
+    expect(await t.close(request, t.depsWith({ clock }))).toMatchObject({ businessDay: yesterday });
+    const cash = await t.counterOrder("open");
+    const paid = await cashPayment(
+      { db: venue.db, app: venue.appAt(clock) },
+      venue.cookie,
+      cash,
+      "18.00",
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect((await get(reportPath)).closureSummary).toEqual({
+      billsClosed: { count: 2, total: "36.00" },
+      deferredPayments: "18.00",
+      received: "18.00",
+    });
+    expect(
+      await venue.db
+        .select({ kind: drawerEntries.kind, amount: drawerEntries.amount })
+        .from(drawerEntries)
+        .where(eq(drawerEntries.printerId, printerId))
+        .orderBy(drawerEntries.sequence),
+    ).toEqual([
+      { kind: "cash_in", amount: 1000 },
+      { kind: "count", amount: 1000 },
+      { kind: "finish", amount: 600 },
+      { kind: "cash_payment", amount: 1800 },
+    ]);
+    expect(await get(drawerPath)).toEqual(drawerHistory);
+    const slip = await withTransaction(venue.db, (tx) =>
+      readDrawerCloseForPrint(tx, [venue.cfg.nodeId], done.json.id as string),
+    );
+    expect(slip).toMatchObject({ cashSales: "0.00", cashIn: "10.00" });
   });
 });

@@ -2,6 +2,8 @@
 
 ## Cambiar la zona horaria en los datos del local {#venue-details}
 
+Configura la zona horaria antes de empezar a tomar pedidos.
+
 Abre **Ajustes del local → Datos del local** y pulsa **Editar**. Si puedes editar **Zona horaria**, elige tu zona en la lista. Para un local en España, elige **España peninsular** o **Islas Canarias**.
 
 Comprueba la hora local y la jornada propuestas, pulsa **He revisado estos cambios** y después **Guardar**.

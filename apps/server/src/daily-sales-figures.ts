@@ -2,7 +2,7 @@ import { inArray } from "drizzle-orm";
 import { devices, type Transaction } from "@waitron/db";
 import {
   computeTopSellers,
-  readDailyClose,
+  computeDailyClose,
   validatedRangeWindow,
   type CashUp,
   type DailyClose,
@@ -15,7 +15,7 @@ export async function readDailySalesFigures(
   tx: Transaction,
   input: DailyCloseInput & { nodeIds: readonly NodeId[] },
 ) {
-  const close = await readDailyClose(tx, input);
+  const close = await computeDailyClose(tx, input);
   const range = { ...input, fromBusinessDay: input.businessDay, toBusinessDay: input.businessDay };
   const topSellers = await computeTopSellers(tx, { ...range, limit: 10 });
   const cash = await namedCashUp(tx, close.cash);

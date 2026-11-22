@@ -210,10 +210,7 @@ No stored fiscal row is to be rewritten.
   (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
-  `stableStringify` (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined`
-  hashes differently from the row the database stores (the column drops the key); its comment now
-  states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
-  change: test titles still say "jsonb" (`verify-daily-close-chain.test.ts:70`), "tenant"
+  Test titles still say "tenant"
   (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
   `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`) and "spec §12"
   (`top-sellers.test.ts:307`). `toDr303Record` (`src/dr303.ts`) does not cross-check a monthly total against a
@@ -221,10 +218,8 @@ No stored fiscal row is to be rewritten.
   takes both from the same code, so it looks deliberate — worth the owner's eye because it is a
   tax file. The top-sellers fixtures give most lines no kitchen name, where CLAUDE.md §3 asks all
   three names to differ (top-sellers never reads that name).
-  `record-daily-close.concurrency.test.ts:60` says "nothing but the write queue keeps the second
-  out"; a reviewer, reading only, thinks the one-close-per-day unique constraint refuses it — not
-  checked. `packages/core/src/errors.ts` names `scripts/errors-reachable.test.ts` without the hedge
-  #601 gave reporting's (the guard matches text).
+  `packages/core/src/errors.ts` names `scripts/errors-reachable.test.ts` without the hedge
+  that the guard matches text.
 
 ## Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts` are code, not comments
 

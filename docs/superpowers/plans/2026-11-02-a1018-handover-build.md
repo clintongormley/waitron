@@ -1,5 +1,9 @@
 # A1018 — controlled and emergency handover between two boxes — Build Plan
 
+_2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
+saved day report and its chain described below are historical. See the
+[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+
 _2026-11-16: [The bucket stop-order change](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bucket-pointer-and-stop.md) moves only
 the Cloud snapshot wait after the stream stop; venue-database writers still stop before the stream._
 

@@ -41,10 +41,9 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 ## The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert
 
 - The nested `tx.transaction(...)` in `enqueueSuccessor`
-  wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today;
-  `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case
-  (`docs/developers/conventions-data.md` has the probe). Whether to remove these two nested calls,
-  or say why they stay, is open (a code change, not made). #587's review also found older comments
+  wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today
+  (`docs/developers/conventions-data.md` has the probe). Whether to remove that nested call,
+  or say why it stays, is open. #587's review also found older comments
   still describing PostgreSQL's behaviour, left alone there:
   `packages/store/src/node-sqlite-adapter.test.ts:90` calls keeping the outer transaction usable
   "the whole point of the savepoint"; a test name in
@@ -974,7 +973,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).

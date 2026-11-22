@@ -3920,7 +3920,7 @@ fake AEAT), then times the requests staff wait on. The dataset is synthetic. It 
 and about two thirds of bills paid by card. Rounds go through a waiter's draft, about a third of the
 later rounds are held and fired when due, and about one bill in 25 asks for a full invoice. One
 print agent prints every job through the agent routes. Each night the bench files the day's sales,
-runs the attendance passes and records the daily close.
+runs the attendance passes and finishes the drawer close.
 
 **Build it.** Build one venue per commit, in its own folder:
 
@@ -3952,7 +3952,7 @@ every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a re
 with history shows by name across the days. `checkpointMs` is the time spent checkpointing the
 database and copying the venue to `last-day/`, measured apart because that copy grows with the
 database. `dayMs - checkpointMs - sum(totalMs)` is the time outside requests: the bench's own reads
-between them, the overnight filing, the attendance passes and the daily close. A resumed build adds
+between them, the overnight filing, the attendance passes and the drawer close. A resumed build adds
 to the file and keeps each day once.
 
 If a build stops, run the same command again. It throws away `venue/`, because a half-traded day
@@ -4098,9 +4098,6 @@ owner has not approved it separately.
   the timings leave it out.
 - **The bench venue stays open across days.** A real box restarts sometimes; a resumed build
   reopens it, and carries on the attendance scan saved in the folder.
-- **`recordDailyClose` is the bench's own addition.** No boot step or route calls it today:
-  `git grep -n recordDailyClose -- 'apps/*.ts' 'packages/*.ts'` finds it, outside tests, only in
-  `apps/server/scripts/bench/trading-day.ts` and in `packages/reporting` itself.
 - **Each measure round starts from the same copy of the last day**, at the instant the build ended.
   Rounds do not see each other's writes. Within a round they do: each `filing.pass` sample adds 50
   sales first, so the last of 200 samples reads about 10,000 more sales than the first.

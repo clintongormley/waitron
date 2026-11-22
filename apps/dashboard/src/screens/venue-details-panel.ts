@@ -74,7 +74,6 @@ const PROBLEMS: Record<string, StringKey> = {
 const REASONS: Record<string, StringKey> = {
   sales: "venue_details.sales",
   orders: "venue_details.orders",
-  daily_close: "venue_details.daily_close",
   business_day_history: "venue_details.business_day_history",
   geography_context: "venue_details.geography_context",
 };
