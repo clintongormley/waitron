@@ -34,6 +34,7 @@ import {
   thousandthsToDecimal,
   type Dining,
   appliedVatClass,
+  VAT_RATE_TABLE,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -953,6 +954,7 @@ export async function priceOrderLines(
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: appliedVatClass(dining, classes),
+      vatRates: VAT_RATE_TABLE[appliedVatClass(dining, classes)],
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -1013,7 +1015,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: appliedVatClass(dining, child),
+        vatRates: VAT_RATE_TABLE[appliedVatClass(dining, child)],
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -1313,6 +1315,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
+    vatClass: line.vatClass as VatClass,
     identity: {
       id: line.id,
       productId: line.productId,
@@ -1324,7 +1327,6 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
       priceQuantity: thousandthsToDecimal(line.priceQuantity),
-      vatClass: line.vatClass as VatClass,
       name: line.name,
       descriptions: line.descriptions,
       optionSnapshots: line.optionSnapshots,
@@ -1341,10 +1343,12 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity and its locked composition. */
+/** A stored working-order line: its identity, its locked composition, and the VAT class it files at
+ * for its order's way of selling. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
+  vatClass: VatClass;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */
@@ -1455,7 +1459,10 @@ export async function priceStoredOrderForIssuance(
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
   return {
-    gross: grossLockedLines(grouped.map(({ locked }) => locked)),
+    gross: grossLockedLines(
+      grouped.map(({ locked }) => locked),
+      grouped.map(({ vatClass }) => VAT_RATE_TABLE[vatClass]),
+    ),
     identities: grouped.map(({ identity }) => identity),
   };
 }

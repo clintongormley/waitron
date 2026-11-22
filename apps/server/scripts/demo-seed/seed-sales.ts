@@ -47,6 +47,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
+  VAT_RATE_TABLE,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
@@ -267,7 +268,10 @@ export async function seedSales(
             defaultLanguage,
           ),
           quantity: "1",
-          vatClass: takeaway ? (product.takeawayVatClass ?? product.vatClass) : product.vatClass,
+          vatRates:
+            VAT_RATE_TABLE[
+              takeaway ? (product.takeawayVatClass ?? product.vatClass) : product.vatClass
+            ],
           grossUnitPrice: price,
           lineGross: price,
         });

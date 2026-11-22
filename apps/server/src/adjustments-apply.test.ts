@@ -52,7 +52,14 @@ import {
 } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { listStationNotices } from "@waitron/venue-service";
-import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
+import {
+  decimal,
+  subtractDecimal,
+  sumDecimals,
+  toScale,
+  VAT_RATE_TABLE,
+  type Decimal,
+} from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -254,7 +261,7 @@ async function payAll(billId: string) {
 function breakdownOf(lines: [VatClass, string][]) {
   const gross: GrossLines = {
     lines: lines.map(([vatClass, lineGross]) => ({
-      vatClass,
+      vatRates: VAT_RATE_TABLE[vatClass],
       grossUnitPrice: decimal(lineGross),
       lineGross: decimal(lineGross),
     })) as unknown as GrossLines["lines"],

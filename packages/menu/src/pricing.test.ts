@@ -1,6 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
-import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import { describe, expect, it } from "vitest";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  subtractDecimal,
+  sumDecimals,
+  VAT_RATE_TABLE,
+} from "@waitron/shared";
+import type { DatedRate, Decimal } from "@waitron/shared";
 import {
   baseFromGross,
   grossBasketWithOptions,
@@ -10,7 +17,6 @@ import {
   splitGross,
   vatSignRefused,
 } from "./pricing.js";
-import * as vatRates from "@waitron/shared";
 import type {
   BasketItemWithOptions,
   LockedLine,
@@ -56,20 +62,22 @@ const ON = "2026-09-27";
 
 describe("priceBasket — difference method", () => {
   it("prices a frozen extra by portions while retaining its physical amount", () => {
-    const gross = grossLockedLines([
-      {
-        grossUnitPrice: "0.01",
-        quantity: "0.150",
-        priceQuantity: "0.050",
-        vatClass: "reduced",
-        name: "Ham slices",
-        descriptions: { en: "Ham" },
-        category: "Food",
-        unitName: { en: "kg" },
-        unitPrecision: 3,
-        parentLineNo: 1,
-      },
-    ]);
+    const gross = grossLockedLines(
+      [
+        {
+          grossUnitPrice: "0.01",
+          quantity: "0.150",
+          priceQuantity: "0.050",
+          name: "Ham slices",
+          descriptions: { en: "Ham" },
+          category: "Food",
+          unitName: { en: "kg" },
+          unitPrecision: 3,
+          parentLineNo: 1,
+        },
+      ],
+      [VAT_RATE_TABLE.reduced],
+    );
 
     expect(gross.lines[0]).toMatchObject({
       quantity: "0.150",
@@ -105,20 +113,22 @@ describe("priceBasket — difference method", () => {
     expect(live.lines[0]).toMatchObject(expected);
     expect(live.lines[0]).not.toHaveProperty("variantId");
     const locked = rateLines(
-      grossLockedLines([
-        {
-          grossUnitPrice: "4.10",
-          quantity: "1",
-          vatClass: "general",
-          name: product.name,
-          descriptions: product.descriptions,
-          category: "Drinks",
-          variantName: product.variantName,
-          variantDescriptions: product.variantDescriptions,
-          variantKitchenName: product.variantKitchenName,
-          kitchenName: product.kitchenName,
-        },
-      ]),
+      grossLockedLines(
+        [
+          {
+            grossUnitPrice: "4.10",
+            quantity: "1",
+            name: product.name,
+            descriptions: product.descriptions,
+            category: "Drinks",
+            variantName: product.variantName,
+            variantDescriptions: product.variantDescriptions,
+            variantKitchenName: product.variantKitchenName,
+            kitchenName: product.kitchenName,
+          },
+        ],
+        [VAT_RATE_TABLE.general],
+      ),
       ON,
     );
     expect(locked.lines[0]).toMatchObject(expected);
@@ -255,7 +265,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
             name: "Ham slices",
             descriptions: { en: "Ham" },
             priceDelta: "0.01",
-            vatClass: "general",
+            vatRates: VAT_RATE_TABLE.general,
             quantity: 3,
             physicalQuantity: "0.150",
             priceQuantity: "0.050",
@@ -273,7 +283,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
       unitPrecision: 3,
       grossUnitPrice: "0.01",
       lineGross: "0.06",
-      vatClass: "general",
+      vatRates: VAT_RATE_TABLE.general,
     });
     expect(gross.total).toBe("4.06");
   });
@@ -291,7 +301,10 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
       decimal("1.50"),
       decimal("24.90"),
     ]);
-    expect(gross.lines.map((line) => line.vatClass)).toEqual(["general", "reduced"]);
+    expect(gross.lines.map((line) => line.vatRates)).toEqual([
+      VAT_RATE_TABLE.general,
+      VAT_RATE_TABLE.reduced,
+    ]);
     expect(gross.lines[0]).not.toHaveProperty("vatRate");
     expect(gross.lines[0]).not.toHaveProperty("lineTotal");
     // The gross line total is what the operator/customer sees (and what the working-order draft
@@ -319,7 +332,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
         product: each("1.50", "general"),
         quantity: "2",
         options: [
-          { name: "Lemon", descriptions: { en: "Lemon" }, priceDelta: "0.40", vatClass: null },
+          { name: "Lemon", descriptions: { en: "Lemon" }, priceDelta: "0.40", vatRates: null },
         ],
       },
       { product: weight("24.90", "reduced"), quantity: "0.320", options: [] },
@@ -333,7 +346,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
 });
 
 describe("rateLines", () => {
-  it("keeps every field a gross line carries, a caller's own included, and drops the class and gross unit", () => {
+  it("keeps every field a gross line carries, a caller's own included, and drops the rates and gross unit", () => {
     const gross = grossBasketWithOptions([
       { product: each("12.10", "general"), quantity: "1", options: [] },
     ]);
@@ -360,22 +373,66 @@ describe("rateLines", () => {
       productId: "p-1",
     });
   });
+});
 
-  it("takes the table once per call, whatever the number of lines", () => {
-    const lookups = vi.spyOn(vatRates, "vatRatesOn");
-    try {
-      rateLines(
-        grossBasketWithOptions([
-          { product: each("1.00", "general"), quantity: "1", options: [] },
-          { product: each("2.00", "reduced"), quantity: "1", options: [] },
-          { product: each("3.00", "general"), quantity: "1", options: [] },
-        ]),
-        ON,
-      );
-      expect(lookups.mock.calls).toEqual([[ON]]);
-    } finally {
-      lookups.mockRestore();
-    }
+describe("rateLines — each line's own list of dated rates", () => {
+  const line = (lineNo: number, gross: string, vatRates: readonly DatedRate[]) => ({
+    lineNo,
+    name: `line ${lineNo}`,
+    descriptions: {},
+    quantity: "1",
+    vatRates,
+    grossUnitPrice: decimal(gross),
+    lineGross: decimal(gross),
+  });
+
+  it("rates each line from its own list on the date: a 4% group and a 21% group", () => {
+    const lines = [
+      line(1, "10.40", [
+        { from: null, rate: "10.00" },
+        { from: "2027-01-01", rate: "4.00" },
+      ]),
+      line(2, "12.10", [{ from: null, rate: "21.00" }]),
+    ];
+    const priced = rateLines({ lines, total: decimal("22.50") }, "2027-01-01");
+    expect(priced.lines.map((l) => l.vatRate)).toEqual(["4.00", "21.00"]);
+    expect(priced.vatBreakdown).toEqual([
+      { rate: "4.00", base: "10.00", tax: "0.40" },
+      { rate: "21.00", base: "10.00", tax: "2.10" },
+    ]);
+  });
+
+  it("refuses a line whose list is empty, naming the line", () => {
+    const lines = [line(1, "12.10", [{ from: null, rate: "21.00" }]), line(2, "1.00", [])];
+    expect(() => rateLines({ lines, total: decimal("13.10") }, ON)).toThrow(
+      expect.objectContaining({ code: "vat_rate.unavailable", params: { lineNo: 2 } }),
+    );
+  });
+
+  it("grossLockedLines without rates gives every line an empty list", () => {
+    const stored = {
+      grossUnitPrice: "1.00",
+      quantity: "1",
+      name: "item",
+      descriptions: { en: "item" },
+      category: null,
+    };
+    const gross = grossLockedLines([stored, stored]);
+    expect(gross.lines.map((l) => l.vatRates)).toEqual([[], []]);
+  });
+
+  it("grossLockedLines with rates gives each line its own list", () => {
+    const stored = {
+      grossUnitPrice: "1.00",
+      quantity: "1",
+      name: "item",
+      descriptions: { en: "item" },
+      category: null,
+    };
+    const general = [{ from: null, rate: "21.00" }];
+    const reduced = [{ from: null, rate: "10.00" }];
+    const gross = grossLockedLines([stored, stored], [general, reduced]);
+    expect(gross.lines.map((l) => l.vatRates)).toEqual([general, reduced]);
   });
 });
 
@@ -395,12 +452,12 @@ describe("a VAT class", () => {
           product: each("11.00", "reduced"),
           quantity: "1",
           options: [
-            { name: "Ice", descriptions: { es: "Ice" }, priceDelta: "1.10", vatClass: null },
+            { name: "Ice", descriptions: { es: "Ice" }, priceDelta: "1.10", vatRates: null },
             {
               name: "Small plate",
               descriptions: { es: "Small plate" },
               priceDelta: "1.04",
-              vatClass: "super_reduced",
+              vatRates: VAT_RATE_TABLE.super_reduced,
             },
           ],
         },
@@ -420,10 +477,15 @@ describe("a VAT class", () => {
 describe("rateLines over grossBasketWithOptions — parent + child lines", () => {
   const opt = (
     priceDelta: string,
-    vatClass: SelectedOption["vatClass"],
+    vatClass: PriceableProduct["vatClass"] | null,
     name = "Option",
     descriptions: Record<string, string> = { es: "Option" },
-  ): SelectedOption => ({ name, descriptions, priceDelta, vatClass });
+  ): SelectedOption => ({
+    name,
+    descriptions,
+    priceDelta,
+    vatRates: vatClass === null ? null : VAT_RATE_TABLE[vatClass],
+  });
 
   it("prices a dish with options as parent + child lines", () => {
     const priced = rateLines(
@@ -445,12 +507,12 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
           },
           quantity: "1",
           options: [
-            { name: "Large", descriptions: { es: "Large" }, priceDelta: "0.50", vatClass: null },
+            { name: "Large", descriptions: { es: "Large" }, priceDelta: "0.50", vatRates: null },
             {
               name: "Oat milk",
               descriptions: { es: "Oat milk" },
               priceDelta: "0.40",
-              vatClass: null,
+              vatRates: null,
             },
           ],
         },
@@ -545,7 +607,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
     expect(priced.total).toBe(decimal("12.00"));
   });
 
-  it("inherits the dish's rate when the option's vatClass is null", () => {
+  it("inherits the dish's rate when the option's vatRates is null", () => {
     const priced = rateLines(
       grossBasketWithOptions([
         {
@@ -574,7 +636,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
               name: "Extra shot",
               descriptions: { es: "Extra shot" },
               priceDelta: "1.50",
-              vatClass: null,
+              vatRates: null,
               quantity: 2,
             },
           ],
@@ -601,7 +663,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
             name: "Large",
             descriptions: { es: "Large" },
             priceDelta: "1.30",
-            vatClass: null,
+            vatRates: null,
             ...(quantity !== undefined ? { quantity } : {}),
           },
         ],
@@ -635,24 +697,25 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
     // coffee×1 (gross 1.50) + water×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
     // (NOT round(4.55×21%)=0.96).
     const priced = rateLines(
-      grossLockedLines([
-        {
-          grossUnitPrice: "1.50",
-          quantity: "1",
-          vatClass: "general",
-          name: "Coffee",
-          descriptions: { es: "Coffee" },
-          category: null,
-        },
-        {
-          grossUnitPrice: "2.00",
-          quantity: "2",
-          vatClass: "general",
-          name: "Water",
-          descriptions: { es: "Water" },
-          category: null,
-        },
-      ]),
+      grossLockedLines(
+        [
+          {
+            grossUnitPrice: "1.50",
+            quantity: "1",
+            name: "Coffee",
+            descriptions: { es: "Coffee" },
+            category: null,
+          },
+          {
+            grossUnitPrice: "2.00",
+            quantity: "2",
+            name: "Water",
+            descriptions: { es: "Water" },
+            category: null,
+          },
+        ],
+        [VAT_RATE_TABLE.general, VAT_RATE_TABLE.general],
+      ),
       ON,
     );
     expect(priced.total).toBe("5.50");
@@ -677,16 +740,18 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
     // A weighed line where recovery by division would drift: gross unit 9.99/kg, qty 0.333 → gross
     // 3.33. grossLockedLines takes the STORED gross unit, so base/tax match the add-time VAT breakdown.
     const priced = rateLines(
-      grossLockedLines([
-        {
-          grossUnitPrice: "9.99",
-          quantity: "0.333",
-          vatClass: "reduced",
-          name: "Ham slices",
-          descriptions: { es: "Ham" },
-          category: null,
-        },
-      ]),
+      grossLockedLines(
+        [
+          {
+            grossUnitPrice: "9.99",
+            quantity: "0.333",
+            name: "Ham slices",
+            descriptions: { es: "Ham" },
+            category: null,
+          },
+        ],
+        [VAT_RATE_TABLE.reduced],
+      ),
       ON,
     );
     expect(priced.total).toBe("3.33");
@@ -705,7 +770,6 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
       {
         grossUnitPrice: "8.50",
         quantity: "2",
-        vatClass: "general",
         name: "item",
         descriptions: { en: "item" },
         category: null,
@@ -715,7 +779,6 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
       {
         grossUnitPrice: "24.90",
         quantity: "0.320",
-        vatClass: "reduced",
         name: "sliced ham",
         descriptions: { en: "sliced ham" },
         category: "Food",
@@ -725,7 +788,6 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
       {
         grossUnitPrice: "1.30",
         quantity: "5",
-        vatClass: "super_reduced",
         name: "item",
         descriptions: { en: "item" },
         category: null,
@@ -733,7 +795,16 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
         unitPrecision: 0,
       },
     ];
-    expect(rateLines(grossLockedLines(locked), ON)).toEqual(priceBasket(basket, ON));
+    expect(
+      rateLines(
+        grossLockedLines(locked, [
+          VAT_RATE_TABLE.general,
+          VAT_RATE_TABLE.reduced,
+          VAT_RATE_TABLE.super_reduced,
+        ]),
+        ON,
+      ),
+    ).toEqual(priceBasket(basket, ON));
   });
 });
 
@@ -760,19 +831,21 @@ describe("frozen options answers", () => {
     expect(live.lines[0]).toHaveProperty("optionSnapshots", optionSnapshots);
     expect(live.total).toBe("4.40");
     const locked = rateLines(
-      grossLockedLines([
-        {
-          grossUnitPrice: "2.20",
-          quantity: "2",
-          vatClass: "reduced",
-          name: "item",
-          descriptions: { en: "item" },
-          category: null,
-          optionSnapshots,
-          unitName: { en: "ea" },
-          unitPrecision: 0,
-        },
-      ]),
+      grossLockedLines(
+        [
+          {
+            grossUnitPrice: "2.20",
+            quantity: "2",
+            name: "item",
+            descriptions: { en: "item" },
+            category: null,
+            optionSnapshots,
+            unitName: { en: "ea" },
+            unitPrecision: 0,
+          },
+        ],
+        [VAT_RATE_TABLE.reduced],
+      ),
       ON,
     );
     expect(locked).toEqual(live);
@@ -794,7 +867,7 @@ const grossOf = (amounts: readonly string[], vatClass: PriceableProduct["vatClas
     name: `line ${i + 1}`,
     descriptions: {},
     quantity: "1",
-    vatClass,
+    vatRates: VAT_RATE_TABLE[vatClass],
     grossUnitPrice: decimal(amount),
     lineGross: decimal(amount),
   }));

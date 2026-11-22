@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { decimal } from "@waitron/shared";
+import { decimal, VAT_RATE_TABLE } from "@waitron/shared";
 import {
   grossBasketWithOptions,
   grossLockedLines,
@@ -64,8 +64,13 @@ describe("pricing takes each rate on the date it is given", () => {
         product: each("12.30", "general"),
         quantity: "1",
         options: [
-          { name: "Hielo", descriptions: { es: "Hielo" }, priceDelta: "1.23", vatClass: null },
-          { name: "Tapa", descriptions: { es: "Tapa" }, priceDelta: "1.10", vatClass: "reduced" },
+          { name: "Hielo", descriptions: { es: "Hielo" }, priceDelta: "1.23", vatRates: null },
+          {
+            name: "Tapa",
+            descriptions: { es: "Tapa" },
+            priceDelta: "1.10",
+            vatRates: VAT_RATE_TABLE.reduced,
+          },
         ] as const,
       },
     ];
@@ -79,18 +84,17 @@ describe("pricing takes each rate on the date it is given", () => {
     expect(rates(FROM)).toEqual([decimal("23.00"), decimal("23.00"), decimal("10.00")]);
   });
 
-  it("rateLines over grossLockedLines: a stored line's class takes the date's rate at the same gross", () => {
+  it("rateLines over grossLockedLines: a stored line's rates give the date's rate at the same gross", () => {
     const line = {
       grossUnitPrice: "12.30",
       quantity: "1",
-      vatClass: "general" as const,
       name: "item",
       descriptions: { en: "item" },
       category: null,
     };
 
-    const before = rateLines(grossLockedLines([line]), BEFORE);
-    const from = rateLines(grossLockedLines([line]), FROM);
+    const before = rateLines(grossLockedLines([line], [VAT_RATE_TABLE.general]), BEFORE);
+    const from = rateLines(grossLockedLines([line], [VAT_RATE_TABLE.general]), FROM);
 
     expect(before.lines[0]).toMatchObject({ vatRate: "21.00", lineTotal: "10.17" });
     expect(from.lines[0]).toMatchObject({ vatRate: "23.00", lineTotal: "10.00" });

@@ -12,6 +12,7 @@ import {
   sumDecimals,
   type Decimal,
   type VatClass,
+  VAT_RATE_TABLE,
 } from "@waitron/shared";
 import { rateLines, splitGross, vatSignRefused, type PricedLines } from "@waitron/menu";
 import { deductAdvances, type AdvanceCredit } from "./advance-deduction.js";
@@ -27,7 +28,7 @@ function meal(lines: readonly [string, VatClass][]): PricedLines {
     name: `dish ${i + 1}`,
     descriptions: {},
     quantity: "1",
-    vatClass,
+    vatRates: VAT_RATE_TABLE[vatClass],
     grossUnitPrice: decimal(amount),
     lineGross: decimal(amount),
   }));

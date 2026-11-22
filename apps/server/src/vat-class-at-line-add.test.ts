@@ -57,7 +57,6 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   createOpenOrder,
   parkOrder,
-  priceStoredOrder,
   priceStoredOrderForIssuance,
   readOrderRevision,
 } from "./working-order.js";
@@ -420,8 +419,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
-    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
-    expect(rateLines(rebuilt, "2026-09-27").vatBreakdown).toEqual(BEER_AT_10_PERCENT);
+    const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrderForIssuance(tx, id));
+    expect(rateLines(rebuilt.gross, "2026-09-27").vatBreakdown).toEqual(BEER_AT_10_PERCENT);
     expect(await filed(id)).toEqual(sale);
     expect(await stored(id)).toEqual(storedAtAdd);
   });
