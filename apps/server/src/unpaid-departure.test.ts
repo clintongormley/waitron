@@ -413,9 +413,10 @@ describe("recording that a table left without paying", () => {
 
   it("removes the unserved kitchen item and queues its cancellation slip", async () => {
     const counts = () =>
-      venue.db.all<{ items: number; kitchen: number; prints: number }>(sql`
+      venue.db.all<{ items: number; kitchen: number; corrections: number; prints: number }>(sql`
         select (select count(*) from ticket_items) as items,
-               (select count(*) from kitchen_print_jobs) as kitchen,
+               (select count(*) from kitchen_print_jobs where correction_slip = false) as kitchen,
+               (select count(*) from kitchen_print_jobs where correction_slip = true) as corrections,
                (select count(*) from print_jobs) as prints
       `)[0];
     const atStart = counts();
@@ -435,6 +436,7 @@ describe("recording that a table left without paying", () => {
     expect(counts()).toEqual({
       items: before!.items - 1,
       kitchen: before!.kitchen,
+      corrections: before!.corrections + 1,
       prints: before!.prints + 1,
     });
   });
