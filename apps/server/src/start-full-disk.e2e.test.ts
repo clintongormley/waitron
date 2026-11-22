@@ -926,7 +926,14 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(res.headers.get("content-type")).toBe("application/zip");
     const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
     expect(JSON.parse(new TextDecoder().decode(files["actions.json"]))).toEqual({
-      counts: { voids: 0, refunds: 0, drawerOpenings: 1 },
+      counts: {
+        voids: 0,
+        refunds: 0,
+        drawerOpenings: 1,
+        drawerEntries: 0,
+        billPayments: 0,
+        receiptReprints: 0,
+      },
       voids: [],
       refunds: [],
       drawerOpenings: [
@@ -938,6 +945,9 @@ describe("the Box status read and free-space deletion on a real full disk", () =
           yourPart: ["opened"],
         },
       ],
+      drawerEntries: [],
+      billPayments: [],
+      receiptReprints: [],
     });
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs5'`)).toEqual([
       { id: "bs5" },

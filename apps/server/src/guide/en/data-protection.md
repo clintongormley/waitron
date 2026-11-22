@@ -29,7 +29,9 @@ duties include these:
 Waitron helps with requests from people in these ways:
 
 - Each person who signs in to the dashboard can download a copy of their own data, under
-  **Account settings**, **Your details**, **Copy of your data**. See
+  **Account settings**, **Your details**, **Copy of your data**. This includes their recorded cash
+  movements and drawer closes, their part in bill payments, the receipt reprints they requested
+  and any decisions they made about payment holds. See
   [Download your data](staff.md#own-data).
 - An admin can download another person's copy from **Users**, with **Download their data** in
   the person's row menu. See [Download another person's data](staff.md#person-data).

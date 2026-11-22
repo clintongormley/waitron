@@ -537,10 +537,17 @@ describe("the worked example's whole download: the refund, the drawer, and the o
     expect(fileNamed(files, "adjustments.json")).toEqual(marthaAdjustments(story));
   });
 
-  it("leaves Martha's actions.json as S2c wrote it: one refund asked for, three openings", async () => {
+  it("keeps Martha's one refund request and three openings in the expanded actions file", async () => {
     const files = await downloadAll(story.martha);
     expect(fileNamed(files, "actions.json")).toEqual({
-      counts: { voids: 0, refunds: 1, drawerOpenings: 3 },
+      counts: {
+        voids: 0,
+        refunds: 1,
+        drawerOpenings: 3,
+        drawerEntries: 0,
+        billPayments: 0,
+        receiptReprints: 0,
+      },
       voids: [],
       refunds: [
         {
@@ -577,6 +584,9 @@ describe("the worked example's whole download: the refund, the drawer, and the o
           yourPart: ["opened"],
         },
       ],
+      drawerEntries: [],
+      billPayments: [],
+      receiptReprints: [],
     });
   });
 

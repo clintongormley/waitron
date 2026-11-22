@@ -509,11 +509,23 @@ describe("ALL_MODULES personal-data seat", () => {
     );
   });
 
+  it("exposes payment hold decisions only when the payments module is enabled", () => {
+    expect(
+      personalDataParts(ALL_MODULES).find((part) => part.owner === "payments")?.part.files,
+    ).toEqual(["payment-holds.json"]);
+    expect(
+      personalDataParts(ALL_MODULES.filter((module) => module.name !== "payments")).flatMap(
+        ({ part }) => part.files,
+      ),
+    ).not.toContain("payment-holds.json");
+  });
+
   it("no other module carries the seat", () => {
     expect(ALL_MODULES.filter((m) => m.personalData !== undefined).map((m) => m.name)).toEqual([
       "venue-service",
       "identity",
       "workforce",
+      "payments",
       "adjustments",
       "staffing",
     ]);

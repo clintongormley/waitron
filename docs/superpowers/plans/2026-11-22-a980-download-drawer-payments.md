@@ -14,14 +14,18 @@ the same readers. Scope comes from Lane F's A980-DOWNLOAD-DRAWER-PAYMENTS queue 
   and bill payment lookup for invoices. Take one additional `withWriteLock` turn per table
   after the snapshot. The first pass is five fixed turns plus the two chunked lookup counts.
   Time each new read and the download on a seeded year of trading across the venue's tables.
-  Record the timings here. Take a download over 250 ms back to the watcher before proceeding.
+  Take a download over 250 ms back to the watcher before proceeding. The local arm64 Node
+  26.13.1 probe seeded 12 staff across 250 trading days: 94,737 drawer entries, 90,000 bill
+  payments, 1,699 receipt reprints and 58,500 provider payments. Across five signed-in downloads
+  the slowest SQLite reads took 7.9, 12.3, 0.2 and 6.2 ms respectively. The slowest full ZIP
+  response took 116 ms and exported 7,500 bill payments. Lane F receipts hold the probe and raw times.
 - For `drawer_entries.person_id` include cash in, cash out, count, recount and finish, with
   kind, time and the signed recorded amount in decimal money. Finish records the amount taken
   to bank. The derived count difference includes cash other staff moved, so omit it (watcher,
   09:14). The payment and refund rows repeat the requesters already covered in the bill
   payment and refund sections. State that reason at the filter and in the column inventory.
 - For `bill_payments.requested_by` and `attested_by`, include method, applied amount, tip, state,
-  request time, invoice number if filed and the subject's roles on one row. For the attester
+  request time, the filed bill's invoice number if available and the subject's roles on one row. For the attester
   include `received_at` or `failed_at` as the attestation time. A later decline keeps the
   original receipt time. For `receipt_reprints.person_id`, include request time and invoice
   number. Exclude person identifiers, typed notes, drawer facts, card and provider data.

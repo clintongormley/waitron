@@ -112,9 +112,11 @@ files. If the venue plans staff or records working time in Waitron, the download
 your employment details, rota, absences, staff roles and attendance questions as `.json` files,
 and your working-time record as a PDF and a `.csv` spreadsheet. There can be an `actions.json` too:
 the whole sales already recorded whose void you authorised, the refunds you asked for, authorised
-or recorded the outcome of, and the cash-drawer openings you made or authorised. There can be an
-`adjustments.json` too: the voids, comps and discounts on a bill that you made giving a reason, or
-approved for someone else.
+or recorded the outcome of, and the cash-drawer openings you made or authorised. It also includes
+the cash you added, took out or counted, the drawer closes you finished, bill payments you requested
+or confirmed, and receipt reprints you requested. The `adjustments.json` file lists the voids,
+comps and discounts on a bill that you made giving a reason or approved for someone else. If you
+decided any payment holds, look for `payment-holds.json`.
 
 Check `service-actions.json` for your order and table service actions and
 `department-transfers.json` for the transfers between departments you resolved.

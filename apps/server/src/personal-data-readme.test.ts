@@ -421,7 +421,7 @@ ${ASK}
 What each file holds
 ${PROFILE_LINE}
 ${SIGN_IN_LINE}
-- actions.json: the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; for each refund, the tip it gave back, whether it was cash or card and whether it went through, failed or is still waiting; for each opening, why the drawer opened and whether another person authorised it for the person who opened it; and for each refund and opening, your part in it. Kept to account for the money the venue takes and gives back.
+- actions.json: the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; for each refund, the tip it gave back, whether it was cash or card and whether it went through, failed or is still waiting; for each opening, why the drawer opened and whether another person authorised it for the person who opened it; and for each refund and opening, your part in it. It also lists the cash you added, took out or counted and the withdrawal recorded when you finished closing a drawer. For each bill payment you requested or confirmed, it gives the amount, tip, method, status, when it was requested, when you confirmed it if you did, and the invoice number if the bill was invoiced. For each receipt reprint you requested, it gives the invoice number and request time. Kept to account for the money the venue takes and gives back.
 ${MACHINE}
 
 ${ORIGIN}
@@ -455,6 +455,19 @@ ${ASK}
     expect(personalDataReadme({ ...base, language: "es", files: ACTIONS_FILES_SET })).toBe(
       spanishReadme(ACTIONS_FILES_SET),
     );
+  });
+
+  it("describes the payment hold decisions in English", () => {
+    expect(personalDataReadme({ ...base, files: ["payment-holds.json"] })).toContain(
+      "- payment-holds.json: the order number for each payment hold you decided, what you decided and when. Kept to account for how the venue settled a payment discrepancy.",
+    );
+  });
+
+  it("uses the Spanish description for a payment hold decision file", () => {
+    const file = PERSONAL_DATA_README_WORDS.es.files["payment-holds.json"]!;
+    expect(
+      personalDataReadme({ ...base, language: "es", files: ["payment-holds.json"] }),
+    ).toContain(`- payment-holds.json: ${file.holds} ${file.use}`);
   });
 
   const ADJUSTMENTS_FILES_SET = ["profile.json", "sign-in.json", "adjustments.json"];
