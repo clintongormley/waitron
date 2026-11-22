@@ -37,7 +37,7 @@ import { readCategory } from "./categories.js";
 import { readVenueVatRates, setTakeawayVatRate } from "./takeaway-vat-rates.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
-import type { Transaction } from "@waitron/db";
+import type { Transaction, VenueSettings } from "@waitron/db";
 import "./errors.js"; // load the code registry for the `menu.*`/`product.*`/`menu_*` codes thrown below
 import { publishedAllergens } from "./derivation.js";
 import type {
@@ -966,8 +966,9 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
 export async function createProductSkippingNameCheck(
   tx: Transaction,
   input: CreateProductInput,
+  venue?: VenueSettings,
 ): Promise<Product> {
-  return insertProduct(tx, input, false);
+  return insertProduct(tx, input, false, venue);
 }
 
 type UnitAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; unit: SellableUnit };
@@ -994,6 +995,7 @@ async function insertProduct(
   tx: Transaction,
   input: CreateProductInput,
   checkNames: boolean,
+  venue?: VenueSettings,
 ): Promise<Product> {
   if (!input.name.trim()) throw new AppError("product.invalid", { field: "name" });
   if (stringToCents(input.unitPrice) < 0)
@@ -1026,7 +1028,7 @@ async function insertProduct(
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
-  const areaRates = await readVenueVatRates(tx);
+  const areaRates = await readVenueVatRates(tx, venue);
   const [row] = await tx.insert(products).values(values).returning({ id: products.id });
   await setTakeawayVatRate(
     tx,

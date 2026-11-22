@@ -6,6 +6,7 @@ import {
   readTaxpayer,
   readVenueSettings,
   type Transaction,
+  type VenueSettings,
 } from "@waitron/db";
 import {
   AppError,
@@ -15,10 +16,16 @@ import {
 } from "@waitron/shared";
 import "./errors.js";
 
-/** The VAT rates of the venue's area: the taxpayer's country with the venue's fiscal territory. */
-export async function readVenueVatRates(tx: Transaction): Promise<AreaVatRates> {
+/**
+ * The VAT rates of the venue's area: the taxpayer's country with the venue's fiscal territory. A
+ * caller that has already read the venue's settings passes them as `venue`.
+ */
+export async function readVenueVatRates(
+  tx: Transaction,
+  venue?: VenueSettings,
+): Promise<AreaVatRates> {
   const taxpayer = await readTaxpayer(tx);
-  const territory = (await readVenueSettings(tx)).doc.fiscalTerritory;
+  const territory = (venue ?? (await readVenueSettings(tx)).doc).fiscalTerritory;
   const rates = taxpayer === null ? undefined : vatRatesFor(taxpayer.country, territory);
   if (rates === undefined) {
     throw new AppError("vat_rate.area_unsupported", {

@@ -1,7 +1,7 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, products, withTransaction } from "@waitron/db";
+import { kitchenCourses, products, settings, VENUE_SETTINGS, withTransaction } from "@waitron/db";
 import { seedBusinessDay, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -121,7 +121,7 @@ describe("one save builds one query on the content-language setting", () => {
     active: true,
   });
 
-  it("by the product editor, for a new product with three named variants, plus one read of the venue's area", async () => {
+  it("by the product editor, for a product with three named variants", async () => {
     const reads = await withTransaction(fx.db, async (tx) => {
       const counting = countingSettingsReads(tx);
       await saveProductEditor(
@@ -132,7 +132,7 @@ describe("one save builds one query on the content-language setting", () => {
       );
       return counting.reads();
     });
-    expect(reads).toBe(2);
+    expect(reads).toBe(1);
   });
 
   it("by a variant save of three named variants", async () => {
@@ -149,6 +149,13 @@ describe("one save builds one query on the content-language setting", () => {
     });
     expect(reads).toBe(1);
   });
+});
+
+it("refuses a new product while no venue is saved", async () => {
+  await fx.db.delete(settings).where(eq(settings.module, VENUE_SETTINGS.module));
+  await expect(
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en")),
+  ).rejects.toMatchObject({ code: "venue.not_found" });
 });
 
 it("reads a product with no unit as unitId null", async () => {

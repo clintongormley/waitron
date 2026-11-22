@@ -1,4 +1,4 @@
-import type { Transaction } from "@waitron/db";
+import type { Transaction, VenueSettings } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
@@ -135,7 +135,11 @@ export async function readContentLanguages(
 export async function readSavedContentLanguages(
   tx: Transaction,
 ): Promise<ContentLanguages | undefined> {
-  const { doc } = await readSettings(tx, VENUE_SETTINGS);
+  return savedContentLanguagesIn((await readSettings(tx, VENUE_SETTINGS)).doc);
+}
+
+/** The content-language setting held in an already-read venue settings document. */
+export function savedContentLanguagesIn(doc: VenueSettings): ContentLanguages | undefined {
   return doc.contentLanguages === null
     ? undefined
     : {
