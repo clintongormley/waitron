@@ -254,6 +254,9 @@ it("fills the visible area with grid when there are no tables", async () => {
   expect(grid.width).toBe(600);
   expect(grid.height).toBe(360);
   expect(getComputedStyle(part(el, "grid")).backgroundSize).toBe("12px 12px");
+  expect(
+    getComputedStyle(part(el, "grid")).backgroundImage.match(/linear-gradient\([^,(]*/g),
+  ).toEqual(["linear-gradient(to right", "linear-gradient(rgb"]);
 });
 
 it("fills a box that is not a whole number of squares without overflowing it", async () => {
@@ -399,6 +402,10 @@ it("draws no grid in the margin, so the lines start at the plan's x 0 and y 0", 
   expect(m.drawn.top).toBeCloseTo(72);
   expect(m.style.backgroundClip).toBe("content-box");
   expect(m.style.backgroundOrigin).toBe("content-box");
+  expect(m.style.backgroundImage.match(/linear-gradient\([^,(]*/g)).toEqual([
+    "linear-gradient(to right",
+    "linear-gradient(rgb",
+  ]);
 });
 
 it("draws no grid in the margin past a table that arrived poking out", async () => {
