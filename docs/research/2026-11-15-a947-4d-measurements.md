@@ -162,7 +162,24 @@ Installing the certificate from `http://192.168.10.135/setup/trust` gave a padlo
    till at `https://waitron.local/till/` and the Pixel tablet's at
    `https://box-a22e.waitron.local/till/` both asked to set the device up again ("Set up this device
    … Ask to join"); the Oppo's till was not reported. The Mac, set up again as "Counter 2", sold on
-   the new main box. Why the browsers were not recognised is lane A's TILLS-AFTER-SWITCH item.
+   the new main box.
+
+   **Why (lane A, 22 November 2026, after the session).** The enrolments themselves came across:
+   the Counter's row had the same id and the same stored token on both boxes (lane K's capture,
+   `~/waitron-campaign-k/receipts/tills-after-switch-capture-20261122.md`). The Lenovo had been set
+   up through the demo start on 21 November (lane K's provision sent `mode: "demo"`,
+   `~/waitron-campaign-k/logs/run-20261121-172134.log:207`), and a demo box shows the development
+   "Choose a device" list (`apps/server/src/boot.ts:2650`). A till set up from that list's own
+   **Set up a new device** button is also saved as that browser tab's chosen device, and the tab
+   then signs in by that choice rather than by its own sign-in cookie. Mac Chrome holds a sign-in
+   cookie named for the Counter, made at 12:37:22, when the session record has the Mac back on the
+   Lenovo's till, and only a box with the list on names a sign-in cookie that way (run both ways
+   in a scratch test: list off, refused with 401 and no such cookie; list on, 200 and the cookie).
+   The box that took over had no demo start, so it refused the choice and the till asked to be set
+   up again. The Pixel enrolled by the box's number because its VPN hid `waitron.local` (owner,
+   13:03), so its cookie belonged to that number alone. A test now checks that a till enrolled on
+   the main box still signs in on the box that took over after an emergency switch (#4075). Still
+   to run: the same switch on a pair set up without the demo start (the next two-box session).
 
 **Other findings from the session.** The owner's feedback on the switch pages, which is the
 EMERGENCY-SWITCH-SIMPLE item in lane A, is in the session record word for word. Besides it:
