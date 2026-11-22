@@ -1927,15 +1927,18 @@ it("boot gives remote dashboard files the main handover stop and request metadat
     const build = open.headers.get(BUILD_HEADER);
     gate!.close({ allowed: () => false });
     const stoppedLines = await withLoggedLines(async () => {
-      for (const path of ["/devices", "/assets/app.js"]) {
-        const stopped = await staff!.request(`https://staff.example.test${path}`, {
-          headers: { accept: "text/html", "x-request-id": "remote-stopped" },
-        });
-        expect(stopped.status).toBe(503);
-        expect(await stopped.json()).toEqual({
-          error: { code: "handover.stepping_down", params: {} },
-        });
-      }
+      const stoppedPage = await staff!.request("https://staff.example.test/devices", {
+        headers: { accept: "text/html", "x-request-id": "remote-stopped" },
+      });
+      expect(stoppedPage.status).toBe(503);
+      expect(await stoppedPage.text()).toContain("<h1>This box is standing down</h1>");
+      const stoppedFile = await staff!.request("https://staff.example.test/assets/app.js", {
+        headers: { accept: "text/html", "x-request-id": "remote-stopped" },
+      });
+      expect(stoppedFile.status).toBe(503);
+      expect(await stoppedFile.json()).toEqual({
+        error: { code: "handover.stepping_down", params: {} },
+      });
       const stopped = await local!.request("/devices", {
         headers: { accept: "text/html", "x-request-id": "local-stopped" },
       });

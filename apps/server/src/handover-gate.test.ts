@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { corsForVenue } from "./cors.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
+import { STANDING_DOWN_PAGE_WORDS } from "./i18n/restricted-page.js";
 
 function hold() {
   let release!: () => void;
@@ -97,7 +98,7 @@ describe("createHandoverGate", () => {
     });
     expect(r.gate.isClosed()).toBe(true);
 
-    const refused = await r.app.request("/fast");
+    const refused = await r.app.request("/api/fast");
     expect(refused.status).toBe(503);
     expect(await refused.json()).toEqual({
       error: { code: "handover.stepping_down", params: {} },
@@ -322,5 +323,62 @@ describe("a closed gate's refusal across origins", () => {
     });
     expect(refused.headers.get("access-control-allow-origin")).toBeNull();
     expect(r.handled()).toBe(0);
+  });
+});
+
+describe("a closed gate's page for a person", () => {
+  function closedApp() {
+    const gate = createHandoverGate();
+    const app = new Hono();
+    app.use("*", gate.middleware);
+    app.get("*", (c) => c.text("app page"));
+    gate.close({ allowed: () => false });
+    return app;
+  }
+
+  it.each(["/till/", "/till", "/devices"])(
+    "answers GET %s with a page saying the box is standing down, refreshing every 5 seconds",
+    async (path) => {
+      const res = await closedApp().request(path);
+      expect(res.status).toBe(503);
+      expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("refresh")).toBe("5");
+      expect(res.headers.get("vary")).toBe("Accept-Language");
+      expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+      const html = await res.text();
+      expect(html).toContain("<h1>This box is standing down</h1>");
+      expect(html).toContain("<p>Another box now runs the venue.</p>");
+      expect(html).toContain("<p>Restarting…</p>");
+    },
+  );
+
+  it("answers HEAD on a page path with the page's status and headers", async () => {
+    const res = await closedApp().request("/till/", { method: "HEAD" });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+    expect(res.headers.get("refresh")).toBe("5");
+  });
+
+  it("speaks Spanish to a Spanish browser", async () => {
+    const res = await closedApp().request("/till/", { headers: { "Accept-Language": "es" } });
+    const html = await res.text();
+    expect(html).toContain('<html lang="es">');
+    const words = STANDING_DOWN_PAGE_WORDS["es-ES"];
+    expect(html).toContain(`<h1>${words.title}</h1>`);
+    expect(html).toContain(`<p>${words.body}</p>`);
+    expect(html).toContain(`<p>${words.restarting}</p>`);
+  });
+
+  it.each([
+    ["GET", "/api/orders"],
+    ["GET", "/assets/app.js"],
+    ["POST", "/till/"],
+    ["POST", "/devices"],
+  ])("keeps the JSON refusal for %s %s", async (method, path) => {
+    const res = await closedApp().request(path, { method });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("refresh")).toBeNull();
+    expect(await res.json()).toEqual({ error: { code: "handover.stepping_down", params: {} } });
   });
 });

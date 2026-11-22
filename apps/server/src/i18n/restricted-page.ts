@@ -39,6 +39,22 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
   },
 };
 
+/** The page a box answers between closing its handover gate and restarting (`../handover-gate.ts`). */
+export const STANDING_DOWN_PAGE_WORDS: Readonly<
+  Record<SupportedLocale, { title: string; body: string; restarting: string }>
+> = {
+  "en-GB": {
+    title: "This box is standing down",
+    body: "Another box now runs the venue.",
+    restarting: "Restarting…",
+  },
+  "es-ES": {
+    title: "Este servidor se está retirando",
+    body: "Otro servidor lleva ahora el local.",
+    restarting: "Reiniciando…",
+  },
+};
+
 /** The successor's role, after its address, where this box knows it is the main box. */
 export const RESTRICTED_MAIN_BOX_WORDS: Readonly<Record<SupportedLocale, string>> = {
   "en-GB": "main box",

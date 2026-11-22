@@ -120,7 +120,7 @@ export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: 
 export function boxPageAnswer(
   c: Context,
   html: string,
-  status: 200 | 404 | 500,
+  status: 200 | 404 | 500 | 503,
   cache: "no-cache" | "no-store" = "no-cache",
 ): Response {
   return c.html(html, status, { "Cache-Control": cache, "Content-Security-Policy": CSP });
