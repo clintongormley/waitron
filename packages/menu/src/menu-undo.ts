@@ -7,6 +7,7 @@ import type {
   MenuDocument,
   MenuPreview,
   IncludeFolder,
+  IncludeFolderInput,
   MemberRef,
   MenuHome,
   SectionInput,
@@ -49,6 +50,13 @@ export type MenuUndoCommand =
       price: string | null;
       name: string;
     }
+  | {
+      method: "setIncludeFolder";
+      listId: string;
+      memberId: string;
+      input: IncludeFolderInput;
+      name: string;
+    }
   | { method: "updateSection"; sectionId: string; patch: Partial<SectionInput>; name: string }
   | {
       method: "setHomeDisplay";
@@ -79,12 +87,14 @@ export function menuChangeAction(input: MenuUndoInput, changeId: string): MenuCh
 const NONE: MenuChangeAction = { kind: "none" };
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+type PlacedInclude = { section: SectionNode; parent: string | null };
 type PlacedOffer = { menuItemId: string; offer: FrozenOffer };
 
 /** A document's offers by product and sections by id, each built on first use. */
 class DocumentLookups {
   #offers: Map<string, PlacedOffer> | undefined;
   #sections: Map<string, SectionNode> | undefined;
+  #includes: Map<string, PlacedInclude[]> | undefined;
 
   constructor(readonly document: MenuDocument) {}
 
@@ -114,6 +124,27 @@ class DocumentLookups {
       this.#sections = sections;
     }
     return this.#sections.get(sectionId) ?? null;
+  }
+
+  include(sectionId: string): PlacedInclude | null {
+    if (this.#includes === undefined) {
+      const includes = new Map<string, PlacedInclude[]>();
+      const visit = (members: readonly DocumentMember[], parent: string | null) => {
+        for (const section of members) {
+          if (section.kind !== "section") continue;
+          if (section.includedMenu === undefined) visit(section.members, section.sectionId);
+          else {
+            const placements = includes.get(section.sectionId) ?? [];
+            placements.push({ section, parent });
+            includes.set(section.sectionId, placements);
+          }
+        }
+      };
+      visit(this.document.root.members, null);
+      this.#includes = includes;
+    }
+    const placements = this.#includes.get(sectionId);
+    return placements?.length === 1 ? placements[0]! : null;
   }
 }
 
@@ -155,7 +186,9 @@ function thisMenuAction(plan: Plan, change: MenuChange): MenuChangeAction {
     case "home_display_changed":
       return homeDisplayUndo(plan.live.document, now, change.device);
     case "section_changed":
-      return ownSectionUndo(plan.input.languages, plan.live, plan.now, change);
+      return plan.live.section(change.sectionId)?.includedMenu === undefined
+        ? ownSectionUndo(plan.input.languages, plan.live, plan.now, change)
+        : includeFolderUndo(plan, change);
     case "price_changed":
       return dishPriceUndo(plan.live, plan.now, change);
     case "product_changed":
@@ -249,8 +282,7 @@ function ownSectionUndo(
 ): MenuChangeAction {
   const was = live.section(change.sectionId);
   const is = now.section(change.sectionId);
-  // Whether a section is an include never changes.
-  if (was === null || is === null || was.includedMenu !== undefined) return NONE;
+  if (was === null || is === null) return NONE;
   const patch: Partial<SectionInput> = {};
   for (const field of change.fields)
     switch (field) {
@@ -271,6 +303,60 @@ function ownSectionUndo(
         break;
     }
   return undo({ method: "updateSection", sectionId: change.sectionId, patch, name: change.name });
+}
+
+function workingIncludeMembers(
+  nodes: readonly UndoStructureNode[],
+  listId: string,
+  parent: string,
+  sectionId: string,
+): UndoStructureNode[] {
+  if (parent === listId)
+    return nodes.filter(({ ref }) => ref.kind === "section" && ref.sectionId === sectionId);
+  return nodes.flatMap((node) =>
+    node.ref.kind === "section" && node.includedMenuId === undefined
+      ? workingIncludeMembers(node.children ?? [], listId, node.ref.sectionId, sectionId)
+      : [],
+  );
+}
+
+function includeFolderUndo(
+  plan: Plan,
+  change: Extract<MenuChange, { kind: "section_changed" }>,
+): MenuChangeAction {
+  const { structure, languages } = plan.input;
+  if (!structure) return NONE;
+  const was = plan.live.include(change.sectionId);
+  const is = plan.now.include(change.sectionId);
+  if (was === null || is === null) return NONE;
+  const listId = is.parent ?? structure.rootSectionId;
+  const members = workingIncludeMembers(
+    structure.nodes,
+    listId,
+    structure.rootSectionId,
+    change.sectionId,
+  );
+  if (members.length !== 1) return NONE;
+  const member = members[0]!;
+  if (member.folder === undefined) return NONE;
+
+  const showAsFolder = was.section.direct !== true;
+  const overrides = was.section.fixed ?? {};
+  if (showAsFolder) {
+    // A folder write keeps switched-off names and cannot restore a different one.
+    const saved = member.folder.overrides.names ?? {};
+    const published = overrides.names ?? {};
+    for (const language of new Set([...Object.keys(saved), ...Object.keys(published)])) {
+      if (!languages.includes(language) && saved[language] !== published[language]) return NONE;
+    }
+  }
+  return undo({
+    method: "setIncludeFolder",
+    listId,
+    memberId: member.memberId,
+    input: showAsFolder ? { showAsFolder, overrides } : { showAsFolder },
+    name: change.name,
+  });
 }
 
 function sharedProductAction(change: MenuChange): MenuChangeAction {

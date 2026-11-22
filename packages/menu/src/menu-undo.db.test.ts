@@ -1,12 +1,11 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   menus,
   menuItems,
   menuItemVariantOverrides,
   products,
-  sectionMembers,
   sections,
   withTransaction,
   type Transaction,
@@ -50,6 +49,8 @@ function run(tx: Transaction, command: MenuUndoCommand): Promise<unknown> {
       );
     case "updateSection":
       return updateSection(tx, command.sectionId, command.patch);
+    case "setIncludeFolder":
+      return setIncludeFolder(tx, command.listId, command.memberId, command.input);
     case "setHomeDisplay":
       return setHomeDisplay(tx, command.menuId, command.device, command.patch);
   }
@@ -66,7 +67,8 @@ async function readPreview(menuId: string): Promise<MenuPreview> {
 
 async function actionsOf(preview: MenuPreview): Promise<ReadonlyMap<string, MenuChangeAction>> {
   const { languages } = await app((tx) => readContentLanguages(tx, "en"));
-  return menuChangeActions({ preview, languages });
+  const structure = await app((tx) => readMenuStructure(tx, preview.document.menuId));
+  return menuChangeActions({ preview, languages, structure });
 }
 
 /** The one change `pick` finds, and the action offered beside it. */
@@ -316,27 +318,73 @@ describe("own section Undo", () => {
     },
   );
 
-  it("offers nothing yet for how this menu shows an included menu", async () => {
+  it("restores the published folder from direct display, keeping its switched-off name", async () => {
     const f = await menusFixture(fx.db);
-    await publish(f.dinner);
-    const [include] = await fx.db
-      .select({ id: sectionMembers.id })
-      .from(sectionMembers)
-      .where(
-        and(
-          eq(sectionMembers.sectionId, f.dinnerRoot),
-          eq(sectionMembers.childSectionId, f.drinks),
-        ),
-      );
-    await app((tx) => setIncludeFolder(tx, f.dinnerRoot, include!.id, { showAsFolder: false }));
-
-    const { change, action } = await changeAndAction(
-      await readPreview(f.dinner),
-      (found) => found.kind === "section_changed" && found.sectionId === f.drinks,
+    const readInclude = async () =>
+      (await app((tx) => readMenuStructure(tx, f.dinner))).nodes.find(
+        (node) => node.includedMenuId === f.drinksMenu,
+      )!;
+    const { memberId } = await readInclude();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
+    await app((tx) =>
+      setIncludeFolder(tx, f.dinnerRoot, memberId, {
+        showAsFolder: true,
+        overrides: { names: { en: "Bar", es: "Bebidas" }, color: "#ff0000" },
+      }),
+    );
+    await publish(f.dinner);
+    await app((tx) =>
+      setIncludeFolder(tx, f.dinnerRoot, memberId, {
+        showAsFolder: false,
+        overrides: {
+          names: { en: "Cocktails", es: "Bebidas" },
+          color: "#0000ff",
+          image: libraryImageName("large.jpg"),
+        },
+      }),
+    );
+    await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }));
+    await changeBurgerPrice(f);
 
-    expect(change).toMatchObject({ source: "this_menu", fields: ["direct"] });
-    expect(action).toEqual({ kind: "none" });
+    await undoAndCheck(
+      f.dinner,
+      f.lunch,
+      (change) => change.kind === "section_changed" && change.sectionId === f.drinks,
+    );
+    expect((await readInclude()).folder).toEqual({
+      showAsFolder: true,
+      overrides: { names: { en: "Bar", es: "Bebidas" }, color: "#ff0000" },
+    });
+  });
+
+  it("restores published direct display and keeps the folder settings hidden", async () => {
+    const f = await menusFixture(fx.db);
+    const readInclude = async () =>
+      (await app((tx) => readMenuStructure(tx, f.dinner))).nodes.find(
+        (node) => node.includedMenuId === f.drinksMenu,
+      )!;
+    const { memberId } = await readInclude();
+    await app((tx) => setIncludeFolder(tx, f.dinnerRoot, memberId, { showAsFolder: false }));
+    await publish(f.dinner);
+    await app((tx) =>
+      setIncludeFolder(tx, f.dinnerRoot, memberId, {
+        showAsFolder: true,
+        overrides: { names: { en: "Bar" }, image: null },
+      }),
+    );
+    await changeBurgerPrice(f);
+
+    await undoAndCheck(
+      f.dinner,
+      f.lunch,
+      (change) => change.kind === "section_changed" && change.sectionId === f.drinks,
+    );
+    expect((await readInclude()).folder).toEqual({
+      showAsFolder: false,
+      overrides: { names: { en: "Bar" }, image: null },
+    });
   });
 
   it("still sends an included menu's renamed section to that menu", async () => {

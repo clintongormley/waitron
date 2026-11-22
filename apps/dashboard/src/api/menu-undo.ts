@@ -24,6 +24,9 @@ export async function sendMenuUndo(api: MenuUndoApi, command: MenuUndoCommand): 
     case "updateSection":
       await api.updateSection(command.sectionId, command.patch);
       return;
+    case "setIncludeFolder":
+      await api.setIncludeFolder(command.listId, command.memberId, command.input);
+      return;
     case "setHomeDisplay":
       return api.setHomeDisplay(command.menuId, command.device, command.patch);
   }
@@ -61,7 +64,13 @@ function refusalSentence(
       if (code === "menu_item.not_found")
         return { key: "menu_preview.undo_item_gone", values: { name: command.name } };
       return null;
+    case "setIncludeFolder":
     case "updateSection": {
+      if (
+        command.method === "setIncludeFolder" &&
+        (code === "menu_section.not_found" || code === "menu_section.wrong_role")
+      )
+        return { key: "menu_preview.undo_include_gone", values: { name: command.name } };
       if (code === "menu_section.invalid" && !PRESENTATION_FIELDS.includes(field)) return null;
       const key = SECTION_REFUSALS[code];
       return key ? { key, values: { name: command.name } } : null;

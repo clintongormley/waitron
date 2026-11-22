@@ -8,6 +8,9 @@ import { setLocale } from "../i18n/t.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 import {
   cleanupWidgets,
+  directInclude,
+  includeDisplayChange,
+  includedDrinks,
   documentProduct,
   documentSection,
   menuDocument,
@@ -263,6 +266,27 @@ async function mountLive(changes: MenuChange[], props: Partial<MenuPreviewPanel>
 
 const undoButton = (el: MenuPreviewPanel, id: string) =>
   el.shadowRoot!.querySelector<HTMLButtonElement>(`button.undo[data-undo-change="${id}"]`);
+it("offers include Undo when structure arrives, while the included menu's own change links to Edit", async () => {
+  const changes = [includeDisplayChange, includedOrder];
+  const el = await mountLive(changes, {
+    preview: {
+      ...livePreview(changes),
+      document: includedDrinks(true),
+      live: { versionId: "v-2", document: includedDrinks(false) },
+    },
+  });
+  expect(undoButton(el, includeDisplayChange.id)).toBeNull();
+  el.structure = { rootSectionId: "root", nodes: [directInclude] };
+  await el.updateComplete;
+  expect(undoButton(el, includeDisplayChange.id)).not.toBeNull();
+  expect(editLink(el, includedOrder.id)?.getAttribute("href")).toBe(
+    "/menus/menu/m-drinks/view/structure",
+  );
+  el.structure = { rootSectionId: "root", nodes: [] };
+  await el.updateComplete;
+  expect(undoButton(el, includeDisplayChange.id)).toBeNull();
+});
+
 const undoEvents = (el: MenuPreviewPanel) => {
   const heard = vi.fn();
   el.addEventListener("wt-menu-undo", (event) => {

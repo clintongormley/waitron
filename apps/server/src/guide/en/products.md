@@ -331,6 +331,12 @@ The copy starts unpublished, with the source menu's working sections, prices and
 settings. Published versions and scheduled publications stay with the source. Editing the copy's
 own sections leaves the source as it was; included menus still point to the same shared menus.
 
+## Review unpublished menu changes {#preview-undo}
+
+Open **Preview** to review your changes before publishing. When a change offers **Undo**,
+choose it to restore its published value. For an included menu, this restores direct display or
+the folder along with the names, photo and colour it had when published.
+
 ## Patch the live menu in an emergency {#patch-live-menu}
 
 Use a patch when you find a mistake in the menu that is live now, such as a wrong price, while the

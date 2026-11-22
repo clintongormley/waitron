@@ -384,3 +384,109 @@ describe("menuChangeAction", () => {
     expect(menuChangeAction(input, "not-listed")).toEqual({ kind: "none" });
   });
 });
+
+describe("include presentation Undo", () => {
+  const folder: Extract<DocumentMember, { kind: "section" }> = {
+    kind: "section",
+    sectionId: "drinks",
+    includedMenu: drinks,
+    internalName: "Drinks",
+    names: {},
+    image: null,
+    color: null,
+    members: [],
+  };
+  const direct = { ...folder, direct: true } as const;
+  const own = { ...folder, sectionId: "mains", includedMenu: undefined };
+  const member = {
+    memberId: "include-drinks",
+    ref: { kind: "section", sectionId: "drinks" },
+    includedMenuId: drinks.id,
+    folder: { showAsFolder: false, overrides: {} },
+  } as const;
+  const id = "include-changed";
+  const input = (): MenuUndoInput => {
+    const model = preview([
+      change(id, {
+        kind: "section_changed",
+        sectionId: "drinks",
+        name: "Drinks",
+        fields: ["direct"],
+        source: "this_menu",
+      }),
+    ]);
+    model.live!.document.root.members = [folder];
+    model.document.root.members = [{ ...own, members: [direct] }];
+    return {
+      preview: model,
+      languages: ["en"],
+      structure: {
+        rootSectionId: "root",
+        nodes: [
+          {
+            memberId: "own-mains",
+            ref: { kind: "section", sectionId: "mains" },
+            children: [member],
+          },
+        ],
+      },
+    };
+  };
+
+  it("uses the working parent and ignores another include's copy of the target", () => {
+    const value = input();
+    value.preview.document.root.members.push({
+      ...folder,
+      sectionId: "wine",
+      includedMenu: { id: "wine-menu", name: "Wine" },
+      members: [direct],
+    });
+
+    expect(menuChangeAction(value, id)).toEqual({
+      kind: "undo",
+      command: {
+        method: "setIncludeFolder",
+        listId: "mains",
+        memberId: "include-drinks",
+        input: { showAsFolder: true, overrides: {} },
+        name: "Drinks",
+      },
+    });
+  });
+
+  it.each(["published", "working"])("omits Undo for two %s occurrences", (side) => {
+    const value = input();
+    const document = side === "published" ? value.preview.live!.document : value.preview.document;
+    document.root.members.push(folder);
+    expect(menuChangeAction(value, id)).toEqual({ kind: "none" });
+  });
+
+  it("omits Undo when the current structure is missing or still has the old placement", () => {
+    const value = input();
+    expect(menuChangeAction({ ...value, structure: null }, id)).toEqual({ kind: "none" });
+    expect(
+      menuChangeAction({ ...value, structure: { rootSectionId: "root", nodes: [member] } }, id),
+    ).toEqual({ kind: "none" });
+  });
+
+  it("omits Undo when the working structure has two matching children", () => {
+    const value = input();
+    const parent = value.structure!.nodes[0]!;
+    parent.children = [member, { ...member, memberId: "another-include" }];
+    expect(menuChangeAction(value, id)).toEqual({ kind: "none" });
+  });
+
+  it.each<Record<string, string>>([{ es: "Bebidas nuevas" }, {}])(
+    "omits Undo when it would change a switched-off fixed name from %o",
+    (names) => {
+      const value = input();
+      value.preview.live!.document.root.members = [
+        { ...folder, fixed: { names: { es: "Bebidas" } } },
+      ];
+      value.structure!.nodes[0]!.children = [
+        { ...member, folder: { showAsFolder: false, overrides: { names } } },
+      ];
+      expect(menuChangeAction(value, id)).toEqual({ kind: "none" });
+    },
+  );
+});

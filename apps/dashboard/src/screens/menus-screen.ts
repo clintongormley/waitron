@@ -1521,9 +1521,17 @@ export class MenusScreen extends LitElement {
     const preview = this.preview;
     const ids = Object.keys(this.undoRefusals);
     if (preview === null || ids.length === 0) return;
-    const input = { preview, languages: currentContentLanguages().languages };
+    const input = this.#undoInput(preview);
     const stale = ids.filter((id) => menuChangeAction(input, id).kind !== "undo");
     if (stale.length > 0) this.undoRefusals = without(this.undoRefusals, stale);
+  }
+
+  #undoInput(preview: MenuPreview) {
+    return {
+      preview,
+      languages: currentContentLanguages().languages,
+      structure: this.structureError ? null : this.structure,
+    };
   }
 
   #undoBlocked(menuId: string): boolean {
@@ -1539,10 +1547,7 @@ export class MenusScreen extends LitElement {
     const preview = this.preview;
     if (menuId === null || preview === null || this.previewError) return;
     if (this.#undoBlocked(menuId)) return;
-    const action = menuChangeAction(
-      { preview, languages: currentContentLanguages().languages },
-      changeId,
-    );
+    const action = menuChangeAction(this.#undoInput(preview), changeId);
     if (action.kind !== "undo") return;
     const command = action.command;
     const sentFrom = this.#menuName();
@@ -3354,6 +3359,7 @@ export class MenusScreen extends LitElement {
       .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
       .preview=${this.preview}
+      .structure=${this.structureError ? null : this.structure}
       .failed=${this.previewError}
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}

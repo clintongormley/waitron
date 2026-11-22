@@ -347,6 +347,12 @@ página de inicio de la carta original. Las versiones publicadas y las publicaci
 se quedan en la original. Editar las secciones propias de la copia deja la original como estaba;
 las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
+## Revisa los cambios de la carta antes de publicar {#preview-undo}
+
+Abre **Vista previa** para revisar tus cambios antes de publicar. Si un cambio ofrece
+**Deshacer**, púlsalo para recuperar el valor publicado. En una carta incluida, recuperas
+la presentación directa o la carpeta con los nombres, la foto y el color que tenía al publicarse.
+
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
 Usa una corrección cuando encuentres un error en la carta publicada, como un precio equivocado,
