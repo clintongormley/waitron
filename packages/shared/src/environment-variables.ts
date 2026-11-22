@@ -24,6 +24,8 @@ export interface VariableSpec {
   readonly retiring?: string;
 }
 
+// Browser builds can remove the whole server inventory when readers do not import it.
+/* @__NO_SIDE_EFFECTS__ */
 function variable(
   source: VariableSource,
   kind: VariableKind,
@@ -266,6 +268,7 @@ export function readVariable(
   return env[name];
 }
 
+/* @__NO_SIDE_EFFECTS__ */
 function namesFor(file: BoxFile): EnvironmentVariableName[] {
   const names = Object.keys(ENVIRONMENT_VARIABLES) as EnvironmentVariableName[];
   return names.filter((name) => ENVIRONMENT_VARIABLES[name].source === file).sort();
