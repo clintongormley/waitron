@@ -224,16 +224,6 @@ Left open:
   it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
   an order be handed over before it is paid but did not decide this. **Next action:** decide
   whether a placed order can be adjusted before it is collected.
-- **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
-  dropped quantity without a reason** when a client sends it that way, the venue allows changes
-  to sent items and the kitchen has not started the dish (`applyLineEdits`,
-  `apps/server/src/working-order.ts`). The till's counter hides × and `−` on a sent dish only
-  while it has read the order's lines; when they cannot be read, it shows both on every line.
-  **Next action:** decide whether the edit should refuse dropping a sent line.
-- **Two basket changes the app makes by itself do not check the edit lock:** the menu poll's
-  price-version update of the basket's lines (`adoptLines`) and the order's label
-  (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). What is lost is the basket's
-  own copy of the new prices. **Next action:** decide whether the two should wait for the lock.
 - **Override PIN limits (C89, #951), for the owner:** the two PIN prompts say "wait a moment"
   rather than counting down the seconds the server sends, as the sign-in screen does, and the
   approver prompt hides the message as soon as someone types; the limit is an optional
