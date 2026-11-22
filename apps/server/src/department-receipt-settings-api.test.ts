@@ -59,7 +59,6 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
   const cfg: TradingContext = {
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   await seedVenueSettings(suite.db, {

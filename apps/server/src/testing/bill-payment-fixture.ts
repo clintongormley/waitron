@@ -23,8 +23,10 @@ import {
   type BillPaymentDeps,
 } from "../bill-payments.js";
 import type { BillEditExpected } from "../order-drafts.js";
+import type { ServiceMode } from "@waitron/module";
 import type { DeviceRequestConfig } from "../trading-context.js";
 export * from "../bill-payments.js";
+export type OrderFlow = Exclude<ServiceMode, "table_tab">;
 export type BillPaymentAsk = Omit<Ask, "expectedEdit"> & { expectedEdit?: BillEditExpected | null };
 export type BillPaymentRequest = Omit<Request, "expectedEdit"> & {
   expectedEdit?: BillEditExpected | null;
@@ -70,7 +72,6 @@ export async function observedPaymentBody(
 }
 export async function previewBillPayment(
   deps: Parameters<typeof preview>[0],
-  cfg: Parameters<typeof preview>[1],
   billId: string,
   ask: BillPaymentAsk,
   operatorId?: string,
@@ -79,7 +80,6 @@ export async function previewBillPayment(
   const current = await withTransaction(deps.db, (tx) => readBillEditState(tx, billId));
   return preview(
     deps,
-    cfg,
     billId,
     request,
     operatorId ?? current.editorId ?? "cccccccc-0000-4000-8000-0000000000f1",

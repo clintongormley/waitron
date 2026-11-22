@@ -26,15 +26,12 @@ it.each(["activation-started", "committed", "publication"] as const)(
       const config = loadConfig(
         {
           WAITRON_NODE_ID: f.context.binding.targetNodeId,
-          WAITRON_TILL_TIPS: "1",
         },
         "/migrations",
         "/state",
       );
-      const settings = { ...config.tillApp };
       await reconcileFirstSetupBeforeMode(config, f.store);
       expect(config.node).toBeUndefined();
-      expect(config.tillApp).toStrictEqual(settings);
       expect((await f.store.read())?.status).toBe(status);
     } finally {
       await f.dispose();

@@ -60,6 +60,7 @@ import {
   findCaptureWarning,
   MANUAL_PROVIDER,
   payments as providerPayments,
+  readPaymentsSettings,
   recordManualCardPayment,
 } from "@waitron/payments";
 import type {
@@ -1525,7 +1526,6 @@ async function requirePayableBill(tx: Transaction, workingOrderId: string): Prom
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
 export async function previewBillPayment(
   deps: TillSaleDeps,
-  cfg: TradingContext,
   workingOrderId: string,
   ask: BillPaymentAsk,
   operatorId: string | undefined,
@@ -1545,7 +1545,8 @@ export async function previewBillPayment(
       await billPaymentTotal(tx, workingOrderId, advances),
       held,
     );
-    return previewAllocation(funds, request, { tipsEnabled: cfg.tipsEnabled });
+    const { doc } = await readPaymentsSettings(tx);
+    return previewAllocation(funds, request, { tipsEnabled: doc.tipsEnabled });
   });
 }
 
@@ -1926,8 +1927,9 @@ async function beginBillPayment(
       ),
     };
   }
+  const { tipsEnabled } = (await readPaymentsSettings(tx)).doc;
   const addedTip =
-    basket !== undefined && req.entry === "reader" && !cfg.tipsEnabled ? ZERO : req.addedTip;
+    basket !== undefined && req.entry === "reader" && !tipsEnabled ? ZERO : req.addedTip;
   const { request, items } = await allocationRequestFor(
     tx,
     workingOrderId,
@@ -1944,7 +1946,7 @@ async function beginBillPayment(
   const allocation = confirmAllocation(
     funds,
     request,
-    { tipsEnabled: cfg.tipsEnabled },
+    { tipsEnabled },
     {
       applied: basket === undefined ? decimal(req.applied) : total,
       tip: decimal(basket === undefined ? req.tip : (addedTip ?? ZERO)),

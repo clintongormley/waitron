@@ -13,6 +13,16 @@ Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de 
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
 Elige **Todas las categorías** para ver todos los módulos opcionales.
 
+## Activar las propinas o una cuenta de prueba {#payment-settings}
+
+Abre **Pagos con tarjeta** y ve a **Ajustes**, debajo de **Lectores de tarjetas**. Activa
+**Ofrecer propina en la caja** y pulsa **Guardar**.
+
+En un servidor configurado para Preparar, configura primero las credenciales de prueba de tu
+proveedor en **Módulos**. En **Pagos con tarjeta**, dentro de **Ajustes**, activa
+**Usar las cuentas de prueba de los proveedores de tarjetas** y pulsa **Guardar**.
+Desactiva la opción para volver al simulador de tarjetas.
+
 ## Desconectar un proveedor de tarjetas {#disconnect-provider}
 
 Para quitar las credenciales guardadas de un proveedor, elige **Desconectar** en el menú de su

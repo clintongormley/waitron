@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import type { TradingContext } from "./trading-context.js";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
@@ -152,7 +153,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -361,9 +361,10 @@ describe("counter basket payment", () => {
       addedTip: "0.30",
       externalRef: "OP-TIP",
     } as const;
+    await setTipsForTest(suite.db, true);
     const paid = await payCounterBasket(
       deps,
-      { ...cfg, tipsEnabled: true, practiceMode: true },
+      { ...cfg, practiceMode: true },
       operator,
       id,
       basket,
@@ -374,15 +375,8 @@ describe("counter basket payment", () => {
     expect(paid.total).toBe("2.25");
     expect(paid.vatBreakdown).toEqual([{ rate: "21.00", base: "1.86", tax: "0.39" }]);
     expect(paid.tender).toMatchObject({ charged: "2.55", tip: "0.30", reference: "OP-TIP" });
-    const replay = await payCounterBasket(
-      deps,
-      { ...cfg, tipsEnabled: false },
-      operator,
-      id,
-      basket,
-      payment,
-      id,
-    );
+    await setTipsForTest(suite.db, false);
+    const replay = await payCounterBasket(deps, cfg, operator, id, basket, payment, id);
     expect(replay.tender).toEqual(paid.tender);
     const rows = await suite.db.execute(sql`
       select t.amount, t.tip_amount, p.amount as paid, s.total
@@ -404,10 +398,11 @@ describe("counter basket payment", () => {
     });
     const id = randomUUID();
     const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+    await setTipsForTest(suite.db, true);
     await expect(
       payCounterBasket(
         { db: suite.db, backend, clock, admission: testTradingAdmission() },
-        { ...cfg, tipsEnabled: true },
+        cfg,
         operator,
         id,
         { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },

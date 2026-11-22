@@ -169,7 +169,6 @@ async function venue(): Promise<Venue> {
   const cfg: TradingContext = {
     nodeId: brandNodeId(result.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const scriptCfg = { ...cfg, origin: jobOrigin("operator_script") };

@@ -52,7 +52,6 @@ import { mountTillApi } from "./till-api.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { mountPaymentsApi } from "./payments-api.js";
-import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { printSaleReceipt } from "./till-sale.js";
@@ -153,7 +152,6 @@ async function venueWith(
     ...loadNodeIdentity({
       WAITRON_NODE_ID: venue.nodeId,
     }),
-    ...loadTillAppSettings({}),
     locale: await readVenueLocale(db),
     simplifiedInvoiceLimit: null,
   });

@@ -1012,7 +1012,6 @@ describe("the owner's case: an emergency switch while the old main box stays off
       const cfgOn = (id: string): TradingContext => ({
         nodeId: asNodeId(id),
         locale: "es-ES",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       });
       const [profile] = await seedDeviceProfiles(mainBox.db, {

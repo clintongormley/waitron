@@ -89,7 +89,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { printSaleReceipt, readSettledTicket, reprintSale } from "./till-sale.js";
@@ -202,7 +202,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

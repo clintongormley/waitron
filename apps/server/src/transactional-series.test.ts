@@ -87,21 +87,15 @@ async function issue(v: BillVenue, path: string, id: string, backend = v.backend
     return invoice;
   }
   if (path === "bill payment") {
-    const result = await send(
-      v.appTipsOff,
-      v.cookie,
-      "POST",
-      `/api/working-orders/${id}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount: "3.00",
-        method: "cash",
-        tendered: "3.00",
-        applied: "3.00",
-        tip: "0.00",
-      },
-    );
+    const result = await send(v.app, v.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      method: "cash",
+      tendered: "3.00",
+      applied: "3.00",
+      tip: "0.00",
+    });
     expect(result.status).toBe(200);
     return result.json;
   }
@@ -224,8 +218,7 @@ describe("transactional active series qualification", () => {
       applied: "3.00",
       tip: "0.00",
     };
-    const request = () =>
-      send(v.appTipsOff, v.cookie, "POST", `/api/working-orders/${id}/payments`, body);
+    const request = () => send(v.app, v.cookie, "POST", `/api/working-orders/${id}/payments`, body);
     try {
       const failed = await request();
       expect(failed.status).toBe(500);

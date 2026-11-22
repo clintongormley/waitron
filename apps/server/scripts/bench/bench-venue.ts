@@ -189,7 +189,6 @@ export async function openBenchVenue(
     const cfg: TradingContext = {
       nodeId,
       locale: LOCALE,
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
     const cookies = !seeded

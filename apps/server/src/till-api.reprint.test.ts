@@ -84,7 +84,6 @@ function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

@@ -68,7 +68,6 @@ beforeEach(async () => {
       cfg: {
         nodeId: nodeId(randomUUID()),
         locale: "en-GB",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },
       readMembership: async () => null,

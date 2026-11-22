@@ -42,6 +42,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Open this dashboard over HTTPS at the box’s own address before entering a Wi-Fi password.",
     es: "Abre este panel por HTTPS en la dirección del servidor antes de introducir una contraseña Wi-Fi.",
   },
+  "payments.test_providers_prepare_only": {
+    en: "You can use test accounts on a Prepare box only. Your changes were not saved.",
+    es: "Solo puedes usar cuentas de prueba en un servidor configurado para Preparar. No se han guardado tus cambios.",
+  },
   "module.providers_enabled": {
     en: "Turn off all card providers before turning Payments off. Open Card providers and remove or unpair each provider's readers first.",
     es: "Desactiva todos los proveedores de tarjeta antes de desactivar Pagos. Abre Proveedores de tarjeta y elimina o desvincula sus lectores primero.",

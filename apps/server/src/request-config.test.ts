@@ -8,7 +8,6 @@ describe("requestCfg", () => {
     const cfg: TradingContext = {
       nodeId: nodeId("7a2b8c63-4d2c-4e3b-8c9f-2a3b4c5d6e7f"),
       locale: "es-ES",
-      tipsEnabled: true,
       simplifiedInvoiceLimit: decimal("400"),
     };
     const device = deviceId("0f0e0d0c-0b0a-4908-8706-050403020100");

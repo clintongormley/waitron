@@ -40,7 +40,6 @@ async function setupVenue(): Promise<TradingContext> {
   return {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

@@ -47,6 +47,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   PAYMENTS_SETTINGS,
+  readPaymentsSettings,
   BACKUP_MATCH_WINDOW_MS,
   reconciliationRuns,
   listRefundAuditRows,
@@ -133,6 +134,8 @@ import {
 } from "./card-reader-delete.js";
 import { queryFlag } from "./report-api.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import type { CardSimulatorSeat } from "./card-simulator.js";
+import type { OnboardingIntent } from "./trading-config.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -151,6 +154,8 @@ export interface PaymentsApiDeps {
   pool: CardProviderPool;
   providers: readonly CardProviderContribution[];
   simulator?: PaymentProvider;
+  cardSimulator?: CardSimulatorSeat;
+  onboardingIntent?: OnboardingIntent;
   fetch?: typeof fetch;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
@@ -178,6 +183,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
   "payment.provider_disabled": 409,
+  "payments.test_providers_prepare_only": 409,
   "module.disabled": 409,
   "settings.out_of_date": 409,
   "settings.invalid": 500,
@@ -860,6 +866,53 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  const testProvidersAvailable = deps.onboardingIntent === "prepare";
+  function paymentSettingsAnswer({
+    doc,
+    revision,
+  }: Awaited<ReturnType<typeof readPaymentsSettings>>) {
+    return {
+      tipsEnabled: doc.tipsEnabled,
+      testProviders: doc.testProviders,
+      testProvidersAvailable,
+      revision,
+    };
+  }
+
+  app.get("/management-api/payments/settings", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(paymentSettingsAnswer(await gated(sessionId, readPaymentsSettings)));
+    }),
+  );
+
+  app.put("/management-api/payments/settings", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const { tipsEnabled, testProviders, revision } = body;
+      if (typeof tipsEnabled !== "boolean")
+        throw new AppError("management.request_invalid", { field: "tipsEnabled" });
+      if (typeof testProviders !== "boolean")
+        throw new AppError("management.request_invalid", { field: "testProviders" });
+      if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
+        throw new AppError("management.request_invalid", { field: "revision" });
+      const { saved, practiceChanged } = await gated(sessionId, async (tx, personId) => {
+        if (testProviders && !testProvidersAvailable)
+          throw new AppError("payments.test_providers_prepare_only", {});
+        const { doc } = await readPaymentsSettings(tx);
+        const saved = await saveSettings(tx, PAYMENTS_SETTINGS, {
+          doc: { ...doc, tipsEnabled, testProviders },
+          expectedRevision: revision,
+          personId,
+        });
+        return { saved, practiceChanged: doc.testProviders !== testProviders };
+      });
+      if (practiceChanged && testProvidersAvailable) await deps.cardSimulator?.reapply();
+      return c.json(paymentSettingsAnswer(saved));
+    }),
+  );
+
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -954,7 +1007,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         }
         const { doc } = await readSettings(tx, PAYMENTS_SETTINGS);
         return saveSettings(tx, PAYMENTS_SETTINGS, {
-          doc: { providers: { ...doc.providers, [seat.providerId]: body.enabled as boolean } },
+          doc: {
+            ...doc,
+            providers: { ...doc.providers, [seat.providerId]: body.enabled as boolean },
+          },
           expectedRevision: body.revision as number,
           personId: authorizedBy,
         });
@@ -1387,7 +1443,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         amount: decimal(remaining),
         payment: { method: "card", addedTip: ZERO },
       },
-      { tipsEnabled: deps.cfg.tipsEnabled },
+      { tipsEnabled: (await readPaymentsSettings(tx)).doc.tipsEnabled },
     );
     if (preview.kind !== "allocated")
       throw new AppError("payment.not_stuck", { paymentId: payment.id });

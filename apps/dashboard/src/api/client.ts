@@ -2585,6 +2585,16 @@ export interface BackupAuditView {
   ))[];
 }
 
+export interface PaymentSettingsEdit {
+  tipsEnabled: boolean;
+  testProviders: boolean;
+  revision: number;
+}
+
+export interface PaymentSettingsView extends PaymentSettingsEdit {
+  testProvidersAvailable: boolean;
+}
+
 export interface PaymentProviderRow {
   providerId: string;
   state: "connected" | "not_connected";
@@ -5599,6 +5609,14 @@ export class DashboardApi {
       undefined,
       { passive: true },
     );
+  }
+
+  getPaymentSettings(): Promise<PaymentSettingsView> {
+    return this.#request("/management-api/payments/settings", "GET");
+  }
+
+  savePaymentSettings(edit: PaymentSettingsEdit): Promise<PaymentSettingsView> {
+    return this.#request("/management-api/payments/settings", "PUT", edit);
   }
 
   listPaymentProviders(): Promise<PaymentProviderRow[]> {

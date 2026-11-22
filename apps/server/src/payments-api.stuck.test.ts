@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -897,7 +898,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     const v = await setup();
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { stripe: false } },
+        doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { stripe: false } },
         expectedRevision: 0,
         personId: v.managerId,
       }),
@@ -2027,7 +2028,7 @@ describe("provider-confirmed partial-refund release", () => {
     const refused = await post(v, retainPath(payment.id), seen);
     expect((await errorOf(refused)).code).toBe("bill.tip_not_allowed");
     expect(lookup).not.toHaveBeenCalled();
-    v.cfg.tipsEnabled = true;
+    await setTipsForTest(suite.db, true);
     const list = await send(v, "GET", "/management-api/payments/bill-payments");
     expect(await list.json()).toMatchObject([{ retention: { ...seen, outstanding: "0.00" } }]);
     const result = await post(v, retainPath(payment.id), seen);

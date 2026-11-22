@@ -38,6 +38,7 @@ import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import {
   PAYMENTS_PERMISSIONS,
   PAYMENTS_SETTINGS,
+  readPaymentsSettings,
   SimulatorPaymentProvider,
   cardReaders,
   payments,
@@ -227,7 +228,6 @@ function cfgOf(venue: Venue): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -3319,7 +3319,115 @@ describe("manager-ended practice uncertainty", () => {
   });
 });
 
+describe("payments settings", () => {
+  const path = "/management-api/payments/settings";
+  let venue: Venue;
+  let app: Hono;
+  beforeEach(async () => {
+    venue = await seedVenueWithStaff();
+    app = mountApp(venue);
+  });
+  const put = (body: object) => send(app, "PUT", path, { cookie: venue.managerCookie, body });
+
+  it("returns the switches and requires hardware management", async () => {
+    const response = await send(app, "GET", path, { cookie: venue.managerCookie });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      tipsEnabled: false,
+      testProviders: false,
+      testProvidersAvailable: false,
+      revision: 0,
+    });
+    for (const method of ["GET", "PUT"] as const) {
+      const refused = await send(app, method, path, {
+        cookie: venue.staffCookie,
+        ...(method === "PUT"
+          ? { body: { tipsEnabled: true, testProviders: false, revision: 0 } }
+          : {}),
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    }
+  });
+
+  it("lets a tips save clear an imported practice switch on Live and preserves provider choices", async () => {
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: { stripe: false }, tipsEnabled: false, testProviders: true },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    const denied = await put({ tipsEnabled: true, testProviders: true, revision: 1 });
+    expect(denied.status).toBe(409);
+    expect(await denied.json()).toEqual({
+      error: { code: "payments.test_providers_prepare_only", params: {} },
+    });
+    expect((await readPaymentsSettings(suite.db)).revision).toBe(1);
+
+    const saved = await put({ tipsEnabled: true, testProviders: false, revision: 1 });
+    expect(saved.status).toBe(200);
+    const stale = await put({ tipsEnabled: false, testProviders: false, revision: 1 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: { code: "settings.out_of_date", params: { module: "payments", revision: 2 } },
+    });
+    expect(await readPaymentsSettings(suite.db)).toEqual({
+      doc: { providers: { stripe: false }, tipsEnabled: true, testProviders: false },
+      revision: 2,
+    });
+  });
+
+  it.each([
+    ["tipsEnabled", null],
+    ["testProviders", "true"],
+    ["revision", -1],
+    ["revision", 0.5],
+  ])("refuses an invalid %s", async (field, value) => {
+    const response = await put({
+      tipsEnabled: false,
+      testProviders: false,
+      revision: 0,
+      [field]: value,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect((await readPaymentsSettings(suite.db)).revision).toBe(0);
+  });
+});
+
 describe("provider On/Off", () => {
+  it("preserves the saved tips and practice switches when an administrator changes a provider", async () => {
+    const venue = await seedVenueWithStaff();
+    const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
+    const session = await withTransaction(suite.db, async (tx) => {
+      await saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: { sumup: false }, tipsEnabled: true, testProviders: true },
+        expectedRevision: 0,
+        personId: null,
+      });
+      return startManagementSession(tx, { method: "password", personId: admin!.id });
+    });
+    const response = await send(
+      mountApp(venue),
+      "PUT",
+      "/management-api/payments/providers/stripe/state",
+      {
+        cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+        body: { enabled: false, revision: 1 },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await readPaymentsSettings(suite.db)).toEqual({
+      doc: { providers: { sumup: false, stripe: false }, tipsEnabled: true, testProviders: true },
+      revision: 2,
+    });
+  });
+
   it("requires an administrator and retains credentials while reader additions are refused", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
@@ -3414,7 +3522,7 @@ it.each(["pair", "adopt"] as const)(
     const turnOff = () =>
       withTransaction(suite.db, (tx) =>
         saveSettings(tx, PAYMENTS_SETTINGS, {
-          doc: { providers: { stripe: false } },
+          doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { stripe: false } },
           expectedRevision: 0,
           personId: null,
         }),

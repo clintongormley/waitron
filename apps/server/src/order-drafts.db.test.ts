@@ -132,7 +132,6 @@ async function setupVenue(): Promise<Venue> {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   await seedPersons(db, [

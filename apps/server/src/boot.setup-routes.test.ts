@@ -73,7 +73,6 @@ import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
-import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -1140,7 +1139,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       const cfg: TradingContext = {
         locale: "es-ES",
         ...loadNodeIdentity(trading),
-        ...loadTillAppSettings(trading),
         simplifiedInvoiceLimit: null,
       };
       const [profile] = await venue.store.venue

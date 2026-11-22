@@ -37,7 +37,6 @@ it("deletes through the real core seat when the optional bookings table was neve
   const cfg: TradingContext = {
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const f = await withTransaction(suite.db, async (tx) => {

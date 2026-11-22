@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import {
   billShare,
   takeReaderBillPayment,
@@ -514,7 +515,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     });
     const provider = new FakePaymentProvider(suite.db);
     const filing = { ...deps(), admission: testTradingAdmission() };
-    const cfg = { ...v.cfg, tipsEnabled: true };
+    await setTipsForTest(suite.db, true);
+    const cfg = v.cfg;
     provider.crashNextCollect("captured");
     await expect(
       takeReaderBillPayment(

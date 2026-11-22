@@ -73,7 +73,7 @@ async function venue() {
   return v;
 }
 const request = (v: BillVenue, method: string, path: string, body?: unknown) =>
-  send(v.appTipsOff, v.cookie, method, path, body);
+  send(v.app, v.cookie, method, path, body);
 const line = (v: BillVenue) => ({ menuItemId: v.offerFor("Caña"), quantity: "1" });
 const refused = (v: BillVenue) => ({
   status: 409,

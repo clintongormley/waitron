@@ -245,11 +245,10 @@ export function mountBillPaymentsApi(
   app.post("/api/working-orders/:id/payments/preview", (c) =>
     runBodyLines(c, log, async () => {
       const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)));
-      return c.json(await previewBillPayment(fiscal, cfg, id, ask, session.personId));
+      return c.json(await previewBillPayment(fiscal, id, ask, session.personId));
     }),
   );
 
@@ -437,7 +436,7 @@ export function mountBillPaymentsApi(
             ...fiscal,
             cfg: saleCfg,
             refundProviderFor: refundProvidersOf({
-              simulator: deps.cardProvider,
+              simulator: deps.refundSimulator ?? deps.cardProvider,
               pool: deps.pool,
             }),
             clockUnconfirmed: deps.clockUnconfirmed,

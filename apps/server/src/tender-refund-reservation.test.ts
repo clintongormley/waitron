@@ -62,7 +62,6 @@ beforeEach(async () => {
     nodeId,
     origin: deviceOrigin(deviceId),
     locale: "en-GB",
-    tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
   number = 0;

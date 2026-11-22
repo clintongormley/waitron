@@ -40,6 +40,16 @@ resolver reads that object's property later (`bill-refunds.ts:124-137`), the mou
 copied the value. This is a source trace, not a runtime proof. Recheck these consumers when the
 payments slices land and settle the correction with the watcher before changing their wiring.
 
+**Current-main adjustments, 2026-11-22.** The watcher cleared these changes to the reviewed
+plan in Lane F's questions log at 19:37, 19:43 and 19:52. The existing `payments` row gains the
+two switches. Both settings writers keep the other fields, and configuration format 57 carries
+only the two switches. On a Live box, a tips save clears any imported practice value while a
+request to enable it is refused. The overdue-card proposal also reads the tips switch in its
+transaction. The existing Card payments page gets a Settings section below Card readers.
+The simulator instance remains available to pending collections and refunds after switching to
+test providers. Replacing the old Demo reader row checks, the running-server test verifies the
+practice option and the simulated-payment notice in both directions.
+
 **Owner lands:** no. Tips are kept off the invoice (`docs/backlog.md:2598`, the Tips row), so the
 switch's source moving changes no sale, invoice number, fiscal record or hashed value; the rule that
 clamps a tip to zero when tips are off (`apps/server/src/bill-allocation.ts:112,126`,
@@ -177,6 +187,11 @@ Counted, hand-written: about 330 lines of code (document 50, seat 35, server rea
 dashboard panel and tab 130, client and strings 25) and about 420 lines of tests (document 50, seat
 50, routes 110, panel, unsaved and a11y 170, re-pointed fixtures 40). Not counted: deleted
 `till-config.ts` and its test. About 3 hours.
+
+**Measured 2026-11-22.** After sharing the route-test setup and dropping duplicate assertions, the
+kept files add 451 production lines, 551 test lines and 21 test-support lines. They remove 382
+lines. The two retired files held 182 additional lines. The watcher cleared the overage at 20:09.
+The export projection, current payment consumers and browser checks account for the growth.
 
 ## Finish line
 

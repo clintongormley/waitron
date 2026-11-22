@@ -60,7 +60,6 @@ function cfgOf(): TradingContext {
   return {
     nodeId: brandNodeId(randomUUID()),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

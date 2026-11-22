@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { findAdministrativeArea } from "@waitron/country";
@@ -129,7 +130,6 @@ async function environment(ownNode: boolean, pending = false) {
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     ...(ownNode ? { WAITRON_NODE_ID: NODE } : {}),
-    WAITRON_TILL_TIPS: "true",
   };
 }
 
@@ -203,6 +203,7 @@ it.each([
     });
     await seedBusinessDay(source.db, { timeZone });
     await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
+    await setTipsForTest(source.db, true);
     const server = await startServer(await environment(true));
     try {
       if (province === "Barcelona") {
@@ -248,6 +249,7 @@ it.each([
     });
     await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
+    await setTipsForTest(source.db, true);
     const server = await startServer({
       ...(await environment(true)),
       WAITRON_ENV: "dev",
@@ -264,7 +266,6 @@ it.each([
       expect(observed.cfg).toMatchObject({
         nodeId: NODE,
         locale: "en-GB",
-        tipsEnabled: true,
         practiceMode,
         operationDescriptionRequired: false,
       });

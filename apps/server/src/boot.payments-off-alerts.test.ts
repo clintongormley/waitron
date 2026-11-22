@@ -134,7 +134,7 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
       if (installed) {
         await withTransaction(suite.db, async (tx) => {
           await saveSettings(tx, PAYMENTS_SETTINGS, {
-            doc: { providers: { stripe: false, sumup: false } },
+            doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { stripe: false, sumup: false } },
             expectedRevision: 0,
             personId: null,
           });

@@ -75,7 +75,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const ids = await withTransaction(db, async (tx) => {

@@ -207,7 +207,7 @@ it("refreshes whether the venue is connected to SumUp without a reader", async (
       const { revision } = await readSettings(tx, PAYMENTS_SETTINGS);
       await saveSettings(tx, PAYMENTS_SETTINGS, {
         expectedRevision: revision,
-        doc: { providers: { sumup } },
+        doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { sumup } },
         personId: null,
       });
     });
@@ -225,6 +225,24 @@ it("refreshes whether the venue is connected to SumUp without a reader", async (
 });
 
 describe("the till's setup revision", () => {
+  it("refreshes an open till when tips are switched on", async () => {
+    const till = await setupTill();
+    const before = await sendAsTill(till, "GET", "/api/till");
+    expect(before.body.tipsEnabled).toBe(false);
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: {}, tipsEnabled: true, testProviders: false },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+
+    const after = await sendAsTill(till, "GET", "/api/till");
+    expect(after.body.tipsEnabled).toBe(true);
+    expect(after.body.setupRevision).not.toBe(before.body.setupRevision);
+    expect(await menuStateRevision(till)).toBe(after.body.setupRevision);
+  });
+
   it("the start read and menu-state name the same setup revision for one till", async () => {
     const till = await setupTill();
     const start = await sendAsTill(till, "GET", "/api/till");

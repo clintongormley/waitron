@@ -72,7 +72,6 @@ const suite = useVenueDb({
     cfg = {
       nodeId: brandNodeId(randomUUID()),
       locale: "es-ES",
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
     const managerSid = await withTransaction(db, async (tx) => {

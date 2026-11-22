@@ -119,6 +119,8 @@ reporting only.
 `WAITRON_TILL_TIPS`, and today's till offers no percentages. The first design shows none until this
 is answered. A default service amount is proposed by nobody.
 
+_2026-11-22, A1308 env3. To offer tips, use Card payments → Settings in the dashboard._
+
 ## Q13(d)1. Suggested percentages the guest can refuse — NARROWED
 
 **Proposed answer for a yes or no:** a tip stays outside the VAT base when suggested amounts are

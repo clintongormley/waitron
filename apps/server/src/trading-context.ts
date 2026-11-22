@@ -1,6 +1,5 @@
 import type { Decimal, DeviceOrigin, Origin, SaleOrigin } from "@waitron/shared";
 import type { NodeIdentityConfig } from "./node-config.js";
-import type { TillAppSettings } from "./till-config.js";
 
 export interface FiscalRuntimeContext {
   simplifiedInvoiceLimit: Decimal | null;
@@ -13,8 +12,7 @@ export interface RequestEffects {
   madeHereSink?: Set<string>;
 }
 
-export interface TradingContext
-  extends NodeIdentityConfig, TillAppSettings, FiscalRuntimeContext, RequestEffects {
+export interface TradingContext extends NodeIdentityConfig, FiscalRuntimeContext, RequestEffects {
   /** The venue's display language; receipts resolve their own language. */
   locale: string;
   /** Fiscal values and hashes must not depend on this flag. */

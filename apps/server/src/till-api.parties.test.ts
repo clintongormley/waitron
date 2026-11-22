@@ -64,7 +64,6 @@ const suite = useVenueDb({
     cfg = {
       nodeId: brandNodeId(nodeId),
       locale: "es-ES",
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
   },

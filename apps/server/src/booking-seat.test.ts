@@ -67,7 +67,6 @@ async function setupVenue(): Promise<Venue> {
   const tillCfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const manager = await withTransaction(db, async (tx) => {

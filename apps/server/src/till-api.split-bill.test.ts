@@ -119,7 +119,6 @@ function makeCfg(nodeId: string): OriginConfig {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

@@ -55,6 +55,7 @@ import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import { parkOrder } from "../working-order.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
+import { setTipsForTest } from "./payment-settings.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 /**
@@ -81,7 +82,7 @@ export interface BillVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  /** The box's configuration, tips off. */
+  /** The box's device request configuration. */
   cfg: DeviceRequestConfig;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
@@ -101,8 +102,6 @@ export interface BillVenue {
     clockUnconfirmed?: () => boolean;
     practiceMode?: boolean;
   }): Hono;
-  /** The same routes with the venue's tips off. */
-  appTipsOff: Hono;
   /** The first till's session and device. */
   cookie: string;
   /** The first till's device: `cookie`'s. */
@@ -170,7 +169,6 @@ export async function provisionBillVenue(
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const rows = await db.select().from(departments);
@@ -275,8 +273,8 @@ export async function provisionBillVenue(
         : Promise.reject(new AppError("payment.provider_unknown", { providerId })),
     evict: () => {},
   };
+  await setTipsForTest(db, true);
   const mount = (
-    tipsEnabled: boolean,
     at: TrustedClock = clock,
     disk?: DiskFullState,
     log: Logger = quiet,
@@ -295,7 +293,6 @@ export async function provisionBillVenue(
         clock: at,
         cfg: {
           ...cfg,
-          tipsEnabled,
           practiceMode,
           ...(clockUnconfirmed === undefined ? {} : { clockUnconfirmed }),
         },
@@ -326,11 +323,10 @@ export async function provisionBillVenue(
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     card,
     pool,
-    app: mount(true),
-    appAt: (at) => mount(true, at),
+    app: mount(),
+    appAt: (at) => mount(at),
     appWith: (opts) =>
       mount(
-        true,
         opts.clock,
         opts.disk,
         opts.log,
@@ -339,7 +335,6 @@ export async function provisionBillVenue(
         opts.clockUnconfirmed,
         opts.practiceMode,
       ),
-    appTipsOff: mount(false),
     cookie: await cookieFor(devices[0]!),
     deviceId: devices[0]!.deviceId,
     cookie2: await cookieFor(devices[1]!),

@@ -75,7 +75,6 @@ async function setup() {
       cfg: {
         nodeId: nodeId(seeded.nodeId),
         locale: "es-ES",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },
       ring: loadKeyRing({

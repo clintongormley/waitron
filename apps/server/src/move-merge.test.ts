@@ -171,7 +171,6 @@ async function setupVenue(): Promise<Seeded> {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const { coffeeId, waterId, baconId } = await withTransaction(db, async (tx) => {

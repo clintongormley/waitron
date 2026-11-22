@@ -94,7 +94,6 @@ beforeAll(async () => {
   cfg = {
     nodeId,
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 });

@@ -156,7 +156,10 @@ export function mountTenderRefundApi(
     cfg: deps.cfg,
     clock: deps.clock,
     attendance: deps.attendance,
-    refundProviderFor: refundProvidersOf({ simulator: deps.cardProvider, pool: deps.pool }),
+    refundProviderFor: refundProvidersOf({
+      simulator: deps.refundSimulator ?? deps.cardProvider,
+      pool: deps.pool,
+    }),
     clockUnconfirmed: deps.clockUnconfirmed,
     log,
   };

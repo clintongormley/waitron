@@ -314,7 +314,6 @@ describe("unsent dishes block new payments on their own bill", () => {
     await expect(
       previewBillPayment(
         { ...deps(), admission: testTradingAdmission() },
-        venue.cfg,
         billId,
         ask("items", "cash"),
       ),
@@ -327,7 +326,6 @@ describe("unsent dishes block new payments on their own bill", () => {
     await expect(
       previewBillPayment(
         { ...deps(), admission: testTradingAdmission() },
-        venue.cfg,
         otherBillId,
         ask("contribution", "cash"),
       ),

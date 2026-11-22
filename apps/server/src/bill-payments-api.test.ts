@@ -255,7 +255,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {

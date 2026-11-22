@@ -194,7 +194,6 @@ async function setup(bluetooth = false) {
       cfg: {
         nodeId: nodeId(node!.id),
         locale: "es-ES",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },
       pairingMode: createPairingMode(),

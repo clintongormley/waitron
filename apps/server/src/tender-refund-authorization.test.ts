@@ -82,7 +82,6 @@ beforeEach(async () => {
     nodeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en-GB",
-    tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
   const people = await seedPersons(db, [

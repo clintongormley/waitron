@@ -57,6 +57,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
 import "../widgets/equipment-label.js";
 import "../widgets/backup-audit.js";
+import "./payments-settings-panel.js";
 import { holderText } from "../i18n/equipment.js";
 import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
 import { readerDeleteCopy } from "../widgets/reader-delete-copy.js";
@@ -2506,6 +2507,12 @@ export class PaymentsScreen extends LitElement {
               ></wt-data-table>`
         }
       </section>
+      <dashboard-payments-settings
+        .api=${this.api}
+        @payment-simulator-changed=${(event: CustomEvent<boolean>) => {
+          this.simulatedCardPayments = event.detail;
+        }}
+      ></dashboard-payments-settings>
       ${this.#renderProviderChoice()} ${this.#renderPairReader()}
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())}

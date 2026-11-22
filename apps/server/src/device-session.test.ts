@@ -98,7 +98,6 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const st = await asApp(admin, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));

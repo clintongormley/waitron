@@ -92,7 +92,6 @@ async function venue(opts: { render?: Render } = {}) {
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const agentOne = await agent("Back office agent");

@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
@@ -67,7 +68,7 @@ import { requestIdMiddleware } from "./request-id.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -130,7 +131,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -1273,8 +1273,8 @@ describe("reader payments over HTTP", () => {
   ])(
     "accepts tip $tip with tipsEnabled $tipsEnabled and records the charged amount",
     async ({ tip, tipsEnabled, charged, recordedTip }) => {
-      const { cfg: baseCfg, available, operatorId } = await setupVenue();
-      const cfg = { ...baseCfg, tipsEnabled };
+      const { cfg, available, operatorId } = await setupVenue();
+      await setTipsForTest(suite.db, tipsEnabled);
       const each = available.find((product) => product.pricingUnit === "each")!;
       const client = new FakeStripe();
       const app = new Hono();
@@ -1318,8 +1318,8 @@ describe("reader payments over HTTP", () => {
   )(
     "refuses invalid tip $tip with tipsEnabled $tipsEnabled before creating a payment or asking the reader",
     async ({ tip, tipsEnabled }) => {
-      const { cfg: baseCfg, available, operatorId } = await setupVenue();
-      const cfg = { ...baseCfg, tipsEnabled };
+      const { cfg, available, operatorId } = await setupVenue();
+      await setTipsForTest(suite.db, tipsEnabled);
       const each = available.find((product) => product.pricingUnit === "each")!;
       const client = new FakeStripe();
       const app = new Hono();

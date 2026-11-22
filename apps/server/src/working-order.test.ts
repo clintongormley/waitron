@@ -66,7 +66,7 @@ import * as menu from "@waitron/menu";
 import type { DietaryLabel } from "@waitron/menu";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicketItem,

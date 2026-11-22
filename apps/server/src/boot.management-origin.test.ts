@@ -1,3 +1,5 @@
+import { PAYMENTS_SETTINGS } from "@waitron/payments";
+import { saveSettings } from "@waitron/db";
 import { useTestProducer } from "./testing/test-producer.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { seedModuleSettings } from "../test/module-settings.js";
@@ -182,24 +184,66 @@ const url = (path: string) => `http://127.0.0.1:${httpPort()}${path}`;
 const otherPort = () => `http://127.0.0.1:${httpPort() + 1}`;
 
 describe("the card-provider notice in the running server", () => {
-  it.each([
-    ["", true],
-    ["enabled", false],
-  ] as const)(
-    "reports the actual simulator with test providers %j",
-    async (providers, expected) => {
-      await withServer(
-        { WAITRON_ONBOARDING_INTENT: "prepare", WAITRON_PAYMENT_TEST_PROVIDERS: providers },
-        async ({ venue }) => {
-          const response = await fetch(url("/management-api/session/me"), {
-            headers: { cookie: venue.managerCookie },
-          });
-          expect(response.status).toBe(200);
-          expect(await response.json()).toMatchObject({ simulatedCardPayments: expected });
-        },
-      );
-    },
-  );
+  it("starts a Prepare box on test accounts when the choice was saved", async () => {
+    await withServer(
+      { WAITRON_ONBOARDING_INTENT: "prepare" },
+      async ({ venue }) => {
+        const response = await fetch(url("/management-api/session/me"), {
+          headers: { cookie: venue.managerCookie },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ simulatedCardPayments: false });
+      },
+      async () => {
+        await withTransaction(suite.db, (tx) =>
+          saveSettings(tx, PAYMENTS_SETTINGS, {
+            doc: { ...PAYMENTS_SETTINGS.defaults(), testProviders: true },
+            expectedRevision: 0,
+            personId: null,
+          }),
+        );
+      },
+    );
+  });
+
+  it("switches new practice collections and the dashboard notice without restarting", async () => {
+    await withServer({ WAITRON_ONBOARDING_INTENT: "prepare" }, async ({ venue }) => {
+      const cookie = venue.managerCookie;
+      const get = async (path: string) => {
+        const response = await fetch(url(path), { headers: { cookie } });
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const notice = () => get("/management-api/session/me");
+      const till = () => get("/api/till");
+      const save = async (testProviders: boolean, revision: number) => {
+        const response = await fetch(url("/management-api/payments/settings"), {
+          method: "PUT",
+          headers: { cookie, origin: TRUSTED, "content-type": "application/json" },
+          body: JSON.stringify({ tipsEnabled: false, testProviders, revision }),
+        });
+        expect(await answerOf(response)).toMatchObject({
+          status: 200,
+          body: { testProvidersAvailable: true },
+        });
+      };
+
+      expect(await notice()).toMatchObject({ simulatedCardPayments: true });
+      const before = await till();
+      expect(before).toMatchObject({ cardProvider: "simulator" });
+      await save(true, 0);
+      expect(await notice()).toMatchObject({ simulatedCardPayments: false });
+      const after = await till();
+      expect(after).toMatchObject({ cardProvider: "none" });
+      expect(after.setupRevision).not.toBe(before.setupRevision);
+      await save(false, 1);
+      expect(await notice()).toMatchObject({ simulatedCardPayments: true });
+      expect(await till()).toMatchObject({
+        cardProvider: "simulator",
+        setupRevision: before.setupRevision,
+      });
+    });
+  });
 });
 
 async function answerOf(response: Response) {

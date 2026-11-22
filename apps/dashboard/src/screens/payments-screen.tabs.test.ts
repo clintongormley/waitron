@@ -18,6 +18,12 @@ const reader: ReaderRow = {
 
 function api(readers: ReaderRow[] = [reader], overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    getPaymentSettings: vi.fn().mockResolvedValue({
+      tipsEnabled: false,
+      testProviders: false,
+      testProvidersAvailable: false,
+      revision: 0,
+    }),
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue(readers),
     listReaderHolders: vi.fn().mockResolvedValue([]),
@@ -57,6 +63,11 @@ describe("Card payments reader tools", () => {
       });
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
       expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+      const settings = el.shadowRoot!.querySelector("dashboard-payments-settings");
+      expect(settings).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=readers-section]")!.nextElementSibling).toBe(
+        settings,
+      );
       expect(
         [...el.shadowRoot!.querySelectorAll("h2")].map((heading) => heading.textContent),
       ).toEqual(["Card readers"]);
@@ -70,6 +81,7 @@ describe("Card payments reader tools", () => {
 });
 
 const readerReads = [
+  "getPaymentSettings",
   "listPaymentProviders",
   "listReaders",
   "listReaderHolders",

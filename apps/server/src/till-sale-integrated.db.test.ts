@@ -64,7 +64,7 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
@@ -148,7 +148,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -245,8 +244,7 @@ async function anotherNodeSeries(): Promise<void> {
   });
 }
 
-/** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
- * overrides `cfg.tipsEnabled`. */
+/** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. */
 function integratedDeps(
   app: Database,
   client = new FakeStripe(),
