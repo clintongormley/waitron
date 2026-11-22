@@ -3135,7 +3135,7 @@ is drawn marked only while a drag is under way. One hint line under the month sa
 Yes, a date on a holiday repeats on that holiday whatever its date that year; that note shows, Yes or
 No, when a stored date was saved on a public holiday or a new date is one. With Yes, a second note warns that 29 February repeats only in leap years. The grid has a column
 per date, headed by its short weekday, day and month, with a department Closed tick under each heading. It writes all-day Closed paint only for the chosen
-department at that date’s changeover. Before Save, unticking restores that department’s prior draft
+department at the column’s changeover. Before Save, unticking restores that department’s prior draft
 hours. A separate Close the whole venue tick writes the date’s global flag, retaining paint; while
 it is ticked, department Closed is checked and disabled. A zone shows only the whole-venue tick
 and keeps its Open/Closed strokes. Department all-day paint uses the grid’s Closed all day display
@@ -3148,8 +3148,11 @@ stretch. A department paints its periods and Closed; a zone paints Open and Clos
 department's day, with the zone's season closures drawn as Closed. A zone's Closed paint keeps its full range,
 as in the season painter, with "<department> closed all day" behind a date its department is
 closed; changing the department's paint leaves its zones' closures untouched. A date's ⋮ offers Copy to… and
-Clear. The grid is drawn from the first date's changeover; when the dates' changeovers differ, a
-notice says so. Opened on a public holiday with no special day, a new day starts with the holiday's
+Clear. A one-off date uses its own changeover. If the dates have different starts, each column
+has its own ruler. Yearly repeats use a shared ruler at the venue’s start in force. Copy to…
+keeps the clock times and names the first destination whose changeover a range crosses. It keeps
+the chooser open and copies nothing until the selected dates fit.
+Opened on a public holiday with no special day, a new day starts with the holiday's
 name and its date (on a picked run whose first date is the holiday, every date of the run) and can
 be saved as it opened; when a special day of that name exists, the painter
 first offers Add to <name>, which opens the one with the latest date with this date, or every date of the picked run, added as an

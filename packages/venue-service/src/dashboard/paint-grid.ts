@@ -10,6 +10,7 @@ import {
   CopyChooser,
   OverflowFade,
   columnMenu,
+  columnTimeRuler,
   hourLines,
   isDeleteKey,
   paintGridStyles,
@@ -30,6 +31,7 @@ import {
 export interface PaintColumn {
   key: string;
   label: string;
+  cutover?: string;
 }
 export interface PaintPeriod {
   id: string;
@@ -150,6 +152,10 @@ export class PaintGrid extends LitElement {
   /** The paint chip: a period id, `null` for Closed, `undefined` for nothing chosen. */
   @property({ attribute: false }) chosen: string | null | undefined = undefined;
   @property() cutover = "06:00";
+  @property({ attribute: false }) copyRefusal?: (
+    paint: readonly Paint[],
+    destination: PaintColumn,
+  ) => string | undefined;
   @property({ type: Boolean }) closedErases = true;
   /** A refused save's message per column key: the heading is marked and the day described by it. */
   @property({ attribute: false }) columnErrors: ReadonlyMap<string, string> = new Map();
@@ -172,18 +178,19 @@ export class PaintGrid extends LitElement {
   @query(".menu") private menu!: HTMLElement;
   readonly #fade = new OverflowFade(this);
   readonly #stroke = new ColumnStroke(this, {
-    cutover: () => this.cutover,
+    cutover: (key) => this.#cutover(key),
     canStart: (key) => !this.readOnly && this.chosen !== undefined && !this.closedAllDay.has(key),
     canRelease: () => this.chosen !== undefined,
     released: (stretch) => {
+      const cutover = this.#cutover(stretch.key);
       const paint: Paint = {
         periodId: this.chosen!,
-        startsAt: clockAt(stretch.start, this.cutover),
-        endsAt: clockAt(stretch.end, this.cutover),
+        startsAt: clockAt(stretch.start, cutover),
+        endsAt: clockAt(stretch.end, cutover),
       };
       this.#emit(
         stretch.key,
-        paintStretch(this.#day(stretch.key), paint, this.cutover, this.closedErases),
+        paintStretch(this.#day(stretch.key), paint, cutover, this.closedErases),
       );
     },
   });
@@ -191,6 +198,13 @@ export class PaintGrid extends LitElement {
     columns: () => this.columns,
     trigger: (key) =>
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
+    refusal: (from, to) => {
+      for (const column of this.columns) {
+        if (!to.includes(column.key)) continue;
+        const refusal = this.copyRefusal?.(this.#day(from), column);
+        if (refusal !== undefined) return refusal;
+      }
+    },
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
       for (const key of to)
@@ -273,22 +287,27 @@ export class PaintGrid extends LitElement {
     this.#closeMenu();
     void this.#focusAfter(selected.key, selected.startsAt);
   }
+  #cutover(key: string): string {
+    return this.columns.find((column) => column.key === key)?.cutover ?? this.cutover;
+  }
+
   #change(periodId: string | null): void {
     const selected = this.selected;
     const index = this.#selectedIndex();
     if (selected === null || index < 0) return;
     this.#closeMenu();
+    const cutover = this.#cutover(selected.key);
     const day = changeBlockPeriod(
       this.#day(selected.key),
       index,
       periodId,
-      this.cutover,
+      cutover,
       this.closedErases,
     );
     const block = this.#day(selected.key)[index]!;
-    const [from] = stepSpan(block, this.cutover);
+    const [from] = stepSpan(block, cutover);
     const covering = day.find((paint) => {
-      const [start, end] = stepSpan(paint, this.cutover);
+      const [start, end] = stepSpan(paint, cutover);
       return start <= from && from < end;
     });
     this.#emit(selected.key, day);
@@ -322,8 +341,8 @@ export class PaintGrid extends LitElement {
   #position(start: number, end: number) {
     return styleMap({ top: `${(start / DAY) * 100}%`, height: `${((end - start) / DAY) * 100}%` });
   }
-  #block(column: PaintColumn, paint: Paint, index: number) {
-    const [start, end] = stepSpan(paint, this.cutover);
+  #block(column: PaintColumn, paint: Paint, index: number, cutover: string) {
+    const [start, end] = stepSpan(paint, cutover);
     const name = this.#name(paint.periodId);
     if (this.readOnly)
       return html`<div
@@ -354,8 +373,8 @@ export class PaintGrid extends LitElement {
       <span>${name}</span> ${paint.startsAt}–${paint.endsAt}
     </button>`;
   }
-  #underlay(paint: Paint) {
-    const [start, end] = stepSpan(paint, this.cutover);
+  #underlay(paint: Paint, cutover: string) {
+    const [start, end] = stepSpan(paint, cutover);
     return html`<div
       class=${paint.periodId === null ? "block underlay closed" : "block underlay"}
       data-colour=${this.#colour(paint.periodId) ?? nothing}
@@ -367,14 +386,14 @@ export class PaintGrid extends LitElement {
       >
     </div>`;
   }
-  #preview(column: PaintColumn) {
+  #preview(column: PaintColumn, cutover: string) {
     const stretch = this.#stroke.preview;
     if (stretch === null || stretch.key !== column.key || this.chosen === undefined) return nothing;
     const replaced = [
       ...new Set(
         this.#day(column.key)
           .filter((paint) => {
-            const [start, end] = stepSpan(paint, this.cutover);
+            const [start, end] = stepSpan(paint, cutover);
             return paint.periodId !== this.chosen && start < stretch.end && stretch.start < end;
           })
           .map((paint) => this.#name(paint.periodId)),
@@ -387,7 +406,7 @@ export class PaintGrid extends LitElement {
       style=${this.#position(stretch.start, stretch.end)}
     >
       <span
-        >${`${this.#name(this.chosen)} ${clockAt(stretch.start, this.cutover)}–${clockAt(stretch.end, this.cutover)}`}</span
+        >${`${this.#name(this.chosen)} ${clockAt(stretch.start, cutover)}–${clockAt(stretch.end, cutover)}`}</span
       >${
         replaced.length > 0
           ? html`<span>${t("paint.replaces").replace("{names}", replaced.join(", "))}</span>`
@@ -435,9 +454,13 @@ export class PaintGrid extends LitElement {
   }
 
   override render() {
+    const firstStart = this.columns[0]?.cutover ?? this.cutover;
+    const perDate = this.columns.some(({ cutover }) => (cutover ?? this.cutover) !== firstStart);
+    const minDay = "calc(var(--wt-space-6) * 4)";
+    const minColumn = perDate ? `calc(${minDay} + var(--times-width))` : minDay;
     // With no button inside, a read-only grid's scrolling region takes the focus itself.
     return html`<div
-        class="scroll"
+        class=${perDate ? "scroll per-date" : "scroll"}
         role="region"
         aria-label=${t("paint.grid")}
         tabindex=${ifDefined(this.readOnly ? "0" : undefined)}
@@ -446,10 +469,10 @@ export class PaintGrid extends LitElement {
         <div
           class="layout"
           style=${styleMap({
-            "--column-tracks": `repeat(${this.columns.length}, minmax(calc(var(--wt-space-6) * 4), 1fr))`,
+            "--column-tracks": `repeat(${this.columns.length}, minmax(${minColumn}, 1fr))`,
           })}
         >
-          <div class="heading corner"></div>
+          ${perDate ? nothing : html`<div class="heading corner"></div>`}
           ${this.columns.map(
             (column) =>
               html`<div
@@ -475,11 +498,12 @@ export class PaintGrid extends LitElement {
                 }<slot name=${`column-head-${column.key}`}></slot>
               </div>`,
           )}
-          ${timeRuler(this.cutover)}
+          ${perDate ? nothing : timeRuler(firstStart)}
           ${this.columns.map((column) => {
             const shut = this.closedAllDay.has(column.key);
             const day = shut ? [] : this.#day(column.key);
-            return html`<div
+            const cutover = column.cutover ?? this.cutover;
+            const body = html`<div
               class="day"
               role="group"
               aria-label=${column.label}
@@ -492,8 +516,8 @@ export class PaintGrid extends LitElement {
               @pointerdown=${(event: PointerEvent) => this.#stroke.start(event, column.key)}
               @keydown=${() => this.#stroke.forgetDrag()}
             >
-              ${hourLines(this.cutover)}
-              ${shut ? nothing : (this.underlay.get(column.key) ?? []).map((paint) => this.#underlay(paint))}
+              ${hourLines(cutover)}
+              ${shut ? nothing : (this.underlay.get(column.key) ?? []).map((paint) => this.#underlay(paint, cutover))}
               ${
                 !shut && this.closedBehind.has(column.key)
                   ? html`<div class="all-closed behind">${this.closedBehind.get(column.key)}</div>`
@@ -501,9 +525,12 @@ export class PaintGrid extends LitElement {
                     ? html`<div class="all-closed">${t("paint.closed_all_day")}</div>`
                     : nothing
               }
-              ${day.map((paint, index) => this.#block(column, paint, index))}
-              ${this.#preview(column)}
+              ${day.map((paint, index) => this.#block(column, paint, index, cutover))}
+              ${this.#preview(column, cutover)}
             </div>`;
+            return perDate
+              ? html`<div class="dated-column">${columnTimeRuler(cutover)}${body}</div>`
+              : body;
           })}
         </div>
       </div>

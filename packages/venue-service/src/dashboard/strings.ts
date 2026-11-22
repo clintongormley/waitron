@@ -111,8 +111,6 @@ const en = {
   "special.open": "Open",
   "special.zone_gone": "This zone no longer exists.",
   "special.season_error": "The season's hours could not be loaded.",
-  "special.changeover_differs":
-    "These dates start their day at different times; drawn from {time}.",
   "special.explain":
     "Each date starts with its season's usual hours, shown faded. Drag down a day to paint the hours you want instead, or drag over a block to replace it. Paint Closed to shut part of a day, or tick Closed under a date to close this department all day. Close the whole venue is separate.",
   "special.zone_explain":
@@ -192,6 +190,8 @@ const en = {
   "paint.copy_to": "Copy to…",
   "paint.copy_day_to": "Copy {day} to",
   "paint.copy": "Copy",
+  "paint.copy_crosses_start":
+    "The copied hours cross the business-day start on {date}. Paint it separately.",
   "paint.clear": "Clear",
   "painter.week": "{season}: standard week",
   "painter.special_day": "{name}: special day, {dates}",
@@ -1042,8 +1042,6 @@ const es: Record<keyof typeof en, string> = {
   "special.open": "Abierto",
   "special.zone_gone": "Esta zona ya no existe.",
   "special.season_error": "No se ha podido cargar el horario de la temporada.",
-  "special.changeover_differs":
-    "Estas fechas empiezan el día a horas distintas; se dibujan desde las {time}.",
   "special.explain":
     "Cada fecha empieza con el horario habitual de su temporada, en tenue. Arrastra por un día para pintar el horario que quieras, o sobre un bloque para sustituirlo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrar este departamento todo el día. Cerrar todo el establecimiento es una opción aparte.",
   "special.zone_explain":
@@ -1123,6 +1121,8 @@ const es: Record<keyof typeof en, string> = {
   "paint.copy_to": "Copiar a…",
   "paint.copy_day_to": "Copiar {day} a",
   "paint.copy": "Copiar",
+  "paint.copy_crosses_start":
+    "El horario que quieres copiar cruza el inicio de la jornada del {date}. Pinta ese día por separado.",
   "paint.clear": "Vaciar",
   "painter.week": "{season}: semana estándar",
   "painter.special_day": "{name}: día especial, {dates}",

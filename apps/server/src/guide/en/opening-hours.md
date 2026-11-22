@@ -36,6 +36,8 @@ Station hours follow your painted periods, their menus, routing and the closures
 
 In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.
 
+When the dates have different business-day starts, read the time ruler beside each date as you paint. With **Every year**, use the shared ruler. If **Copy to…** names a date whose start the hours cross, paint that date separately.
+
 ## Holiday names {#holiday-names}
 
 When you plan around a public holiday, its name follows your dashboard language. Spain's supplied holidays have English display names in English and their official published names in Spanish. For example, 25 December appears as **Christmas Day** or **Natividad del Señor**. Changing the screen language keeps the holiday on the same date.

@@ -29,9 +29,8 @@ The special-day staffing painter draws every date's column, and the blocks in it
 date. Each date's opening hours behind the paint (`resolveDepartmentsDays`) and the month's slot
 count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`) use that date's
 own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
-slots it produces. Opening hours' special-day painter draws from the first date's changeover and
-says so when the dates' changeovers differ. Needs a
-decision on how one grid with one time ruler shows dates with different changeovers. Special-day saves also validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
+slots it produces. Opening hours draws one-off special days with a ruler in each column when
+the dates' changeovers differ. Staffing special-day saves validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
 
 ## Pay-period changes after closure
 

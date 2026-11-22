@@ -578,9 +578,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Service periods, opening hours and departments
 
-- **Draw a special-day grid from each date's business-day start.**
-  [Detail](backlog/service-periods.md#a-special-day-grid-uses-the-first-dates-changeover)
-
 - **A1512. Send the venue's opening hours to Google (owner, 2026-11-11; was SP19).** Wanted. The
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.

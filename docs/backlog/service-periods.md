@@ -49,12 +49,6 @@ which reads years 0–99 as 1900–1999, so it refuses every date in those years
 and `weekdayOf`). Changing it would change which dates the server accepts from outside (menu
 publication dates, imports), so it needs a decision.
 
-## A special-day grid uses the first date's changeover
-
-The special-day editor draws every date from the first date's business-day start and shows a
-notice when the selected dates have different starts. Zone closures are stored whole and read
-against each actual day's department hours; drawing each date on its own start remains open.
-
 ## Loose ends left by A788
 
 Found while building A788 (the business-day start changes at the next changeover). Unless an entry
