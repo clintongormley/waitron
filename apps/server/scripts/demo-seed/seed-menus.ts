@@ -103,6 +103,10 @@ export async function seedMenus(
   });
   await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required, null);
   const vatRates = await readVenueVatRates(tx);
+  // A data set's takeaway rates are its own country's law; a rate the venue's area does not offer
+  // (the United Kingdom stand-in offers only 0%) gives way to the area's default.
+  const takeawayVatRateOf = (rate: string | undefined) =>
+    rate !== undefined && vatRates.pickable.includes(rate) ? rate : undefined;
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const presentation = async (text: Readonly<Record<string, string>>, basename?: string) => {
     const names = translated(text);
@@ -193,7 +197,7 @@ export async function seedMenus(
             ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
             unitPrice: product.unitPrice,
             vatClass: product.vatClass,
-            takeawayVatClass: product.takeawayVatClass,
+            takeawayVatRate: takeawayVatRateOf(product.takeawayVatRate),
           },
           vatRates,
         );

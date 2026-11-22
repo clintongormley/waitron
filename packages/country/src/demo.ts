@@ -31,7 +31,7 @@ interface CountryDemoProductFields<L extends string = string> {
 
   unitPrice: string;
   vatClass: string;
-  takeawayVatClass?: string;
+  takeawayVatRate?: string;
 
   image: string;
 }

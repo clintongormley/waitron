@@ -349,6 +349,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "weight",
         unitPrice: "21.00",
         vatClass: "super_reduced",
+        takeawayVatRate: "4.00",
         image: "manchego-curado.png",
       },
       {
@@ -376,6 +377,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "weight",
         unitPrice: "28.50",
         vatClass: "super_reduced",
+        takeawayVatRate: "4.00",
         image: "cabrales.png",
       },
       {
@@ -403,6 +405,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "weight",
         unitPrice: "26.00",
         vatClass: "super_reduced",
+        takeawayVatRate: "4.00",
         image: "idiazabal.png",
       },
       {
@@ -430,6 +433,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "weight",
         unitPrice: "34.00",
         vatClass: "super_reduced",
+        takeawayVatRate: "4.00",
         image: "torta-del-casar.png",
       },
       {
@@ -451,6 +455,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "weight",
         unitPrice: "19.50",
         vatClass: "super_reduced",
+        takeawayVatRate: "4.00",
         image: "mahon.png",
       },
     ],
@@ -1227,7 +1232,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "each",
         unitPrice: "1.60",
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatRate: "21.00",
         image: "botellin-cerveza.png",
       },
     ],
@@ -1263,7 +1268,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "each",
         unitPrice: "2.50",
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatRate: "21.00",
         image: "refresco-cola.png",
       },
       {
@@ -1339,7 +1344,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "each",
         unitPrice: "1.80",
         vatClass: "reduced",
-        takeawayVatClass: "general",
+        takeawayVatRate: "21.00",
         image: "coca-cola-zero-lata.png",
       },
     ],

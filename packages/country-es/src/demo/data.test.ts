@@ -6,6 +6,7 @@ import {
   CASA_DELGADO_VALENCIA,
   DEMO_MEDIA_ROOTS,
 } from "./index.js";
+import { SPAIN } from "../spain.js";
 import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -353,23 +354,27 @@ describe("Casa Delgado VAT classes", () => {
   });
 
   // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the deli's other food is at 10% (art. 91.Uno.1.1.º).
-  it("sells the takeaway cheeses at the super-reduced rate and the other deli goods at the reduced rate", () => {
+  it("sells the takeaway cheeses at 4% and the other deli goods at the area's takeaway rate, 10%", () => {
+    const areaDefault = SPAIN.fiscalJurisdictions.find(
+      ({ id }) => id === "ES-common",
+    )?.defaultTakeawayVatRate;
+    expect(areaDefault).toBe("10.00");
     const expected = {
-      "Iberian ham": "reduced",
-      Chorizo: "reduced",
-      "Pork loin": "reduced",
-      Salchichón: "reduced",
-      Cecina: "reduced",
-      Sobrasada: "reduced",
-      Manchego: "super_reduced",
-      Cabrales: "super_reduced",
-      Idiazábal: "super_reduced",
-      "Torta cheese": "super_reduced",
-      Mahón: "super_reduced",
-      Anchovies: "reduced",
-      Olives: "reduced",
-      "Octopus in oil": "reduced",
-      "Tuna belly": "reduced",
+      "Iberian ham": "10.00",
+      Chorizo: "10.00",
+      "Pork loin": "10.00",
+      Salchichón: "10.00",
+      Cecina: "10.00",
+      Sobrasada: "10.00",
+      Manchego: "4.00",
+      Cabrales: "4.00",
+      Idiazábal: "4.00",
+      "Torta cheese": "4.00",
+      Mahón: "4.00",
+      Anchovies: "10.00",
+      Olives: "10.00",
+      "Octopus in oil": "10.00",
+      "Tuna belly": "10.00",
     };
     for (const set of sets)
       expect(
@@ -377,7 +382,7 @@ describe("Casa Delgado VAT classes", () => {
           set.menus.deli.categories.flatMap((category) =>
             category.products.map((product) => [
               product.staffName?.en ?? product.image,
-              product.vatClass,
+              product.takeawayVatRate ?? areaDefault,
             ]),
           ),
         ),
@@ -386,17 +391,17 @@ describe("Casa Delgado VAT classes", () => {
   });
   // Art. 91.Uno.1.1.º excludes alcoholic drinks and sweetened soft drinks from the reduced rate for
   // goods, so taken away they take the general 21% (art. 90.Uno).
-  it("lists the restaurant's cola, Coca-Cola Zero and bottled beer in the deli, served at the reduced rate and taken away at the general rate", () => {
+  it("lists the restaurant's cola, Coca-Cola Zero and bottled beer in the deli, served at the reduced rate and taken away at 21%", () => {
     const drinks = ["refresco-cola.png", "coca-cola-zero-lata.png", "botellin-cerveza.png"];
     for (const set of sets) {
       const restaurant = set.menus.restaurant.categories.flatMap((category) => category.products);
       expect(
         drinks.map((image) => {
           const product = restaurant.find((candidate) => candidate.image === image);
-          return [image, product?.vatClass, product?.takeawayVatClass];
+          return [image, product?.vatClass, product?.takeawayVatRate];
         }),
         set.id,
-      ).toEqual(drinks.map((image) => [image, "reduced", "general"]));
+      ).toEqual(drinks.map((image) => [image, "reduced", "21.00"]));
       expect(set.menus.deli.listedSection?.productImages, set.id).toEqual(drinks);
       expect(set.menus.deli.listedSection?.name.en, set.id).toBe("Drinks");
       const deliOwn = set.menus.deli.categories.flatMap((category) => category.products);
@@ -411,17 +416,26 @@ describe("Casa Delgado VAT classes", () => {
     }
   });
 
-  it("gives a takeaway class only to the drinks the deli lists", () => {
+  it("gives a takeaway rate only to the deli's cheeses and the drinks the deli lists", () => {
     for (const set of sets)
       expect(
         [set.menus.restaurant, set.menus.deli, set.menus.lunch]
           .flatMap((menu) => menu.categories)
           .flatMap((category) => category.products)
-          .filter((product) => product.takeawayVatClass !== undefined)
-          .map((product) => product.image)
+          .filter((product) => product.takeawayVatRate !== undefined)
+          .map((product) => [product.image, product.takeawayVatRate])
           .sort(),
         set.id,
-      ).toEqual(["botellin-cerveza.png", "coca-cola-zero-lata.png", "refresco-cola.png"]);
+      ).toEqual([
+        ["botellin-cerveza.png", "21.00"],
+        ["cabrales.png", "4.00"],
+        ["coca-cola-zero-lata.png", "21.00"],
+        ["idiazabal.png", "4.00"],
+        ["mahon.png", "4.00"],
+        ["manchego-curado.png", "4.00"],
+        ["refresco-cola.png", "21.00"],
+        ["torta-del-casar.png", "4.00"],
+      ]);
   });
 });
 

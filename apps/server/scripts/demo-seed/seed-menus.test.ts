@@ -63,7 +63,7 @@ describe("seedMenus", () => {
     expect(new Set(rows.map((row) => row.color)).size).toBe(rows.length);
   });
 
-  it("offers the restaurant's own cola, Coca-Cola Zero and bottled beer in the deli, taken away at the general class", async () => {
+  it("offers the restaurant's own cola, Coca-Cola Zero and bottled beer in the deli, taken away at 21%", async () => {
     await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedMenus(tx, {
@@ -76,10 +76,12 @@ describe("seedMenus", () => {
         name: string;
         vat_class: string;
         takeaway_vat_class: string | null;
+        takeaway_rate: number;
       }>(sql`
-        select name, vat_class, takeaway_vat_class from products
-        where name in ('Cola', 'Coca-Cola', 'Coca-Cola Zero', 'Bottled beer', 'Beer')
-        order by name`);
+        select p.name, p.vat_class, p.takeaway_vat_class, r.rate as takeaway_rate
+        from products p join product_takeaway_vat_rates r on r.product_id = p.id
+        where p.name in ('Cola', 'Coca-Cola', 'Coca-Cola Zero', 'Bottled beer', 'Beer')
+        order by p.name`);
       return { deli, drinksMenu, productsByImage, classes };
     });
     const drinks = ["refresco-cola.png", "coca-cola-zero-lata.png", "botellin-cerveza.png"].map(
@@ -96,10 +98,15 @@ describe("seedMenus", () => {
       .map(productOf);
     for (const id of drinks) expect(offeredInDrinks).toContain(id);
     expect(read.classes).toEqual([
-      { name: "Beer", vat_class: "reduced", takeaway_vat_class: null },
-      { name: "Bottled beer", vat_class: "reduced", takeaway_vat_class: "general" },
-      { name: "Coca-Cola Zero", vat_class: "reduced", takeaway_vat_class: "general" },
-      { name: "Cola", vat_class: "reduced", takeaway_vat_class: "general" },
+      { name: "Beer", vat_class: "reduced", takeaway_vat_class: null, takeaway_rate: 1000 },
+      { name: "Bottled beer", vat_class: "reduced", takeaway_vat_class: null, takeaway_rate: 2100 },
+      {
+        name: "Coca-Cola Zero",
+        vat_class: "reduced",
+        takeaway_vat_class: null,
+        takeaway_rate: 2100,
+      },
+      { name: "Cola", vat_class: "reduced", takeaway_vat_class: null, takeaway_rate: 2100 },
     ]);
   });
 
