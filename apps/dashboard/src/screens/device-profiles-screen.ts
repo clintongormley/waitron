@@ -23,6 +23,10 @@ import { renderSwitchGroup } from "../widgets/device-profile-switch-group.js";
 import { renderDeviceProfileWhere } from "../widgets/device-profile-where.js";
 import { renderDeviceProfileWho } from "../widgets/device-profile-who.js";
 import {
+  renderDeviceProfileKitchenScreens,
+  type KitchenListsProps,
+} from "../widgets/device-profile-kitchen.js";
+import {
   renderDeviceProfilePrinterLists,
   renderDeviceProfileReaders,
   type PrinterChoice,
@@ -1658,6 +1662,17 @@ export class DeviceProfilesScreen extends LitElement {
     return this.draftKitchenScreens[kind] ?? EVERY;
   }
 
+  #onKitchenScreenKind(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const kind = KITCHEN_SCREEN_KINDS.find((kind) => kind === event.detail.value);
+    this.draftKitchenScreens =
+      kind === undefined
+        ? {}
+        : { [kind]: structuredClone(this.#loadedKitchenScreens[kind] ?? EVERY) };
+    this.#clearRefusal("kitchenScreens", ...KITCHEN_LIST_FIELDS);
+    this.#draftScope?.changed();
+  }
+
   #setScreen(kind: KitchenScreenKind, scope: ProfileKitchenScreen | undefined): void {
     const next = { ...this.draftKitchenScreens };
     if (scope === undefined) delete next[kind];
@@ -2254,153 +2269,38 @@ export class DeviceProfilesScreen extends LitElement {
     return profileKindListsShown(kind, this.draftKitchenScreens);
   }
 
-  #listChoices(
-    all: readonly { id: string; name: string; active: boolean }[],
-    listed: readonly string[],
-  ): { id: string; label: string; on: boolean }[] {
-    return all
-      .filter((entry) => entry.active)
-      .map((entry) => ({
-        id: entry.id,
-        label: entry.name,
-        on: listed.includes(entry.id),
-      }));
-  }
-
-  /** "Every station", or a switch per station; for a pass screen or monitor the same for zones. */
-  #renderKindLists(kind: KitchenScreenKind, errors: FieldErrors): TemplateResult | typeof nothing {
-    if (!this.#kindListsShown(kind)) return nothing;
-    const slug = KIND_SLUG[kind];
+  #kitchenLists(kind: KitchenScreenKind, errors: FieldErrors): KitchenListsProps {
     const fields = KIND_FIELDS[kind];
-    const scope = this.#scopeOf(kind);
-    const list = (
-      key: "stationIds" | "zoneIds",
-      field: EditorField,
-      every: {
-        test: string;
-        label: string;
-        handler: (e: CustomEvent<{ checked: boolean }>) => void;
-      },
-      all: readonly { id: string; name: string; active: boolean }[],
-      item: string,
-      heading: string,
-    ) => {
-      const listed = scope[key];
-      return renderSwitchGroup(
-        `profile-${slug}-${key === "stationIds" ? "stations" : "zones"}`,
-        heading,
-        errors[field],
-        [
-          html`<wt-switch
-            data-test=${every.test}
-            name=${field}
-            label=${every.label}
-            .checked=${listed === null}
-            @wt-change=${every.handler}
-          ></wt-switch>`,
-          ...(key === "stationIds" && listed?.length === 0
-            ? [
-                html`<p class="hint" data-test="empty-station-selection">
-                  ${t("devices.empty_station_selection")}
-                </p>`,
-              ]
-            : []),
-          ...(listed === null
-            ? []
-            : this.#listChoices(all, listed).map(
-                (choice) =>
-                  html`<wt-switch
-                    data-test="profile-${slug}-${item}-${choice.id}"
-                    name=${field}
-                    label=${choice.label}
-                    .checked=${choice.on}
-                    @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                      this.#onListed(e, kind, key, choice.id)}
-                  ></wt-switch>`,
-              )),
-        ],
-      );
+    return {
+      kind,
+      slug: KIND_SLUG[kind],
+      stationsField: fields.stations,
+      zonesField: fields.zones,
+      scope: this.#scopeOf(kind),
+      stations: this.stations.filter((station) => station.active),
+      zones: this.scopeChoices.zones,
+      stationsError: errors[fields.stations],
+      zonesError: fields.zones === null ? undefined : errors[fields.zones],
+      onEveryStation: (event) => this.#onScreenEveryStation(event, kind),
+      onEveryZone: (event) => this.#onScreenEveryZone(event, kind),
+      onListed: (event, key, id) => this.#onListed(event, kind, key, id),
+      onShowOtherStations: (event) => this.#onShowOtherStations(event, kind),
     };
-    return html`<div class="nested" data-test="profile-${slug}-lists">
-      ${list(
-        "stationIds",
-        fields.stations,
-        {
-          test: `profile-${slug}-every-station`,
-          label: t("device_profiles.every_station"),
-          handler: (e) => this.#onScreenEveryStation(e, kind),
-        },
-        this.stations.filter((station) => station.active),
-        "station",
-        t("device_profiles.kitchen_stations"),
-      )}
-      ${
-        fields.zones === null
-          ? nothing
-          : list(
-              "zoneIds",
-              fields.zones,
-              {
-                test: `profile-${slug}-every-zone`,
-                label: t("device_profiles.every_zone_venue"),
-                handler: (e) => this.#onScreenEveryZone(e, kind),
-              },
-              this.scopeChoices.zones,
-              "zone",
-              t("device_profiles.kitchen_zones"),
-            )
-      }
-      ${
-        kind === "station"
-          ? nothing
-          : html`<wt-switch
-              data-test="profile-${slug}-other-stations"
-              name="showNonPassStations"
-              label=${t("device_profiles.show_other_stations")}
-              .checked=${scope.showNonPassStations ?? true}
-              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                this.#onShowOtherStations(e, kind)}
-            ></wt-switch>`
-      }
-    </div>`;
   }
 
   #renderKitchenScreens(errors: FieldErrors): TemplateResult {
     const selected = KITCHEN_SCREEN_KINDS.find(
       (kind) => this.draftKitchenScreens[kind] !== undefined,
     );
-    return html`<p class="hint" data-test="kitchen-screens-hint">
-        ${t("device_profiles.kitchen_screens_hint")}
-      </p>
-      <wt-combobox
-        class="field"
-        data-test="profile-kitchen-screens"
-        name="kitchenScreens"
-        label=${t("device_profiles.kitchen_screens")}
-        search="never"
-        show-empty-option
-        .options=${[
-          { value: "", label: t("device_profiles.kitchen_screen.none") },
-          ...KITCHEN_SCREEN_KINDS.map((kind) => ({
-            value: kind,
-            label: t(`device_profiles.kitchen_screen.${kind}`),
-          })),
-        ]}
-        .value=${selected ?? ""}
-        .error=${errors.kitchenScreens ?? ""}
-        .invalid=${Boolean(errors.kitchenScreens)}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          const kind = KITCHEN_SCREEN_KINDS.find((kind) => kind === event.detail.value);
-          this.draftKitchenScreens =
-            kind === undefined
-              ? {}
-              : { [kind]: structuredClone(this.#loadedKitchenScreens[kind] ?? EVERY) };
-          this.#clearRefusal("kitchenScreens", ...KITCHEN_LIST_FIELDS);
-          this.#draftScope?.changed();
-        }}
-      ></wt-combobox>
-      ${selected === undefined ? nothing : this.#renderKindLists(selected, errors)}`;
+    return renderDeviceProfileKitchenScreens({
+      selected,
+      error: errors.kitchenScreens ?? "",
+      lists:
+        selected !== undefined && this.#kindListsShown(selected)
+          ? this.#kitchenLists(selected, errors)
+          : undefined,
+      onKind: (event) => this.#onKitchenScreenKind(event),
+    });
   }
 
   #renderWhere(errors: FieldErrors): TemplateResult {
