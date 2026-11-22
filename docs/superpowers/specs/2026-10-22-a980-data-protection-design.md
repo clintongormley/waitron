@@ -643,6 +643,10 @@ the page, and an email-server refusal did not. S10 masks a person's name, email 
 every line the server's logger writes; `apps/server/src/recovery-page-personal-data.test.ts` pins
 both, the attendance email sender included._
 
+_2026-11-22: the attendance email cases have left that test; `apps/server/src/smtp-send.test.ts`
+pins that a refused send, at the recipient or after the message, answers with only its status, its
+code and whether the server refused._
+
 ### 4.9 Staff monitoring
 
 Waitron records the staff member on every void, refund, drawer opening and order change, and the

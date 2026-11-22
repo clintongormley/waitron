@@ -80,7 +80,7 @@ export async function smtpRig(
           else if (reply === "data-refused")
             socket.write(
               options.echoRecipient
-                ? `550 <${recipient}>: message refused\r\n`
+                ? `550 secret-smtp-password <${recipient}>: message refused\r\n`
                 : "550 secret-smtp-password rejected\r\n",
             );
           else if (reply === "accepted" || reply === "no-login") socket.write("250 accepted\r\n");
@@ -114,7 +114,7 @@ export async function smtpRig(
           socket.write(
             reply === "recipient-refused"
               ? options.echoRecipient
-                ? `550 <${recipient}>: unknown recipient\r\n`
+                ? `550 secret-smtp-password <${recipient}>: unknown recipient\r\n`
                 : "550 secret-smtp-password unknown recipient\r\n"
               : "250 recipient ok\r\n",
           );
