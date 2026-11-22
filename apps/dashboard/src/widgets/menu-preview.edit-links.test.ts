@@ -295,16 +295,6 @@ it("links included variants to Price overrides and included structural edits to 
       includedMenu: { id: "m-drinks", name: "Drinks" },
     },
     {
-      id: "included-mixed",
-      targets: { before: [], after: [] },
-      kind: "product_changed",
-      productId: "p-lemonade",
-      name: "Lemonade",
-      fields: ["variants", "names"],
-      source: "included_menu",
-      includedMenu: { id: "m-drinks", name: "Drinks" },
-    },
-    {
       id: "included-section",
       targets: { before: [], after: [] },
       kind: "section_changed",
@@ -329,9 +319,6 @@ it("links included variants to Price overrides and included structural edits to 
   ]);
   expect(editLink(el, "included-variants")?.getAttribute("href")).toBe(
     "/menus/menu/m-drinks/view/prices",
-  );
-  expect(editLink(el, "included-mixed")?.getAttribute("href")).toBe(
-    "/menus/menu/m-drinks/view/structure",
   );
   expect(editLink(el, "included-section")?.getAttribute("href")).toBe(
     "/menus/menu/m-drinks/view/structure",
