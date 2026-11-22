@@ -371,8 +371,8 @@ list value, so a dish discounted earlier still shows its menu price), **amount t
 in basis points) ÷ 10000, exact decimals rounded half up to the cent, blank when the department has
 none. The price without VAT is the menu price ÷ (1 + the dish's rate), the rate being `vatRateOn` of
 the line's `vat_class` (or `takeaway_vat_class` when the bill's `dining` is takeaway) on the
-adjustment's civil day in the venue's zone; for a whole bill, the sum of that over the bill's lines
-still on it, each at its own rate. Under D14's alternative it is the menu price × the same factor.
+adjustment's civil day in the venue's zone; for a whole bill, the sum of that over the bill's rows
+the discount took money off that are still on a bill, each at its own rate. Under D14's alternative it is the menu price × the same factor.
 The department is the dish's line's `offer_department_id`, else the bill's `department_id` (D11).
 
 **Where the margin lives.** A nullable column `departments.estimated_margin_bp` (basis points,

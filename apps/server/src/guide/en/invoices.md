@@ -61,3 +61,11 @@ your adviser. The workbook lists what was recorded in the period for earlier per
   (**Corrective**, **Void**, **Date moved out**, **Date moved in** or
   **Issued after its sale's period**), its invoice number, the invoice it corrects and the period
   it belongs to.
+- **Given free**: each comp and each discount to zero on the period's bills, one row per dish or
+  for a whole bill, with its **Invoice number**, **Menu price (EUR)** and **Estimated cost (EUR)**.
+  A dish taken off the bill is not listed. The estimated cost is the menu price without VAT less
+  the department's estimated margin, and stays blank when the department has none.
+
+Set a department's margin in **Departments and zones**: open the department and fill in
+**Estimated margin (%)** on its **Details** tab. The workbook uses the margins saved when you
+download it, so changing one also changes the estimates for earlier periods.

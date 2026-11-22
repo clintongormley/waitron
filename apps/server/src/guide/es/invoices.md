@@ -62,3 +62,12 @@ anteriores:
   (**Rectificativa**, **Anulación**, **Fecha trasladada (salida)**,
   **Fecha trasladada (entrada)** o **Emitida después del periodo de su venta**), su número de
   factura, la factura que corrige y el periodo al que corresponde.
+- **Invitaciones**: cada invitación y cada descuento hasta cero en las cuentas del periodo, una
+  fila por plato o por toda la cuenta, con su **Número de factura**, **Precio de carta (EUR)** y
+  **Coste estimado (EUR)**. Un plato quitado de la cuenta no aparece. El coste estimado es el precio
+  de carta sin IVA menos el margen estimado del departamento, y queda en blanco si el departamento
+  no tiene.
+
+Pon el margen de un departamento en **Departamentos y zonas**: abre el departamento y rellena
+**Margen estimado (%)** en su pestaña **Datos**. El libro usa los márgenes guardados cuando lo
+descargas, así que cambiar uno también cambia las estimaciones de periodos anteriores.
