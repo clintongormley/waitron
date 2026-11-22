@@ -9,12 +9,33 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
+import { CountdownController } from "../state/countdown-controller.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { StaffMember } from "../api/client.js";
 
 export interface OverrideConfirmDetail {
   personId: string;
   pin: string;
+}
+
+/** An approver's PIN refused, naming the approver whose PIN was sent: an answer that arrives after
+ * the person moved on to another approver must not show, or lock, under that other one. */
+export interface ApproverRefusal {
+  code: string;
+  personId: string;
+  /** Only on `pin.throttled`: how long the server makes this approver wait. */
+  retryAfterSeconds?: number;
+}
+
+export function approverRefusal(error: unknown, personId: string): ApproverRefusal {
+  const { code, retryAfterSeconds } = (error ?? {}) as {
+    code?: unknown;
+    retryAfterSeconds?: unknown;
+  };
+  if (typeof code !== "string") return { code: "server.internal", personId };
+  return code === "pin.throttled" && typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
+    ? { code, personId, retryAfterSeconds }
+    : { code, personId };
 }
 
 /** It NEVER surfaces the raw code — a domain code is an internal contract, not UI copy. */
@@ -25,7 +46,7 @@ export function overrideErrorText(code: string): string {
 
 /**
  * Deliberately GENERIC: it knows nothing of the drawer or of any specific action. The caller supplies
- * the eligible authorizers (the dialog never fetches) and the failed attempt's error code.
+ * the eligible authorizers (the dialog never fetches) and the failed attempt's refusal.
  */
 @customElement("till-supervisor-override-dialog")
 export class TillSupervisorOverrideDialog extends LitElement {
@@ -53,6 +74,10 @@ export class TillSupervisorOverrideDialog extends LitElement {
         width: 100%;
       }
 
+      .pad-wrap[inert] {
+        opacity: 0.5;
+      }
+
       .pin-display {
         min-height: var(--wt-space-6);
         margin-bottom: var(--wt-space-3);
@@ -64,12 +89,14 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   @property({ attribute: false }) authorizers: StaffMember[] = [];
 
-  @property() error: string | null = null;
+  @property({ attribute: false }) error: ApproverRefusal | null = null;
 
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private dismissed = false;
   @state() private active = true;
+  /** The chosen approver's wait before they may try again. */
+  readonly #wait = new CountdownController(this);
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -88,10 +115,16 @@ export class TillSupervisorOverrideDialog extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** A freshly-delivered error (the parent nulls then re-sets it per attempt) must always show, even
-   * after the operator dismissed the previous one by typing — so any change to `error` re-arms it. */
+  /** A freshly-delivered refusal for the chosen approver (the parent nulls then re-sets it per
+   * attempt) must show, even after the operator dismissed the previous one by typing — so any
+   * change to `error` re-arms it. */
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("error")) this.dismissed = false;
+    if (changed.has("error")) {
+      this.dismissed = false;
+      this.#wait.stop();
+      const seconds = this.#refusalFor(this.selected)?.retryAfterSeconds ?? 0;
+      if (this.active && seconds > 0) this.#wait.start(seconds);
+    }
     if (!this.active || this.#scope) return;
     this.#leave = leaveCoordinatorFor(this);
     this.#scope = this.#leave?.register<string>({
@@ -113,6 +146,10 @@ export class TillSupervisorOverrideDialog extends LitElement {
     return t(supervisor[which]);
   }
 
+  #refusalFor(person: StaffMember | undefined): ApproverRefusal | null {
+    return person !== undefined && this.error?.personId === person.personId ? this.error : null;
+  }
+
   #select(person: StaffMember): void {
     if (!this.isConnected || !this.active) return;
     this.selected = person;
@@ -124,6 +161,8 @@ export class TillSupervisorOverrideDialog extends LitElement {
   #back(): void {
     if (!this.isConnected || !this.active) return;
     const proceed = () => {
+      // The wait is the approver's own, so another approver may try at once.
+      this.#wait.stop();
       this.selected = undefined;
       this.pin = "";
     };
@@ -143,7 +182,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
   #confirm(): void {
     if (!this.isConnected || !this.active) return;
     const person = this.selected;
-    if (person === undefined || this.pin === "") return;
+    if (person === undefined || this.pin === "" || this.#wait.remaining > 0) return;
     const pin = this.pin;
     this.pin = "";
     this.#scope?.commit("");
@@ -170,6 +209,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
     if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
     this.active = false;
     this.pin = "";
+    this.#wait.stop();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#reportClose();
@@ -222,25 +262,34 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   #renderPin(person: StaffMember) {
-    const showError = this.error !== null && !this.dismissed;
+    const waiting = this.#wait.remaining > 0;
+    const refusal = this.#refusalFor(person);
+    const errorText = waiting
+      ? t("override.throttled").replace("{n}", String(this.#wait.remaining))
+      : refusal !== null && (refusal.retryAfterSeconds ?? 0) === 0 && !this.dismissed
+        ? overrideErrorText(refusal.code)
+        : "";
     return html`
       <p class="operator">${person.displayName}</p>
       <p class="prompt">${this.#text("enter_pin")}</p>
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
-      <till-numeric-pad
-        mode="pin"
-        .value=${this.pin}
-        @wt-change=${(event: Event) => this.#onPadChange(event)}
-        @pad-enter=${() => pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
-      ></till-numeric-pad>
-      <wt-form-actions slot="footer" .error=${showError ? overrideErrorText(this.error!) : ""}>
+      <div class="pad-wrap" ?inert=${waiting}>
+        <till-numeric-pad
+          mode="pin"
+          .value=${this.pin}
+          @wt-change=${(event: Event) => this.#onPadChange(event)}
+          @pad-enter=${() =>
+            pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
+        ></till-numeric-pad>
+      </div>
+      <wt-form-actions slot="footer" .error=${errorText}>
         <wt-button slot="cancel" class="back" variant="secondary" @click=${() => this.#back()}>
           ${t("action.back")}
         </wt-button>
         <wt-button
           class="authorize"
           variant="primary"
-          ?disabled=${this.pin === ""}
+          ?disabled=${this.pin === "" || waiting}
           @click=${() => this.#confirm()}
         >
           ${t("action.authorize")}

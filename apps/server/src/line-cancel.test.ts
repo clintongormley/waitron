@@ -43,7 +43,7 @@ import {
 import { fireGroup, printHoldTickets } from "./order-groups.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { cancelItem, type CancelItemAsk, type CancelItemCommand } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
 import {
   parkOrder,
@@ -64,6 +64,7 @@ import {
   provisionAdjustmentVenue,
   PINS,
   type AdjustmentVenue,
+  approverPin,
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -133,7 +134,7 @@ async function askFor(
   order: Fixture,
   outcome: CancelItemAsk["outcome"] = "keep_charge",
   quantity = "2",
-): Promise<CancelItemAsk & { expectedPartyRevision: number }> {
+): Promise<Omit<CancelItemCommand, "admission"> & { expectedPartyRevision: number }> {
   return inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, order.billId));
@@ -149,7 +150,7 @@ async function askFor(
     };
   });
 }
-function cancel(order: Fixture, ask: CancelItemAsk) {
+function cancel(order: Fixture, ask: Omit<CancelItemCommand, "admission">) {
   return inTx(venue, (tx) =>
     cancelItem(
       tx,
@@ -233,7 +234,7 @@ describe("Cancel item service command", () => {
       const approved = {
         ...ask,
         ...(outcome === "remove_charge"
-          ? { approver: { personId: venue.managerId, pin: PINS.manager } }
+          ? { approver: approverPin(venue.managerId, PINS.manager) }
           : {}),
       };
       const result = await inTx(venue, (tx) =>
@@ -430,7 +431,7 @@ describe("Cancel item service command", () => {
       preparationStarted: true,
       reasonId: venue.reasonId.mistake,
       note: "Wrong dish",
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     };
     const before = await snapshot(order);
     const preview = await inTx(venue, (tx) =>
@@ -679,7 +680,7 @@ describe("Cancel item service command", () => {
     await cancel(order, {
       ...ask,
       reasonId: venue.reasonId.houseVoid,
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     });
     const after = await snapshot(order);
     expect(after.lines.map((row) => ({ quantity: row.quantity, total: row.lineTotal }))).toEqual([
@@ -886,7 +887,7 @@ describe("Cancel item service command", () => {
     expect(await snapshot(order)).toEqual(before);
     const fresh = await askFor(order, "remove_charge", "2");
     fresh.reasonId = venue.reasonId.houseVoid;
-    fresh.approver = { personId: venue.supervisorId, pin: PINS.supervisor };
+    fresh.approver = approverPin(venue.supervisorId, PINS.supervisor);
     await cancel(order, fresh);
     const after = await snapshot(order);
     expect(
@@ -1122,7 +1123,7 @@ describe("Cancel item service command", () => {
       ...ask,
       reasonId: venue.reasonId.mistake,
       note: "Wrong table",
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     });
     const after = await snapshot(order);
     expect(after.lines.map((row) => row.quantity)).toEqual([1000, 2000]);
@@ -1408,7 +1409,7 @@ describe("Cancel item service command", () => {
       params: { approval: "refund" },
     });
     expect(await snapshot(order)).toEqual(before);
-    await cancel(order, { ...ask, approver: { personId: venue.managerId, pin: PINS.manager } });
+    await cancel(order, { ...ask, approver: approverPin(venue.managerId, PINS.manager) });
     const after = await snapshot(order);
     expect(after.adjustments).toMatchObject([
       {
@@ -1492,7 +1493,7 @@ describe("What a cancel records for refunds", () => {
     const answer = await cancel(order, {
       ...(await askFor(order)),
       refundHandoff: true,
-      approver: { personId: venue.managerId, pin: PINS.manager },
+      approver: approverPin(venue.managerId, PINS.manager),
     });
     const { party, adjustments: rows } = await snapshot(order);
     expect(answer).toEqual({ revision: party[0]!.revision });
@@ -1535,7 +1536,7 @@ describe("What a cancel records for refunds", () => {
         ...(await askFor(order, "remove_charge")),
         ...(answer === undefined ? {} : { preparationStarted: answer }),
         reasonId: venue.reasonId.houseVoid,
-        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+        approver: approverPin(venue.supervisorId, PINS.supervisor),
       });
       expect(await cancels(order)).toEqual([
         { chargeKept: false, preparationStarted: true, refundHandoff: false, refundValue: null },
@@ -1549,7 +1550,7 @@ describe("What a cancel records for refunds", () => {
     await cancel(order, {
       ...(await askFor(order, "remove_charge")),
       reasonId: venue.reasonId.houseVoid,
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     });
     const stations = [order.parent.id, order.extra!.id].map(
       (lineId) => order.tickets.find((row) => row.workingOrderLineId === lineId)!.stationId,
@@ -1583,7 +1584,7 @@ describe("What a cancel records for refunds", () => {
     await cancel(dropped, {
       ...(await askFor(dropped, "remove_charge", "1")),
       reasonId: venue.reasonId.houseVoid,
-      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      approver: approverPin(venue.supervisorId, PINS.supervisor),
     });
     for (const order of [kept, dropped])
       expect((await snapshot(order)).lines[0]).toMatchObject({ lineTotal: 0 });

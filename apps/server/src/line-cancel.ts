@@ -21,14 +21,19 @@ import {
   sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { persons, type PinAttempts } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/menu";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
-import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
+import {
+  applyAdjustment,
+  reasonNameIn,
+  type ApproverPin,
+  type CheckedApprover,
+} from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -70,11 +75,17 @@ export interface CancelItemAsk {
   submissionId: string;
   reasonId?: string;
   note?: string;
-  approver?: AdjustmentArgs["approver"];
+  approver?: ApproverPin;
   /** The person whose PIN `authorize` checked for `sale.refund`, or null when no PIN was checked.
    * Recorded only when the refund handoff stands (ticked, on a settled bill); otherwise ignored. */
   refundApprovedBy?: string | null;
 }
+
+/** What {@link cancelItem} is handed: the ask, its approver carrying the limit its PIN counts against. */
+export type CancelItemCommand = Omit<CancelItemAsk, "approver"> & {
+  admission: TradingAdmission;
+  approver?: CheckedApprover;
+};
 
 type Line = typeof workingOrderLines.$inferSelect;
 
@@ -94,12 +105,11 @@ export async function cancelItem(
   cfg: TradingContext,
   target: CancellationTarget,
   lineId: string,
-  ask: CancelItemAsk & { admission: TradingAdmission },
+  ask: CancelItemCommand,
   operatorId: string,
   attendance?: OrderAttendance,
   policy: {
     venueLocale: string;
-    attempts?: PinAttempts;
     completeAdjustment?: (billId: string) => Promise<TillSaleResult | null | void>;
   } = { venueLocale: cfg.locale },
 ): Promise<CancelItemAnswer> {
@@ -356,7 +366,6 @@ export async function cancelItem(
             recordedPreparationStarted: true,
           },
           policy.venueLocale,
-          policy.attempts,
           attendance,
         );
         invoice = await policy.completeAdjustment?.(bill!.id);

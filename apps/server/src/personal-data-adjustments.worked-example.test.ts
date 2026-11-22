@@ -30,7 +30,7 @@ import { personalDataParts, preparePersonalData } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
-import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { ALL_MODULES } from "./modules.js";
 import { advanceTicketItem } from "./working-order.js";
 import {
@@ -39,6 +39,7 @@ import {
   provisionAdjustmentVenue,
   PINS,
   type AdjustmentVenue,
+  approverPin,
 } from "./testing/adjustment-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
@@ -172,12 +173,12 @@ async function voidLine(
   bill: { partyId: string; billId: string },
   lineId: string,
   operatorId: string,
-  choice: Pick<CancelItemAsk, "outcome" | "reasonId" | "approver">,
+  choice: Pick<CancelItemCommand, "outcome" | "reasonId" | "approver">,
 ): Promise<string | undefined> {
   await inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, bill.partyId));
     const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, bill.billId));
-    const ask: CancelItemAsk = {
+    const ask: Omit<CancelItemCommand, "admission"> = {
       quantity: "1",
       expectedEdit: await readBillEditState(tx, bill.billId),
       expectedPartyRevision: party!.revision,
@@ -252,7 +253,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
   const selling = { ...venue, item: (name: string) => offers.offerFor(ids.get(name)!) };
   const martha = venue.staffId;
   const lewis = venue.supervisorId;
-  const lewisApproves = { personId: lewis, pin: PINS.supervisor };
+  const lewisApproves = approverPin(lewis, PINS.supervisor);
 
   const tableFour = await billWith(
     selling,

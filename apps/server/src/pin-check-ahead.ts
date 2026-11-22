@@ -80,3 +80,13 @@ export function withCheck<T extends { personId: string; pin: string }>(
 ): (T & { checked?: SecretCheck }) | undefined {
   return override === undefined || checked === undefined ? override : { ...override, checked };
 }
+
+/** {@link withCheck}'s approver, also carrying the wrong-PIN limit its PIN was checked under. */
+export function withCheckUnder<T extends { personId: string; pin: string }>(
+  approver: T | undefined,
+  checked: SecretCheck | undefined,
+  attempts: PinAttempts,
+): (T & { checked?: SecretCheck; attempts: PinAttempts }) | undefined {
+  const withChecked = withCheck(approver, checked);
+  return withChecked === undefined ? undefined : { ...withChecked, attempts };
+}

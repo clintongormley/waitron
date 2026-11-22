@@ -34,10 +34,9 @@ import type { Transaction } from "@waitron/db";
 import {
   persons,
   readPersonAuthority,
-  verifyPersonCredential,
   verifyThrottledCredential,
+  type Override,
   type PinAttempts,
-  type SecretCheck,
 } from "@waitron/identity";
 import {
   AppError,
@@ -114,12 +113,18 @@ export interface AdjustmentArgs extends AdjustmentAsk {
   preparationStarted?: boolean;
   /** What a cancel row records as started; unlike `preparationStarted`, it touches no notice. */
   recordedPreparationStarted?: boolean;
-  /**
-   * Someone the plan's approval admits ({@link approves}). `checked` is `checkPin`'s result on this
-   * person and PIN, taken before the transaction opened.
-   */
-  approver?: { personId: string; pin: string; checked?: SecretCheck };
+  /** Someone the plan's approval admits ({@link approves}). */
+  approver?: CheckedApprover;
 }
+
+/** An approver's PIN as a request carries it. */
+export type ApproverPin = Pick<Override, "personId" | "pin">;
+
+/**
+ * An approver's PIN with the wrong-PIN limit it counts against, so `applyAdjustment` and
+ * `cancelItem` never check an approver's PIN without one.
+ */
+export type CheckedApprover = Override & { attempts: PinAttempts };
 
 /** What an adjustment would do, answered before it is confirmed (plan D4, D15). */
 export interface AdjustmentPreview {
@@ -1234,15 +1239,12 @@ async function approvedBy(
   tx: Transaction,
   approval: Approval | null,
   approver: AdjustmentArgs["approver"],
-  attempts: PinAttempts | undefined,
 ): Promise<string | null> {
   if (approval === null) return null;
   const refused = () => new AppError("adjustment.approval_required", { approval: approval.by });
   if (approver === undefined) throw refused();
-  const { personId, pin, checked } = approver;
-  const { authority } = await (attempts === undefined
-    ? verifyPersonCredential(tx, personId, pin, checked)
-    : verifyThrottledCredential(tx, personId, pin, attempts, checked));
+  const { personId, pin, checked, attempts } = approver;
+  const { authority } = await verifyThrottledCredential(tx, personId, pin, attempts, checked);
   if (!approves(approval, authority.permissions)) throw refused();
   return approver.personId;
 }
@@ -1355,16 +1357,13 @@ interface LineReduction {
  * telling the kitchen about a dish it had, or about the dish a cancelled extra came off; a comp or a
  * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
  * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
- * language, which names the reason for an operator with no language of their own. `attempts`, when
- * given, puts the approver's PIN under that wrong-PIN limit; it is kept apart from `args` because
- * `args` is recorded.
+ * language, which names the reason for an operator with no language of their own.
  */
 export async function applyAdjustment(
   tx: Transaction,
   cfg: TradingContext,
   args: AdjustmentArgs & { admission: TradingAdmission },
   venueLocale: string,
-  attempts?: PinAttempts,
   attendance?: OrderAttendance,
   complete?: () => Promise<TillSaleResult | null>,
 ): Promise<{ adjustmentIds: string[]; revision: number; invoice?: TillSaleResult }> {
@@ -1380,7 +1379,7 @@ export async function applyAdjustment(
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
-      const approved = await approvedBy(tx, plan.approval, approver, attempts);
+      const approved = await approvedBy(tx, plan.approval, approver);
       const activity =
         attendance === undefined
           ? undefined

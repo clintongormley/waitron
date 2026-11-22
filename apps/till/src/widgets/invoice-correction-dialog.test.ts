@@ -538,7 +538,7 @@ describe("sending a correction", () => {
     await confirmCorrection(el);
     const pin = await pinDialog(el);
     signIn(pin);
-    await vi.waitFor(() => expect(pin.error).toBe("pin.invalid"));
+    await vi.waitFor(() => expect(pin.error).toEqual({ code: "pin.invalid", personId: "manager" }));
     expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
   });
 
@@ -1465,7 +1465,7 @@ describe("the correction window's other paths", () => {
     pin.dispatchEvent(new CustomEvent("override-cancel"));
     answer({ code: "pin.invalid", status: 401 });
 
-    await vi.waitFor(() => expect(pin.error).toBe("pin.invalid"));
+    await vi.waitFor(() => expect(pin.error?.code).toBe("pin.invalid"));
     expect(root(el).querySelector("till-supervisor-override-dialog")).toBe(pin);
   });
 

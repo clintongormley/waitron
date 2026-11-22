@@ -92,6 +92,10 @@ import type {
   TenderRefundView,
 } from "./api/tender-refund-types.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
+import type {
+  ApproverRefusal,
+  TillSupervisorOverrideDialog,
+} from "./widgets/supervisor-override-dialog.js";
 
 // The venue's default menu — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
@@ -649,9 +653,9 @@ async function showTicketDocument(el: TillApp, document: "receipt" | "invoice") 
 }
 
 const overrideDialog = (el: TillApp) =>
-  el.shadowRoot!.querySelector<HTMLElement & { authorizers: unknown; error: string | null }>(
-    "till-supervisor-override-dialog",
-  );
+  el.shadowRoot!.querySelector<
+    HTMLElement & { authorizers: unknown; error: ApproverRefusal | null }
+  >("till-supervisor-override-dialog");
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 const shell = (el: TillApp) =>
@@ -6654,11 +6658,11 @@ describe("till-app", () => {
     expect(pay.shadowRoot!.querySelector("[data-counter-pay]")).not.toBeNull();
   });
 
-  it("too many wrong override PINs keep the dialog open, telling the operator to wait", async () => {
+  it("too many wrong override PINs keep the dialog open, telling the operator to wait when the refusal carries no seconds", async () => {
     const openDrawer = vi
       .fn()
       .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockRejectedValueOnce({ code: "pin.throttled", params: { retryAfterSeconds: 2 } });
+      .mockRejectedValueOnce({ code: "pin.throttled" });
     const { el } = await mountApp({ openDrawer });
     await toTicket(el);
     emit(ticket(el)!, "open-drawer");
@@ -6669,8 +6673,83 @@ describe("till-app", () => {
 
     const dialog = overrideDialog(el);
     expect(dialog).not.toBeNull();
-    expect(dialog!.error).toBe("pin.throttled");
+    expect(dialog!.error?.code).toBe("pin.throttled");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("counts the approver's wait down in the drawer's PIN prompt after too many wrong PINs", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    overrideDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await flush(el);
+
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el);
+
+    const actions = overrideDialog(el)!.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe(t("override.throttled").replace("{n}", "5"));
+  });
+
+  it("does not lock out the next approver with the first one's late refusal in the drawer's PIN prompt", async () => {
+    let answerFirst!: (refusal: unknown) => void;
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockReturnValueOnce(new Promise((_resolve, reject) => (answerFirst = reject)));
+    const { el } = await mountApp({
+      openDrawer,
+      listDrawerAuthorizers: vi.fn().mockResolvedValue([
+        { personId: "sup-1", displayName: "Responsable" },
+        { personId: "sup-2", displayName: "Encargada" },
+      ]),
+    });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    const prompt = overrideDialog(el)!;
+    const inPrompt = (selector: string) =>
+      prompt.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!;
+    const typePin = async (digits: string) => {
+      const pad = prompt.shadowRoot!.querySelector("till-numeric-pad")!;
+      await pad.updateComplete;
+      for (const digit of digits) {
+        pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!.click();
+        await flush(el);
+      }
+    };
+
+    inPrompt('[data-person="sup-1"]').click();
+    await flush(el);
+    await typePin("1111");
+    inPrompt(".authorize").click();
+    await flush(el);
+    expect(openDrawer).toHaveBeenLastCalledWith({ personId: "sup-1", pin: "1111" });
+    inPrompt(".back").click();
+    await flush(el);
+    inPrompt('[data-person="sup-2"]').click();
+    await flush(el);
+    await typePin("2222");
+
+    answerFirst({ code: "pin.throttled", retryAfterSeconds: 30, status: 429 });
+    await flush(el);
+
+    expect(overrideDialog(el)).toBe(prompt);
+    const actions = prompt.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe("");
+    expect(inPrompt(".pad-wrap").hasAttribute("inert")).toBe(false);
+    expect(inPrompt(".authorize").disabled).toBe(false);
   });
 
   it.each([
@@ -6766,7 +6845,7 @@ describe("till-app", () => {
     // Still open for a retry, told to show the wrong-PIN error; no app-level banner.
     const dialog = overrideDialog(el);
     expect(dialog).not.toBeNull();
-    expect(dialog!.error).toBe("pin.invalid");
+    expect(dialog!.error?.code).toBe("pin.invalid");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
@@ -26888,7 +26967,7 @@ describe("A737 post-invoice refund integration", () => {
   const dialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillTenderRefundDialog>("till-tender-refund-dialog");
   const approval = (el: TillApp) =>
-    el.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund-approval]");
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("[data-tender-refund-approval]");
   const refundKeys = () =>
     Object.keys(localStorage).filter((key) => key.startsWith("waitron.tender-refund:"));
   beforeEach(() => {
@@ -27211,7 +27290,7 @@ describe("A737 post-invoice refund integration", () => {
     emit(approval(el)!, "override-confirm", { personId: "manager", pin: "9999" });
     await flush(el);
     expect(approval(el)).not.toBeNull();
-    expect(approval(el)).toHaveProperty("error", "pin.invalid");
+    expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "manager" });
     expect(dialog(el)!.busy).toBe(false);
     emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
     await flush(el);

@@ -31,7 +31,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin, registerModulePermissions } from "@waitron/identity";
+import { createPinThrottle, loginWithPin, registerModulePermissions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
 import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -52,7 +52,8 @@ import {
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";
-import { mountTillApi } from "../till-api.js";
+import { mountTillApi, overridePinAttempts } from "../till-api.js";
+import type { CheckedApprover } from "../adjustments-apply.js";
 import { systemClock } from "../till-backend.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -296,6 +297,11 @@ export interface AdjustmentVenue {
 }
 
 export const PINS = { staff: "5555", supervisor: "6666", manager: "7777" } as const;
+
+/** `personId`'s `pin` as the write path takes an approver, under a wrong-PIN limit of its own. */
+export function approverPin(personId: string, pin: string): CheckedApprover {
+  return { personId, pin, attempts: overridePinAttempts(createPinThrottle(), "test-device") };
+}
 
 const quiet: Logger = () => {};
 

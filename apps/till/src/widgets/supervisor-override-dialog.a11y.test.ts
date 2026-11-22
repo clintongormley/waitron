@@ -47,7 +47,21 @@ describe.each(["light", "dark"] as const)(
       // Enter PIN mode for a supervisor, then surface a retry error (the failed-attempt state).
       el.shadowRoot!.querySelector<HTMLElement>('[data-person="sup-1"]')!.click();
       await el.updateComplete;
-      el.error = "pin.invalid";
+      el.error = { code: "pin.invalid", personId: "sup-1" };
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations while the approver's wait counts down", async () => {
+      setLocale("es-ES");
+      const { el, host } = await mountWidget<TillSupervisorOverrideDialog>(
+        "till-supervisor-override-dialog",
+        { authorizers },
+        theme,
+      );
+      el.shadowRoot!.querySelector<HTMLElement>('[data-person="sup-1"]')!.click();
+      await el.updateComplete;
+      el.error = { code: "pin.throttled", retryAfterSeconds: 30, personId: "sup-1" };
       await el.updateComplete;
       await expectNoA11yViolations(host);
     });

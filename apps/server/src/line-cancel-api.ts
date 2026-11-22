@@ -24,7 +24,12 @@ import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
-import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import {
+  overrideToCheck,
+  withCheck,
+  withCheckUnder,
+  withPinCheckAhead,
+} from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
 import {
   overridePinAttempts,
@@ -258,7 +263,7 @@ export function mountLineCancelApi(
               {
                 ...ask,
                 admission: deps.admission,
-                approver: withCheck(ask.approver, checked),
+                approver: withCheckUnder(ask.approver, checked, attempts),
                 refundApprovedBy: refund?.viaOverride === true ? refund.authorizedBy : null,
               },
               session.personId,
@@ -267,7 +272,6 @@ export function mountLineCancelApi(
                 : { recorder: deps.attendance, clock: deps.clock },
               {
                 venueLocale: deps.venueLocale,
-                attempts,
                 completeAdjustment: async (billId) => {
                   const invoice = await issueIfFullyPaid(tx, fiscal, cfg, billId, session.personId);
                   await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, billId);

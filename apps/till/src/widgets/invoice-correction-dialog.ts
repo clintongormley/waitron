@@ -18,7 +18,11 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import "./supervisor-override-dialog.js";
-import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+import {
+  approverRefusal,
+  type ApproverRefusal,
+  type OverrideConfirmDetail,
+} from "./supervisor-override-dialog.js";
 import { currentLocale, t, vatSplitText } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
@@ -170,7 +174,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   @state() private sendRefusal: PayRefusal | null = null;
   @state() private cashGiven: string | null = null;
   @state() private approvers: StaffMember[] | null = null;
-  @state() private pinError: string | null = null;
+  @state() private pinError: ApproverRefusal | null = null;
   #override?: Override;
   #retry?: () => Promise<void>;
   #openedReasonId?: string;
@@ -495,14 +499,15 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.busy = true;
     this.sendRefusal = null;
     this.lostKey = lost;
+    const approverId = this.#override?.personId;
     try {
       await step();
       this.approvers = null;
       this.#override = undefined;
     } catch (error) {
       const refusal = refusalOf(error);
-      if (this.approvers !== null && PIN_REFUSALS.has(refusal.code)) {
-        this.pinError = refusal.code;
+      if (this.approvers !== null && approverId !== undefined && PIN_REFUSALS.has(refusal.code)) {
+        this.pinError = approverRefusal(error, approverId);
       } else if (refusal.code === "authorization.not_permitted") {
         this.#retry = step;
         this.#retryLost = lost;

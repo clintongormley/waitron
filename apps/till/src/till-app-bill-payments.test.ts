@@ -7999,7 +7999,7 @@ describe("till-app: giving back a bill payment", () => {
     const readsBefore = getBillBalance.mock.calls.length;
     await pinPad(el, "0000");
 
-    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(approval(el)!.error?.code).toBe("pin.invalid");
     expect(
       (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
         .textContent,
@@ -8042,26 +8042,22 @@ describe("till-app: giving back a bill payment", () => {
     });
   });
 
-  it("keeps the PIN prompt open after too many wrong PINs, saying to wait, with the refund open and not busy", async () => {
+  it("counts the approver's wait down in the refund's PIN prompt after too many wrong PINs", async () => {
     const el = await askRefund(
       {
         refundBillPayment: needsApproval(() =>
-          Promise.reject({
-            code: "pin.throttled",
-            params: { retryAfterSeconds: 2 },
-            status: 429,
-          }),
+          Promise.reject({ code: "pin.throttled", retryAfterSeconds: 2, status: 429 }),
         ),
       },
       cashPaid,
     );
     await pinPad(el, "7777");
 
-    expect(approval(el)!.error).toBe("pin.throttled");
+    expect(approval(el)!.error?.code).toBe("pin.throttled");
     expect(
       (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
         .textContent,
-    ).toBe(t("pin.throttled"));
+    ).toBe(t("override.throttled").replace("{n}", "2"));
     expect(refundDialog(el)).not.toBeNull();
     expect(refundDialog(el)!.busy).toBe(false);
   });
@@ -8149,7 +8145,7 @@ describe("till-app: giving back a bill payment", () => {
     inRefund(el, "[data-refund-continue]")!.click();
     await flush(el);
     await pinPad(el, "0000");
-    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(approval(el)!.error?.code).toBe("pin.invalid");
     emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
     await flush(el);
 
@@ -8357,7 +8353,7 @@ describe("till-app: giving back a bill payment", () => {
       inRefund(el, "[data-refund-continue]")!.click();
       await flush(el);
       await pinPad(el, "0000");
-      expect(approval(el)!.error).toBe("pin.invalid");
+      expect(approval(el)!.error?.code).toBe("pin.invalid");
       emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
       await flush(el);
 

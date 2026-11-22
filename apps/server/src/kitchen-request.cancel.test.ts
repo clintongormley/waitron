@@ -11,7 +11,7 @@ import { listStationNotices } from "@waitron/venue-service";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { cancelItem, type CancelItemAsk, type CancelItemCommand } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
 import { fireGroup } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -83,7 +83,7 @@ async function askFor(
   order: Order,
   outcome: CancelItemAsk["outcome"],
   quantity = "2",
-): Promise<CancelItemAsk> {
+): Promise<Omit<CancelItemCommand, "admission">> {
   return inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, order.billId));
@@ -100,7 +100,7 @@ async function askFor(
   });
 }
 
-function cancel(order: Order, ask: CancelItemAsk) {
+function cancel(order: Order, ask: Omit<CancelItemCommand, "admission">) {
   return inTx(venue, (tx) =>
     cancelItem(
       tx,

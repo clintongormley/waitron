@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-powered-by.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { CountdownController } from "../state/countdown-controller.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -209,13 +210,12 @@ export class TillLockScreen extends LitElement {
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private errorKey?: StringKey | "storage.disk_full";
-  /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. */
-  @state() private throttleRemaining = 0;
   /** Stays set after a successful login: the till keeps this screen up while its first reads wait. */
   @state() private signingIn = false;
 
   readonly #venueLogo = new VenueLogoController(this);
-  #throttleTimer?: ReturnType<typeof setInterval>;
+  /** A `pin.throttled` back-off. */
+  readonly #throttle = new CountdownController(this);
   #connection = 0;
   /** Advanced by Cancel and by leaving the page, so a sign-in still waiting to be sent is dropped. */
   #submission = 0;
@@ -252,8 +252,6 @@ export class TillLockScreen extends LitElement {
     this.staff = undefined;
     this.errorKey = undefined;
     this.signingIn = false;
-    this.throttleRemaining = 0;
-    this.#clearThrottle();
   }
 
   async #loadStaff(): Promise<void> {
@@ -299,8 +297,7 @@ export class TillLockScreen extends LitElement {
     this.pin = "";
     this.errorKey = undefined;
     this.signingIn = false;
-    this.#clearThrottle();
-    this.throttleRemaining = 0;
+    this.#throttle.stop();
   }
 
   #onPadChange(event: Event): void {
@@ -314,7 +311,7 @@ export class TillLockScreen extends LitElement {
    * `logged-in`: those are side effects, not state writes. */
   async #submit(): Promise<void> {
     const person = this.selected;
-    if (person === undefined || this.pin === "" || this.throttleRemaining > 0 || this.signingIn)
+    if (person === undefined || this.pin === "" || this.#throttle.remaining > 0 || this.signingIn)
       return;
     const connection = this.#connection;
     const submission = ++this.#submission;
@@ -362,28 +359,10 @@ export class TillLockScreen extends LitElement {
 
   /** The PIN is kept so entry resumes with what was typed. */
   #startThrottle(retryAfterSeconds: number | undefined): void {
-    this.#clearThrottle();
-    const seconds =
-      typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
-        ? Math.ceil(retryAfterSeconds)
-        : 1;
-    this.throttleRemaining = seconds;
     this.errorKey = undefined;
-    this.#throttleTimer = setInterval(() => {
-      this.throttleRemaining = this.throttleRemaining - 1;
-      if (this.throttleRemaining <= 0) {
-        this.throttleRemaining = 0;
-        this.#clearThrottle();
-      }
-    }, 1000);
-  }
-
-  /** Does not touch {@link throttleRemaining}, so a caller that wants entry live again resets it too. */
-  #clearThrottle(): void {
-    if (this.#throttleTimer !== undefined) {
-      clearInterval(this.#throttleTimer);
-      this.#throttleTimer = undefined;
-    }
+    this.#throttle.start(
+      typeof retryAfterSeconds === "number" && retryAfterSeconds > 0 ? retryAfterSeconds : 1,
+    );
   }
 
   #switchDevice(): void {
@@ -542,7 +521,7 @@ export class TillLockScreen extends LitElement {
   }
 
   #renderPin(person: StaffMember) {
-    const throttled = this.throttleRemaining > 0;
+    const throttled = this.#throttle.remaining > 0;
     return html`
       ${this.#renderHeading("login.enter_pin")}
       <p class="operator">${person.displayName}</p>
@@ -550,7 +529,7 @@ export class TillLockScreen extends LitElement {
       ${
         throttled
           ? html`<p class="throttle" role="alert">
-              ${t("login.throttled").replace("{n}", String(this.throttleRemaining))}
+              ${t("login.throttled").replace("{n}", String(this.#throttle.remaining))}
             </p>`
           : this.signingIn
             ? html`<p class="status pin-status" role="status">${t("login.loading")}</p>`

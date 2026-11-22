@@ -216,7 +216,7 @@ export async function observedCancelItem(
   const [line] = await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, lineId));
   const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, orderId));
   const target = bill!.partyId ?? { billId: orderId };
-  const body: CancelItemAsk = {
+  const body: Omit<CancelItemAsk, "approver"> = {
     expectedEdit: await readBillEditState(tx, orderId),
     expectedBillRevision: revision,
     ...(bill!.partyId === null

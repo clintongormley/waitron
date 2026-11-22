@@ -15,7 +15,11 @@ import { codeMessage } from "../i18n/codes.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./station-today-dialog.js";
 import "./supervisor-override-dialog.js";
-import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+import {
+  approverRefusal,
+  type ApproverRefusal,
+  type OverrideConfirmDetail,
+} from "./supervisor-override-dialog.js";
 
 @customElement("till-station-today")
 export class TillStationToday extends LitElement {
@@ -45,7 +49,7 @@ export class TillStationToday extends LitElement {
   @state() private destinations: StationDestination[] | null = null;
   @state() private refusal: string | null = null;
   @state() private authorizers: StaffMember[] | null = null;
-  @state() private pinError: string | null = null;
+  @state() private pinError: ApproverRefusal | null = null;
   #intent?: StationTodayWrite;
   #deviceAuthorizers: StaffMember[] = [];
   #generation = 0;
@@ -171,8 +175,8 @@ export class TillStationToday extends LitElement {
     } catch (error) {
       if (!this.#current(generation, id)) return;
       const code = this.#code(error);
-      if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled")) {
-        this.pinError = code;
+      if (override && this.authorizers && (code === "pin.invalid" || code === "pin.throttled")) {
+        this.pinError = approverRefusal(error, override.personId);
       } else if (code === "authorization.not_permitted") {
         const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {

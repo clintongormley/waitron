@@ -15,7 +15,7 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { resolveMailDeliveryIn } from "./email-delivery.js";
-import { adjustments } from "@waitron/adjustments";
+import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,9 +37,11 @@ import {
   invoiceSeries,
   printers,
   parties,
+  personRoles,
   personStaffRoles,
   printJobs,
   products,
+  roles,
   saleLines,
   sales,
   tenders,
@@ -75,6 +77,7 @@ import { planVenue } from "@waitron/provisioning";
 import {
   basisPointsToDecimal,
   centsToDecimal,
+  decimal,
   nodeId as brandNodeId,
   thousandthsToDecimal,
   deviceOrigin,
@@ -4814,8 +4817,22 @@ describe("the limit on wrong refund PINs", () => {
       const json = (await res.json()) as Record<string, unknown>;
       return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
     };
-    return { clockAt, refundOn };
+    const post = async (path: string, body: unknown, cookie = venue.cookie) => {
+      const res = await app.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      const json = (text === "" ? {} : JSON.parse(text)) as Record<string, unknown>;
+      return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
+    };
+    return { clockAt, refundOn, post };
   }
+
+  /** The staff session's device cookie alone, for signing in on that device. */
+  const deviceCookie = () =>
+    venue.cookie.split("; ").find((part) => part.startsWith(`${DEVICE_COOKIE}=`))!;
 
   /** The admin, who holds `sale.refund`, signed in on the staff session's device. */
   async function adminCookie(): Promise<string> {
@@ -4885,6 +4902,111 @@ describe("the limit on wrong refund PINs", () => {
     expect(throttled.status).toBe(429);
     expect(throttled.json).toMatchObject({ code: "pin.throttled" });
     expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("a refund's wrong manager PINs count toward the same manager's drawer and adjustment approvals on that device", async () => {
+    const { refundOn, post } = throttledApp();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const toAdjust = await tabWith("Paella");
+    const reason = await inTx((tx) =>
+      createAdjustmentReason(tx, {
+        name: "Approval required",
+        names: {},
+        kind: "comp",
+        actions: ["comp"],
+        maxPercentBp: null,
+        maxAmount: decimal("0"),
+        noteRequired: false,
+      }),
+    );
+    const [line] = await inTx((tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, toAdjust)),
+    );
+    const [order] = await inTx((tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, toAdjust)),
+    );
+
+    // A runner on the same till, whose only role does not open the drawer, so the drawer asks
+    // for the manager's PIN.
+    const runnerSession = await inTx(async (tx) => {
+      const [runner] = await seedPersons(tx, {
+        displayName: `Runner-${randomUUID().slice(0, 8)}`,
+        pinHash: fixturePinHash("5555"),
+      });
+      const name = `Runner ${randomUUID().slice(0, 8)}`;
+      const [role] = await tx
+        .insert(roles)
+        .values({ name, nameFolded: name.toLowerCase(), permissions: [] })
+        .returning();
+      await tx.delete(personRoles).where(eq(personRoles.personId, runner!.id));
+      await tx.insert(personRoles).values({ personId: runner!.id, roleId: role!.id });
+      return loginWithPin(tx, { deviceId: venue.deviceId, personId: runner!.id, pin: "5555" });
+    });
+    const runnerCookie = `${SESSION_COOKIE}=${runnerSession.token}; ${deviceCookie()}`;
+
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") });
+      expect(wrong.status).toBe(401);
+      expect(wrong.json).toMatchObject({ code: "pin.invalid" });
+    }
+    const drawer = await post("/api/drawer/open", byAdmin("1234"), runnerCookie);
+    const adjustment = await post(`/api/working-orders/${toAdjust}/adjustments`, {
+      submissionId: randomUUID(),
+      expectedRevision: order!.revision,
+      expectedEdit: await inTx((tx) => readBillEditState(tx, toAdjust)),
+      lineId: line!.id,
+      action: "comp",
+      reasonId: reason.id,
+      note: null,
+      approver: { personId: venue.adminId, pin: "1234" },
+    });
+
+    expect(drawer.status).toBe(429);
+    expect(drawer.json).toMatchObject({ code: "pin.throttled" });
+    expect(adjustment.status).toBe(429);
+    expect(adjustment.json).toMatchObject({ code: "pin.throttled" });
+  });
+
+  it("wrong refund PINs do not stop the manager signing in on that device, and wrong sign-in PINs do not limit the manager's refund approval", async () => {
+    const { refundOn, post } = throttledApp();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const signIn = (pin: string) =>
+      post("/api/session", { personId: venue.adminId, pin }, deviceCookie());
+
+    for (let i = 0; i < 4; i += 1) {
+      expect((await refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") })).status).toBe(401);
+    }
+    expect((await signIn("1234")).status).toBe(200);
+    const stillLimited = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+    expect(stillLimited.status).toBe(429);
+    expect(stillLimited.json).toMatchObject({ code: "pin.throttled" });
+
+    const { refundOn: freshRefundOn, post: freshPost } = throttledApp();
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await freshPost(
+        "/api/session",
+        { personId: venue.adminId, pin: "9999" },
+        deviceCookie(),
+      );
+      expect(wrong.status).toBe(401);
+    }
+    const signInLimited = await freshPost(
+      "/api/session",
+      { personId: venue.adminId, pin: "1234" },
+      deviceCookie(),
+    );
+    expect(signInLimited.status).toBe(429);
+    const refunded = await freshRefundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([{ authorizedBy: venue.adminId }]);
   });
 
   it("an override sent by an operator who may refund cash is never checked, so its right PIN does not clear the count", async () => {

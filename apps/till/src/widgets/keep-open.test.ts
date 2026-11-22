@@ -1,8 +1,9 @@
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { TillKeepOpen } from "./keep-open.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
@@ -142,7 +143,7 @@ it.each(["pin.invalid", "pin.throttled"])(
     pin.dispatchEvent(
       new CustomEvent("override-confirm", { detail: { personId: "ana", pin: "1234" } }),
     );
-    await expect.poll(() => pin.error).toBe(code);
+    await expect.poll(() => pin.error?.code).toBe(code);
     expect(el.shadowRoot!.querySelector("till-keep-open-dialog")).toBe(d);
     pin.dispatchEvent(
       new CustomEvent("override-confirm", { detail: { personId: "ana", pin: "5678" } }),
@@ -155,6 +156,35 @@ it.each(["pin.invalid", "pin.throttled"])(
     ]);
   },
 );
+it("counts the manager's wait down in the PIN prompt after too many wrong PINs", async () => {
+  let writes = 0;
+  const { el } = await mount({}, (p, i) =>
+    p.endsWith("authorizers")
+      ? json([{ personId: "ana", displayName: "Ana" }])
+      : i.method === "PUT"
+        ? ++writes === 1
+          ? refusal("authorization.not_permitted")
+          : json({ error: { code: "pin.throttled", params: { retryAfterSeconds: 30 } } }, 429)
+        : json({ zone }),
+  );
+  act(el);
+  await save(await dialog(el));
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+    .not.toBeNull();
+  const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+  await pin.updateComplete;
+  pin.shadowRoot!.querySelector<HTMLElement>("[data-person=ana]")!.click();
+  await pin.updateComplete;
+  pin.dispatchEvent(
+    new CustomEvent("override-confirm", { detail: { personId: "ana", pin: "1234" } }),
+  );
+  await expect.poll(() => pin.error?.code).toBe("pin.throttled");
+  await pin.updateComplete;
+  expect(
+    (await formMessageOf(pin.shadowRoot!.querySelector("wt-form-actions")!))!.textContent,
+  ).toContain(t("override.throttled").replace("{n}", "30"));
+});
 it("cancelling the PIN leaves the selected endpoint ready for retry", async () => {
   const { el } = await mount({}, (p, i) =>
     p.endsWith("authorizers")
