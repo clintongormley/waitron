@@ -18,9 +18,11 @@ before it), without its cloud-server phrase and without saying that `@waitron/ve
 own declaration: this version cannot run in Waitron Cloud, and the library's 0.2.1 has none (owner,
 22 November: "Just put in whatever we have for now, we can update it later"). The asesor's (tax
 adviser's) answer goes into the template for a later version, since a released version's
-declaration never changes. A line starting `<!-- release-blocker:` at the top of
-[`template.md`](../../packages/fiscal-verifactu/declarations/template.md) still makes both release
-commands refuse, answering `declaration.release_blocked {"count":1}`.
+declaration never changes. The spare-server sentence stays: this version can add a spare box and
+switch to it (A947). A line of the form `<!-- release-blocker: … -->` anywhere in
+[`template.md`](../../packages/fiscal-verifactu/declarations/template.md) still makes
+`pnpm release prepare` refuse, answering `declaration.release_blocked` with the number of such
+lines; `pnpm release tag` refuses a written `v<version>.md` that carries one.
 
 Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). The two commands check
 what they can before the tag exists, and a tag pushed by hand skips those checks. CI then refuses to
@@ -376,10 +378,10 @@ the asset and dispatch the empty offer with default `none`. Before retiring a
 signing key, publish the offer again with the key both releases trust so the next
 publisher can verify the file it is replacing. [GitHub CLI release upload](https://cli.github.com/manual/gh_release_upload)
 
-## Read the draft before the blockers go
+## Read the declaration without signing
 
-To read the whole declaration as it stands, blockers and all, run the package command with
-`--draft`, after loading the settings as in step 3:
+To read the whole declaration as it stands, with any blocker lines listed, run the package command
+with `--draft`, after loading the settings as in step 3:
 
 ```sh
 pnpm --filter @waitron/fiscal-verifactu declaration show --draft --version 1.0.0 --place "<town>" --date 2026-11-11
