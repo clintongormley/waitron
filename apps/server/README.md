@@ -193,7 +193,7 @@ for the empty-setup, both history controls and the real boot refusal that preser
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — the taxpayer row, the
-venue, a node, and standard, full and rectificative invoice series — and runs every enabled module's
+venue, a node, and standard, full and corrective invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 

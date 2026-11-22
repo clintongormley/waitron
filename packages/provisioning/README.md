@@ -30,7 +30,7 @@ separate retained preproduction sample database.
 | `keyring` | nothing at all — no venue directory, no files       | once per deployment |
 | `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
-`venue` creates the taxpayer row, the venue, a node and its standard, full and rectificative
+`venue` creates the taxpayer row, the venue, a node and its standard, full and corrective
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
@@ -72,7 +72,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`taxpayer` holds exactly one), an
-**admin person**, the venue, a node, and standard, full and rectificative invoice series, and
+**admin person**, the venue, a node, and standard, full and corrective invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
@@ -193,7 +193,7 @@ not the venue.
 (common-territory Spain, Veri\*Factu with IVA) or `GB-vat`, which selects `fiscal-none` and files
 nothing; any other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also
 refuses a `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes
-among the standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
+among the standard, full and corrective series (`provisioning.duplicate_series_code`) before the directory is opened.
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which

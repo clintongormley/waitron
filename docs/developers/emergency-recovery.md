@@ -51,7 +51,7 @@ backup's node recovery key. For example:
   "requiredBases": [
     { "code": "A", "purpose": "standard" },
     { "code": "FF", "purpose": "full" },
-    { "code": "R", "purpose": "rectificative" }
+    { "code": "R", "purpose": "corrective" }
   ],
   "incidentEvidence": "outside/register/this-recovery-event",
   "knownIdentities": null,
