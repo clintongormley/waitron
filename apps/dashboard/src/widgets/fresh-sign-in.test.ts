@@ -272,6 +272,22 @@ describe("what the holding form reads", () => {
 });
 
 describe("the ways in", () => {
+  it("offers a passkey only while the signed-in profile has one", async () => {
+    const { root, api } = await mount(profile());
+    const passkeyButton = () => root.querySelector("[data-test=use-passkey]");
+    expect(field(root, "current-password")).not.toBeNull();
+    expect(passkeyButton()).toBeNull();
+
+    api.getProfile.mockResolvedValue(profile({ passkeys: [PASSKEY] }));
+    api.liveData.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(passkeyButton()).not.toBeNull());
+
+    api.getProfile.mockResolvedValue(profile());
+    api.liveData.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(passkeyButton()).toBeNull());
+    expect(field(root, "current-password")).not.toBeNull();
+  });
+
   it("offers the passkey instead of the password to a person who has a password", async () => {
     const { el, root } = await mount(profile({ passkeys: [PASSKEY] }));
     expect(field(root, "current-password")).not.toBeNull();
