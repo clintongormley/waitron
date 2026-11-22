@@ -111,3 +111,11 @@ it("the shared row distinguishes orders taken from this waiter from other held o
   expect(words(null, true)).toBe("Taken over by someone else");
   expect(words(null, false)).toBe("An unsent order");
 });
+
+it("closes without a review when Cancel is pressed on the list", async () => {
+  const { button, prompt } = await mount({ resume: "dishes" });
+  await userEvent.click(button("[data-cancel-conflicts]"));
+  await vi.waitFor(() => expect(prompt.close).toHaveBeenCalledWith(false));
+  expect(prompt.close).toHaveBeenCalledOnce();
+  expect(prompt.takeOver).not.toHaveBeenCalled();
+});

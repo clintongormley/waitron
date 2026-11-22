@@ -344,3 +344,16 @@ describe("attendance correction time and reason", () => {
     ]);
   });
 });
+
+describe("attendance correction Cancel", () => {
+  it("closes an untouched correction and tells the screen nothing was sent", async () => {
+    const { el } = await mount();
+    const cancelled: CustomEvent[] = [];
+    el.addEventListener("correction-cancel", (event) => cancelled.push(event as CustomEvent));
+    const sent = watch(el);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+    await expect.poll(() => cancelled.length).toBe(1);
+    expect(el.open).toBe(false);
+    expect(sent).toEqual([]);
+  });
+});

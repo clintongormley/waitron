@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { staffNoticeText } from "./staff-notices.js";
 import { en, es } from "./strings.js";
 import { clockTime, setLocale } from "./t.js";
@@ -260,3 +260,47 @@ describe.each(LANGUAGES)(
     });
   },
 );
+
+describe("staffNoticeText for an invoice waiting at an office printer", () => {
+  beforeEach(() => setLocale("en-GB"));
+  const office = (params: Record<string, unknown>) =>
+    staffNoticeText({ code: "invoice_delivery.office_print", params });
+
+  it.each([{}, { printer: "" }, { printer: 3 }])(
+    "words the notice as unknown when its printer is %o",
+    (params) => {
+      expect(office(params).main).toBe(en["staff_notice.unknown"]);
+    },
+  );
+
+  it("names the printer an invoice failed at", () => {
+    expect(office({ printer: "Office", reason: "failed" })).toEqual({
+      main: "An invoice failed to print at Office. Check the printer before trying again.",
+      hint: "",
+    });
+  });
+
+  it.each(["uncertain", "uncertain_held"])(
+    "says an invoice may have printed when its outcome is %s",
+    (reason) => {
+      expect(office({ printer: "Office", reason })).toEqual({
+        main: "An invoice may have printed at Office. Check the printer before trying again.",
+        hint: "",
+      });
+    },
+  );
+
+  it("words a hold the till knows with its reason and the printer", () => {
+    expect(office({ printer: "Office", hold: "paper_jam" })).toEqual({
+      main: "A full invoice is waiting to print.",
+      hint: "Waiting at Office (paper jam). Check the printer. It will print when ready.",
+    });
+  });
+
+  it("words a hold the till does not know without a reason", () => {
+    expect(office({ printer: "Office", hold: "on_fire" })).toEqual({
+      main: "A full invoice is waiting to print.",
+      hint: "Waiting at the office printer.",
+    });
+  });
+});

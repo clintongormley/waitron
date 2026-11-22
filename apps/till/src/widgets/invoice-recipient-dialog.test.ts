@@ -1,6 +1,6 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -963,6 +963,29 @@ describe("till-invoice-recipient-dialog Spanish locality and province commas", (
       await fill(el, field, value.replace(",", ""));
       save(el);
       expect(sent).toHaveLength(1);
+    },
+  );
+});
+
+describe("till-invoice-recipient-dialog Enter in an address or email field", () => {
+  it.each(["address", "postalCode", "locality", "email"])(
+    "saves the recipient when Enter is pressed in %s",
+    async (name) => {
+      const el = await mountWithPrinter({ deliveryOptions: withEmail });
+      const sent = confirmations(el);
+      await fillValid(el);
+      await chooseDelivery(el, "email");
+      await fill(el, "email", "ana@example.com");
+      const field = el.shadowRoot!.querySelector<HTMLElement>(`wt-input[name=${name}]`)!;
+      field.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
+      await userEvent.keyboard("{Enter}");
+      expect(sent).toEqual([
+        {
+          invoiceType: "F1",
+          recipient: anaGarcia,
+          delivery: { medium: "email", recipient: "ana@example.com" },
+        },
+      ]);
     },
   );
 });
