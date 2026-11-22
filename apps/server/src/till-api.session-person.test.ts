@@ -105,7 +105,6 @@ const BODIES: Readonly<Record<string, () => unknown>> = {
   "POST /api/session": () => ({ personId: randomUUID(), pin: "1234" }),
 };
 
-/** The owner's named routes, and the kitchen screens, that must be among the refused. */
 const NAMED_REFUSED = [
   "POST /api/parties/:id/drafts/:did/discard",
   "POST /api/parties/:id/drafts/:did/submit",
