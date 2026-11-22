@@ -176,6 +176,9 @@ describe("planBusinessDayStart", () => {
 });
 
 describe("clockTransitionAt", () => {
+  const transitionAt = (clock: BusinessDayClock, dayCutover: string, at: Date) =>
+    clockTransitionAt(clock, dayCutover, at, planBusinessDayStart(clock, dayCutover, at));
+
   it.each([
     [
       "2026-10-23T01:00:00Z",
@@ -193,22 +196,18 @@ describe("clockTransitionAt", () => {
     ],
     ["2027-03-29T01:00:00Z", null],
   ])("02:30 saved at %s", (at, expected) => {
-    expect(clockTransitionAt(MADRID, "02:30", new Date(at))).toEqual(expected);
+    expect(transitionAt(MADRID, "02:30", new Date(at))).toEqual(expected);
   });
 
   it("a 02:30 start saving 05:00 is refused across the same clocks change", () => {
     expect(
-      clockTransitionAt(
-        { ...MADRID, dayCutover: "02:30" },
-        "05:00",
-        new Date("2026-10-23T01:00:00Z"),
-      ),
+      transitionAt({ ...MADRID, dayCutover: "02:30" }, "05:00", new Date("2026-10-23T01:00:00Z")),
     ).toEqual({ clocksChangeOn: "2026-10-25", saveFrom: "2026-10-26T01:30:00.000Z" });
   });
 
   it("a day that would end before it starts, where midnight is skipped, is a clocks change", () => {
     expect(
-      clockTransitionAt(
+      transitionAt(
         { timeZone: "America/Havana", dayCutover: "23:59", cutoverChanges: [] },
         "00:00",
         new Date("2027-03-13T11:00:00Z"),
@@ -218,11 +217,7 @@ describe("clockTransitionAt", () => {
 
   it("a 01:00 start saving 02:30 may save again once the 01:00 changeover passes", () => {
     expect(
-      clockTransitionAt(
-        { ...MADRID, dayCutover: "01:00" },
-        "02:30",
-        new Date("2026-10-23T01:00:00Z"),
-      ),
+      transitionAt({ ...MADRID, dayCutover: "01:00" }, "02:30", new Date("2026-10-23T01:00:00Z")),
     ).toEqual({ clocksChangeOn: "2026-10-25", saveFrom: "2026-10-26T00:00:00.000Z" });
   });
 
@@ -234,7 +229,7 @@ describe("clockTransitionAt", () => {
     "2027-03-27T11:00:00Z",
     "2027-03-29T01:00:00Z",
   ])("03:00 saved at %s meets no clocks change", (at) => {
-    expect(clockTransitionAt(MADRID, "03:00", new Date(at))).toBeNull();
+    expect(transitionAt(MADRID, "03:00", new Date(at))).toBeNull();
   });
 });
 

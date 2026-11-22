@@ -96,8 +96,8 @@ export function clockTransitionAt(
   clock: BusinessDayClock,
   dayCutover: string,
   at: Date,
+  plan: BusinessDayStartPlan,
 ): null | { clocksChangeOn: string; saveFrom: string | null } {
-  const plan = planBusinessDayStart(clock, dayCutover, at);
   const failing = firstTransitionDay(plan, dayCutover);
   if (failing === null) return null;
   const clocksChangeOn = clocksChangeDate(failing, clock.timeZone);
