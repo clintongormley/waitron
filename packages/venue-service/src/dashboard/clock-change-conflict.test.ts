@@ -4,8 +4,8 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { clockChangeConflictText } from "./clock-change-conflict.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
-beforeEach(() => setLocale("en"));
-afterEach(() => setLocale("en"));
+beforeEach(() => setLocale("en-GB"));
+afterEach(() => setLocale("en-GB"));
 
 const conflict = (
   reason: string,
@@ -41,7 +41,7 @@ it("names the clashing range, the new start, when it takes effect and why", () =
 });
 
 it("says it in Spanish", () => {
-  setLocale("es");
+  setLocale("es-ES");
   expect(clockChangeConflictText(conflict("transition_strip"))).toBe(
     "Restaurant · viernes · Dinner · 21:00–02:45 choca con el nuevo inicio del día de trabajo, 03:00 desde mié 21 oct, 03:00: El horario coincide con el cambio de inicio.",
   );

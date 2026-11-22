@@ -20,7 +20,7 @@ export function clockChangeConflictText(refusal: Refusal): string | undefined {
   const weekday = first.weekday === undefined ? undefined : weekdayLabel(first.weekday);
   const day =
     first.date !== undefined
-      ? formatDayAndMonth(first.date, pickLocale({ en: "en-GB", es: "es" }))
+      ? formatDayAndMonth(first.date)
       : weekday && pickLocale({ en: weekday, es: weekday.toLowerCase() });
   return format("hours.clock_change_conflict", {
     range: [

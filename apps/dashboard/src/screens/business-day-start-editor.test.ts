@@ -13,6 +13,8 @@ import { setLocale } from "../i18n/t.js";
 import "./business-day-start-editor.js";
 
 type Editor = LitElement & { api: DashboardApi; model: BusinessDayClockModel; readOnly: boolean };
+const fixFields = "Correct the highlighted fields to continue.";
+const fixFieldsEs = "Corrige los campos marcados para continuar.";
 export const clockModel = (): BusinessDayClockModel => ({
   clock: { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },
   revision: 4,
@@ -266,7 +268,7 @@ it("shows the new draft's preview refusal after a failed Save of the previous dr
   expect(footer.error).toContain("This browser could not connect to Waitron.");
   await change(el, "dayCutover", "04:00");
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("Check the start time.");
-  expect(footer.error).toBe("Check the start time.");
+  expect(footer.error).toBe(fixFields);
 });
 it("shows schedule conflicts and keeps Save disabled", async () => {
   const { el } = await rig({
@@ -448,13 +450,20 @@ it.each(["connection.failed", "venue.business_day_locked"])(
 
 it("shows the reopen instruction once when Save already reported that the clock changed", async () => {
   setLocale("en-GB");
+  const previews = vi.fn(async () => preview());
   const { el } = await rig({
+    previewBusinessDayStart: previews,
     putBusinessDayStart: async () => {
       throw { code: "venue.business_day_changed" };
     },
   });
   await ready(el);
   await click(el, "save");
+  await change(el, "dayCutover", "04:00");
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(
+    "The business-day clock changed. Reopen the editor.",
+  );
+  expect(previews).toHaveBeenCalledTimes(1);
   el.model = { ...clockModel(), revision: 5 };
   await flush(el);
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(
@@ -991,7 +1000,9 @@ it.each([
     expect(previews).toHaveBeenCalledTimes(1);
     await click(el, "save");
     expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
-    expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+    expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(
+      locale === "es-ES" ? fixFieldsEs : fixFields,
+    );
     expect(previews).toHaveBeenCalledTimes(2);
     expect(q<WtInput>(el, "[name=dayCutover]")!.value).toBe("03:00");
     expect(save(el).variant).toBe("secondary");
@@ -1027,7 +1038,9 @@ it.each([
   await ready(el);
   await click(el, "save");
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
-  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(
+    locale === "es-ES" ? fixFieldsEs : fixFields,
+  );
 });
 it("puts a preview refusal naming the time under the field, without Retry", async () => {
   setLocale("en-GB");
@@ -1051,11 +1064,12 @@ it("puts a preview refusal naming the time under the field, without Retry", asyn
   await change(el, "dayCutover", "02:30");
   const message = "The clocks change on Sun 25 Oct. Save again from Mon 26 Oct, 02:30.";
   await expect.poll(() => q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
-  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(fixFields);
   expect(q(el, "[data-test=preview-retry]")).toBeNull();
   expect(save(el).disabled).toBe(true);
   await change(el, "dayCutover", "02:45");
-  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(fixFields);
   await change(el, "dayCutover", "05:00");
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe("");

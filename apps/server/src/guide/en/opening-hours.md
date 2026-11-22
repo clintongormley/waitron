@@ -10,7 +10,7 @@ To change the usual timetable, follow the season's **standard hours** link at th
 
 ## Resolve a clash with the business-day start {#business-day-start}
 
-Use the department, day and times in the clash details to find the hours. From the start preview, choose **Review opening hours**. Open the named season or special day and check any zone or period listed. Adjust the hours or choose a different start time.
+Use the department, day and times in the clash details to find the hours. If you are in the start preview, choose **Review opening hours**. Open the named season or special day and check any zone or period listed. Adjust the hours or choose a different start time.
 
 If the business-day clock changes while you are editing the start time, close and reopen the editor. Check the latest start and preview before you save.
 

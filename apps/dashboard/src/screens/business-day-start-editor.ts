@@ -294,6 +294,7 @@ export class BusinessDayStartEditor extends LitElement {
       this.readOnly ||
       Object.keys(this.#problems()).length ||
       this.draft.dayCutover === this.#baseline?.dayCutover ||
+      (this.actionError !== "" && this.actionError === this.#clockChangeRefusal) ||
       this.#clockIdentity !== this.#identity()
     )
       return;
@@ -324,17 +325,14 @@ export class BusinessDayStartEditor extends LitElement {
     this.draft = { ...this.draft, [field]: event.detail.value };
     this.#scope?.changed();
     this.errors = this.#feedback.attempted ? this.#problems() : {};
-    this.actionError = this.errors.dayCutover ? t("form.fix_fields") : "";
+    if (this.actionError !== this.#clockChangeRefusal) this.actionError = "";
     this.#refreshPreview();
   }
   async #save(): Promise<void> {
     if (!this.draft || this.busy || this.readOnly || saveActionState(this.#scope).unchanged) return;
     this.#feedback.press();
     this.errors = this.#problems();
-    if (Object.keys(this.errors).length) {
-      this.actionError = t("form.fix_fields");
-      return;
-    }
+    if (Object.keys(this.errors).length) return;
     if (!this.#ready()) return;
     const generation = this.#generation;
     this.busy = true;
@@ -356,7 +354,7 @@ export class BusinessDayStartEditor extends LitElement {
       const params = this.#params(error);
       const message = this.#refusal(error);
       if (params?.field === "dayCutover") this.errors = { dayCutover: message };
-      this.actionError = message;
+      else this.actionError = message;
       this.#clockChangeRefusal = code === "venue.business_day_changed" ? message : "";
       if (code === "venue.business_day_changed" || code === "venue.business_day_locked") {
         this.preview = undefined;
@@ -482,6 +480,12 @@ export class BusinessDayStartEditor extends LitElement {
     const draft = this.draft;
     const stale = draft && this.#clockIdentity !== this.#identity();
     const reopenMessage = stale ? t("business_day.changed") : "";
+    const fieldError = this.errors.dayCutover ?? this.previewFieldError;
+    const footerError = this.#feedback.message(
+      { action: this.actionError || reopenMessage, dayCutover: fieldError },
+      new Set(fieldError ? ["dayCutover"] : []),
+      t("form.fix_fields"),
+    );
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
@@ -544,7 +548,7 @@ export class BusinessDayStartEditor extends LitElement {
                     placeholder="HH:MM"
                     required
                     .value=${draft.dayCutover}
-                    .error=${this.errors.dayCutover ?? this.previewFieldError}
+                    .error=${fieldError}
                     ?disabled=${this.busy || this.readOnly}
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       if (active()) this.#change("dayCutover", event);
@@ -608,9 +612,7 @@ export class BusinessDayStartEditor extends LitElement {
                       : nothing
                   }
                 </div>
-                <wt-form-actions
-                  slot="footer"
-                  .error=${this.actionError || reopenMessage || this.previewFieldError}
+                <wt-form-actions slot="footer" .error=${footerError}
                   ><wt-button
                     slot="cancel"
                     data-test="cancel"
