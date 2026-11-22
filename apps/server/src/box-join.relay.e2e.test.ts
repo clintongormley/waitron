@@ -19,7 +19,7 @@ import {
   signJoinHello,
   signJoinMessage,
   type JoinField,
-  type JoinHelloFields,
+  type JoinHello,
 } from "./box-join-code.js";
 import { parseEnvFile } from "./env-file.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -83,7 +83,7 @@ async function startRelay(
       store.port = String(port);
       const hello = { ...body, storeUrl: store.origin, newPublicKey: own.publicKey };
       const signature = signJoinHello(
-        hello as unknown as JoinHelloFields,
+        hello as unknown as JoinHello,
         body.at as number,
         own.privateKey,
       );
@@ -273,7 +273,7 @@ describe("a relay between a joining box and the main box", () => {
       const refused = await pair.adopt(relay.url);
       expect(refused.body).toEqual({ error: { code: "mirror.join_invalid", params: {} } });
       // The code M shows, worked out from what crossed the relay.
-      const hello = JSON.parse(crossingTo(relay, "hello")!.sent) as JoinHelloFields;
+      const hello = JSON.parse(crossingTo(relay, "hello")!.sent) as JoinHello;
       const opened = JSON.parse(crossingTo(relay, "hello")!.answered) as Record<string, string>;
       const reveal = JSON.parse(crossingTo(relay, "reveal")!.sent) as { newNonce: string };
       const revealed = JSON.parse(crossingTo(relay, "reveal")!.answered) as { mainNonce: string };

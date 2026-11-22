@@ -104,7 +104,7 @@ export function isStoreUrlOf(storeUrl: unknown, contactUrl: string): boolean {
 }
 
 /** The joining box, as its own request named it. */
-export interface JoiningSpare {
+interface JoiningSpare {
   standby: { nodeId: string; publicKey: string };
   contactUrl: string;
   storeUrl: string;

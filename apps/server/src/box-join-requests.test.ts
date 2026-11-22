@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { commitmentFor, joinCode, type JoinCodeInputs } from "./box-join-code.js";
+import { commitmentFor, joinCode, type JoinCodeInputs, type JoinHello } from "./box-join-code.js";
 import type { LockedJoinBundle } from "./box-join-seal.js";
-import { createBoxJoinRequests, type JoinHello } from "./box-join-requests.js";
+import { createBoxJoinRequests } from "./box-join-requests.js";
 
 const MAIN = { nodeId: "main-node", publicKey: Buffer.from("main key").toString("base64") };
 const WALL_START = Date.parse("2026-11-21T10:00:00.000Z");

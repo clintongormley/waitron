@@ -23,6 +23,7 @@ import {
   signJoinMessage,
   verifyJoinHello,
   verifyJoinMessage,
+  type JoinHello,
 } from "./box-join-code.js";
 import {
   createBoxJoinRequests,
@@ -30,7 +31,6 @@ import {
   type HeldJoinRequest,
   type JoinEndReason,
   type JoinFull,
-  type JoinHello,
 } from "./box-join-requests.js";
 import { isBareOrigin } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -55,7 +55,7 @@ const BODY_LIMIT = 65536;
 const NONCE_BYTES = 32;
 const MAX_ADDRESSES = 32;
 
-export interface BoxJoinApiDeps {
+interface BoxJoinApiDeps {
   appDb: Database;
   node: NodeDatabase;
   ring: KeyRing;

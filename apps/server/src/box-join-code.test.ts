@@ -10,7 +10,6 @@ import {
   JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
-  codeTaken,
   commitmentFor,
   commitmentMatches,
   drawDecoys,
@@ -200,6 +199,24 @@ describe("joinCode", () => {
     expect(joinCode(inputs)).toBe(expected);
   });
 
+  it("gives the same code for fixed inputs as it always has", () => {
+    expect(
+      joinCode({
+        newNodeId: "5b0c3f4e-1d2a-4c7e-9f00-0a1b2c3d4e5f",
+        newPublicKey: Buffer.alloc(44, 1).toString("base64"),
+        encryptionKey: Buffer.alloc(44, 2).toString("base64"),
+        contactUrl: "https://192.168.1.40:8443",
+        storeUrl: "https://192.168.1.40:9000",
+        addresses: ["fd00::40", "192.168.1.40"],
+        mainNodeId: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        mainPublicKey: Buffer.alloc(44, 3).toString("base64"),
+        newNonce: Buffer.alloc(32, 4),
+        mainNonce: Buffer.alloc(32, 5),
+        requestId: "c1d2e3f4-0000-4000-8000-000000000001",
+      }),
+    ).toBe("829075");
+  });
+
   it("writes a small code as six digits with leading zeros", () => {
     // Search for inputs whose code starts with "0": about one in ten tries.
     const inputs = baseInputs();
@@ -247,16 +264,6 @@ describe("drawDecoys", () => {
       expect(b).toMatch(/^\d{6}$/);
       expect(new Set([a, b, "482913", ...listed]).size).toBe(5);
     }
-  });
-});
-
-describe("codeTaken", () => {
-  it("reports a real code equal to a listed code as taken", () => {
-    expect(codeTaken("482913", ["111111", "482913", "222222"])).toBe(true);
-  });
-
-  it("does not report a code no listed request shows", () => {
-    expect(codeTaken("482913", ["111111", "222222"])).toBe(false);
   });
 });
 

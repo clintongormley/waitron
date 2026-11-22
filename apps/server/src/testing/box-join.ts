@@ -15,17 +15,14 @@ import {
   signJoinHello,
   signJoinMessage,
   type JoinField,
+  type JoinHello,
 } from "../box-join-code.js";
 import {
   mountBoxJoinApi,
   mountBoxJoinPersonApi,
   type BoxJoinPersonApiDeps,
 } from "../box-join-api.js";
-import {
-  createBoxJoinRequests,
-  type BoxJoinRequests,
-  type JoinHello,
-} from "../box-join-requests.js";
+import { createBoxJoinRequests, type BoxJoinRequests } from "../box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "../box-join-seal.js";
 import { boxHostnameFor } from "../box-name.js";
 import type { Logger } from "../logger.js";
@@ -33,7 +30,7 @@ import { generateStandbyIdentity, type StandbyIdentity } from "../reserved-ident
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 
 /** The origin every request below is sent to, so a person's request comes from this box's page. */
-export const JOIN_ORIGIN = "https://waitron.local";
+const JOIN_ORIGIN = "https://waitron.local";
 
 /** A new box asking to join: what it sends, and the keys it keeps. */
 export interface JoiningBox {
@@ -146,7 +143,7 @@ export interface ListedJoin {
 }
 
 /** A hello and its reveal, so the request is listed. Answers the refusal when either is refused. */
-export async function askToJoin(
+async function askToJoin(
   app: Hono,
   box: JoiningBox,
   at = Date.now(),
@@ -242,7 +239,7 @@ export interface PersonSent {
 }
 
 /** A person's request from this box's own page, over an encrypted connection. */
-export async function personPost(
+async function personPost(
   app: Hono,
   path: string,
   sent: PersonSent,

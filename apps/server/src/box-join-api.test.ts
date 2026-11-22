@@ -15,13 +15,10 @@ import {
   joinCode,
   revealAnswerFields,
   verifyJoinMessage,
+  type JoinHello,
 } from "./box-join-code.js";
 import { mountBoxJoinApi } from "./box-join-api.js";
-import {
-  createBoxJoinRequests,
-  type BoxJoinRequests,
-  type JoinHello,
-} from "./box-join-requests.js";
+import { createBoxJoinRequests, type BoxJoinRequests } from "./box-join-requests.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import {

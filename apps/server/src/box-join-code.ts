@@ -78,7 +78,8 @@ export function commitmentMatches(
   return commitment.length === expected.length && timingSafeEqual(commitment, expected);
 }
 
-export interface JoinCodeInputs {
+/** The fields of a new box's hello; the code and every signature over the hello cover them. */
+export interface JoinHello {
   newNodeId: string;
   /** The new box's node public key, base64 DER. */
   newPublicKey: string;
@@ -87,6 +88,9 @@ export interface JoinCodeInputs {
   contactUrl: string;
   storeUrl: string;
   addresses: readonly string[];
+}
+
+export interface JoinCodeInputs extends JoinHello {
   mainNodeId: string;
   /** The main box's node identity public key, base64 DER. */
   mainPublicKey: string;
@@ -100,12 +104,7 @@ export function joinCode(inputs: JoinCodeInputs): string {
   const v = sha256(
     encodeFields([
       JOIN_CODE_LABEL,
-      inputs.newNodeId,
-      Buffer.from(inputs.newPublicKey, "base64"),
-      Buffer.from(inputs.encryptionKey, "base64"),
-      inputs.contactUrl,
-      inputs.storeUrl,
-      [...inputs.addresses].sort().join("\n"),
+      ...helloFields(inputs),
       inputs.mainNodeId,
       Buffer.from(inputs.mainPublicKey, "base64"),
       inputs.newNonce,
@@ -118,12 +117,6 @@ export function joinCode(inputs: JoinCodeInputs): string {
 
 function randomCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-/** The real code cannot be redrawn, so a reveal whose code a listed request already shows is refused. */
-export function codeTaken(code: string, listed: Iterable<string>): boolean {
-  for (const shown of listed) if (shown === code) return true;
-  return false;
 }
 
 /** Two decoys, distinct from the real code, from each other and from every listed request's codes. */
@@ -145,13 +138,8 @@ export function drawDecoys(
 
 export const JOIN_PROTOCOL = 1;
 
-export type JoinHelloFields = Pick<
-  JoinCodeInputs,
-  "newNodeId" | "newPublicKey" | "encryptionKey" | "contactUrl" | "storeUrl" | "addresses"
->;
-
 /** The hello's fields every signature over it covers, in order. */
-function helloFields(hello: JoinHelloFields): Buffer[] {
+function helloFields(hello: JoinHello): Buffer[] {
   return [
     Buffer.from(hello.newNodeId),
     Buffer.from(hello.newPublicKey, "base64"),
@@ -162,17 +150,17 @@ function helloFields(hello: JoinHelloFields): Buffer[] {
   ];
 }
 
-function helloMessageFields(hello: JoinHelloFields, at: number): Buffer[] {
+function helloMessageFields(hello: JoinHello, at: number): Buffer[] {
   return [Buffer.from(String(JOIN_PROTOCOL)), ...helloFields(hello), Buffer.from(String(at))];
 }
 
 /** The hello is signed before any request exists, so it carries request id `""` and seq 0. */
-export function signJoinHello(hello: JoinHelloFields, at: number, privateKeyB64: string): string {
+export function signJoinHello(hello: JoinHello, at: number, privateKeyB64: string): string {
   return signJoinMessage(JOIN_HELLO_LABEL, "", 0, helloMessageFields(hello, at), privateKeyB64);
 }
 
 export function verifyJoinHello(
-  hello: JoinHelloFields,
+  hello: JoinHello,
   at: number,
   signatureB64: string,
   publicKeyB64: string,
@@ -199,7 +187,7 @@ export function pollMessageFields(at: number): Buffer[] {
 
 /** What the main box signs in its reveal answer, under the reveal's request id and seq. */
 export function revealAnswerFields(
-  hello: JoinHelloFields,
+  hello: JoinHello,
   newNonce: Buffer,
   mainNonce: Buffer,
 ): Buffer[] {

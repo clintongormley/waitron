@@ -9,7 +9,7 @@ import {
   commitmentFor,
   revealAnswerFields,
   signJoinMessage,
-  type JoinHelloFields,
+  type JoinHello,
 } from "../box-join-code.js";
 import { lockJoinBundle } from "../box-join-seal.js";
 import { ownContactUrl } from "../box-name.js";
@@ -137,7 +137,7 @@ export function stubMainBox(main: {
   keys: { publicKey: string; privateKey: string };
   bundleFor: (standby: { nodeId: string; publicKey: string }) => MirrorBundle;
 }): (req: IncomingMessage, res: ServerResponse) => void {
-  const requests = new Map<string, { hello: JoinHelloFields; mainNonce: Buffer }>();
+  const requests = new Map<string, { hello: JoinHello; mainNonce: Buffer }>();
   const answer = (res: ServerResponse, status: number, body: unknown) => {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));

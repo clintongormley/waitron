@@ -17,7 +17,7 @@ import {
   signJoinMessage,
   verifyJoinMessage,
   type JoinField,
-  type JoinHelloFields,
+  type JoinHello,
 } from "./box-join-code.js";
 import {
   JOIN_END_REASONS,
@@ -91,7 +91,7 @@ interface Attempt {
   trust: Parameters<typeof boxExchange>[1]["trust"];
   requestId: string;
   identity: StandbyIdentity;
-  hello: JoinHelloFields;
+  hello: JoinHello;
   encryptionPrivateKey: string;
   mainNodeId: string;
   mainPublicKey: string;
@@ -326,7 +326,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     storeUrl.protocol = "https:";
     storeUrl.port = String(deps.spareStorePort);
     const addresses = ownAddresses();
-    const hello: JoinHelloFields = {
+    const hello: JoinHello = {
       newNodeId: identity.nodeId,
       newPublicKey: identity.publicKey,
       encryptionKey: encryption.publicKey

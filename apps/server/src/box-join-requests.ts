@@ -1,9 +1,9 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { codeTaken, commitmentFor, drawDecoys, joinCode } from "./box-join-code.js";
+import { commitmentFor, drawDecoys, joinCode, type JoinHello } from "./box-join-code.js";
 import type { LockedJoinBundle } from "./box-join-seal.js";
 
 const MINUTE = 60_000;
-export const HELLO_REVEAL_MS = 30_000;
+const HELLO_REVEAL_MS = 30_000;
 export const JOIN_REQUEST_TTL_MS = 15 * MINUTE;
 export const ENDED_KEPT_MS = 2 * MINUTE;
 const HELLO_WINDOW_MS = MINUTE;
@@ -14,17 +14,7 @@ const REVEALS_MAX = 6;
 const REVEAL_WINDOW_MS = 15 * MINUTE;
 const STARTED_AGAIN_MS = 15 * MINUTE;
 
-/** The fields of a new box's hello that the code covers. */
-export interface JoinHello {
-  newNodeId: string;
-  newPublicKey: string;
-  encryptionKey: string;
-  contactUrl: string;
-  storeUrl: string;
-  addresses: readonly string[];
-}
-
-export interface MainIdentity {
+interface MainIdentity {
   nodeId: string;
   publicKey: string;
 }
@@ -56,15 +46,15 @@ const LIMIT_TERMS: Record<JoinLimit, { max: number; minutes: number }> = {
   listed: { max: LISTED_MAX, minutes: JOIN_REQUEST_TTL_MS / MINUTE },
   recent: { max: REVEALS_MAX, minutes: REVEAL_WINDOW_MS / MINUTE },
 };
-export type JoinNotFound = { refused: "not_found" };
-export type JoinInvalid = { refused: "invalid" };
+type JoinNotFound = { refused: "not_found" };
+type JoinInvalid = { refused: "invalid" };
 
 export interface RevealAnswer {
   mainNonce: Buffer;
   signature: string;
 }
 
-export type PollAnswer =
+type PollAnswer =
   | { state: "waiting" }
   | { state: "ended"; reason: JoinEndReason }
   | { state: "approved"; locked: LockedJoinBundle };
@@ -92,7 +82,6 @@ interface Revealed {
   seq: number;
   answer: RevealAnswer;
   code: string;
-  decoys: [string, string];
   /** The three codes in the order Check shows them, drawn once. */
   choices: string[];
   startedAgain: boolean;
@@ -121,7 +110,7 @@ interface Window {
   count: number;
 }
 
-export interface BoxJoinRequestsOptions {
+interface BoxJoinRequestsOptions {
   /** Every duration is measured on this clock, so a wall-clock step cannot stretch one. */
   steadyNow?: () => number;
   /** Only for the times the answers report. */
@@ -332,9 +321,9 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         mainNonce: r.mainNonce,
         requestId: r.id,
       });
-      const shown = (list: JoinRequest[]) =>
-        list.flatMap((l) => [l.revealed!.code, ...l.revealed!.decoys]);
-      if (codeTaken(code, shown(listedRequests()))) {
+      const shown = (list: JoinRequest[]) => list.flatMap((l) => l.revealed!.choices);
+      // The real code cannot be redrawn, so a reveal whose code a listed request shows is refused.
+      if (shown(listedRequests()).includes(code)) {
         end(r, "code_taken", now);
         return { refused: "code_taken" };
       }
@@ -348,7 +337,6 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         seq: input.seq,
         answer,
         code,
-        decoys,
         choices: shuffled([code, ...decoys]),
         startedAgain: startedAgainAt.has(r.address),
       };

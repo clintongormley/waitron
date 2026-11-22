@@ -58,7 +58,7 @@ export const SPARE_URL = "https://spare.test";
 export const ADMIN_PASSWORD = "correct horse";
 
 /** Two boxes on separate databases and state folders; the main box's database chooses its modules. */
-export interface TwoBoxes {
+interface TwoBoxes {
   mainBox: VenueDb;
   spareBox: VenueDb;
   mainState: string;
