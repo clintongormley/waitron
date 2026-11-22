@@ -50,8 +50,9 @@ Once the setup is deleted the box restarts. After **Recover from backup**, **Rec
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
 bucket**, as on a new box; restoring needs the backup encryption key (for a backup file) or the recovery kit
 (for your bucket), and that backup's server key. After
-**Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
-this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
+**Start again**, **Reconnect** opens "Set up this box", where you choose how to set up this box; if
+another Waitron box is already running a restaurant on the network, that page says so and offers
+**Join it as a spare** first. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
 there to restore.
 
@@ -229,7 +230,9 @@ If an earlier restore choice is still saved, it will run when the server starts.
 
 Until you choose the restore button, the page keeps what you entered only while it stays open.
 Changing the file, key or environment discards what it checked, and a reload opens the page's
-first screen; from there choose **Join or recover** and start the restore again. If the box refuses the
+first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
+restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
+restore again. If the box refuses the
 restore, the page returns to the form and you enter the server key again.
 
 Once you choose the restore button, the page says "Provisioning this server" and asks you to keep it

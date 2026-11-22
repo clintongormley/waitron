@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import { helpLinkStyles, actionsStyles, introStyles } from "../form-styles.js";
+import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -17,29 +17,16 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 @customElement("setup-mode-screen")
 export class SetupModeScreen extends LitElement {
   static override styles = [
-    helpLinkStyles,
     baseStyles,
     pageTitleStyles,
     actionsStyles,
-    introStyles,
     css`
       :host {
         display: block;
       }
 
-      .intro {
-        margin: var(--wt-space-3) 0;
-      }
-
-      .cert-note {
+      .other-box {
         margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .production-warning {
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-danger);
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -52,8 +39,14 @@ export class SetupModeScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
       }
 
-      .existing {
-        margin-top: var(--wt-space-5);
+      h2.others {
+        margin: var(--wt-space-5) 0 0;
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text-muted);
+      }
+
+      .others + .choices {
+        margin-top: var(--wt-space-2);
       }
 
       .warning {
@@ -72,7 +65,8 @@ export class SetupModeScreen extends LitElement {
     `,
   ];
 
-  @property({ type: Boolean }) certificateNote = false;
+  /** Set while another box answers the venue's name on this network. */
+  @property({ type: Boolean }) otherBoxFound = false;
 
   @property() installationOrigin?: "usb";
 
@@ -127,8 +121,8 @@ export class SetupModeScreen extends LitElement {
   }
 
   /** Joining or recovering is not a fresh primary, so it writes no mode. */
-  #chooseExisting(): void {
-    this.#requestChoice(undefined, () => dispatchSetupGoto(this, "role"));
+  #chooseExisting(screen: "role" | "connect" | "restore"): void {
+    this.#requestChoice(undefined, () => dispatchSetupGoto(this, screen));
   }
 
   #chooseLive(): void {
@@ -158,30 +152,27 @@ export class SetupModeScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("mode.heading")}</h1>
-      <p class="intro">${t("mode.intro")}</p>
-      ${
-        this.certificateNote
-          ? html`<p class="cert-note" data-test="cert-note">
-              ${t("mode.cert_note")}
-              <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-                >${t("mode.cert_note_link")}</a
-              >.
-            </p>`
-          : nothing
-      }
-      ${
-        this.environment === "production"
-          ? html`<p class="production-warning" role="alert" data-test="production-warning">
-              ${t("mode.production_warning")}
-            </p>`
-          : nothing
-      }
       ${this.confirming ? this.#renderConfirm() : this.#renderChoices()}
     `;
   }
 
   #renderChoices(): TemplateResult {
+    const found = this.otherBoxFound;
     return html`
+      ${
+        found
+          ? html`<p class="other-box" data-test="other-box">${t("mode.other_box")}</p>
+              <div class="choices">
+                <wt-choice-row
+                  data-test="choose-join-spare"
+                  heading=${t("mode.join_spare.heading")}
+                  @click=${() => this.#chooseExisting("connect")}
+                  >${t("mode.join_spare.copy")}</wt-choice-row
+                >
+              </div>
+              <h2 class="others">${t("mode.others.heading")}</h2>`
+          : nothing
+      }
       <div class="choices">
         ${
           this.environment === "production" || this.installationOrigin === "usb"
@@ -209,16 +200,22 @@ export class SetupModeScreen extends LitElement {
           @click=${() => this.#chooseLive()}
           >${t("mode.live.copy")}</wt-choice-row
         >
+        ${
+          found
+            ? html`<wt-choice-row
+                data-test="choose-recover"
+                heading=${t("mode.recover.heading")}
+                @click=${() => this.#chooseExisting("restore")}
+                >${t("mode.recover.copy")}</wt-choice-row
+              >`
+            : html`<wt-choice-row
+                data-test="choose-existing"
+                heading=${t("mode.existing.heading")}
+                @click=${() => this.#chooseExisting("role")}
+                >${t("mode.existing.copy")}</wt-choice-row
+              >`
+        }
       </div>
-      <section class="existing">
-        <h2>${t("mode.existing.heading")}</h2>
-        <wt-choice-row
-          data-test="choose-existing"
-          heading=${t("mode.existing.choice")}
-          @click=${() => this.#chooseExisting()}
-          >${t("mode.existing.copy")}</wt-choice-row
-        >
-      </section>
     `;
   }
 

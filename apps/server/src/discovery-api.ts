@@ -130,6 +130,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
         ...reach,
         caDownloadAvailable: await caExists(),
         caDownloadPath: CA_DOWNLOAD_PATH,
+        venueName: deps.venueNameState?.() ?? "not-asked",
       });
     });
   }

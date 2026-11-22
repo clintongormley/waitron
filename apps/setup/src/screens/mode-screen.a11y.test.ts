@@ -15,15 +15,13 @@ describe.each(["light", "dark"] as const)("setup-mode-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the certificate note shown", async () => {
+  it("has no violations when another box was found (its line, the leading card and Other choices)", async () => {
     const { el, host } = await mountWidget<SetupModeScreen>(
       "setup-mode-screen",
-      { certificateNote: true },
+      { otherBoxFound: true },
       theme,
     );
-    expect(
-      el.shadowRoot!.querySelector("[data-test=cert-note] [data-test=trust-help]"),
-    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=other-box]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

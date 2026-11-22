@@ -85,12 +85,12 @@ export const startEn = {
 
   "connect.heading": "Join the main box",
   "connect.intro":
-    "This box joins your venue's main box and keeps a copy of its data. Once it has joined, it can take over: by a handover from the main box's Servers page, or by an emergency switch if the main box fails. Enter the main box's address and choose Join. To restore a backup instead, choose Back.",
+    "This box joins the main box as a spare. It keeps an up-to-date copy of the venue's data, so it can take over if the main box fails, or when you choose a planned handover.",
   "connect.primary_url.label": "Main box address",
   "connect.primary_url.error": "Enter the main box's address.",
   "connect.primary_url.refused":
     "This address can't be used. Enter the main box's name, starting with https://, for example https://waitron.local. An IP address on the venue's network, such as https://192.168.1.10, is not accepted.",
-  "connect.primary_url.hint": "For example https://waitron.local",
+  "connect.primary_url.hint": "https://waitron.local",
   "connect.fix_fields": "Correct the highlighted fields to continue.",
   "connect.back": "Back",
   "connect.join": "Join",
@@ -167,30 +167,31 @@ export const startEn = {
   "connect.refusal.generic":
     "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
 
-  "mode.heading": "Set up this Waitron server",
-  "mode.intro":
-    "This server runs the till and files fiscal records. Set it up once here, then it restarts into everyday trading mode.",
-  "mode.cert_note": "If your browser shows a certificate warning,",
-  "mode.cert_note_link": "open certificate help",
-  "mode.production_warning":
-    "This server is stamped for production — provisioning files real records to AEAT.",
+  "mode.heading": "Set up this box",
+  "mode.other_box": "Another Waitron box is already running a restaurant on this network.",
+  "mode.join_spare.heading": "Join it as a spare",
+  "mode.join_spare.copy":
+    "Add this box as a spare for the restaurant that's already running. It can take over if the main box fails.",
+  "mode.others.heading": "Other choices",
   "mode.demo.heading": "Demo",
-  "mode.demo.copy": "A practice server. Nothing is filed to AEAT — safe to explore and throw away.",
+  "mode.demo.copy":
+    "A practice box. Nothing is sent to the tax agency, so it is safe to explore and throw away.",
   "mode.prepare.heading": "Prepare your restaurant",
   "mode.prepare.copy":
-    "Enter your real menus, staff and layouts, then practise with test payments. Nothing is filed to AEAT.",
-  "mode.live.heading": "Live",
-  "mode.live.copy": "The real thing. Every sale is filed to AEAT. This choice is permanent.",
-  "mode.existing.heading": "Already have a restaurant?",
+    "Enter your real menus, staff and layouts, then practise with test payments. Nothing is sent to the tax agency.",
+  "mode.live.heading": "Start a new restaurant",
+  "mode.live.copy": "Every sale is sent to the tax agency (AEAT). You can't change this later.",
+  "mode.existing.heading": "Join or recover a restaurant",
   "mode.existing.copy":
-    "Add this server as a mirror of a running restaurant, or recover a restaurant from a backup.",
-  "mode.existing.choice": "Join or recover",
+    "Add this box as a spare for a restaurant that's already running, or bring one back from a backup.",
+  "mode.recover.heading": "Recover a restaurant",
+  "mode.recover.copy": "Bring a restaurant back from a backup.",
   "mode.confirm.heading": "This is permanent",
   "mode.confirm.warning":
-    "A live server files real invoices to AEAT and can NEVER become a demo — this is permanent.",
+    "A new restaurant sends every sale to the tax agency (AEAT) and can NEVER become a demo — this is permanent.",
   "mode.confirm.understand": "I understand this cannot be undone",
   "mode.confirm.back": "Back",
-  "mode.confirm.button": "Set up this live server",
+  "mode.confirm.button": "Start a new restaurant",
 
   "admin.heading": "Your account",
   "admin.intro": "Create the account that manages this server. You can add more people later.",
@@ -327,12 +328,12 @@ export const startEs: Record<keyof typeof startEn, string> = {
 
   "connect.heading": "Unirse al servidor principal",
   "connect.intro":
-    "Este servidor se une al servidor principal de tu local y guarda una copia de sus datos. Una vez unido, puede tomar el relevo: con un traspaso desde la página Servidores del servidor principal, o con un cambio de emergencia si el servidor principal falla. Escribe la dirección del servidor principal y elige Unirse. Para restaurar una copia de seguridad, elige Volver.",
+    "Este servidor se une al servidor principal como servidor de reserva. Guarda una copia al día de los datos del local, así que puede tomar el relevo si el servidor principal falla o cuando elijas un traspaso planificado.",
   "connect.primary_url.label": "Dirección del servidor principal",
   "connect.primary_url.error": "Escribe la dirección del servidor principal.",
   "connect.primary_url.refused":
     "No se puede usar esta dirección. Escribe el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del local, como https://192.168.1.10.",
-  "connect.primary_url.hint": "Por ejemplo https://waitron.local",
+  "connect.primary_url.hint": "https://waitron.local",
   "connect.fix_fields": "Corrige los campos marcados para continuar.",
   "connect.back": "Volver",
   "connect.join": "Unirse",
@@ -411,31 +412,31 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.generic":
     "Este servidor no ha podido hacerlo ahora. Comprueba la dirección y que el servidor principal está encendido, e inténtalo de nuevo.",
 
-  "mode.heading": "Configura este servidor Waitron",
-  "mode.intro":
-    "Este servidor hace funcionar la caja y envía los registros fiscales. Configúralo aquí una vez y después se reiniciará en el modo de venta diaria.",
-  "mode.cert_note": "Si tu navegador muestra un aviso de certificado,",
-  "mode.cert_note_link": "abre la ayuda sobre el certificado",
-  "mode.production_warning":
-    "Este servidor está marcado para producción: al configurarlo se envían registros reales a la AEAT.",
+  "mode.heading": "Configura este servidor",
+  "mode.other_box": "Ya hay otro servidor Waitron con un restaurante en marcha en esta red.",
+  "mode.join_spare.heading": "Unirse como reserva",
+  "mode.join_spare.copy":
+    "Añade este servidor como reserva del restaurante que ya está en marcha. Puede tomar el relevo si el servidor principal falla.",
+  "mode.others.heading": "Otras opciones",
   "mode.demo.heading": "Demostración",
   "mode.demo.copy":
-    "Un servidor de práctica. No se envía nada a la AEAT: puedes explorarlo y descartarlo sin riesgo.",
+    "Un servidor de práctica. No se envía nada a la AEAT, así que puedes explorarlo y descartarlo sin riesgo.",
   "mode.prepare.heading": "Prepara tu restaurante",
   "mode.prepare.copy":
     "Introduce tus cartas, tu personal y tus planos reales, y practica con pagos de prueba. No se envía nada a la AEAT.",
-  "mode.live.heading": "En vivo",
-  "mode.live.copy": "El de verdad. Cada venta se envía a la AEAT. Esta elección es permanente.",
-  "mode.existing.heading": "¿Ya tienes un restaurante?",
+  "mode.live.heading": "Empezar un restaurante nuevo",
+  "mode.live.copy": "Cada venta se envía a la AEAT. No podrás cambiarlo después.",
+  "mode.existing.heading": "Unirse a un restaurante o recuperarlo",
   "mode.existing.copy":
-    "Añade este servidor como réplica de un restaurante en funcionamiento, o recupera un restaurante desde una copia de seguridad.",
-  "mode.existing.choice": "Unirse o recuperar",
+    "Añade este servidor como reserva de un restaurante que ya está en marcha, o recupera uno desde una copia de seguridad.",
+  "mode.recover.heading": "Recuperar un restaurante",
+  "mode.recover.copy": "Recupera un restaurante desde una copia de seguridad.",
   "mode.confirm.heading": "Esto es permanente",
   "mode.confirm.warning":
-    "Un servidor en vivo envía facturas reales a la AEAT y NUNCA puede convertirse en uno de demostración: es permanente.",
+    "Un restaurante nuevo envía cada venta a la AEAT y NUNCA puede convertirse en uno de demostración: es permanente.",
   "mode.confirm.understand": "Entiendo que no se puede deshacer",
   "mode.confirm.back": "Volver",
-  "mode.confirm.button": "Configurar este servidor en vivo",
+  "mode.confirm.button": "Empezar un restaurante nuevo",
 
   "admin.heading": "Tu cuenta",
   "admin.intro":

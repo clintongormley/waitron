@@ -40,7 +40,9 @@ Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexió
 `waitron.local` lleva al servidor principal, abre la dirección que la pantalla del servidor nuevo
 muestra después de **Use this box's own address**. No hace falta instalar el certificado del
 servidor nuevo: acepta una vez el aviso del navegador, elige **Unirse o recuperar** en la primera
-pantalla y después **Añadir un nodo réplica**.
+pantalla y después **Añadir un nodo réplica**. Si ahí eliges **Continuar con la configuración**,
+«Configura este servidor» dice cuándo encuentra otro servidor Waitron con un restaurante en marcha en
+la red y ofrece primero **Unirse como reserva**, que abre la misma página para unirse.
 
 Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige
 **Unirse**; su dirección IP, como `https://192.168.1.10`, se rechaza. El servidor nuevo muestra un

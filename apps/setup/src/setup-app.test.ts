@@ -497,28 +497,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
   });
 
-  it("does not repeat the certificate note once the connection question has been answered", async () => {
-    const el = await mountSetupApp(
-      stubApi({ getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }) }),
-    );
-    await flush(el);
-    (await screenHost(el, "connection"))
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
-      .click();
-    await flush(el);
-    const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).toBeNull();
-  });
-
-  it("keeps the certificate note when the connection question was never asked", async () => {
-    const el = await mountSetupApp(
-      stubApi({ getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }) }),
-    );
-    await flush(el);
-    const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).not.toBeNull();
-  });
-
   it("keeps the connection step open when the check fails and allows a fresh check", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("network"));
     const el = await mountSetupApp(
@@ -618,9 +596,7 @@ describe("setup-app", () => {
     const el = await mountSetupApp();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain(
-      "Set up this Waitron server",
-    );
+    expect(mode.shadowRoot!.querySelector("h1")?.textContent).toContain("Set up this box");
   });
 
   it("routes Join or recover through its subchooser to the mirror connection form", async () => {
@@ -657,7 +633,7 @@ describe("setup-app", () => {
     },
   );
 
-  it("boot reads the box environment via getStatus and the mode screen warns of a production box", async () => {
+  it("boot reads the box environment via getStatus and the mode screen offers a production box no practice choices", async () => {
     const getStatus = vi.fn().mockResolvedValue({
       provisioned: false,
       environment: "production",
@@ -667,7 +643,9 @@ describe("setup-app", () => {
     await flush(el);
     expect(getStatus).toHaveBeenCalledOnce();
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).not.toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-prepare]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-live]")).not.toBeNull();
   });
 
   it("still renders when boot's getStatus rejects (the try/catch is proven)", async () => {
@@ -680,7 +658,7 @@ describe("setup-app", () => {
     await el.updateComplete;
     const mode = await screenHost(el, "mode");
     expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]")).not.toBeNull();
-    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-prepare]")).not.toBeNull();
   });
 
   it("#goto flips the visible screen", async () => {
@@ -1834,12 +1812,12 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Live or Join or recover.",
+      "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Start a new restaurant or Join or recover a restaurant.",
       "Reload",
     ],
     [
       "es-ES",
-      "Demostración no está disponible en este servidor. Recarga para volver a la configuración y elige Prepara tu restaurante, En vivo o Unirse o recuperar.",
+      "Demostración no está disponible en este servidor. Recarga para volver a la configuración y elige Prepara tu restaurante, Empezar un restaurante nuevo o Unirse a un restaurante o recuperarlo.",
       "Recargar",
     ],
   ] as const)(
@@ -3389,25 +3367,6 @@ describe("connection checks", () => {
       expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
     },
   );
-
-  it("Join or recover then Back still offers the certificate help for a new setup", async () => {
-    const el = await mountSetupApp(
-      stubApi({
-        getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-        firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
-        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
-      }),
-    );
-    const connection = await screenHost(el, "connection");
-    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
-    await flush(el);
-    await flush(el);
-    const role = await screenHost(el, "role");
-    role.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
-    await flush(el);
-    const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
-  });
 
   it("Join or recover stays on the connection screen with the reason when the server does not answer", async () => {
     const getStatus = vi
@@ -5863,7 +5822,8 @@ describe("screen fallback", () => {
     goto(el, "no-such-screen" as Screen);
     await el.updateComplete;
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).not.toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-live]")).not.toBeNull();
   });
 });
 

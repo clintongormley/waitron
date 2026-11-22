@@ -84,6 +84,21 @@ it("reports caDownloadAvailable:false when there is no box CA", async () => {
   });
 });
 
+it.each(["other-box-answers", "no-other-box", "not-asked", "ask-failed"] as const)(
+  "tells setup what the venue-name watch last found (%s)",
+  async (state) => {
+    const app = appFor(await stateDirWithCa(), { venueNameState: () => state });
+    expect(await (await app.request("/setup-api/discovery")).json()).toMatchObject({
+      venueName: state,
+    });
+  },
+);
+
+it("says the venue name was not asked where no venue-name watch runs", async () => {
+  const body = await (await appFor(await stateDirWithCa()).request("/setup-api/discovery")).json();
+  expect(body).toMatchObject({ venueName: "not-asked" });
+});
+
 it("renders a trust page with the CA link and the inline QR", async () => {
   const res = await appFor(await stateDirWithCa()).request("/setup/trust");
   expect(res.status).toBe(200);

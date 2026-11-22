@@ -86,7 +86,7 @@ export const shellEn = {
     "The fiscal test could not run. Check the connection and try again.",
 
   "shell.provision.usb_demo_refused":
-    "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Live or Join or recover.",
+    "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Start a new restaurant or Join or recover a restaurant.",
   "shell.provision.throwaway_refused":
     "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
 
@@ -307,7 +307,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido hacer la prueba fiscal. Comprueba la conexión e inténtalo de nuevo.",
 
   "shell.provision.usb_demo_refused":
-    "Demostración no está disponible en este servidor. Recarga para volver a la configuración y elige Prepara tu restaurante, En vivo o Unirse o recuperar.",
+    "Demostración no está disponible en este servidor. Recarga para volver a la configuración y elige Prepara tu restaurante, Empezar un restaurante nuevo o Unirse a un restaurante o recuperarlo.",
   "shell.provision.throwaway_refused":
     "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
 
