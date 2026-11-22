@@ -36,6 +36,7 @@ export async function smtpRig(
     starttls?: true | 454 | 502;
     wrongHostname?: boolean;
     pipelining?: boolean;
+    echoRecipient?: boolean;
   } = {},
 ) {
   const material = options.wrongHostname ? smtpWrongHostTls : smtpTestTls;
@@ -44,6 +45,7 @@ export async function smtpRig(
   let connections = 0;
   const authentications: string[] = [];
   const commands: string[] = [];
+  const recipients: string[] = [];
   let received!: () => void;
   let closed!: () => void;
   const connectionClosed = new Promise<void>((resolve) => {
@@ -58,6 +60,7 @@ export async function smtpRig(
     if (!upgraded && reply !== "no-greeting") socket.write("220 invoice-test ESMTP\r\n");
     let buffer = "";
     let data: string[] | undefined;
+    let recipient = "";
     socket.on("data", (chunk: string) => {
       buffer += chunk;
       let end: number;
@@ -74,7 +77,12 @@ export async function smtpRig(
           data = undefined;
           received();
           if (reply === "lost-ack") socket.destroy();
-          else if (reply === "data-refused") socket.write("550 secret-smtp-password rejected\r\n");
+          else if (reply === "data-refused")
+            socket.write(
+              options.echoRecipient
+                ? `550 <${recipient}>: message refused\r\n`
+                : "550 secret-smtp-password rejected\r\n",
+            );
           else if (reply === "accepted" || reply === "no-login") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
           socket.write(
@@ -97,13 +105,17 @@ export async function smtpRig(
         } else if (line.startsWith("MAIL") && reply === "login-required") {
           socket.write("530 secret-smtp-password authentication required\r\n");
         } else if (line.startsWith("RCPT")) {
+          recipient = /<([^>]*)>/.exec(line)?.[1] ?? "";
+          recipients.push(recipient);
           if (reply === "dropped-before-data") {
             socket.destroy();
             return;
           }
           socket.write(
             reply === "recipient-refused"
-              ? "550 secret-smtp-password unknown recipient\r\n"
+              ? options.echoRecipient
+                ? `550 <${recipient}>: unknown recipient\r\n`
+                : "550 secret-smtp-password unknown recipient\r\n"
               : "250 recipient ok\r\n",
           );
         } else if (line === "DATA") {
@@ -155,6 +167,7 @@ export async function smtpRig(
     messages,
     authentications,
     commands,
+    recipients,
     dataReceived,
     connectionClosed,
     sockets,

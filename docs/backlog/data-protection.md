@@ -189,10 +189,8 @@ by the answers):
   need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
 - **S10 follow-ups (from #2094's review, not taken there):**
   - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
-    `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
-    three similar allow-list checks; reuse the existing fake mail server in
-    `apps/server/src/recovery-page-personal-data.test.ts` and drop its two attendance cases that
-    repeat an existing test.
+    `scripts/personal-log-params.test.ts` (its header lists what text reading misses), and merge
+    its three similar allow-list checks.
   - **Owner choices on the partial mask** are listed under the S10 plan's decision 14 and in lane
     B's questions file; one worth a look: the ending after an email's last dot is kept whole, so a
     mistyped `jordi@puig.ferrer` logs as `j***i@p***g.ferrer`.
