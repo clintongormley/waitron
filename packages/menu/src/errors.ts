@@ -175,7 +175,7 @@ declare module "@waitron/shared" {
      */
     "product.offered_as_extra": { field: string; extraLists: { id: string; name: string }[] };
     "product.name_taken": { field: string; name: string };
-    /** A product-editor field is missing or malformed. */
+    /** A request field is missing or malformed; `field` names it. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
     "product.archived": { productId: string; field?: string };

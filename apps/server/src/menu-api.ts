@@ -1,6 +1,7 @@
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import {
   isProductOrdering,
+  isProductPrice,
   validateOptionalTranslations,
   type TranslationContext,
 } from "@waitron/menu";
@@ -11,9 +12,7 @@ import {
   AppError,
   FALLBACK_LOCALE,
   VAT_CLASSES,
-  decimal,
   type ContentLanguageRules,
-  type Decimal,
   type VatClass,
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -331,10 +330,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
-  // Raised by the `decimal()` inside the menu writes' `stringToCents`, not by this file:
-  // `refuseNegativePrice` swallows its own `decimal()` throw.
   "shared.invalid_decimal": 400,
-  // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
   "menu.not_found": 404,
   "set_menu.not_found": 404,
@@ -442,23 +438,9 @@ function requireUuidParam(id: string, kind: string): string {
   return id;
 }
 
-/**
- * Refuse a negative MENU price. Scoped to the menu deliberately: a corrective invoice's
- * totals are negative on purpose, so "a price is never negative" is only true of prices this file
- * writes.
- *
- * SIGN ONLY. A value `decimal()` cannot parse is left to the write's own `decimal()`, which keeps
- * both the error code and the order in which a request carrying two faults reports them. `decimal()`
- * drops the sign from a zero magnitude, so `-0.00` is not refused.
- */
-function refuseNegativePrice(value: string, field: string): void {
-  let parsed: Decimal;
-  try {
-    parsed = decimal(value);
-  } catch {
-    return;
-  }
-  if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
+/** A menu price the product editor would accept: the shape `isProductPrice` allows, never rounded. */
+function refuseInvalidPrice(value: string, field: string): void {
+  if (!isProductPrice(value)) throw new AppError("product.invalid", { field });
 }
 
 function parseMenuVariants(value: unknown): MenuVariant[] {
@@ -1402,7 +1384,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         if (typeof body.grossPrice !== "string") {
           throw new AppError("management.request_invalid", { field: "grossPrice" });
         }
-        refuseNegativePrice(body.grossPrice, "grossPrice");
+        refuseInvalidPrice(body.grossPrice, "grossPrice");
       }
       for (const retired of ["active", "offered"]) {
         if (Object.hasOwn(body, retired)) {
@@ -1665,7 +1647,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       if (typeof body.unitPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "unitPrice" });
       }
-      refuseNegativePrice(body.unitPrice, "unitPrice");
+      refuseInvalidPrice(body.unitPrice, "unitPrice");
       if (typeof body.vatClass !== "string") {
         throw new AppError("management.request_invalid", { field: "vatClass" });
       }

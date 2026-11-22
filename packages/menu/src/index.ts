@@ -265,6 +265,7 @@ export * from "./extra-projection.js";
 export * from "./extra-usage.js";
 export * from "./product-modifiers.js";
 export * from "./offered-modifiers.js";
+export { isProductPrice } from "./modifier-limits.js";
 
 // Listed rather than `export *`: what a menu sells is decided from the offer (`MenuOffer.variants`),
 // never from `variantsOfProducts`, which reads Inactive variants too.

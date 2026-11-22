@@ -173,6 +173,7 @@ function namesThePrice(error: unknown, save: PriceSave): boolean {
   return (
     (code === "product.variant_invalid" && fieldOf(error) === "price") ||
     (code === "management.request_invalid" && ["grossPrice", "price"].includes(fieldOf(error))) ||
+    (code === "product.invalid" && fieldOf(error) === "grossPrice") ||
     (code === "product.variant_not_found" && save.variantId !== null)
   );
 }
