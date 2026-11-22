@@ -58,6 +58,8 @@ it("names a hidden surcharge error and remembers the hidden column on reopen", a
   );
   const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
   await surcharge.fill("20000");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(surcharge).toHaveAttribute("aria-invalid", "true");
   const chooser = table.getByRole("button", { name: "Customise columns" });
   await vi.waitFor(() => expect(chooser.element()).toBeVisible());
   await chooser.click();
@@ -71,7 +73,6 @@ it("names a hidden surcharge error and remembers the hidden column on reopen", a
       .shadowRoot!.querySelector("wt-form-actions")!,
   );
   const save = actions.getByRole("button", { name: "Save", exact: true });
-  await save.click();
   await expect
     .element(actions.getByRole("alert"))
     .toHaveTextContent("Your change to Soup was not saved.");
@@ -231,18 +232,22 @@ it("saves two staged surcharges together and freezes editing until the refresh f
   );
   await starter.fill("2.00");
   await sharing.fill("5.25");
-  await save.click();
+  await userEvent.keyboard("{Enter}");
   await vi.waitFor(() => expect(release).toBeDefined());
   expect(api.updateMenuItem).toHaveBeenCalledWith("daily", "soup-item", { grossPrice: "2.00" });
   expect(api.updateMenuItem).toHaveBeenCalledWith("daily", "bravas-item", { grossPrice: "5.25" });
-  await expect.element(sharing).toBeDisabled();
   await expect.element(save).toBeDisabled();
   await expect.element(cancel).toBeDisabled();
+  const field = sharing.element();
+  const fieldRoot = field.getRootNode() as ShadowRoot;
+  expect(fieldRoot.activeElement).toBe(field);
+  await expect.element(sharing).toHaveAttribute("readonly");
   release({
     ...details,
     dishes: [hake, { ...bravas, surcharge: "5.25" }, { ...soup, surcharge: "2.00" }],
   });
-  await expect.element(sharing).toBeEnabled();
+  await expect.element(sharing).not.toHaveAttribute("readonly");
+  expect(fieldRoot.activeElement).toBe(field);
   await expect.element(cancel).toBeDisabled();
   expect(api.readSetMenu).toHaveBeenCalledTimes(reads + 1);
 
@@ -613,6 +618,34 @@ it("keeps a dish whose removal is refused and says why", async () => {
     .toHaveTextContent("That set menu could not be found.");
   await expect.element(page.getByRole("region", { name: "No course" })).toBeVisible();
   expect(api.readSetMenu).toHaveBeenCalledTimes(reads);
+});
+
+it("omits a removed dish from a queued Save even when the removal refresh fails", async () => {
+  const { el, api } = await mountDishes();
+  const dishes = page.elementLocator(el.shadowRoot!.querySelector("dashboard-set-menu-dishes")!);
+  const save = dishes.getByRole("button", { name: "Save", exact: true });
+  let finishRemove!: () => void;
+  api.removeSectionMember.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishRemove = () => resolve(undefined);
+      }),
+  );
+  api.readSetMenu
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValueOnce({ ...details, dishes: [bravas, { ...soup, surcharge: "2.00" }] });
+
+  await page.getByRole("textbox", { name: "Surcharge for Hake" }).fill("4.00");
+  await page.getByRole("textbox", { name: "Surcharge for Soup" }).fill("2.00");
+  await page.getByRole("button", { name: "Actions for Hake" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await vi.waitFor(() => expect(finishRemove).toBeDefined());
+  await save.click();
+  finishRemove();
+  await expect.element(page.getByRole("region", { name: "No course" })).not.toBeInTheDocument();
+  expect(api.updateMenuItem).toHaveBeenCalledExactlyOnceWith("daily", "soup-item", {
+    grossPrice: "2.00",
+  });
 });
 
 it("offers Try again when the set menu cannot be read after a removal", async () => {

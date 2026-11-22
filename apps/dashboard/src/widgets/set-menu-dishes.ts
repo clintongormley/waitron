@@ -198,7 +198,11 @@ export class SetMenuDishes extends LitElement {
       const refusals = new Map<string, PriceRefusal>();
       for (const { dish, price } of changes) {
         const id = dish.menuItemId;
-        if (!this.details.dishes.some(({ menuItemId }) => menuItemId === id)) continue;
+        if (
+          !this.prices.has(id) ||
+          !this.details.dishes.some(({ menuItemId }) => menuItemId === id)
+        )
+          continue;
         try {
           await this.api.updateMenuItem(this.details.id, id, { grossPrice: price });
           saved.set(id, price);
@@ -371,7 +375,7 @@ export class SetMenuDishes extends LitElement {
       placeholder=${t("menus.set_menu_included")}
       .value=${live(this.prices.get(id) ?? dish.surcharge ?? "")}
       .error=${this.#priceError(id)}
-      .disabled=${this.savingPrices}
+      ?readonly=${this.savingPrices}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         if (!this.savingPrices) this.#updatePrice(id, event.detail.value);
