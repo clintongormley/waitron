@@ -2427,8 +2427,7 @@ describe("clock compatibility reads special-day paint", () => {
   });
 });
 
-/** Four seasons, three departments and two sets of `count` yearly special days, with
- *  fixed ids so the listed conflicts come out in one order. */
+/** Four seasons, three departments and two sets of `count` yearly special days. */
 async function busyCalendar(count: number, run = 0) {
   const fixed = (kind: number, n: number) =>
     `00000000-0000-4${String(run).padStart(3, "0")}-8${String(kind).padStart(3, "0")}-${String(n).padStart(12, "0")}`;
