@@ -460,7 +460,7 @@ export class CopyChooser {
     const columns = this.#options.columns();
     const from = columns.find(({ key }) => key === copying?.key);
     const heading = t("paint.copy_day_to").replace("{day}", from?.label ?? "");
-    const ready = (copying?.ticked.size ?? 0) > 0;
+    const ready = (copying?.ticked.size ?? 0) > 0 && copying?.refusal === undefined;
     return html`<div
       class="chooser"
       id="copy-chooser"

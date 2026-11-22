@@ -193,7 +193,7 @@ const en = {
   "paint.copy_day_to": "Copy {day} to",
   "paint.copy": "Copy",
   "paint.copy_crosses_start":
-    "The copied hours cross the business-day start on {date}. Paint it separately.",
+    "The copied paint does not fit the business-day start on {date}. Paint it separately.",
   "paint.clear": "Clear",
   "painter.week": "{season}: standard week",
   "painter.special_day": "{name}: special day, {dates}",
@@ -1126,7 +1126,7 @@ const es: Record<keyof typeof en, string> = {
   "paint.copy_day_to": "Copiar {day} a",
   "paint.copy": "Copiar",
   "paint.copy_crosses_start":
-    "El horario que quieres copiar cruza el inicio de la jornada del {date}. Pinta ese día por separado.",
+    "El horario que quieres copiar no encaja con el inicio de la jornada del {date}. Pinta ese día por separado.",
   "paint.clear": "Vaciar",
   "painter.week": "{season}: semana estándar",
   "painter.special_day": "{name}: día especial, {dates}",

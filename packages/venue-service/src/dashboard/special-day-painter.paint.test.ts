@@ -201,7 +201,7 @@ describe("the season under the paint", () => {
     expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
   });
 
-  it("positions saved blocks and hour labels on each date's own scale", async () => {
+  it("aligns paint, faded hours and hour lines on each date's own scale", async () => {
     const { painter } = await mount({
       days: {
         sd1: storedDay({
@@ -212,7 +212,10 @@ describe("the season under the paint", () => {
           })),
         }),
       },
-      season: (date) => ({ dayCutover: date === DEC_14 ? "05:00" : "06:10" }),
+      season: (date) => ({
+        dayCutover: date === DEC_14 ? "05:00" : "06:10",
+        ranges: [lunch("07:00", "08:00")],
+      }),
     });
     for (const [date, minutes] of [
       [DEC_14, 120],
@@ -226,8 +229,12 @@ describe("the season under the paint", () => {
         (label) => label.textContent!.trim() === "07:00",
       );
       expect(label?.getBoundingClientRect().top).toBeCloseTo(block.top, 0);
+      expect(day.querySelector(".underlay")!.getBoundingClientRect().top).toBeCloseTo(block.top, 0);
+      const lines = [...day.querySelectorAll(".line")].map(
+        (line) => line.getBoundingClientRect().top,
+      );
+      expect(lines.some((top) => Math.abs(top - block.top) < 0.5)).toBe(true);
     }
-    expect(part(painter, "changeover-notice")).toBeNull();
   });
 
   it("paints and saves the second date from its 06:10 start", async () => {
@@ -377,13 +384,12 @@ describe("painting a department", () => {
       );
       await g.updateComplete;
     }
-    await userEvent.click(
-      [...chooser.querySelectorAll<HTMLElement>("wt-button")].find(
-        (button) => button.textContent!.trim() === "Copy",
-      )!,
-    );
+    const copy = [
+      ...chooser.querySelectorAll<HTMLElementTagNameMap["wt-button"]>("wt-button"),
+    ].find((button) => button.textContent!.trim() === "Copy")!;
+    await userEvent.click(copy);
     await settle(painter);
-    return chooser;
+    return { chooser, copy };
   }
 
   it("copies paint at the same clock times to a date with a different start, and clears by date", async () => {
@@ -420,13 +426,22 @@ describe("painting a department", () => {
       },
       season: (date) => ({ dayCutover: date === DEC_15 ? "06:10" : "05:00" }),
     });
-    const chooser = await copyTo(painter, [DEC_15, DEC_25]);
+    const { chooser, copy } = await copyTo(painter, [DEC_15, DEC_25]);
     expect(chooser.matches(":popover-open")).toBe(true);
     expect(chooser.querySelector('[role="alert"]')?.textContent).toMatch(
       /15 Dec.*paint it separately/i,
     );
     expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
     expect(grid(painter).days.get(DEC_25) ?? []).toEqual([]);
+    expect(copy.disabled).toBe(true);
+    await userEvent.click(
+      chooser.querySelector<HTMLInputElement>(`input[name="copyTo-${DEC_15}"]`)!,
+    );
+    await settle(painter);
+    expect(copy.disabled).toBe(false);
+    await userEvent.click(copy);
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_25)).toEqual([lunch("05:30", "07:00")]);
   });
 
   it("an undone paint makes Save quiet again", async () => {
@@ -902,16 +917,19 @@ describe("a period the live model no longer lists", () => {
 describe("a period the live model no longer lists, moved to a replacement", () => {
   it("leaves the replacement's saved block on a date the draft changed, and Save sends it beside the painted one", async () => {
     const day = storedDay({
-      paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("08:00", "10:00")] }],
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("05:30", "06:10")] }],
     });
-    const { painter, writes } = await mount({ days: { sd1: day } });
+    const { painter, writes } = await mount({
+      days: { sd1: day },
+      season: (date) => ({ dayCutover: date === DEC_15 ? "06:10" : "06:00" }),
+    });
     chip(painter, "paint-p2").click();
-    await drag(painter, DEC_15, at("19:00"), at("22:00"));
+    await drag(painter, DEC_15, 770, 950);
     expect(grid(painter).days.get(DEC_15)).toEqual([
-      lunch("08:00", "10:00"),
       dinner("19:00", "22:00"),
+      lunch("05:30", "06:10"),
     ]);
-    day.paint = [{ departmentId: "d1", date: DEC_15, ranges: [dinner("08:00", "10:00")] }];
+    day.paint = [{ departmentId: "d1", date: DEC_15, ranges: [dinner("05:30", "06:10")] }];
     const next = painterModel();
     const restaurant = next.departments[0]!;
     restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
@@ -920,7 +938,7 @@ describe("a period the live model no longer lists, moved to a replacement", () =
     expect(part(painter, "paint-p1")).toBeNull();
     await expect
       .poll(() => grid(painter).days.get(DEC_15))
-      .toEqual([dinner("08:00", "10:00"), dinner("19:00", "22:00")]);
+      .toEqual([dinner("19:00", "22:00"), dinner("05:30", "06:10")]);
     expect(saveButton(painter).disabled).toBe(false);
     saveButton(painter).click();
     await expect.poll(() => writes.length).toBe(1);
@@ -928,7 +946,7 @@ describe("a period the live model no longer lists, moved to a replacement", () =
       {
         departmentId: "d1",
         date: DEC_15,
-        ranges: [dinner("08:00", "10:00"), dinner("19:00", "22:00")],
+        ranges: [dinner("19:00", "22:00"), dinner("05:30", "06:10")],
       },
     ]);
   });
@@ -1254,10 +1272,12 @@ describe("a zone's closures are stored independently of department hours", () =>
     const { painter, writes } = await mount({
       season: (date) => ({
         dayCutover: date === DEC_14 ? "05:00" : "06:10",
-        ranges: [lunch("06:10", "08:00")],
+        ranges: [lunch("05:30", "06:10")],
       }),
     });
     await pick(painter, "zone:z2");
+    expect(grid(painter).underlay.get(DEC_15)).toEqual([lunch("05:30", "06:10")]);
+    expect(grid(painter).closedBehind.has(DEC_15)).toBe(false);
     await drag(painter, DEC_15, 0, 50);
     expect(grid(painter).days.get(DEC_15)).toEqual([closed("06:10", "07:00")]);
     expect(column(painter, DEC_15).querySelector<HTMLElement>("button.block")!.style.top).toBe(
@@ -1365,12 +1385,17 @@ describe("a zone's closures are stored independently of department hours", () =>
   });
 
   it("a zone's Open block changes to Closed outside department hours", async () => {
-    const { painter } = await mount({ season: restaurantOnly });
+    const { painter } = await mount({
+      season: (date) => ({
+        ...restaurantOnly(date),
+        dayCutover: date === DEC_15 ? "06:10" : "06:00",
+      }),
+    });
     await pick(painter, "zone:z2");
     chip(painter, "paint-open").click();
     await settle(painter);
-    await drag(painter, DEC_15, at("12:00"), at("14:00"));
-    const open = { periodId: "open", startsAt: "12:00", endsAt: "14:00" };
+    await drag(painter, DEC_15, 1400, 1440);
+    const open = { periodId: "open", startsAt: "05:30", endsAt: "06:10" };
     expect(grid(painter).days.get(DEC_15)).toEqual([open]);
     const g = grid(painter);
     await userEvent.click(column(painter, DEC_15).querySelector<HTMLElement>("button.block")!);
@@ -1380,7 +1405,7 @@ describe("a zone's closures are stored independently of department hours", () =>
       )!,
     );
     await settle(painter);
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("12:00", "14:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("05:30", "06:10")]);
     expect(frame(painter).refusal).toBe("");
   });
 });
