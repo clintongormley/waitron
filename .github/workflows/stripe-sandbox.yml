@@ -65,9 +65,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Self-skips cleanly (describe.skip) when STRIPE_SANDBOX_SECRET_KEY isn't configured as a
-      # repository secret — see packages/payments-stripe/src/collect.sandbox.test.ts. The repo owner
-      # must add that secret (a Stripe TEST-mode key) for this job to actually exercise Stripe rather
-      # than report a skipped suite every night.
+      # repository secret.
       - run: pnpm --filter @waitron/payments-stripe test:sandbox
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}

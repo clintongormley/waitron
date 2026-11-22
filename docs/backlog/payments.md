@@ -245,9 +245,8 @@ the ordering surface is A508 and [A509](till.md#a509-online-ordering-for-collect
 
 The add-reader route answers `reader.reference_unknown` when Stripe's library throws
 `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts` `readers.add`).
-`reader-add.sandbox.test.ts` shows test-mode Stripe answers that way for an unknown, a malformed
-and an empty id. Whether it does for a real reader that belongs to another Stripe account is
-unchecked: it needs a second test-mode account holding a simulated reader.
+`reader-add.sandbox.test.ts` shows test-mode Stripe answers that way for an unknown and a malformed
+id. Whether it does for a real reader that belongs to another Stripe account is unchecked: it needs a second test-mode account holding a simulated reader.
 
 ## A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets
 
@@ -282,8 +281,7 @@ Remaining Stripe qualification and maintenance.
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
 - **Check how real Stripe answers a reader id from another Stripe account** — left open by A519
-  (#1566); unknown, malformed and empty ids are settled by `reader-add.sandbox.test.ts`. Needs a
-  second test-mode account.
+  (#1566). Needs a second test-mode account.
   [Detail](payments.md#check-how-real-stripe-answers-a-reader-id-from-another-stripe-account)
 - **Check Stripe's reader paging on real Stripe.** The reader list (`readers.list` in
   `packages/payments-stripe/src/card-provider.ts`) asks for 100 readers a page and follows
