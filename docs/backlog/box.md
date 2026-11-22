@@ -950,9 +950,9 @@ client. No screen calls them yet.
   needs an encrypted connection, since none carries a secret. A change from another page that
   carries none of the dashboard, till or device cookies passes that check and is refused by the session check as 401
   `management_session.required`, or, when its body is over the size limit, by that limit first as
-  400 `management.request_invalid` `{ field: "body" }` (the limit runs ahead of the session check,
-  `apps/server/src/box-host-api.ts:173-174`, and reads a body sent without a `Content-Length` to
-  measure it); either way the host is asked nothing. The
+  400 `management.request_invalid` `{ field: "body" }` (the limit runs ahead of the session check in
+  `mountBoxHostApi`, `apps/server/src/box-host-api.ts`, and reads a body sent without a
+  `Content-Length` to measure it); either way the host is asked nothing. The
   reads are not checked: another page cannot read their answers. Why: SameSite ignores the port,
   so a page served on another port of the box's own name is sent the manager's cookie; a review run
   in real Chromium showed such a page changing the start screen and forgetting the saved network
@@ -975,11 +975,8 @@ client. No screen calls them yet.
   `box_host.unavailable` `{ reason: "missing", detail: "ENOENT" }` on a machine with no
   `/run/waitron-box/box.sock`.
 - On a mirror or a fenced box the read-only gate refuses the four POST routes with `node.read_only`;
-  no exemption was added, and no test of this pull request runs them there.
-- Left in the code, for whoever touches it next: `askHost` keeps one cast, `refusal as
-  ProtocolRefusal`, where the protocol's refusals go to `box_host.failed`; and on a route whose own
-  refusal set is empty (the reads and the start screen), an extra own word passed to `askHost` still
-  compiles, where on the scan, join and forget it does not.
+  no exemption was added. Tests: `apps/server/src/box-host-api.test.ts` and
+  `apps/server/src/box-host-api.join.test.ts`.
 
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 

@@ -16,8 +16,10 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { mountBoxHostApi } from "./box-host-api.js";
+import { askHost, mountBoxHostApi } from "./box-host-api.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
+import { readOnlyGate } from "./read-only-gate.js";
+import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import {
   boxHostRequests,
   type BoxHostRequests,
@@ -98,6 +100,7 @@ function mount(
   db: Database,
   host: BoxHostRequests = fakeHost(),
   log: Logger = () => {},
+  posture?: { mirror: boolean; fenced: boolean },
 ): { app: Hono; host: BoxHostRequests } {
   const app = new Hono();
   app.use("*", async (c, next) => {
@@ -109,6 +112,15 @@ function mount(
     "*",
     requireManagementChangeFromOwnPage(async () => false, log),
   );
+  if (posture !== undefined) {
+    app.use(
+      "*",
+      readOnlyGate(
+        () => posture.mirror || posture.fenced,
+        (c) => isReadOnlyExempt(c.req, posture),
+      ),
+    );
+  }
   mountBoxHostApi(app, { db, host }, log);
   return { app, host };
 }
@@ -913,5 +925,33 @@ describe("a scan asked with the live header", () => {
       (await post(app, SCAN, manager.cookie, undefined, { "x-waitron-live": "1" })).status,
     ).toBe(200);
     expect(Date.parse(await lastSeen(manager))).toBeGreaterThan(before.getTime());
+  });
+});
+
+describe("the changes on a mirror or a fenced box", () => {
+  it.each([
+    { mirror: true, fenced: false },
+    { mirror: false, fenced: true },
+  ])("answer node.read_only without asking the host %j", async (posture) => {
+    const host = fakeHost();
+    const { app } = mount(suite.db, host, () => {}, posture);
+    const responses = await Promise.all(
+      CHANGES.map(([, path, body]) => post(app, path, manager.cookie, body)),
+    );
+    for (const response of responses) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+    }
+    expect(changeAsked(host)).toBe(0);
+  });
+});
+
+describe("askHost's own refusal words", () => {
+  it("refuses at compile time a word the host's request cannot answer", async () => {
+    const host = fakeHost();
+    const actor = { source: "person", person: manager.id } as const;
+    // @ts-expect-error the start screen's read has no refusal words of its own
+    const read = askHost({ taken: 0 }, () => host.screenRead(actor), { busy: "box_network.busy" });
+    expect(await read).toEqual({ start: "till" });
   });
 });

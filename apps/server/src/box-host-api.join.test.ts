@@ -19,6 +19,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountBoxHostApi } from "./box-host-api.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
+import { readOnlyGate } from "./read-only-gate.js";
+import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { boxHostRequests, type BoxHostRequests, type WifiJoin } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -94,7 +96,12 @@ function fakeHost() {
   } satisfies BoxHostRequests;
 }
 
-function mount(host: BoxHostRequests, log: Logger = () => {}, db: Database = suite.db): Hono {
+function mount(
+  host: BoxHostRequests,
+  log: Logger = () => {},
+  db: Database = suite.db,
+  posture?: { mirror: boolean; fenced: boolean },
+): Hono {
   const app = new Hono();
   app.use(
     "*",
@@ -104,6 +111,15 @@ function mount(host: BoxHostRequests, log: Logger = () => {}, db: Database = sui
     "*",
     requireManagementChangeFromOwnPage(async () => false, log),
   );
+  if (posture !== undefined) {
+    app.use(
+      "*",
+      readOnlyGate(
+        () => posture.mirror || posture.fenced,
+        (c) => isReadOnlyExempt(c.req, posture),
+      ),
+    );
+  }
   mountBoxHostApi(app, { db, host }, log);
   return app;
 }
@@ -607,5 +623,19 @@ describe("the password never leaves the body", () => {
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
+  });
+});
+
+describe("a join on a mirror or a fenced box", () => {
+  it.each([
+    { mirror: true, fenced: false },
+    { mirror: false, fenced: true },
+  ])("answers node.read_only without asking the host %j", async (posture) => {
+    const host = fakeHost();
+    const app = mount(host, () => {}, suite.db, posture);
+    const response = await join(app, { cookie: manager.cookie });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+    expect(host.networkJoin).not.toHaveBeenCalled();
   });
 });
