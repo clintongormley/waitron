@@ -452,7 +452,7 @@ it("a saved email shows and a typed password never installs unload handling", as
   );
   // mountWidget does not reset localStorage; only this file's beforeEach does.
   const { screen } = await mount();
-  expect(value(screen, "chosen-email")).toBe("remembered@example.test");
+  await expect.element(page.getByText("remembered@example.test", { exact: true })).toBeVisible();
   expect(unload()).toBe(false);
   await change(screen, "password", "synthetic password");
   expect(unload()).toBe(false);

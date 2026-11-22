@@ -3852,10 +3852,8 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   disabled field box is not dimmed by `--wt-opacity-disabled`.
 - **Read-only** (`wt-input`'s `readonly`, which sets the native input's `readonly`): the value
   cannot be typed over, and no data attribute changes, so the box keeps the editable field's fill,
-  line and value colour, and its label floats like any field holding a value — it looks neither
-  empty nor disabled. Use it for a value a step shows but does not change: the sign-in screen's
-  chosen email, with "Use another account" in its `end` slot; and the course list's name while its
-  save is still being answered, read-only because that keeps focus where `disabled` would drop it.
+  line and value colour, and its label floats like any field holding a value. The course list
+  uses it while a name is saving to keep focus in the field.
 - **Compact** (`data-compact`, whenever no label is drawn: `hide-label`, or no `label` at all): the
   box's least height is `--wt-tap-min` instead of `--wt-field-height`, which makes a single-line
   field exactly the tap-target height.
@@ -4474,15 +4472,15 @@ explicit action. Navigation, refresh, logout and session expiry must leave that 
 Never use server-side account status or passkey enrolment to select a public screen, because the
 difference would reveal whether the account exists or has a passkey.
 
-On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as the heading. Show the
-address in a read-only `wt-input` labelled Email (owner, 2026-10-02, A189), so its text lines
-up with any other field on the step, with an accessible change-account icon in its `end` slot. That
-icon clears both the current attempt and the saved email/method, then returns to blank email entry.
-The reset and account-setup page and the passkey offer after sign-in show the same field without
-the icon. The password step, the code step and the reset and account-setup page also keep a hidden
-semantic username input for password managers; the read-only field is named `chosen-email`, so
-that hidden input stays the only field named `email`. Ordinary login has no separate Cancel or
-Forget button.
+On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as
+the heading. Show the address as wrapping text under **Email**, with a pencil and a visible
+**Change** action beside it, spoken as **Change email address**. The watcher cleared this layout
+after the owner's 2026-11-22 request to make the address look non-editable, superseding A189's
+read-only field. **Change** clears the current attempt and the saved email and method, then focuses
+the blank email field.
+The reset and account-setup page and the passkey offer after sign-in show the same address text.
+The password step, the code step and the reset and account-setup page keep a hidden semantic
+username input for password managers. Ordinary login has no separate Cancel or Forget button.
 
 Every step sits in a card drawn like the setup wizard's: a 1px `--wt-color-border` border,
 `--wt-radius-lg` corners and the `--wt-color-surface-raised` background. It draws no logo, because

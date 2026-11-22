@@ -139,6 +139,24 @@ export class LoginScreen extends LitElement {
         margin-block: var(--wt-space-4);
       }
 
+      .login-context {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .login-address {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .login-address-label {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .change-account {
+        flex: none;
+      }
+
       .password-toggle svg,
       .change-account svg,
       .method svg,
@@ -1031,27 +1049,19 @@ export class LoginScreen extends LitElement {
     };
   }
 
-  /** Named apart from the hidden `autofill-username` input, so that input stays the only field
-   * named `email` for password managers. */
   #renderLoginContext(changeable = true) {
-    return html`<wt-input
-      class="field"
-      data-test="login-context"
-      name="chosen-email"
-      type="email"
-      autocomplete="off"
-      readonly
-      label=${t("login.email")}
-      .value=${this.email}
-    >
+    return html`<div class="field login-context">
+      <p class="login-address">
+        <span class="login-address-label">${t("login.email")}</span>
+        <span data-test="login-context">${this.email}</span>
+      </p>
       ${
         changeable
           ? html`<wt-button
               class="change-account"
-              slot="end"
               variant="ghost"
               data-test="change-account"
-              aria-label=${t("login.use_another_account")}
+              aria-label=${t("login.change_email")}
               ?disabled=${this.busy}
               @click=${() => {
                 if (!this.busy) this.#cancelLogin();
@@ -1060,10 +1070,11 @@ export class LoginScreen extends LitElement {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" />
               </svg>
+              ${t("action.change")}
             </wt-button>`
           : nothing
       }
-    </wt-input>`;
+    </div>`;
   }
 
   #fieldLink(id: string, label: string, action: () => void) {

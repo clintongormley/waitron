@@ -44,6 +44,8 @@ y datos de contacto por separado.
 
 Para configurar el envío de estos enlaces, abre [Configuración del correo](email.md#set-up). Si una invitación no llega en unos minutos, revisa el correo no deseado del destinatario y Correo antes de reenviarla: solo funciona el enlace más reciente. Si un reintento indica que no ha cambiado nada, espera un minuto.
 
+Para iniciar sesión con otra dirección de correo, pulsa **Cambiar** junto a la dirección en la pantalla de inicio de sesión.
+
 Si Waitron no puede verificar tu passkey, puedes reintentarlo o elegir **Usar tu contraseña**
 para iniciar sesión. En la pantalla de contraseña, **¿Has olvidado tu contraseña?** solicita un
 correo con un enlace para elegir una nueva. La confirmación es la misma para todas las direcciones;

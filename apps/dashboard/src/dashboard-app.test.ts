@@ -5033,8 +5033,11 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
         t(step === "password" ? "login.password_heading" : "account.offer_passkey", "en-GB"),
       );
-      expect(screen.shadowRoot!.querySelector<WtInput>("[data-test=login-context]")!.value).toBe(
+      expect(screen.shadowRoot!.querySelector("[data-test=login-context]")?.textContent).toBe(
         "typed@example.com",
+      );
+      expect(Boolean(screen.shadowRoot!.querySelector("[data-test=change-account]"))).toBe(
+        step === "password",
       );
       expect(screen).toMatchObject({
         step,
