@@ -338,8 +338,7 @@ function includeFolderUndo(
   );
   if (members.length !== 1) return NONE;
   const member = members[0]!;
-  if (member.folder === undefined || member.includedMenuId !== is.section.includedMenu?.id)
-    return NONE;
+  if (member.folder === undefined) return NONE;
 
   const showAsFolder = was.section.direct !== true;
   const overrides = was.section.fixed ?? {};

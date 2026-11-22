@@ -101,6 +101,7 @@ function fakeApi(writes: Partial<DashboardApi>) {
   const state = {
     preview: previewOf([rename, recolour]),
     readFails: false,
+    structureReadFails: false,
     menuName: "Lunch Menu",
     languages: ["en"],
     structure,
@@ -118,6 +119,8 @@ function fakeApi(writes: Partial<DashboardApi>) {
     Object.fromEntries(
       parts.map((part) => {
         if (part === "preview" && state.readFails)
+          return [part, { status: 409, body: { error: { code: "menu.read_failed" } } }];
+        if (part === "structure" && state.structureReadFails)
           return [part, { status: 409, body: { error: { code: "menu.read_failed" } } }];
         const bodies = { structure: state.structure, home, preview: state.preview, status };
         return [part, { status: 200, body: bodies[part] }];
@@ -283,6 +286,25 @@ it("keeps the include Undo refusal when a fresh snapshot still offers it", async
   await vi.waitFor(() => expect(panel().preview).not.toBe(before));
   await panel().updateComplete;
   expect(refusal()).toBe(expected);
+});
+
+it("hides include Undo while only a stale structure is available", async () => {
+  const liveData = new LiveData();
+  const fake = fakeApi({ liveData } as Partial<DashboardApi>);
+  fake.state.preview = includePreview();
+  fake.state.structure = { ...structure, nodes: [directInclude] };
+  const { panel } = await mount(fake.api);
+  const id = includeDisplayChange.id;
+  expect(undoButton(panel(), id)).not.toBeNull();
+  const before = panel().preview;
+  fake.state.structureReadFails = true;
+  fake.state.preview = includePreview();
+  liveData.invalidate([{ type: "menus" }]);
+
+  await vi.waitFor(() => expect(panel().preview).not.toBe(before));
+  await panel().updateComplete;
+  expect(undoButton(panel(), id)).toBeNull();
+  expect(undoButton(panel(), "own-rename")).not.toBeNull();
 });
 
 it("reports a failed read after a stored Undo as a load failure, keeping the success line", async () => {

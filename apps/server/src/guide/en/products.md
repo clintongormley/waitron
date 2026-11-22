@@ -283,9 +283,6 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
-In **Preview**, choose **Undo** beside the change to restore how an included menu appeared in the
-published version, including its folder’s name, photo and colour.
-
 ## Set menus {#set-menus}
 
 To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name
@@ -333,6 +330,12 @@ customer names, colour and image.
 The copy starts unpublished, with the source menu's working sections, prices and Home page
 settings. Published versions and scheduled publications stay with the source. Editing the copy's
 own sections leaves the source as it was; included menus still point to the same shared menus.
+
+## Review unpublished menu changes {#preview-undo}
+
+Open **Preview** to review your changes before publishing. When a change offers **Undo**,
+choose it to restore its published value. For an included menu, this restores how it appeared, either directly
+or as a folder with its published names, photo and colour.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 

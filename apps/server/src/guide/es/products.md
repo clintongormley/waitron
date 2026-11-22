@@ -295,9 +295,6 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
-En **Vista previa**, pulsa **Deshacer** junto al cambio para recuperar cómo se mostraba una carta
-incluida en la versión publicada, incluido el nombre, la foto y el color de su carpeta.
-
 ## Cartas a precio fijo {#set-menus}
 
 Para ofrecer varios platos por un precio único, elige **Añadir carta** y después
@@ -349,6 +346,12 @@ La copia empieza sin publicar, con las secciones de trabajo, los precios y los a
 página de inicio de la carta original. Las versiones publicadas y las publicaciones programadas
 se quedan en la original. Editar las secciones propias de la copia deja la original como estaba;
 las cartas incluidas siguen apuntando a las mismas cartas compartidas.
+
+## Revisa los cambios de la carta antes de publicar {#preview-undo}
+
+Abre **Vista previa** para revisar tus cambios antes de publicar. Si un cambio ofrece
+**Deshacer**, púlsalo para recuperar el valor publicado. Si cambiaste cómo se mostraba una carta incluida, la
+recuperas tal como estaba publicada, directamente o como carpeta con sus nombres, foto y color.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
