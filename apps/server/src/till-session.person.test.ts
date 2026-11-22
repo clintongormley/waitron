@@ -79,7 +79,6 @@ async function fixture() {
         : { kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null } }),
     });
     const jar = `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`;
-    // Opened directly: a kitchen display has no sign-in, but its cookie can still carry a token.
     const sessionOf = async (personId: string) => {
       const token = randomUUID();
       await suite.db

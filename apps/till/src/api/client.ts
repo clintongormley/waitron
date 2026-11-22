@@ -4003,7 +4003,7 @@ export class TillApi {
     );
   }
 
-  /** {@link listStations} for a kitchen display, which has no session → `GET /api/device/stations`. */
+  /** {@link listStations} for a kitchen display using its device proof → `GET /api/device/stations`. */
   deviceStations(options: ReadOptions = {}): Promise<Station[]> {
     return this.#request<Station[]>("/api/device/stations", "GET", undefined, options.signal);
   }

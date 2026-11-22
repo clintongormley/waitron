@@ -719,10 +719,10 @@ the server checks each at the route, never trusting the till's copy:
   registrations and does not walk other APIs, including theme, node, box and backup routes.
   The independent zone map remains a comment.
 - **A kitchen display's preparation and movement use device authority.** A `kds` profile is a shared display
-  with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
-  every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
-  list names, and with nobody signed in a till route that needs a session answers
-  `session.required`. Payment and the drawer always need a named person. Its pass screen's bill
+  on a station or pass screen. `profileAllows` (`packages/layouts/src/device-profile.ts`)
+  allows only `prepare-orders`, `take-orders` and `hand-over-orders`. The shared till session
+  check answers `session.required` for a kitchen display based on its current profile type.
+  A kitchen sign-in carries no separate type field. Its pass screen's bill
   and group Ready routes (`apps/server/src/device-levers.ts`) serve only a kitchen display, check
   `prepare-orders`, the `run-the-pass` screen flag and the order's zone against its pass screen. The former device Fire and Away
   routes are retired. Waiter group Fire uses the signed-in person's session.
@@ -766,9 +766,9 @@ the server checks each at the route, never trusting the till's copy:
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
   the person's admission again; that switch, and a manager moving the device onto another profile
-  (Devices → edit), end the sessions the new profile does not admit, and a move onto a kitchen
-  display's profile ends every session on the device, whatever that profile's admission list says,
-  since nobody signs in on one (`endSessionsNotAdmitted`, `apps/server/src/device.ts`).
+  (Devices → edit), end the sessions the new profile does not admit. Reassignment into or out
+  of a kitchen display profile ends every session on the device (`endSessionsNotAdmitted`,
+  `apps/server/src/device.ts`).
 
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
@@ -1205,9 +1205,9 @@ an Add, landing while the PIN is checked therefore leaves no session open
 (`apps/server/src/join-e2e.test.ts`, "a sign-in that Delete overtook is refused, and opens no
 session" and "a sign-in that Delete and then Add both overtook is refused, and opens no
 session"). The same check hands back the device as it stands at that moment, and the sign-in
-refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile is now a kitchen
-screen's (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`), so a move onto a kitchen-screen
-profile while the PIN is checked opens no session (`apps/server/src/join-e2e.test.ts`, "a sign-in
+refuses it `device.forbidden_action` (`action: "sign_in"`) if a reassignment between an ordering
+and a kitchen profile overtook the PIN check (`apps/server/src/till-api.ts`). A move onto a
+kitchen profile during the check opens no session (`apps/server/src/join-e2e.test.ts`, "a sign-in
 overtaken by a move onto a kitchen-screen profile is refused, and opens no session"). A bill payment checks again inside the transaction that writes it, before anything is written: the
 operator's session is still open on that device, then the device is still active and not deleted,
 or it is refused `session.required` or `device.unauthorized` (`assertStillSignedIn`,

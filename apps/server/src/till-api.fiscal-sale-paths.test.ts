@@ -42,7 +42,7 @@ import {
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, readPersonAuthority } from "@waitron/identity";
+import { hashPassword, hashPin, readPersonAuthority } from "@waitron/identity";
 import { permissionsForRole } from "@waitron/identity/src/permissions.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -963,7 +963,7 @@ describe("sale-time device from the authenticated session", () => {
     expect(fiscalRecords).toHaveLength(0);
   });
 
-  it("refuses a cash sale from a kitchen display, whose profile does not take cash — 403 device.cash_not_allowed", async () => {
+  it("refuses a cash sale even with a kitchen display session", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -980,11 +980,7 @@ describe("sale-time device from the authenticated session", () => {
       stationId: station.id,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
-    // Opened directly: the sign-in route refuses a `kds_station` device itself.
-    const session = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId: dev.deviceId, personId: operatorId, pin: "5555" }),
-    );
-    const cookie = `${SESSION_COOKIE}=${session.token}`;
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     const id = randomUUID();
     const res = await app.request(`/api/working-orders/${id}/payments`, {
@@ -1000,8 +996,8 @@ describe("sale-time device from the authenticated session", () => {
         basket: { lines: [{ menuItemId: each.menuItemId, quantity: "2" }] },
       }),
     });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(verifactuRecords);
     });
@@ -3153,33 +3149,6 @@ describe("card readers the till cannot drive, and readers named by id", () => {
 });
 
 describe("POST /api/session by device kind", () => {
-  it("refuses a kitchen display as device.forbidden_action naming sign_in", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    const app = new Hono();
-    mountTillApi(app, apiDeps(cfg), noopLog);
-    const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, { name: "Pass", isDefault: false }),
-    );
-    const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Pass screen",
-      profileId: await seedProfileFF("kds"),
-      stationId: station.id,
-    });
-
-    const res = await app.request("/api/session", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
-      },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({
-      error: { code: "device.forbidden_action", params: { action: "sign_in" } },
-    });
-  });
-
   it.each(["till", "phone-portrait"] as const)("signs a person in on a %s device", async (ff) => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();

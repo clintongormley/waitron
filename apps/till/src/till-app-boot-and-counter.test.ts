@@ -260,7 +260,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
+const lock = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen:not([compact])");
 const shell = (el: TillApp) =>
   el.shadowRoot!.querySelector<
     HTMLElement & {
@@ -415,7 +416,7 @@ describe("till-app session activity", () => {
     expect(screen!.deviceId).toBe("station-device");
   });
 
-  it("a kitchen display whose board read fails falls back to the sign-in screen, which shows the logo and Powered by", async () => {
+  it("a kitchen display whose board read fails offers a retry with its logo and no ordering sign-in", async () => {
     const answer = {
       ...FIXTURE_ANSWER,
       hash: "logo-hash",
@@ -436,6 +437,7 @@ describe("till-app session activity", () => {
           kitchenScreens: [kitchenScreen("station")],
         }),
         getDeviceStationScreen,
+        listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
       });
       await flush(el);
       expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
@@ -447,6 +449,12 @@ describe("till-app session activity", () => {
       expect(logo).not.toBeNull();
       expect(logo.getAttribute("alt")).toBe(till.venueName);
       expect(screen.shadowRoot!.querySelector("wt-powered-by")).not.toBeNull();
+      expect(screen.shadowRoot!.querySelector(".operator-button")).toBeNull();
+      getDeviceStationScreen.mockResolvedValue({ stations: [] });
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-retry]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull(),
+      );
     } finally {
       localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
       startVenueTheme(document.documentElement, {
@@ -6429,7 +6437,59 @@ it.each([false, true])("direct Kitchen mount requires act-as-kds (%s)", async (a
   expect(fixedShell.shadowRoot!.querySelector("header")).toBeNull();
   expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
   expect(el.shadowRoot!.querySelector("till-kitchen-screen-notice")).toBeNull();
+  const login = el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]");
+  expect(login?.shadowRoot?.querySelector("[data-kitchen-sign-in]") ?? null).toBeNull();
   expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
+});
+
+it("signs in and out on a kitchen display without replacing its station board", async () => {
+  const { el } = await mountApp({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      formFactor: "kds",
+      capabilities: ["act-as-kds"],
+    }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "staff-kitchen",
+      name: "Kitchen",
+      formFactor: "kds",
+      kitchenScreens: [kitchenScreen("station")],
+    }),
+    getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+    listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
+    login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "es-ES" }),
+  });
+  await flush(el);
+  const board = el.shadowRoot!.querySelector("till-station-screen");
+  expect(board).not.toBeNull();
+  const screen = el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]");
+  const signIn = screen?.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-sign-in]");
+  expect(signIn?.textContent?.trim()).toBe(t("action.login"));
+  signIn!.click();
+  await flush(el);
+  await screen!.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
+  screen!.shadowRoot!.querySelector<HTMLElement>('[data-person="p1"]')!.click();
+  await screen!.updateComplete;
+  const pad = screen!.shadowRoot!.querySelector("till-numeric-pad")!;
+  await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  pad.shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!.click();
+  await screen!.updateComplete;
+  screen!.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+  await flush(el);
+  expect(api.login).toHaveBeenCalledWith("p1", "1");
+  expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")?.textContent?.trim()).toBe(
+    "Ana",
+  );
+  expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
+  expect(screen!.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+
+  screen!.shadowRoot!.querySelector<HTMLElement>("[data-kitchen-sign-out]")!.click();
+  await flush(el);
+  expect(api.logout).toHaveBeenCalledOnce();
+  expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")).toBeNull();
+  expect(screen!.shadowRoot!.querySelector("[data-kitchen-sign-in]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
 });
 
 it("opens the profile starting screen in the sign-in history entry", async () => {

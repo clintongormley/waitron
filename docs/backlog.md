@@ -764,8 +764,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A436 — a kitchen display with someone signed in, logged out only after a long idle time** (owner,
   2026-10-08, answering the A366 slice 5 plan; open). The owner: "kitchen
   displays can have a login, but i would not expect them to log off automatically, or at least
-  only after an extended logout time (eg 30 minutes)". Today nobody can sign in on one. Left out
-  of slice 5 as too large for it.
+  only after an extended logout time (eg 30 minutes)". Kitchen sign-in and move attribution are
+  built. The profile’s optional idle timeout remains open.
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**

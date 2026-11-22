@@ -49,7 +49,7 @@ import {
   tillSessions,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
-import { kindOfFormFactor } from "@waitron/layouts";
+import { isSharedDisplay } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
@@ -232,7 +232,6 @@ import {
   assertDeviceStillProven,
   requireDeviceProof,
   tryReadDevice,
-  type DeviceBinding,
 } from "./device-session.js";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
@@ -1077,7 +1076,7 @@ function requireLineIds(value: unknown): string[] {
 }
 
 /** What every group command carries: its submission id, the party revision read, and who acts —
- *  the signed-in person, or a kitchen display nobody is signed in on. */
+ *  the signed-in person or the kitchen display. */
 export function groupCommand(operatorId: string, body: Record<string, unknown>): PartyCommandArgs {
   return {
     submissionId: submissionIdOf(body),
@@ -1278,12 +1277,6 @@ function mountBillReady(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 }
 
-/** A kitchen display cannot open a shift session. */
-function refuseKitchenSignIn(device: DeviceBinding): void {
-  if (kindOfFormFactor(device.formFactor) === "kds_station")
-    throw new AppError("device.forbidden_action", { action: "sign_in" });
-}
-
 /**
  * `write`, moving by one each room of `tableIds` it changed; refused before it when `check` names a
  * table whose room is no longer at the revision sent.
@@ -1416,9 +1409,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (personId === null) throw new AppError("pin.invalid", {}, { reason: "malformed" });
       const proof = await requireDeviceProof(deps, c);
       const { device } = proof;
-      // Before the PIN work, and again under the lock: the profile can change while the PIN is
-      // checked.
-      refuseKitchenSignIn(device);
       pinThrottle.check(device.deviceId, personId);
       const attempts = { throttle: pinThrottle, slot: device.deviceId };
       if (typeof pin !== "string") {
@@ -1438,7 +1428,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           try {
             const opened = await withTransaction(deps.db, async (tx) => {
               const current = await assertDeviceStillProven(tx, proof);
-              refuseKitchenSignIn(current);
+              if (isSharedDisplay(device.formFactor) !== isSharedDisplay(current.formFactor))
+                throw new AppError("device.forbidden_action", { action: "sign_in" });
               const opened = await loginWithPin(tx, {
                 deviceId: device.deviceId,
                 personId,

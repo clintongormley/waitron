@@ -179,6 +179,16 @@ en **En espera en el pase**: consulta [Haz que una estación espere al pase](kit
 Un plato que la estación ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
 sin ningún extra que fuera a una estación propia, se puede cambiar sea cual sea el ajuste de las estaciones.
 
+## Inicia sesión en una pantalla de cocina {#kitchen-sign-in}
+
+En la pantalla de estación o de pase, pulsa **Entrar**, elige tu nombre e introduce tu PIN.
+La cola sigue visible. Cuando usas **Cambiar de estación…**, la estación de destino ve tu nombre
+en la tarjeta del plato.
+
+Pulsa **Cerrar sesión** cuando dejes la pantalla a otra persona. Si dejas la sesión abierta,
+los siguientes traslados llevarán tu nombre hasta que alguien la cierre.
+La pantalla ofrece **Entrar** cuando su [perfil admite a alguien](staff.md#device-profile-sign-in).
+
 ## Trabaja con la pantalla de estación {#kitchen-screen}
 
 La pantalla de estación muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
