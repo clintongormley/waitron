@@ -42,6 +42,28 @@ const job = (items: unknown[], fields: Record<string, unknown> = {}) =>
     houseStyle: [],
     ...fields,
   });
+const twentyLanguages = [
+  "en",
+  "es",
+  "fr",
+  "de",
+  "it",
+  "pt",
+  "nl",
+  "sv",
+  "da",
+  "fi",
+  "pl",
+  "cs",
+  "el",
+  "hu",
+  "ro",
+  "bg",
+  "hr",
+  "sk",
+  "sl",
+  "et",
+];
 const pinta = [item("product:1", "PINTA", ["ca"])];
 const house = { kind: "product", staffName: "CARAJILLO", names: { ca: "Cigaló" } };
 const one = job([item("product:1", "PINTA", ["ca", "es"])]);
@@ -271,15 +293,25 @@ it.each([
   ["a repeated ref", job([item("product:1", "PINTA", ["ca"]), item("product:1", "CANYA", ["es"])])],
   ["version 2", job(pinta, { version: 2 })],
   ["a country that is not two capitals", job(pinta, { country: "es" })],
+  ["the unknown region as the country", job(pinta, { country: "ZZ" })],
+  ["a country no region name exists for", job(pinta, { country: "XX" })],
   ["a default that is not enabled", job(pinta, { languages: { default: "en", enabled: ["ca"] } })],
   [
     "21 enabled languages",
     job(pinta, {
       languages: {
         default: "ca",
-        enabled: ["ca", ...Array.from({ length: 20 }, (_, i) => `l${String.fromCharCode(97 + i)}`)],
+        enabled: ["ca", ...twentyLanguages],
       },
     }),
+  ],
+  [
+    "an enabled language no language name exists for",
+    job(pinta, { languages: { default: "ca", enabled: ["ca", "zz"] } }),
+  ],
+  [
+    "the undetermined language enabled",
+    job(pinta, { languages: { default: "ca", enabled: ["ca", "und"] } }),
   ],
   ["no items", job([])],
   [
@@ -333,6 +365,22 @@ it("accepts a context head listed before its member, and counts only items with 
       status: 200,
       json: { version: 1, state: "queued", total: 1 },
     });
+  }));
+
+it("accepts 20 enabled languages", () =>
+  withCloud(async (f) => {
+    const body = job([item("product:1", "PINTA", ["en"])], {
+      languages: { default: "en", enabled: twentyLanguages },
+    });
+    expect(await submit(f, body)).toMatchObject({ status: 200, json: { state: "queued" } });
+  }));
+
+it("accepts an enabled language tag with a variant, as Cloud does", () =>
+  withCloud(async (f) => {
+    const body = job([item("product:1", "PINTA", ["ca-ES-valencia"])], {
+      languages: { default: "ca", enabled: ["ca", "ca-ES-valencia"] },
+    });
+    expect(await submit(f, body)).toMatchObject({ status: 200, json: { state: "queued" } });
   }));
 
 it("over 1,000 valid items is 413 translation_job_too_large", () =>

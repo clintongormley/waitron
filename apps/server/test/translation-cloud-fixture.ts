@@ -96,6 +96,22 @@ const namesIn = (v: unknown, enabled: Set<string>) =>
   !Array.isArray(v) &&
   Object.entries(v).every(([language, name]) => enabled.has(language) && text(name));
 
+const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], { type: "language" });
+const REGION_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+/** Cloud's rule: `region` in waitron-cloud's `packages/translation/src/job-body.ts`. */
+const country = (v: unknown) =>
+  typeof v === "string" && /^[A-Z]{2}$/.test(v) && v !== "ZZ" && REGION_NAMES.of(v) !== v;
+/** Cloud's rule: `language` in waitron-cloud's `packages/translation/src/job-body.ts`. */
+function languageTag(tag: unknown): boolean {
+  if (typeof tag !== "string" || tag === "und" || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(tag))
+    return false;
+  try {
+    return LANGUAGE_NAMES.of(tag) !== tag;
+  } catch {
+    return false;
+  }
+}
+
 /** The fake's fingerprint check (contract, "Submit", step 3). */
 export function verifySubmitVector(c: { body: string; signedBody: string }): boolean {
   const signed = JSON.parse(c.signedBody) as { jobSha256: string; jobBytes: number };
@@ -156,8 +172,7 @@ function readJob(body: string): FakeJobBody | null {
   if (
     !keysAre(v, ["version", "country", "languages", "items", "houseStyle"]) ||
     v.version !== 1 ||
-    typeof v.country !== "string" ||
-    !/^[A-Z]{2}$/.test(v.country)
+    !country(v.country)
   )
     return null;
   const l = v.languages;
@@ -166,7 +181,7 @@ function readJob(body: string): FakeJobBody | null {
     !Array.isArray(l.enabled) ||
     l.enabled.length < 1 ||
     l.enabled.length > 20 ||
-    !l.enabled.every((t) => typeof t === "string" && /^[a-z]{2,3}(-[A-Z]{2})?$/.test(t)) ||
+    !l.enabled.every(languageTag) ||
     new Set(l.enabled).size !== l.enabled.length ||
     !l.enabled.includes(l.default)
   )
@@ -244,7 +259,6 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  * - `revoked` (403) comes after the envelope, proof and lease checks, for all four actions: before
  *   submit's fingerprint check and the other three's signed-body check;
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
- * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
  * - `expire()` expires a job in any state, a `collected` one included.
  * Where this fake differs from Cloud:
  * - `pageItems(n)` caps a collect page at `n` entries, which Cloud does not; the byte budget
