@@ -1114,6 +1114,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   window in Box status. Still open are the first signed publication, first live offer, physical
   test-box upgrade, automatic timer activation and paired upgrades.
   Paired upgrades also bring two-box venues the change of software producer (A993), which is built for single boxes first (owner, 2026-11-22).
+  The password-checked go-back must refuse an upgrade that changed the software producer once its new fiscal installation has opened (A993): the old version would write that installation's first record under the old producer.
   Before enabling scheduled installs, measure the timer, download and trial and use the measured preparation time to set the minimum window.
   After the first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux
