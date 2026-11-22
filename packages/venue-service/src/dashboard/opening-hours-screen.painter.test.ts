@@ -196,17 +196,14 @@ describe("the season painter's address", () => {
       });
       app = mountedApp;
       await expect.poll(() => drawnView(el)).toBe("month");
-      await guard.write(
-        new URL(
-          "/opening-hours/view/staffing/month/2026-12/painter/season/season/winter",
-          location.href,
-        ),
-      );
+      const earlierStaffing = "/opening-hours/view/staffing/month/2026-11";
+      await guard.write(earlierStaffing);
+      await guard.write("/opening-hours/view/staffing/month/2026-12/painter/season/season/winter");
       await expect.poll(() => host).toBeDefined();
       const pushed = vi.spyOn(history, "pushState");
       const replaced = vi.spyOn(history, "replaceState");
       const step = "/opening-hours/view/staffing/month/2026-12/painter/season/season/spring";
-      const switchTo = "/opening-hours/view/season/season/spring/department/d1";
+      const switchTo = "/opening-hours/view/season/season/spring/department/d1/month/2026-12";
       host!.open(
         "staffing",
         { month: "2026-12", painter: "season", season: "spring" },
@@ -220,6 +217,10 @@ describe("the season painter's address", () => {
       expect(
         replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
       ).toEqual([step, switchTo]);
+      history.back();
+      await expect.poll(() => location.pathname).toBe(earlierStaffing);
+      history.forward();
+      await expect.poll(() => location.pathname).toBe(switchTo);
       await cancel(await shownPainter(el));
       await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-12");
     } finally {

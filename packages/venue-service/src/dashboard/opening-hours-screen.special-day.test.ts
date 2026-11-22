@@ -239,7 +239,7 @@ describe("the special-day painter's address", () => {
     const pushed = vi.spyOn(history, "pushState");
     const replaced = vi.spyOn(history, "replaceState");
     const month = "/opening-hours/view/staffing/month/2026-12";
-    const switchTo = "/opening-hours/view/special-day/special-day/sd1";
+    const switchTo = "/opening-hours/view/special-day/special-day/sd1/month/2026-12";
     host!.open("staffing", { month: "2026-12" }, { replace: true });
     await expect.poll(() => location.pathname).toBe(month);
     host!.open("special-day", { "special-day": "sd1" }, { replace: true });
