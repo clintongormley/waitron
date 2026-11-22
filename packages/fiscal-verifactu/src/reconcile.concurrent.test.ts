@@ -35,11 +35,13 @@ async function fixture() {
 
 async function snapshot() {
   return {
-    deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
+    deliveries: (
+      await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
+    ).rows,
     acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
-    records: (await suite.db.execute(sql`select * from registros_facturacion order by id`)).rows,
+    records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
     heads: (await suite.db.execute(sql`select * from cadenas order by node_id`)).rows,
   };
 }
@@ -70,7 +72,7 @@ function gate() {
 async function requeue() {
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(
-      sql`update envios set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}`,
+      sql`update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}`,
     );
     await tx.execute(sql`delete from acks`);
   });
@@ -137,7 +139,7 @@ describe("reconciliation alongside filing", () => {
     const before = await snapshot();
     const lookup = afterLookup(client, async () => {
       await withTransaction(suite.db, (tx) =>
-        tx.execute(sql`update envios set estado = 'rechazado', codigo_error = '1161',
+        tx.execute(sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1161',
           mensaje_error = 'New filing refusal', intentos = intentos + 1
           where registro_id = ${refused}`),
       );
@@ -257,7 +259,7 @@ describe("reconciliation alongside filing", () => {
     await requeue();
     let newer: Awaited<ReturnType<typeof snapshot>> | undefined;
     const lookup = afterLookup(client, async () => {
-      await withTransaction(suite.db, (tx) => tx.execute(sql`delete from envios`));
+      await withTransaction(suite.db, (tx) => tx.execute(sql`delete from verifactu_submissions`));
       newer = await snapshot();
     });
 

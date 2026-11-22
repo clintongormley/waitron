@@ -54,7 +54,7 @@ import {
 import type { AvailableProduct } from "@waitron/menu";
 import { departments } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { venueModuleConfig } from "./provision.js";
@@ -384,9 +384,7 @@ describe("counter basket payment", () => {
       join payments p on p.sale_id = s.id where s.working_order_id = ${id}`);
     expect(rows.rows).toEqual([{ amount: 255, tip_amount: 30, paid: 255, total: 225 }]);
     expect(
-      await suite.db
-        .select({ total: registrosFacturacion.importeTotal })
-        .from(registrosFacturacion),
+      await suite.db.select({ total: verifactuRecords.importeTotal }).from(verifactuRecords),
     ).toEqual([{ total: "2.25" }]);
   });
 
@@ -755,7 +753,7 @@ describe("counter basket payment", () => {
     expect(await expectOneTicketItemPerDish()).toBe(2);
 
     const rows = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(verifactuRecords);
     });
     expect(rows.length).toBe(1);
   });
@@ -806,7 +804,7 @@ describe("counter basket payment", () => {
       params: { field: "tendered" },
     });
     expect(await suite.db.select().from(sales)).toEqual([]);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
   });
 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
@@ -2550,7 +2548,7 @@ describe("ordering extras and options — parent + child lines", () => {
         await suite.db.execute<{ sales: number; records: number }>(sql`
           select
             (select cast(count(*) as integer) from sales) as sales,
-            (select cast(count(*) as integer) from registros_facturacion) as records`)
+            (select cast(count(*) as integer) from verifactu_records) as records`)
       ).rows;
     const before = await written();
     await expect(
@@ -3013,7 +3011,7 @@ describe("per-answer receipt presentation", () => {
       });
       expect(first.receiptSettings).toEqual({ printAddress: true });
       const before = await suite.db.execute<{ n: number }>(
-        sql`select count(*) as n from registros_facturacion`,
+        sql`select count(*) as n from verifactu_records`,
       );
       await suite.db
         .update(departments)
@@ -3043,11 +3041,8 @@ describe("per-answer receipt presentation", () => {
         receiptSettings: first.receiptSettings,
       }).toEqual(first);
       expect(
-        (
-          await suite.db.execute<{ n: number }>(
-            sql`select count(*) as n from registros_facturacion`,
-          )
-        ).rows,
+        (await suite.db.execute<{ n: number }>(sql`select count(*) as n from verifactu_records`))
+          .rows,
       ).toEqual(before.rows);
     },
   );
@@ -3209,7 +3204,7 @@ describe("receipt presentation address failure", () => {
       expect(ticket.total).toBe("2.25");
       expect(ticket.tender).toEqual({ method: "cash", change: "7.75" });
       expect(await suite.db.select().from(sales)).toHaveLength(1);
-      expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(1);
+      expect(await suite.db.select().from(verifactuRecords)).toHaveLength(1);
       expect(warning.mock.calls).toEqual([
         [
           "receipt.optional_read_failed",
@@ -3245,7 +3240,7 @@ describe("saved-zone immediate replay", () => {
         id,
       );
     const first = await pay(source);
-    const before = await suite.db.select().from(registrosFacturacion);
+    const before = await suite.db.select().from(verifactuRecords);
     expect(before).toHaveLength(1);
     expect(before[0]).toMatchObject({ fechaExpedicionFactura: "2026-10-15", offsetMinutos: 120 });
     admission.requireRestart();
@@ -3256,6 +3251,6 @@ describe("saved-zone immediate replay", () => {
       },
     };
     expect(await pay(unreadable)).toEqual(first);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual(before);
   });
 });

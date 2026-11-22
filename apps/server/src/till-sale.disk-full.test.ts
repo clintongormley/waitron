@@ -86,8 +86,8 @@ function count(table: string): number {
 function counts() {
   return {
     sales: count("sales"),
-    registros: count("registros_facturacion"),
-    envios: count("envios"),
+    registros: count("verifactu_records"),
+    envios: count("verifactu_submissions"),
     workingOrders: count("working_orders"),
   };
 }

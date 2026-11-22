@@ -373,7 +373,7 @@ async function readEnvios(
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }[]> {
   // A raw read, so `incidencia` arrives as the stored 0/1.
   const rows = await admin.execute<{ estado: string; intentos: number; incidencia: number }>(
-    sql`select estado, intentos, incidencia from envios order by registro_id`,
+    sql`select estado, intentos, incidencia from verifactu_submissions order by registro_id`,
   );
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
@@ -532,15 +532,13 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
 
       // Chained on the node's own reserved SIF.
       const reservedSif = await db.main.execute<{ id: string }>(
-        sql`select id from registro_sif where node_id = ${seed.nodeId} and revocado_en is null`,
+        sql`select id from verifactu_identities where node_id = ${seed.nodeId} and revocado_en is null`,
       );
       const registros = await db.main.execute<{
         huella: string;
         node_id: string;
         sif_id: string;
-      }>(
-        sql`select huella, node_id, sif_id from registros_facturacion where node_id = ${seed.nodeId}`,
-      );
+      }>(sql`select huella, node_id, sif_id from verifactu_records where node_id = ${seed.nodeId}`);
       expect(registros.rows).toHaveLength(1);
       expect(registros.rows[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
       expect(registros.rows[0]!.sif_id).toBe(reservedSif.rows[0]!.id);

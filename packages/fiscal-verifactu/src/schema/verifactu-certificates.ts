@@ -7,8 +7,8 @@ export const certificateKind = enumType(["sello", "representante"]);
 
 /** One row per AEAT certificate installed on a node. Declared `appendOnly()` in
  * `../classification.ts`. */
-export const fiscalCertificateInstalls = table(
-  "fiscal_certificate_installs",
+export const verifactuCertificates = table(
+  "verifactu_certificates",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     // No foreign key: `nodes` is a state table, which a `local` one may not join (CLAUDE.md §3).
@@ -31,11 +31,11 @@ export const fiscalCertificateInstalls = table(
     checkedAt: ts("checked_at"),
   },
   (t) => [
-    index("fiscal_certificate_installs_node_idx").on(t.nodeId, t.installedAt),
-    check("fiscal_certificate_installs_source_ck", enumCheck(t.source)),
-    check("fiscal_certificate_installs_kind_ck", enumCheck(t.kind)),
+    index("verifactu_certificates_node_idx").on(t.nodeId, t.installedAt),
+    check("verifactu_certificates_source_ck", enumCheck(t.source)),
+    check("verifactu_certificates_kind_ck", enumCheck(t.kind)),
     check(
-      "fiscal_certificate_installs_dashboard_ck",
+      "verifactu_certificates_dashboard_ck",
       sql`${t.source} = 'setup' or (${t.personId} is not null and ${t.checkedAt} is not null and ${t.checkedEndpoint} is not null)`,
     ),
   ],

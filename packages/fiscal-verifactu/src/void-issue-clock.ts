@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { sales, type Transaction } from "@waitron/db";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { AppError, type NodeId, type SaleId } from "@waitron/shared";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export async function prepareFiscalVoidClock(
   tx: Transaction,
@@ -12,11 +12,9 @@ export async function prepareFiscalVoidClock(
   issuingNodeId: NodeId,
 ): Promise<TrustedClock> {
   const [original] = await tx
-    .select({ nodeId: registrosFacturacion.nodeId })
-    .from(registrosFacturacion)
-    .where(
-      and(eq(registrosFacturacion.saleId, saleId), eq(registrosFacturacion.tipoRegistro, "alta")),
-    )
+    .select({ nodeId: verifactuRecords.nodeId })
+    .from(verifactuRecords)
+    .where(and(eq(verifactuRecords.saleId, saleId), eq(verifactuRecords.tipoRegistro, "alta")))
     .limit(1);
   if (original === undefined) throw new AppError("fiscal.sale_not_recorded", { saleId });
   const [sale] = await tx.select({ nodeId: sales.nodeId }).from(sales).where(eq(sales.id, saleId));

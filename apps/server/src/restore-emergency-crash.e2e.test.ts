@@ -9,11 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase, readStandardSeriesId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import {
-  fiscalAllocations,
-  registrosFacturacion,
-  VerifactuBackend,
-} from "@waitron/fiscal-verifactu";
+import { fiscalAllocations, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { orderedMigrationSets } from "@waitron/module";
@@ -41,7 +37,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let fixture: Awaited<ReturnType<typeof stagedHourCrash>> | undefined;
 async function stage(kind: "archive" | "stream") {
   fixture = await stagedHourCrash(suite, kind, "emergency-offline-restore");
-  const originalRecords = await suite.db.select().from(registrosFacturacion);
+  const originalRecords = await suite.db.select().from(verifactuRecords);
   expect(originalRecords).toHaveLength(1);
   return { ...fixture, originalRecords };
 }
@@ -84,7 +80,7 @@ it.each([
             saleInput({ nodeId: f.node.nodeId, seriesId: brandSeriesId(seriesId) }),
           ),
         );
-        expect(await old.venue.select().from(registrosFacturacion)).toHaveLength(2);
+        expect(await old.venue.select().from(verifactuRecords)).toHaveLength(2);
       } finally {
         await old.close();
       }

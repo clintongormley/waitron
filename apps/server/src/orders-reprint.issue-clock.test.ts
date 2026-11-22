@@ -38,7 +38,7 @@ async function counts() {
     venue.db.all<{ n: number }>(sql`select count(*) as n from print_jobs`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from drawer_opens`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from sales`),
-    venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`),
+    venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_records`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from sale_settlements`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from tenders`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from receipt_reprints`),

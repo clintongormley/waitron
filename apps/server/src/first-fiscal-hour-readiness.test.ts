@@ -121,7 +121,7 @@ function inspect(directory: string) {
   try {
     return {
       deployment: db.prepare("select environment from deployment").all(),
-      records: db.prepare("select entorno from registros_facturacion").all(),
+      records: db.prepare("select entorno from verifactu_records").all(),
       credentials: db.prepare("select purpose from venue_credentials").all(),
       series: db.prepare("select purpose, next_number from invoice_series order by purpose").all(),
     };

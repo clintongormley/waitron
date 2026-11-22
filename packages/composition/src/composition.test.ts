@@ -554,7 +554,7 @@ it("Start again explicitly exempts only the fiscal activation from append-only h
       m.name,
       m.startAgainDeletable,
     ]),
-  ).toEqual([["fiscal-verifactu", ["fiscal_allocations", "fiscal_certificate_installs"]]]);
+  ).toEqual([["fiscal-verifactu", ["fiscal_allocations", "verifactu_certificates"]]]);
   expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
 });
 

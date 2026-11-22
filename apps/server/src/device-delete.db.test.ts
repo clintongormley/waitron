@@ -580,7 +580,7 @@ describe("the device delete impact", () => {
       "incidents",
       "drawer_opens",
       "order_groups",
-      "registros_facturacion",
+      "verifactu_records",
       "order_amendments",
       "time_entries",
     ];

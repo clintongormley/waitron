@@ -232,11 +232,11 @@ async function orderState(id: string): Promise<{ status: string }> {
   return { status: rows[0]!.status };
 }
 
-/** How many chained `registros_facturacion` rows exist for this working order's sale. */
+/** How many chained `verifactu_records` rows exist for this working order's sale. */
 async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
   `);
@@ -291,7 +291,7 @@ describe("joinTables → one bill", () => {
 });
 
 describe("parties combined, bills merged → one fiscal record (H2)", () => {
-  it("a merged-then-paid tab yields exactly ONE registros_facturacion row; the source tab files nothing", async () => {
+  it("a merged-then-paid tab yields exactly ONE verifactu_records row; the source tab files nothing", async () => {
     const { cfg, coffee, water } = await setupVenue();
     const tInto = await seedTable(cfg, "MR-into");
     const tFrom = await seedTable(cfg, "MR-from");
@@ -468,7 +468,7 @@ describe("a full-invoice bill merged away", () => {
 
   async function filedRecords(intoTab: string, fromTab: string) {
     const { rows } = await suite.db.execute<{ tipo_factura: string; destinatarios: string }>(sql`
-      select r.tipo_factura, r.destinatarios from registros_facturacion r
+      select r.tipo_factura, r.destinatarios from verifactu_records r
       join sales s on s.id = r.sale_id
       where s.working_order_id in (${intoTab}, ${fromTab})
     `);

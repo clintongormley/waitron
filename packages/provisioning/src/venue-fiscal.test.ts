@@ -13,7 +13,7 @@ function contribution(id: string): FiscalContribution {
     makeBackend: () => ({ id }) as unknown as FiscalBackend,
     drain: async () => ({
       nextDueAt: null,
-      tenantsWithWork: 0,
+      passesWithWork: 0,
       batchesSent: 0,
       recordsSubmitted: 0,
       recordsAccepted: 0,

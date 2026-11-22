@@ -155,7 +155,7 @@ export interface DrainResult {
    * awaiting-certificate flag (`apps/server/src/pass.ts`) changes only when this is `> 0`, because
    * a pass with no work read no certificate.
    */
-  tenantsWithWork: number;
+  passesWithWork: number;
   batchesSent: number;
   recordsSubmitted: number;
   recordsAccepted: number; // includes accepted-with-errors — still counts as accepted
@@ -173,7 +173,7 @@ export interface DrainResult {
 export function emptyDrainResult(): DrainResult {
   return {
     nextDueAt: null,
-    tenantsWithWork: 0,
+    passesWithWork: 0,
     batchesSent: 0,
     recordsSubmitted: 0,
     recordsAccepted: 0,

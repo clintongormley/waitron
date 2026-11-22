@@ -170,7 +170,7 @@ function snapshot() {
     "sales",
     "tenders",
     "invoice_series",
-    "registros_facturacion",
+    "verifactu_records",
     "order_amendments",
     "unpaid_departures",
     "adjustments",
@@ -370,7 +370,7 @@ it("an admitted direct issue uses the writing venue's calendar and preserves old
     ...venue.clock,
     now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
   };
-  const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
+  const before = venue.db.all(sql`select * from verifactu_records order by rowid`);
   await withTransaction(venue.db, async (tx) => {
     const invoice = await priceForIssuance(tx, clock, venue.backend, venue.cfg, id);
     await issueUnpaidInvoice(tx, venue.backend, venue.cfg, invoice, venue.operatorId, ready);
@@ -379,7 +379,7 @@ it("an admitted direct issue uses the writing venue's calendar and preserves old
     sql`select issued_offset_minutes, issued_at from sales where working_order_id = ${id}`,
   );
   expect(sale).toEqual({ issued_offset_minutes: 120, issued_at: "2026-10-14T23:30:00.000Z" });
-  const after = venue.db.all(sql`select * from registros_facturacion order by rowid`);
+  const after = venue.db.all(sql`select * from verifactu_records order by rowid`);
   expect(after.slice(0, before.length)).toEqual(before);
   expect(after).toHaveLength(before.length + 1);
 });
@@ -638,7 +638,7 @@ it.each([
       operation !== "save",
     );
   const actor = await operator();
-  const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
+  const before = venue.db.all(sql`select * from verifactu_records order by rowid`);
   const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };
   if (operation === "save") {
     await updateHeldOrder(
@@ -731,13 +731,13 @@ it.each([
       await issueIfFullyPaid(tx, deps, venue.cfg, id, actor.personId);
     });
   const after = venue.db.all<{ fecha_expedicion_factura: string }>(
-    sql`select * from registros_facturacion order by rowid`,
+    sql`select * from verifactu_records order by rowid`,
   );
   expect(after.slice(0, before.length)).toEqual(before);
   expect(after).toHaveLength(before.length + 1);
   expect(after.at(-1)!.fecha_expedicion_factura).toBe("2026-10-15");
   const [sale] = venue.db.all(
-    sql`select issued_at, issued_offset_minutes from sales where id = (select sale_id from registros_facturacion order by rowid desc limit 1)`,
+    sql`select issued_at, issued_offset_minutes from sales where id = (select sale_id from verifactu_records order by rowid desc limit 1)`,
   );
   expect(sale).toEqual({ issued_at: "2026-10-14T23:30:00.000Z", issued_offset_minutes: 120 });
 });

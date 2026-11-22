@@ -105,12 +105,12 @@ const AWAITING_CERT_ERROR = "credentials.missing";
 function drainReport(result: DrainResult, deps: { awaitingCert: AwaitingCertStatus; log: Logger }) {
   let sawMissingCert = false;
   for (const skipped of result.skipped) {
-    deps.log("warn", "drain.tenant_skipped", skipped);
+    deps.log("warn", "drain.skipped", skipped);
     if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
   }
   // A no-work pass read no cert, so it leaves the flag unchanged; clearing it there would log
   // `fiscal.certificate_available` when nothing arrived.
-  if (result.tenantsWithWork > 0) {
+  if (result.passesWithWork > 0) {
     noteAwaitingCert(deps, sawMissingCert);
   }
   deps.log("info", "drain.complete", {

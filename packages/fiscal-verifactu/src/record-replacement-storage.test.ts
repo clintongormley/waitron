@@ -6,7 +6,7 @@ import { buildAltaRecord } from "@waitron/verifactu";
 import { deviceOrigin, type SaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, seedSale, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -20,7 +20,7 @@ beforeEach(async () => {
 
 function rowFor(
   position: number,
-  previous?: typeof registrosFacturacion.$inferSelect,
+  previous?: typeof verifactuRecords.$inferSelect,
   correctsRegistroId: string | null = null,
 ) {
   const built = buildAltaRecord({
@@ -61,13 +61,13 @@ function rowFor(
 }
 
 it("stores two successive replacements under the original invoice identity without changing older rows", async () => {
-  const [original] = await suite.db.insert(registrosFacturacion).values(rowFor(1)).returning();
+  const [original] = await suite.db.insert(verifactuRecords).values(rowFor(1)).returning();
   const [first] = await suite.db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values(rowFor(2, original!, original!.id))
     .returning();
   const [second] = await suite.db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values(rowFor(3, first!, first!.id))
     .returning();
 
@@ -84,22 +84,22 @@ it("stores two successive replacements under the original invoice identity witho
   }
   const [savedOriginal] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, original!.id));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, original!.id));
   const [savedFirst] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, first!.id));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, first!.id));
   expect(savedOriginal).toEqual(original);
   expect(savedFirst).toEqual(first);
 });
 
 it("refuses two concurrent replacements of one version on the replacement key", async () => {
-  const [original] = await suite.db.insert(registrosFacturacion).values(rowFor(1)).returning();
+  const [original] = await suite.db.insert(verifactuRecords).values(rowFor(1)).returning();
   const attempts = await Promise.allSettled(
     [2, 3].map((position) =>
       suite.db
-        .insert(registrosFacturacion)
+        .insert(verifactuRecords)
         .values(rowFor(position, original!, original!.id))
         .returning(),
     ),
@@ -108,28 +108,28 @@ it("refuses two concurrent replacements of one version on the replacement key", 
   const rejected = attempts.find((attempt) => attempt.status === "rejected");
   expect(isUniqueViolation(rejected?.reason)).toBe(true);
   expect(constraintTarget(rejected?.reason)).toEqual({
-    table: "registros_facturacion",
+    table: "verifactu_records",
     columns: ["corrects_registro_id"],
   });
-  expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(2);
+  expect(await suite.db.select().from(verifactuRecords)).toHaveLength(2);
 });
 
 it("refuses a replacement naming a missing record", async () => {
   const error = await captureError(() =>
-    suite.db.insert(registrosFacturacion).values(rowFor(1, undefined, "missing-record")),
+    suite.db.insert(verifactuRecords).values(rowFor(1, undefined, "missing-record")),
   );
   expect(isRefusal(error, [787])).toBe(true);
-  expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+  expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
 });
 
 it("still refuses a second original with the same invoice identity", async () => {
-  const [original] = await suite.db.insert(registrosFacturacion).values(rowFor(1)).returning();
+  const [original] = await suite.db.insert(verifactuRecords).values(rowFor(1)).returning();
   const error = await captureError(() =>
-    suite.db.insert(registrosFacturacion).values(rowFor(2, original!)),
+    suite.db.insert(verifactuRecords).values(rowFor(2, original!)),
   );
   expect(isUniqueViolation(error)).toBe(true);
   expect(constraintTarget(error)).toEqual({
-    table: "registros_facturacion",
+    table: "verifactu_records",
     columns: [
       "id_emisor_factura",
       "num_serie_factura",
@@ -137,5 +137,5 @@ it("still refuses a second original with the same invoice identity", async () =>
       "tipo_registro",
     ],
   });
-  expect(await suite.db.select().from(registrosFacturacion)).toEqual([original]);
+  expect(await suite.db.select().from(verifactuRecords)).toEqual([original]);
 });

@@ -70,7 +70,7 @@ function facts() {
     taxpayer: suite.db.all(sql`select * from taxpayer`),
     deployment: suite.db.all(sql`select * from deployment`),
     allocations: suite.db.all(sql`select * from fiscal_allocations`),
-    sif: suite.db.all(sql`select * from registro_sif`),
+    sif: suite.db.all(sql`select * from verifactu_identities`),
     series: suite.db.all(sql`select * from invoice_series`),
   };
 }
@@ -92,9 +92,9 @@ describe("provisionVenue with a throwaway allocation", () => {
         initialAllocation: throwaway("preproduction"),
       });
 
-      expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-        { numero_instalacion: "0CNNW", node_id: result.nodeId },
-      ]);
+      expect(
+        suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
+      ).toEqual([{ numero_instalacion: "0CNNW", node_id: result.nodeId }]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: identity.taxId, environment: "preproduction" },
       ]);
@@ -177,7 +177,7 @@ describe("provisionVenue with a throwaway allocation", () => {
 
     expect(result.seriesIds).toHaveLength(3);
     expect(suite.db.all(sql`select * from fiscal_allocations`)).toEqual([]);
-    expect(suite.db.all(sql`select * from registro_sif`)).toEqual([]);
+    expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual([]);
     expect(suite.db.all(sql`select tax_id from taxpayer`)).toEqual([{ tax_id: real.taxId }]);
   });
 

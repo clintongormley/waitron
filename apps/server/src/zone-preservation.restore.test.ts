@@ -22,7 +22,7 @@ import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
 import { assertValid, computeHuella } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleId, seriesId } from "@waitron/shared";
 import { runRestore } from "./restore-command.js";
 
@@ -30,7 +30,7 @@ it.each(["archive", "bucket"] as const)(
   "%s entry preserves old identities and first-drain payloads before the next saved-zone issue",
   async (kind) => {
     vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
-    await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
+    await suite.db.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
     await recoveryInvoices();
     const [standard] = await suite.db
       .select()
@@ -73,7 +73,7 @@ it.each(["archive", "bucket"] as const)(
     const before = await recordedRecoveryRows(suite.db);
     const allocations = suite.db.all(sql`select * from fiscal_allocations order by rowid`);
     const identities = suite.db.all<Record<string, unknown>>(
-      sql`select * from registro_sif order by rowid`,
+      sql`select * from verifactu_identities order by rowid`,
     );
     const expected = before.records.map((row) => fromRegistroRow(decodeRegistroRow(row)));
     expect(expected.at(-1)).toMatchObject({
@@ -98,7 +98,7 @@ it.each(["archive", "bucket"] as const)(
     try {
       const db = placed.venue;
       const restoredIdentities = db.all<Record<string, unknown>>(
-        sql`select * from registro_sif order by rowid`,
+        sql`select * from verifactu_identities order by rowid`,
       );
       for (const old of identities)
         expect(restoredIdentities.find((row) => row.id === old.id)).toEqual({
@@ -118,7 +118,7 @@ it.each(["archive", "bucket"] as const)(
       const sent: unknown[] = [];
       const client = aeat.client();
       await db.execute(
-        sql`update envios set proximo_intento_en = '2026-10-18T12:00:00.000Z' where estado = 'pendiente'`,
+        sql`update verifactu_submissions set proximo_intento_en = '2026-10-18T12:00:00.000Z' where estado = 'pendiente'`,
       );
       const result = await drain(
         {

@@ -4,7 +4,12 @@ import { nodes, readVenue } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedNode, seedNodesForSifContention } from "./testing/seed.js";
-import { seedTenantNodeSif, seedTenantWithSif, seedTenants, TENANT_A } from "../test/fixtures.js";
+import {
+  seedTaxpayerNodeSif,
+  seedTaxpayerWithSif,
+  seedTaxpayers,
+  TAXPAYER_A,
+} from "../test/fixtures.js";
 import {
   seedIndependentChain,
   seedPendingEnvios,
@@ -24,8 +29,8 @@ it("adds fiscal nodes at the existing venue without replacing its settings", asy
 });
 
 it.each([
-  { name: "seedTenantNodeSif", seed: seedTenantNodeSif },
-  { name: "seedTenants", seed: seedTenants },
+  { name: "seedTaxpayerNodeSif", seed: seedTaxpayerNodeSif },
+  { name: "seedTaxpayers", seed: seedTaxpayers },
 ])("reuses an existing venue for fixed-id parents: $name", async ({ seed }) => {
   await seedVenueSettings(suite.db, {
     name: "Retained venue",
@@ -36,8 +41,8 @@ it.each([
   await seed(suite.db);
   expect(await readVenue(suite.db)).toEqual(before);
   expect(
-    (await suite.db.select().from(nodes)).find((row) => row.id === TENANT_A.nodeId),
-  ).toMatchObject({ id: TENANT_A.nodeId });
+    (await suite.db.select().from(nodes)).find((row) => row.id === TAXPAYER_A.nodeId),
+  ).toMatchObject({ id: TAXPAYER_A.nodeId });
 });
 
 it("adds independent fiscal chains at the existing venue", async () => {
@@ -58,6 +63,6 @@ it("keeps a configured venue's fields when adding a write-path fixture", async (
   await seedNode(suite.db);
   await seedVenueSettings(suite.db, { name: "Retained venue", city: "Retained city" });
   const before = await readVenue(suite.db);
-  await seedTenantWithSif(suite.db);
+  await seedTaxpayerWithSif(suite.db);
   expect(await readVenue(suite.db)).toEqual(before);
 });

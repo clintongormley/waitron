@@ -36,8 +36,8 @@ indexed here are listed at the bottom; add them the same way (verbatim + page) w
 > — **FAQ §4, p.9**
 
 The SIF identity is **NIF + Id.SIF + NºInstalación**. A version change does **not** fork the identity;
-the other three do. **Bears on:** `registro_sif` (`nif`, `id_sistema_informatico`, `numero_instalacion`)
-in `packages/fiscal-verifactu/src/schema/sif.ts`, whose own doc comment says the same. `Version` rides
+the other three do. **Bears on:** `verifactu_identities` (`nif`, `id_sistema_informatico`, `numero_instalacion`)
+in `packages/fiscal-verifactu/src/schema/verifactu-identities.ts`, whose own doc comment says the same. `Version` rides
 on each record's `SistemaInformatico` block but is not a registration/identity field — so a software
 release must never mint a new installation or a new chain.
 
@@ -112,7 +112,7 @@ operation is simply "generate QR + generate chained RF + (optionally) remit":
 > — **FAQ §3, p.8**
 
 **Bears on:** Waitron's "register the SIF" provisioning step is **purely internal** (mint
-`numero_instalacion`, write `registro_sif`) — **not an AEAT call**. The DR is a legal/administrative task
+`numero_instalacion`, write `verifactu_identities`) — **not an AEAT call**. The DR is a legal/administrative task
 for the *producer* (Waitron), tracked in [action-plan.md](action-plan.md), not something provisioning does.
 
 ## 6. A valid qualified e-certificate must be installed or the SIF cannot operate
@@ -153,7 +153,7 @@ direct primary-source endorsement of the shape #33 chose.
 > — **FAQ §5, p.15**
 
 **Bears on:** the invoice and its fiscal record are one atomic unit (`recordSale` writes both in one
-transaction); remission is an outbox that must eventually drain (`envios`), never left un-sent.
+transaction); remission is an outbox that must eventually drain (`verifactu_submissions`), never left un-sent.
 
 ## 9. Territorial scope: común vs foral are **not coincident**; Veri\*Factu is *común* only
 

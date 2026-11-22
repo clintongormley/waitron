@@ -116,13 +116,13 @@ it("mounts the administrator remedy boundary even on a host without a submission
  * clock, and the fixture's own wait is long past. */
 async function seedWaiting(): Promise<string[]> {
   const seeded = await seedPendingEnvios(suite.db, { count: 3 });
-  await suite.db.execute(sql`update envios set proximo_intento_en = ${FUTURE()}`);
+  await suite.db.execute(sql`update verifactu_submissions set proximo_intento_en = ${FUTURE()}`);
   return seeded.registroIds;
 }
 
 async function waits(): Promise<unknown[]> {
   const rows = await suite.db.execute<{ proximo_intento_en: string }>(
-    sql`select proximo_intento_en from envios order by registro_id`,
+    sql`select proximo_intento_en from verifactu_submissions order by registro_id`,
   );
   return rows.rows.map((r) => r.proximo_intento_en);
 }
@@ -130,7 +130,7 @@ async function waits(): Promise<unknown[]> {
 /** Every row a press or its session check could write. */
 async function snapshot(): Promise<unknown[][]> {
   const tables = [
-    sql`select * from envios order by registro_id`,
+    sql`select * from verifactu_submissions order by registro_id`,
     sql`select * from dashboard_sessions order by token_hash`,
     sql`select * from persons order by id`,
   ];

@@ -9,11 +9,11 @@ import {
   type ModuleOperationInput,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -24,8 +24,8 @@ import {
 } from "./hour-dormant-standby.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
@@ -42,7 +42,7 @@ let value: unknown;
 let history: unknown[];
 let host: ModuleOperationHost;
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     seedFixtureSif(tx, {
@@ -76,7 +76,7 @@ beforeEach(async () => {
 });
 async function rows() {
   return {
-    sif: await suite.db.select().from(registroSif),
+    sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     chains: await suite.db.select().from(cadenas),
     allocations: await suite.db.select().from(fiscalAllocations),
@@ -502,8 +502,9 @@ it.each(["taxpayer", "country", "environment", "primary-sif", "sif-nif"])(
     if (fault === "taxpayer") await suite.db.delete(taxpayer);
     if (fault === "country") await suite.db.update(taxpayer).set({ country: "FR" });
     if (fault === "environment") await suite.db.delete(deployment);
-    if (fault === "primary-sif") await suite.db.update(registroSif).set({ revocadoEn: new Date() });
-    if (fault === "sif-nif") await suite.db.update(registroSif).set({ nif: "50000000R" });
+    if (fault === "primary-sif")
+      await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
+    if (fault === "sif-nif") await suite.db.update(verifactuIdentities).set({ nif: "50000000R" });
     const before = await rows();
     await expect(reserve()).rejects.toMatchObject({
       code: "sif.allocation_invalid",

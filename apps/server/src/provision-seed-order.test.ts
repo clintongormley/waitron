@@ -57,7 +57,7 @@ describe("first setup module seeds", () => {
       nif: string;
       id_sistema_informatico: string;
       numero_instalacion: string;
-    }>(sql`select nif, id_sistema_informatico, numero_instalacion from registro_sif
+    }>(sql`select nif, id_sistema_informatico, numero_instalacion from verifactu_identities
            where node_id = ${nodeId} and revocado_en is null`);
     expect(live.rows).toEqual([
       { nif, id_sistema_informatico: "W1", numero_instalacion: "S000001" },

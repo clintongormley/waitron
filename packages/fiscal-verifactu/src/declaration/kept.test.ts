@@ -3,10 +3,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
-import { seedTenantNodeSif } from "../../test/fixtures.js";
+import { seedTaxpayerNodeSif } from "../../test/fixtures.js";
 import { keptDeclarations } from "./kept.js";
 
-const suite = useVenueDb({ migrations: TEST_MIGRATIONS, setup: seedTenantNodeSif });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS, setup: seedTaxpayerNodeSif });
 
 const T0 = new Date("2026-11-01T09:00:00.000Z");
 const T1 = new Date("2026-11-02T09:00:00.000Z");

@@ -10,7 +10,7 @@ const stayed = run(stayedUpCheck);
 const fingerprint = run(`
 import {DatabaseSync} from 'node:sqlite'; import {createHash} from 'node:crypto';
 const db=new DatabaseSync('/var/lib/docker/volumes/waitron_state/_data/venue/venue.db',{readOnly:true});
-try { console.log(JSON.stringify(Object.fromEntries(['sales','sale_lines','registros_facturacion','working_orders','working_order_lines'].map(table=>{
+try { console.log(JSON.stringify(Object.fromEntries(['sales','sale_lines','verifactu_records','working_orders','working_order_lines'].map(table=>{
  const rows=db.prepare('select * from '+JSON.stringify(table)+' order by rowid').all();
  return [table,{count:rows.length,sha256:createHash('sha256').update(JSON.stringify(rows)).digest('hex')}];
 })))); } finally {db.close()}
@@ -25,7 +25,7 @@ systemctl start waitron-app.service
 /usr/local/sbin/waitron-dev-start
 ${stayed}
 [ -f /opt/waitron/before.json ] || ${fingerprint} >/opt/waitron/before.json
-jq -e '.sales.count==1 and .registros_facturacion.count==1 and .working_orders.count==1' /opt/waitron/before.json
+jq -e '.sales.count==1 and .verifactu_records.count==1 and .working_orders.count==1' /opt/waitron/before.json
 `;
 const compare = `${stayed}
 ${fingerprint} >/opt/waitron/after.json

@@ -99,7 +99,7 @@ async function originalFacts() {
     lines: await tx.select().from(saleLines),
     tenders: await tx.select().from(tenders),
     settlements: await tx.select().from(saleSettlements),
-    fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
+    fiscal: (await tx.execute(sql`select * from verifactu_records order by id`)).rows,
   }));
 }
 async function target(method: "cash" | "card" = "cash", manual = false) {

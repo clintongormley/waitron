@@ -33,6 +33,8 @@ Identify this fixture by its helper and source commit. It uses `TENANT_A`, taxpa
 `a0000000-0000-4000-8000-000000000002`, stamped `preproduction`. The source location's name
 comes from the existing fiscal test seed; it is not Cloud's `Cloud Test Venue` fixture.
 
+**2026-11-22, A1308 fiscal 1.** The current seed exports this taxpayer as `TAXPAYER_A`.
+
 ## Keep the authority attached to its own archive
 
 Build the fixture through its existing setup and helpers:

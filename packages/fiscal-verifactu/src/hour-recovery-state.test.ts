@@ -6,18 +6,18 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { VerifactuBackend } from "./backend.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -155,8 +155,8 @@ it("reads each configured prefix and exact spelling without writing counters", a
 
 it("includes higher retired names on another node under another software identifier", async () => {
   await seed();
-  await suite.db.insert(registroSif).values({
-    nodeId: TENANT_A.nodeId2,
+  await suite.db.insert(verifactuIdentities).values({
+    nodeId: TAXPAYER_A.nodeId2,
     nif: "89890001K",
     idSistemaInformatico: "OTHER",
     numeroInstalacion: "0CNRP",
@@ -164,7 +164,7 @@ it("includes higher retired names on another node under another software identif
     revocadoEn: new Date("2026-10-16T13:20:00Z"),
   });
   await suite.db.insert(invoiceSeries).values({
-    nodeId: TENANT_A.nodeId2,
+    nodeId: TAXPAYER_A.nodeId2,
     code: "different-0CNRP",
     purpose: "standard",
     retiredAt: new Date("2026-10-16T13:20:00Z"),
@@ -183,15 +183,16 @@ it("includes higher retired names on another node under another software identif
   expect(facts.bases).toHaveLength(3);
 });
 
-it.each([{ module: "another-module" }, { action: "promote" }, { targetNodeId: TENANT_A.nodeId2 }])(
-  "refuses a changed operation %j before reading fiscal state",
-  async (change) => {
-    await expect(read({ ...binding, ...change })).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "event_mismatch" },
-    });
-  },
-);
+it.each([
+  { module: "another-module" },
+  { action: "promote" },
+  { targetNodeId: TAXPAYER_A.nodeId2 },
+])("refuses a changed operation %j before reading fiscal state", async (change) => {
+  await expect(read({ ...binding, ...change })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+});
 
 it("refuses a missing taxpayer rather than manufacturing a scope", async () => {
   await expect(read()).rejects.toMatchObject({
@@ -259,13 +260,13 @@ it("consults an exact committed restore without changing counters or evidence", 
   const before = {
     allocations: await suite.db.select().from(fiscalAllocations),
     series: await suite.db.select().from(invoiceSeries),
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
   };
   expect((await read(operation)).priorActivation).toBe("committed");
   expect({
     allocations: await suite.db.select().from(fiscalAllocations),
     series: await suite.db.select().from(invoiceSeries),
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
   }).toEqual(before);
   await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
     code: "sif.allocation_invalid",

@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildAltaRecord, buildAnulacionRecord, serializeEnvio } from "@waitron/verifactu";
 import type { AltaInput, Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   decodeRegistroRow,
   fromRegistroRow,
@@ -48,9 +48,9 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
     offsetMinutes: 120,
     entorno: "production",
   });
-  await suite.db.insert(registrosFacturacion).values(row);
+  await suite.db.insert(verifactuRecords).values(row);
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   const raw = rows[0];
   if (raw === undefined) throw new Error(`storeAndReadBack: no row for sale ${saleId}`);
@@ -115,7 +115,7 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     // FacturasRectificadas — the "present" arm of three of fromRegistroRow's conditional spreads.
     //
     // FacturasSustituidas — the F3 canje block — is deliberately NOT set here:
-    // registros_facturas_sustituidas_f3_ck requires it to sit on an F3. The F3 case below covers it.
+    // verifactu_records_facturas_sustituidas_f3_ck requires it to sit on an F3. The F3 case below covers it.
     const built = buildAltaRecord({
       ...r5RectificativaInput(),
       TipoRectificativa: "S",
@@ -134,7 +134,7 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     // The fourth conditional-spread "present" arm, plus the recipient: FacturasSustituidas names
     // the substituted simplified tickets on an F3 canje, and Destinatarios carries the recipient an
     // F3 must always bear. An F3 is a full invoice with a POSITIVE total and carries none of the
-    // three rectificativa fields; registros_facturas_sustituidas_f3_ck requires the block to sit on
+    // three rectificativa fields; verifactu_records_facturas_sustituidas_f3_ck requires the block to sit on
     // an F3, so this is the one record shape that stores both.
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
@@ -259,11 +259,11 @@ describe("decodeRegistroRow", () => {
     // The drift guard for `decodeRegistroRow`, and the reason that function derives its work from
     // `getTableColumns` rather than from a list of column names somebody wrote down: the property
     // asserted here is "a decoded raw row IS drizzle's typed select, renamed", so a column added
-    // to `registros_facturacion` later is covered without either side being touched.
+    // to `verifactu_records` later is covered without either side being touched.
     //
     // The record is an F3 canje because it is the storable shape that leaves the most JSON columns
     // non-null at once — `facturas_sustituidas`, `destinatarios`, `desglose` and
-    // `sistema_informatico` — and `registros_facturas_sustituidas_f3_ck` refuses the block on any
+    // `sistema_informatico` — and `verifactu_records_facturas_sustituidas_f3_ck` refuses the block on any
     // other `tipo_factura`. A null column proves nothing here: `decodeRegistroRow` skips nulls, so
     // a row whose JSON columns were all null would pass this case with the decoding deleted.
     const built = buildAltaRecord({
@@ -302,8 +302,8 @@ describe("decodeRegistroRow", () => {
 
     const [typed] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, decoded.id));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, decoded.id));
 
     // Compared by VALUE under the snake_case names, not key by key: `toEqual` on the whole object
     // is what makes a column nobody thought about part of the assertion.

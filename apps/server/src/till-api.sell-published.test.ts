@@ -349,7 +349,7 @@ async function written(): Promise<{ sales: number; records: number; orders: numb
   const rows = await suite.db.execute<{ sales: number; records: number; orders: number }>(sql`
     select
       (select cast(count(*) as integer) from sales) as sales,
-      (select cast(count(*) as integer) from registros_facturacion) as records,
+      (select cast(count(*) as integer) from verifactu_records) as records,
       (select cast(count(*) as integer) from working_orders) as orders`);
   return rows.rows[0]!;
 }

@@ -3,7 +3,7 @@ import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { allocationFixture } from "../test/allocation-fixture.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { ALLOCATED_FISCAL_SEED } from "./allocated-lifecycle.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
@@ -11,18 +11,18 @@ import { FISCAL_RESTORE } from "./restore.js";
 import { currentSif, registerSif } from "./registro-sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
 };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const standby = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = SERIES_BASES;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 
@@ -36,7 +36,7 @@ async function seeded() {
 }
 async function snapshot() {
   return {
-    identities: await suite.db.select().from(registroSif),
+    identities: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),

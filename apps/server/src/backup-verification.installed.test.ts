@@ -57,10 +57,10 @@ it("accepting control preserves every captured row through every real owner", as
   const result = await verify(f);
   expect(result.status).toBe("passed");
   expect(comparisons).toBe(ownersComparedFor(f));
-  expect(f.logical.registros_facturacion).toHaveLength(4);
-  expect(f.logical.registro_sif).toHaveLength(3);
+  expect(f.logical.verifactu_records).toHaveLength(4);
+  expect(f.logical.verifactu_identities).toHaveLength(3);
   expect(f.logical.fiscal_allocations).toHaveLength(3);
-  expect(f.logical.fiscal_certificate_installs).toHaveLength(1);
+  expect(f.logical.verifactu_certificates).toHaveLength(1);
   expect(f.logical.sale_lines).toHaveLength(4);
   expect(f.entries.find((e) => e.name.endsWith("hour-history.json"))).toBeDefined();
 });
@@ -142,7 +142,7 @@ it.each([
 it("full fiscal walk refuses an old damaged record beside an empty current registration", async () => {
   const f = await suite.create();
   await f.corrupt((db) =>
-    db.prepare("update registros_facturacion set huella=? where secuencia=1").run("0".repeat(64)),
+    db.prepare("update verifactu_records set huella=? where secuencia=1").run("0".repeat(64)),
   );
   const answer = await verify(f);
   expect(answer.status).toBe("invalid");

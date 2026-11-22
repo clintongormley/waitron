@@ -1,9 +1,9 @@
 import { readHistoryNodes, type Transaction } from "@waitron/db";
 import type { NodeId } from "@waitron/shared";
 import { desc, inArray } from "drizzle-orm";
-import { fiscalCertificateInstalls } from "./schema/index.js";
+import { verifactuCertificates } from "./schema/index.js";
 
-export type InstallRow = typeof fiscalCertificateInstalls.$inferSelect;
+export type InstallRow = typeof verifactuCertificates.$inferSelect;
 
 /** The newest install on this box or any box it took over from. */
 export async function latestInstall(tx: Transaction, nodeId: string): Promise<InstallRow | null> {
@@ -21,14 +21,14 @@ export async function latestInstallAmong(
 ): Promise<InstallRow | null> {
   const [row] = await tx
     .select()
-    .from(fiscalCertificateInstalls)
-    .where(inArray(fiscalCertificateInstalls.nodeId, history))
-    .orderBy(desc(fiscalCertificateInstalls.installedAt))
+    .from(verifactuCertificates)
+    .where(inArray(verifactuCertificates.nodeId, history))
+    .orderBy(desc(verifactuCertificates.installedAt))
     .limit(1);
   return row ?? null;
 }
 
-type InstallInsert = typeof fiscalCertificateInstalls.$inferInsert;
+type InstallInsert = typeof verifactuCertificates.$inferInsert;
 
 /**
  * Writes an install, taking `installedAt` as the writer's clock: the row is stamped then, but never
@@ -60,7 +60,7 @@ export async function installsOf(
         latest === null
           ? row.installedAt
           : new Date(Math.max(now, latest.installedAt.getTime() + 1));
-      await tx.insert(fiscalCertificateInstalls).values({ ...row, nodeId, installedAt });
+      await tx.insert(verifactuCertificates).values({ ...row, nodeId, installedAt });
     },
   };
 }

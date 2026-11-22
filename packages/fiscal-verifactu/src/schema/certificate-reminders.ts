@@ -1,6 +1,6 @@
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, newId, table, ts } from "@waitron/db";
-import { fiscalCertificateInstalls } from "./certificate-installs.js";
+import { verifactuCertificates } from "./verifactu-certificates.js";
 
 export const reminderStage = enumType(["warning", "urgent", "expired"]);
 export const reminderStatus = enumType(["claimed", "sent", "failed", "unknown"]);
@@ -16,7 +16,7 @@ export const fiscalCertificateReminders = table(
     nodeId: id("node_id").notNull(),
     installId: id("install_id")
       .notNull()
-      .references(() => fiscalCertificateInstalls.id),
+      .references(() => verifactuCertificates.id),
     stage: reminderStage("stage").notNull(),
     // No foreign key, for the reason on the install's `person_id`; nothing in the database checks
     // the person exists, and the writer names a person it is emailing. No email address is stored.

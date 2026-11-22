@@ -88,9 +88,9 @@ describe("the throwaway allocation seat", () => {
     it("activates a preproduction hour allocation for any taxpayer", async () => {
       const administratorId = randomUUID();
       const series = await activate(signFor(administratorId), administratorId);
-      expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-        { numero_instalacion: "0CNNW", node_id: node.nodeId },
-      ]);
+      expect(
+        suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
+      ).toEqual([{ numero_instalacion: "0CNNW", node_id: node.nodeId }]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: TAXPAYER, environment: "preproduction" },
       ]);
@@ -133,7 +133,7 @@ describe("the throwaway allocation seat", () => {
         environment: "preproduction",
         installationIdentity: "0CNNW",
       });
-      const sif = suite.db.all(sql`select * from registro_sif`);
+      const sif = suite.db.all(sql`select * from verifactu_identities`);
       expect(sif).toHaveLength(1);
       expect(JSON.stringify(sif)).not.toMatch(/throwaway/i);
     });
@@ -280,7 +280,7 @@ describe("the throwaway allocation seat", () => {
         code: "sif.allocation_invalid",
         params: { reason: "environment_mismatch" },
       });
-      expect(suite.db.all(sql`select * from registro_sif`)).toEqual([]);
+      expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual([]);
     });
   });
 });

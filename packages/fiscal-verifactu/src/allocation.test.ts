@@ -17,9 +17,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenants, seedSoldRegistro } from "../test/fixtures.js";
+import { TAXPAYER_A, seedTaxpayers, seedSoldRegistro } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { activateAllocation } from "./allocation.js";
 import {
   enrolPaperCustodian,
@@ -37,7 +37,7 @@ import * as activation from "./allocation.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -148,7 +148,7 @@ async function validate(
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db.insert(invoiceSeries).values(bases.map((b) => ({ ...b, nodeId: node.nodeId })));
 });
@@ -226,9 +226,9 @@ describe("allocation activation with host-issued operator authority", () => {
       params: { reason: "reauthentication_required" },
     });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-    expect((await suite.db.execute(sql`select count(*) as n from registro_sif`)).rows).toEqual([
-      { n: 0 },
-    ]);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows,
+    ).toEqual([{ n: 0 }]);
     expect(
       (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
     ).toEqual([{ n: 0 }]);
@@ -294,7 +294,7 @@ describe("allocation activation with host-issued operator authority", () => {
     async (kind) => {
       if (kind === "replay")
         await withOperationAuthority(binding, approval.operatorId, authenticated);
-      const before = await suite.db.execute(sql`select * from registro_sif`);
+      const before = await suite.db.execute(sql`select * from verifactu_identities`);
       const beforeSeries = await suite.db.select().from(invoiceSeries);
       const beforeAudit = await suite.db.execute(sql`select * from fiscal_allocations`);
       await withTransaction(suite.db, async (tx) => {
@@ -359,7 +359,7 @@ describe("allocation activation with host-issued operator authority", () => {
           spy.mockRestore();
         }
       });
-      expect(await suite.db.execute(sql`select * from registro_sif`)).toEqual(before);
+      expect(await suite.db.execute(sql`select * from verifactu_identities`)).toEqual(before);
       expect(await suite.db.select().from(invoiceSeries)).toEqual(beforeSeries);
       expect(await suite.db.execute(sql`select * from fiscal_allocations`)).toEqual(beforeAudit);
     },
@@ -371,9 +371,9 @@ describe("allocation activation checks inside the venue transaction", () => {
     const before = await suite.db.select().from(invoiceSeries);
     expect(await validate()).toEqual({ ok: true, allocation, approval });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-    expect((await suite.db.execute(sql`select count(*) as n from registro_sif`)).rows).toEqual([
-      { n: 0 },
-    ]);
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows,
+    ).toEqual([{ n: 0 }]);
   });
 
   it("uses the stored taxpayer even when the caller context agrees with the wrong allocation", async () => {
@@ -422,7 +422,7 @@ describe("allocation activation checks inside the venue transaction", () => {
 
   it("checks the trusted event's target against the node being activated", async () => {
     expect(
-      await validate(allocation, approval, { ...context, targetNodeId: TENANT_A.nodeId2 }),
+      await validate(allocation, approval, { ...context, targetNodeId: TAXPAYER_A.nodeId2 }),
     ).toEqual({ ok: false, reason: "node_mismatch" });
   });
 
@@ -447,7 +447,7 @@ describe("allocation activation checks inside the venue transaction", () => {
     async (retiredAt) => {
       await suite.db
         .insert(invoiceSeries)
-        .values({ nodeId: TENANT_A.nodeId2, code: "A-P000042", retiredAt });
+        .values({ nodeId: TAXPAYER_A.nodeId2, code: "A-P000042", retiredAt });
       expect(await validate()).toEqual({ ok: false, reason: "series_collision" });
     },
   );
@@ -462,7 +462,7 @@ describe("allocation activation checks inside the venue transaction", () => {
   });
 
   it("permits a different identity suffix on another node", async () => {
-    await suite.db.insert(invoiceSeries).values({ nodeId: TENANT_A.nodeId2, code: "A-P000043" });
+    await suite.db.insert(invoiceSeries).values({ nodeId: TAXPAYER_A.nodeId2, code: "A-P000043" });
     expect(await validate()).toEqual({ ok: true, allocation, approval });
   });
 
@@ -480,7 +480,7 @@ describe("allocation activation checks inside the venue transaction", () => {
     "refuses a locally retained identity with revocadoEn=%s",
     async (retired) => {
       await suite.db.execute(
-        sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en, revocado_en) values (${"retained-sif"}, ${TENANT_A.nodeId2}, ${candidate.taxpayerNif}, ${candidate.softwareId}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()}, ${retired?.getTime() ?? null})`,
+        sql`insert into verifactu_identities (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en, revocado_en) values (${"retained-sif"}, ${TAXPAYER_A.nodeId2}, ${candidate.taxpayerNif}, ${candidate.softwareId}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()}, ${retired?.getTime() ?? null})`,
       );
       expect(await validate()).toEqual({ ok: false, reason: "installation_used" });
     },
@@ -488,14 +488,14 @@ describe("allocation activation checks inside the venue transaction", () => {
 
   it("does not confuse a retained identity from another software scope with this allocation", async () => {
     await suite.db.execute(
-      sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en) values (${"other-software"}, ${TENANT_A.nodeId2}, ${candidate.taxpayerNif}, ${"ZZ"}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()})`,
+      sql`insert into verifactu_identities (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en) values (${"other-software"}, ${TAXPAYER_A.nodeId2}, ${candidate.taxpayerNif}, ${"ZZ"}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()})`,
     );
     expect(await validate()).toEqual({ ok: true, allocation, approval });
   });
 
   it("does not confuse another taxpayer's retained identity with this allocation", async () => {
     await suite.db.execute(
-      sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en) values (${"other-taxpayer"}, ${TENANT_A.nodeId2}, ${"B12345678"}, ${candidate.softwareId}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()})`,
+      sql`insert into verifactu_identities (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en) values (${"other-taxpayer"}, ${TAXPAYER_A.nodeId2}, ${"B12345678"}, ${candidate.softwareId}, ${candidate.installationIdentity}, ${new Date("2026-10-10T00:00:00Z").getTime()})`,
     );
     expect(await validate()).toEqual({ ok: true, allocation, approval });
   });
@@ -552,7 +552,7 @@ describe("allocation activation checks inside the venue transaction", () => {
   });
 
   it("uses a live SIF's stored software scope instead of a caller snapshot", async () => {
-    await suite.db.insert(registroSif).values({
+    await suite.db.insert(verifactuIdentities).values({
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: "ZZ",
@@ -562,19 +562,19 @@ describe("allocation activation checks inside the venue transaction", () => {
   });
 
   it("accepts the existing live SIF's scope and retains its whole row", async () => {
-    await suite.db.insert(registroSif).values({
+    await suite.db.insert(verifactuIdentities).values({
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: candidate.softwareId,
       numeroInstalacion: "99",
     });
-    const before = await suite.db.select().from(registroSif);
+    const before = await suite.db.select().from(verifactuIdentities);
     expect(await validate(allocation, approval, { ...context, softwareId: "ZZ" })).toEqual({
       ok: true,
       allocation,
       approval,
     });
-    expect(await suite.db.select().from(registroSif)).toEqual(before);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual(before);
   });
 
   it("refuses a preproduction allocation on a database stamped production", async () => {
@@ -618,7 +618,7 @@ async function activate(
   );
 }
 async function activationSnapshot() {
-  const tables = ["registro_sif", "invoice_series", "cadenas", "fiscal_allocations"];
+  const tables = ["verifactu_identities", "invoice_series", "cadenas", "fiscal_allocations"];
   const snapshot: Record<string, unknown> = {};
   for (const name of tables) {
     if (!/^[a-z_]+$/.test(name)) throw new Error("invalid probe table");
@@ -640,7 +640,7 @@ describe("atomic allocation activation", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select id, numero_instalacion from registro_sif where revocado_en is null`,
+          sql`select id, numero_instalacion from verifactu_identities where revocado_en is null`,
         )
       ).rows,
     ).toEqual([{ id: result.sifId, numero_instalacion: "P000042" }]);
@@ -732,14 +732,14 @@ describe("atomic allocation activation", () => {
   });
 
   it.each([
-    ["retire SIF", "before update on registro_sif"],
-    ["insert SIF", "before insert on registro_sif"],
+    ["retire SIF", "before update on verifactu_identities"],
+    ["insert SIF", "before insert on verifactu_identities"],
     ["reset chain", "before insert on cadenas"],
     ["retire series", "before update on invoice_series"],
     ["insert series", "before insert on invoice_series when new.code = 'R-P000042'"],
     ["audit result", "before insert on fiscal_allocations"],
   ])("rolls back every local write when %s is refused", async (_step, timing) => {
-    await suite.db.insert(registroSif).values({
+    await suite.db.insert(verifactuIdentities).values({
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: candidate.softwareId,
@@ -769,7 +769,7 @@ describe("activation replay identity integrity", () => {
     const first = await activate();
     if (!/^[a-z_]+$/.test(column)) throw new Error("invalid probe column");
     await suite.db.execute(
-      sql`update registro_sif set ${sql.raw(column)} = ${value} where id = ${first.sifId}`,
+      sql`update verifactu_identities set ${sql.raw(column)} = ${value} where id = ${first.sifId}`,
     );
     const before = await activationSnapshot();
     await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
@@ -794,7 +794,7 @@ describe("replay scope and history", () => {
   it("refuses a different trusted target on replay", async () => {
     await activate();
     await expect(
-      activate({ ...context, priorActivation: "committed", targetNodeId: TENANT_A.nodeId2 }),
+      activate({ ...context, priorActivation: "committed", targetNodeId: TAXPAYER_A.nodeId2 }),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "node_mismatch" },
@@ -856,9 +856,9 @@ describe("replay scope and history", () => {
   it("does not reactivate a retired SIF through replay", async () => {
     const first = await activate();
     await suite.db
-      .update(registroSif)
+      .update(verifactuIdentities)
       .set({ revocadoEn: new Date("2026-10-12T10:00:00.000Z") })
-      .where(eq(registroSif.id, first.sifId));
+      .where(eq(verifactuIdentities.id, first.sifId));
     await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "activation_superseded" },
@@ -932,7 +932,7 @@ describe("activation over retained fiscal rows", () => {
       huella: "A".repeat(64),
       entorno: "preproduction",
     });
-    const before = (await suite.db.execute(sql`select * from registros_facturacion`)).rows;
+    const before = (await suite.db.execute(sql`select * from verifactu_records`)).rows;
     const oldSeries = await suite.db.select().from(invoiceSeries);
     const input = signed({
       ...candidate,
@@ -940,9 +940,9 @@ describe("activation over retained fiscal rows", () => {
     });
     const result = await activate(context, input);
     expect(result.sifId).not.toBe(old.id);
-    expect((await suite.db.execute(sql`select * from registros_facturacion`)).rows).toEqual(before);
+    expect((await suite.db.execute(sql`select * from verifactu_records`)).rows).toEqual(before);
     const oldRow = (
-      await suite.db.select().from(registroSif).where(eq(registroSif.id, old.id))
+      await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.id, old.id))
     )[0]!;
     expect(oldRow).toEqual({ ...old, revocadoEn: expect.any(Date) });
     const afterSeries = await suite.db.select().from(invoiceSeries);
@@ -1007,7 +1007,7 @@ async function inRestoredCopy(body: (db: Database) => Promise<void>) {
 
 async function rawActivationSnapshot(db: Database) {
   const result: Record<string, unknown> = {};
-  for (const table of ["registro_sif", "invoice_series", "cadenas", "fiscal_allocations"]) {
+  for (const table of ["verifactu_identities", "invoice_series", "cadenas", "fiscal_allocations"]) {
     if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot table");
     result[table] = (await db.execute(sql.raw(`select * from "${table}" order by rowid`))).rows;
   }

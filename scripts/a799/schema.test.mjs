@@ -106,8 +106,8 @@ describe("complete historical schema comparison", () => {
     (kind) => {
       const t = {
         ...table(),
-        name: "registros_facturacion",
-        table: "registros_facturacion",
+        name: "verifactu_records",
+        table: "verifactu_records",
         module: "fiscal-verifactu",
         protection: "fiscal",
       };

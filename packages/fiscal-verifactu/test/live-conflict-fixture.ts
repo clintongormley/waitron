@@ -3,19 +3,19 @@ import { invoiceSeries, stampDeployment, withTransaction, type Database } from "
 import { recordSale } from "@waitron/core";
 import { withOperationAuthority } from "@waitron/module";
 import { seriesId } from "@waitron/shared";
-import { seedVenueNodes, TENANT_A } from "./fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "./fixtures.js";
 import { saleInput, steadyClock } from "./write-path-fixtures.js";
 import { createHourPreparation } from "../src/hour-preparation.js";
 import { activatePreparedModuleAllocation } from "../src/allocation-preparation.js";
 import { compareHourClocks } from "../src/hour-clock.js";
 import { VerifactuBackend } from "../src/backend.js";
 import { openFilingCase } from "../src/filing-cases.js";
-import { envios } from "../src/schema/envios.js";
+import { verifactuSubmissions } from "../src/schema/verifactu-submissions.js";
 import { fiscalAllocations } from "../src/schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const liveConflictNode = {
-  nodeId: TENANT_A.nodeId,
+  nodeId: TAXPAYER_A.nodeId,
 };
 const bases = SERIES_BASES;
 export async function seedLiveConflict(
@@ -99,9 +99,9 @@ export async function seedLiveConflict(
   );
   const incident = await withTransaction(db, async (tx) => {
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "rechazado" })
-      .where(eq(envios.registroId, original.fiscal.recordId));
+      .where(eq(verifactuSubmissions.registroId, original.fiscal.recordId));
     return openFilingCase(tx, {
       registroId: original.fiscal.recordId,
       cause: "fiscal.huella_divergente",

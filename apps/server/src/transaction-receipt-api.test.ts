@@ -91,7 +91,7 @@ async function snapshot() {
     lines: await tx.select().from(saleLines).orderBy(saleLines.id),
     tenders: await tx.select().from(tenders).orderBy(tenders.id),
     settlements: await tx.select().from(saleSettlements).orderBy(saleSettlements.saleId),
-    fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
+    fiscal: (await tx.execute(sql`select * from verifactu_records order by id`)).rows,
     orders: await tx.select().from(workingOrders).orderBy(workingOrders.id),
     orderLines: await tx.select().from(workingOrderLines).orderBy(workingOrderLines.id),
   }));

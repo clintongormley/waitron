@@ -60,7 +60,7 @@ async function authored(description?: string) {
 }
 function records(orderId: string) {
   return venue.db.all<{ description: string }>(sql`
-    select r.descripcion_operacion as description from registros_facturacion r
+    select r.descripcion_operacion as description from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${orderId} or s.corrects_sale_id in
       (select id from sales where working_order_id = ${orderId})
@@ -70,7 +70,7 @@ function records(orderId: string) {
 function facts() {
   return {
     sales: venue.db.all(sql`select * from sales order by id`),
-    fiscal: venue.db.all(sql`select * from registros_facturacion order by id`),
+    fiscal: venue.db.all(sql`select * from verifactu_records order by id`),
     series: venue.db.all(sql`select * from invoice_series order by id`),
     payments: venue.db.all<Record<string, unknown>>(sql`select * from payments order by id`),
     billPayments: venue.db.all(sql`select * from bill_payments order by id`),

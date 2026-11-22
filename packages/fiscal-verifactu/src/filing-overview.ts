@@ -21,11 +21,11 @@ import type {
 import { ENVIO_STATES, type EnvioState } from "./handover-summary.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalConflictEvidence } from "./schema/conflict-evidence.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 /**
  * What the Fiscal filing screen shows, read in the caller's one transaction by a fixed number of
@@ -132,15 +132,15 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
   const notIssuedHere = await tx
     .select({
       seriesCode: invoiceSeries.code,
-      recordedAt: fiscalSeriesConflicts.recordedAt,
-      evidence: fiscalSeriesConflicts.evidence,
+      recordedAt: verifactuSeriesConflicts.recordedAt,
+      evidence: verifactuSeriesConflicts.evidence,
     })
-    .from(fiscalSeriesConflicts)
-    .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId))
+    .from(verifactuSeriesConflicts)
+    .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuSeriesConflicts.sifId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, verifactuSeriesConflicts.seriesId))
     .where(
       and(
-        eq(registroSif.nif, taxpayer.taxId),
+        eq(verifactuIdentities.nif, taxpayer.taxId),
         isNotNull(invoiceSeries.retiredAt),
         or(
           exists(
@@ -149,7 +149,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
               .from(fiscalAllocations)
               .where(
                 and(
-                  eq(fiscalAllocations.sifId, registroSif.id),
+                  eq(fiscalAllocations.sifId, verifactuIdentities.id),
                   eq(fiscalAllocations.environment, environment),
                 ),
               ),
@@ -157,18 +157,18 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
           exists(
             tx
               .select({ one: sql`1` })
-              .from(registrosFacturacion)
+              .from(verifactuRecords)
               .where(
                 and(
-                  eq(registrosFacturacion.sifId, registroSif.id),
-                  eq(registrosFacturacion.entorno, environment),
+                  eq(verifactuRecords.sifId, verifactuIdentities.id),
+                  eq(verifactuRecords.entorno, environment),
                 ),
               ),
           ),
         ),
       ),
     )
-    .orderBy(sql`${fiscalSeriesConflicts}.rowid`);
+    .orderBy(sql`${verifactuSeriesConflicts}.rowid`);
   return {
     notIssuedHere: notIssuedHere.map((row) => ({
       seriesCode: row.seriesCode,
@@ -181,7 +181,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
 
 /**
  * A change's earlier identity is the identity of this taxpayer and environment inserted just
- * before its own (`registro_sif.rowid`), never one chosen by a clock: an activation inserts its
+ * before its own (`verifactu_identities.rowid`), never one chosen by a clock: an activation inserts its
  * identity and its `fiscal_allocations` row in one transaction.
  */
 async function readIdentityChanges(
@@ -197,10 +197,10 @@ async function readIdentityChanges(
   >(sql`
     with identities as (
       select s.rowid as position, s.id, s.node_id, s.numero_instalacion as installation
-      from registro_sif s
+      from verifactu_identities s
       where s.nif = ${taxId} and (
         exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${environment})
-        or exists (select 1 from registros_facturacion r where r.sif_id = s.id and r.entorno = ${environment})
+        or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${environment})
       )
     ),
     changes as (
@@ -209,7 +209,7 @@ async function readIdentityChanges(
         where i.position < n.rowid
         order by i.position desc limit 1
       ) as earlier
-      from fiscal_allocations a join registro_sif n on n.id = a.sif_id
+      from fiscal_allocations a join verifactu_identities n on n.id = a.sif_id
       where a.taxpayer_nif = ${taxId} and a.environment = ${environment}
         and not (
           json_extract(a.approval, '$.version') = 2
@@ -220,8 +220,8 @@ async function readIdentityChanges(
       r.num_serie_factura, r.fecha_expedicion_factura
     from changes c
     join identities e on e.position = c.earlier
-    left join registros_facturacion r on r.id = (
-      select l.id from registros_facturacion l
+    left join verifactu_records r on r.id = (
+      select l.id from verifactu_records l
       -- appendToChain and receiveReturnedOriginals refuse an identity of another node
       where l.node_id = e.node_id and l.sif_id = e.id and l.entorno = ${environment}
       order by l.secuencia desc limit 1
@@ -245,14 +245,14 @@ async function readIdentityChanges(
 async function readProgress(tx: Transaction): Promise<FilingProgress> {
   const groups = await tx
     .select({
-      estado: envios.estado,
+      estado: verifactuSubmissions.estado,
       n: count(),
-      oldestGenerated: sql<string | null>`min(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
-      latestConfirmed: sql<string | null>`max(${envios.confirmadoEn})`,
+      oldestGenerated: sql<string | null>`min(${verifactuRecords.fechaHoraHusoGenRegistro})`,
+      latestConfirmed: sql<string | null>`max(${verifactuSubmissions.confirmadoEn})`,
     })
-    .from(envios)
-    .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
-    .groupBy(envios.estado);
+    .from(verifactuSubmissions)
+    .innerJoin(verifactuRecords, eq(verifactuRecords.id, verifactuSubmissions.registroId))
+    .groupBy(verifactuSubmissions.estado);
   const counts = Object.fromEntries(ENVIO_STATES.map((state) => [state, 0])) as Record<
     EnvioState,
     number

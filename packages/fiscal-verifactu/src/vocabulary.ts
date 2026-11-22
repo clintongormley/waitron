@@ -91,7 +91,7 @@ export const FISCAL_VOCABULARY: readonly string[] = [
   "fechas",
   "hora",
   "huso",
-  // registros_facturacion.entorno — Waitron's own environment stamp, on a fiscal column
+  // verifactu_records.entorno — Waitron's own environment stamp, on a fiscal column
   "entorno",
   "entornos",
 ];

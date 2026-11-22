@@ -52,7 +52,7 @@ const make = () => ({
     row("customers", "customer-1", { name: txt("Mara Current"), address: txt("20 New Street") }),
     row("persons", "person-1", { name: txt("Ana") }),
     row("menus", "menu-1", { name: txt("Lunch") }),
-    row("registros_facturacion", "fiscal-1", {
+    row("verifactu_records", "fiscal-1", {
       sale: txt("sale-1"),
       huella: txt("original-hash"),
       predecessor: txt("previous"),
@@ -83,7 +83,7 @@ const make = () => ({
     object("customers"),
     object("persons", "identity"),
     object("menus"),
-    object("registros_facturacion", "fiscal-verifactu", "fiscal"),
+    object("verifactu_records", "fiscal-verifactu", "fiscal"),
     object("events", "orders"),
     object("workforce", "workforce", "fiscal"),
     object("outbox", "fiscal-verifactu", "fiscal"),
@@ -112,14 +112,14 @@ const make = () => ({
       fromTable: "outbox",
       fromKey: [txt("send-1")],
       fromColumns: ["fiscal"],
-      toTable: "registros_facturacion",
+      toTable: "verifactu_records",
       toKey: [txt("fiscal-1")],
       toColumns: ["id"],
     },
   ],
   coverage: {
     sales: [{ table: "sales", key: [txt("sale-1")] }],
-    fiscal: [{ table: "registros_facturacion", key: [txt("fiscal-1")] }],
+    fiscal: [{ table: "verifactu_records", key: [txt("fiscal-1")] }],
     people: [{ table: "persons", key: [txt("person-1")] }],
     menus: [{ table: "menus", key: [txt("menu-1")] }],
     events: [{ table: "events", key: [txt("event-1")] }],
@@ -372,12 +372,12 @@ describe("independent original facts", () => {
     ["product customer name", "products", "customerName", txt("Cheese staff")],
     ["time spelling", "sales", "issuedAt", txt("2026-11-04T13:15:00.000+01:00")],
     ["offset", "sales", "offset", int(0)],
-    ["fiscal bytes", "registros_facturacion", "payload", txt('{"amount":"13.530"}')],
-    ["hash", "registros_facturacion", "huella", txt("recomputed")],
-    ["predecessor", "registros_facturacion", "predecessor", txt("other")],
-    ["fiscal sequence", "registros_facturacion", "sequence", int(3)],
-    ["environment", "registros_facturacion", "environment", txt("production")],
-    ["SIF", "registros_facturacion", "sif", txt("other")],
+    ["fiscal bytes", "verifactu_records", "payload", txt('{"amount":"13.530"}')],
+    ["hash", "verifactu_records", "huella", txt("recomputed")],
+    ["predecessor", "verifactu_records", "predecessor", txt("other")],
+    ["fiscal sequence", "verifactu_records", "sequence", int(3)],
+    ["environment", "verifactu_records", "environment", txt("production")],
+    ["SIF", "verifactu_records", "sif", txt("other")],
     ["workforce bytes", "workforce", "hash", txt("new-head")],
     ["outbox attempts", "outbox", "attempts", int(1)],
     ["outbox due", "outbox", "due", txt("later")],
@@ -596,7 +596,7 @@ describe("exact reviewed transformations", () => {
     expect(() => comparison.compareFacts(old, next, mappings, cell())).toThrow("history.mapping");
   });
   it.each([
-    ["registros_facturacion", "fiscal-verifactu"],
+    ["verifactu_records", "fiscal-verifactu"],
     ["bookings", "bookings"],
   ])("refuses a correctly bound row mapping to protected %s", (table, module) => {
     const context = cell();
@@ -832,7 +832,7 @@ describe("exact reviewed transformations", () => {
     { exactTransform: "tolerance" },
     { after: int(0) },
     { before: int(1) },
-    { object: { subject: "rows", key: "registros_facturacion" }, field: "huella" },
+    { object: { subject: "rows", key: "verifactu_records" }, field: "huella" },
     { object: { subject: "rows", key: "bookings" } },
   ])("rejects an unbound or forbidden mapping %#", (override) => {
     expect(() => comparison.compareFacts(make(), make(), [mapping(override)], cell())).toThrow(

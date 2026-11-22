@@ -130,7 +130,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
 
   async function estadoOf(registroId: string): Promise<string> {
     const { rows } = await suite.db.execute<{ estado: string }>(
-      sql`select estado from envios where registro_id = ${registroId}`,
+      sql`select estado from verifactu_submissions where registro_id = ${registroId}`,
     );
     return rows[0]!.estado;
   }
@@ -212,7 +212,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     await fileOnChain(aeat, seeded, 2, [1100, 1100, 1100], at(1));
     // No accept the drain writes keeps a code; set one directly.
     await suite.db.execute(sql`
-      update envios set codigo_error = '1100' where registro_id = ${seeded.registroIds[0]!}
+      update verifactu_submissions set codigo_error = '1100' where registro_id = ${seeded.registroIds[0]!}
     `);
     expect(await estadoOf(seeded.registroIds[0]!)).toBe("aceptado");
     const held = await appendPendingAlta(suite.db, seeded, 5);
@@ -238,7 +238,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     await fileOnChain(aeat, seeded, 2, [1100, 1100], at(1));
     const held = await appendPendingAlta(suite.db, seeded, 4);
     await suite.db.execute(sql`
-      update envios set estado = 'detenido', incidencia = true where registro_id = ${held.registroId}
+      update verifactu_submissions set estado = 'detenido', incidencia = true where registro_id = ${held.registroId}
     `);
 
     expect(await refusalAlerts()).toEqual([]);

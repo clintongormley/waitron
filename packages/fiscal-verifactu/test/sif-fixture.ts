@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { and, eq } from "drizzle-orm";
 import { registerSif, type RegisterSifParams } from "../src/registro-sif.js";
-import { registroSif } from "../src/schema/sif.js";
+import { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 
 export function seedNamedFixtureSif(
   tx: Transaction,
@@ -21,7 +21,7 @@ export function seedNamedFixtureSif(
 }
 
 export async function fixtureSifIdentities(tx: Transaction) {
-  return tx.select({ identity: registroSif.numeroInstalacion }).from(registroSif);
+  return tx.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities);
 }
 
 export async function seedFixtureSif(
@@ -29,12 +29,12 @@ export async function seedFixtureSif(
   params: Omit<RegisterSifParams, "numeroInstalacion"> & { numeroInstalacion?: string },
 ) {
   const rows = await tx
-    .select({ id: registroSif.id })
-    .from(registroSif)
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
     .where(
       and(
-        eq(registroSif.nif, params.nif),
-        eq(registroSif.idSistemaInformatico, params.idSistemaInformatico),
+        eq(verifactuIdentities.nif, params.nif),
+        eq(verifactuIdentities.idSistemaInformatico, params.idSistemaInformatico),
       ),
     );
   // Historical fixture identities keep record bytes independent of the allocation transport.

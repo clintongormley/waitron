@@ -9,7 +9,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { computeHuella, createClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
@@ -19,7 +19,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const flag = "<sf:Incidencia>S</sf:Incidencia>";
 
 it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact across outage retries", async () => {
-  const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db);
   const personId = newId();
   await seedPersons(suite.db, {
     id: personId,
@@ -46,7 +46,7 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
   const snapshot = async () => ({
     records: (
       await suite.db.execute<Record<string, unknown>>(
-        sql`select * from registros_facturacion order by secuencia`,
+        sql`select * from verifactu_records order by secuencia`,
       )
     ).rows,
     series: (await suite.db.execute(sql`select * from invoice_series order by id`)).rows,

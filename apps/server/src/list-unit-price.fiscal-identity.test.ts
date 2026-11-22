@@ -13,7 +13,7 @@ import {
   createProduct,
   writeProductModifiers,
 } from "@waitron/menu";
-import { registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -83,7 +83,7 @@ const OTHER_LINE_COLUMNS = columnsOf(saleLines, [...MINTED_ID_COLUMNS, "list_uni
 const SALE_COLUMNS = columnsOf(sales, ["id", "node_id", "device_id", "series_id"]);
 /** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
  * time of the insert rather than the fixed clock's. */
-const REGISTRO_COLUMNS = columnsOf(registrosFacturacion, [
+const REGISTRO_COLUMNS = columnsOf(verifactuRecords, [
   "id",
   "sale_id",
   "node_id",
@@ -217,7 +217,7 @@ async function fileOneSale(db: Database) {
       order by l.line_no`),
   );
   const registros = db.all<Record<string, unknown>>(sql`
-    select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from registros_facturacion`);
+    select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from verifactu_records`);
   return { header, lines, registros };
 }
 

@@ -108,9 +108,7 @@ it.each(["passed", "wrong-key", "invalid-chain", "undeclared-entry"])(
     if (kind === "wrong-key") f.deps.recoveryKey.secret = "wrong-disposable-key";
     if (kind === "invalid-chain")
       await f.corrupt((db) =>
-        db
-          .prepare("update registros_facturacion set huella=? where secuencia=1")
-          .run("0".repeat(64)),
+        db.prepare("update verifactu_records set huella=? where secuencia=1").run("0".repeat(64)),
       );
     let exposed = false;
     let comparisons = 0;

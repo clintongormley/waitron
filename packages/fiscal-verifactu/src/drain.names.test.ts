@@ -74,7 +74,7 @@ async function estados(ids: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const id of ids) {
     const { rows } = await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id = ${id}
+      select estado from verifactu_submissions where registro_id = ${id}
     `);
     out.push(rows[0]!.estado);
   }
@@ -86,7 +86,7 @@ async function incidentCodes(): Promise<string[]> {
   return rows.map((row) => row.code);
 }
 
-/** Pinned `registro_sif` ids, so a case chooses which chain `order by sif_id` reads first. */
+/** Pinned `verifactu_identities` ids, so a case chooses which chain `order by sif_id` reads first. */
 const sortsFirst = (tag: string): string => `00000000-0000-4000-8000-${tag.padStart(12, "0")}`;
 const sortsLast = (tag: string): string => `ffffffff-ffff-4fff-8fff-${tag.padStart(12, "0")}`;
 
@@ -117,7 +117,7 @@ function mixedEnvios(sent: Sent[]): Sent[] {
 
 async function closeGateUntil(at: Date): Promise<void> {
   await suite.db.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, ${at.toISOString()}, 300)
   `);
 }

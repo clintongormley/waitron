@@ -5,7 +5,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
-import { registrosFacturacion } from "../src/schema/registros.js";
+import { verifactuRecords } from "../src/schema/verifactu-records.js";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -91,11 +91,11 @@ export async function storedRecord(
 ): Promise<{ invoiceNumber: string; generatedAt: Date } | undefined> {
   const [row] = await db
     .select({
-      invoiceNumber: registrosFacturacion.numSerieFactura,
-      generatedAt: registrosFacturacion.fechaHoraHusoGenRegistro,
+      invoiceNumber: verifactuRecords.numSerieFactura,
+      generatedAt: verifactuRecords.fechaHoraHusoGenRegistro,
     })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, recordId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, recordId));
   return row;
 }
 
@@ -103,7 +103,7 @@ export async function storedRecord(
  * does on its refusal. */
 export async function refusedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
   await db.execute(sql`
-    update envios set estado = 'rechazado', codigo_error = '1112'
-    where registro_id in (select id from registros_facturacion where sale_id = ${saleId})
+    update verifactu_submissions set estado = 'rechazado', codigo_error = '1112'
+    where registro_id in (select id from verifactu_records where sale_id = ${saleId})
   `);
 }

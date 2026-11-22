@@ -26,7 +26,7 @@ import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
 import type { Entorno } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { refuseUntilRecordable } from "./clock-behind.js";
 
 /**
@@ -93,7 +93,7 @@ export interface ChainHead {
  * No row lock: the sequence read here decides the next position several statements later, and
  * that is safe because one write transaction runs on the venue file at a time (the pattern is
  * stated on `assertExtraListForWrite`, `packages/menu/src/extras.ts`). What refuses a forked
- * position whatever wrote it is `registros_facturacion`'s unique index on the chain position.
+ * position whatever wrote it is `verifactu_records`'s unique index on the chain position.
  */
 async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
   const [row] = await tx
@@ -180,16 +180,16 @@ async function attemptAppend(
   } else {
     const [previous] = await tx
       .select({
-        idEmisorFactura: registrosFacturacion.idEmisorFactura,
-        numSerieFactura: registrosFacturacion.numSerieFactura,
-        fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
-        huella: registrosFacturacion.huella,
+        idEmisorFactura: verifactuRecords.idEmisorFactura,
+        numSerieFactura: verifactuRecords.numSerieFactura,
+        fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
+        huella: verifactuRecords.huella,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, head.ultimoRegistroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, head.ultimoRegistroId));
     /* v8 ignore start */
     if (previous === undefined) {
-      // Unreachable: the FK to registros_facturacion(id) and that table's append-only triggers
+      // Unreachable: the FK to verifactu_records(id) and that table's append-only triggers
       // mean a non-null `cadenas.ultimo_registro_id` always resolves.
       throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
     }
@@ -235,15 +235,15 @@ async function attemptAppend(
   if (registro.tipo === "alta" && registro.correctsRegistroId !== undefined) {
     const [target] = await tx
       .select({
-        nodeId: registrosFacturacion.nodeId,
-        saleId: registrosFacturacion.saleId,
-        tipoRegistro: registrosFacturacion.tipoRegistro,
-        idEmisorFactura: registrosFacturacion.idEmisorFactura,
-        numSerieFactura: registrosFacturacion.numSerieFactura,
-        fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
+        nodeId: verifactuRecords.nodeId,
+        saleId: verifactuRecords.saleId,
+        tipoRegistro: verifactuRecords.tipoRegistro,
+        idEmisorFactura: verifactuRecords.idEmisorFactura,
+        numSerieFactura: verifactuRecords.numSerieFactura,
+        fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, registro.correctsRegistroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, registro.correctsRegistroId));
     // A correction may name a record of this box or of a box it took over from; it is always
     // appended to this box's chain.
     if (
@@ -261,17 +261,17 @@ async function attemptAppend(
   }
 
   const [inserted] = await tx
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       ...row,
       ...(registro.tipo === "alta" && registro.correctsRegistroId !== undefined
         ? { correctsRegistroId: registro.correctsRegistroId }
         : {}),
     })
-    .returning({ id: registrosFacturacion.id });
+    .returning({ id: verifactuRecords.id });
   /* v8 ignore start */
   if (inserted === undefined) {
-    throw new Error("registros_facturacion: insert returned no row");
+    throw new Error("verifactu_records: insert returned no row");
   }
   /* v8 ignore stop */
 
@@ -386,7 +386,7 @@ export async function appendToChain(
       if (
         registro.tipo === "alta" &&
         registro.correctsRegistroId !== undefined &&
-        target?.table === "registros_facturacion" &&
+        target?.table === "verifactu_records" &&
         target.columns.length === 1 &&
         target.columns[0] === "corrects_registro_id"
       ) {

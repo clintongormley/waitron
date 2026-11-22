@@ -25,7 +25,7 @@ async function appendAltas(n: number): Promise<void> {
 }
 
 /**
- * Runs one statement against `registros_facturacion` with its append-only triggers out of the way.
+ * Runs one statement against `verifactu_records` with its append-only triggers out of the way.
  *
  * Taking those triggers down is the point: the fact that corrupting a stored record needs the
  * immutability control removed first is that control working. Nothing on the application's own
@@ -39,10 +39,10 @@ async function appendAltas(n: number): Promise<void> {
 async function withoutImmutability(statement: SQL): Promise<void> {
   const triggers = suite.db.all<{ name: string; sql: string }>(
     sql`select name, sql from sqlite_master
-        where type = 'trigger' and tbl_name = 'registros_facturacion' order by name`,
+        where type = 'trigger' and tbl_name = 'verifactu_records' order by name`,
   );
   if (triggers.length === 0) {
-    throw new Error("registros_facturacion carries no append-only trigger to take down");
+    throw new Error("verifactu_records carries no append-only trigger to take down");
   }
   for (const trigger of triggers) suite.db.run(sql.raw(`drop trigger "${trigger.name}"`));
   try {
@@ -57,7 +57,7 @@ async function withoutImmutability(statement: SQL): Promise<void> {
 /** Overwrites one column on one stored registro. */
 async function corrupt(secuencia: number, column: string, value: string): Promise<void> {
   await withoutImmutability(
-    sql`update registros_facturacion set ${sql.raw(column)} = ${value}
+    sql`update verifactu_records set ${sql.raw(column)} = ${value}
         where node_id = ${node.nodeId} and secuencia = ${secuencia}`,
   );
 }
@@ -101,7 +101,7 @@ describe("verifyChain — normal states", () => {
   it("still stores a huella on every record it verified", async () => {
     await appendAltas(3);
     const { rows } = await suite.db.execute<{ huella: string }>(sql`
-      select huella from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+      select huella from verifactu_records where node_id = ${node.nodeId} order by secuencia
     `);
     expect(rows).toHaveLength(3);
     for (const row of rows) expect(row.huella).toMatch(/^[0-9A-F]{64}$/);
@@ -146,7 +146,7 @@ describe("verifyChain — detection", () => {
   it("carries the expected and found values on a link failure", async () => {
     await appendAltas(2);
     const { rows: predecessorRows } = await suite.db.execute<{ huella: string }>(sql`
-      select huella from registros_facturacion where node_id = ${node.nodeId} and secuencia = 1
+      select huella from verifactu_records where node_id = ${node.nodeId} and secuencia = 1
     `);
     const predecessor = predecessorRows[0];
     await corrupt(1, "huella", BOGUS);
@@ -166,7 +166,7 @@ describe("verifyChain — detection", () => {
     // states differently.
     await appendAltas(2);
     await withoutImmutability(
-      sql`delete from registros_facturacion where node_id = ${node.nodeId} and secuencia = 1`,
+      sql`delete from verifactu_records where node_id = ${node.nodeId} and secuencia = 1`,
     );
     const result = await suite.db.transaction((tx) => verifyChain(tx, node.nodeId));
     const missing = result.issues.find((i) => i.code === "predecessor-missing");
@@ -197,7 +197,7 @@ describe("entorno is not part of the huella", () => {
   // would become unverifiable under the other.
   //
   // A DATABASE PER RECORD, not two fixtures in one: the two records must be byte-identical except
-  // for `entorno`, and one database will not hold both — `registros_identidad_uq` does not carry
+  // for `entorno`, and one database will not hold both — `verifactu_records_identidad_uq` does not carry
   // `node_id`. In its own database each record is also a *first* record (same `null` predecessor),
   // so any hash difference between the two can only come from entorno.
   const productionDb = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -213,7 +213,7 @@ describe("entorno is not part of the huella", () => {
       appendToChain(tx, fresh.nodeId, altaFor(fresh, saleId, 1, 1, entorno)),
     );
     const row = await db.execute<{ entorno: string | null }>(
-      sql`select entorno from registros_facturacion where id = ${appended.id}`,
+      sql`select entorno from verifactu_records where id = ${appended.id}`,
     );
     return { huella: appended.huella, stored: row.rows[0]?.entorno ?? null };
   }
@@ -264,7 +264,7 @@ describe("verifyChain — never blocks the sale", () => {
       anterior_huella: string | null;
     }>(sql`
       select secuencia, huella, anterior_huella
-      from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+      from verifactu_records where node_id = ${node.nodeId} order by secuencia
     `);
     expect(rows).toHaveLength(3);
     // And it chained onto the record that was actually there, corruption and all — the chain

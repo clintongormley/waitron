@@ -4,17 +4,17 @@ import { deployment, invoiceSeries, stampDeployment, withTransaction } from "@wa
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "setup",
@@ -29,7 +29,7 @@ afterEach(() => vi.useRealTimers());
 async function seed() {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await activate(binding, "0CNNW", "2026-10-16T11:40:00.000Z");
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
@@ -95,7 +95,7 @@ async function activate(
 it("retains the higher retired hour of another node without changing rows or counters", async () => {
   await seed();
   vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
-  const other = { ...node, nodeId: TENANT_A.nodeId2 };
+  const other = { ...node, nodeId: TAXPAYER_A.nodeId2 };
   await activate(
     { ...binding, eventId: "other-node", targetNodeId: other.nodeId },
     "0CNSM",
@@ -107,12 +107,12 @@ it("retains the higher retired hour of another node without changing rows or cou
     .set({ retiredAt: new Date() })
     .where(eq(invoiceSeries.nodeId, other.nodeId));
   await suite.db
-    .update(registroSif)
+    .update(verifactuIdentities)
     .set({ revocadoEn: new Date() })
-    .where(eq(registroSif.nodeId, other.nodeId));
+    .where(eq(verifactuIdentities.nodeId, other.nodeId));
   const before = {
     series: await suite.db.select().from(invoiceSeries),
-    sifs: await suite.db.select().from(registroSif),
+    sifs: await suite.db.select().from(verifactuIdentities),
     allocations: await suite.db.select().from(fiscalAllocations),
   };
   const sources = await read();
@@ -127,7 +127,7 @@ it("retains the higher retired hour of another node without changing rows or cou
     projectHourHistory({ scope: { ...scope, taxpayerNif: "92470001W" }, sources }),
   ).toMatchObject({ greatestSpentMinute: null, contradictions: [] });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before.series);
-  expect(await suite.db.select().from(registroSif)).toEqual(before.sifs);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual(before.sifs);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
 });
 
@@ -136,7 +136,7 @@ it("combines snapshots taken before and after retirement without inventing confl
   const earlier = await read();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date() });
-  await suite.db.update(registroSif).set({ revocadoEn: new Date() });
+  await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
   const later = await read();
   expect(projectHourHistory({ scope, sources: [...earlier, ...later] })).toMatchObject({
     greatestSpentMinute: 415420,

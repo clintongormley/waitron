@@ -12,8 +12,8 @@ import {
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { registrosFacturacion } from "../src/schema/registros.js";
-import { registroSif } from "../src/schema/sif.js";
+import { verifactuRecords } from "../src/schema/verifactu-records.js";
+import { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 
 import type { Entorno } from "../src/registro-row.js";
 import { nifWithControlLetter } from "../src/testing/seed.js";
@@ -26,7 +26,7 @@ import { nifWithControlLetter } from "../src/testing/seed.js";
 /** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
-export const TENANT_A = {
+export const TAXPAYER_A = {
   seriesId: "a0000000-0000-4000-8000-000000000004",
   saleId: "a0000000-0000-4000-8000-000000000005",
   sifId: "a0000000-0000-4000-8000-000000000006",
@@ -34,7 +34,7 @@ export const TENANT_A = {
   nodeId2: brandNodeId("a0000000-0000-4000-8000-000000000009"),
 };
 
-export const TENANT_B = {
+export const TAXPAYER_B = {
   nodeId: brandNodeId("b0000000-0000-4000-8000-000000000004"),
 };
 
@@ -43,7 +43,7 @@ export const TENANT_B = {
  * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement
  * coverage is checked on settlement.
  */
-export async function seedTenantNodeSif(db: Database): Promise<void> {
+export async function seedTaxpayerNodeSif(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
@@ -56,17 +56,17 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     });
     await seedBusinessDay(db, {});
   }
-  await db.insert(nodes).values({ id: TENANT_A.nodeId, name: "Node 1" });
+  await db.insert(nodes).values({ id: TAXPAYER_A.nodeId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
-    .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
+    .values({ id: TAXPAYER_A.seriesId, nodeId: TAXPAYER_A.nodeId, code: "A" });
   const { deviceId } = await seedDevice(db, {});
   await db.insert(sales).values({
-    id: TENANT_A.saleId,
+    id: TAXPAYER_A.saleId,
     source: "device",
     deviceId,
-    nodeId: TENANT_A.nodeId,
-    seriesId: TENANT_A.seriesId,
+    nodeId: TAXPAYER_A.nodeId,
+    seriesId: TAXPAYER_A.seriesId,
     invoiceNumber: 1,
     issuedAt: ISSUED_AT,
     issuedOffsetMinutes: 60,
@@ -77,9 +77,9 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     fiscalBackend: "verifactu",
     fiscalState: "recorded",
   });
-  await db.insert(registroSif).values({
-    id: TENANT_A.sifId,
-    nodeId: TENANT_A.nodeId,
+  await db.insert(verifactuIdentities).values({
+    id: TAXPAYER_A.sifId,
+    nodeId: TAXPAYER_A.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WAITRON01",
     numeroInstalacion: "1",
@@ -88,16 +88,16 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
 
 /**
  * Seeds the parents registro-sif.test.ts needs: the taxpayer row, and three nodes across
- * one venue — `TENANT_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
- * installation-number counter is per (NIF, IdSIF), not per node) and `TENANT_B.nodeId` (a node
+ * one venue — `TAXPAYER_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
+ * installation-number counter is per (NIF, IdSIF), not per node) and `TAXPAYER_B.nodeId` (a node
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
  *
- * Deliberately narrower than `seedTenantNodeSif` above: no invoice series, no sale, no
- * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
+ * Deliberately narrower than `seedTaxpayerNodeSif` above: no invoice series, no sale, no
+ * pre-existing `verifactu_identities` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
  * even runs. The SIF is the node, so `registerSif` keys on these nodes.
  */
-export async function seedTenants(db: Database): Promise<void> {
+export async function seedTaxpayers(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
@@ -110,9 +110,9 @@ export async function seedTenants(db: Database): Promise<void> {
     await seedBusinessDay(db, {});
   }
   await db.insert(nodes).values([
-    { id: TENANT_A.nodeId, name: "Node 1" },
-    { id: TENANT_A.nodeId2, name: "Node 2" },
-    { id: TENANT_B.nodeId, name: "Node 1" },
+    { id: TAXPAYER_A.nodeId, name: "Node 1" },
+    { id: TAXPAYER_A.nodeId2, name: "Node 2" },
+    { id: TAXPAYER_B.nodeId, name: "Node 1" },
   ]);
 }
 
@@ -126,14 +126,14 @@ export async function seedVenueNodes(db: Database): Promise<void> {
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values([
-    { id: TENANT_A.nodeId, name: "Node 1" },
-    { id: TENANT_A.nodeId2, name: "Node 2" },
-    { id: TENANT_B.nodeId, name: "Node 1" },
+    { id: TAXPAYER_A.nodeId, name: "Node 1" },
+    { id: TAXPAYER_A.nodeId2, name: "Node 2" },
+    { id: TAXPAYER_B.nodeId, name: "Node 1" },
   ]);
 }
 
 /**
- * Advances a node's chain head to point at a fabricated-but-real `registros_facturacion` row,
+ * Advances a node's chain head to point at a fabricated-but-real `verifactu_records` row,
  * standing in for "this node has actually sold something".
  *
  * Not a bare `update cadenas set ultima_huella = ...`, even though that would be enough to make
@@ -142,7 +142,7 @@ export async function seedVenueNodes(db: Database): Promise<void> {
  * `ultima_huella` to be BOTH null or BOTH set, so giving the chain head a huella without a real
  * row for `ultimo_registro_id`'s foreign key to point at is rejected by the database outright. The
  * fabricated `invoice_series` and `sales` rows exist
- * only to satisfy `registros_facturacion`'s own foreign keys; nothing about their content is
+ * only to satisfy `verifactu_records`'s own foreign keys; nothing about their content is
  * asserted on anywhere.
  */
 export async function seedSoldRegistro(
@@ -183,7 +183,7 @@ export async function seedSoldRegistro(
     })
     .returning({ id: sales.id });
   const [registro] = await db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       source: "device",
       deviceId,
@@ -204,7 +204,7 @@ export async function seedSoldRegistro(
       huella: params.huella,
       entorno,
     })
-    .returning({ id: registrosFacturacion.id });
+    .returning({ id: verifactuRecords.id });
   const registroId = registro!.id;
   await db.execute(sql`
     update cadenas
@@ -220,9 +220,9 @@ export interface SeededNodeWithSif {
   seriesId: SeriesId;
 }
 
-// Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
+// Module-scope, not per-call: every test file that imports `seedTaxpayerWithSif` shares this
 // counter across its whole run, which is what keeps each call's SIF identity collision-free in
-// `registro_sif_instalacion_uq`.
+// `verifactu_identities_instalacion_uq`.
 let nifSequence = 0;
 
 function freshNif(): string {
@@ -252,14 +252,14 @@ async function insertNodeAndSeries(
 /**
  * Seeds a node, invoice series and till device at the venue, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
- * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantNodeSif` above is
+ * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTaxpayerNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
  * own fixed ids), which would collide with `write-path.e2e.test.ts`'s own first allocated invoice
  * number.
  *
  * Each call mints its OWN fresh NIF and its own node; `options.nif` overrides that minting. The
  * minted NIF comes from a module-level counter (`freshNif` above), so which one a test gets is
- * decided by how many `seedTenantWithSif` calls ran before it in the same file. The NIF is a HASHED
+ * decided by how many `seedTaxpayerWithSif` calls ran before it in the same file. The NIF is a HASHED
  * field (`IDEmisorFactura`, hashed by `@waitron/verifactu`), so a test that asserts a recorded
  * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured
  * when the counter still minted a `K` for every NIF: the same basket filed 16th in
@@ -277,7 +277,7 @@ async function insertNodeAndSeries(
  * A test comparing with `SOFTWARE_IDENTITY.code` passes `idSistemaInformatico: WAITRON_ID_SISTEMA`;
  * the default is not the code a real setup registers.
  */
-export async function seedTenantWithSif(
+export async function seedTaxpayerWithSif(
   db: Database,
   options: { nif?: string; idSistemaInformatico?: string } = {},
 ): Promise<SeededNodeWithSif> {

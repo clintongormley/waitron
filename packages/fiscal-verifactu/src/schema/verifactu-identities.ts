@@ -8,8 +8,8 @@ import { id, label, newId, nodes, now, table, ts } from "@waitron/db";
  * old identity's registros are immutable and must keep pointing at the identity that actually
  * generated them.
  */
-export const registroSif = table(
-  "registro_sif",
+export const verifactuIdentities = table(
+  "verifactu_identities",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     nodeId: id("node_id")
@@ -25,16 +25,16 @@ export const registroSif = table(
   },
   /* v8 ignore start */
   (t) => [
-    uniqueIndex("registro_sif_instalacion_uq").on(
+    uniqueIndex("verifactu_identities_instalacion_uq").on(
       t.nif,
       t.idSistemaInformatico,
       t.numeroInstalacion,
     ),
     // At most one live identity per node. Partial, so revoked rows accumulate freely.
-    uniqueIndex("registro_sif_activo_uq")
+    uniqueIndex("verifactu_identities_activo_uq")
       .on(t.nodeId)
       .where(sql`${t.revocadoEn} is null`),
-    check("registro_sif_numero_ck", sql`length(${t.numeroInstalacion}) between 1 and 30`),
+    check("verifactu_identities_numero_ck", sql`length(${t.numeroInstalacion}) between 1 and 30`),
   ],
   /* v8 ignore stop */
 );

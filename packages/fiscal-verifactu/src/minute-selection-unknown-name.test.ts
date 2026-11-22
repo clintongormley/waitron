@@ -60,7 +60,7 @@ const backupHistory: HourHistorySource[] = [
     reference: "venue",
     complete: true,
     records: [
-      row("registro_sif/1", "activation", MAIN, KNOWN, MAIN_SETUP),
+      row("verifactu_identities/1", "activation", MAIN, KNOWN, MAIN_SETUP),
       row("invoice_series/1", "series", MAIN, KNOWN, null),
     ],
   },
@@ -68,7 +68,9 @@ const backupHistory: HourHistorySource[] = [
 const survivingWithSwitch: HourHistorySource = {
   reference: "surviving-venue/switch",
   complete: true,
-  records: [row("surviving-venue/switch/registro_sif/2", "activation", SPARE, UNSEEN, SWITCH)],
+  records: [
+    row("surviving-venue/switch/verifactu_identities/2", "activation", SPARE, UNSEEN, SWITCH),
+  ],
 };
 
 interface Row {
@@ -336,7 +338,13 @@ describe("refused", () => {
       reference: "surviving-venue/switch",
       complete: true,
       records: [
-        row("surviving-venue/switch/registro_sif/2", "activation", SPARE, SETTLED, MAIN_SETUP),
+        row(
+          "surviving-venue/switch/verifactu_identities/2",
+          "activation",
+          SPARE,
+          SETTLED,
+          MAIN_SETUP,
+        ),
       ],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({
@@ -364,7 +372,7 @@ describe("refused", () => {
       reference: "surviving-venue/old",
       complete: true,
       records: [
-        row("surviving-venue/old/registro_sif/1", "activation", MAIN, KNOWN, MAIN_SETUP),
+        row("surviving-venue/old/verifactu_identities/1", "activation", MAIN, KNOWN, MAIN_SETUP),
         row(
           "surviving-venue/old/invoice_series/1",
           "series",
@@ -430,7 +438,7 @@ describe("selected although a later name is known", () => {
       reference: "surviving-venue/old",
       complete: true,
       records: [
-        row("surviving-venue/old/registro_sif/1", "activation", MAIN, KNOWN, MAIN_SETUP),
+        row("surviving-venue/old/verifactu_identities/1", "activation", MAIN, KNOWN, MAIN_SETUP),
         row(
           "surviving-venue/old/invoice_series/1",
           "series",

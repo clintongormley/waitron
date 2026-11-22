@@ -84,7 +84,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     .insert(invoiceSeries)
     .values({ nodeId: receiverId, code: "Receiver", purpose: "standard" });
   const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+    sql`select nif, numero_instalacion from verifactu_identities where id = ${source.sifId}`,
   );
   await withTransaction(old.db, (tx) =>
     seedFixtureSif(tx, {
@@ -162,7 +162,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       fetch: async (url, init) => app.request(String(url), init),
     });
   expect(await send()).toBe("confirmed");
-  expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+  expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
     originals.records,
   );
   expect(
@@ -317,7 +317,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(await withTransaction(current.db, listFilingCases)).toEqual(settled);
   expect(
     current.db.all<ReturnRow>(
-      sql`select * from registros_facturacion where id = ${originals.records[0]!.id}`,
+      sql`select * from verifactu_records where id = ${originals.records[0]!.id}`,
     ),
   ).toEqual(originals.records);
   expect(
@@ -325,7 +325,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       node_id: string;
       corrects_registro_id: string;
     }>(sql`select node_id, corrects_registro_id
-    from registros_facturacion where id = ${corrected.registroId}`),
+    from verifactu_records where id = ${corrected.registroId}`),
   ).toEqual([{ node_id: receiverId, corrects_registro_id: originals.records[0]!.id }]);
   const nextSend = new Date(now.getTime() + 60_000);
   const accepted = createFakeAeat({ serverNow: nextSend, tiempoEsperaInicial: 60 });
@@ -341,12 +341,12 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(correctionFiling.recordsAccepted).toBe(1);
   expect(
     current.db.all<{ estado: string; csv: string | null }>(
-      sql`select estado, csv from envios where registro_id = ${corrected.registroId}`,
+      sql`select estado, csv from verifactu_submissions where registro_id = ${corrected.registroId}`,
     ),
   ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
   const clashing = await modules[0]!.handover!.returnRecords!.read(old.db, source.nodeId);
   (clashing[0] as unknown as { records: ReturnRow[] }).records[0]!.offset_minutos = 60;
-  const heldBeforeStop = current.db.all<ReturnRow>(sql`select * from registros_facturacion`);
+  const heldBeforeStop = current.db.all<ReturnRow>(sql`select * from verifactu_records`);
   const read = vi.spyOn(modules[0]!.handover!.returnRecords!, "read").mockResolvedValue(clashing);
   try {
     let status = 0;
@@ -369,12 +369,8 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     ).toBe("record-clash");
     expect(status).toBe(409);
     expect(refusal).toMatchObject({ error: { code: "fiscal.return_record_clash" } });
-    expect(old.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
-      originals.records,
-    );
-    expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
-      heldBeforeStop,
-    );
+    expect(old.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(originals.records);
+    expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(heldBeforeStop);
   } finally {
     read.mockRestore();
   }
@@ -528,7 +524,7 @@ async function copyBase() {
       "device_profiles",
       "nodes",
       "invoice_series",
-      "registro_sif",
+      "verifactu_identities",
       "cadenas",
       "devices",
       "deployment",
@@ -589,7 +585,7 @@ it("counts returned VAT and settled payments without changing the new main's own
     })
     .returning();
   const [ownIdentity] = current.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif,numero_instalacion from registro_sif where id=${receiver.sifId}`,
+    sql`select nif,numero_instalacion from verifactu_identities where id=${receiver.sifId}`,
   );
   const ownPending = altaFor(receiver, brandSaleId(ownSale!.id), 1, 1);
   ownPending.input.IDEmisorFactura = ownIdentity!.nif;
@@ -699,7 +695,7 @@ it("counts returned VAT and settled payments without changing the new main's own
 
 async function originalFor(db: Database, source: SeededNode, saleId: SaleId) {
   const [identity] = db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+    sql`select nif, numero_instalacion from verifactu_identities where id = ${source.sifId}`,
   );
   const pending = altaFor(source, saleId, 1, 1);
   pending.input.IDEmisorFactura = identity!.nif;

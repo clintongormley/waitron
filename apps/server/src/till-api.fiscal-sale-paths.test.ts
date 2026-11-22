@@ -40,7 +40,7 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, readPersonAuthority } from "@waitron/identity";
 import { permissionsForRole } from "@waitron/identity/src/permissions.js";
@@ -592,7 +592,7 @@ describe("the fiscal sale path over HTTP", () => {
       expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual(
         [],
       );
-      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+      expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
     },
   );
 
@@ -616,7 +616,7 @@ describe("the fiscal sale path over HTTP", () => {
       error: { code: "working_order.not_found", params: { workingOrderId: id } },
     });
     expect(await suite.db.select().from(workingOrders)).toEqual([]);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
   });
 
   it("answers 400 course.not_found for a course only the body names", async () => {
@@ -647,7 +647,7 @@ describe("the fiscal sale path over HTTP", () => {
     expect(await res.json()).toMatchObject({
       error: { code: "course.not_found", params: { courseId } },
     });
-    expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
+    expect(await suite.db.select().from(verifactuRecords)).toHaveLength(0);
   });
   it("manual tip validates at the bill payments HTTP boundary", async () => {
     const { cfg, operatorId } = await setupVenue();
@@ -706,7 +706,7 @@ describe("the fiscal sale path over HTTP", () => {
     const original = await pay(id);
     expect(original.status).toBe(200);
     const { invoice: ticket } = await original.json();
-    const [record] = await suite.db.select().from(registrosFacturacion);
+    const [record] = await suite.db.select().from(verifactuRecords);
     await withTransaction(suite.db, (tx) =>
       openFilingCase(tx, {
         registroId: record!.id,
@@ -726,7 +726,7 @@ describe("the fiscal sale path over HTTP", () => {
     const replay = await pay(id);
     expect(replay.status).toBe(200);
     expect((await replay.json()).invoice).toEqual(ticket);
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([record]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([record]);
   });
 
   it("saves and pays a fresh cash basket in one request and replays its invoice", async () => {
@@ -786,7 +786,7 @@ describe("the fiscal sale path over HTTP", () => {
 
     // 4. A GENUINE chained fiscal record exists for this node — one, hashed.
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(verifactuRecords);
     });
     expect(fiscalRecords.length).toBe(1);
     expect(fiscalRecords[0]!.nodeId).toBe(cfg.nodeId);
@@ -914,7 +914,7 @@ describe("the fiscal sale path over HTTP", () => {
     // pointer), and the second increments `secuencia` and carries the first's huella as
     // `anteriorHuella`.
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
     });
     expect(fiscalRecords).toHaveLength(2);
 
@@ -958,7 +958,7 @@ describe("sale-time device from the authenticated session", () => {
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(verifactuRecords);
     });
     expect(fiscalRecords).toHaveLength(0);
   });
@@ -1003,7 +1003,7 @@ describe("sale-time device from the authenticated session", () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(verifactuRecords);
     });
     expect(fiscalRecords).toHaveLength(0);
   });
@@ -1082,7 +1082,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, workingOrderId));
     expect(await storedLines()).toEqual([{ id: line!.id, quantity: 1000 }]);
-    expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
+    expect(await suite.db.select().from(verifactuRecords)).toHaveLength(0);
 
     const paid = await pay();
     expect(paid.status).toBe(200);
@@ -1096,7 +1096,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     //    under its id and attributed to the logged-in operator.
     const after = await withTransaction(suite.db, async (tx) => {
       return {
-        fiscalRecords: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(verifactuRecords),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
@@ -1132,7 +1132,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion);
+      return tx.select().from(verifactuRecords);
     });
     expect(stillOne).toHaveLength(1);
     expect(stillOne.map((row) => row.huella)).toEqual(after.fiscalRecords.map((row) => row.huella));
@@ -1177,7 +1177,7 @@ describe("paying a parked pay-first order sends its dishes to the kitchen", () =
       const workingOrderId = randomUUID();
       const filed = () =>
         withTransaction(suite.db, async (tx) => ({
-          fiscalRecords: await tx.select().from(registrosFacturacion),
+          fiscalRecords: await tx.select().from(verifactuRecords),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -1592,7 +1592,7 @@ describe("reader payments over HTTP", () => {
 
     const after = await withTransaction(suite.db, async (tx) => {
       return {
-        fiscalRecords: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(verifactuRecords),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
@@ -2065,7 +2065,7 @@ describe("place → station queue → per-line advance → collect, over HTTP", 
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        fiscalRecords: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(verifactuRecords),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -2346,7 +2346,7 @@ describe("handheld sales and device capability gates", () => {
     // Exactly one chained record, the same chain-opening shape a counter cash sale files, under
     // `cfg.nodeId`: the SIF is the node, not the device.
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
     });
     expect(fiscalRecords).toHaveLength(1);
     const [only] = fiscalRecords;
@@ -2382,7 +2382,7 @@ describe("handheld sales and device capability gates", () => {
 
     // Exactly one chained record, the same chain-opening shape as the handheld cash case above.
     const fiscalRecords = await withTransaction(suite.db, async (tx) => {
-      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
     });
     expect(fiscalRecords).toHaveLength(1);
     const [only] = fiscalRecords;
@@ -2564,9 +2564,7 @@ describe("handheld sales and device capability gates", () => {
       ]);
     }
 
-    expect(await withTransaction(suite.db, (tx) => tx.select().from(registrosFacturacion))).toEqual(
-      [],
-    );
+    expect(await withTransaction(suite.db, (tx) => tx.select().from(verifactuRecords))).toEqual([]);
     expect(await withTransaction(suite.db, (tx) => tx.select().from(sales))).toEqual([]);
     for (const [id, deviceCookie] of [
       [byHandheld, handheldCookie],
@@ -2587,7 +2585,7 @@ describe("handheld sales and device capability gates", () => {
     }
 
     const fiscalRecords = await withTransaction(suite.db, (tx) =>
-      tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+      tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     );
     expect(fiscalRecords.map((r) => [r.nodeId, r.secuencia])).toEqual([
       [cfg.nodeId, 1],
@@ -2635,7 +2633,7 @@ describe("handheld sales and device capability gates", () => {
     }
 
     const fiscalRecords = await withTransaction(suite.db, (tx) =>
-      tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+      tx.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     );
     expect(fiscalRecords.map((r) => [r.nodeId, r.secuencia])).toEqual([
       [cfg.nodeId, 1],
@@ -2921,7 +2919,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       })
       .from(saleLines)
       .orderBy(saleLines.lineNo);
-    const records = await tx.select().from(registrosFacturacion);
+    const records = await tx.select().from(verifactuRecords);
     return { rows, records };
   });
   expect(stored.rows).toEqual([
@@ -3056,7 +3054,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.db, async (tx) => {
-    return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
+    return tx.select({ id: verifactuRecords.id }).from(verifactuRecords);
   });
   expect(recordCount).toHaveLength(1);
   expect(recordCount.map((row) => row.id)).toEqual(stored.records.map((row) => row.id));
@@ -3726,7 +3724,7 @@ describe("a sale cannot hand over settled extras or options", () => {
       await suite.db.execute(sql`
         select (select count(*) from sales) as sales,
                (select count(*) from working_orders) as orders,
-               (select count(*) from registros_facturacion) as registros`)
+               (select count(*) from verifactu_records) as registros`)
     ).rows[0];
   }
 

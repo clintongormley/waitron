@@ -9,17 +9,17 @@ export { clockStopRestarts } from "./clock-stop-restarts.js";
 export { declaracionesResponsables } from "./declarations.js";
 export { fiscalConflictEvidence } from "./conflict-evidence.js";
 export { fiscalLookupConflicts } from "./lookup-conflicts.js";
-export { fiscalCertificateInstalls } from "./certificate-installs.js";
+export { verifactuCertificates } from "./verifactu-certificates.js";
 export { fiscalCertificateReminders } from "./certificate-reminders.js";
-export { envioFlujo } from "./envio-flujo.js";
-export { envios } from "./envios.js";
+export { verifactuSendingState } from "./verifactu-sending-state.js";
+export { verifactuSubmissions } from "./verifactu-submissions.js";
 export { filingCaseEvents, filingCases } from "./filing-cases.js";
-export { registrosFacturacion } from "./registros.js";
-export { registroSif } from "./sif.js";
+export { verifactuRecords } from "./verifactu-records.js";
+export { verifactuIdentities } from "./verifactu-identities.js";
 
 export { fiscalAllocations } from "./allocations.js";
 export { fiscalReservations } from "./reservations.js";
 
-export { fiscalSeriesConflicts } from "./series-conflicts.js";
+export { verifactuSeriesConflicts } from "./verifactu-series-conflicts.js";
 
 export { returnedInvoiceRecords } from "./returned-invoices.js";

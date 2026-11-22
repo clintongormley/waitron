@@ -11,7 +11,7 @@ export function absentInvoiceIds(tx: Transaction, ids: readonly string[]): strin
   const held = new Set(
     tx
       .all<{ id: string }>(
-        sql`select id from registros_facturacion
+        sql`select id from verifactu_records
     where id in (select value from json_each(${JSON.stringify(ids)}))`,
       )
       .map((row) => row.id),
@@ -25,15 +25,15 @@ export async function markReturnedInvoices(
   now: Date,
 ): Promise<void> {
   await tx.execute(sql`insert into returned_invoice_records (record_id, received_at)
-    select id, ${now.toISOString()} from registros_facturacion
+    select id, ${now.toISOString()} from verifactu_records
     where id in (select value from json_each(${JSON.stringify(ids)}))`);
 }
 
 export async function hasReturnedInvoices(tx: Transaction): Promise<boolean> {
   return (
     tx.get(sql`select 1 from returned_invoice_records m
-    join registros_facturacion r on r.id = m.record_id
-    join nodes n on n.id = r.node_id join registro_sif s on s.id = r.sif_id
+    join verifactu_records r on r.id = m.record_id
+    join nodes n on n.id = r.node_id join verifactu_identities s on s.id = r.sif_id
     limit 1`) !== undefined
   );
 }
@@ -43,8 +43,8 @@ export async function returnedInvoices(
   request: ReturnedInvoicesQuery,
 ): Promise<ReturnedInvoicesPage> {
   const joins = sql`from returned_invoice_records m
-    join registros_facturacion r on r.id = m.record_id
-    join nodes n on n.id = r.node_id join registro_sif s on s.id = r.sif_id`;
+    join verifactu_records r on r.id = m.record_id
+    join nodes n on n.id = r.node_id join verifactu_identities s on s.id = r.sif_id`;
   const searching = request.search.trim() !== "";
   const matches = searching
     ? sql`with ranked as materialized (

@@ -29,8 +29,8 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -115,8 +115,8 @@ vi.mock("@waitron/identity/src/verify-password.js", async (importOriginal) => {
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { nodeId: TAXPAYER_A.nodeId2 };
 const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const ADMIN_EMAIL = "admin@venue.test";
@@ -1375,7 +1375,7 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
   const venueRows = async () => ({
     nodes: await suite.db.select().from(nodes),
     allocations: await suite.db.select().from(fiscalAllocations),
-    sif: await suite.db.select().from(registroSif),
+    sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
   });
 

@@ -457,7 +457,7 @@ rather than mechanism:
   in `packages/bookings`. Same defect that moved the repo-wide
   guards out of `packages/db` on 2026-08-01; the root `vitest.config.ts` header carries that history.
 - **One exception, scoped to a single builder rather than to the file**: `text` in
-  `packages/fiscal-verifactu/src/schema/registros.ts`, whose `cuota_total` and `importe_total` store
+  `packages/fiscal-verifactu/src/schema/verifactu-records.ts`, whose `cuota_total` and `importe_total` store
   the exact bytes hashed into the Veri\*Factu huella and so must not pass through a helper that could
   re-render them. A different builder in that same file is still reported.
 
@@ -1607,6 +1607,8 @@ a card payment's row moving through its states), `cadenas` and `registro_sif`
 and `order_amendments`, which must refuse both, came back with no trigger at all, because it is
 classified `state`. The class is wrong in both directions.
 
+**2026-11-22.** A1308 fiscal 1 renamed `registro_sif` and `envios` to `verifactu_identities` and `verifactu_submissions`.
+
 So the declaration is its own marker: `appendOnly(table, class, reason)` beside `classify()` in
 `@waitron/sync-enrolment`, read by `orderedMigrationSets` off the descriptor's `classification` seat
 and carried to `applyMigrations` through `MigrationSet.appendOnlyTables`. The cost of the
@@ -1654,7 +1656,7 @@ start serves the recovery page at once, with no count of failed starts (`refused
 
 - a trigger dropped, rows changed and the exact text re-created within one 10-second interval, or
   the same done while the box is off;
-- retained tables of an unselected provision-only module, such as `registros_facturacion` and
+- retained tables of an unselected provision-only module, such as `verifactu_records` and
   the filing-case tables on a box later moved to `fiscal-none`;
 - `PRAGMA recursive_triggers` turned off, which reopens the `INSERT OR REPLACE` hole above without
   touching a trigger;
@@ -1711,6 +1713,8 @@ append-only triggers and no error. Measured 2026-09-27 on `node:sqlite`, Node v2
 migrating the full manifest twice: through `migrationOptionsFor(...)`, `registros_facturacion`,
 `sales` and `time_entries` each carried a `RAISE(ABORT)` trigger; with the same array stripped of
 `appendOnlyTables`, none of them did, and `applyMigrations` returned normally.
+
+**2026-11-22.** A1308 fiscal 1 renamed the fiscal records table in this experiment to `verifactu_records`.
 `scripts/apply-migrations-callers.test.ts` holds that every non-test call under `packages/` and
 `apps/` passes a `migrationOptionsFor(...)` result, directly or through a `const` declared once in
 the file; its header lists where it is weaker than its name.
@@ -1810,7 +1814,7 @@ which of three ties it uses: a `node_id` column every read and write names (`joi
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
 rotation reads every populated signing-key group in `box` and `node_pair_link` whole), a seal only a box holding the key ring opens
 (`venue_credentials`, whose ring a joining spare receives from the main box), or rows the
-transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
+transaction that wrote them deletes (`change_log`). `verifactu_certificates` and
 `fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
 and write names as one of `readHistoryNodes(tx, thisNode)`, this box and every box it took over from. Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
@@ -2051,6 +2055,8 @@ orphan commit; the same refusal test then failed. Commands in the disposable clo
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-boot-migration.probe.test.ts`
 and the deletion control with `-t 'deferred orphan control with check'`. The temporary probe and
 SQL are retained with the campaign's migration receipts.
+
+**2026-11-22.** A1308 fiscal 1 renamed the fiscal identity table in this experiment to `verifactu_identities`.
 
 This experiment covers this SIF rebuild and its sampled records. It does not cover cascading
 children, every possible stored value, or the future allocation ledger and runtime consumers.
@@ -5709,7 +5715,7 @@ files (`lstat`, so a link is never followed or counted) whose archive names carr
 (`ownArchiveStamp`), never the newest of those in that folder, and only those taken strictly after
 the current installation began. The installation start comes from the fiscal seat's optional
 `installationStartedAt`
-(`packages/fiscal/src/contribution.ts`); the Veri\*Factu module answers the live `registro_sif`
+(`packages/fiscal/src/contribution.ts`); the Veri\*Factu module answers the live `verifactu_identities`
 row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when the node has none.
 `createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside
 `db.withWriteLock` with no change-list drain, because the drain is a write and this read must answer
@@ -6187,7 +6193,7 @@ than its name — it covers only the duties it names.
 **`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
 types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `text()`
 or `integer()` straight from `drizzle-orm/sqlite-core`. One scoped exception: `text` in
-`packages/fiscal-verifactu/src/schema/registros.ts`. Guard: `scripts/column-vocabulary.test.ts`,
+`packages/fiscal-verifactu/src/schema/verifactu-records.ts`. Guard: `scripts/column-vocabulary.test.ts`,
 weaker than its name — it reads the import line as text and forbids only the builders the
 vocabulary itself imports, so `blob` passes anywhere.
 
@@ -6289,6 +6295,8 @@ wrong. That trigger pair is the WHOLE of the enforcement — the engine has no p
 trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
 or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
 only, and only the tables the start migrated.
+
+**2026-11-22.** A1308 fiscal 1 renamed the fiscal records table in this excerpt to `verifactu_records`.
 
 ### Never put our own metadata into a hash.
 
@@ -7094,7 +7102,7 @@ guard and pointer.
 > weaker than the rule: a test bundle, never the image's; image-smoke's `check-release` step reads
 > the image's stamp but starts nothing.
 
-### `registros_facturacion` is immutable: never work around its append-only update/delete triggers
+### `verifactu_records` is immutable: never work around its append-only update/delete triggers
 
 > `append-only-watch` is weaker than its name: stored text only; selected declarations and existing
 > append-only tables of toggleable modules.

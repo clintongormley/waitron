@@ -19,8 +19,8 @@ import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import type { RemedyKind } from "./record-remedy.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
@@ -63,7 +63,7 @@ beforeEach(async () => {
       altaFor(node, saleId, 1, 1, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,
@@ -118,11 +118,8 @@ function send(
 
 async function snapshot() {
   return {
-    records: await suite.db
-      .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia),
-    deliveries: await suite.db.select().from(envios),
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
@@ -187,9 +184,9 @@ it("replays the same decision after clock and original delivery changes without 
   const result = await first.json();
   instant = new Date("2026-07-20T18:20:35Z");
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "aceptado" })
-    .where(eq(envios.registroId, body.registroId));
+    .where(eq(verifactuSubmissions.registroId, body.registroId));
   const before = await snapshot();
   const retry = await send(Object.fromEntries(Object.entries(body).reverse()));
   expect(retry.status).toBe(200);
@@ -208,7 +205,10 @@ it("serialises simultaneous retries into one saved result", async () => {
 it.each(["pendiente", "enviando", "detenido", "retenido", "aceptado", "aceptado_con_errores"])(
   "refuses the original outcome %s rather than choosing a cancellation",
   async (estado) => {
-    await suite.db.update(envios).set({ estado }).where(eq(envios.registroId, body.registroId));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, body.registroId));
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -219,9 +219,9 @@ it.each(["pendiente", "enviando", "detenido", "retenido", "aceptado", "aceptado_
 
 it("refuses a duplicate conflict even when it has the same invoice key and totals", async () => {
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ codigoError: "3000" })
-    .where(eq(envios.registroId, body.registroId));
+    .where(eq(verifactuSubmissions.registroId, body.registroId));
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);
@@ -238,7 +238,7 @@ it("refuses code 3000 even when a synthetic rejected case carries that same code
       altaFor(node, otherSale, 2, 2, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: record.id, estado: "rechazado", codigoError: "3000" });
     const filingCase = await openFilingCase(tx, {
       registroId: record.id,
@@ -256,14 +256,16 @@ it("refuses code 3000 even when a synthetic rejected case carries that same code
 });
 
 it("refuses an already generated ordinary cancellation and preserves its held payload", async () => {
-  const [original] = await suite.db.select().from(registrosFacturacion);
+  const [original] = await suite.db.select().from(verifactuRecords);
   await withTransaction(suite.db, async (tx) => {
     const cancellation = await appendToChain(
       tx,
       node.nodeId,
       anulacionFor(node, brandSaleId(original!.saleId), 1, 2, "preproduction"),
     );
-    await tx.insert(envios).values({ registroId: cancellation.id, estado: "retenido" });
+    await tx
+      .insert(verifactuSubmissions)
+      .values({ registroId: cancellation.id, estado: "retenido" });
   });
   const before = await snapshot();
   const response = await send();
@@ -273,7 +275,7 @@ it("refuses an already generated ordinary cancellation and preserves its held pa
 });
 
 it("refuses a stale rejected version after a correction was appended", async () => {
-  const [original] = await suite.db.select().from(registrosFacturacion);
+  const [original] = await suite.db.select().from(verifactuRecords);
   await withTransaction(suite.db, (tx) => {
     const next = altaFor(node, brandSaleId(original!.saleId), 1, 2, "preproduction");
     return appendToChain(tx, node.nodeId, {
@@ -290,7 +292,7 @@ it("refuses a stale rejected version after a correction was appended", async () 
 });
 
 it("uses the issued sale origin when cancelling a rejected current correction", async () => {
-  const [original] = await suite.db.select().from(registrosFacturacion);
+  const [original] = await suite.db.select().from(verifactuRecords);
   const decision = await withTransaction(suite.db, async (tx) => {
     const pending = altaFor(node, brandSaleId(original!.saleId), 1, 2, "preproduction");
     const current = await appendToChain(tx, node.nodeId, {
@@ -300,7 +302,7 @@ it("uses the issued sale origin when cancelling a rejected current correction", 
       input: { ...pending.input, Subsanacion: "S", RechazoPrevio: "X" },
     });
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: current.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: current.id,
@@ -440,7 +442,7 @@ it.each([
       altaFor(node, otherSale, 2, 2, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: record.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: record.id,
@@ -458,7 +460,10 @@ it.each([
 });
 
 it.each([null, "1162"])("refuses inconsistent rejection evidence %s", async (codigoError) => {
-  await suite.db.update(envios).set({ codigoError }).where(eq(envios.registroId, body.registroId));
+  await suite.db
+    .update(verifactuSubmissions)
+    .set({ codigoError })
+    .where(eq(verifactuSubmissions.registroId, body.registroId));
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);
@@ -486,9 +491,9 @@ it("refuses when the venue row is missing without changing any fiscal facts", as
 it("refuses a malformed synthetic correction with no issued original for its sale", async () => {
   const otherSale = await seedSale(suite.db, node, 2);
   const selected = await withTransaction(suite.db, async (tx) => {
-    const [original] = await tx.select().from(registrosFacturacion);
+    const [original] = await tx.select().from(verifactuRecords);
     const [malformed] = await tx
-      .insert(registrosFacturacion)
+      .insert(verifactuRecords)
       .values({
         ...original!,
         id: crypto.randomUUID(),
@@ -500,7 +505,7 @@ it("refuses a malformed synthetic correction with no issued original for its sal
       })
       .returning();
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: malformed!.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: malformed!.id,
@@ -570,7 +575,7 @@ it("submits the explicitly chosen absent-original operation instead of setting i
   expect(after.sales).toEqual(before.sales);
   expect(after.cases).toEqual(before.cases);
   const raw = await suite.db.execute(
-    sql`select sin_registro_previo from registros_facturacion where id = ${result.registroId}`,
+    sql`select sin_registro_previo from verifactu_records where id = ${result.registroId}`,
   );
   expect(raw.rows).toEqual([{ sin_registro_previo: "S" }]);
 });
@@ -587,8 +592,8 @@ it("a refused record of the box this one took over from can be remedied here", a
   const { registroId } = (await response.json()) as { registroId: string };
   const [appended] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   expect(appended).toMatchObject({
     nodeId: successor.nodeId,
     sifId: successor.sifId,
@@ -645,7 +650,7 @@ it("refuses a production cancellation while no producer is set, writing nothing"
       altaFor(node, saleId, 2, 2, "production"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,

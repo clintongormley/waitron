@@ -91,7 +91,7 @@ describe("makeFiscalBackend", () => {
   });
 
   it("refuses an unrepresentable WAITRON_ENV, the same guard loadConfig uses", () => {
-    // Refused at construction rather than by `registros_entorno_ck` mid-sale.
+    // Refused at construction rather than by `verifactu_records_entorno_ck` mid-sale.
     expect(() =>
       makeFiscalBackend(VERIFACTU_ENABLED, null, STUB_DB, { WAITRON_ENV: "staging" }),
     ).toThrow();

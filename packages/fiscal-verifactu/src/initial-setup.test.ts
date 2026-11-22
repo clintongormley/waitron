@@ -5,7 +5,7 @@ import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { InitialSetupContext } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedSoldRegistro, seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedSoldRegistro, seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { FISCAL_INITIAL_SETUP as productionInitialSetup } from "./index.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
@@ -17,7 +17,7 @@ import {
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { validateInitialPaperCandidates } from "./initial-paper-candidates.js";
 import type { PaperConsumption } from "./paper-protocol.js";
 import type { AllocationContext, FiscalAllocation } from "./allocation-envelope.js";
@@ -31,7 +31,7 @@ const context: InitialSetupContext = {
     action: "setup",
     eventId: "event1",
     sourceId: "first-setup:attempt1",
-    targetNodeId: TENANT_A.nodeId,
+    targetNodeId: TAXPAYER_A.nodeId,
   },
   administratorId: "admin1",
   country: "ES",
@@ -141,7 +141,7 @@ async function commit(f: ReturnType<typeof fixture>) {
   return withTransaction(suite.db, (tx) =>
     activateAllocation(
       tx,
-      { nodeId: TENANT_A.nodeId },
+      { nodeId: TAXPAYER_A.nodeId },
       f.input.allocation,
       f.input.approval,
       activationContext,
@@ -150,7 +150,7 @@ async function commit(f: ReturnType<typeof fixture>) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "production" });
 });
 
@@ -455,7 +455,7 @@ it("the historical paper collector activates independently bound evidence", asyn
     (authority) =>
       operations.prepare({ binding: context.binding, authority, input: f.input }, (prepared) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, prepared),
+          activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, prepared),
         ),
       ),
   );
@@ -597,17 +597,17 @@ it("refuses malformed Cloud request fields before creating a frozen setup reques
 
 it("gives first setup's history no time floor", async () => {
   const [sif] = await suite.db
-    .insert(registroSif)
+    .insert(verifactuIdentities)
     .values({
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "W1",
       numeroInstalacion: "0CNNW",
       registradoEn: new Date("2026-07-20T10:00:00Z"),
     })
-    .returning({ id: registroSif.id });
+    .returning({ id: verifactuIdentities.id });
   await seedSoldRegistro(suite.db, {
-    nodeId: TENANT_A.nodeId,
+    nodeId: TAXPAYER_A.nodeId,
     sifId: sif!.id,
     nif: "89890001K",
     secuencia: 1,

@@ -75,10 +75,10 @@ describe("buildSchemaListFile", () => {
 
   it("holds a fiscal-verifactu table only in that composition", () => {
     expect(tableNames(entry("fiscal-verifactu", "migrated", "venue"))).toContain(
-      "registros_facturacion",
+      "verifactu_records",
     );
     expect(tableNames(entry("fiscal-none", "migrated", "venue"))).not.toContain(
-      "registros_facturacion",
+      "verifactu_records",
     );
     expect(entry("fiscal-verifactu", "migrated", "venue").setOrder).toContain("fiscal-verifactu");
     expect(entry("fiscal-none", "migrated", "venue").setOrder).not.toContain("fiscal-verifactu");

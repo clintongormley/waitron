@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
@@ -15,11 +15,11 @@ import type { FilingCaseCause } from "./filing-cases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let backend: VerifactuBackend;
-let venue: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let venue: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
 let original: Awaited<ReturnType<typeof recordSale>>;
 
 beforeEach(async () => {
-  venue = await seedTenantWithSif(suite.db);
+  venue = await seedTaxpayerWithSif(suite.db);
   backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
@@ -110,7 +110,7 @@ async function build(kind: (typeof builders)[number]) {
 describe("final fiscal builder conflict check", () => {
   it("does not stop an unrelated node's new sale", async () => {
     await conflict("fiscal.huella_divergente");
-    const other = await seedTenantWithSif(suite.db);
+    const other = await seedTaxpayerWithSif(suite.db);
     await expect(
       withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(other))),
     ).resolves.toMatchObject({ fiscal: { backend: "verifactu", state: "pending" } });
@@ -120,10 +120,10 @@ describe("final fiscal builder conflict check", () => {
     await conflict("fiscal.duplicado_anulado");
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`update registro_sif set revocado_en = ${steadyClock.now().instant.toISOString()} where node_id = ${venue.nodeId}`,
+        sql`update verifactu_identities set revocado_en = ${steadyClock.now().instant.toISOString()} where node_id = ${venue.nodeId}`,
       );
-      await tx.execute(sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
-        select ${randomUUID()}, node_id, nif, id_sistema_informatico, '2', registrado_en from registro_sif where node_id = ${venue.nodeId}`);
+      await tx.execute(sql`insert into verifactu_identities (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
+        select ${randomUUID()}, node_id, nif, id_sistema_informatico, '2', registrado_en from verifactu_identities where node_id = ${venue.nodeId}`);
     });
     await expect(
       withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue))),
@@ -136,22 +136,20 @@ describe("final fiscal builder conflict check", () => {
       `${kind} refuses the first active %s without appending a record`,
       async (cause) => {
         await conflict(cause, true);
-        const before = await suite.db.execute(sql`select * from registros_facturacion`);
+        const before = await suite.db.execute(sql`select * from verifactu_records`);
         const head = await suite.db.execute(sql`select * from cadenas`);
         await expect(build(kind)).rejects.toMatchObject({
           code: "sif.allocation_invalid",
           params: { reason: "conflict_requires_administrator" },
         });
-        expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(before);
+        expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(before);
         expect(await suite.db.execute(sql`select * from cadenas`)).toEqual(head);
       },
     );
     it(`${kind} still builds beside an unrelated filing refusal`, async () => {
       await conflict("fiscal.registro_rechazado");
       await expect(build(kind)).resolves.toMatchObject({ backend: "verifactu", state: "pending" });
-      expect((await suite.db.execute(sql`select id from registros_facturacion`)).rows).toHaveLength(
-        2,
-      );
+      expect((await suite.db.execute(sql`select id from verifactu_records`)).rows).toHaveLength(2);
     });
   }
 });

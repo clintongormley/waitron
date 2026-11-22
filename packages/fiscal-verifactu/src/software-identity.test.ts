@@ -6,9 +6,9 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { makeVerifactuBackend } from "./slot.js";
 import {
   PRODUCER_PENDING,
@@ -296,7 +296,7 @@ describe("a backend keeps its first reading of the settings", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
   it("names the producer read when it was built, after the settings change", async () => {
-    const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+    const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db);
     setProducer(PRODUCER);
     const backend = makeVerifactuBackend({
       db: suite.db,
@@ -309,9 +309,9 @@ describe("a backend keeps its first reading of the settings", () => {
       recordSale(tx, backend, saleInput({ nodeId, seriesId })),
     );
     const [row] = await suite.db
-      .select({ sistemaInformatico: registrosFacturacion.sistemaInformatico })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .select({ sistemaInformatico: verifactuRecords.sistemaInformatico })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     expect(row!.sistemaInformatico).toMatchObject({
       NombreRazon: "PRODUCER PERSON",
       NIF: "00000000T",

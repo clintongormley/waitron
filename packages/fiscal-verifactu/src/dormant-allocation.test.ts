@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 
 import * as standby from "./standby-allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -20,8 +20,8 @@ import {
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const target = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -107,7 +107,7 @@ async function rows(table: string) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
@@ -124,7 +124,7 @@ beforeEach(async () => {
 describe("persisting a named spare's dormant paper allocation", () => {
   it("retains the signed reservation and complete bases without creating any active fiscal state", async () => {
     const active = [
-      await rows("registro_sif"),
+      await rows("verifactu_identities"),
       await rows("cadenas"),
       await rows("invoice_series"),
       await suite.db.execute(
@@ -149,7 +149,7 @@ describe("persisting a named spare's dormant paper allocation", () => {
     expect(JSON.parse(String(saved[0]!.evidence))).toEqual(proof);
     expect(JSON.parse(String(saved[0]!.bases))).toEqual(bases);
     expect([
-      await rows("registro_sif"),
+      await rows("verifactu_identities"),
       await rows("cadenas"),
       await rows("invoice_series"),
       await suite.db.execute(

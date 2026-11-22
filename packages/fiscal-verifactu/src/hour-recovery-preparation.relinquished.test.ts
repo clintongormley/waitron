@@ -11,7 +11,7 @@ import {
   type OperationOperator,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -22,8 +22,8 @@ import { fiscalAllocations } from "./schema/allocations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
@@ -56,7 +56,7 @@ beforeEach(async () => {
     monotonicStartedMs: monotonic,
     monotonicFinishedMs: monotonic,
   }));
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await activateOriginal();
 });

@@ -109,7 +109,7 @@ async function askStopped(seed: (venue: Venue) => Promise<void>, now: Date): Pro
 /** One record of the venue's own node, generated at 2026-07-20T18:20:30Z. */
 async function recordOn(venue: Venue): Promise<void> {
   const [sif] = suite.db.all<{ id: string }>(
-    sql`select id from registro_sif where node_id = ${venue.cfg.nodeId}`,
+    sql`select id from verifactu_identities where node_id = ${venue.cfg.nodeId}`,
   );
   const ids = {
     nodeId: venue.cfg.nodeId,

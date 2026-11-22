@@ -151,14 +151,16 @@ it("finalises an already captured bill once after the actual administrator switc
     });
   expect((await pay(await tabWith(venue, "Paella"))).status).toBe(200);
   const original = suite.db.all<{ id: string; sif_id: string }>(
-    sql`select id, sif_id from registros_facturacion`,
+    sql`select id, sif_id from verifactu_records`,
   )[0]!;
   const collect = venue.card.collect.bind(venue.card);
   let conflict!: NonNullable<ConflictRequest["conflict"]>;
   venue.card.collect = async (input) => {
     const result = await collect(input);
     const incident = await withTransaction(suite.db, async (tx) => {
-      await tx.run(sql`update envios set estado = 'rechazado' where registro_id = ${original.id}`);
+      await tx.run(
+        sql`update verifactu_submissions set estado = 'rechazado' where registro_id = ${original.id}`,
+      );
       return openFilingCase(tx, {
         registroId: original.id,
         cause: "fiscal.huella_divergente",
@@ -175,7 +177,7 @@ it("finalises an already captured bill once after the actual administrator switc
     params: { reason: "issuance_refused" },
   });
   const captures = suite.db.all(sql`select * from payments`);
-  const records = suite.db.all(sql`select * from registros_facturacion`);
+  const records = suite.db.all(sql`select * from verifactu_records`);
   const cases = suite.db.all(sql`select * from filing_cases`);
   const orders = suite.db.all(sql`select * from working_orders`);
   const node = { nodeId: venue.cfg.nodeId };
@@ -274,7 +276,7 @@ it("finalises an already captured bill once after the actual administrator switc
   expect(switched).toMatchObject({ kind: "committed" });
   expect(suite.db.all(sql`select * from payments`)).toEqual(captures);
   expect(suite.db.all(sql`select * from working_orders`)).toEqual(orders);
-  expect(suite.db.all(sql`select * from registros_facturacion`)).toEqual(records);
+  expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(records);
   expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
   const deps = {
     admission: testTradingAdmission(),
@@ -292,7 +294,7 @@ it("finalises an already captured bill once after the actual administrator switc
   const final = suite.db.all(sql`select * from sales where working_order_id = ${billId}`);
   expect(final).toHaveLength(1);
   expect(
-    suite.db.all(sql`select num_serie_factura from registros_facturacion order by secuencia`),
+    suite.db.all(sql`select num_serie_factura from verifactu_records order by secuencia`),
   ).toEqual([{ num_serie_factura: "A-0CNQR/1" }, { num_serie_factura: "A-0CNQT/1" }]);
   expect(await settlePendingBillPayments(deps)).toMatchObject({
     received: 0,

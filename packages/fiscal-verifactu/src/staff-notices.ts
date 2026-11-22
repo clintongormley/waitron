@@ -34,10 +34,10 @@ export async function unsentNotices(
     select count(*) as n,
            coalesce(sum(e.estado = 'retenido'), 0) as held,
            coalesce(max(e.incidencia or e.technical_incidence), 0) as failed,
-           (select technical_incident_token is not null from envio_flujo where id = 1) as open,
+           (select technical_incident_token is not null from verifactu_sending_state where id = 1) as open,
            min(r.fecha_hora_huso_gen_registro) as since
-    from envios e
-    join registros_facturacion r on r.id = e.registro_id
+    from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     where e.estado in ('pendiente', 'enviando', 'detenido', 'retenido')
   `);
   const { n, held, failed, open, since } = rows[0]!;

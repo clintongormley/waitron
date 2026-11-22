@@ -16,7 +16,7 @@ import { seedLiveConflict, liveConflictNode } from "../test/live-conflict-fixtur
 import { FISCAL_ROUTES } from "./routes.js";
 import type { ConflictRef } from "./conflict-evidence.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { parseConflictResult, type ConflictAllocationInput } from "./conflict-recovery-contract.js";
 
@@ -438,7 +438,7 @@ it("refuses an absent preparation engine and malformed retained-event status", a
 it("binds a lookup-only reference to its exact observation at the authenticated recovery route", async () => {
   const [series] = await suite.db.select().from(invoiceSeries);
   const [observed] = await suite.db
-    .insert(fiscalSeriesConflicts)
+    .insert(verifactuSeriesConflicts)
     .values({
       sifId: conflict.sifId,
       seriesId: series!.id,

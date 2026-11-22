@@ -14,7 +14,7 @@ import {
   type DeclaredStandbyContext,
 } from "./declared-paper-standby.js";
 import { liveSeriesBases } from "./reserved-series.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 
@@ -55,9 +55,11 @@ export async function validateStandbyAllocation(
   if (stamp?.environment !== "production" && stamp?.environment !== "preproduction")
     return { ok: false, reason: "environment_unstamped" };
   const [sif] = await tx
-    .select({ nif: registroSif.nif, softwareId: registroSif.idSistemaInformatico })
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, primary.nodeId), isNull(registroSif.revocadoEn)));
+    .select({ nif: verifactuIdentities.nif, softwareId: verifactuIdentities.idSistemaInformatico })
+    .from(verifactuIdentities)
+    .where(
+      and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    );
   if (sif === undefined) return { ok: false, reason: "primary_not_registered" };
   if (sif.nif !== taxpayer.taxId) return { ok: false, reason: "scope_mismatch" };
   const bases = await liveSeriesBases(tx, primary);
@@ -81,13 +83,13 @@ export async function validateStandbyAllocation(
     .where(eq(fiscalAllocations.allocationKey, validated.allocation.allocationId));
   if (usedAllocation !== undefined) return { ok: false, reason: "allocation_consumed" };
   const [usedIdentity] = await tx
-    .select({ id: registroSif.id })
-    .from(registroSif)
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
     .where(
       and(
-        eq(registroSif.nif, validated.allocation.taxpayerNif),
-        eq(registroSif.idSistemaInformatico, validated.allocation.softwareId),
-        sql`${registroSif.numeroInstalacion} = ${validated.allocation.installationIdentity}`,
+        eq(verifactuIdentities.nif, validated.allocation.taxpayerNif),
+        eq(verifactuIdentities.idSistemaInformatico, validated.allocation.softwareId),
+        sql`${verifactuIdentities.numeroInstalacion} = ${validated.allocation.installationIdentity}`,
       ),
     )
     .limit(1);
@@ -129,9 +131,11 @@ export async function establishDormantAllocation(
     .where(eq(nodes.id, standby.nodeId));
   if (standby.nodeId === primary.nodeId || target === undefined) return refuse("node_mismatch");
   const [activeSif] = await tx
-    .select({ id: registroSif.id })
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, standby.nodeId), isNull(registroSif.revocadoEn)))
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
+    .where(
+      and(eq(verifactuIdentities.nodeId, standby.nodeId), isNull(verifactuIdentities.revocadoEn)),
+    )
     .limit(1);
   const [activeSeries] = await tx
     .select({ id: invoiceSeries.id })

@@ -157,7 +157,7 @@ export const bigCount = (name: string) => integer(name);
  * Free text.
  *
  * A fiscal amount held as text is NOT free text and must not become `label()`:
- * `packages/fiscal-verifactu/src/schema/registros.ts` keeps `cuota_total`/`importe_total` as their
+ * `packages/fiscal-verifactu/src/schema/verifactu-records.ts` keeps `cuota_total`/`importe_total` as their
  * own text column because the fiscal fingerprint hashes the stored bytes verbatim. Nothing catches
  * that substitution.
  */

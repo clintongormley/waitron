@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { TENANT_A, seedTenants } from "../test/fixtures.js";
+import { TAXPAYER_A, seedTaxpayers } from "../test/fixtures.js";
 
 import { deriveReservedSeriesCodes, liveSeriesBases, stripOwnSuffixes } from "./reserved-series.js";
 
@@ -41,11 +41,11 @@ describe("stripOwnSuffixes", () => {
 });
 
 describe("liveSeriesBases", () => {
-  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
+  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTaxpayers });
 
   it("keeps one base per (code, purpose) pair in first-seen order", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const node = { nodeId: TENANT_A.nodeId };
+      const node = { nodeId: TAXPAYER_A.nodeId };
       const identity = { ...node, nif: "89890001K", idSistemaInformatico: "WT" };
       await registerSif(tx, { ...identity, numeroInstalacion: "S000001" });
       const registered = await registerSif(tx, { ...identity, numeroInstalacion: "P000042" });
@@ -72,11 +72,11 @@ describe("liveSeriesBases", () => {
 });
 
 describe("liveSeriesBases across purposes", () => {
-  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
+  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTaxpayers });
 
   it("keeps FA standard and FA-S000001 corrective distinct when S000001 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const node = { nodeId: TENANT_A.nodeId };
+      const node = { nodeId: TAXPAYER_A.nodeId };
       const sif = await registerSif(tx, {
         ...node,
         nif: "89890001K",

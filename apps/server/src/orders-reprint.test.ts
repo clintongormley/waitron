@@ -74,7 +74,7 @@ async function counts() {
     venue.db.all<{ n: number }>(sql`select count(*) as n from print_jobs`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from drawer_opens`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from sales`),
-    venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`),
+    venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_records`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from sale_settlements`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from tenders`),
     venue.db.all<{ n: number }>(sql`select count(*) as n from receipt_reprints`),
@@ -392,7 +392,7 @@ describe("a receipt copy printed on a printer later deleted", () => {
         drawers: await tx.select().from(drawerOpens),
         kitchenLinks: await tx.select().from(kitchenPrintJobs),
         sales: await tx.select().from(sales),
-        registros: await tx.all(sql`select * from registros_facturacion`),
+        registros: await tx.all(sql`select * from verifactu_records`),
       }));
     const before = await history();
 

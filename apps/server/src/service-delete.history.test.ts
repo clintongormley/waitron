@@ -116,7 +116,7 @@ it("deleted department reprints its original receipt configuration and frozen he
       })
       .from(departments)
       .where(eq(departments.id, departmentId)),
-    fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
+    fiscal: (await tx.execute(sql`select * from verifactu_records order by id`)).rows,
   }));
   const transfer = await run(async (tx) => {
     const [row] = await tx
@@ -222,7 +222,7 @@ it("deleted department reprints its original receipt configuration and frozen he
       })
       .from(departments)
       .where(eq(departments.id, departmentId)),
-    fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
+    fiscal: (await tx.execute(sql`select * from verifactu_records order by id`)).rows,
   }));
   expect(after).toEqual(before);
   expect(await run((tx) => tx.select().from(diningTables))).toEqual([]);

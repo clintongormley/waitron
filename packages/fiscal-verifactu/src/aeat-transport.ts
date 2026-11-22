@@ -82,7 +82,7 @@ export function aeatEndpointFor(
 }
 
 /** The venue's mTLS `fetch` and the handle that releases the connection pool behind it. */
-export interface TenantTransport {
+export interface AeatTransport {
   fetch: typeof globalThis.fetch;
   /** Graceful: `Agent.close()`, not `.destroy()` — nothing is in flight once the sweep has
    * returned, and `destroy()` would tear down a socket mid-response if that stopped holding. */
@@ -98,7 +98,7 @@ export interface TenantTransport {
  * bundled in `material.pfx` also act as trust anchors (the "ca omitted" case in
  * `aeat-transport.test.ts`).
  */
-export function mtlsFetch(material: CertMaterial, ca?: string): TenantTransport {
+export function mtlsFetch(material: CertMaterial, ca?: string): AeatTransport {
   const dispatcher = new Agent({
     connect: {
       pfx: material.pfx,
@@ -120,7 +120,7 @@ export interface TransportDeps {
   db: Database;
   ring: KeyRing;
   endpointFor: (certKind: CertKind) => string;
-  fetchFor: (material: CertMaterial) => TenantTransport;
+  fetchFor: (material: CertMaterial) => AeatTransport;
   observeAuthorityTime?: FiscalDutyDeps["observeAuthorityTime"];
 }
 
@@ -138,7 +138,7 @@ export interface ClientResolver {
  * another's transports. The certificate is read only when the sweep actually has work.
  */
 export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): ClientResolver {
-  const open: TenantTransport[] = [];
+  const open: AeatTransport[] = [];
   return {
     resolve: async () => {
       const material = await readCertMaterial(deps.db, deps.ring);

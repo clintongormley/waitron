@@ -114,8 +114,8 @@ function snapshot() {
     "working_orders",
     "working_order_lines",
     "cadenas",
-    "registros_facturacion",
-    "envios",
+    "verifactu_records",
+    "verifactu_submissions",
     "print_jobs",
     "drawer_opens",
   ]) {
@@ -180,7 +180,7 @@ describe("previously captured bill payments", () => {
       const repaired = await settle();
       expect(repaired).toMatchObject({ received: 1, pending: 0, errors: [] });
       expect(suite.db.all(sql`select state from bill_payments`)).toEqual([{ state: "received" }]);
-      expect(suite.db.all(sql`select count(*) as count from registros_facturacion`)).toEqual([
+      expect(suite.db.all(sql`select count(*) as count from verifactu_records`)).toEqual([
         { count: 1 },
       ]);
       expect(venue.card.collectCalls).toEqual([]);

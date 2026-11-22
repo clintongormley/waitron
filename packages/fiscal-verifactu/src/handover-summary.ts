@@ -62,7 +62,7 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
   for await (const chain of query.rows(
     `select r.node_id, r.sif_id, s.id_sistema_informatico, s.numero_instalacion,
        count(*) as records, max(r.secuencia) as head
-     from registros_facturacion r join registro_sif s on s.id = r.sif_id
+     from verifactu_records r join verifactu_identities s on s.id = r.sif_id
      group by r.node_id, r.sif_id order by r.node_id, r.sif_id`,
   )) {
     const nodeId = text(chain.node_id);
@@ -71,7 +71,7 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
     let headRegistroId = "";
     let headHuella = "";
     for await (const head of query.rows(
-      "select id, huella from registros_facturacion where node_id = ? and secuencia = ?",
+      "select id, huella from verifactu_records where node_id = ? and secuencia = ?",
       [nodeId, required(chain.head)],
     )) {
       headRegistroId = text(head.id);
@@ -86,8 +86,8 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
     >;
     const enviandoIds: string[] = [];
     for await (const envio of query.rows(
-      `select e.registro_id, e.estado from envios e
-       join registros_facturacion r on r.id = e.registro_id
+      `select e.registro_id, e.estado from verifactu_submissions e
+       join verifactu_records r on r.id = e.registro_id
        where r.node_id = ? and r.sif_id = ? order by e.registro_id`,
       [nodeId, sifId],
     )) {
@@ -100,7 +100,7 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
     const acks: (string | null)[][] = [];
     for await (const ack of query.rows(
       `select ${ACK_SELECT} from ${ACK_TABLE} a
-       join registros_facturacion r on r.id = ${ACK_REGISTRO}
+       join verifactu_records r on r.id = ${ACK_REGISTRO}
        where r.node_id = ? and r.sif_id = ? order by ${ACK_REGISTRO}`,
       [nodeId, sifId],
     ))

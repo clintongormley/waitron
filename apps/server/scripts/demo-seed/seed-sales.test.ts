@@ -11,7 +11,7 @@ import { previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { VenueResult } from "@waitron/provisioning";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   addDecimal,
@@ -158,8 +158,8 @@ describe("seedSales", () => {
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
         .from(sales);
       const registros = await tx
-        .select({ entorno: registrosFacturacion.entorno })
-        .from(registrosFacturacion);
+        .select({ entorno: verifactuRecords.entorno })
+        .from(verifactuRecords);
       const sampled = saleRows[0]!;
       // Money columns read raw are counts of whole cents; `rawCentsToDecimal` converts them at the
       // assertion.
@@ -428,7 +428,7 @@ describe("seedSales", () => {
       device_id: null,
     }));
     expect(pairs("sales")).toEqual(expected);
-    expect(pairs("registros_facturacion")).toEqual(expected);
+    expect(pairs("verifactu_records")).toEqual(expected);
     expect(pairs("working_orders")).toEqual(expected);
   });
 
@@ -485,9 +485,7 @@ describe("seedSales", () => {
 
     const read = await withTransaction(suite.db, async (tx) => ({
       sales: await tx.select({ id: sales.id }).from(sales),
-      registros: await tx
-        .select({ entorno: registrosFacturacion.entorno })
-        .from(registrosFacturacion),
+      registros: await tx.select({ entorno: verifactuRecords.entorno }).from(verifactuRecords),
     }));
     expect(read.sales.length).toBe(0);
     expect(read.registros.length).toBe(0);
@@ -528,13 +526,16 @@ describe("seedSales", () => {
     const { rows: backends } = await suite.db.execute<{ fiscal_backend: string }>(
       sql`select fiscal_backend from sales`,
     );
-    const { rows: fiscalRows } = await suite.db.execute<{ registros: number; envios: number }>(
-      sql`select (select count(*) from registros_facturacion) as registros,
-                 (select count(*) from envios) as envios`,
+    const { rows: fiscalRows } = await suite.db.execute<{
+      registros: number;
+      verifactu_submissions: number;
+    }>(
+      sql`select (select count(*) from verifactu_records) as registros,
+                 (select count(*) from verifactu_submissions) as verifactu_submissions`,
     );
     expect(count).toBeGreaterThan(0);
     expect(backends.length).toBe(count);
     expect(new Set(backends.map((row) => row.fiscal_backend))).toEqual(new Set(["none"]));
-    expect(fiscalRows[0]).toEqual({ registros: 0, envios: 0 });
+    expect(fiscalRows[0]).toEqual({ registros: 0, verifactu_submissions: 0 });
   });
 });

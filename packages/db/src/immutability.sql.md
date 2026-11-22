@@ -11,7 +11,7 @@ Declare it with `appendOnly()` in its own module's classification list, instead 
 the module's, for example `packages/fiscal-verifactu/src/classification.ts:25`:
 
 ```ts
-appendOnly("registros_facturacion", "ledger", LEDGER),
+appendOnly("verifactu_records", "ledger", LEDGER),
 ```
 
 `appendOnlyTablesIn` collects those names onto the set's `MigrationSet.appendOnlyTables`, and

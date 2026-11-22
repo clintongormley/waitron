@@ -61,20 +61,20 @@
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle",
     "appendOnlyTables": [
-      "registros_facturacion",
+      "verifactu_records",
       "returned_invoice_records",
       "filing_cases",
       "filing_case_events",
       "fiscal_conflict_evidence",
       "fiscal_lookup_conflicts",
-      "fiscal_series_conflicts",
+      "verifactu_series_conflicts",
       "fiscal_allocations",
       "fiscal_reservations",
       "clock_stop_restarts",
       "clock_checks",
       "clock_confirmations",
       "declaraciones_responsables",
-      "fiscal_certificate_installs"
+      "verifactu_certificates"
     ]
   },
   {

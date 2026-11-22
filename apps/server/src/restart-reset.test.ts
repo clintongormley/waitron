@@ -180,14 +180,14 @@ describe("resetBeforeFirstDrain over the Veri*Factu seat", () => {
   const claim = (registroId: string) =>
     withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${new Date(NOW.getTime() - 1_000).toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${new Date(NOW.getTime() - 1_000).toISOString()}
         where registro_id = ${registroId}
       `),
     );
   const estadoOf = async (registroId: string) =>
     (
       await suite.db.execute<{ estado: string }>(
-        sql`select estado from envios where registro_id = ${registroId}`,
+        sql`select estado from verifactu_submissions where registro_id = ${registroId}`,
       )
     ).rows[0]?.estado;
 

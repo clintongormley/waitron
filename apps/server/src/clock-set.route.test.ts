@@ -75,7 +75,7 @@ useVenueDb({
 function latest(): { id: string; at: Date } {
   const [row] = venue.db.all<{ id: string; at: string }>(sql`
     select id, fecha_hora_huso_gen_registro as at
-    from registros_facturacion
+    from verifactu_records
     order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);
@@ -90,7 +90,7 @@ function clockAt(ms: number): TrustedClock {
 
 /** A sale a second after the latest record, or at the system's time before the first. */
 async function cashSale(): Promise<void> {
-  const [any] = venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`);
+  const [any] = venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_records`);
   const at = any!.n === 0 ? Date.now() : latest().at.getTime() + 1000;
   const sale = await send(
     venue.appAt(clockAt(at)),

@@ -44,7 +44,7 @@ import {
   departments,
   writePartyAllergy,
 } from "@waitron/venue-service";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
 import { settleIssuedOwingNothing } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -672,7 +672,7 @@ describe("department transfer till writes", () => {
           .select()
           .from(saleLines)
           .where(eq(saleLines.saleId, invoice.saleId));
-        const fiscal = await tx.select().from(registrosFacturacion);
+        const fiscal = await tx.select().from(verifactuRecords);
         return { lineRows, contexts, kitchen, recordedSales, recordedLines, fiscal };
       });
     }

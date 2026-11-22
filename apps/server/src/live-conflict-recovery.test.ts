@@ -19,7 +19,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { FISCAL_ROUTES, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import type { ConflictRef } from "@waitron/fiscal-verifactu/src/conflict-evidence.js";
@@ -40,7 +40,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const PATH = "https://box.test/api/module-recovery/fiscal-verifactu/conflict";
 const SECRET = "synthetic-current-node-key";
 const verifier = identity.hashSecret(SECRET);
@@ -217,7 +217,7 @@ async function selected(m: ReturnType<typeof mounted>): Promise<ConflictAllocati
 
 it("runs the sessionless real key/clock/activation route and reconciles its committed result after reconstruction", async () => {
   const m = mounted();
-  const before = suite.db.all(sql`select * from registros_facturacion`);
+  const before = suite.db.all(sql`select * from verifactu_records`);
   const cases = suite.db.all(sql`select * from filing_cases`);
   const input = await selected(m);
   const activated = await publicAnswer(
@@ -230,7 +230,7 @@ it("runs the sessionless real key/clock/activation route and reconciles its comm
       series: [{ code: "A-0CNQT" }, { code: "FF-0CNQT" }, { code: "R-0CNQT" }],
     },
   });
-  expect(suite.db.all(sql`select * from registros_facturacion`)).toEqual(before);
+  expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(before);
   expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   const reopened = mounted();
@@ -436,14 +436,14 @@ it("rechecks the current key in the activation commit after preparation", async 
     }),
   });
   const input = await selected(m);
-  const before = suite.db.all(sql`select * from registro_sif`);
+  const before = suite.db.all(sql`select * from verifactu_identities`);
   rotate = true;
   const refused = await m.send(request({ command: { kind: "activate", input } }));
   expect(refused.status).toBe(401);
   expect(await refused.json()).toEqual({
     error: { code: "promotion.break_glass_invalid", params: {} },
   });
-  expect(suite.db.all(sql`select * from registro_sif`)).toEqual(before);
+  expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 
@@ -475,7 +475,7 @@ it.each([false, true])(
       }),
     });
     const input = await selected(m);
-    const before = suite.db.all(sql`select * from registros_facturacion`);
+    const before = suite.db.all(sql`select * from verifactu_records`);
     const cases = suite.db.all(sql`select * from filing_cases`);
     const oldSeries = await suite.db.select().from(invoiceSeries);
     hold = true;
@@ -514,13 +514,13 @@ it.each([false, true])(
           params: { reason: "conflict_requires_administrator" },
         },
       });
-      expect(suite.db.all(sql`select * from registros_facturacion`)).toEqual(before);
+      expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(before);
       expect(await suite.db.select().from(invoiceSeries)).toEqual(oldSeries);
     } else {
       expect(response.status).toBe(200);
       expect(outcome).toMatchObject({ ok: true });
       const records = suite.db.all<{ sif_id: string; num_serie_factura: string }>(
-        sql`select sif_id, num_serie_factura from registros_facturacion order by secuencia`,
+        sql`select sif_id, num_serie_factura from verifactu_records order by secuencia`,
       );
       expect(records).toHaveLength(2);
       expect(records[1]!.sif_id).not.toBe(conflict.sifId);

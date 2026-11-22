@@ -40,7 +40,7 @@ async function fixture() {
     NOW,
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.execute(sql`update envios set estado = 'pendiente'`);
+    await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
     await tx.execute(sql`delete from acks`);
   });
   await sealAeatSecret(
@@ -63,7 +63,9 @@ async function fixture() {
 }
 
 async function states() {
-  return (await suite.db.execute(sql`select estado from envios order by registro_id`)).rows;
+  return (
+    await suite.db.execute(sql`select estado from verifactu_submissions order by registro_id`)
+  ).rows;
 }
 
 describe("the module-owned runtime reconciliation seat", () => {

@@ -136,8 +136,8 @@ function effects(id: string) {
     settlements: suite.db.all(
       sql`select * from sale_settlements where sale_id in (select id from sales where working_order_id = ${id})`,
     ),
-    fiscal: contentHash(suite.db.all(sql`select * from registros_facturacion order by id`)),
-    outbox: suite.db.all(sql`select * from envios order by registro_id`),
+    fiscal: contentHash(suite.db.all(sql`select * from verifactu_records order by id`)),
+    outbox: suite.db.all(sql`select * from verifactu_submissions order by registro_id`),
     chains: suite.db.all(sql`select * from cadenas order by node_id`),
     controlOrder: suite.db.all(sql`select * from working_orders where id = ${controlId}`),
     controlLines: suite.db.all(

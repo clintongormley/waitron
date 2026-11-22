@@ -31,9 +31,9 @@ import { appendToChain } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { refusedByAeat, saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
@@ -44,7 +44,7 @@ let seriesId: SeriesId;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -65,7 +65,7 @@ async function storedOrigins(saleId: string) {
     source: string | null;
     device_id: string | null;
   }>(sql`
-    select tipo_registro, source, device_id from registros_facturacion
+    select tipo_registro, source, device_id from verifactu_records
     where sale_id = ${saleId} order by secuencia
   `);
   return rows;
@@ -122,11 +122,11 @@ describe("zero-rate sales", () => {
 
     const [row] = await suite.db
       .select({
-        desglose: registrosFacturacion.desglose,
-        cuotaTotal: registrosFacturacion.cuotaTotal,
+        desglose: verifactuRecords.desglose,
+        cuotaTotal: verifactuRecords.cuotaTotal,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     expect(row).toEqual({
       cuotaTotal: "0.00",
       desglose: [
@@ -145,9 +145,9 @@ describe("the VAT regime on each filed line", () => {
   it("files every line of a sale under the general regime, ClaveRegimen 01", async () => {
     const { saleId } = await sell();
     const [row] = await suite.db
-      .select({ desglose: registrosFacturacion.desglose })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .select({ desglose: verifactuRecords.desglose })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     const desglose = row!.desglose as { ClaveRegimen?: string }[];
     expect(desglose.map((line) => line.ClaveRegimen)).toEqual(["01", "01"]);
   });
@@ -188,12 +188,12 @@ describe("the software block", () => {
   async function storedRecord(saleId: string) {
     const [row] = await suite.db
       .select({
-        sistemaInformatico: registrosFacturacion.sistemaInformatico,
-        idEmisorFactura: registrosFacturacion.idEmisorFactura,
-        nombreRazonEmisor: registrosFacturacion.nombreRazonEmisor,
+        sistemaInformatico: verifactuRecords.sistemaInformatico,
+        idEmisorFactura: verifactuRecords.idEmisorFactura,
+        nombreRazonEmisor: verifactuRecords.nombreRazonEmisor,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     return row!;
   }
 
@@ -333,7 +333,7 @@ describe("recordVoid", () => {
     expect(ref.state).toBe("pending");
     expect(changes).toEqual(["fiscal_submission_queued"]);
 
-    const rows = await suite.db.select().from(registrosFacturacion);
+    const rows = await suite.db.select().from(verifactuRecords);
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.idEmisorFactura).toBe(alta?.idEmisorFactura);
@@ -345,14 +345,14 @@ describe("recordVoid", () => {
 
     const [sidecar] = await suite.db
       .select()
-      .from(envios)
-      .where(eq(envios.registroId, anulacion!.id));
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, anulacion!.id));
     expect(sidecar?.estado).toBe("pendiente");
   });
 
   it("a cancellation of another box's sale is chained on the issuing box, citing the original", async () => {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
-    const m2 = await seedTenantWithSif(suite.db);
+    const m2 = await seedTaxpayerWithSif(suite.db);
     const m2Sif = await withTransaction(suite.db, (tx) => currentSif(tx, m2.nodeId));
 
     await withTransaction(suite.db, (tx) =>
@@ -361,8 +361,8 @@ describe("recordVoid", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     const alta = rows.find((row) => row.tipoRegistro === "alta")!;
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion")!;
     expect(alta.nodeId).toBe(nodeId);
@@ -425,8 +425,8 @@ describe("recordVoid — date reconstruction", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.fechaExpedicionFactura).toBe(alta?.fechaExpedicionFactura);
@@ -445,8 +445,8 @@ describe("recordVoid — date reconstruction", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.fechaExpedicionFactura).toBe(alta?.fechaExpedicionFactura);
@@ -550,9 +550,9 @@ describe("recordCorrection — refusals", () => {
       params: { saleId: original, tipoFactura: "F2" },
     });
     const filed = await suite.db
-      .select({ id: registrosFacturacion.id })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, replacement.saleId));
+      .select({ id: verifactuRecords.id })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, replacement.saleId));
     expect(filed).toEqual([]);
   });
   it("says a refused replacement was refused for being a replacement, not for its original's type", async () => {
@@ -606,8 +606,8 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
   ) {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
     await suite.db.execute(sql`
-      update envios set estado = ${estado}, codigo_error = ${codigoError}
-      where registro_id = (select id from registros_facturacion where sale_id = ${saleId})
+      update verifactu_submissions set estado = ${estado}, codigo_error = ${codigoError}
+      where registro_id = (select id from verifactu_records where sale_id = ${saleId})
     `);
     return saleId;
   }
@@ -621,9 +621,9 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
   ) {
     await withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<Record<string, unknown>>(sql`
-        select * from registros_facturacion r
+        select * from verifactu_records r
         where sale_id = ${saleId} and tipo_registro = 'alta'
-          and not exists (select 1 from registros_facturacion n where n.corrects_registro_id = r.id)
+          and not exists (select 1 from verifactu_records n where n.corrects_registro_id = r.id)
       `);
       const stored = decodeRegistroRow(rows[0]!);
       const previous = fromRegistroRow(stored) as RegistroAlta;
@@ -652,7 +652,9 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
           offsetMinutes: 60,
         },
       });
-      await tx.insert(envios).values({ registroId: appended.id, estado, codigoError });
+      await tx
+        .insert(verifactuSubmissions)
+        .values({ registroId: appended.id, estado, codigoError });
     });
   }
 
@@ -689,7 +691,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
 
   async function storedReplacement() {
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select * from registros_facturacion where sale_id = ${replacementId}`,
+      sql`select * from verifactu_records where sale_id = ${replacementId}`,
     );
     return rows.map((row) => decodeRegistroRow(row));
   }
@@ -700,8 +702,8 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     const original = await originalWithDelivery("rechazado");
     const [originalRow] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, original));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, original));
 
     const ref = await replace(original, laterDay, "2026-03-01");
 
@@ -740,7 +742,10 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
       cuotaTotal: originalRow!.cuotaTotal,
       importeTotal: originalRow!.importeTotal,
     });
-    const [sidecar] = await suite.db.select().from(envios).where(eq(envios.registroId, row.id));
+    const [sidecar] = await suite.db
+      .select()
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, row.id));
     expect(sidecar?.estado).toBe("pendiente");
 
     const record = fromRegistroRow(row) as RegistroAlta;
@@ -899,8 +904,8 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
       await refusedByAeat(suite.db, original);
     } else {
       await suite.db.execute(sql`
-        update envios set estado = ${estado}
-        where registro_id in (select id from registros_facturacion where sale_id = ${original})
+        update verifactu_submissions set estado = ${estado}
+        where registro_id in (select id from verifactu_records where sale_id = ${original})
       `);
     }
     return original;
@@ -908,7 +913,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
 
   async function registroCount() {
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from registros_facturacion`,
+      sql`select count(*) as n from verifactu_records`,
     );
     return rows[0]!.n;
   }
@@ -917,8 +922,8 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     const original = await fullOriginalWithDelivery();
     const [originalRow] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, original));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, original));
 
     await replace(original, laterDay, "2026-03-01", customer);
 
@@ -963,9 +968,9 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
   it("names the customer the original record was filed with, not the one it is handed", async () => {
     const original = await fullOriginalWithDelivery();
     const [originalRow] = await suite.db
-      .select({ destinatarios: registrosFacturacion.destinatarios })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, original));
+      .select({ destinatarios: verifactuRecords.destinatarios })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, original));
 
     await replace(original, laterDay, "2026-03-01", { ...customer, legalName: "Otro Nombre SL" });
 
@@ -1192,8 +1197,8 @@ describe("recordSale — invoice type selection", () => {
     });
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.numSerieFactura, "A/999"));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.numSerieFactura, "A/999"));
     expect(row?.tipoFactura).toBe("F1");
   });
 
@@ -1246,8 +1251,8 @@ describe("recordSale — invoice type selection", () => {
 
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.numSerieFactura, "A/998"));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.numSerieFactura, "A/998"));
     expect(row?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345674" }],
     });
@@ -1272,8 +1277,8 @@ describe("recordSale — invoice type selection", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.numSerieFactura, "A/997"));
     expect(rows).toEqual([]);
   });
 
@@ -1294,8 +1299,8 @@ describe("recordSale — invoice type selection", () => {
 
       const [row] = await suite.db
         .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.numSerieFactura, `A/${invoiceNumber}`));
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.numSerieFactura, `A/${invoiceNumber}`));
       expect(row?.destinatarios).toEqual({
         IDDestinatario: [
           { NombreRazon: "Client SARL", IDOtro: { CodigoPais: "FR", IDType: idType, ID: id } },
@@ -1320,8 +1325,8 @@ describe("recordSale — invoice type selection", () => {
 
     const rows = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.numSerieFactura, "A/993"));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.numSerieFactura, "A/993"));
     expect(rows).toEqual([]);
   });
 });
@@ -1372,7 +1377,7 @@ describe("recordSale — an invoice issued on a later day than the sale", () => 
       );
     });
     const { rows } = await suite.db.execute<Record<string, unknown>>(
-      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+      sql`select * from verifactu_records where sale_id = ${saleId}`,
     );
     const row = decodeRegistroRow(rows[0]!);
     return { row, record: fromRegistroRow(row) as RegistroAlta };
@@ -1652,20 +1657,20 @@ describe("checkIntegrity", () => {
 });
 
 describe("pendingCount", () => {
-  it("counts the pending envios row a sale just created", async () => {
+  it("counts the pending verifactu_submissions row a sale just created", async () => {
     await sell();
     expect(await backend.pendingCount(nodeId)).toBe(1);
   });
 
   it("does not count another node's pending records", async () => {
     await sell();
-    const other = await seedTenantWithSif(suite.db);
+    const other = await seedTaxpayerWithSif(suite.db);
     expect(await backend.pendingCount(other.nodeId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
-    await suite.db.execute(sql`update envios set estado = 'aceptado'`);
+    await suite.db.execute(sql`update verifactu_submissions set estado = 'aceptado'`);
     expect(await backend.pendingCount(nodeId)).toBe(0);
   });
 });
@@ -1708,7 +1713,7 @@ describe("filedReceiptFor", () => {
       { rate: decimal("21.00"), base: decimal("82.64"), tax: decimal("17.36") },
       { rate: decimal("10.00"), base: decimal("9.09"), tax: decimal("0.91") },
     ];
-    // The sale row must exist first (`registros_facturacion.sale_id` references it).
+    // The sale row must exist first (`verifactu_records.sale_id` references it).
     const ref = await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
         id: freshSaleId,

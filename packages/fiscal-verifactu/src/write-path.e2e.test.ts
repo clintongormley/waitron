@@ -37,9 +37,9 @@ import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
@@ -64,7 +64,7 @@ let seriesId: SeriesId;
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
   // steadyClock })`. The real constructor also requires `db`: `pendingCount(nodeId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
@@ -83,14 +83,14 @@ async function sell(overrides: Record<string, unknown> = {}) {
   });
 }
 
-/** Reads one `registros_facturacion` row via a raw, untyped `execute` — the snake_case
+/** Reads one `verifactu_records` row via a raw, untyped `execute` — the snake_case
  * `RegistroRow` shape `fromRegistroRow`/`computeHuella`/`buildQrPayload` need, never Drizzle's
  * own camelCase `.select()` shape (see `./registro-row.ts`'s own doc comment on `RegistroRow` for
  * why the two are not interchangeable: a `timestamptz` column renders differently through each
  * path). Mirrors `./verify.ts`'s and `./chain.test.ts`'s identical convention. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await pg.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
@@ -102,8 +102,8 @@ describe("the write path against the real Veri*Factu backend", () => {
     const { saleId } = await sell();
     const rows = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.tipoRegistro).toBe("alta");
     expect(rows[0]?.numSerieFactura).toBe("A/1");
@@ -111,15 +111,15 @@ describe("the write path against the real Veri*Factu backend", () => {
   });
 
   it("marks the first record of a chain as PrimerRegistro", async () => {
-    // **Deviation from the brief.** `db.select().from(registrosFacturacion)` with no `where` at
+    // **Deviation from the brief.** `db.select().from(verifactuRecords)` with no `where` at
     // all reads whichever row happens to be first in the WHOLE table, and this suite seeds a new
     // node per test on one shared database rather than asserting against an empty table. Scoped by
     // `saleId`, so the row read here is this test's own however many others the table holds.
     const { saleId } = await sell();
     const [row] = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     expect(row?.primerRegistro).toBe(true);
   });
 
@@ -164,8 +164,8 @@ describe("the write path against the real Veri*Factu backend", () => {
     const { saleId } = await sell();
     const [registro] = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(1);
     expect(head?.ultimaHuella).toBe(registro?.huella);
@@ -177,12 +177,12 @@ describe("the write path against the real Veri*Factu backend", () => {
     const second = await sell();
     const [a] = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, first.saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, first.saleId));
     const [b] = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, second.saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, second.saleId));
     expect(b?.primerRegistro).toBe(false);
     expect(b?.anteriorHuella).toBe(a?.huella);
     expect(b?.anteriorNumSerieFactura).toBe("A/1");
@@ -193,9 +193,12 @@ describe("the write path against the real Veri*Factu backend", () => {
     const { saleId } = await sell();
     const [registro] = await pg.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
-    const [sidecar] = await pg.db.select().from(envios).where(eq(envios.registroId, registro!.id));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
+    const [sidecar] = await pg.db
+      .select()
+      .from(verifactuSubmissions)
+      .where(eq(verifactuSubmissions.registroId, registro!.id));
     expect(sidecar?.estado).toBe("pendiente");
     expect(sidecar?.intentos).toBe(0);
     // The CSV is unrecoverable once lost and arrives only with a submission response, so it must
@@ -238,9 +241,9 @@ describe("the write path against the real Veri*Factu backend", () => {
     ).rejects.toThrow("simulated crash");
 
     expect(await pg.db.select().from(sales)).toHaveLength(0);
-    expect(await pg.db.select().from(registrosFacturacion)).toHaveLength(0);
-    expect(await pg.db.select().from(envios)).toHaveLength(0);
-    // The chain head row itself still exists — `seedTenantWithSif`'s own `registerSif` call
+    expect(await pg.db.select().from(verifactuRecords)).toHaveLength(0);
+    expect(await pg.db.select().from(verifactuSubmissions)).toHaveLength(0);
+    // The chain head row itself still exists — `seedTaxpayerWithSif`'s own `registerSif` call
     // created it at provisioning time, in a transaction that already committed — but its
     // `secuencia` is untouched by the rolled-back sale.
     const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
@@ -254,7 +257,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     //
     // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock, fetch:
     // exploding })`. `VerifactuBackendOptions` (`./backend.ts`) has no `fetch` field at all, and
-    // never will while this plan's write path stops at `envios` in `pendiente` — submission
+    // never will while this plan's write path stops at `verifactu_submissions` in `pendiente` — submission
     // (the only place a real backend would ever call `fetch`) is plan 3's drainer, not built
     // here. There is nothing to inject an exploding fetch INTO. The structural proof instead:
     // every source file this write path actually runs never references a network primitive —
@@ -283,10 +286,7 @@ describe("the write path against the real Veri*Factu backend", () => {
 
     expect(await pg.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
     expect(
-      await pg.db
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, saleId)),
+      await pg.db.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
     ).toHaveLength(1);
     expect(await pg.db.select().from(incidents)).toHaveLength(0);
   });
@@ -304,7 +304,7 @@ describe("parent_line_id is not part of the huella", () => {
   //
   // Two sales built from IDENTICAL input, differing ONLY in whether one child line names a parent,
   // must therefore produce the same huella. Getting two BYTE-IDENTICAL huellas is the hard part:
-  // two COMMITTED altas under one obligado can never share a NumSerieFactura (registros_identidad_uq
+  // two COMMITTED altas under one obligado can never share a NumSerieFactura (verifactu_records_identidad_uq
   // on IDEmisorFactura + NumSerieFactura + fecha + tipo), and NumSerieFactura is itself a
   // huella input; two under different obligados differ by NIF, also a huella input. So each sale is
   // recorded, its stored huella read back INSIDE its transaction, and the transaction then ROLLED
@@ -351,7 +351,7 @@ describe("parent_line_id is not part of the huella", () => {
       );
 
       const { rows } = await tx.execute<{ huella: string }>(
-        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+        sql`select huella from verifactu_records where sale_id = ${saleId}`,
       );
       huella = rows[0]!.huella;
 
@@ -471,7 +471,7 @@ describe("a line's note is not part of the huella", () => {
         saleInput({ nodeId, seriesId, lines: linesWith(note) }),
       );
       const { rows } = await tx.execute<{ huella: string }>(
-        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+        sql`select huella from verifactu_records where sale_id = ${saleId}`,
       );
       huella = rows[0]!.huella;
       // Roll the whole sale back so the next call re-allocates the identical NumSerieFactura against the
@@ -536,7 +536,7 @@ describe("the source and device are inert to the huella and the chain (SP-A.2 §
       const { saleId } = await recordSale(tx, backend, saleInput({ origin, nodeId, seriesId }));
       const { rows } = await tx.execute<RecordSnapshot>(
         sql`select huella, anterior_huella, secuencia, entorno, node_id, source, device_id
-            from registros_facturacion where sale_id = ${saleId}`,
+            from verifactu_records where sale_id = ${saleId}`,
       );
       snapshot = rows[0]!;
       // Self-contained guard: prove the origin ACTUALLY reached the record as this run's, so the
@@ -580,10 +580,10 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   //
   // The GOLDEN amounts were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
   // code existed, in a throwaway `git worktree` detached at that commit. The capture appended a
-  // temporary test to this same file which seeded `seedTenantWithSif(pg.db, { nif: PINNED_NIF })`,
+  // temporary test to this same file which seeded `seedTaxpayerWithSif(pg.db, { nif: PINNED_NIF })`,
   // filed this exact basket in `main`'s own line shape — the options answer on the dish line's
   // `modifierSnapshots`, the extra as a child line at `parentLineNo: 1` — and read
-  // `huella, importe_total, cuota_total` straight out of `registros_facturacion`. The command run
+  // `huella, importe_total, cuota_total` straight out of `verifactu_records`. The command run
   // there, verbatim:
   //
   //     pnpm --filter @waitron/fiscal-verifactu test write-path
@@ -592,7 +592,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // `29999999H`); @waitron/verifactu 0.1.0 and 0.2.1 hash the basket alike (receipt: that commit).
   //
   // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
-  // fields the huella hashes (in `@waitron/verifactu`), and `seedTenantWithSif` mints it
+  // fields the huella hashes (in `@waitron/verifactu`), and `seedTaxpayerWithSif` mints it
   // from a counter that advances once per call in a file, so the same basket run standalone and
   // run 16th in THIS file hashed differently. Both are correct records of their own inputs. Without the pin, a golden literal here would fail the day anyone adds or removes a test
   // ABOVE it — a gate that cries wolf. With it, the literal is a property of the basket: recorded
@@ -630,7 +630,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
 
   it("files the same huella, ImporteTotal and CuotaTotal as main did for the same basket", async () => {
     // Its own seed rather than the suite's `beforeEach` one, because this test pins the NIF.
-    const seeded = await seedTenantWithSif(pg.db, { nif: PINNED_NIF });
+    const seeded = await seedTaxpayerWithSif(pg.db, { nif: PINNED_NIF });
 
     const { huella, importe_total, cuota_total } = await withTransaction(pg.db, async (tx) => {
       const { saleId } = await recordSale(
@@ -687,7 +687,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
         importe_total: string;
         cuota_total: string;
       }>(
-        sql`select huella, importe_total, cuota_total from registros_facturacion where sale_id = ${saleId}`,
+        sql`select huella, importe_total, cuota_total from verifactu_records where sale_id = ${saleId}`,
       );
       return rows[0]!;
     });
@@ -770,9 +770,9 @@ describe("a variant line is filed at its own effective VAT rate", () => {
         }),
       );
       const [row] = await tx
-        .select({ desglose: registrosFacturacion.desglose })
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, saleId));
+        .select({ desglose: verifactuRecords.desglose })
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.saleId, saleId));
       return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
     });
 
@@ -872,9 +872,9 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
         }),
       );
       const [row] = await tx
-        .select({ desglose: registrosFacturacion.desglose })
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, saleId));
+        .select({ desglose: verifactuRecords.desglose })
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.saleId, saleId));
       return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
     });
 
@@ -904,7 +904,7 @@ describe("a variant's names are not part of the huella", () => {
     descriptions: Record<string, string>;
     kitchenName: string;
   }): Promise<string> {
-    const seeded = await seedTenantWithSif(pg.db, { nif: PINNED_NIF });
+    const seeded = await seedTaxpayerWithSif(pg.db, { nif: PINNED_NIF });
     let huella: string | undefined;
     await withTransaction(pg.db, async (tx) => {
       const { saleId } = await recordSale(
@@ -934,7 +934,7 @@ describe("a variant's names are not part of the huella", () => {
         }),
       );
       const { rows } = await tx.execute<{ huella: string }>(
-        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+        sql`select huella from verifactu_records where sale_id = ${saleId}`,
       );
       huella = rows[0]!.huella;
       // Without this, a regression that stopped storing the variant's names would leave both

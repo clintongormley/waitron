@@ -436,7 +436,7 @@ it.each(["en", "es"] as const)(
         expect(
           (
             await selected.venue.execute<{ n: number }>(
-              "select count(*) as n from registros_facturacion",
+              "select count(*) as n from verifactu_records",
             )
           ).rows[0]!.n,
         ).toBe(0);

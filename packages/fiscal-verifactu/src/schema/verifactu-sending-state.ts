@@ -5,17 +5,17 @@ import { count, id, table, ts } from "@waitron/db";
 /**
  * Flow-control state for the obligado tributario this database belongs to. Holds when the NEXT
  * envío may be sent and the current AEAT-supplied wait `t`. Separate from
- * `envios.proximo_intento_en` (per-record retry backoff) because the flow-control race — "send when
+ * `verifactu_submissions.proximo_intento_en` (per-record retry backoff) because the flow-control race — "send when
  * `t` elapsed OR 1000 accumulated, whichever first" — is a fact about the whole submission stream,
- * and the write path defaults each new `envios` row to `now()`, so a per-record column cannot bound
+ * and the write path defaults each new `verifactu_submissions` row to `now()`, so a per-record column cannot bound
  * the interval between envíos.
  *
- * ONE ROW: `id` is pinned to 1 by `envio_flujo_singleton_ck`, and that id doubles as the
+ * ONE ROW: `id` is pinned to 1 by `verifactu_sending_state_singleton_ck`, and that id doubles as the
  * `ON CONFLICT` target the drainer upserts against. Lazily created: no row means nothing has ever
  * been sent, which reads as "may send now"; the drainer upserts one after the first response.
  */
-export const envioFlujo = table(
-  "envio_flujo",
+export const verifactuSendingState = table(
+  "verifactu_sending_state",
   {
     id: count("id").primaryKey().notNull().default(1),
     // When the next envío may go. Persisted, never an in-memory timer.
@@ -27,6 +27,6 @@ export const envioFlujo = table(
     technicalIncidentToken: id("technical_incident_token"),
   },
   /* v8 ignore start */
-  (t) => [check("envio_flujo_singleton_ck", sql`${t.id} = 1`)],
+  (t) => [check("verifactu_sending_state_singleton_ck", sql`${t.id} = 1`)],
   /* v8 ignore stop */
 );

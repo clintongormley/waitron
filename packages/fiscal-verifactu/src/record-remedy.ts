@@ -10,9 +10,9 @@ import { recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import type { Entorno } from "./registro-row.js";
 import { queueSubmission } from "./queue-submission.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifyChain } from "./verify.js";
 import type { CorrectedRecordFacts } from "./record-remedy-facts.js";
 
@@ -103,8 +103,8 @@ export async function applyRecordCorrection(
   }
   const [delivery] = await tx
     .select()
-    .from(envios)
-    .where(eq(envios.registroId, request.registroId));
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, request.registroId));
   // Checked before a replay too, as the kind's own enablement is.
   const answersAcceptance =
     input.correctionDecision === undefined
@@ -117,8 +117,8 @@ export async function applyRecordCorrection(
     });
   const [target] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, request.registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, request.registroId));
   const history = input.history ?? (await readHistoryNodes(tx, input.nodeId));
   if (
     target === undefined ||
@@ -171,15 +171,18 @@ export async function applyRecordCorrection(
   if (filingCase === undefined)
     throw new AppError("filing_case.not_found", { caseId: request.caseId });
   const [cancellation] = await tx
-    .select({ sinRegistroPrevio: registrosFacturacion.sinRegistroPrevio, estado: envios.estado })
-    .from(registrosFacturacion)
-    .leftJoin(envios, eq(envios.registroId, registrosFacturacion.id))
+    .select({
+      sinRegistroPrevio: verifactuRecords.sinRegistroPrevio,
+      estado: verifactuSubmissions.estado,
+    })
+    .from(verifactuRecords)
+    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
     .where(
       and(
-        eq(registrosFacturacion.tipoRegistro, "anulacion"),
-        eq(registrosFacturacion.idEmisorFactura, target.idEmisorFactura),
-        eq(registrosFacturacion.numSerieFactura, target.numSerieFactura),
-        eq(registrosFacturacion.fechaExpedicionFactura, target.fechaExpedicionFactura),
+        eq(verifactuRecords.tipoRegistro, "anulacion"),
+        eq(verifactuRecords.idEmisorFactura, target.idEmisorFactura),
+        eq(verifactuRecords.numSerieFactura, target.numSerieFactura),
+        eq(verifactuRecords.fechaExpedicionFactura, target.fechaExpedicionFactura),
       ),
     );
   if (

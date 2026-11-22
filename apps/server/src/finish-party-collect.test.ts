@@ -24,7 +24,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { adjustments } from "@waitron/adjustments";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import {
   readProfileServiceScopes,
   listDepartments,
@@ -818,9 +818,9 @@ async function filed(billIds: string[]) {
   return {
     registros: await venue.db
       .select()
-      .from(registrosFacturacion)
-      .where(inArray(registrosFacturacion.saleId, saleIds))
-      .orderBy(registrosFacturacion.id),
+      .from(verifactuRecords)
+      .where(inArray(verifactuRecords.saleId, saleIds))
+      .orderBy(verifactuRecords.id),
     sales: saleRows,
     saleLines: await venue.db
       .select()

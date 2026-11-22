@@ -3,15 +3,15 @@ import type { Database } from "@waitron/db";
 import { validate, type ValidationIssue } from "@waitron/verifactu";
 import type { IdentityChangeView, InvoiceIdView } from "../src/filing-overview-types.js";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "../src/registro-row.js";
-import { envios } from "../src/schema/envios.js";
-import { registrosFacturacion } from "../src/schema/registros.js";
-import type { registroSif } from "../src/schema/sif.js";
+import { verifactuSubmissions } from "../src/schema/verifactu-submissions.js";
+import { verifactuRecords } from "../src/schema/verifactu-records.js";
+import type { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 import { seedPendingEnvios } from "./drain-fixtures.js";
 
 /** English names for fiscal tables and AEAT's invoice fields, for suites outside this package. */
-export const invoiceRecords = registrosFacturacion;
+export const invoiceRecords = verifactuRecords;
 
-export function recordInvoiceNumber(row: typeof registrosFacturacion.$inferSelect): string {
+export function recordInvoiceNumber(row: typeof verifactuRecords.$inferSelect): string {
   return row.numSerieFactura;
 }
 
@@ -20,7 +20,7 @@ export function storedInvoiceNumbers(db: Database): string[] {
   return db
     .all<{
       n: string;
-    }>(sql`select num_serie_factura as n from registros_facturacion order by num_serie_factura`)
+    }>(sql`select num_serie_factura as n from verifactu_records order by num_serie_factura`)
     .map((row) => row.n);
 }
 
@@ -35,7 +35,7 @@ export function aeatInvoiceNumber(invoice: Pick<InvoiceIdView, "NumSerieFactura"
   return invoice.NumSerieFactura;
 }
 
-export function registrationInstallationName(row: typeof registroSif.$inferSelect): string {
+export function registrationInstallationName(row: typeof verifactuIdentities.$inferSelect): string {
   return row.numeroInstalacion;
 }
 
@@ -46,9 +46,9 @@ export async function filedKindsBySale(
   saleIds: readonly string[],
 ): Promise<Map<string, string>> {
   const rows = await db
-    .select({ saleId: registrosFacturacion.saleId, kind: registrosFacturacion.tipoFactura })
-    .from(registrosFacturacion)
-    .where(inArray(registrosFacturacion.saleId, [...saleIds]));
+    .select({ saleId: verifactuRecords.saleId, kind: verifactuRecords.tipoFactura })
+    .from(verifactuRecords)
+    .where(inArray(verifactuRecords.saleId, [...saleIds]));
   return new Map(
     rows.flatMap(({ saleId, kind }) => (saleId === null || kind === null ? [] : [[saleId, kind]])),
   );
@@ -61,12 +61,12 @@ export async function filedSales(
 ): Promise<Map<string, { kind: string; total: string | null }>> {
   const rows = await db
     .select({
-      saleId: registrosFacturacion.saleId,
-      kind: registrosFacturacion.tipoFactura,
-      total: registrosFacturacion.importeTotal,
+      saleId: verifactuRecords.saleId,
+      kind: verifactuRecords.tipoFactura,
+      total: verifactuRecords.importeTotal,
     })
-    .from(registrosFacturacion)
-    .where(inArray(registrosFacturacion.saleId, [...saleIds]));
+    .from(verifactuRecords)
+    .where(inArray(verifactuRecords.saleId, [...saleIds]));
   return new Map(
     rows.flatMap(({ saleId, kind, total }) =>
       saleId === null || kind === null ? [] : [[saleId, { kind, total }]],
@@ -93,7 +93,7 @@ export interface FiledInvoice {
 /** Every invoice record filed for the sale; a cancellation record throws. */
 export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledInvoice[] {
   return db
-    .all<RegistroRow>(sql`select * from registros_facturacion where sale_id = ${saleId}`)
+    .all<RegistroRow>(sql`select * from verifactu_records where sale_id = ${saleId}`)
     .map((row) => {
       const record = fromRegistroRow(decodeRegistroRow(row));
       if (!("TipoFactura" in record)) throw new Error(`sale ${saleId} has a cancellation record`);
@@ -115,9 +115,9 @@ export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledI
 /** Stores AEAT's refusal, with `code`, as the filing reply to one record. */
 export async function refuseRecord(db: Database, recordId: string, code: string): Promise<void> {
   await db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: code })
-    .where(eq(envios.registroId, recordId));
+    .where(eq(verifactuSubmissions.registroId, recordId));
 }
 
 /** `count` records waiting to be sent, generated on 2026-07-20 (`seedPendingEnvios`), under a new
@@ -142,5 +142,8 @@ export async function seedWaitingRecords(
 
 /** Marks one record's sending as stopped. */
 export async function stopRecord(db: Database, recordId: string): Promise<void> {
-  await db.update(envios).set({ estado: "detenido" }).where(eq(envios.registroId, recordId));
+  await db
+    .update(verifactuSubmissions)
+    .set({ estado: "detenido" })
+    .where(eq(verifactuSubmissions.registroId, recordId));
 }

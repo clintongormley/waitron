@@ -48,7 +48,7 @@ it("reports damage in taxpayer beside an invoice, still counting the kept rows a
 
 it("reports a damaged invoice table with no sale as damaged, with nothing kept and no records seen", async () => {
   const held = await heldSetup();
-  damagePages(venueDb(held), "registros_facturacion");
+  damagePages(venueDb(held), "verifactu_records");
   expect(await readDatabase(held)).toMatchObject({
     kind: "damaged",
     code: "errcode 11",
@@ -162,7 +162,7 @@ it("reports a 0-byte venue.db as damaged (no such table), nothing counted", asyn
 
 it("marks the read damaged when a module seat finds its table missing", async () => {
   const held = await heldSetup();
-  write(held, ["drop table registros_facturacion"]);
+  write(held, ["drop table verifactu_records"]);
   expect(await readDatabase(held)).toMatchObject({ kind: "damaged", code: "no such table" });
 });
 

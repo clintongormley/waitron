@@ -92,7 +92,7 @@ async function immutable() {
     sales: await tx.select().from(sales),
     tenders: await tx.select().from(tenders),
     refunds: await tx.select().from(refunds),
-    fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
+    fiscal: (await tx.execute(sql`select * from verifactu_records order by id`)).rows,
     drawers: await tx.select().from(drawerOpens),
     deliveries: await tx.select().from(invoiceDeliveries),
   }));

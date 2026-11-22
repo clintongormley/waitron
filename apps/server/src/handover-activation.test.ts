@@ -20,7 +20,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { handoverActivations, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -280,7 +280,7 @@ const node = (nodeId: string, standing: MembershipNode["standing"]): MembershipN
 const operationRow = (store: Store) => readHandoverOperation(store.node, standby.nodeId, OPERATION);
 const allocations = (store: Store) => store.venue.select().from(fiscalAllocations);
 const activations = (store: Store) => store.venue.select().from(handoverActivations);
-const sifRows = (store: Store) => store.venue.select().from(registroSif);
+const sifRows = (store: Store) => store.venue.select().from(verifactuIdentities);
 
 async function emergencySpare(gate = true) {
   placed = await fixture.placeSpareEmergencyCopy();

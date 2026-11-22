@@ -15,7 +15,7 @@ import { isCertKind } from "./aeat-transport.js";
 import { normaliseTaxId, openCertificateFile } from "./certificate-file.js";
 import { certificateSizeRefusal } from "./certificate-open.js";
 
-const TABLES = ["fiscal_certificate_installs", "fiscal_certificate_reminders"] as const;
+const TABLES = ["verifactu_certificates", "fiscal_certificate_reminders"] as const;
 
 async function first(query: BackupQuery, sql: string, values?: readonly BackupValue[]) {
   for await (const row of query.rows(sql, values)) return row;
@@ -92,12 +92,12 @@ async function check(
   if (node === undefined || typeof taxpayer?.tax_id !== "string") return "invalid";
   const { details } = opened;
   if (details.taxId !== null && details.taxId !== normaliseTaxId(taxpayer.tax_id)) return "invalid";
-  if (!(await exists(query, "fiscal_certificate_installs"))) return "invalid";
+  if (!(await exists(query, "verifactu_certificates"))) return "invalid";
   let latest: Awaited<ReturnType<typeof first>>;
   let ambiguous = false;
   const history = await historyNodes(query, context.source.nodeId);
   for await (const row of query.rows(
-    `select * from fiscal_certificate_installs where node_id in (${history.map(() => "?").join(",")}) order by installed_at desc`,
+    `select * from verifactu_certificates where node_id in (${history.map(() => "?").join(",")}) order by installed_at desc`,
     history,
   )) {
     if (latest === undefined) latest = row;

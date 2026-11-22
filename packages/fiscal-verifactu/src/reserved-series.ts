@@ -3,7 +3,7 @@ import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 // Leave room for a 27-character emergency identity and a ten-digit invoice counter.
 const NUM_SERIE_MAX = 60;
@@ -50,7 +50,9 @@ export async function liveSeriesBases(
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
     .orderBy(invoiceSeries.code);
-  const numbers = await tx.select({ n: registroSif.numeroInstalacion }).from(registroSif);
+  const numbers = await tx
+    .select({ n: verifactuIdentities.numeroInstalacion })
+    .from(verifactuIdentities);
   const registered = new Set(numbers.map((r) => r.n));
   const seen = new Set<string>();
   const claimed = new Set<string>();

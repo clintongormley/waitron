@@ -64,12 +64,12 @@ describe("fiscalDrainEnabled", () => {
       new Date("2026-09-09T10:00:00Z"),
     );
     expect(drain).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ tenantsWithWork: 0, recordsSubmitted: 0, nextDueAt: null });
+    expect(result).toMatchObject({ passesWithWork: 0, recordsSubmitted: 0, nextDueAt: null });
   });
 
   it("invokes the supplied regime drain when enabled", async () => {
     const expected = {
-      tenantsWithWork: 0,
+      passesWithWork: 0,
       batchesSent: 0,
       recordsSubmitted: 0,
       recordsAccepted: 0,

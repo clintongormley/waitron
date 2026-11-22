@@ -358,7 +358,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     identity: { nodeId, nif: "61000002T" },
     entorno: "preproduction",
   });
-  const enviosBefore = suite.db.all(sql`select * from envios order by rowid`);
+  const enviosBefore = suite.db.all(sql`select * from verifactu_submissions order by rowid`);
   // The suite holds its own folder for this process, so the child gets a copy of it.
   const venueDir = join(scratch, "venue");
   await mkdir(venueDir);
@@ -428,7 +428,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
       operationState: operation?.state,
       restriction: await readHandoverRestriction(reading.node, nodeId),
       enviosBefore,
-      enviosAfter: reading.venue.all(sql`select * from envios order by rowid`),
+      enviosAfter: reading.venue.all(sql`select * from verifactu_submissions order by rowid`),
     };
   } finally {
     await reading.close();

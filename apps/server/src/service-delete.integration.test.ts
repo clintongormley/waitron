@@ -853,7 +853,7 @@ const HISTORY_ROWS = [
   "tenders",
   "sale_settlements",
   "bill_payments",
-  "registros_facturacion",
+  "verifactu_records",
   "cadenas",
   "order_amendments",
   "working_order_lines",
@@ -1128,9 +1128,7 @@ it.each(["zone", "department"] as const)(
       });
       const sale = rows("sales").find((row) => row.working_order_id === orderId)!;
       expect(sale).toMatchObject({ receipt_department_id: f.departmentId });
-      expect(rows("registros_facturacion").filter((row) => row.sale_id === sale.id)).not.toEqual(
-        [],
-      );
+      expect(rows("verifactu_records").filter((row) => row.sale_id === sale.id)).not.toEqual([]);
       const lines = rows("working_order_lines").filter((row) => row.working_order_id === orderId);
       expect(lines).not.toEqual([]);
       for (const line of lines) expect(line).toMatchObject({ offer_department_id: f.departmentId });
@@ -1156,7 +1154,7 @@ it.each(["zone", "department"] as const)(
       "sale_settlements",
       "sales",
       "sale_lines",
-      "registros_facturacion",
+      "verifactu_records",
       "cadenas",
       "order_amendments",
       "working_order_lines",

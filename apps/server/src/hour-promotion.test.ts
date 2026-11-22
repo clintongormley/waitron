@@ -18,7 +18,7 @@ import {
   type OperationBinding,
 } from "@waitron/module";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
@@ -26,7 +26,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -65,8 +65,8 @@ vi.mock("./run-server.js", async (importOriginal) => ({
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { nodeId: TAXPAYER_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-promotion-password";
 const hash = hashPassword(PASSWORD);
@@ -269,7 +269,7 @@ async function rows() {
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
-    sif: await suite.db.select().from(registroSif),
+    sif: await suite.db.select().from(verifactuIdentities),
   };
 }
 async function promote(
@@ -721,9 +721,9 @@ it("a promotion beside a leftover start-again note file is not held back by the 
 it("waits past the minute a recorded installation name holds, writing no fiscal rows", async () => {
   const s = await service();
   await admit(s);
-  const [live] = await suite.db.select().from(registroSif);
+  const [live] = await suite.db.select().from(verifactuIdentities);
   const minute = Math.floor(Date.now() / 60_000) * 60_000;
-  await suite.db.insert(registroSif).values({
+  await suite.db.insert(verifactuIdentities).values({
     nodeId: primary.nodeId,
     nif: live!.nif,
     idSistemaInformatico: live!.idSistemaInformatico,
@@ -748,8 +748,8 @@ it("waits past the minute a recorded installation name holds, writing no fiscal 
 it("a promotion takes its current minute although a later installation name is recorded", async () => {
   const s = await service();
   await admit(s);
-  const [live] = await suite.db.select().from(registroSif);
-  await suite.db.insert(registroSif).values({
+  const [live] = await suite.db.select().from(verifactuIdentities);
+  await suite.db.insert(verifactuIdentities).values({
     nodeId: primary.nodeId,
     nif: live!.nif,
     idSistemaInformatico: live!.idSistemaInformatico,
@@ -1118,7 +1118,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   );
   const baseline = {
     series: await spare.db.select().from(invoiceSeries),
-    sif: await spare.db.select().from(registroSif),
+    sif: await spare.db.select().from(verifactuIdentities),
   };
   const s = createNodeOperationPreparation({ ...options, db: spare.db, nodeDb: spare.node });
   const operation = { binding: { ...held, action: "establish" }, input: state };
@@ -1148,7 +1148,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     expect.objectContaining({ id: target.nodeId, publicKey: identity.publicKey, endorsement }),
   ]);
   expect(await spare.db.select().from(invoiceSeries)).toEqual(baseline.series);
-  expect(await spare.db.select().from(registroSif)).toEqual(baseline.sif);
+  expect(await spare.db.select().from(verifactuIdentities)).toEqual(baseline.sif);
   expect(await spare.db.select().from(fiscalReservations)).toEqual([]);
   expect(await spare.db.select().from(fiscalAllocations)).toEqual([]);
   const saved = await readModulePreparationHistory(options, binding.module);

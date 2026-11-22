@@ -32,7 +32,7 @@ const OVERRIDE = () => ({ personId: venue.adminId, pin: "1234" });
 function latest(): { at: Date; offsetMinutes: number } {
   const [row] = venue.db.all<{ at: string; offsetMinutes: number }>(sql`
     select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
-    from registros_facturacion
+    from verifactu_records
     order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);

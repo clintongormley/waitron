@@ -196,7 +196,7 @@ describe("devSetup against a real venue directory", () => {
       );
       const { rows: sales } = await db.execute<{ n: number }>(sql`select count(*) as n from sales`);
       const { rows: records } = await db.execute<{ issuer: string; n: number }>(
-        sql`select id_emisor_factura as issuer, count(*) as n from registros_facturacion group by id_emisor_factura`,
+        sql`select id_emisor_factura as issuer, count(*) as n from verifactu_records group by id_emisor_factura`,
       );
       return { taxpayer, venueDoc, departments, sales: sales[0]!.n, records };
     });

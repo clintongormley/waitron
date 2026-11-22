@@ -123,13 +123,13 @@ describe("hourly probes after a taxpayer-name change", () => {
       })),
     });
     await suite.db.execute(
-      sql`update envio_flujo set proximo_envio_en = '2026-07-21T01:03:00.000Z'`,
+      sql`update verifactu_sending_state set proximo_envio_en = '2026-07-21T01:03:00.000Z'`,
     );
     const { wire, sent } = capture(aeat.client());
     await drain(deps(wire, 2), PROBE);
     expect(sent).toEqual([]);
     const { rows } = await suite.db.execute<{ sent: string; attempts: number }>(sql`
-      select enviado_en as sent, intentos as attempts from envios where registro_id = ${first}
+      select enviado_en as sent, intentos as attempts from verifactu_submissions where registro_id = ${first}
     `);
     expect(rows).toEqual([{ sent: "2026-07-21T00:02:00.000Z", attempts: 1 }]);
     await advance(wire, 2);

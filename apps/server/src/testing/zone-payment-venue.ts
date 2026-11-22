@@ -128,7 +128,7 @@ export async function zonePaymentVenue(db: Database) {
         "tenders",
         "sale_settlements",
         "invoice_series",
-        "registros_facturacion",
+        "verifactu_records",
         "drawer_opens",
         "print_jobs",
       ].map((name) => [name, db.all(sql`select * from ${sql.identifier(name)} order by rowid`)]),

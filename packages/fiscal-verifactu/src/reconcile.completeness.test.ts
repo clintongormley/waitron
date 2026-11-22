@@ -35,18 +35,20 @@ async function submitted() {
 
 async function snapshot() {
   return {
-    deliveries: (await suite.db.execute(sql`select * from envios order by registro_id`)).rows,
+    deliveries: (
+      await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
+    ).rows,
     acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     events: (await suite.db.execute(sql`select * from filing_case_events order by id`)).rows,
-    records: (await suite.db.execute(sql`select * from registros_facturacion order by id`)).rows,
+    records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
   };
 }
 
 async function loseAcknowledgements() {
   await withTransaction(suite.db, async (tx) => {
-    await tx.execute(sql`update envios set estado = 'pendiente'`);
+    await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
     await tx.execute(sql`delete from acks`);
   });
 }

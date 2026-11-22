@@ -9,19 +9,19 @@ import { withTransaction, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",
   secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
 };
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await seedFixtureSif(suite.db, {
     nodeId: node.nodeId,
@@ -47,7 +47,7 @@ for (const locale of ["en", "es"] as const)
       await suite.db.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
       );
-      const before = await suite.db.select().from(registroSif);
+      const before = await suite.db.select().from(verifactuIdentities);
       const part = await withTransaction(suite.db, (tx) =>
         FISCAL_RECOVERY_PACK_PAGE(tx, node, {
           keyInForce: { nodeId: nodeKey.nodeId, name: nodeKey.name },
@@ -119,6 +119,6 @@ for (const locale of ["en", "es"] as const)
       expect(
         (await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!.timeZone,
       ).toBe(timeZone);
-      expect(await suite.db.select().from(registroSif)).toEqual(before);
+      expect(await suite.db.select().from(verifactuIdentities)).toEqual(before);
     },
   );

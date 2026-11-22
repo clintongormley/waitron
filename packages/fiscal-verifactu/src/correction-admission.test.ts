@@ -9,7 +9,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -18,7 +18,7 @@ const clock = {
   ...steadyClock,
   now: () => ({ ...steadyClock.now(), instant: AT, offsetMinutes: 120 }),
 };
-type Estado = (typeof envios.$inferInsert)["estado"];
+type Estado = (typeof verifactuSubmissions.$inferInsert)["estado"];
 
 let node: SeededNode;
 let backend: VerifactuBackend;
@@ -107,7 +107,7 @@ async function file(
     });
     const estado = options.estado === undefined ? "pendiente" : options.estado;
     if (estado !== null)
-      await tx.insert(envios).values({ registroId: id, estado, codigoError: "1161" });
+      await tx.insert(verifactuSubmissions).values({ registroId: id, estado, codigoError: "1161" });
     return id;
   });
   return { saleId, registroId, number };

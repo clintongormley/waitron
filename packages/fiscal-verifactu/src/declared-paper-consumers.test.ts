@@ -5,7 +5,7 @@ import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import {
@@ -23,8 +23,8 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId },
-  target = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId },
+  target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = SERIES_BASES;
 const time = "2026-10-16T00:00:00.000Z";
 function checkpoint(prefix: "S" | "P", floor = 42): DeclaredRegisterHistory {
@@ -61,7 +61,7 @@ function checkpoint(prefix: "S" | "P", floor = 42): DeclaredRegisterHistory {
   };
 }
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db.insert(invoiceSeries).values(bases.map((b) => ({ ...b, nodeId: primary.nodeId })));
 });

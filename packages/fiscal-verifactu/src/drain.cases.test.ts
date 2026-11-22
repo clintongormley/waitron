@@ -22,7 +22,7 @@ import {
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -101,7 +101,7 @@ async function envioOf(registroId: string): Promise<EnvioState> {
     incidencia: number;
     proximo_intento_en: string;
   }>(sql`
-    select estado, csv, incidencia, proximo_intento_en from envios where registro_id = ${registroId}
+    select estado, csv, incidencia, proximo_intento_en from verifactu_submissions where registro_id = ${registroId}
   `);
   const row = rows[0]!;
   return { ...row, incidencia: row.incidencia === 1 };
@@ -414,7 +414,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100], middleWithoutCode);
       expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
       const { rows } = await suite.db.execute<{ codigo_error: string | null }>(sql`
-        select e.codigo_error from envios e join registros_facturacion r on r.id = e.registro_id
+        select e.codigo_error from verifactu_submissions e join verifactu_records r on r.id = e.registro_id
         order by r.secuencia
       `);
       expect(rows.map((row) => row.codigo_error)).toEqual(["1100", null, "1100"]);
@@ -427,7 +427,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       // No accept the drain writes keeps a code; set one directly, so only the records' state
       // separates them from a run of refusals.
       await suite.db.execute(sql`
-        update envios set codigo_error = '1100' where registro_id in ${seeded.registroIds}
+        update verifactu_submissions set codigo_error = '1100' where registro_id in ${seeded.registroIds}
       `);
       expect(await estados(seeded.registroIds)).toEqual(["aceptado", "aceptado", "aceptado"]);
       await sendsNext(seeded, aeat);
@@ -437,7 +437,7 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       const aeat = fakeAeat();
       const seeded = await fileOneEnvio(aeat, [1100, null, 1100]);
       await suite.db.execute(sql`
-        update envios set codigo_error = '1100' where registro_id = ${seeded.registroIds[1]!}
+        update verifactu_submissions set codigo_error = '1100' where registro_id = ${seeded.registroIds[1]!}
       `);
       expect(await estados(seeded.registroIds)).toEqual(["rechazado", "aceptado", "rechazado"]);
       await sendsNext(seeded, aeat);
@@ -554,14 +554,14 @@ describe("drain — a run of refusals with one code stops its chain", () => {
 
 async function codigoOf(registroId: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ codigo_error: string | null }>(
-    sql`select codigo_error from envios where registro_id = ${registroId}`,
+    sql`select codigo_error from verifactu_submissions where registro_id = ${registroId}`,
   );
   return rows[0]!.codigo_error;
 }
 
 async function mensajeOf(registroId: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ mensaje_error: string | null }>(
-    sql`select mensaje_error from envios where registro_id = ${registroId}`,
+    sql`select mensaje_error from verifactu_submissions where registro_id = ${registroId}`,
   );
   return rows[0]!.mensaje_error;
 }
@@ -627,7 +627,7 @@ describe("drain — a re-sent record whose stored copy AEAT accepted with errors
 
   async function resend(registroId: string) {
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', csv = null, confirmado_en = null,
+      update verifactu_submissions set estado = 'pendiente', csv = null, confirmado_en = null,
         proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${registroId}
     `);
@@ -778,7 +778,7 @@ describe("drain — a conflict holds nothing behind it", () => {
     await drain(deps(aeat.client()), FIRST);
     aeat.annul(seeded.facturaKeys[0]!);
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${original}
     `);
 
@@ -856,7 +856,7 @@ describe("drain — the records around a conflict", () => {
     await drain(deps(aeat.client()), FIRST);
     aeat.annul(seeded.facturaKeys[0]!);
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${original}
     `);
     const sameReply = await appendPendingAlta(suite.db, seeded, 2);
@@ -977,8 +977,8 @@ describe("drain — a cancellation on another chain", () => {
     expect(await envioOf(original!)).toMatchObject({ estado: "aceptado" });
     const [head] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, other.registroId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, other.registroId));
     const otherChain = { ...seeded, nodeId: brandNodeId(head!.nodeId), sifId: head!.sifId };
     const cancellation = await appendCancellation(suite.db, seeded, original!, 6, {
       otherChainHeadId: other.registroId,
@@ -1088,7 +1088,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     expect(await envioOf(original)).toMatchObject({ estado: "rechazado" });
     const correction = await appendCorrection(suite.db, seeded, original, 2);
     await suite.db.execute(
-      sql`update envios set estado = 'aceptado' where registro_id = ${correction}`,
+      sql`update verifactu_submissions set estado = 'aceptado' where registro_id = ${correction}`,
     );
     const refusals = [];
     for (const secuencia of [3, 4, 5]) {
@@ -1164,7 +1164,7 @@ describe("drain — a duplicate whose lookup fails", () => {
     await drain(deps(aeat.client()), FIRST);
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${duplicate}
     `);
     const accepted = await seedSecondChain(suite.db, seeded, 5);
@@ -1271,7 +1271,7 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
     const [duplicate] = seeded.registroIds;
     await drain(deps(aeat.client()), FIRST);
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${duplicate}
     `);
     const real = aeat.client();
@@ -1300,7 +1300,7 @@ describe("drain — a duplicate replacement whose sale was made the month before
     });
     await drain(deps(aeat.client()), FIRST);
     await suite.db.execute(sql`
-      update envios set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
+      update verifactu_submissions set estado = 'pendiente', csv = null, proximo_intento_en = ${FIRST.toISOString()}
       where registro_id = ${replacement}
     `);
     const real = aeat.client();
@@ -1374,7 +1374,7 @@ describe("drain — a case commits with the outcome that opened it", () => {
     // Refuses the second line's accept, which is written after the first line's rejection, its
     // incident and its case.
     await suite.db.execute(sql`
-      create trigger test_refuse_accept before update of estado on envios
+      create trigger test_refuse_accept before update of estado on verifactu_submissions
       when new.estado = 'aceptado'
       begin select raise(abort, 'refused by test'); end
     `);
@@ -1414,7 +1414,7 @@ describe("drain — a claim that rolls back reports nothing it wrote", () => {
       secuencia: 1,
     });
     await suite.db.execute(sql`
-      create trigger test_refuse_claim before update of estado on envios
+      create trigger test_refuse_claim before update of estado on verifactu_submissions
       when new.estado = 'enviando'
       begin select raise(abort, 'refused by test'); end
     `);
@@ -1455,7 +1455,7 @@ describe("drain — resolving a case releases nothing", () => {
       }),
     );
     const before = await suite.db.execute(
-      sql`select * from envios where registro_id = ${original}`,
+      sql`select * from verifactu_submissions where registro_id = ${original}`,
     );
     const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
     const wire = recording(aeat.client());
@@ -1464,7 +1464,9 @@ describe("drain — resolving a case releases nothing", () => {
 
     expect(wire.sent).toEqual([]);
     expect((await envioOf(cancellation)).estado).toBe("retenido");
-    const after = await suite.db.execute(sql`select * from envios where registro_id = ${original}`);
+    const after = await suite.db.execute(
+      sql`select * from verifactu_submissions where registro_id = ${original}`,
+    );
     expect(after.rows).toEqual(before.rows);
     expect((await cases()).map((c) => [c.registroId, c.status])).toEqual([
       [original, "resolved"],
@@ -1529,7 +1531,7 @@ describe("drain — reply lines are paired with the records sent by position", (
 
   async function saleOf(registroId: string): Promise<string> {
     const { rows } = await suite.db.execute<{ sale_id: string }>(sql`
-      select sale_id from registros_facturacion where id = ${registroId}
+      select sale_id from verifactu_records where id = ${registroId}
     `);
     return rows[0]!.sale_id;
   }

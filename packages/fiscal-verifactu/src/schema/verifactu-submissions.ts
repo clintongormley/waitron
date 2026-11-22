@@ -1,25 +1,25 @@
 import { sql } from "drizzle-orm";
 import { check, index } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, now, table, ts } from "@waitron/db";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 /**
  * The submission SIDECAR — 1:1 with a registro, holding the delivery state that mutates
- * constantly. It exists because `registros_facturacion` is immutable, and submission state cannot
+ * constantly. It exists because `verifactu_records` is immutable, and submission state cannot
  * live on an immutable table.
  *
  * Chain order has exactly one source of truth, and this table never reorders anything, only
  * records what happened to each row.
  */
-export const envios = table(
-  "envios",
+export const verifactuSubmissions = table(
+  "verifactu_submissions",
   {
     // The registro id IS the primary key. 1:1 becomes structural rather than conventional: there
     // is no shape of this table in which a registro can have two envío rows.
     registroId: id("registro_id")
       .primaryKey()
       /* v8 ignore start */
-      .references(() => registrosFacturacion.id),
+      .references(() => verifactuRecords.id),
     /* v8 ignore stop */
     estado: label("estado").notNull().default("pendiente"),
     intentos: count("intentos").notNull().default(0),
@@ -46,11 +46,11 @@ export const envios = table(
   /* v8 ignore start */
   (t) => [
     // The drainer's access path: oldest due first.
-    index("envios_drenaje_idx").on(t.estado, t.proximoIntentoEn),
+    index("verifactu_submissions_drenaje_idx").on(t.estado, t.proximoIntentoEn),
     // The certificate card's newest-acceptance read, taken under the write lock.
-    index("envios_confirmado_idx").on(t.confirmadoEn),
+    index("verifactu_submissions_confirmado_idx").on(t.confirmadoEn),
     check(
-      "envios_estado_ck",
+      "verifactu_submissions_estado_ck",
       sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')`,
     ),
   ],

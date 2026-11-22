@@ -56,7 +56,7 @@ async function paidBill(): Promise<string> {
 
 async function storedRows(): Promise<RegistroRow[]> {
   const { rows } = await venue.db.execute<Record<string, unknown>>(sql`
-    select * from registros_facturacion where node_id = ${venue.cfg.nodeId} order by secuencia`);
+    select * from verifactu_records where node_id = ${venue.cfg.nodeId} order by secuencia`);
   return rows.map((row) => decodeRegistroRow<RegistroRow>(row));
 }
 

@@ -27,7 +27,12 @@ export {
   validateAeatCert,
   type AeatCert,
 } from "./provisioning-secret.js";
-export { cadenas, envios, registroSif, registrosFacturacion } from "./schema/index.js";
+export {
+  cadenas,
+  verifactuSubmissions,
+  verifactuIdentities,
+  verifactuRecords,
+} from "./schema/index.js";
 export { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
 export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";

@@ -7,7 +7,7 @@ describe("FiscalContribution.drain contract", () => {
       id: "test",
       drain: async () => ({
         nextDueAt: null,
-        tenantsWithWork: 0,
+        passesWithWork: 0,
         batchesSent: 0,
         recordsSubmitted: 0,
         recordsAccepted: 0,

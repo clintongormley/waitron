@@ -7,12 +7,12 @@ import { lastAcceptedQuery } from "./certificate-card.js";
  * held-chain test as `haltOpenChainClaims` in `drain.ts`. */
 function waitingRecords(): SQL {
   return sql`
-    select e.registro_id from envios e
-    join registros_facturacion r on r.id = e.registro_id
+    select e.registro_id from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     where e.estado = 'pendiente'
       and not exists (
-        select 1 from envios held_envio
-        join registros_facturacion held on held.id = held_envio.registro_id
+        select 1 from verifactu_submissions held_envio
+        join verifactu_records held on held.id = held_envio.registro_id
         where held.sif_id = r.sif_id and held.secuencia < r.secuencia
           and held_envio.estado = 'detenido'
       )
@@ -39,7 +39,7 @@ export async function retryWaitingRecords(
 ): Promise<{ waiting: number; cleared: number }> {
   const waiting = await countWaiting(tx);
   const cleared = await tx.execute<{ registro_id: string }>(sql`
-    update envios set proximo_intento_en = ${now.toISOString()}
+    update verifactu_submissions set proximo_intento_en = ${now.toISOString()}
     where proximo_intento_en > ${now.toISOString()}
       and registro_id in (${waitingRecords()})
     returning registro_id

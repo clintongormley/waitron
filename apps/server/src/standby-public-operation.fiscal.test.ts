@@ -28,7 +28,7 @@ import {
   ALLOCATED_FISCAL_STANDBY,
   createPaperAllocationPreparation,
 } from "@waitron/fiscal-verifactu";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -354,8 +354,8 @@ async function liveTarget(target: string) {
   return {
     sif: await spare.db
       .select()
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, target), isNull(registroSif.revocadoEn))),
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, target), isNull(verifactuIdentities.revocadoEn))),
     series: await spare.db
       .select()
       .from(invoiceSeries)

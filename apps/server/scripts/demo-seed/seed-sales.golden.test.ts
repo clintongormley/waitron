@@ -205,20 +205,20 @@ async function readPracticeSales() {
         order by s.invoice_number, t.method`,
   );
   const { rows: registroRows } = await db.execute(
-    sql`select ${columns("r", REGISTROS_COLUMNS)} from registros_facturacion r
+    sql`select ${columns("r", REGISTROS_COLUMNS)} from verifactu_records r
         order by r.secuencia`,
   );
   const { rows: envioRows } = await db.execute(
-    sql`select ${columns("e", ENVIOS_COLUMNS)} from envios e
-        join registros_facturacion r on r.id = e.registro_id
+    sql`select ${columns("e", ENVIOS_COLUMNS)} from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
         order by r.secuencia`,
   );
   return {
     sales: saleRows,
     sale_lines: lineRows,
     tenders: tenderRows,
-    registros_facturacion: registroRows,
-    envios: envioRows,
+    verifactu_records: registroRows,
+    verifactu_submissions: envioRows,
   };
 }
 
@@ -248,7 +248,7 @@ describe("seedSales on a Spanish venue", () => {
     }
     const golden: unknown = JSON.parse(readFileSync(FIXTURE, "utf8"));
 
-    expect(actual.registros_facturacion.length).toBeGreaterThan(0);
+    expect(actual.verifactu_records.length).toBeGreaterThan(0);
     expect(actual).toEqual(golden);
   });
 });

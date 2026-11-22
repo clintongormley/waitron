@@ -351,7 +351,7 @@ export async function canonicalMadridSemantics(
       case "invoice_series":
         key = parts("node_id", "code", "purpose");
         break;
-      case "registro_sif":
+      case "verifactu_identities":
         key = parts("node_id", "numero_instalacion");
         break;
       case "dashboard_sessions":

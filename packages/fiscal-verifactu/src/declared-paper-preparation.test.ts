@@ -10,7 +10,7 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { activateModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
@@ -19,7 +19,7 @@ import { validatePaperCandidates } from "./initial-paper-candidates.js";
 import { declaredHistoryBytes } from "./paper-register-history.js";
 import type { DeclaredReservation, DeclaredRegisterHistory } from "./paper-register-protocol.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import type { AllocationContext } from "./allocation-envelope.js";
 import { validateAllocationEnvelope } from "./allocation-envelope.js";
 import {
@@ -32,7 +32,7 @@ import {
 const load = () => import("./declared-paper-preparation.js");
 const admission = () => import("./declared-paper-evidence.js");
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const time = "2026-10-16T00:00:00.000Z";
 const bases = [
   { code: "A", purpose: "standard" },
@@ -175,7 +175,7 @@ function fixture(prefix: "S" | "P" = "S") {
 type Fixture = ReturnType<typeof fixture>;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -198,7 +198,7 @@ async function attempt(f = fixture(), change?: (value: Fixture["facts"]) => void
 }
 async function noWrites() {
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect((await suite.db.select().from(invoiceSeries)).map((x) => x.code)).toEqual([
     "A",
     "B",

@@ -68,7 +68,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
       primer_registro: number;
     }>(sql`
       select secuencia, huella, anterior_huella, primer_registro
-      from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+      from verifactu_records where node_id = ${node.nodeId} order by secuencia
     `);
     expect(rows.map((r) => r.secuencia)).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
     expect(rows[0]?.primer_registro).toBe(1);
@@ -108,7 +108,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
     }
 
     const { rows } = await suite.db.execute<{ secuencia: number; device_id: string }>(sql`
-      select secuencia, device_id from registros_facturacion
+      select secuencia, device_id from verifactu_records
       where node_id = ${node.nodeId} order by secuencia
     `);
     // One continuous per-node sequence spanning both tills...
@@ -143,7 +143,7 @@ describe("currentSif resolves per node", () => {
       appendToChain(tx, nodeA.nodeId, altaFor(nodeA, saleId, 1, 1)),
     );
     const counts = await suite.db.execute<{ node_id: string; count: number }>(sql`
-      select node_id, cast(count(*) as int) as count from registros_facturacion group by node_id
+      select node_id, cast(count(*) as int) as count from verifactu_records group by node_id
     `);
     const byNode = new Map(counts.rows.map((r) => [r.node_id, r.count]));
     expect(byNode.get(nodeA.nodeId)).toBe(1);
@@ -224,7 +224,7 @@ describe("the series↔node guard (record-sale)", () => {
     });
     expect(result.fiscal.state).toBe("pending");
     const { rows } = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as int) as count from registros_facturacion where node_id = ${node.nodeId}
+      select cast(count(*) as int) as count from verifactu_records where node_id = ${node.nodeId}
     `);
     expect(rows[0]?.count).toBe(1);
   });

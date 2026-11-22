@@ -11,7 +11,7 @@ import type {
 } from "@waitron/fiscal";
 import type { ErrorParams, NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { confirmClockStep } from "./clock-step.js";
@@ -33,7 +33,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,

@@ -1471,8 +1471,7 @@ it("the readiness option refuses an unowned command before opening the venue", a
 
 it("the production command records a readable certificate against the committed setup node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
-  const { fiscalCertificateInstalls } =
-    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
   const candidate = makeAuthority().issue();
   const certificate = {
     pfxBase64: candidate.pfx.toString("base64"),
@@ -1482,7 +1481,7 @@ it("the production command records a readable certificate against the committed 
   const f = await productionFixture(true, certificate);
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
-  const rows = await venue.db.select().from(fiscalCertificateInstalls);
+  const rows = await venue.db.select().from(verifactuCertificates);
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({
     nodeId: state.frozen.nodeId,

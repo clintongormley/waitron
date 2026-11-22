@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { incidents, openVenueDatabase, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { recordFixtureSale } from "./testing/sale.js";
 import { provisionTestVenue } from "./testing/venue.js";
 import { createDemoVenueProvisioner } from "./demo-seed/testing/provision-venue.js";
@@ -53,8 +53,8 @@ function read(directory: string) {
     return {
       sales: db.prepare("select total from sales order by invoice_number").all(),
       counters: db.prepare("select id, code, next_number from invoice_series order by code").all(),
-      records: db.prepare("select count(*) as count from registros_facturacion").get(),
-      outbox: db.prepare("select count(*) as count from envios").get(),
+      records: db.prepare("select count(*) as count from verifactu_records").get(),
+      outbox: db.prepare("select count(*) as count from verifactu_submissions").get(),
       incidents: db.prepare("select code, sale_id, source from incidents").all(),
     };
   } finally {
@@ -157,8 +157,6 @@ it("the sale fixture keeps the venue issue date when the host is on the previous
       .from(sales),
   ).toEqual([{ issuedAt: "2026-11-01T23:30:00.000Z", offsetMinutes: 60 }]);
   expect(
-    await suite.db
-      .select({ date: registrosFacturacion.fechaExpedicionFactura })
-      .from(registrosFacturacion),
+    await suite.db.select({ date: verifactuRecords.fechaExpedicionFactura }).from(verifactuRecords),
   ).toEqual([{ date: "2026-11-02" }]);
 });

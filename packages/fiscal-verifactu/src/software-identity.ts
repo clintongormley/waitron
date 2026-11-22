@@ -36,7 +36,7 @@ export interface SoftwareIdentity extends SoftwareProduct {
 
 export const SOFTWARE_IDENTITY: SoftwareProduct = Object.freeze({
   name: "Waitron",
-  // Not what a record files: `IdSistemaInformatico` comes from the node's `registro_sif` row
+  // Not what a record files: `IdSistemaInformatico` comes from the node's `verifactu_identities` row
   // (`currentSif`).
   code: WAITRON_ID_SISTEMA,
   onlyVerifactu: "S",

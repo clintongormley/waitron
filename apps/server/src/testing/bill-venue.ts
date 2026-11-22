@@ -470,7 +470,7 @@ export async function statusOf(venue: BillVenue, billId: string): Promise<string
 export function fiscalRecordCount(venue: Pick<BillVenue, "db">, billId?: string): number {
   const records = sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
   `;
   const [row] = venue.db.all<{ count: string }>(
     billId === undefined

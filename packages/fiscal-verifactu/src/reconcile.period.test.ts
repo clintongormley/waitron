@@ -11,12 +11,12 @@ import {
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { currentSif } from "./registro-sif.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { VerifactuBackend } from "./backend.js";
 
@@ -35,13 +35,13 @@ const CLOCK_INSTANT = steadyClock.now().instant;
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-let venue: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let venue: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
 let nif: string;
 let sifId: string;
 let sequence: number;
 
 beforeEach(async () => {
-  venue = await seedTenantWithSif(suite.db);
+  venue = await seedTaxpayerWithSif(suite.db);
   const sif = await suite.db.transaction((tx) => currentSif(tx, venue.nodeId));
   nif = sif.nif;
   sifId = sif.id;
@@ -49,7 +49,7 @@ beforeEach(async () => {
 });
 
 /**
- * One alta registro stamped with `fecha` (the stored `YYYY-MM-DD` form), plus its `envios` sidecar.
+ * One alta registro stamped with `fecha` (the stored `YYYY-MM-DD` form), plus its `verifactu_submissions` sidecar.
  * Not routed through `recordSale`, which derives the expedition date from the clock.
  */
 async function seedAltaOn(
@@ -81,7 +81,7 @@ async function seedAltaOn(
     })
     .returning({ id: sales.id });
   const [registro] = await db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       source: "device",
       deviceId: venue.deviceId,
@@ -107,8 +107,8 @@ async function seedAltaOn(
       huella: String(sequence).padStart(64, "0"),
       entorno: "production",
     })
-    .returning({ id: registrosFacturacion.id });
-  await db.insert(envios).values({ registroId: registro!.id });
+    .returning({ id: verifactuRecords.id });
+  await db.insert(verifactuSubmissions).values({ registroId: registro!.id });
   return registro!.id;
 }
 
@@ -126,7 +126,7 @@ function depsAgainstEmptyAeat(): ReconcileDeps {
  * that says a period expression CAN select nothing, so a `checked: 0` above is a real answer. */
 async function rowsMatchingPrefix(prefix: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: number }>(
-    sql`select count(*) as count from registros_facturacion
+    sql`select count(*) as count from verifactu_records
         where substr(fecha_expedicion_factura, 1, 7) = ${prefix}`,
   );
   return rows[0]!.count;
@@ -274,7 +274,7 @@ describe("reconcile — the date form an incident carries", () => {
     // Already re-submitted once by an earlier sweep, so this `noTrace` escalates to an incident
     // carrying the `IDFactura` triple.
     await suite.db.execute(sql`
-      update envios set estado = 'aceptado', reconciled_resubmit_at = ${CLOCK_INSTANT.toISOString()}
+      update verifactu_submissions set estado = 'aceptado', reconciled_resubmit_at = ${CLOCK_INSTANT.toISOString()}
       where registro_id = ${registroId}
     `);
 

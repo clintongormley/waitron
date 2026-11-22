@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { CorrectionAdmission } from "@waitron/fiscal";
 import type { NodeId, SaleId } from "@waitron/shared";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 type Filing = Extract<CorrectionAdmission, { eligible: true }>["filing"];
 
@@ -28,25 +28,25 @@ export async function correctionAdmissionFor(
 ): Promise<CorrectionAdmission> {
   const rows = await tx
     .select({
-      id: registrosFacturacion.id,
-      tipoRegistro: registrosFacturacion.tipoRegistro,
-      tipoFactura: registrosFacturacion.tipoFactura,
-      tipoRectificativa: registrosFacturacion.tipoRectificativa,
-      nodeId: registrosFacturacion.nodeId,
-      correctsRegistroId: registrosFacturacion.correctsRegistroId,
-      numSerieFactura: registrosFacturacion.numSerieFactura,
-      fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
-      estado: envios.estado,
+      id: verifactuRecords.id,
+      tipoRegistro: verifactuRecords.tipoRegistro,
+      tipoFactura: verifactuRecords.tipoFactura,
+      tipoRectificativa: verifactuRecords.tipoRectificativa,
+      nodeId: verifactuRecords.nodeId,
+      correctsRegistroId: verifactuRecords.correctsRegistroId,
+      numSerieFactura: verifactuRecords.numSerieFactura,
+      fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
+      estado: verifactuSubmissions.estado,
     })
-    .from(registrosFacturacion)
-    .leftJoin(envios, eq(envios.registroId, registrosFacturacion.id))
-    .where(eq(registrosFacturacion.saleId, saleId));
+    .from(verifactuRecords)
+    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
+    .where(eq(verifactuRecords.saleId, saleId));
 
   if (rows.some((row) => row.tipoRegistro === "anulacion")) {
     return { eligible: false, reason: "voided" };
   }
   if (rows.length === 0) return { eligible: false, reason: "missing" };
-  // Each fix names a distinct earlier alta of the same sale (`registros_corrects_registro_uq`,
+  // Each fix names a distinct earlier alta of the same sale (`verifactu_records_corrects_registro_uq`,
   // `appendToChain`), so each line of fixes ends in one unfixed version: one means one line.
   const fixed = new Set(rows.map((row) => row.correctsRegistroId));
   const latest = rows.filter((row) => !fixed.has(row.id));

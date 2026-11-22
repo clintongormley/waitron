@@ -32,7 +32,7 @@ export async function filedFor(venue: BillVenue, orderId: string) {
   );
   const [record] = venue.db.all<{ operationDate: string | null; issueDate: string }>(sql`
     select fecha_operacion as operationDate, fecha_expedicion_factura as issueDate
-    from registros_facturacion where sale_id = ${sale!.id}`);
+    from verifactu_records where sale_id = ${sale!.id}`);
   const rates = (
     await venue.db
       .select({ rate: saleLines.vatRate })

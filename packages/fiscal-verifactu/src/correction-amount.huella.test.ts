@@ -10,7 +10,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { centsToDecimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, DeviceId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -33,7 +33,7 @@ let rectifySessionId: string;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the control below pins a huella literal.
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, {
     nif: "20009999E",
   }));
   const [series] = await suite.db
@@ -99,7 +99,7 @@ async function correct(
 
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);

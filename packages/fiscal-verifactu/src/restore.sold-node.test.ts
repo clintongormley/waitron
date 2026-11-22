@@ -44,7 +44,7 @@ describe("restoreFiscal", () => {
       true,
     );
     const { rows: ledger } = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from registros_facturacion where node_id = ${seededNode.nodeId}`,
+      sql`select count(*) as n from verifactu_records where node_id = ${seededNode.nodeId}`,
     );
     expect(ledger[0]?.n).toBe(1);
     expect(outcome.series).toBeUndefined();

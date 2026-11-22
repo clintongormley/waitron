@@ -17,18 +17,18 @@ import {
   table,
   ts,
 } from "@waitron/db";
-import { registroSif } from "./sif.js";
+import { verifactuIdentities } from "./verifactu-identities.js";
 
 /**
  * Query keys live in columns and structured, non-hashed payloads in `json` columns. Huella inputs
  * keep their original text representation.
  */
-export const registrosFacturacion = table(
-  "registros_facturacion",
+export const verifactuRecords = table(
+  "verifactu_records",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     correctsRegistroId: id("corrects_registro_id").references(
-      (): AnySQLiteColumn => registrosFacturacion.id,
+      (): AnySQLiteColumn => verifactuRecords.id,
     ),
     // Where the sale came from: informational only and never hashed. The chain key is `node_id`.
     source: saleSourceColumn("source").notNull(),
@@ -47,7 +47,7 @@ export const registrosFacturacion = table(
     sifId: id("sif_id")
       .notNull()
       /* v8 ignore start */
-      .references(() => registroSif.id),
+      .references(() => verifactuIdentities.id),
     /* v8 ignore stop */
     saleId: id("sale_id")
       .notNull()
@@ -107,7 +107,7 @@ export const registrosFacturacion = table(
     tipoHuella: label("tipo_huella").notNull(),
     huella: label("huella").notNull(),
     // Which environment this registro was GENERATED for, so `drain` can refuse to submit it to the
-    // other one. A fact about the record, not the attempt to send it, so not on `envios`.
+    // other one. A fact about the record, not the attempt to send it, so not on `verifactu_submissions`.
     //
     // NOT part of the huella. `entorno` is ours, never AEAT's: it is absent from the RegistroAlta/
     // RegistroAnulacion `toRegistroRow` builds off of, and `verify.test.ts` pins that two records
@@ -121,48 +121,48 @@ export const registrosFacturacion = table(
   (t) => [
     // THE backstop against two writers claiming one chain position. Keyed on the node: two tills
     // of one node share one sequence. See chain.node-rekey.concurrency.test.ts.
-    uniqueIndex("registros_tenant_node_secuencia_uq").on(t.nodeId, t.secuencia),
-    uniqueIndex("registros_corrects_registro_uq").on(t.correctsRegistroId),
+    uniqueIndex("verifactu_records_node_secuencia_uq").on(t.nodeId, t.secuencia),
+    uniqueIndex("verifactu_records_corrects_registro_uq").on(t.correctsRegistroId),
     // Originals retain their unique identity; each correction names the version it replaces.
-    uniqueIndex("registros_identidad_uq")
+    uniqueIndex("verifactu_records_identidad_uq")
       .on(t.idEmisorFactura, t.numSerieFactura, t.fechaExpedicionFactura, t.tipoRegistro)
       .where(sql`${t.correctsRegistroId} is null`),
-    index("registros_sale_idx").on(t.saleId),
-    index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
-    index("registros_generado_idx").on(t.fechaHoraHusoGenRegistro),
-    ...originChecks("registros_facturacion", t.source, t.deviceId),
-    check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
-    check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
+    index("verifactu_records_sale_idx").on(t.saleId),
+    index("verifactu_records_node_secuencia_idx").on(t.nodeId, t.secuencia),
+    index("verifactu_records_generado_idx").on(t.fechaHoraHusoGenRegistro),
+    ...originChecks("verifactu_records", t.source, t.deviceId),
+    check("verifactu_records_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
+    check("verifactu_records_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
     // Uppercase SHA-256 hex; `glob` is the case-SENSITIVE matcher. Does NOT refuse a value holding
     // a NUL byte: `length()` and `glob` both stop at the first NUL.
     check(
-      "registros_huella_ck",
+      "verifactu_records_huella_ck",
       sql`length(${t.huella}) = 64 and ${t.huella} not glob '*[^0-9A-F]*'`,
     ),
-    check("registros_secuencia_ck", sql`${t.secuencia} > 0`),
+    check("verifactu_records_secuencia_ck", sql`${t.secuencia} > 0`),
     check(
-      "registros_entorno_ck",
+      "verifactu_records_entorno_ck",
       sql`${t.entorno} is null or ${t.entorno} in ('production', 'preproduction')`,
     ),
     check(
-      "registros_tipo_rectificativa_ck",
+      "verifactu_records_tipo_rectificativa_ck",
       sql`${t.tipoRectificativa} is null or ${t.tipoRectificativa} in ('S', 'I')`,
     ),
     // A rectification type requires an R1–R5 invoice type. Explicit NOT NULL rejects
     // anulación rows: SQL CHECK accepts NULL results as well as true.
-    // `glob` matches the WHOLE value and is case-sensitive. Same NUL gap as registros_huella_ck.
+    // `glob` matches the WHOLE value and is case-sensitive. Same NUL gap as verifactu_records_huella_ck.
     check(
-      "registros_tipo_factura_rectificativa_ck",
+      "verifactu_records_tipo_factura_rectificativa_ck",
       sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} glob 'R[1-5]')`,
     ),
     // A substitution block requires F3. Explicit NOT NULL rejects anulación rows
     // because SQL CHECK accepts NULL results as well as true.
     check(
-      "registros_facturas_sustituidas_f3_ck",
+      "verifactu_records_facturas_sustituidas_f3_ck",
       sql`${t.facturasSustituidas} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} = 'F3')`,
     ),
     check(
-      "registros_encadenamiento_ck",
+      "verifactu_records_encadenamiento_ck",
       sql`(${t.primerRegistro}
              and ${t.anteriorIdEmisorFactura} is null
              and ${t.anteriorNumSerieFactura} is null

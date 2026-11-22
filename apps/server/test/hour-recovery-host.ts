@@ -29,7 +29,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "../src/break-glass.js";
@@ -116,7 +116,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 export const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-export const node = { nodeId: TENANT_A.nodeId, streamId: "a0000000-0000-4000-8000-000000000002" };
+export const node = { nodeId: TAXPAYER_A.nodeId, streamId: "a0000000-0000-4000-8000-000000000002" };
 export const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -671,8 +671,9 @@ export async function recordedRecoveryRows(db: Database) {
     lines: (await db.execute(sql`select * from sale_lines order by sale_id, line_no`)).rows,
     tenders: (await db.execute(sql`select * from tenders order by id`)).rows,
     settlements: (await db.execute(sql`select * from sale_settlements order by id`)).rows,
-    records: (await db.execute(sql`select * from registros_facturacion order by secuencia`)).rows,
-    submissions: (await db.execute(sql`select * from envios order by registro_id`)).rows,
+    records: (await db.execute(sql`select * from verifactu_records order by secuencia`)).rows,
+    submissions: (await db.execute(sql`select * from verifactu_submissions order by registro_id`))
+      .rows,
   };
 }
 

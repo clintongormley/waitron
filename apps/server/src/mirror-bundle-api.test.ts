@@ -45,7 +45,7 @@ import { readPairLink } from "@waitron/node-db";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
-import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
+import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
 import { AppError, nodeId } from "@waitron/shared";
 import {
@@ -270,7 +270,7 @@ async function allocationSnapshot() {
   return {
     allocations: await db.select().from(fiscalAllocations),
     reservations: await db.select().from(fiscalReservations),
-    identities: await db.select().from(registroSif),
+    identities: await db.select().from(verifactuIdentities),
     series: await db.select().from(invoiceSeries),
     outsideReservations: structuredClone(outsideReservations),
   };

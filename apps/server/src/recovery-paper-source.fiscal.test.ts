@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { dashboardSessions, persons } from "@waitron/identity";
 
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import * as sources from "@waitron/fiscal-verifactu/src/allocation-paper-source.js";
 import {
@@ -16,14 +16,14 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { readOperationAuthority } from "@waitron/module";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -130,7 +130,7 @@ async function withFiles(
 let secret: string;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -191,7 +191,9 @@ it("combines real key authentication, configured paper files and the complete ac
       { code: "R-P000042", purpose: "corrective" },
     ]);
     expect(
-      await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
+      await suite.db
+        .select({ identity: verifactuIdentities.numeroInstalacion })
+        .from(verifactuIdentities),
     ).toEqual([{ identity: "P000042" }]);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
@@ -207,7 +209,7 @@ it("refuses activation when the key changes during configured-source collection"
       code: "promotion.break_glass_invalid",
     });
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);

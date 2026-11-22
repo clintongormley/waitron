@@ -50,9 +50,9 @@ function snapshot(includePayments = true) {
     "sale_lines",
     "tenders",
     "sale_settlements",
-    "registros_facturacion",
+    "verifactu_records",
     "cadenas",
-    "envios",
+    "verifactu_submissions",
     "working_orders",
     "working_order_lines",
     "print_jobs",
@@ -174,7 +174,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
     fault.enabled = false;
     const repaired = await send(venue.app, venue.cookie, "POST", path, body);
     expect(repaired.status).toBe(200);
-    expect(suite.db.all(sql`select count(*) as count from registros_facturacion`)).toEqual([
+    expect(suite.db.all(sql`select count(*) as count from verifactu_records`)).toEqual([
       { count: 1 },
     ]);
     expect(
@@ -185,7 +185,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
     expect(venue.card.collectCalls).toHaveLength(captures);
     const replay = await send(venue.app, venue.cookie, "POST", path, body);
     expect(replay.status).toBe(200);
-    expect(suite.db.all(sql`select count(*) as count from registros_facturacion`)).toEqual([
+    expect(suite.db.all(sql`select count(*) as count from verifactu_records`)).toEqual([
       { count: 1 },
     ]);
     expect(venue.card.collectCalls).toHaveLength(captures);

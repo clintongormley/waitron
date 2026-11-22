@@ -8,7 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -85,8 +85,8 @@ it.each(["credit", "substitution"] as const)(
     const sale = await operationSale(kind);
     const before = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia);
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia);
     for (const reverse of [false, true]) {
       await expect(
         withTransaction(suite.db, async (tx) => {
@@ -112,7 +112,7 @@ it.each(["credit", "substitution"] as const)(
       });
     }
     expect(
-      await suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
+      await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     ).toEqual(before);
   },
 );
@@ -124,8 +124,8 @@ it.each(["credit", "substitution"] as const)(
     const sale = await operationSale(kind);
     const before = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia);
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia);
     const result = await withTransaction(suite.db, (tx) =>
       kind === "credit"
         ? backend.recordCorrection(tx, sale, { correctsSaleId: originalSaleId })
@@ -133,8 +133,8 @@ it.each(["credit", "substitution"] as const)(
     );
     const stored = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia);
+      .from(verifactuRecords)
+      .orderBy(verifactuRecords.secuencia);
     expect(stored.slice(0, 3)).toEqual(before);
     expect(stored[3]).toMatchObject({
       id: result.recordId,
@@ -157,10 +157,7 @@ it.each(["credit", "substitution"] as const)(
 
 it("a void retains the issued sale's origin after corrections from another origin", async () => {
   await versions("F2", "F2");
-  const before = await suite.db
-    .select()
-    .from(registrosFacturacion)
-    .orderBy(registrosFacturacion.secuencia);
+  const before = await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
   const result = await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`pragma reverse_unordered_selects = on`);
     try {
@@ -171,8 +168,8 @@ it("a void retains the issued sale's origin after corrections from another origi
   });
   const [stored] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, result.recordId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, result.recordId));
   expect(stored).toMatchObject({
     source: "device",
     deviceId: node.deviceId,
@@ -183,9 +180,10 @@ it("a void retains the issued sale's origin after corrections from another origi
     anteriorHuella: before[2]!.huella,
   });
   expect(
-    (
-      await suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia)
-    ).slice(0, 3),
+    (await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia)).slice(
+      0,
+      3,
+    ),
   ).toEqual(before);
 });
 
@@ -228,8 +226,8 @@ it("corrects a replacement by differences, naming the replacement in an R5 'I'",
 
   const [stored] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, result.recordId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, result.recordId));
   expect(stored).toMatchObject({ tipoFactura: "R5", tipoRectificativa: "I" });
   expect(stored!.facturasRectificadas).toEqual({
     IDFacturaRectificada: [

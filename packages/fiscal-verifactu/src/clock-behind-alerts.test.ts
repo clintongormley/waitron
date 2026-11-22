@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -14,7 +14,7 @@ describe("clockUnusableSource", () => {
   const LAST = new Date("2026-10-25T09:00:00.000Z");
 
   async function sellAt(instant: Date): Promise<void> {
-    const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+    const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db);
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,

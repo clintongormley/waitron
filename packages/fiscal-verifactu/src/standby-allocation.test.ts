@@ -5,9 +5,9 @@ import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "../test/fixtures.js";
 
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import * as fiscal from "./index.js";
 import {
@@ -22,8 +22,8 @@ import {
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const target = TENANT_A.nodeId2;
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const target = TAXPAYER_A.nodeId2;
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -96,7 +96,7 @@ async function check(
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
@@ -112,7 +112,7 @@ beforeEach(async () => {
 
 describe("a dormant standby allocation checked against stored venue facts", () => {
   it("returns the reserved identities without writing a SIF, chain, series, activation or counter", async () => {
-    const before = (await suite.db.execute(sql`select * from registro_sif`)).rows;
+    const before = (await suite.db.execute(sql`select * from verifactu_identities`)).rows;
     const counters = (
       await suite.db.execute(
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,
@@ -126,7 +126,7 @@ describe("a dormant standby allocation checked against stored venue facts", () =
       allocation,
       reservation: input.reservation.payload,
     });
-    expect((await suite.db.execute(sql`select * from registro_sif`)).rows).toEqual(before);
+    expect((await suite.db.execute(sql`select * from verifactu_identities`)).rows).toEqual(before);
     expect(
       (
         await suite.db.execute(
@@ -162,15 +162,15 @@ describe("a dormant standby allocation checked against stored venue facts", () =
   });
 
   it("binds the proof to the actual primary even if caller and evidence name another source", async () => {
-    const input = signed(allocation, { ...event, sourceId: TENANT_B.nodeId });
-    const expected = { ...context, sourceId: TENANT_B.nodeId };
+    const input = signed(allocation, { ...event, sourceId: TAXPAYER_B.nodeId });
+    const expected = { ...context, sourceId: TAXPAYER_B.nodeId };
     expect(verifyPaperReservation(input, trust, expected).ok).toBe(true);
     expect(await check(input, expected)).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
   it("binds the proof to the actual requested standby even if caller and evidence name another target", async () => {
-    const input = signed(allocation, { ...event, targetNodeId: TENANT_B.nodeId });
-    const expected = { ...context, targetNodeId: TENANT_B.nodeId };
+    const input = signed(allocation, { ...event, targetNodeId: TAXPAYER_B.nodeId });
+    const expected = { ...context, targetNodeId: TAXPAYER_B.nodeId };
     expect(verifyPaperReservation(input, trust, expected).ok).toBe(true);
     expect(await check(input, expected)).toEqual({ ok: false, reason: "scope_mismatch" });
   });
@@ -193,17 +193,17 @@ describe("a dormant standby allocation checked against stored venue facts", () =
 
   it("refuses a source whose SIF is revoked", async () => {
     await suite.db
-      .update(registroSif)
+      .update(verifactuIdentities)
       .set({ revocadoEn: new Date() })
-      .where(eq(registroSif.nodeId, primary.nodeId));
+      .where(eq(verifactuIdentities.nodeId, primary.nodeId));
     expect(await check()).toEqual({ ok: false, reason: "primary_not_registered" });
   });
 
   it("refuses a live SIF whose taxpayer no longer agrees with the venue", async () => {
     await suite.db
-      .update(registroSif)
+      .update(verifactuIdentities)
       .set({ nif: "B12345678" })
-      .where(eq(registroSif.nodeId, primary.nodeId));
+      .where(eq(verifactuIdentities.nodeId, primary.nodeId));
     expect(await check()).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
@@ -216,8 +216,8 @@ describe("a dormant standby allocation checked against stored venue facts", () =
   });
 
   it("refuses an installation already used by a revoked SIF", async () => {
-    await suite.db.insert(registroSif).values({
-      nodeId: TENANT_B.nodeId,
+    await suite.db.insert(verifactuIdentities).values({
+      nodeId: TAXPAYER_B.nodeId,
       nif: allocation.taxpayerNif,
       idSistemaInformatico: allocation.softwareId,
       numeroInstalacion: sql`${allocation.installationIdentity}`,
@@ -227,7 +227,7 @@ describe("a dormant standby allocation checked against stored venue facts", () =
   });
 
   it("refuses a locally committed allocation even if the outside context claims it is still reserved", async () => {
-    const [sif] = await suite.db.select().from(registroSif);
+    const [sif] = await suite.db.select().from(verifactuIdentities);
     await suite.db.insert(fiscalAllocations).values({
       eventKey: "previous-activation",
       allocationKey: allocation.allocationId,
@@ -258,7 +258,7 @@ describe("a dormant standby allocation checked against stored venue facts", () =
 
   it("refuses a reserved series already present on another node even when retired", async () => {
     await suite.db.insert(invoiceSeries).values({
-      nodeId: TENANT_B.nodeId,
+      nodeId: TAXPAYER_B.nodeId,
       code: "FF-P000042",
       purpose: "full",
       retiredAt: new Date(),

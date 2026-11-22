@@ -332,7 +332,7 @@ describe("recording that a table left without paying", () => {
     expect(answer.status, JSON.stringify(answer)).toBe(200);
     expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(
-      venue.db.all(sql`select tipo_factura from registros_facturacion
+      venue.db.all(sql`select tipo_factura from verifactu_records
       where sale_id in (select id from sales where working_order_id = ${party.tabId})`),
     ).toEqual([{ tipo_factura: "F1" }]);
     expect(
@@ -837,7 +837,7 @@ describe("a presented bill whose card is in flight", () => {
     return venue.db.all(sql`
       select
         (select count(*) from sales) as sales,
-        (select count(*) from registros_facturacion) as fiscalRecords,
+        (select count(*) from verifactu_records) as fiscalRecords,
         (select count(*) from sale_settlements) as settlements,
         (select count(*) from unpaid_departures) as departures,
         (select count(*) from print_jobs) as printJobs
@@ -2117,7 +2117,7 @@ describe("a merged party", () => {
       const [row] = venue.db.all<{ number: number; num: string; previous: string | null }>(sql`
         select s.invoice_number as number, r.num_serie_factura as num,
           r.anterior_num_serie_factura as previous
-        from sales s join registros_facturacion r on r.sale_id = s.id
+        from sales s join verifactu_records r on r.sale_id = s.id
         where s.working_order_id = ${billId}
       `);
       return row!;

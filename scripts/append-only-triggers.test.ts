@@ -48,11 +48,9 @@ const EXPECTED = [
   "filing_case_events",
   "filing_cases",
   "fiscal_allocations",
-  "fiscal_certificate_installs",
   "fiscal_conflict_evidence",
   "fiscal_lookup_conflicts",
   "fiscal_reservations",
-  "fiscal_series_conflicts",
   "handover_activations",
   "invoice_correction_refunds",
   "invoice_pdf_downloads",
@@ -63,7 +61,6 @@ const EXPECTED = [
   "pay_period_closures",
   "payment_refunds",
   "receipt_reprints",
-  "registros_facturacion",
   "returned_invoice_records",
   "sale_line_dishes",
   "sale_lines",
@@ -74,6 +71,9 @@ const EXPECTED = [
   "tenders",
   "time_entries",
   "unpaid_departures",
+  "verifactu_certificates",
+  "verifactu_records",
+  "verifactu_series_conflicts",
 ];
 
 /** What the modules declare, through the same call boot makes. */

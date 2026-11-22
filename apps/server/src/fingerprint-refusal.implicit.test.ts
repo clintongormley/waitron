@@ -68,7 +68,7 @@ function snapshot() {
     .all<{ name: string }>(sql`select name from sqlite_schema where type = 'table' order by name`)
     .map((row) => row.name)
     .filter((name) =>
-      /^(working_|order_|bill_|ticket_|kitchen_|service_commands|parties$|party_|sales$|sale_|tenders$|print_jobs$|drawer_opens$|invoice_series$|cadenas$|registros_facturacion$|envios$|attendance_|unpaid_departures$)/.test(
+      /^(working_|order_|bill_|ticket_|kitchen_|service_commands|parties$|party_|sales$|sale_|tenders$|print_jobs$|drawer_opens$|invoice_series$|cadenas$|verifactu_records$|verifactu_submissions$|attendance_|unpaid_departures$)/.test(
         name,
       ),
     );
@@ -297,7 +297,7 @@ describe("late issuance rolls back its initiating command", () => {
     fault.enabled = false;
     const repaired = await send(venue.app, venue.cookie, method, path, body);
     expect(repaired.status, JSON.stringify(repaired.json)).toBe(200);
-    expect(suite.db.all(sql`select count(*) as count from registros_facturacion`)).toEqual([
+    expect(suite.db.all(sql`select count(*) as count from verifactu_records`)).toEqual([
       { count: 1 },
     ]);
   });
@@ -372,7 +372,7 @@ describe("late issuance rolls back its initiating command", () => {
       expect(repaired.status, JSON.stringify(repaired.json)).toBe(200);
       const issued = suite.db.all<{ bill: string; numSerie: string }>(sql`
         select s.working_order_id as bill, r.num_serie_factura as numSerie
-        from registros_facturacion r join sales s on s.id = r.sale_id
+        from verifactu_records r join sales s on s.id = r.sale_id
         order by s.invoice_number
       `);
       expect(issued.map((row) => row.bill)).toEqual([bill1, bill2]);

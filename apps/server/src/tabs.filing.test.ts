@@ -56,7 +56,7 @@ import type { TradingContext } from "./trading-context.js";
  * until it is paid.
  *
  * H2: the huella does not depend on whether the order was a tab or delivered to a table. Two
- * filings with the same huella share the AEAT identity `registros_identidad_uq` is keyed on, so each
+ * filings with the same huella share the AEAT identity `verifactu_records_identidad_uq` is keyed on, so each
  * goes in its own database (`secondVenueSharingNif`).
  *
  * Nothing here stages concurrent `openTab` or `addTabRound` calls: the one-open-tab rule and
@@ -224,7 +224,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
   `);
@@ -326,7 +326,7 @@ async function nifOf(db: Database = suite.db): Promise<string> {
 /**
  * A venue in a second database whose node files under `nif` instead of its own, so its
  * `IDEmisorFactura` matches the first venue's. It must be a second database: two filings with the
- * same huella share `registros_identidad_uq`'s key (issuer NIF, number, date, record type).
+ * same huella share `verifactu_records_identidad_uq`'s key (issuer NIF, number, date, record type).
  */
 async function secondVenueSharingNif(nif: string, db: Database = suiteB.db): Promise<SeededVenue> {
   const venue = await setupVenue(db);
@@ -342,7 +342,7 @@ async function secondVenueSharingNif(nif: string, db: Database = suiteB.db): Pro
 
 async function filedHuella(workingOrderId: string, db: Database = suite.db): Promise<string> {
   const { rows } = await db.execute<{ huella: string }>(sql`
-    select r.huella from registros_facturacion r
+    select r.huella from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}`);
   return rows[0]!.huella;

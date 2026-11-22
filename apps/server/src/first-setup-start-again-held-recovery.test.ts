@@ -27,7 +27,7 @@ import { expect, it } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
 import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { manifestSets } from "@waitron/migrations";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
@@ -146,7 +146,7 @@ it("a setup database whose -wal holds no rows stays refused setup.not_ready when
 it("in the held state, an invoice record refuses Start again kept-records even when the fiscal module lists its invoice table, and every other append-only table, as deletable, and nothing changes", async () => {
   // A sale also writes append-only rows outside the invoice table; listing them all leaves kept 0.
   const every = manifestSets().flatMap((set) => set.appendOnlyTables);
-  expect(every).toContain(getTableName(registrosFacturacion));
+  expect(every).toContain(getTableName(verifactuRecords));
   extraDeletable.set("fiscal-verifactu", every);
   const f = await heldSetup({ invoices: 1 });
   await expectStartAgainRefused(f, await handMade(f), {

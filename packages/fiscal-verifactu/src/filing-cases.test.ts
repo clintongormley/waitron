@@ -50,7 +50,7 @@ async function rowCount(table: string): Promise<number> {
 
 async function setEstado(registroId: string, estado: string): Promise<void> {
   await suite.db.execute(
-    sql`update envios set estado = ${estado} where registro_id = ${registroId}`,
+    sql`update verifactu_submissions set estado = ${estado} where registro_id = ${registroId}`,
   );
 }
 
@@ -464,7 +464,9 @@ describe("listFilingCases", () => {
   it("changes no submission row when a case is resolved", async () => {
     const { registroId, opened } = await openCaseOnFirstRecord();
     await setEstado(registroId, "rechazado");
-    const before = await suite.db.execute(sql`select * from envios order by registro_id`);
+    const before = await suite.db.execute(
+      sql`select * from verifactu_submissions order by registro_id`,
+    );
 
     await inTx((tx) =>
       recordCaseEvent(tx, {
@@ -477,7 +479,9 @@ describe("listFilingCases", () => {
       }),
     );
 
-    const after = await suite.db.execute(sql`select * from envios order by registro_id`);
+    const after = await suite.db.execute(
+      sql`select * from verifactu_submissions order by registro_id`,
+    );
     expect(after.rows).toEqual(before.rows);
   });
 });

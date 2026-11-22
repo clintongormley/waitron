@@ -2,7 +2,7 @@ import { nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
-import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { certificateAlerts } from "./certificate-alerts.js";
@@ -33,25 +33,25 @@ async function install(nodeId: string, kind: CertKind, validUntil = END): Promis
   );
 }
 
-function alertsAt(at: string, nodeId: string = TENANT_A.nodeId) {
+function alertsAt(at: string, nodeId: string = TAXPAYER_A.nodeId) {
   return withTransaction(suite.db, (tx) => certificateAlerts(tx, { nodeId }, new Date(at)));
 }
 
 describe("certificateAlerts", () => {
   it("raises nothing when the node has no install", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     await expect(alertsAt("2026-10-24T23:00:00Z")).resolves.toEqual([]);
   });
 
   it("raises nothing for a representative certificate 61 days from its end", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
     await expect(alertsAt("2026-08-25T10:00:00Z")).resolves.toEqual([]);
   });
 
   it("warns 60 days before a representative certificate ends, since that day's local midnight", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
     await expect(alertsAt("2026-08-26T10:00:00Z")).resolves.toEqual([
       {
         key: "fiscal.certificate_expiring",
@@ -65,8 +65,8 @@ describe("certificateAlerts", () => {
   });
 
   it("raises the same code as an error 14 days before a representative certificate ends", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
     await expect(alertsAt("2026-10-11T10:00:00Z")).resolves.toEqual([
       {
         key: "fiscal.certificate_expiring",
@@ -80,8 +80,8 @@ describe("certificateAlerts", () => {
   });
 
   it("says the certificate has expired from the instant it ends", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
     await expect(alertsAt("2026-10-24T23:00:00Z")).resolves.toEqual([
       {
         key: "fiscal.certificate_expired",
@@ -95,8 +95,8 @@ describe("certificateAlerts", () => {
   });
 
   it("warns 90 days before a seal certificate ends, and not the day before", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "sello");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "sello");
     await expect(alertsAt("2026-07-26T10:00:00Z")).resolves.toEqual([]);
     await expect(alertsAt("2026-07-27T10:00:00Z")).resolves.toEqual([
       {
@@ -111,18 +111,18 @@ describe("certificateAlerts", () => {
   });
 
   it("raises nothing for another node's expired certificate", async () => {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     await install("other-node", "representante");
     await expect(alertsAt("2026-10-24T23:00:00Z")).resolves.toEqual([]);
     await expect(alertsAt("2026-10-24T23:00:00Z", "other-node")).resolves.toHaveLength(1);
   });
 
   it("reads only the node's latest install", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
     await withTransaction(suite.db, (tx) =>
       recordInstall(tx, {
-        nodeId: TENANT_A.nodeId,
+        nodeId: TAXPAYER_A.nodeId,
         installedAt: new Date("2026-10-20T09:00:00.000Z"),
         source: "dashboard",
         personId: "p-1",
@@ -141,11 +141,11 @@ describe("certificateAlerts", () => {
   });
 
   it("raises the expiry alert on the box that took over from the one that installed it", async () => {
-    await seedTenantNodeSif(suite.db);
-    await install(TENANT_A.nodeId, "representante");
-    await suite.db.insert(nodes).values({ id: TENANT_A.nodeId2, name: "Node 2" });
-    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
-    await expect(alertsAt("2026-10-19T10:00:00Z", TENANT_A.nodeId2)).resolves.toMatchObject([
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "representante");
+    await suite.db.insert(nodes).values({ id: TAXPAYER_A.nodeId2, name: "Node 2" });
+    await recordTakeover(suite.db, TAXPAYER_A.nodeId, TAXPAYER_A.nodeId2);
+    await expect(alertsAt("2026-10-19T10:00:00Z", TAXPAYER_A.nodeId2)).resolves.toMatchObject([
       { code: "fiscal.certificate_expiring", params: { days: 6, date: "2026-10-25" } },
     ]);
   });

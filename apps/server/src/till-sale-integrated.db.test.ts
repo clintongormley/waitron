@@ -302,7 +302,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const rows = suite.db.all<{ count: string }>(sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
   `);
@@ -430,7 +430,7 @@ describe("active fiscal conflict stops new money", () => {
     cause: "fiscal.huella_divergente" | "fiscal.duplicado_anulado",
   ) {
     const [record] = suite.db.all<{ id: string }>(sql`
-      select id from registros_facturacion where node_id = ${cfg.nodeId} order by secuencia limit 1
+      select id from verifactu_records where node_id = ${cfg.nodeId} order by secuencia limit 1
     `);
     await withTransaction(suite.db, async (tx) => {
       const opened = await openFilingCase(tx, {
@@ -469,7 +469,7 @@ describe("active fiscal conflict stops new money", () => {
         await originalSale(cfg, coffee);
         await seedConflict(cfg, cause);
         const series = await suite.db.select().from(invoiceSeries);
-        const records = await suite.db.execute(sql`select * from registros_facturacion`);
+        const records = await suite.db.execute(sql`select * from verifactu_records`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
         const id = randomUUID();
@@ -502,7 +502,7 @@ describe("active fiscal conflict stops new money", () => {
         expect(await paymentCount(id)).toBe(0);
         expect(await saleCount(id)).toBe(0);
         expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
-        expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(records);
+        expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(records);
         expect(await suite.db.select().from(printJobs)).toEqual(jobs);
       },
     );
@@ -522,7 +522,7 @@ describe("active fiscal conflict stops new money", () => {
         });
         await seedConflict(cfg, cause);
         const series = await suite.db.select().from(invoiceSeries);
-        const records = await suite.db.execute(sql`select * from registros_facturacion`);
+        const records = await suite.db.execute(sql`select * from verifactu_records`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
         const refusal = await payReader(
@@ -555,7 +555,7 @@ describe("active fiscal conflict stops new money", () => {
         expect(await saleCount(id)).toBe(0);
         expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
         expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
-        expect(await suite.db.execute(sql`select * from registros_facturacion`)).toEqual(records);
+        expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(records);
         expect(await suite.db.select().from(printJobs)).toEqual(jobs);
         expect(provider.refundCalls).toEqual([]);
       },

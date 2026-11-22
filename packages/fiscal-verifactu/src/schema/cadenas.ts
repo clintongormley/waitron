@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, primaryKey } from "drizzle-orm/sqlite-core";
 import { count, id, label, nodes, now, table, ts } from "@waitron/db";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 /**
  * The chain head — MUTABLE, unlike everything it points at. One row per node; `selectHead`
@@ -23,10 +23,10 @@ export const cadenas = table(
     /* v8 ignore stop */
     // Monotonic across SIF identities and NEVER reset. A replacement identity resets the chain POINTER
     // (below), not the counter: resetting to zero would collide head-on with
-    // `registros_tenant_node_secuencia_uq`, and the sequence is ours anyway.
+    // `verifactu_records_node_secuencia_uq`, and the sequence is ours anyway.
     secuencia: count("secuencia").notNull().default(0),
     /* v8 ignore start */
-    ultimoRegistroId: id("ultimo_registro_id").references(() => registrosFacturacion.id),
+    ultimoRegistroId: id("ultimo_registro_id").references(() => verifactuRecords.id),
     /* v8 ignore stop */
     ultimaHuella: label("ultima_huella"),
     actualizadoEn: ts("actualizado_en").notNull().$defaultFn(now),

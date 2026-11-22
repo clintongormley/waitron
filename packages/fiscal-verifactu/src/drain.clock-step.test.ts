@@ -40,7 +40,7 @@ function aeat() {
 async function states(ids: string[]) {
   return (
     await suite.db.execute<{ estado: string }>(sql`
-      select estado from envios where registro_id in ${ids} order by registro_id
+      select estado from verifactu_submissions where registro_id in ${ids} order by registro_id
     `)
   ).rows.map((row) => row.estado);
 }
@@ -48,7 +48,9 @@ async function states(ids: string[]) {
 describe("drain after the clock steps back — a record's retry time", () => {
   it("files a chain's records together when their retry times lie further ahead than the longest retry wait", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    await suite.db.execute(sql`update envios set proximo_intento_en = ${ahead(STEP_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 
@@ -60,7 +62,7 @@ describe("drain after the clock steps back — a record's retry time", () => {
   it("files a record whose retry time lies one millisecond further ahead than the longest retry wait", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(
-      sql`update envios set proximo_intento_en = ${ahead(BACKOFF_MAX_MS + 1)}`,
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(BACKOFF_MAX_MS + 1)}`,
     );
 
     const result = await drain(deps(aeat().client()), NOW);
@@ -71,7 +73,9 @@ describe("drain after the clock steps back — a record's retry time", () => {
 
   it("waits for a retry time that lies exactly the longest retry wait ahead", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    await suite.db.execute(sql`update envios set proximo_intento_en = ${ahead(BACKOFF_MAX_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(BACKOFF_MAX_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 
@@ -82,7 +86,9 @@ describe("drain after the clock steps back — a record's retry time", () => {
 
   it("reports the skip retry, not the stored time, for a due record another environment's guard refuses", async () => {
     await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
-    await suite.db.execute(sql`update envios set proximo_intento_en = ${ahead(STEP_MS)}`);
+    await suite.db.execute(
+      sql`update verifactu_submissions set proximo_intento_en = ${ahead(STEP_MS)}`,
+    );
 
     const result = await drain(deps(aeat().client()), NOW);
 
@@ -96,7 +102,7 @@ describe("drain after the clock steps back — a claim left sending", () => {
   async function claimedAt(at: string) {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(
-      sql`update envios set estado = 'enviando', enviado_en = ${at}, intentos = 1`,
+      sql`update verifactu_submissions set estado = 'enviando', enviado_en = ${at}, intentos = 1`,
     );
     return seeded;
   }
@@ -137,7 +143,7 @@ describe("drain after the clock steps back — AEAT's sending wait", () => {
   async function gateAt(at: string) {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${at}, ${WAIT_MS / 1000})
     `);
     return seeded;
@@ -146,7 +152,7 @@ describe("drain after the clock steps back — AEAT's sending wait", () => {
   async function storedGate() {
     return (
       await suite.db.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
-        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+        sql`select proximo_envio_en, tiempo_espera_seg from verifactu_sending_state`,
       )
     ).rows;
   }
@@ -214,11 +220,11 @@ describe("drain after the clock steps back — a held chain's hourly probe", () 
     for (const key of seeded.facturaKeys) fake.reject(key, 1100, "Rechazo");
     await drain(deps(fake.client()), new Date("2026-07-21T00:00:10Z"));
     const held = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
-    await suite.db.execute(sql`delete from envio_flujo`);
+    await suite.db.execute(sql`delete from verifactu_sending_state`);
     await drain(deps(fake.client()), new Date("2026-07-21T00:00:20Z"));
     expect(await states([held])).toEqual(["detenido"]);
-    await suite.db.execute(sql`update envios set enviado_en = ${at}`);
-    await suite.db.execute(sql`delete from envio_flujo`);
+    await suite.db.execute(sql`update verifactu_submissions set enviado_en = ${at}`);
+    await suite.db.execute(sql`delete from verifactu_sending_state`);
     return { fake, held };
   }
 
@@ -229,7 +235,7 @@ describe("drain after the clock steps back — a held chain's hourly probe", () 
 
     expect(result.recordsSubmitted).toBe(1);
     const sent = await suite.db.execute<{ enviado_en: string }>(
-      sql`select enviado_en from envios where registro_id = ${held}`,
+      sql`select enviado_en from verifactu_submissions where registro_id = ${held}`,
     );
     expect(sent.rows[0]!.enviado_en).toBe(NOW.toISOString());
   });

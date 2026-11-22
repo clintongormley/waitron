@@ -3,7 +3,7 @@ import { withTransaction, deployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationHost } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { createHostedHourPreparation } from "./hour-preparation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
@@ -19,11 +19,11 @@ const binding = {
   action: "setup",
   eventId: "owned-hour",
   sourceId: "first-setup:owned-attempt",
-  targetNodeId: TENANT_A.nodeId,
+  targetNodeId: TAXPAYER_A.nodeId,
 };
 const bases = SERIES_BASES;
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   // Two minutes early: a setup's settle wait then ends at NOW, whose name the cases expect.
@@ -131,7 +131,7 @@ it("the default host clock provider reaches the unchanged real activation writer
   await withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
       withTransaction(suite.db, (tx) =>
-        activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, operation),
+        activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, operation),
       ),
     ),
   );
@@ -213,7 +213,7 @@ function activate(f: ReturnType<typeof fixture>, input: unknown) {
   return withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input }, (operation) =>
       withTransaction(suite.db, (tx) =>
-        activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, operation),
+        activatePreparedModuleAllocation(tx, { nodeId: TAXPAYER_A.nodeId }, operation),
       ),
     ),
   );

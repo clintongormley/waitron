@@ -4,8 +4,8 @@ import type { ReconcileResult } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { reconcile, type ReconcileDeps, type ReconcileScope } from "./reconcile.js";
 import { imputationMonth } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { envios } from "./schema/envios.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { readLiveReconciliationSeries } from "./reconcile-series.js";
 
 export interface ReconciliationObservation {
@@ -46,19 +46,19 @@ export function createReconciliationSweep(
     if (lastTick !== undefined && now.getTime() < lastTick) next.clear();
     lastTick = now.getTime();
     const month = imputationMonth(
-      registrosFacturacion.fechaOperacion,
-      registrosFacturacion.fechaExpedicionFactura,
+      verifactuRecords.fechaOperacion,
+      verifactuRecords.fechaExpedicionFactura,
     );
     const stored = await withTransaction(deps.db, (tx) =>
       tx
         .selectDistinct({ month })
-        .from(registrosFacturacion)
-        .innerJoin(envios, eq(envios.registroId, registrosFacturacion.id))
+        .from(verifactuRecords)
+        .innerJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
         .where(
           and(
-            inArray(registrosFacturacion.nodeId, deps.scope.historyNodeIds),
-            eq(registrosFacturacion.idEmisorFactura, deps.scope.taxpayerId),
-            eq(registrosFacturacion.entorno, deps.scope.environment),
+            inArray(verifactuRecords.nodeId, deps.scope.historyNodeIds),
+            eq(verifactuRecords.idEmisorFactura, deps.scope.taxpayerId),
+            eq(verifactuRecords.entorno, deps.scope.environment),
           ),
         )
         .orderBy(month),

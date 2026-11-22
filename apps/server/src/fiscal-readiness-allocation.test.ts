@@ -14,9 +14,9 @@ import {
   FISCAL_SLOT,
   createPaperAllocationPreparation,
 } from "@waitron/fiscal-verifactu";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
 import {
   paperCustodianFingerprint,
   signPaperBlock,
@@ -215,9 +215,9 @@ it("creates the retained preproduction readiness chain from its supplied allocat
     const inspect = async () => {
       const store = await openVenueDatabase(databaseDir);
       try {
-        const identities = await store.venue.select().from(registroSif);
+        const identities = await store.venue.select().from(verifactuIdentities);
         const ledger = await store.venue.select().from(fiscalAllocations);
-        const records = await store.venue.select().from(registrosFacturacion);
+        const records = await store.venue.select().from(verifactuRecords);
         return { identities, ledger, records };
       } finally {
         await store.close();

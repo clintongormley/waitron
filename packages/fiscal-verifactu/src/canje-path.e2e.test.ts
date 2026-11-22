@@ -5,7 +5,7 @@ import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow, toRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedSale, seedNode, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -77,7 +77,7 @@ async function storeF3(record: RegistroAlta): Promise<string> {
     entorno: "production",
   });
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(registrosFacturacion).values(row);
+    await tx.insert(verifactuRecords).values(row);
   });
   return saleId;
 }
@@ -93,7 +93,7 @@ async function storeF3(record: RegistroAlta): Promise<string> {
  * `serializeEnvio`. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    sql`select * from verifactu_records where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
@@ -107,8 +107,8 @@ describe("the F3 canje drain path", () => {
 
     const [row] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, saleId));
     expect(row?.tipoFactura).toBe("F3");
     expect(row?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente Empresarial SL", NIF: "B12345678" }],

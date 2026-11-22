@@ -79,7 +79,7 @@ async function addSeries(purpose: "full" | "corrective") {
 function records(id: string) {
   return v.db
     .all<regime.RegistroRow>(
-      sql`select * from registros_facturacion where sale_id = ${id} order by secuencia`,
+      sql`select * from verifactu_records where sale_id = ${id} order by secuencia`,
     )
     .map((r) => regime.fromRegistroRow(decodeRegistroRow(r)));
 }
@@ -91,9 +91,9 @@ function snapshot() {
       "sale_voids",
       "sale_substitutions",
       "invoice_series",
-      "registros_facturacion",
+      "verifactu_records",
       "cadenas",
-      "envios",
+      "verifactu_submissions",
       "tenders",
       "sale_settlements",
     ].map((name) => [name, v.db.all(sql`select * from ${sql.identifier(name)} order by rowid`)]),

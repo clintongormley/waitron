@@ -10,10 +10,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { nodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
 
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import {
@@ -25,8 +25,8 @@ import {
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId };
-const standby = { nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const standby = { nodeId: TAXPAYER_A.nodeId2 };
 const bases = SERIES_BASES;
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -124,7 +124,7 @@ async function attempt<T>(
 const lifecycle = () => fiscal.ALLOCATED_FISCAL_STANDBY;
 async function rows() {
   return {
-    sif: await suite.db.select().from(registroSif),
+    sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     chains: (await suite.db.execute(sql`select * from cadenas`)).rows,
     counters: (
@@ -141,7 +141,7 @@ function refusal(reason: string) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
@@ -189,7 +189,10 @@ it("establishes only the signed dormant reservation and retains all three purpos
     bases,
   });
   expect(
-    await suite.db.select().from(registroSif).where(eq(registroSif.nodeId, standby.nodeId)),
+    await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, standby.nodeId)),
   ).toEqual([]);
   expect(
     await suite.db
@@ -266,7 +269,7 @@ it("refuses an establishment state different from the independently prepared sig
 it("binds reserve to the primary actually read by the host", async () => {
   await expect(
     attempt("reserve", (tx, operation) =>
-      lifecycle().reserve(tx, { ...primary, nodeId: TENANT_B.nodeId }, standby, operation),
+      lifecycle().reserve(tx, { ...primary, nodeId: TAXPAYER_B.nodeId }, standby, operation),
     ),
   ).rejects.toMatchObject(refusal("node_mismatch"));
 });
@@ -379,7 +382,7 @@ it("rejects another action's prepared token", async () => {
 it("rejects a token for another supplied standby", async () => {
   await expect(
     attempt("reserve", (tx, operation) =>
-      lifecycle().reserve(tx, primary, { ...standby, nodeId: TENANT_B.nodeId }, operation),
+      lifecycle().reserve(tx, primary, { ...standby, nodeId: TAXPAYER_B.nodeId }, operation),
     ),
   ).rejects.toMatchObject(refusal("node_mismatch"));
 });

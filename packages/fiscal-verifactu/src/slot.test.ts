@@ -10,7 +10,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { makeAuthority } from "../test/certificate-fixtures.js";
-import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
@@ -202,7 +202,7 @@ describe("FISCAL_SLOT.resetInFlight", () => {
     const [registroId] = seeded.registroIds;
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
-        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
+        update verifactu_submissions set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
         where registro_id = ${registroId}
       `),
     );
@@ -210,7 +210,7 @@ describe("FISCAL_SLOT.resetInFlight", () => {
     await FISCAL_SLOT.resetInFlight({ db: suite.db }, now);
 
     const rows = await suite.db.execute<{ estado: string }>(
-      sql`select estado from envios where registro_id = ${registroId}`,
+      sql`select estado from verifactu_submissions where registro_id = ${registroId}`,
     );
     expect(rows.rows).toEqual([{ estado: "pendiente" }]);
   });
@@ -341,18 +341,20 @@ describe("the fiscal readiness rejection reader", () => {
     const [rejected, halted, pending] = seeded.registroIds;
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`update envios set estado = 'rechazado', codigo_error = '1161', mensaje_error = 'Importe total incorrecto' where registro_id = ${rejected}`,
+        sql`update verifactu_submissions set estado = 'rechazado', codigo_error = '1161', mensaje_error = 'Importe total incorrecto' where registro_id = ${rejected}`,
       );
-      await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${halted}`);
       await tx.execute(
-        sql`update envios set codigo_error = '999', mensaje_error = 'Retry later' where registro_id = ${pending}`,
+        sql`update verifactu_submissions set estado = 'detenido' where registro_id = ${halted}`,
+      );
+      await tx.execute(
+        sql`update verifactu_submissions set codigo_error = '999', mensaje_error = 'Retry later' where registro_id = ${pending}`,
       );
     });
-    const before = await suite.db.execute(sql`select * from registros_facturacion order by id`);
+    const before = await suite.db.execute(sql`select * from verifactu_records order by id`);
     expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([
       { code: "1161", message: "Importe total incorrecto" },
     ]);
-    expect(await suite.db.execute(sql`select * from registros_facturacion order by id`)).toEqual(
+    expect(await suite.db.execute(sql`select * from verifactu_records order by id`)).toEqual(
       before,
     );
   });
@@ -382,10 +384,10 @@ describe("FISCAL_SLOT.certificate", () => {
   }
 
   async function setupSeal() {
-    await seedTenantNodeSif(suite.db);
+    await seedTaxpayerNodeSif(suite.db);
     const ring = testRing();
     await sealAeatSecret(
-      { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(INSTALLED_AT) },
+      { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(INSTALLED_AT) },
       {
         pfxBase64: installed.pfx.toString("base64"),
         passphrase: installed.passphrase,
@@ -400,7 +402,7 @@ describe("FISCAL_SLOT.certificate", () => {
     const card = await FISCAL_SLOT.certificate!.read(
       {
         db: suite.db,
-        nodeId: TENANT_A.nodeId,
+        nodeId: TAXPAYER_A.nodeId,
         authorize: async () => {},
         nameOf: async () => null,
       },
@@ -437,7 +439,7 @@ describe("FISCAL_SLOT.certificate", () => {
       {
         db: suite.db,
         ring,
-        nodeId: TENANT_A.nodeId,
+        nodeId: TAXPAYER_A.nodeId,
         environment: "preproduction",
         authorize: async () => ({ personId: "p-1" }),
       },

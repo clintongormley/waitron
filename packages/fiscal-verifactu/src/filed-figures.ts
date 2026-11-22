@@ -44,8 +44,8 @@ export async function filedFiguresFor(
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select r.id, r.sale_id, r.corrects_registro_id, r.desglose, r.cuota_total, r.importe_total,
         e.estado
-      from registros_facturacion as r indexed by registros_sale_idx
-      left join envios as e on e.registro_id = r.id
+      from verifactu_records as r indexed by verifactu_records_sale_idx
+      left join verifactu_submissions as e on e.registro_id = r.id
       where r.sale_id in (${sql.join(
         distinct.slice(start, start + IDS_PER_QUERY).map((id) => sql`${id}`),
         sql`, `,

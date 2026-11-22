@@ -167,7 +167,9 @@ it("saves the real module PDF privately and grants activation only for its exact
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
+  expect(
+    await venue.db.execute("select count(*) as count from verifactu_identities"),
+  ).toMatchObject({
     rows: [{ count: 0 }],
   });
 });

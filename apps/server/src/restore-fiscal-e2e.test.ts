@@ -2,7 +2,7 @@ import { readCloudVenueId, readVenueSettings, saveCloudVenueId } from "@waitron/
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
-// so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
+// so the append-only triggers on `verifactu_records`, and the schema every assertion reads,
 // are the ones a box would carry.
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
@@ -26,8 +26,8 @@ import {
 import {
   FISCAL_RESTORE,
   cadenas,
-  registroSif,
-  registrosFacturacion,
+  verifactuIdentities,
+  verifactuRecords,
 } from "@waitron/fiscal-verifactu";
 import {
   applyMigrations,
@@ -91,7 +91,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "corrective" });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "FF", purpose: "full" });
   await stampDeployment(db, "preproduction");
-  await db.insert(registroSif).values({
+  await db.insert(verifactuIdentities).values({
     id: F.sifId,
     nodeId: F.nodeId,
     nif: "89890001K",
@@ -115,7 +115,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     fiscalState: "recorded",
   });
   const [registro] = await db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       source: "device",
       deviceId: sql`(select id from devices)`,
@@ -140,7 +140,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
       tipoHuella: "01",
       huella: HUELLA,
     })
-    .returning({ id: registrosFacturacion.id });
+    .returning({ id: verifactuRecords.id });
   // The chain head: no row exists until an append or a registration creates one — insert it
   // explicitly, pointing at the record, at sequence 1 (both pointers set: `cadenas_puntero_ck`).
   await db.insert(cadenas).values({
@@ -409,12 +409,12 @@ describe("fiscal restore, end to end", () => {
     try {
       const sifs = await db
         .select({
-          numeroInstalacion: registroSif.numeroInstalacion,
-          revocadoEn: registroSif.revocadoEn,
+          numeroInstalacion: verifactuIdentities.numeroInstalacion,
+          revocadoEn: verifactuIdentities.revocadoEn,
         })
-        .from(registroSif)
-        .where(eq(registroSif.nodeId, F.nodeId))
-        .orderBy(registroSif.numeroInstalacion);
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.nodeId, F.nodeId))
+        .orderBy(verifactuIdentities.numeroInstalacion);
       expect(sifs).toHaveLength(2);
       expect(sifs[0]).toMatchObject({ numeroInstalacion: "1" });
       expect(sifs[0]?.revocadoEn).not.toBeNull();
@@ -463,15 +463,13 @@ describe("fiscal restore, end to end", () => {
         const restored = await readImageBytes(tx, images[0]!.filename);
         expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
       });
-      const ledger = await db
-        .select({ huella: registrosFacturacion.huella })
-        .from(registrosFacturacion);
+      const ledger = await db.select({ huella: verifactuRecords.huella }).from(verifactuRecords);
       expect(ledger).toHaveLength(1);
       // `execute()` throws the engine's error itself; drizzle's `run()` wraps it, so
       // `restore-fiscal-receipt.test.ts` reads `.cause` instead.
       const blocked = ((): { errcode?: number; message?: string } | undefined => {
         try {
-          db.execute(sql`update registros_facturacion set huella = ${"E".repeat(64)}`);
+          db.execute(sql`update verifactu_records set huella = ${"E".repeat(64)}`);
           return undefined;
         } catch (error) {
           return error as { errcode?: number; message?: string };
@@ -482,7 +480,7 @@ describe("fiscal restore, end to end", () => {
         "the restored ledger accepted an UPDATE — the append-only trigger is inert",
       ).toBeDefined();
       expect(blocked?.errcode).toBe(SQLITE_CONSTRAINT_TRIGGER);
-      expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
+      expect(blocked?.message).toMatch(/verifactu_records is append-only/);
       expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           modulesWithSets(ALL_MODULES).map((m) => [
@@ -540,9 +538,9 @@ describe("fiscal restore, end to end", () => {
     const store = await openVenueDatabase(dirs.venueDir);
     try {
       const live = await store.venue
-        .select({ numeroInstalacion: registroSif.numeroInstalacion })
-        .from(registroSif)
-        .where(isNull(registroSif.revocadoEn));
+        .select({ numeroInstalacion: verifactuIdentities.numeroInstalacion })
+        .from(verifactuIdentities)
+        .where(isNull(verifactuIdentities.revocadoEn));
       expect(live).toEqual([{ numeroInstalacion: "1" }]);
       expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
@@ -594,8 +592,8 @@ describe("fiscal restore, end to end", () => {
     const store = await openVenueDatabase(dirs.venueDir);
     try {
       const sifs = await store.venue
-        .select({ numeroInstalacion: registroSif.numeroInstalacion })
-        .from(registroSif);
+        .select({ numeroInstalacion: verifactuIdentities.numeroInstalacion })
+        .from(verifactuIdentities);
       expect(sifs).toHaveLength(1); // the hook's new row rolled back
       expect(sifs).toEqual([{ numeroInstalacion: "1" }]);
       expect(await store.venue.select().from(fiscalAllocations)).toEqual([]);

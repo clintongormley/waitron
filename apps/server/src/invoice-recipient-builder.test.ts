@@ -4,13 +4,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
-import { cadenas, envios, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import {
+  cadenas,
+  verifactuSubmissions,
+  verifactuRecords,
+  VerifactuBackend,
+} from "@waitron/fiscal-verifactu";
 import {
   decodeRegistroRow,
   fromRegistroRow,
   type RegistroRow,
 } from "@waitron/fiscal-verifactu/src/registro-row.js";
-import { seedTenantWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayerWithSif } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, decimal, jobOrigin, saleId } from "@waitron/shared";
@@ -18,11 +23,11 @@ import { validate, type Destinatario, type RegistroAlta } from "@waitron/verifac
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const issuedAt = new Date("2026-03-01T12:05:00.000Z");
-let seeded: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let seeded: Awaited<ReturnType<typeof seedTaxpayerWithSif>>;
 let backend: VerifactuBackend;
 
 beforeEach(async () => {
-  seeded = await seedTenantWithSif(suite.db);
+  seeded = await seedTaxpayerWithSif(suite.db);
   backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
@@ -136,13 +141,13 @@ describe.each(["F1", "F3"] as const)("%s accepted recipient identity", (kind) =>
     const ref = await record(input, kind);
     const [stored] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, ref.recordId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, ref.recordId));
     expect(stored?.tipoFactura).toBe(kind);
     expect(stored?.destinatarios).toEqual({ IDDestinatario: [test.expected] });
     const rows = suite.db.all<RegistroRow>(
       // Read the persisted record rather than validating an independently rebuilt input.
-      sql`select * from registros_facturacion where id = ${ref.recordId}`,
+      sql`select * from verifactu_records where id = ${ref.recordId}`,
     );
     const registro = fromRegistroRow(decodeRegistroRow(rows[0]!)) as RegistroAlta;
     expect(validate(registro, { now: issuedAt })).toEqual([]);
@@ -230,9 +235,9 @@ describe.each(["F1", "F3"] as const)("%s refused recipient identity", (kind) => 
     await withTransaction(suite.db, (tx) => backend.recordSale(tx, original));
     const input = await sale(recipient as Counterparty, 2);
     const before = {
-      records: await suite.db.select().from(registrosFacturacion),
+      records: await suite.db.select().from(verifactuRecords),
       head: await suite.db.select().from(cadenas),
-      outbox: await suite.db.select().from(envios),
+      outbox: await suite.db.select().from(verifactuSubmissions),
     };
     const error = await captureError(() =>
       withTransaction(suite.db, (tx) =>
@@ -245,8 +250,8 @@ describe.each(["F1", "F3"] as const)("%s refused recipient identity", (kind) => 
     if (!(error instanceof AppError)) throw error;
     expect(error.code).toBe("fiscal.record_invalid");
     expect(error.params).toEqual({ fields: [field], codes: ["RECIPIENT_IDENTIFIER_INVALID"] });
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual(before.records);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual(before.records);
     expect(await suite.db.select().from(cadenas)).toEqual(before.head);
-    expect(await suite.db.select().from(envios)).toEqual(before.outbox);
+    expect(await suite.db.select().from(verifactuSubmissions)).toEqual(before.outbox);
   });
 });

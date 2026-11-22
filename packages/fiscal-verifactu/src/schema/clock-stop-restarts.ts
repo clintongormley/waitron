@@ -1,6 +1,6 @@
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, newId, nodes, table, ts } from "@waitron/db";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 /**
  * Written by nothing: kept for the go-live migration squash (A760) to drop. Declared `appendOnly()`
@@ -21,7 +21,7 @@ export const clockStopRestarts = table(
     clockAt: ts("clock_at").notNull(),
     registroId: id("registro_id")
       .notNull()
-      .references(() => registrosFacturacion.id),
+      .references(() => verifactuRecords.id),
     recordAt: ts("record_at").notNull(),
     proof: json<unknown>("proof").notNull(),
   },

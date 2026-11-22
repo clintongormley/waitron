@@ -12,7 +12,7 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 import { appendToChain, type PendingRegistro } from "./chain.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { readFilingWarnings } from "./filing-warnings.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 // A totals warning cannot arise from a record Waitron builds, so the real `validate` runs and
@@ -101,12 +101,12 @@ async function append(node: SeededNode, registro: PendingRegistro): Promise<stri
 async function recordOf(id: string) {
   const [row] = await suite.db
     .select({
-      numSerieFactura: registrosFacturacion.numSerieFactura,
-      fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
-      tipoRegistro: registrosFacturacion.tipoRegistro,
+      numSerieFactura: verifactuRecords.numSerieFactura,
+      fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
+      tipoRegistro: verifactuRecords.tipoRegistro,
     })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, id));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, id));
   return row!;
 }
 

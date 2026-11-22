@@ -342,11 +342,11 @@ async function frozenUnitLabels(
   };
 }
 
-/** How many chained `registros_facturacion` rows exist for this working order's sale. */
+/** How many chained `verifactu_records` rows exist for this working order's sale. */
 async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
-    from registros_facturacion r
+    from verifactu_records r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
   `);

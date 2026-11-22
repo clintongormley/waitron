@@ -125,9 +125,9 @@ function facts(directory: string) {
       allocations: all(
         "select event_key, allocation_key, node_id, environment from fiscal_allocations",
       ),
-      identities: all("select id, node_id, numero_instalacion from registro_sif"),
+      identities: all("select id, node_id, numero_instalacion from verifactu_identities"),
       series: all("select id, code, purpose, next_number from invoice_series order by code"),
-      records: all("select id, entorno, num_serie_factura, huella from registros_facturacion"),
+      records: all("select id, entorno, num_serie_factura, huella from verifactu_records"),
       sales: all("select id from sales"),
     };
   } finally {

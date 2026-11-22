@@ -85,7 +85,7 @@ function retained() {
       "settings",
       "nodes",
       "invoice_series",
-      "registro_sif",
+      "verifactu_identities",
       "fiscal_allocations",
       "fiscal_reservations",
     ].map((table) => [

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, json, newId, table, ts } from "@waitron/db";
 import { filingCases } from "./filing-cases.js";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 import { CONFLICT_CAUSES, type ConflictEvidence } from "../conflict-types.js";
 export type { ConflictCause, ConflictComparison, ConflictEvidence } from "../conflict-types.js";
@@ -15,7 +15,7 @@ export const fiscalConflictEvidence = table(
     id: id("id").primaryKey().$defaultFn(newId),
     registroId: id("registro_id")
       .notNull()
-      .references(() => registrosFacturacion.id),
+      .references(() => verifactuRecords.id),
     caseId: id("case_id")
       .notNull()
       .references(() => filingCases.id),

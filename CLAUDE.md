@@ -584,7 +584,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   A read that wants both says why at the query. Nothing guards it.
   [Receipt](docs/developers/conventions-data.md#every-read-of-printers-names-its-kind).
 - **Declare table/column types through `packages/db/src/schema/columns.ts`, never direct engine
-  builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/registros.ts`. Guard:
+  builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/verifactu-records.ts`. Guard:
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
 - **Money columns hold whole cents; convert at the row with `decimalToCents`, `centsToDecimal`,
   or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
@@ -976,7 +976,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   explains it. Guards: stream loop/pause e2e, health bucket-copy cases and the threshold cases in
   `apps/server/src/alert-sources.test.ts`, weaker than the rule: named cases only; stream cases skip
   without binaries.
-- **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
+- **`verifactu_records` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
   is weaker than its name. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).

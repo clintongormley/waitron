@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
 import { afterEach, expect, vi } from "vitest";
 import { type StartAgainSummary } from "@waitron/provisioning";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
 import {
   createFirstSetupResolutionActions,
   type StartAgainFirstSetupRequest,
@@ -244,7 +244,7 @@ const exists = (path: string) =>
 
 const venueDb = (f: Pick<Held, "roots">) => join(f.roots.venueDir, "venue.db");
 
-const invoiceTable = getTableName(registrosFacturacion);
+const invoiceTable = getTableName(verifactuRecords);
 
 const labelOf = async (f: Held) => (await f.host.resolution.inspectFirstSetupResolution()).database;
 

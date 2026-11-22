@@ -5,7 +5,7 @@ import { captureError, withTransaction, writeNodeMembership } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
@@ -48,9 +48,9 @@ function chart(
 
 async function recordsOf(node: SeededNode): Promise<number> {
   const rows = await suite.db
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.nodeId, node.nodeId));
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.nodeId, node.nodeId));
   return rows.length;
 }
 

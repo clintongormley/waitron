@@ -8,7 +8,7 @@ import {
   type ModuleOperationInput,
 } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import * as preparation from "./allocation-preparation.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { AllocationOperationEvidence } from "./allocation-operation.js";
@@ -19,11 +19,11 @@ import {
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -117,7 +117,7 @@ function refusal(reason: string) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -160,7 +160,9 @@ it("activates every purpose through the public module preparation seat", async (
   expect(rows[0]?.approval).toEqual(approval);
   expect(rows[0]?.result).toEqual(result);
   expect(
-    await suite.db.select({ identity: registroSif.numeroInstalacion }).from(registroSif),
+    await suite.db
+      .select({ identity: verifactuIdentities.numeroInstalacion })
+      .from(verifactuIdentities),
   ).toEqual([{ identity: "P000042" }]);
 });
 
@@ -257,7 +259,7 @@ it("rolls back activation when the later host write refuses", async () => {
     }),
   ).rejects.toThrow("later-host-refusal");
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
 });
 

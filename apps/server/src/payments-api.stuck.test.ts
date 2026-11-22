@@ -1162,7 +1162,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     ).toEqual(expected);
     expect(
       suite.db.all(sql`
-        select r.source, r.device_id from registros_facturacion r
+        select r.source, r.device_id from verifactu_records r
         join sales s on s.id = r.sale_id where s.working_order_id = ${orderId}`),
     ).toEqual(expected);
   });

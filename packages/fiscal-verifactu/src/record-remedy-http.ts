@@ -138,7 +138,7 @@ export async function applyCorrectedRecordFacts(
   generation.requireWritable();
   const {
     rows: [rawTarget],
-  } = await tx.execute(sql`select * from registros_facturacion where id = ${registroId}`);
+  } = await tx.execute(sql`select * from verifactu_records where id = ${registroId}`);
   if (rawTarget === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
   const target = decodeRegistroRow(rawTarget);
   const source = await generation.returnSource?.(tx);

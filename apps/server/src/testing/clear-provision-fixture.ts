@@ -27,7 +27,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "device_profiles",
       "persons",
       "cadenas",
-      "registro_sif",
+      "verifactu_identities",
       "invoice_series",
       "nodes",
       "kitchen_stations",

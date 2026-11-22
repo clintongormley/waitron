@@ -1227,7 +1227,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 120_000);
 
   function expectThrowawayVenue(db: Database, taxId: string): void {
-    expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
+    expect(db.all(sql`select numero_instalacion from verifactu_identities`)).toEqual([
       { numero_instalacion: "0CNNW" },
     ]);
     expect(
@@ -1448,7 +1448,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         "deployment",
         "taxpayer",
         "nodes",
-        "registro_sif",
+        "verifactu_identities",
         "fiscal_allocations",
         "invoice_series",
       ]) {

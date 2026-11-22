@@ -321,7 +321,7 @@ const ADDED_TABLES = [
   "drawer_entries",
   "fiscal_conflict_evidence",
   "fiscal_lookup_conflicts",
-  "fiscal_series_conflicts",
+  "verifactu_series_conflicts",
   "handover_activations",
   "handover_return_batches",
   "invoice_correction_refunds",
@@ -410,7 +410,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
     ["last_seen_at", "deleted_at"],
   ],
   dining_tables: [["zone_id", "short_name", "short_name_key"]],
-  envios: [["csv", "technical_incidence"]],
+  verifactu_submissions: [["csv", "technical_incidence"]],
   floor_plan_tables: [["seats", "short_name"]],
   floor_reset_tables: [["seats", "short_name"]],
   invoice_deliveries: [["person_id", "made_by_retry", "printer_chosen"]],
@@ -454,7 +454,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
     ["customer_name", "name_key"],
     ["allergens", "color"],
   ],
-  registros_facturacion: [
+  verifactu_records: [
     ["source", "corrects_registro_id"],
     ["tipo_rectificativa", "subsanacion", "rechazo_previo", "sin_registro_previo"],
   ],
@@ -791,6 +791,11 @@ for (const locale of ["en", "es"] as const) {
       sessions: "till_sessions",
       management_sessions: "dashboard_sessions",
       management_account_actions: "account_actions",
+      envio_flujo: "verifactu_sending_state",
+      envios: "verifactu_submissions",
+      fiscal_certificate_installs: "verifactu_certificates",
+      registro_sif: "verifactu_identities",
+      registros_facturacion: "verifactu_records",
     };
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       expected[phase] = madridWithRenamedTables(expected[phase], tableRenames);
@@ -1129,7 +1134,7 @@ for (const locale of ["en", "es"] as const) {
           ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
         );
       }
-      const records = expected[phase].tables.registros_facturacion!;
+      const records = expected[phase].tables.verifactu_records!;
       for (const name of [
         "corrects_registro_id",
         "subsanacion",
@@ -1211,7 +1216,7 @@ for (const locale of ["en", "es"] as const) {
       records.foreignKeys.push({
         id: 4,
         seq: 0,
-        table: "registros_facturacion",
+        table: "verifactu_records",
         from: "corrects_registro_id",
         to: "id",
         on_update: "NO ACTION",

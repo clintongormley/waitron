@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let f: Awaited<ReturnType<typeof stagedHourRestore>> | undefined;
@@ -18,14 +18,14 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     f = await stagedHourRestore(suite, kind, "paper-offline-restore");
     const retained = f.journal();
-    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TAXPAYER_A.nodeId);
     const log = vi.fn();
     expect(await f.run(log)).toBe(true);
     const rows = await f.snapshot();
     expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNY", "0CNQT"]);
     expect(rows.allocations[1]?.approval.operatorId).toEqual({
       kind: "recovery-key",
-      nodeId: TENANT_A.nodeId,
+      nodeId: TAXPAYER_A.nodeId,
       eventId: "paper-offline-restore",
     });
     expect(

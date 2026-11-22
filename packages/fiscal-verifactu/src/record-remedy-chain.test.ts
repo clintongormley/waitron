@@ -8,7 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   altaFor,
   anulacionFor,
@@ -29,7 +29,7 @@ beforeEach(async () => {
 });
 
 async function rows() {
-  return suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+  return suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
 }
 
 function correction(correctsRegistroId: string, seconds: number) {
@@ -81,9 +81,7 @@ it("appends successive corrections at the live chain head while preserving invoi
     expect([row.subsanacion, row.rechazoPrevio]).toEqual(["S", "X"]);
     expect(row.saleId).toBe(saleId);
     expect(row.huella).not.toBe(original.huella);
-    const raw = await suite.db.execute(
-      sql`select * from registros_facturacion where id = ${row.id}`,
-    );
+    const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${row.id}`);
     expect(computeHuella(fromRegistroRow(decodeRegistroRow(raw.rows[0]!)))).toBe(row.huella);
   }
   expect(await readChainHead(suite.db, node.nodeId)).toEqual({
@@ -113,8 +111,8 @@ it("refuses the second simultaneous correction with a domain code and leaves the
   });
   const replacements = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.correctsRegistroId, original.id));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.correctsRegistroId, original.id));
   expect(replacements).toHaveLength(1);
   expect(await rows()).toHaveLength(2);
   expect(await readChainHead(suite.db, node.nodeId)).toEqual({
@@ -200,8 +198,8 @@ it("appends a correction of a record of the box this one took over from on this 
 
   const [row] = await suite.db
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, appended.id));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, appended.id));
   expect(row).toMatchObject({
     nodeId: successor.nodeId,
     sifId: successor.sifId,

@@ -11,9 +11,9 @@ import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-reme
 import type { RegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { queueSubmission } from "./queue-submission.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   producerFields,
   runningIdentity,
@@ -50,8 +50,8 @@ export async function applyAbsentOriginalCancellation(
   generation.requireWritable();
   const [target] = await tx
     .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.id, registroId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
   if (
     target === undefined ||
     !(await isInHistory(tx, generation.nodeId, target.nodeId)) ||
@@ -84,20 +84,23 @@ export async function applyAbsentOriginalCancellation(
     return { registroId: stored.remedyRegistroId, eventId: stored.id };
   }
   const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx.select().from(envios).where(eq(envios.registroId, registroId));
+  const [delivery] = await tx
+    .select()
+    .from(verifactuSubmissions)
+    .where(eq(verifactuSubmissions.registroId, registroId));
   const [replacement] = await tx
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.correctsRegistroId, registroId));
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.correctsRegistroId, registroId));
   const [cancellation] = await tx
-    .select({ id: registrosFacturacion.id })
-    .from(registrosFacturacion)
+    .select({ id: verifactuRecords.id })
+    .from(verifactuRecords)
     .where(
       and(
-        eq(registrosFacturacion.tipoRegistro, "anulacion"),
-        eq(registrosFacturacion.idEmisorFactura, target.idEmisorFactura),
-        eq(registrosFacturacion.numSerieFactura, target.numSerieFactura),
-        eq(registrosFacturacion.fechaExpedicionFactura, target.fechaExpedicionFactura),
+        eq(verifactuRecords.tipoRegistro, "anulacion"),
+        eq(verifactuRecords.idEmisorFactura, target.idEmisorFactura),
+        eq(verifactuRecords.numSerieFactura, target.numSerieFactura),
+        eq(verifactuRecords.fechaExpedicionFactura, target.fechaExpedicionFactura),
       ),
     );
   if (
@@ -117,7 +120,7 @@ export async function applyAbsentOriginalCancellation(
     rows: [issued],
   } = await tx.execute<Pick<RegistroRow, "source" | "device_id">>(sql`
     select source, device_id
-    from registros_facturacion indexed by registros_sale_idx
+    from verifactu_records indexed by verifactu_records_sale_idx
     where sale_id = ${target.saleId} and tipo_registro = 'alta'
       and corrects_registro_id is null
   `);

@@ -49,7 +49,7 @@ describe("cash sales while reconciliation is unknown", () => {
         });
       expect((await sell(randomUUID())).status).toBe(200);
       const before = (
-        await suite.db.execute(sql`select * from registros_facturacion order by secuencia`)
+        await suite.db.execute(sql`select * from verifactu_records order by secuencia`)
       ).rows;
       const held = gate();
       let entered = false;
@@ -104,7 +104,7 @@ describe("cash sales while reconciliation is unknown", () => {
         expect(replay.status).toBe(200);
         expect((await replay.json()).invoice.invoiceNumber).toBe("A/2");
         const records = (
-          await suite.db.execute(sql`select * from registros_facturacion order by secuencia`)
+          await suite.db.execute(sql`select * from verifactu_records order by secuencia`)
         ).rows;
         expect(records).toHaveLength(2);
         expect(records[0]).toEqual(before[0]);
@@ -113,8 +113,11 @@ describe("cash sales while reconciliation is unknown", () => {
             .rows,
         ).toEqual([{ n: 2, paid: 7000 }]);
         expect(
-          (await suite.db.execute(sql`select estado, count(*) as n from envios group by estado`))
-            .rows,
+          (
+            await suite.db.execute(
+              sql`select estado, count(*) as n from verifactu_submissions group by estado`,
+            )
+          ).rows,
         ).toEqual([{ estado: "pendiente", n: 2 }]);
       } finally {
         held.resolve();

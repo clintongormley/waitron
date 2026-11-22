@@ -81,13 +81,13 @@ it("a damaged held database with no invoice and its own pending -wal is refused 
   });
 });
 
-it("an invoice record with the envios table missing refuses kept-records even when every append-only table is listed as deletable, and nothing changes", async () => {
+it("an invoice record with the verifactu_submissions table missing refuses kept-records even when every append-only table is listed as deletable, and nothing changes", async () => {
   extraDeletable.set(
     "fiscal-verifactu",
     manifestSets().flatMap((set) => set.appendOnlyTables),
   );
   const f = await heldSetup({ invoices: 1 });
-  dropTables(f, ["envios"]);
+  dropTables(f, ["verifactu_submissions"]);
   await expectHeldRefused(f, {
     ...keptRecords,
     reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
@@ -95,7 +95,7 @@ it("an invoice record with the envios table missing refuses kept-records even wh
 });
 
 // The invoice count failing must not lose the kept count, or Start again deletes the row.
-it.each(["envios", "registros_facturacion"])(
+it.each(["verifactu_submissions", "verifactu_records"])(
   "a dashboard certificate row with the %s table missing refuses kept-records, and deletes nothing",
   async (table) => {
     const f = await heldSetup();

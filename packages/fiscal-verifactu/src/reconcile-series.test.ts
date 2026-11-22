@@ -13,7 +13,7 @@ it("reads local invoice identities once while checking a complete returned month
   const seeded = await seedPendingEnvios(suite.db, { count: 12 });
   const records = (
     await suite.db.execute<{ number: string; date: string }>(
-      sql`select num_serie_factura as number, fecha_expedicion_factura as date from registros_facturacion order by secuencia`,
+      sql`select num_serie_factura as number, fecha_expedicion_factura as date from verifactu_records order by secuencia`,
     )
   ).rows;
   const observations: RegistroConsultado[] = records.map((row) => ({
@@ -47,9 +47,9 @@ it("reads local invoice identities once while checking a complete returned month
       reads.mockRestore();
     }
   });
-  expect((await suite.db.execute(sql`select * from fiscal_series_conflicts`)).rows).toEqual([]);
+  expect((await suite.db.execute(sql`select * from verifactu_series_conflicts`)).rows).toEqual([]);
   expect(
-    (await suite.db.execute(sql`select count(*) as count from registros_facturacion`)).rows,
+    (await suite.db.execute(sql`select count(*) as count from verifactu_records`)).rows,
   ).toEqual([{ count: 12 }]);
 });
 
@@ -87,7 +87,7 @@ it("an invoice the old box holds is not outside this box's series of the same co
       ),
     );
   const conflicts = async () =>
-    (await suite.db.execute(sql`select invoice_identity from fiscal_series_conflicts`)).rows;
+    (await suite.db.execute(sql`select invoice_identity from verifactu_series_conflicts`)).rows;
 
   await retain([spare.nodeId, old.nodeId]);
   expect(await conflicts()).toEqual([]);

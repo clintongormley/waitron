@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { dashboardSessions, persons } from "@waitron/identity";
 
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import * as allocation from "@waitron/fiscal-verifactu";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
@@ -19,13 +19,13 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -132,7 +132,7 @@ async function withFiles(
 let secret: string;
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
     .insert(invoiceSeries)
@@ -222,7 +222,7 @@ it("rejects a replacement key before the real restore hook can activate anything
       code: "promotion.break_glass_invalid",
     });
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   });
 });
@@ -236,7 +236,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
     }),
   );
   await suite.db.update(invoiceSeries).set({ nextNumber: 23 });
-  const oldSifs = await suite.db.select().from(registroSif);
+  const oldSifs = await suite.db.select().from(verifactuIdentities);
   const oldSeries = await suite.db.select().from(invoiceSeries);
   await withFiles(async (paths) => {
     const module = {
@@ -292,7 +292,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
       { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
     ]);
-    const sifs = await suite.db.select().from(registroSif);
+    const sifs = await suite.db.select().from(verifactuIdentities);
     expect(sifs).toHaveLength(2);
     expect(sifs.find((row) => row.id === oldSifs[0]!.id)).toEqual({
       ...oldSifs[0]!,

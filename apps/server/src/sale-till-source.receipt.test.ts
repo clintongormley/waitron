@@ -20,7 +20,7 @@ import {
   listAvailableProducts,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -289,15 +289,15 @@ async function registrosFor(): Promise<Registro[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({
-        deviceId: registrosFacturacion.deviceId,
-        nodeId: registrosFacturacion.nodeId,
-        secuencia: registrosFacturacion.secuencia,
-        huella: registrosFacturacion.huella,
-        anteriorHuella: registrosFacturacion.anteriorHuella,
-        entorno: registrosFacturacion.entorno,
-        numSerieFactura: registrosFacturacion.numSerieFactura,
+        deviceId: verifactuRecords.deviceId,
+        nodeId: verifactuRecords.nodeId,
+        secuencia: verifactuRecords.secuencia,
+        huella: verifactuRecords.huella,
+        anteriorHuella: verifactuRecords.anteriorHuella,
+        entorno: verifactuRecords.entorno,
+        numSerieFactura: verifactuRecords.numSerieFactura,
       })
-      .from(registrosFacturacion);
+      .from(verifactuRecords);
     return rows.sort((a, b) => a.secuencia - b.secuencia);
   });
 }
@@ -440,7 +440,7 @@ describe("a sale names the device it was rung on", () => {
     const registroRows = await suite.db.execute<{
       source: string | null;
       device_id: string | null;
-    }>(sql`select source, device_id from registros_facturacion order by secuencia`);
+    }>(sql`select source, device_id from verifactu_records order by secuencia`);
     expect(registroRows.rows).toEqual(expected);
   });
 });

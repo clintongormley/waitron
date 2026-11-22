@@ -11,7 +11,7 @@ import {
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { toRegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   altaFor,
   anulacionFor,
@@ -53,7 +53,7 @@ it.each(unsupportedAlta)(
     });
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await tx.insert(registrosFacturacion).values(
+        await tx.insert(verifactuRecords).values(
           toRegistroRow(record, {
             origin: deviceOrigin(node.deviceId),
             nodeId: node.nodeId,
@@ -69,7 +69,7 @@ it.each(unsupportedAlta)(
       code: "fiscal.record_invalid",
       params: { fields: [field], codes: ["UNSUPPORTED_FIELD"] },
     });
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
   },
 );
 
@@ -180,7 +180,7 @@ it.each([
     });
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await tx.insert(registrosFacturacion).values(
+        await tx.insert(verifactuRecords).values(
           toRegistroRow(record, {
             origin: deviceOrigin(node.deviceId),
             nodeId: node.nodeId,
@@ -197,7 +197,7 @@ it.each([
       code: "fiscal.record_invalid",
       params: { fields: [field], codes: ["UNSUPPORTED_FIELD"] },
     });
-    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
   },
 );
 
@@ -205,7 +205,7 @@ it("leaves original records and the chain head intact when a correction contains
   const original = await withTransaction(suite.db, (tx) =>
     appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
   );
-  const before = await suite.db.select().from(registrosFacturacion);
+  const before = await suite.db.select().from(verifactuRecords);
   const head = await readChainHead(suite.db, node.nodeId);
   const pending = altaFor(node, saleId, 1, 2, "preproduction");
   await expect(
@@ -228,6 +228,6 @@ it("leaves original records and the chain head intact when a correction contains
       codes: ["UNSUPPORTED_FIELD"],
     },
   });
-  expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);
+  expect(await suite.db.select().from(verifactuRecords)).toEqual(before);
   expect(await readChainHead(suite.db, node.nodeId)).toEqual(head);
 });

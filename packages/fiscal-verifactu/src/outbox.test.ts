@@ -35,19 +35,23 @@ const press = (now: Date) => withTransaction(suite.db, (tx) => retryWaitingRecor
 
 async function envioRow(registroId: string) {
   const rows = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from envios where registro_id = ${registroId}`,
+    sql`select * from verifactu_submissions where registro_id = ${registroId}`,
   );
   return rows.rows[0]!;
 }
 
 async function allEnvios() {
   return (
-    await suite.db.execute<Record<string, unknown>>(sql`select * from envios order by registro_id`)
+    await suite.db.execute<Record<string, unknown>>(
+      sql`select * from verifactu_submissions order by registro_id`,
+    )
   ).rows;
 }
 
 async function flujo() {
-  return (await suite.db.execute<Record<string, unknown>>(sql`select * from envio_flujo`)).rows;
+  return (
+    await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)
+  ).rows;
 }
 
 describe("readOutbox", () => {
@@ -133,31 +137,31 @@ describe("retryWaitingRecords", () => {
     ];
     const later = "2026-07-21T05:00:00.000Z";
     await suite.db.execute(sql`
-      update envios set estado = 'aceptado', confirmado_en = '2026-07-21T00:00:30.000Z',
+      update verifactu_submissions set estado = 'aceptado', confirmado_en = '2026-07-21T00:00:30.000Z',
         proximo_intento_en = ${later}
       where registro_id = ${aceptado}
     `);
     await suite.db.execute(sql`
-      update envios set estado = 'enviando', enviado_en = '2026-07-21T00:00:40.000Z',
+      update verifactu_submissions set estado = 'enviando', enviado_en = '2026-07-21T00:00:40.000Z',
         proximo_intento_en = ${later}
       where registro_id = ${enviando}
     `);
     await suite.db.execute(sql`
-      update envios set estado = 'retenido', proximo_intento_en = ${later}
+      update verifactu_submissions set estado = 'retenido', proximo_intento_en = ${later}
       where registro_id = ${retenido}
     `);
     await suite.db.execute(sql`
-      update envios set estado = 'detenido', incidencia = 1, enviado_en = '2026-07-21T00:00:50.000Z',
+      update verifactu_submissions set estado = 'detenido', incidencia = 1, enviado_en = '2026-07-21T00:00:50.000Z',
         proximo_intento_en = ${later}
       where registro_id = ${detenido}
     `);
     await suite.db.execute(sql`
-      update envios set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
+      update verifactu_submissions set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
       where registro_id = ${behind}
     `);
     const other = await seedSecondChain(suite.db, seeded, 6);
     await suite.db.execute(sql`
-      update envios set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
+      update verifactu_submissions set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
       where registro_id = ${other.registroId}
     `);
 
@@ -185,11 +189,11 @@ describe("retryWaitingRecords", () => {
     const [earlier, detenido, behind] = seeded.registroIds as [string, string, string];
     const later = "2026-07-21T05:00:00.000Z";
     await suite.db.execute(sql`
-      update envios set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
+      update verifactu_submissions set intentos = 1, incidencia = 1, proximo_intento_en = ${later}
       where registro_id in (${earlier}, ${behind})
     `);
     await suite.db.execute(sql`
-      update envios set estado = 'detenido', incidencia = 1, enviado_en = '2026-07-21T00:00:50.000Z',
+      update verifactu_submissions set estado = 'detenido', incidencia = 1, enviado_en = '2026-07-21T00:00:50.000Z',
         proximo_intento_en = ${later}
       where registro_id = ${detenido}
     `);

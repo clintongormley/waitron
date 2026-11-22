@@ -316,7 +316,12 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
 
     // The proof: no fiscal record exists anywhere for this venue — not a registro, not a SIF row,
     // not a chain head, not an outbox envío — across a sale, a void, a correction and a substitution.
-    for (const table of ["registros_facturacion", "registro_sif", "cadenas", "envios"]) {
+    for (const table of [
+      "verifactu_records",
+      "verifactu_identities",
+      "cadenas",
+      "verifactu_submissions",
+    ]) {
       expect(await countRows(table)).toBe(0);
     }
 

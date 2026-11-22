@@ -25,7 +25,7 @@ const suite = useVenueDb({
   },
 });
 afterEach(async () => {
-  await suite.db.execute(sql`delete from envios`);
+  await suite.db.execute(sql`delete from verifactu_submissions`);
 });
 
 /** Every table in the database, drizzle's per-package journals included, SQLite's own excluded. */
@@ -59,10 +59,10 @@ describe("migration composition across packages", () => {
     // Core's tables and the module's tables coexist, created by independent migration sets.
     expect(names).toContain("sales");
     expect(names).toContain("devices");
-    expect(names).toContain("registros_facturacion");
+    expect(names).toContain("verifactu_records");
     expect(names).toContain("cadenas");
-    expect(names).toContain("registro_sif");
-    expect(names).toContain("envios");
+    expect(names).toContain("verifactu_identities");
+    expect(names).toContain("verifactu_submissions");
   });
 
   it("keeps the two journals separate", async () => {
@@ -95,10 +95,10 @@ describe("migration composition across packages", () => {
   });
 });
 
-describe("envio_flujo migration", () => {
-  it("creates envio_flujo as a one-row table with both value columns not-null", async () => {
+describe("verifactu_sending_state migration", () => {
+  it("creates verifactu_sending_state as a one-row table with both value columns not-null", async () => {
     const db = suite.db;
-    const byName = await nullabilityOf(db, "envio_flujo");
+    const byName = await nullabilityOf(db, "verifactu_sending_state");
     expect(byName).toMatchObject({
       id: "NO",
       proximo_envio_en: "NO",
@@ -106,17 +106,17 @@ describe("envio_flujo migration", () => {
     });
 
     await db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, '2026-07-21T00:00:00Z', 60)
     `);
     const second = await captureError(async () =>
       db.execute(sql`
-        insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+        insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
         values (2, '2026-07-21T00:00:00Z', 60)
       `),
     );
-    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // envio_flujo_singleton_ck
-    await db.execute(sql`delete from envio_flujo`);
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // verifactu_sending_state_singleton_ck
+    await db.execute(sql`delete from verifactu_sending_state`);
   });
 });
 
@@ -134,24 +134,26 @@ describe("acks migration", () => {
   });
 });
 
-describe("envios.reconciled_resubmit_at migration", () => {
-  it("adds envios.reconciled_resubmit_at (nullable)", async () => {
+describe("verifactu_submissions.reconciled_resubmit_at migration", () => {
+  it("adds verifactu_submissions.reconciled_resubmit_at (nullable)", async () => {
     const db = suite.db;
-    expect(await nullabilityOf(db, "envios")).toMatchObject({ reconciled_resubmit_at: "YES" });
+    expect(await nullabilityOf(db, "verifactu_submissions")).toMatchObject({
+      reconciled_resubmit_at: "YES",
+    });
   });
 });
 
-describe("registros_facturacion.entorno migration", () => {
-  it("adds registros_facturacion.entorno (nullable)", async () => {
+describe("verifactu_records.entorno migration", () => {
+  it("adds verifactu_records.entorno (nullable)", async () => {
     const db = suite.db;
-    expect(await nullabilityOf(db, "registros_facturacion")).toMatchObject({ entorno: "YES" });
+    expect(await nullabilityOf(db, "verifactu_records")).toMatchObject({ entorno: "YES" });
   });
 
   it("rejects any value outside 'production'/'preproduction'", async () => {
     const db = suite.db;
     const error = await captureError(async () =>
       db.execute(sql`
-        insert into registros_facturacion (id, source, device_id, node_id, sif_id, sale_id,
+        insert into verifactu_records (id, source, device_id, node_id, sif_id, sale_id,
           secuencia, tipo_registro,
           id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
           primer_registro, sistema_informatico,
@@ -164,6 +166,6 @@ describe("registros_facturacion.entorno migration", () => {
           '2026-07-20T17:20:31.000Z')
       `),
     );
-    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true); // registros_entorno_ck
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true); // verifactu_records_entorno_ck
   });
 });

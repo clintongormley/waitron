@@ -38,7 +38,7 @@ async function fixture() {
       "device_profiles",
       "nodes",
       "invoice_series",
-      "registro_sif",
+      "verifactu_identities",
       "cadenas",
       "devices",
     ]) {
@@ -110,9 +110,10 @@ it("marks an imported prefix even when a later record is refused", async () => {
   batch.records[2]!.num_serie_factura = batch.records[0]!.num_serie_factura!;
   expect(await receive(node, batch)).toEqual({ refusal: "fiscal.return_record_clash" });
   expect(markers()).toEqual([{ record_id: prefix, received_at: receivedAt.toISOString() }]);
-  expect(
-    receiver.db.all(sql`select secuencia from registros_facturacion order by secuencia`),
-  ).toEqual([{ secuencia: 1 }, { secuencia: 2 }]);
+  expect(receiver.db.all(sql`select secuencia from verifactu_records order by secuencia`)).toEqual([
+    { secuencia: 1 },
+    { secuencia: 2 },
+  ]);
 });
 
 it("marks originals in an incomplete payment batch and rolls back with the caller", async () => {
@@ -139,7 +140,7 @@ it("marks originals in an incomplete payment batch and rolls back with the calle
   ).rejects.toBe(aborted);
   expect(markers()).toEqual([{ record_id: id, received_at: receivedAt.toISOString() }]);
   expect(
-    receiver.db.get(sql`select id from registros_facturacion where id = ${second}`),
+    receiver.db.get(sql`select id from verifactu_records where id = ${second}`),
   ).toBeUndefined();
 });
 
@@ -156,7 +157,7 @@ it("reads only marked invoices with stored bases and separate record kinds", asy
       sourceName: "Node Returning",
       generationId: node.sifId,
       installation: source.db.get<{ value: string }>(
-        sql`select numero_instalacion as value from registro_sif where id = ${node.sifId}`,
+        sql`select numero_instalacion as value from verifactu_identities where id = ${node.sifId}`,
       )!.value,
       sequence: 1,
       invoiceNumber: "A/1",
@@ -183,7 +184,7 @@ it("keeps cancellations separate and orders receipt time before chain position",
   const pending = anulacionFor(node, first.records[0]!.sale_id as never, 1, 2);
   pending.input.IDEmisorFacturaAnulada = String(first.records[0]!.id_emisor_factura);
   pending.input.SistemaInformatico.NumeroInstalacion = source.db.get<{ value: string }>(
-    sql`select numero_instalacion as value from registro_sif where id = ${node.sifId}`,
+    sql`select numero_instalacion as value from verifactu_identities where id = ${node.sifId}`,
   )!.value;
   await withTransaction(source.db, (tx) => appendToChain(tx, node.nodeId, pending));
   const second = await append(node, 2);
@@ -210,7 +211,7 @@ it("sums the stored bases exactly instead of subtracting totals, and retains cor
   const pending = altaFor(node, sale, 1, 2);
   pending.input.IDEmisorFactura = String(first.records[0]!.id_emisor_factura);
   pending.input.SistemaInformatico.NumeroInstalacion = source.db.get<{ value: string }>(
-    sql`select numero_instalacion as value from registro_sif where id = ${node.sifId}`,
+    sql`select numero_instalacion as value from verifactu_identities where id = ${node.sifId}`,
   )!.value;
   pending.input.Subsanacion = "S";
   pending.input.Desglose = ["0.10", "0.20"].map((base, i) => ({
@@ -257,7 +258,7 @@ it.each([
   const pending = altaFor(node, sale, 2, 2);
   pending.input.IDEmisorFactura = String(first.records[0]!.id_emisor_factura);
   pending.input.SistemaInformatico.NumeroInstalacion = source.db.get<{ value: string }>(
-    sql`select numero_instalacion as value from registro_sif where id = ${node.sifId}`,
+    sql`select numero_instalacion as value from verifactu_identities where id = ${node.sifId}`,
   )!.value;
   pending.input.TipoFactura = kind;
   if (kind !== "F2" && kind !== "R5")

@@ -7,7 +7,7 @@ import { readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-d
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, dashboardSessions } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
 import { establishDormantAllocation } from "@waitron/fiscal-verifactu/src/standby-allocation.js";
 import { activateAuthenticatedDormantAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
@@ -31,8 +31,8 @@ import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
-const primary = { nodeId: TENANT_A.nodeId };
-const target = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId };
+const target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -225,7 +225,7 @@ async function promote(
 async function snapshot() {
   const rows: unknown[] = [];
   for (const table of [
-    "registro_sif",
+    "verifactu_identities",
     "invoice_series",
     "cadenas",
     "fiscal_allocations",
@@ -236,7 +236,7 @@ async function snapshot() {
   return rows;
 }
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {

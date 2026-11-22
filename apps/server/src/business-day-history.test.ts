@@ -125,7 +125,7 @@ async function frozen() {
       "bill_payments",
       "refunds",
       "invoice_series",
-      "registros_facturacion",
+      "verifactu_records",
       "drawer_entries",
       "adjustments",
       "working_orders",
@@ -262,7 +262,7 @@ describe("dated business-day reporting through real storage", () => {
       "adjustments",
     ])
       expect((rows[table] as unknown[]).length).toBeGreaterThan(0);
-    expect((rows.registros_facturacion as unknown[]).length).toBeGreaterThan(0);
+    expect((rows.verifactu_records as unknown[]).length).toBeGreaterThan(0);
     expect(rows.drawer_entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "count", amount: 800 }),

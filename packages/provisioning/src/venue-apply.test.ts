@@ -460,7 +460,7 @@ describe("applyVenue", () => {
         (select count(*) from taxpayer where id = 1) as taxpayer,
         (select count(*) from nodes where id = ${result.nodeId}) as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
-        (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null) as sif,
+        (select count(*) from verifactu_identities where node_id = ${result.nodeId} and revocado_en is null) as sif,
         (select count(*) from kitchen_stations
            where is_default and active) as default_stations,
         (select count(*) from departments
@@ -487,9 +487,9 @@ describe("applyVenue", () => {
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
     expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
 
-    // registro_sif.nif came from the taxpayer's tax_id, never an argument.
+    // verifactu_identities.nif came from the taxpayer's tax_id, never an argument.
     const sif = await suite.db.execute<{ nif: string; numero_instalacion: string }>(sql`
-      select nif, numero_instalacion from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
+      select nif, numero_instalacion from verifactu_identities where node_id = ${result.nodeId} and revocado_en is null`);
     expect(sif.rows[0]?.nif).toBe("B12345678");
     expect(sif.rows[0]?.numero_instalacion).toBe("S000001");
     expect(result.seeded).toEqual([
@@ -906,7 +906,7 @@ describe("applyVenue", () => {
     });
     expect(a.nodeId).toBe(b.nodeId);
     const installs = await suite.db.execute<{ numero_instalacion: number }>(sql`
-      select numero_instalacion from registro_sif
+      select numero_instalacion from verifactu_identities
       where node_id in (${a.nodeId}, ${b.nodeId}) and revocado_en is null`);
     expect(installs.rows).toHaveLength(1);
   });
@@ -1148,12 +1148,17 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      ["taxpayer", "settings", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
-        (table) => [
-          table,
-          suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
-        ],
-      ),
+      [
+        "taxpayer",
+        "settings",
+        "nodes",
+        "invoice_series",
+        "verifactu_identities",
+        "fiscal_allocations",
+      ].map((table) => [
+        table,
+        suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
+      ]),
     );
     const changed = request("B55664422");
     Object.assign(changed, { [field]: value });

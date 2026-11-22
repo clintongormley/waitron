@@ -3,7 +3,7 @@ import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -16,8 +16,8 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId },
-  target = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TAXPAYER_A.nodeId },
+  target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = SERIES_BASES;
 const time = "2026-10-16T00:00:00.000Z";
 const digest = (v: unknown) => createHash("sha256").update(declaredHistoryBytes(v)).digest("hex");
@@ -109,7 +109,7 @@ function fixture(serial = 43) {
   return { binding, candidate, reservation, history, input, facts };
 }
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db.insert(invoiceSeries).values(bases.map((b) => ({ ...b, nodeId: primary.nodeId })));
   await withTransaction(suite.db, (tx) =>

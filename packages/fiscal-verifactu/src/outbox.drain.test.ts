@@ -53,13 +53,15 @@ const press = (now: Date) => withTransaction(suite.db, (tx) => retryWaitingRecor
 
 async function envioRow(registroId: string) {
   const rows = await suite.db.execute<Record<string, unknown>>(
-    sql`select * from envios where registro_id = ${registroId}`,
+    sql`select * from verifactu_submissions where registro_id = ${registroId}`,
   );
   return rows.rows[0]!;
 }
 
 async function flujo() {
-  return (await suite.db.execute<Record<string, unknown>>(sql`select * from envio_flujo`)).rows;
+  return (
+    await suite.db.execute<Record<string, unknown>>(sql`select * from verifactu_sending_state`)
+  ).rows;
 }
 
 /** Three records, two failed sends: each record backs off an hour (to 01:02:01) while AEAT's
@@ -69,7 +71,7 @@ async function failedTwiceWithAnHoursBackOff() {
   const h = harness();
   h.state.down = true;
   await drain(h.deps, at("00:01:00"));
-  await suite.db.execute(sql`update envios set intentos = 6`);
+  await suite.db.execute(sql`update verifactu_submissions set intentos = 6`);
   await drain(h.deps, at("00:02:01"));
   h.state.down = false;
   for (const id of seeded.registroIds) {
@@ -121,7 +123,7 @@ describe("the drain after a press", () => {
     const { state, deps } = harness();
     state.down = true;
     await drain(deps, at("00:01:00"));
-    await suite.db.execute(sql`update envios set intentos = 6`);
+    await suite.db.execute(sql`update verifactu_submissions set intentos = 6`);
     await drain(deps, at("00:02:01"));
     state.down = false;
     await appendPendingAlta(suite.db, seeded, 2);
@@ -172,7 +174,7 @@ describe("the drain after a press", () => {
     const fifth = await appendPendingAlta(suite.db, seeded, 5);
     const fifthWait = at("01:00:00").toISOString();
     await suite.db.execute(sql`
-      update envios set proximo_intento_en = ${fifthWait}, intentos = 2
+      update verifactu_submissions set proximo_intento_en = ${fifthWait}, intentos = 2
       where registro_id = ${fifth.registroId}
     `);
 

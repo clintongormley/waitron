@@ -7,10 +7,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
+import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
 import { ALL_MODULES } from "./modules.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { writeAllocationInput } from "./testing/allocation-input.js";
@@ -27,13 +27,13 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = SERIES_BASES;
 let root: string;
 let secret: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "retired-fiscal-operation-"));
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await suite.db
     .insert(invoiceSeries)
@@ -55,7 +55,7 @@ afterEach(async () => {
 async function rows(db = suite.db) {
   return {
     series: await db.select().from(invoiceSeries),
-    registrations: await db.select().from(registroSif),
+    registrations: await db.select().from(verifactuIdentities),
     allocations: await db.select().from(fiscalAllocations),
   };
 }

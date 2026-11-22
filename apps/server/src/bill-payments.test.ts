@@ -41,7 +41,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { ensureFixtureJobRole, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -497,10 +497,10 @@ describe("invoice selection before reserving new bill money", () => {
           .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
           .where(eq(sales.workingOrderId, billId));
         const records = await tx
-          .select({ nodeId: registrosFacturacion.nodeId, sifNode: registroSif.nodeId })
-          .from(registrosFacturacion)
-          .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
-          .where(eq(registrosFacturacion.saleId, saleRows[0]?.id ?? ""));
+          .select({ nodeId: verifactuRecords.nodeId, sifNode: verifactuIdentities.nodeId })
+          .from(verifactuRecords)
+          .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuRecords.sifId))
+          .where(eq(verifactuRecords.saleId, saleRows[0]?.id ?? ""));
         return { saleRows, records };
       });
       const here = venue.cfg.nodeId;

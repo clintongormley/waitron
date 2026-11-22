@@ -125,7 +125,7 @@ async function prepare(v: BillVenue, path: string) {
 }
 
 function records(v: BillVenue) {
-  return v.db.all<{ id: string }>(sql`select * from registros_facturacion order by id`);
+  return v.db.all<{ id: string }>(sql`select * from verifactu_records order by id`);
 }
 
 async function snapshot(v: BillVenue) {
@@ -136,8 +136,8 @@ async function snapshot(v: BillVenue) {
     billPayments: await v.db.select().from(billPayments),
     jobs: await v.db.select().from(printJobs),
     records: records(v),
-    outbox: v.db.all(sql`select * from envios order by registro_id`),
-    sif: v.db.all(sql`select * from registro_sif order by id`),
+    outbox: v.db.all(sql`select * from verifactu_submissions order by registro_id`),
+    sif: v.db.all(sql`select * from verifactu_identities order by id`),
   };
 }
 
@@ -152,7 +152,7 @@ describe("transactional active series qualification", () => {
       const [oldSale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, oldId));
       expect(oldSale!.seriesId).toBe(emergencySeries.id);
       const oldRecords = records(v);
-      const sif = v.db.all(sql`select * from registro_sif order by id`);
+      const sif = v.db.all(sql`select * from verifactu_identities order by id`);
       const id = await prepare(v, path);
       const shortSeries = await activate(v, short);
       await issue(v, path, id);
@@ -160,13 +160,13 @@ describe("transactional active series qualification", () => {
       expect(sale!.seriesId).toBe(shortSeries.id);
       expect(sale!.invoiceNumber).toBe(1);
       const issued = v.db.all<{ sif_id: string; anterior_huella: string | null }>(
-        sql`select sif_id, anterior_huella from registros_facturacion where sale_id = ${sale!.id}`,
+        sql`select sif_id, anterior_huella from verifactu_records where sale_id = ${sale!.id}`,
       );
       const prior = v.db.all<{ id: string; sif_id: string; huella: string }>(
-        sql`select id, sif_id, huella from registros_facturacion where sale_id = ${oldSale!.id}`,
+        sql`select id, sif_id, huella from verifactu_records where sale_id = ${oldSale!.id}`,
       );
       expect(issued).toEqual([{ sif_id: prior[0]!.sif_id, anterior_huella: prior[0]!.huella }]);
-      expect(v.db.all(sql`select * from registro_sif order by id`)).toEqual(sif);
+      expect(v.db.all(sql`select * from verifactu_identities order by id`)).toEqual(sif);
       expect(records(v).filter((r) => oldRecords.some((old) => old.id === r.id))).toEqual(
         oldRecords,
       );

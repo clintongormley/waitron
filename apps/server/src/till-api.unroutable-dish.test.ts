@@ -280,7 +280,7 @@ async function kitchenItems(workingOrderId: string) {
 async function filedFor(workingOrderId: string): Promise<number> {
   const saleId = await saleOf(workingOrderId);
   const { rows } = await suite.db.execute<{ n: number }>(
-    sql`select count(*) as n from registros_facturacion where sale_id = ${saleId}`,
+    sql`select count(*) as n from verifactu_records where sale_id = ${saleId}`,
   );
   return Number(rows[0]!.n);
 }
@@ -423,7 +423,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       sales: suite.db.all(sql`select * from sales order by id`),
       payments: suite.db.all(sql`select * from payments order by id`),
       billPayments: suite.db.all(sql`select * from bill_payments order by id`),
-      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      fiscal: suite.db.all(sql`select * from verifactu_records order by id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       numbers: suite.db.all(
         sql`select count(*) as count, max(order_number) as maximum from working_orders`,
@@ -647,7 +647,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
 
     async function filedTotal(): Promise<number> {
       const { rows } = await suite.db.execute<{ n: number }>(
-        sql`select count(*) as n from registros_facturacion`,
+        sql`select count(*) as n from verifactu_records`,
       );
       return Number(rows[0]!.n);
     }

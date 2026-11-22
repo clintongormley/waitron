@@ -2,9 +2,9 @@ import { and, count, eq, min, notExists, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import {
   filingCaseEvents,
   filingCases,
@@ -29,14 +29,14 @@ export interface FilingCaseReport extends FilingCase {
  * its envío `preceding_envio`, leaving out set-aside (`retenido`) records: one is never sent, so
  * it neither breaks nor lengthens a run of refusals, and is never the record before a held one. A
  * caller adds its own conditions, order and limit. A chain's records are all on its node
- * (`appendToChain`, ./chain.ts), and naming the node lets `registros_node_secuencia_idx` serve
+ * (`appendToChain`, ./chain.ts), and naming the node lets `verifactu_records_node_secuencia_idx` serve
  * the walk.
  */
 export function recordsBefore(record: "r" | "d" | "p" | "h" | "held" | "runs"): SQL {
   const alias = sql.raw(record);
   return sql`
-    from registros_facturacion preceding
-    left join envios preceding_envio on preceding_envio.registro_id = preceding.id
+    from verifactu_records preceding
+    left join verifactu_submissions preceding_envio on preceding_envio.registro_id = preceding.id
     where preceding.node_id = ${alias}.node_id and preceding.sif_id = ${alias}.sif_id
       and preceding.secuencia < ${alias}.secuencia
       and preceding_envio.estado is not 'retenido'
@@ -185,9 +185,9 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
   // PRIMARY KEY, as here; measured (node:sqlite, SQLite 3.53.4, Node v26.7.0, 2026-10-06), `VACUUM`
   // and `VACUUM INTO` kept them, and a drizzle-style table rebuild renumbered them in order.
   const cases = await tx
-    .select({ filingCase: filingCases, estado: envios.estado })
+    .select({ filingCase: filingCases, estado: verifactuSubmissions.estado })
     .from(filingCases)
-    .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
+    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, filingCases.registroId))
     .orderBy(sql`${filingCases}.rowid`);
   const events = await tx
     .select()
@@ -237,30 +237,30 @@ export async function openFilingCases(tx: Transaction, limit: number | null) {
       evidence: filingCases.evidence,
       openedAt: filingCases.openedAt,
       record: {
-        tipoRegistro: registrosFacturacion.tipoRegistro,
-        idEmisorFactura: registrosFacturacion.idEmisorFactura,
-        numSerieFactura: registrosFacturacion.numSerieFactura,
-        fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
-        tipoFactura: registrosFacturacion.tipoFactura,
-        importeTotal: registrosFacturacion.importeTotal,
-        cuotaTotal: registrosFacturacion.cuotaTotal,
-        descripcionOperacion: registrosFacturacion.descripcionOperacion,
-        huella: registrosFacturacion.huella,
-        anteriorHuella: registrosFacturacion.anteriorHuella,
-        fechaHoraHusoGenRegistro: registrosFacturacion.fechaHoraHusoGenRegistro,
-        numeroInstalacion: registroSif.numeroInstalacion,
+        tipoRegistro: verifactuRecords.tipoRegistro,
+        idEmisorFactura: verifactuRecords.idEmisorFactura,
+        numSerieFactura: verifactuRecords.numSerieFactura,
+        fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
+        tipoFactura: verifactuRecords.tipoFactura,
+        importeTotal: verifactuRecords.importeTotal,
+        cuotaTotal: verifactuRecords.cuotaTotal,
+        descripcionOperacion: verifactuRecords.descripcionOperacion,
+        huella: verifactuRecords.huella,
+        anteriorHuella: verifactuRecords.anteriorHuella,
+        fechaHoraHusoGenRegistro: verifactuRecords.fechaHoraHusoGenRegistro,
+        numeroInstalacion: verifactuIdentities.numeroInstalacion,
       },
       submission: {
-        estado: envios.estado,
-        codigoError: envios.codigoError,
-        mensajeError: envios.mensajeError,
-        enviadoEn: envios.enviadoEn,
+        estado: verifactuSubmissions.estado,
+        codigoError: verifactuSubmissions.codigoError,
+        mensajeError: verifactuSubmissions.mensajeError,
+        enviadoEn: verifactuSubmissions.enviadoEn,
       },
     })
     .from(filingCases)
-    .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, filingCases.registroId))
-    .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
-    .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
+    .innerJoin(verifactuRecords, eq(verifactuRecords.id, filingCases.registroId))
+    .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuRecords.sifId))
+    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, filingCases.registroId))
     .where(caseIsOpen(tx))
     .orderBy(sql`${filingCases}.rowid desc`);
   const listed = limit === null ? query : query.limit(limit);
@@ -318,8 +318,8 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
         order by preceding.secuencia desc
         limit 1
       ) end as refused_before_case_id
-    from envios e
-    join registros_facturacion r on r.id = e.registro_id
+    from verifactu_submissions e
+    join verifactu_records r on r.id = e.registro_id
     left join filing_cases c on c.registro_id = e.registro_id
     where e.estado in ('detenido', 'rechazado')
     order by r.sif_id, r.secuencia

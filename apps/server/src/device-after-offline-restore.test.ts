@@ -12,8 +12,12 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { deviceOrigin, seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
-import { fiscalAllocations, registroSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import {
+  fiscalAllocations,
+  verifactuIdentities,
+  VerifactuBackend,
+} from "@waitron/fiscal-verifactu";
+import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import * as internetClock from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
@@ -65,7 +69,7 @@ it.each([
     try {
       expect(await store.venue.select().from(devices)).toEqual([]);
       const cfg = {
-        nodeId: TENANT_A.nodeId,
+        nodeId: TAXPAYER_A.nodeId,
         locale: "en",
         invoiceLocales: ["es"],
         simplifiedInvoiceLimit: null,
@@ -149,7 +153,7 @@ it.each([
       expect(await approved.json()).toMatchObject({ status: "approved" });
       expect(await store.venue.select().from(invoiceSeries)).toEqual(recovered.series);
       expect(await store.venue.select().from(fiscalAllocations)).toEqual(recovered.allocations);
-      expect(await store.venue.select().from(registroSif)).toEqual(recovered.registrations);
+      expect(await store.venue.select().from(verifactuIdentities)).toEqual(recovered.registrations);
       expect(restore.journal()).toBe(journal);
       const clock = { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: new Date() }) };
       const backend = new VerifactuBackend({
@@ -179,7 +183,7 @@ it.each([
       )!;
       await expect(sell(retired.id)).rejects.toMatchObject({ code: "sale.series_retired" });
       await sell(standard.id);
-      expect(store.venue.all(sql`select num_serie_factura from registros_facturacion`)).toEqual([
+      expect(store.venue.all(sql`select num_serie_factura from verifactu_records`)).toEqual([
         { num_serie_factura: "A-0CNQT/1" },
       ]);
       expect(

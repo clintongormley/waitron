@@ -3,7 +3,7 @@ import { readTaxpayer, type Transaction } from "@waitron/db";
 import type { Cabecera, RegistroConsultado } from "@waitron/verifactu";
 import type { ReconcileScope } from "./reconcile.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import { imputationMonth } from "./registro-row.js";
 
 type ReconciliationSeries = { sif_id: string; series_id: string; code: string };
@@ -14,12 +14,12 @@ export async function readLiveReconciliationSeries(
   return (
     await tx.execute<ReconciliationSeries>(sql`
     select s.id as sif_id, i.id as series_id, i.code
-    from registro_sif s join invoice_series i on i.node_id = s.node_id
+    from verifactu_identities s join invoice_series i on i.node_id = s.node_id
     where s.node_id = ${scope.nodeId} and s.nif = ${scope.taxpayerId}
       and s.revocado_en is null and i.retired_at is null
       and (
         exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${scope.environment})
-        or exists (select 1 from registros_facturacion r where r.sif_id = s.id and r.entorno = ${scope.environment})
+        or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${scope.environment})
       )
   `)
   ).rows;
@@ -44,7 +44,7 @@ async function readRetainableSeries(
   return (
     await tx.execute<ReconciliationSeries>(sql`
     select s.id as sif_id, i.id as series_id, i.code
-    from registro_sif s join invoice_series i on i.node_id = s.node_id
+    from verifactu_identities s join invoice_series i on i.node_id = s.node_id
     where s.node_id = ${scope.nodeId} and s.nif = ${scope.taxpayerId}
       and (
         (s.revocado_en is null and i.retired_at is null)
@@ -52,7 +52,7 @@ async function readRetainableSeries(
       )
       and (
         exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${scope.environment})
-        or exists (select 1 from registros_facturacion r where r.sif_id = s.id and r.entorno = ${scope.environment})
+        or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${scope.environment})
       )
   `)
   ).rows;
@@ -69,7 +69,7 @@ export async function retainUnheldSeriesConflicts(
   const known = await readRetainableSeries(tx, scope);
   const local = await tx.execute<{ number: string; date: string }>(sql`
     select r.num_serie_factura as number, r.fecha_expedicion_factura as date
-    from registros_facturacion r
+    from verifactu_records r
     where ${inArray(sql`r.node_id`, scope.historyNodeIds)} and r.id_emisor_factura = ${scope.taxpayerId}
       and r.entorno = ${scope.environment}
       and ${imputationMonth(sql`r.fecha_operacion`, sql`r.fecha_expedicion_factura`)} = ${`${period.year}-${period.month}`}
@@ -98,7 +98,7 @@ export async function retainUnheldSeriesConflicts(
       system: lookupSystem(data.SistemaInformatico),
     };
     await tx
-      .insert(fiscalSeriesConflicts)
+      .insert(verifactuSeriesConflicts)
       .values({
         sifId: series.sif_id,
         seriesId: series.series_id,
@@ -107,7 +107,7 @@ export async function retainUnheldSeriesConflicts(
         recordedAt: now,
       })
       .onConflictDoNothing({
-        target: [fiscalSeriesConflicts.sifId, fiscalSeriesConflicts.invoiceIdentity],
+        target: [verifactuSeriesConflicts.sifId, verifactuSeriesConflicts.invoiceIdentity],
       });
   }
 }

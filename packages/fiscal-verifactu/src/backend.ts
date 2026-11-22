@@ -49,8 +49,8 @@ import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { queueSubmission } from "./queue-submission.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { chainHeads, refuseUntilRecordable } from "./clock-behind.js";
@@ -157,7 +157,7 @@ export function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput 
 /**
  * The real Veri*Factu `FiscalBackend`. Every record method builds its registro through
  * `appendToChain`, which computes the huella and advances the chain head, then inserts a
- * `pendiente` `envios` row — all on the caller's transaction. Nothing here contacts AEAT.
+ * `pendiente` `verifactu_submissions` row — all on the caller's transaction. Nothing here contacts AEAT.
  */
 export class VerifactuBackend implements FiscalBackend {
   readonly id = BACKEND_ID;
@@ -252,7 +252,7 @@ export class VerifactuBackend implements FiscalBackend {
 
   /**
    * Builds the registro via `appendToChain`, inserts it, advances the chain head, and inserts the
-   * `envios` row as `pendiente`, all on the caller's own transaction — the atomicity
+   * `verifactu_submissions` row as `pendiente`, all on the caller's own transaction — the atomicity
    * `packages/core`'s `recordSale` depends on.
    *
    * Reads NO clock of its own: `sale.issuedAt`/`sale.offsetMinutes` are the reading the caller
@@ -343,14 +343,17 @@ export class VerifactuBackend implements FiscalBackend {
     >,
   ): Promise<boolean> {
     const deliveries = await tx
-      .select({ estado: envios.estado, codigoError: envios.codigoError })
-      .from(registrosFacturacion)
-      .leftJoin(envios, eq(envios.registroId, registrosFacturacion.id))
+      .select({
+        estado: verifactuSubmissions.estado,
+        codigoError: verifactuSubmissions.codigoError,
+      })
+      .from(verifactuRecords)
+      .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
       .where(
         and(
-          eq(registrosFacturacion.idEmisorFactura, invoice.id_emisor_factura),
-          eq(registrosFacturacion.numSerieFactura, invoice.num_serie_factura),
-          eq(registrosFacturacion.fechaExpedicionFactura, invoice.fecha_expedicion_factura),
+          eq(verifactuRecords.idEmisorFactura, invoice.id_emisor_factura),
+          eq(verifactuRecords.numSerieFactura, invoice.num_serie_factura),
+          eq(verifactuRecords.fechaExpedicionFactura, invoice.fecha_expedicion_factura),
         ),
       );
     return deliveries.every(
@@ -367,7 +370,7 @@ export class VerifactuBackend implements FiscalBackend {
    */
   private async qrPayloadFor(tx: Transaction, registroId: string): Promise<string> {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
-      select * from registros_facturacion where id = ${registroId}
+      select * from verifactu_records where id = ${registroId}
     `);
     const row = rows[0];
     /* v8 ignore start */
@@ -389,7 +392,7 @@ export class VerifactuBackend implements FiscalBackend {
   async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select *
-      from registros_facturacion indexed by registros_sale_idx
+      from verifactu_records indexed by verifactu_records_sale_idx
       where sale_id = ${saleId} and tipo_registro = 'alta'
         and corrects_registro_id is null
       limit 1
@@ -462,7 +465,7 @@ export class VerifactuBackend implements FiscalBackend {
     const { rows } = await tx.execute<OriginalAlta>(sql`
       select source, device_id, id_emisor_factura, num_serie_factura,
         fecha_expedicion_factura
-      from registros_facturacion indexed by registros_sale_idx
+      from verifactu_records indexed by verifactu_records_sale_idx
       where sale_id = ${saleId} and tipo_registro = 'alta'
         and corrects_registro_id is null
       limit 1
@@ -539,11 +542,11 @@ export class VerifactuBackend implements FiscalBackend {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
         tipo_rectificativa, destinatarios
-      from registros_facturacion
+      from verifactu_records
       where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
         and not exists (
-          select 1 from registros_facturacion replacement
-          where replacement.corrects_registro_id = registros_facturacion.id
+          select 1 from verifactu_records replacement
+          where replacement.corrects_registro_id = verifactu_records.id
         )
       limit 1
     `);
@@ -698,11 +701,11 @@ export class VerifactuBackend implements FiscalBackend {
     for (const substitutedSaleId of substitution.substitutedSaleIds) {
       const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
         select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
-        from registros_facturacion
+        from verifactu_records
         where sale_id = ${substitutedSaleId} and tipo_registro = 'alta'
           and not exists (
-            select 1 from registros_facturacion replacement
-            where replacement.corrects_registro_id = registros_facturacion.id
+            select 1 from verifactu_records replacement
+            where replacement.corrects_registro_id = verifactu_records.id
           )
         limit 1
       `);
@@ -798,8 +801,8 @@ export class VerifactuBackend implements FiscalBackend {
     return withTransaction(this.db, async (tx) => {
       const rows = await tx.execute<{ count: number }>(sql`
         select count(*) as count
-        from envios e
-        join registros_facturacion r on r.id = e.registro_id
+        from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
         where r.node_id = ${nodeId} and e.estado = 'pendiente'
       `);
       return rows.rows[0]!.count;

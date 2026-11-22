@@ -508,7 +508,7 @@ it.each([
           { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
         ]);
         expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
-        expect(db.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(0);
+        expect(db.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
       } finally {
         db.close();
       }
@@ -536,9 +536,7 @@ it.each([
         expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
           { environment: "preproduction" },
         ]);
-        expect(isolated.prepare("select count(*) as n from registros_facturacion").get()?.n).toBe(
-          1,
-        );
+        expect(isolated.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(1);
         expect(
           isolated
             .prepare("select count(*) as n from products where name = 'Prepared gazpacho'")

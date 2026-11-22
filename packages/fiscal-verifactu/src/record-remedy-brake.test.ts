@@ -20,8 +20,8 @@ import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import type { RemedyKind } from "./record-remedy.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -59,7 +59,7 @@ async function append(number: number) {
       node.nodeId,
       altaFor(node, saleId, number, number, "preproduction"),
     );
-    await tx.insert(envios).values({ registroId: record.id, proximoIntentoEn: T0 });
+    await tx.insert(verifactuSubmissions).values({ registroId: record.id, proximoIntentoEn: T0 });
     return record.id;
   });
 }
@@ -125,11 +125,11 @@ function send(value: unknown = body, enabled: RemedyKind[] | null = [KIND], runt
 
 async function snapshot() {
   return {
-    records: await suite.db
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
+    deliveries: await suite.db
       .select()
-      .from(registrosFacturacion)
-      .orderBy(registrosFacturacion.secuencia),
-    deliveries: await suite.db.select().from(envios).orderBy(envios.registroId),
+      .from(verifactuSubmissions)
+      .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
     held: await withTransaction(suite.db, heldRecords),
     acks: await pendingAcks(suite.db),
@@ -236,7 +236,10 @@ it("replays reordered simultaneous requests and later submissions without anothe
 it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado", "retenido"])(
   "refuses a %s target without changing it",
   async (estado) => {
-    await suite.db.update(envios).set({ estado }).where(eq(envios.registroId, ids[3]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, ids[3]!));
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -260,9 +263,9 @@ it.each([
 ])("refuses %s without releasing or recording an action", async (scenario) => {
   if (scenario === "pending predecessor" || scenario === "sending predecessor")
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: scenario === "pending predecessor" ? "pendiente" : "enviando" })
-      .where(eq(envios.registroId, ids[0]!));
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
   if (scenario === "own case")
     await withTransaction(suite.db, (tx) =>
       openFilingCase(tx, {
@@ -276,12 +279,15 @@ it.each([
   if (scenario === "wrong case")
     body.caseId = (await withTransaction(suite.db, listFilingCases))[0]!.id;
   if (scenario === "broken run")
-    await suite.db.update(envios).set({ estado: "aceptado" }).where(eq(envios.registroId, ids[0]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado: "aceptado" })
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
   if (scenario === "different code" || scenario === "missing code")
     await suite.db
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ codigoError: scenario === "different code" ? "1161" : null })
-      .where(eq(envios.registroId, ids[0]!));
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
   if (scenario === "missing record") body.registroId = "missing";
   if (scenario === "foreign node") runtimeNode = nodeId("00000000-0000-4000-8000-000000000001");
   if (scenario === "foreign environment") environment = "production";
@@ -353,9 +359,9 @@ async function refuseFourth(
 ) {
   return withTransaction(suite.db, async (tx) => {
     await tx
-      .update(envios)
+      .update(verifactuSubmissions)
       .set({ estado: "rechazado", codigoError: "1100" })
-      .where(eq(envios.registroId, ids[3]!));
+      .where(eq(verifactuSubmissions.registroId, ids[3]!));
     await writeAck(tx, ids[3]!, NOW);
     return openFilingCase(tx, {
       registroId: ids[3]!,
@@ -370,7 +376,10 @@ it.each(["pendiente", "enviando", "detenido"])(
   "keeps the brake behind an older %s record even with three later matching refusals",
   async (estado) => {
     const holdingCase = await refuseFourth();
-    await suite.db.update(envios).set({ estado }).where(eq(envios.registroId, ids[0]!));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, ids[0]!));
     body = { ...body, registroId: ids[4], caseId: holdingCase.id };
     const before = await snapshot();
     const response = await send();
@@ -396,13 +405,13 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
     await refuseFourth();
     const [original] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, ids[0]!));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, ids[0]!));
     await withTransaction(suite.db, async (tx) => {
       await tx
-        .update(envios)
+        .update(verifactuSubmissions)
         .set({ estado: "rechazado", codigoError: "1100" })
-        .where(eq(envios.registroId, ids[4]!));
+        .where(eq(verifactuSubmissions.registroId, ids[4]!));
       await writeAck(tx, ids[4]!, NOW);
       const holdingCase = await openFilingCase(tx, {
         registroId: ids[4]!,
@@ -411,11 +420,14 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
         now: NOW,
       });
       if (scenario === "accepted original")
-        await tx.update(envios).set({ estado: "aceptado" }).where(eq(envios.registroId, ids[0]!));
+        await tx
+          .update(verifactuSubmissions)
+          .set({ estado: "aceptado" })
+          .where(eq(verifactuSubmissions.registroId, ids[0]!));
       const pending = anulacionFor(node, saleId(original!.saleId), 1, 6, "preproduction");
       if (scenario === "absent-original marker") pending.input.SinRegistroPrevio = "S";
       const record = await appendToChain(tx, node.nodeId, pending);
-      await tx.insert(envios).values({
+      await tx.insert(verifactuSubmissions).values({
         registroId: record.id,
         estado: "detenido",
         intentos: 1,
@@ -438,7 +450,7 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
       aeat = createFakeAeat({ serverNow: NOW, tiempoEsperaInicial: 5 });
       if (scenario === "accepted original") {
         const raw = await suite.db.execute<Record<string, unknown>>(
-          sql`select * from registros_facturacion where id = ${ids[0]}`,
+          sql`select * from verifactu_records where id = ${ids[0]}`,
         );
         const record = fromRegistroRow(decodeRegistroRow(raw.rows[0]!));
         if (!("TipoFactura" in record)) throw new Error("expected original alta");

@@ -8,7 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, seedSale, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -29,7 +29,7 @@ beforeEach(async () => {
 async function storeVersion(
   position: number,
   facts: { issuerName: string; base: string; tax: string; total: string },
-  previous?: typeof registrosFacturacion.$inferSelect,
+  previous?: typeof verifactuRecords.$inferSelect,
 ) {
   const built = buildAltaRecord({
     IDEmisorFactura: TEST_NIF,
@@ -56,7 +56,7 @@ async function storeVersion(
       previous === undefined ? { PrimerRegistro: "S" } : { RegistroAnterior: pointerTo(previous) },
   });
   const [stored] = await suite.db
-    .insert(registrosFacturacion)
+    .insert(verifactuRecords)
     .values({
       ...toRegistroRow(built, {
         origin: deviceOrigin(node.deviceId),
@@ -114,8 +114,8 @@ it.each([false, true])(
     expect(replay).toEqual(issued);
     const [saved] = await suite.db
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, original.id));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, original.id));
     expect(saved).toEqual(original);
   },
 );

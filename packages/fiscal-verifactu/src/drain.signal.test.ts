@@ -20,7 +20,7 @@ const AEAT_WAIT_SEG = 7;
 async function seedThreeBatches(): Promise<void> {
   await seedPendingEnvios(suite.db, { count: 9 });
   await suite.db.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
     values (1, ${EARLIER_GATE.toISOString()}, 120)
   `);
 }
@@ -51,7 +51,7 @@ function deps(resolved: VerifactuClient, signal?: AbortSignal): DrainDeps {
 async function estados(): Promise<Record<string, number>> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ estado: string; n: number }>(
-      sql`select estado, count(*) as n from envios group by estado`,
+      sql`select estado, count(*) as n from verifactu_submissions group by estado`,
     ),
   );
   return Object.fromEntries(rows.map((row) => [row.estado, row.n]));
@@ -60,7 +60,7 @@ async function estados(): Promise<Record<string, number>> {
 async function flujo(): Promise<{ proximo_envio_en: string; tiempo_espera_seg: number }[]> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
-      sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
+      sql`select proximo_envio_en, tiempo_espera_seg from verifactu_sending_state`,
     ),
   );
   return rows;
@@ -109,7 +109,7 @@ describe("drain — told to stop", () => {
     ]);
   });
 
-  it("a signal seen before the first send leaves envio_flujo unchanged", async () => {
+  it("a signal seen before the first send leaves verifactu_sending_state unchanged", async () => {
     const controller = new AbortController();
     controller.abort();
     let submits = 0;
@@ -236,7 +236,7 @@ describe("drain — told to stop between a claim that found nothing sendable and
       entorno: "production",
     });
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${EARLIER_GATE.toISOString()}, 120)
     `);
   });
@@ -247,7 +247,7 @@ describe("drain — told to stop between a claim that found nothing sendable and
     expect(result.recordsSubmitted).toBe(1);
   });
 
-  it("claims and sends nothing more, and leaves envio_flujo unchanged", async () => {
+  it("claims and sends nothing more, and leaves verifactu_sending_state unchanged", async () => {
     // Reads false at the first claim's check only: aborted from then on, as a signal raised while
     // the first claim ran would be.
     let reads = 0;
@@ -294,7 +294,7 @@ describe("drain — told to stop at a retry after a batch was sent", () => {
       entorno: "production",
     });
     await suite.db.execute(sql`
-      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${EARLIER_GATE.toISOString()}, 120)
     `);
   });

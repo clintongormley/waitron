@@ -497,7 +497,7 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
   /** One filing pass at an instant past AEAT's wait, so a pass with rows due always sends. */
   const filingPass = async () => {
     const gate = venue.db.all<{ at: string }>(
-      sql`select proximo_envio_en as at from envio_flujo where id = 1`,
+      sql`select proximo_envio_en as at from verifactu_sending_state where id = 1`,
     )[0];
     if (gate !== undefined) clock.set(new Date(Date.parse(gate.at) + 1000));
     const now = clock.now();

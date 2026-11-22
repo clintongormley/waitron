@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type BackupVerificationContext } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, seedSoldRegistro, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, seedSoldRegistro, TAXPAYER_A } from "../test/fixtures.js";
 import { activateAllocation } from "./allocation.js";
 import { recordConflictEvidence } from "./conflict-evidence.js";
 import { toAeatDate } from "./registro-row.js";
@@ -37,7 +37,7 @@ const pinned = vi.hoisted(() => ({
 }));
 vi.mock("./backup-verification-trust.js", () => ({ FISCAL_BACKUP_PUBLIC_TRUST: pinned }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "corrective" },
@@ -124,7 +124,7 @@ async function activation(hour: number) {
 
 async function capture(populate = true) {
   if (populate) {
-    await seedTenants(suite.db);
+    await seedTaxpayers(suite.db);
     await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
     const first = await activation(0);
     await activation(1);
@@ -137,7 +137,7 @@ async function capture(populate = true) {
       huella: "A".repeat(64),
     });
     await suite.db.execute(
-      sql`insert into filing_cases (id, registro_id, cause, evidence, opened_at) select '10000000-0000-4000-8000-000000000001', id, 'fiscal.registro_rechazado', '{"codigo":1,"mensaje":"retained","csv":null}', ${time} from registros_facturacion limit 1`,
+      sql`insert into filing_cases (id, registro_id, cause, evidence, opened_at) select '10000000-0000-4000-8000-000000000001', id, 'fiscal.registro_rechazado', '{"codigo":1,"mensaje":"retained","csv":null}', ${time} from verifactu_records limit 1`,
     );
     await suite.db.execute(
       sql`insert into filing_case_events (id, case_id, action_key, kind, person_id, action, remedy_registro_id, recorded_at) values ('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','note-1','note','10000000-0000-4000-8000-000000000003','retained note',null,${time})`,
@@ -148,7 +148,7 @@ async function capture(populate = true) {
       num_serie_factura: string;
       fecha_expedicion_factura: string;
     }>(sql`
-      select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura from registros_facturacion limit 1
+      select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura from verifactu_records limit 1
     `)!;
     await withTransaction(suite.db, (tx) =>
       recordConflictEvidence(tx, {
@@ -180,28 +180,28 @@ async function capture(populate = true) {
       }),
     );
     await suite.db.execute(
-      sql`insert into envios (registro_id, estado, proximo_intento_en, csv) select id, 'aceptado', ${time}, 'retained-csv' from registros_facturacion`,
+      sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en, csv) select id, 'aceptado', ${time}, 'retained-csv' from verifactu_records`,
     );
     await suite.db.execute(
-      sql`insert into acks (registro_id, submitted_at, csv, state) select id, ${time}, 'retained-csv', 'accepted' from registros_facturacion`,
+      sql`insert into acks (registro_id, submitted_at, csv, state) select id, ${time}, 'retained-csv', 'accepted' from verifactu_records`,
     );
     await suite.db.execute(
-      sql`insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg) values (1,${time},60)`,
+      sql`insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg) values (1,${time},60)`,
     );
     await suite.db.execute(
-      sql`insert into fiscal_certificate_installs (id,node_id,installed_at,source,kind,fingerprint,valid_from,valid_until) values ('10000000-0000-4000-8000-000000000004',${node.nodeId},${time},'setup','sello','retained-fingerprint',${time},'2027-10-16T11:00:00.000Z')`,
+      sql`insert into verifactu_certificates (id,node_id,installed_at,source,kind,fingerprint,valid_from,valid_until) values ('10000000-0000-4000-8000-000000000004',${node.nodeId},${time},'setup','sello','retained-fingerprint',${time},'2027-10-16T11:00:00.000Z')`,
     );
     await suite.db.execute(
       sql`insert into fiscal_certificate_reminders (id,node_id,install_id,stage,person_id,status,claimed_at) values ('10000000-0000-4000-8000-000000000005',${node.nodeId},'10000000-0000-4000-8000-000000000004','warning','10000000-0000-4000-8000-000000000003','sent',${time})`,
     );
     await suite.db.execute(
-      sql`insert into clock_stop_restarts (id,node_id,person_id,restarted_at,clock_at,registro_id,record_at,proof) select '10000000-0000-4000-8000-000000000006',${node.nodeId},'10000000-0000-4000-8000-000000000003',${time},${time},id,${time},'{"heads":{}}' from registros_facturacion`,
+      sql`insert into clock_stop_restarts (id,node_id,person_id,restarted_at,clock_at,registro_id,record_at,proof) select '10000000-0000-4000-8000-000000000006',${node.nodeId},'10000000-0000-4000-8000-000000000003',${time},${time},id,${time},'{"heads":{}}' from verifactu_records`,
     );
     await suite.db.execute(
       sql`insert into clock_checks (id,seq,node_id,opened_at,reason,detail) values ('10000000-0000-4000-8000-000000000007',1,${node.nodeId},${time},'behind_chain','{"heads":{}}')`,
     );
     await suite.db.execute(
-      sql`insert into clock_confirmations (id,seq,node_id,box_clock_at,confirmed_at,step_ms,source,person_id,reason,proof,check_id,registro_id,record_at) select '10000000-0000-4000-8000-000000000008',1,${node.nodeId},${time},${time},0,'authority',null,'behind_chain','{"authority":{"agrees":true}}','10000000-0000-4000-8000-000000000007',id,${time} from registros_facturacion`,
+      sql`insert into clock_confirmations (id,seq,node_id,box_clock_at,confirmed_at,step_ms,source,person_id,reason,proof,check_id,registro_id,record_at) select '10000000-0000-4000-8000-000000000008',1,${node.nodeId},${time},${time},0,'authority',null,'behind_chain','{"authority":{"agrees":true}}','10000000-0000-4000-8000-000000000007',id,${time} from verifactu_records`,
     );
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-backup-history-"));
@@ -295,15 +295,15 @@ it("accepts a genuinely empty fiscal owner", async () => {
 it.each([
   [
     "registration node",
-    "update registro_sif set node_id='missing' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "update verifactu_identities set node_id='missing' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
   ],
   [
     "registration scope",
-    "update registro_sif set nif='B12345674' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "update verifactu_identities set nif='B12345674' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
   ],
   [
     "revoked registration instant",
-    "update registro_sif set revocado_en='bad' where revocado_en is not null",
+    "update verifactu_identities set revocado_en='bad' where revocado_en is not null",
   ],
   ["allocation node", "update fiscal_allocations set node_id='missing' where event_key='event-0'"],
   [
@@ -316,7 +316,7 @@ it.each([
   ],
   [
     "missing historical SIF",
-    "delete from registro_sif where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "delete from verifactu_identities where id=(select sif_id from fiscal_allocations where event_key='event-0')",
   ],
   [
     "missing historical series",
@@ -329,7 +329,7 @@ it.each([
   ["filing case parent", "update filing_cases set registro_id='missing'"],
   ["filing event parent", "update filing_case_events set case_id='missing'"],
   ["filing remedy parent", "update filing_case_events set remedy_registro_id='missing'"],
-  ["send parent", "update envios set registro_id='missing'"],
+  ["send parent", "update verifactu_submissions set registro_id='missing'"],
   ["ack parent", "update acks set registro_id='missing'"],
   ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
   ["restart node parent", "update clock_stop_restarts set node_id='missing'"],
@@ -361,7 +361,7 @@ it.each([
   ],
   ["allocation", (v: HistoryFixture) => ({ ...v, series: v.series.slice(1) })],
   ["approval", (v: HistoryFixture) => ({ ...v, eventId: "changed" })],
-  ["approval", (v: HistoryFixture) => ({ ...v, targetNodeId: TENANT_A.nodeId2 })],
+  ["approval", (v: HistoryFixture) => ({ ...v, targetNodeId: TAXPAYER_A.nodeId2 })],
   ["approval", (v: HistoryFixture) => ({ ...v, noParallelRecovery: false })],
   [
     "approval",
@@ -394,14 +394,14 @@ it.each([
 });
 
 it.each([
-  "registro_sif",
+  "verifactu_identities",
   "fiscal_allocations",
   "filing_cases",
   "filing_case_events",
-  "envios",
-  "envio_flujo",
+  "verifactu_submissions",
+  "verifactu_sending_state",
   "acks",
-  "fiscal_certificate_installs",
+  "verifactu_certificates",
   "fiscal_certificate_reminders",
 ])("retains every captured %s row", async (table) => {
   await capture();
@@ -505,7 +505,7 @@ function paper(db: DatabaseSync, declared = false, emergency = false) {
       activation.series[i].id,
     );
   }
-  db.prepare("update registro_sif set numero_instalacion=? where id=?").run(
+  db.prepare("update verifactu_identities set numero_instalacion=? where id=?").run(
     identity,
     activation.sifId,
   );
@@ -599,7 +599,7 @@ function reservation(db: DatabaseSync) {
       eventId: "reserve-43",
       operatorId: "administrator",
       sourceId: node.nodeId,
-      targetNodeId: TENANT_A.nodeId2,
+      targetNodeId: TAXPAYER_A.nodeId2,
       incidentEvidence: "spare",
       reservedAt: time,
     },
@@ -608,7 +608,7 @@ function reservation(db: DatabaseSync) {
   db.prepare("insert into fiscal_reservations values (?,?,?,?,?,?,?,?,?,?,?)").run(
     "reserve-43",
     allocation.allocationId,
-    TENANT_A.nodeId2,
+    TAXPAYER_A.nodeId2,
     node.nodeId,
     allocation.taxpayerNif,
     allocation.softwareId,
@@ -628,7 +628,7 @@ it("checks dormant reservation signatures without current register confirmations
 it.each(["source", "target"])("requires a reservation's %s node to exist", async (missing) => {
   await capture(false);
   both((db) => {
-    for (const id of [node.nodeId, TENANT_A.nodeId2])
+    for (const id of [node.nodeId, TAXPAYER_A.nodeId2])
       db.prepare("insert into nodes (id,name,created_at) values (?,?,?)").run(
         id,
         "Retained node",
@@ -636,7 +636,7 @@ it.each(["source", "target"])("requires a reservation's %s node to exist", async
       );
     reservation(db);
     db.prepare("delete from nodes where id=?").run(
-      missing === "source" ? node.nodeId : TENANT_A.nodeId2,
+      missing === "source" ? node.nodeId : TAXPAYER_A.nodeId2,
     );
   });
   pinned.paper = [custodian];
@@ -681,7 +681,7 @@ function declaredReservation(db: DatabaseSync, malformed = false) {
       action: "reserve",
       eventId: "reserve-43",
       sourceId: node.nodeId,
-      targetNodeId: TENANT_A.nodeId2,
+      targetNodeId: TAXPAYER_A.nodeId2,
     },
     reservedAt: time,
   };
@@ -738,7 +738,7 @@ function cloud(db: DatabaseSync) {
       r.series[i]!.id,
     );
   }
-  db.prepare("update registro_sif set numero_instalacion=? where id=?").run(
+  db.prepare("update verifactu_identities set numero_instalacion=? where id=?").run(
     a.installationIdentity,
     r.sifId,
   );
@@ -955,7 +955,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('registro_sif','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','fiscal_lookup_conflicts','fiscal_series_conflicts','envios','envio_flujo','acks','fiscal_certificate_installs','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','fiscal_lookup_conflicts','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);
@@ -1140,7 +1140,7 @@ it("preserves the first returned-invoice receipt through backup", async () => {
   await capture();
   both((db) =>
     db.exec(
-      "insert into returned_invoice_records select id, '2026-11-12T12:00:00.000Z' from registros_facturacion limit 1",
+      "insert into returned_invoice_records select id, '2026-11-12T12:00:00.000Z' from verifactu_records limit 1",
     ),
   );
   expect(await verify()).toMatchObject({ status: "passed" });

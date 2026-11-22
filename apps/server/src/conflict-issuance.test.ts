@@ -30,7 +30,7 @@ const pay = (billId: string, body: Record<string, unknown>) =>
   send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, body);
 async function markConflict() {
   const [record] = suite.db.all<{ id: string }>(
-    sql`select id from registros_facturacion order by secuencia limit 1`,
+    sql`select id from verifactu_records order by secuencia limit 1`,
   );
   await withTransaction(suite.db, (tx) =>
     openFilingCase(tx, {

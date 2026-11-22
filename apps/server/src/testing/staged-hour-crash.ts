@@ -23,13 +23,13 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import {
   cadenas,
-  envios,
+  verifactuSubmissions,
   fiscalAllocations,
-  registroSif,
-  registrosFacturacion,
+  verifactuIdentities,
+  verifactuRecords,
   VerifactuBackend,
 } from "@waitron/fiscal-verifactu";
-import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
@@ -82,8 +82,8 @@ export async function stagedHourCrash(
   try {
     await seedVenueNodes(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
-    const node = { nodeId: TENANT_A.nodeId };
+    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TAXPAYER_A.nodeId);
+    const node = { nodeId: TAXPAYER_A.nodeId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
       action: "setup",
@@ -258,12 +258,12 @@ export async function stagedHourCrash(
       try {
         return {
           chainHeads: await copy.venue.select().from(cadenas),
-          submissions: await copy.venue.select().from(envios),
+          submissions: await copy.venue.select().from(verifactuSubmissions),
           nodeKeys: await copy.node.select().from(box),
           allocations: await copy.venue.select().from(fiscalAllocations),
-          registrations: await copy.venue.select().from(registroSif),
+          registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select().from(invoiceSeries),
-          records: await copy.venue.select().from(registrosFacturacion),
+          records: await copy.venue.select().from(verifactuRecords),
         };
       } finally {
         await copy.close();

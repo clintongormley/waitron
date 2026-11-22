@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
@@ -35,12 +35,12 @@ interface EnvioSeed {
   technical?: boolean;
 }
 
-/** One waiting record per entry, then each `envios` row set to the entry's state and marks. */
+/** One waiting record per entry, then each `verifactu_submissions` row set to the entry's state and marks. */
 async function seedEnvios(rows: readonly EnvioSeed[]): Promise<void> {
   const { registroIds } = await seedPendingEnvios(suite.db, { count: rows.length });
   for (const [index, row] of rows.entries()) {
     await suite.db.execute(sql`
-      update envios
+      update verifactu_submissions
       set estado = ${row.estado},
           incidencia = ${row.incidencia === true ? 1 : 0},
           technical_incidence = ${row.technical === true ? 1 : 0}
@@ -51,7 +51,7 @@ async function seedEnvios(rows: readonly EnvioSeed[]): Promise<void> {
 
 async function openIncident(): Promise<void> {
   await suite.db.execute(sql`
-    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
+    insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
     values (1, '2026-07-21T00:00:00.000Z', 0, 'probe')
   `);
 }
@@ -137,7 +137,7 @@ describe("FISCAL_STAFF_NOTICES", () => {
 
 /** Records one sale whose record is generated at `at`, in the given offset. */
 async function sellAt(at: { instant: Date; offsetMinutes: number }): Promise<void> {
-  const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db);
   const backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -256,13 +256,13 @@ describe("unsentNotices", () => {
       vi.setSystemTime(new Date("2026-07-21T17:05:00.000Z"));
       const seeded = await seedPendingEnvios(suite.db, { count: 1 });
       await suite.db.execute(sql`
-        update envios set estado = 'aceptado' where registro_id = ${seeded.registroIds[0]!}
+        update verifactu_submissions set estado = 'aceptado' where registro_id = ${seeded.registroIds[0]!}
       `);
       vi.setSystemTime(new Date("2026-07-21T17:31:00.000Z"));
       await appendPendingAlta(suite.db, seeded, 2, { generadoEn: "2026-07-21T17:50:00.000Z" });
       vi.setSystemTime(new Date("2026-07-21T17:45:00.000Z"));
       await appendPendingAlta(suite.db, seeded, 3, { generadoEn: "2026-07-21T17:20:00.000Z" });
-      await suite.db.execute(sql`update envios set technical_incidence = 1`);
+      await suite.db.execute(sql`update verifactu_submissions set technical_incidence = 1`);
     } finally {
       vi.useRealTimers();
     }

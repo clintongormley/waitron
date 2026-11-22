@@ -18,7 +18,7 @@ import {
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import {
   ALLOCATED_FISCAL_SEED,
   ALLOCATED_FISCAL_RESTORE,
@@ -37,13 +37,13 @@ import {
   signPaperReservationForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { establishDormantAllocation } from "./standby-allocation.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = SERIES_BASES;
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -201,13 +201,13 @@ function refusal(reason: string) {
 }
 
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 
 it("the setup seed creates exactly the supplied SIF and every purpose without scaffold series", async () => {
   const report = await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-  const sifs = await suite.db.select().from(registroSif);
+  const sifs = await suite.db.select().from(verifactuIdentities);
   expect(sifs).toHaveLength(1);
   expect(sifs[0]).toMatchObject({
     nif: "89890001K",
@@ -230,7 +230,7 @@ it.each(["restore"])(
   "%s replaces all live identities once and returns no series for the host to recreate",
   async (action) => {
     await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-    const oldSif = (await suite.db.select().from(registroSif))[0]!;
+    const oldSif = (await suite.db.select().from(verifactuIdentities))[0]!;
     await suite.db.update(invoiceSeries).set({ nextNumber: 23 });
     const oldSeries = await liveSeries();
     const report = await attempt(action, async (tx, operation) =>
@@ -238,7 +238,7 @@ it.each(["restore"])(
     );
     expect(typeof report === "string" ? report : report.report).toContain("installation P000042");
     if (typeof report !== "string") expect(report.series).toBeUndefined();
-    const history = await suite.db.select().from(registroSif);
+    const history = await suite.db.select().from(verifactuIdentities);
     expect(history).toHaveLength(2);
     expect(history.find((row) => row.id === oldSif.id)).toMatchObject({
       ...oldSif,
@@ -269,7 +269,7 @@ it("a missing setup approval cannot mint a local identity", async () => {
   await expect(withTransaction(suite.db, (tx) => seed.run(tx, node))).rejects.toMatchObject(
     refusal("reauthentication_required"),
   );
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
 
@@ -282,7 +282,7 @@ it("a raw uncollected setup approval cannot mint a local identity", async () => 
       ),
     ).rejects.toMatchObject(refusal("outside_confirmation_missing"));
   });
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
 });
 
 it("keeps an absent taxpayer as a corrupt-database failure rather than an operator refusal", async () => {
@@ -293,7 +293,7 @@ it("keeps an absent taxpayer as a corrupt-database failure rather than an operat
   expect(error).toBeInstanceOf(Error);
   expect(error).not.toBeInstanceOf(AppError);
   expect((error as Error).message).toContain("taxpayer is empty");
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
@@ -315,7 +315,7 @@ it("a later host refusal rolls back the complete seeded set", async () => {
       throw new Error("host-write-refused");
     }),
   ).rejects.toThrow("host-write-refused");
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
@@ -327,26 +327,26 @@ it.each(["restore", "promote"])(
       attempt(action, (tx, operation) => seed.run(tx, node, operation)),
     ).rejects.toMatchObject(refusal("event_mismatch"));
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   },
 );
 
 it("the restore hook cannot consume a prepared setup operation", async () => {
   await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-  const before = await suite.db.select().from(registroSif);
+  const before = await suite.db.select().from(verifactuIdentities);
   await expect(
     attempt("setup", (tx, operation) => restore(tx, node, operation), { identity: "S000002" }),
   ).rejects.toMatchObject(refusal("event_mismatch"));
-  expect(await suite.db.select().from(registroSif)).toEqual(before);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual(before);
 });
 
 it("the restore hook refuses missing authority on a filing node", async () => {
   await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-  const before = await suite.db.select().from(registroSif);
+  const before = await suite.db.select().from(verifactuIdentities);
   await expect(withTransaction(suite.db, (tx) => restore(tx, node))).rejects.toMatchObject(
     refusal("reauthentication_required"),
   );
-  expect(await suite.db.select().from(registroSif)).toEqual(before);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual(before);
 });
 
 it.each([
@@ -381,11 +381,11 @@ it.each(["setup", "restore"])(
       .set({ nextNumber: 37 })
       .where(isNull(invoiceSeries.retiredAt));
     const before = await suite.db.select().from(invoiceSeries);
-    const sifs = await suite.db.select().from(registroSif);
+    const sifs = await suite.db.select().from(verifactuIdentities);
     const ledger = await suite.db.select().from(fiscalAllocations);
     expect(await attempt(action, run, { priorActivation: "committed" })).toEqual(first);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-    expect(await suite.db.select().from(registroSif)).toEqual(sifs);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
   },
 );
@@ -397,13 +397,13 @@ it.each(["setup", "restore"])(
       attempt(action, (tx, operation) => promote(tx, node, operation)),
     ).rejects.toMatchObject(refusal("event_mismatch"));
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    expect(await suite.db.select().from(registroSif)).toEqual([]);
+    expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   },
 );
 
 it("promotes a retained dormant reservation once, without resetting counters on retry", async () => {
   await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-  const target = { ...node, nodeId: TENANT_A.nodeId2 };
+  const target = { ...node, nodeId: TAXPAYER_A.nodeId2 };
   const held = request("promote", "P000042", target);
   const proof = held.input.allocation.reservationEvidence.block;
   const join = {
@@ -447,7 +447,10 @@ it("promotes a retained dormant reservation once, without resetting counters on 
   );
   const reservation = await suite.db.select().from(fiscalReservations);
   expect(
-    await suite.db.select().from(registroSif).where(eq(registroSif.nodeId, target.nodeId)),
+    await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.nodeId, target.nodeId)),
   ).toEqual([]);
   expect(
     await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, target.nodeId)),
@@ -456,8 +459,8 @@ it("promotes a retained dormant reservation once, without resetting counters on 
   await attempt("promote", run, { target });
   const targetSifs = await suite.db
     .select()
-    .from(registroSif)
-    .where(eq(registroSif.nodeId, target.nodeId));
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.nodeId, target.nodeId));
   expect(targetSifs).toHaveLength(1);
   expect(targetSifs[0]).toMatchObject({ numeroInstalacion: "P000042", revocadoEn: null });
   const active = await suite.db

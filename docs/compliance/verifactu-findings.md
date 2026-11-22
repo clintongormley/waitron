@@ -40,6 +40,9 @@ This is the single most important correction to the original design assumption.
 > **"per node"**, the node being the SIF. `till_id` survives only as an informational snapshot on
 > `registros_facturacion`/`sales`.
 >
+> **2026-11-22.** A1308 fiscal 1 renamed those tables to `verifactu_identities` and
+> `verifactu_records`.
+>
 > **Update, 2026-10-04 (A238).** The till snapshot is gone too: those rows now name a `source` and,
 > for a sale made on a device, its `device_id` ([2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md)).
 

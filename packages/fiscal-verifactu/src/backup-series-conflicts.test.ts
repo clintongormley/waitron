@@ -10,7 +10,7 @@ import { openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { verifyBackupFiscalHistory } from "./backup-verification-history.js";
-import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -20,7 +20,7 @@ it.each(["valid", "sif_id", "series_id", "changed-evidence"] as const)(
   async (fault) => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [series] = await suite.db.select().from(invoiceSeries);
-    await suite.db.insert(fiscalSeriesConflicts).values({
+    await suite.db.insert(verifactuSeriesConflicts).values({
       sifId: seeded.sifId,
       seriesId: series!.id,
       invoiceIdentity: "S1/99",
@@ -55,14 +55,14 @@ it.each(["valid", "sif_id", "series_id", "changed-evidence"] as const)(
             copy.exec("pragma foreign_keys=off");
             const triggers = copy
               .prepare(
-                "select name,sql from sqlite_schema where type='trigger' and tbl_name='fiscal_series_conflicts'",
+                "select name,sql from sqlite_schema where type='trigger' and tbl_name='verifactu_series_conflicts'",
               )
               .all();
             for (const trigger of triggers)
               copy.exec(`drop trigger "${String(trigger.name).replaceAll('"', '""')}"`);
             if (fault === "changed-evidence")
-              copy.exec("update fiscal_series_conflicts set evidence='{}'");
-            else copy.exec(`update fiscal_series_conflicts set "${fault}"='missing-parent'`);
+              copy.exec("update verifactu_series_conflicts set evidence='{}'");
+            else copy.exec(`update verifactu_series_conflicts set "${fault}"='missing-parent'`);
             for (const trigger of triggers) copy.exec(String(trigger.sql));
           } finally {
             copy.close();

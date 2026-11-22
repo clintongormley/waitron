@@ -98,10 +98,10 @@ interface FiscalCounts {
 
 async function fiscalCounts(db: Database): Promise<FiscalCounts> {
   const [sif, series, nodes, registros] = await Promise.all([
-    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from registro_sif`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from verifactu_identities`),
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from invoice_series`),
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from nodes`),
-    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from registros_facturacion`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from verifactu_records`),
   ]);
   return {
     sif: sif.rows[0]!.n,

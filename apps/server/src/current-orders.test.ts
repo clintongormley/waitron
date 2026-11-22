@@ -2265,7 +2265,7 @@ describe("a paid held dish fired on its own", () => {
         sales: await suite.db.all(sql`select * from sales order by id`),
         saleLines: await suite.db.all(sql`select * from sale_lines order by id`),
         tenders: await suite.db.all(sql`select * from tenders order by id`),
-        invoices: await suite.db.all(sql`select * from registros_facturacion order by id`),
+        invoices: await suite.db.all(sql`select * from verifactu_records order by id`),
         numbers: await suite.db.all(sql`select * from invoice_series order by id`),
         adjustments: await suite.db.select().from(adjustments).orderBy(adjustments.id),
         payments: await suite.db.all(sql`select * from bill_payments order by id`),

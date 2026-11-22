@@ -3,7 +3,7 @@ import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolm
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 
 export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
-  appendOnly("registros_facturacion", "ledger", LEDGER),
+  appendOnly("verifactu_records", "ledger", LEDGER),
   appendOnly(
     "returned_invoice_records",
     "ledger",
@@ -13,7 +13,7 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("filing_case_events", "ledger", LEDGER),
   appendOnly("fiscal_conflict_evidence", "ledger", LEDGER),
   appendOnly("fiscal_lookup_conflicts", "ledger", LEDGER),
-  appendOnly("fiscal_series_conflicts", "ledger", LEDGER),
+  appendOnly("verifactu_series_conflicts", "ledger", LEDGER),
   appendOnly("fiscal_allocations", "ledger", LEDGER),
   appendOnly("fiscal_reservations", "ledger", LEDGER),
   appendOnly("clock_stop_restarts", "ledger", LEDGER),
@@ -25,12 +25,12 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
     "the declaraciones responsables this venue has run; one row per release version, the same on every box",
   ),
   classify("cadenas", "ledger", LEDGER),
-  classify("registro_sif", "ledger", LEDGER),
-  classify("envios", "ledger", LEDGER),
-  classify("envio_flujo", "ledger", LEDGER),
+  classify("verifactu_identities", "ledger", LEDGER),
+  classify("verifactu_submissions", "ledger", LEDGER),
+  classify("verifactu_sending_state", "ledger", LEDGER),
   classify("acks", "ledger", LEDGER),
   appendOnly(
-    "fiscal_certificate_installs",
+    "verifactu_certificates",
     "local",
     "the certificates installed on a node, keyed by its node id; read by that node and every node that took over from it (`readHistoryNodes`)",
   ),

@@ -527,7 +527,7 @@ function firedAtOf(lineId: string): string | null {
 describe("a held dish split onto a check", () => {
   const filed = (billId: string) =>
     v.db.all(sql`
-      select importe_total as total from registros_facturacion
+      select importe_total as total from verifactu_records
       where sale_id in (select id from sales where working_order_id = ${billId})`);
   const flanTickets = (partyId: string) =>
     v.db.all(sql`
@@ -857,7 +857,7 @@ describe("merge bills", () => {
     const { partyId, main, second } = await twoBills("Table 60");
     const filed = (billId: string) =>
       v.db.all(sql`
-        select importe_total as total from registros_facturacion
+        select importe_total as total from verifactu_records
         where sale_id in (select id from sales where working_order_id = ${billId})`);
 
     await merge(partyId, main, second);

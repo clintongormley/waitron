@@ -15,7 +15,7 @@ import { openBackupQuery } from "@waitron/store";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
 import { KEY_ONLY_CANDIDATE, RC2_CANDIDATE } from "../test/openssl-certificates.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "../test/fixtures.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import { verifyBackupFiscalSecrets } from "./backup-verification-secrets.js";
@@ -74,24 +74,24 @@ function payload(cert = candidate) {
   return { pfxBase64: cert.pfx.toString("base64"), passphrase: cert.passphrase, certKind: "sello" };
 }
 async function capture(cert: Candidate | null = candidate) {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   if (cert !== null) {
     await sealAeatSecret(
-      { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(oldAt) },
+      { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(oldAt) },
       payload(older),
     );
     await sealAeatSecret(
-      { db: suite.db, ring, nodeId: TENANT_A.nodeId2, now: () => new Date(createdAt) },
+      { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId2, now: () => new Date(createdAt) },
       payload(older),
     );
     await sealAeatSecret(
-      { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(createdAt) },
+      { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(createdAt) },
       payload(cert),
     );
     await suite.db.execute(sql`insert into fiscal_certificate_reminders
       (id,node_id,install_id,stage,person_id,status,claimed_at,reported_at)
       select ${installId},node_id,id,'warning','10000000-0000-4000-8000-000000000013','sent',${createdAt},${createdAt}
-      from fiscal_certificate_installs where node_id=${TENANT_A.nodeId} and installed_at=${oldAt}`);
+      from verifactu_certificates where node_id=${TAXPAYER_A.nodeId} and installed_at=${oldAt}`);
   }
   entries = {
     "secrets/secrets.env": secretsEnv,
@@ -160,7 +160,7 @@ async function verify(options: { sourceSchema?: number | null; nodeId?: string }
           },
         },
         source: {
-          nodeId: options.nodeId ?? TENANT_A.nodeId,
+          nodeId: options.nodeId ?? TAXPAYER_A.nodeId,
           environment: "preproduction",
           createdAt,
         },
@@ -213,7 +213,7 @@ it("opens captured PFX without signing or network and emits only a fixed result"
     candidate.passphrase,
     candidate.fingerprint,
     "89890001K",
-    TENANT_A.nodeId,
+    TAXPAYER_A.nodeId,
     candidate.pfx.toString("base64"),
     key,
   ])
@@ -232,9 +232,9 @@ it("selects only the source node's latest install while retaining another node's
   both((db) =>
     db
       .prepare(
-        "update fiscal_certificate_installs set installed_at='2027-01-01T00:00:00.000Z' where node_id=?",
+        "update verifactu_certificates set installed_at='2027-01-01T00:00:00.000Z' where node_id=?",
       )
-      .run(TENANT_A.nodeId2),
+      .run(TAXPAYER_A.nodeId2),
   );
   expect(await verify()).toEqual(result("passed"));
 });
@@ -247,37 +247,37 @@ function tookOver(db: DatabaseSync, source: string, destination: string) {
 }
 it("accepts the install of the box the source took over from", async () => {
   await capture();
-  both((db) => tookOver(db, TENANT_A.nodeId, TENANT_B.nodeId));
-  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+  both((db) => tookOver(db, TAXPAYER_A.nodeId, TAXPAYER_B.nodeId));
+  expect(await verify({ nodeId: TAXPAYER_B.nodeId })).toEqual(result("passed"));
 });
 it("accepts the install of a box the source took over from two handovers back", async () => {
   await capture();
   both((db) => {
-    db.prepare("delete from fiscal_certificate_installs where node_id=?").run(TENANT_A.nodeId2);
-    tookOver(db, TENANT_A.nodeId, TENANT_A.nodeId2);
-    tookOver(db, TENANT_A.nodeId2, TENANT_B.nodeId);
+    db.prepare("delete from verifactu_certificates where node_id=?").run(TAXPAYER_A.nodeId2);
+    tookOver(db, TAXPAYER_A.nodeId, TAXPAYER_A.nodeId2);
+    tookOver(db, TAXPAYER_A.nodeId2, TAXPAYER_B.nodeId);
   });
-  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+  expect(await verify({ nodeId: TAXPAYER_B.nodeId })).toEqual(result("passed"));
 });
 it("lists a box once when the source took back from the box that took over from it", async () => {
   await capture();
   both((db) => {
-    tookOver(db, TENANT_A.nodeId, TENANT_B.nodeId);
-    tookOver(db, TENANT_B.nodeId, TENANT_A.nodeId);
+    tookOver(db, TAXPAYER_A.nodeId, TAXPAYER_B.nodeId);
+    tookOver(db, TAXPAYER_B.nodeId, TAXPAYER_A.nodeId);
   });
-  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("passed"));
+  expect(await verify({ nodeId: TAXPAYER_B.nodeId })).toEqual(result("passed"));
   expect(await verify()).toEqual(result("passed"));
 });
 it("finds no install for a source that took over from no box that has one", async () => {
   await capture();
-  both((db) => tookOver(db, TENANT_B.nodeId, TENANT_A.nodeId));
-  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("invalid"));
+  both((db) => tookOver(db, TAXPAYER_B.nodeId, TAXPAYER_A.nodeId));
+  expect(await verify({ nodeId: TAXPAYER_B.nodeId })).toEqual(result("invalid"));
 });
 it("reads only the source's own installs from a file with no handover record", async () => {
   await capture();
   both((db) => db.exec("drop table handover_activations"));
   expect(await verify()).toEqual(result("passed"));
-  expect(await verify({ nodeId: TENANT_B.nodeId })).toEqual(result("invalid"));
+  expect(await verify({ nodeId: TAXPAYER_B.nodeId })).toEqual(result("invalid"));
 });
 it("does not accept an older source-node certificate", async () => {
   await capture();
@@ -287,9 +287,7 @@ it("does not accept an older source-node certificate", async () => {
 it("accepts a source with one genuine installation", async () => {
   await capture();
   both((db) => db.prepare("delete from fiscal_certificate_reminders;").run());
-  both((db) =>
-    db.prepare("delete from fiscal_certificate_installs where installed_at=?").run(oldAt),
-  );
+  both((db) => db.prepare("delete from verifactu_certificates where installed_at=?").run(oldAt));
   expect(await verify()).toEqual(result("passed"));
 });
 it.each(["before", "after"] as const)("checks the source-node relationship in %s", async (side) => {
@@ -297,9 +295,9 @@ it.each(["before", "after"] as const)("checks the source-node relationship in %s
   edit(side, (db) =>
     db
       .prepare(
-        "update fiscal_certificate_installs set fingerprint='wrong-fingerprint' where node_id=? and installed_at=?",
+        "update verifactu_certificates set fingerprint='wrong-fingerprint' where node_id=? and installed_at=?",
       )
-      .run(TENANT_A.nodeId, createdAt),
+      .run(TAXPAYER_A.nodeId, createdAt),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -314,10 +312,8 @@ it.each([
   await capture();
   both((db) =>
     db
-      .prepare(
-        `update fiscal_certificate_installs set ${column}=? where node_id=? and installed_at=?`,
-      )
-      .run(value, TENANT_A.nodeId, createdAt),
+      .prepare(`update verifactu_certificates set ${column}=? where node_id=? and installed_at=?`)
+      .run(value, TAXPAYER_A.nodeId, createdAt),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -336,8 +332,8 @@ it.each([
   await capture();
   edit("after", (db) =>
     db
-      .prepare(`update fiscal_certificate_installs set ${column}='changed' where node_id=?`)
-      .run(TENANT_A.nodeId2),
+      .prepare(`update verifactu_certificates set ${column}='changed' where node_id=?`)
+      .run(TAXPAYER_A.nodeId2),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -353,15 +349,15 @@ it("requires an unambiguous latest source-node install", async () => {
   await capture();
   both((db) =>
     db
-      .prepare("update fiscal_certificate_installs set installed_at=? where node_id=?")
-      .run(createdAt, TENANT_A.nodeId),
+      .prepare("update verifactu_certificates set installed_at=? where node_id=?")
+      .run(createdAt, TAXPAYER_A.nodeId),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
 it("refuses a credential with no corresponding source install", async () => {
   await capture();
   both((db) =>
-    db.prepare("delete from fiscal_certificate_installs where node_id=?").run(TENANT_A.nodeId),
+    db.prepare("delete from verifactu_certificates where node_id=?").run(TAXPAYER_A.nodeId),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -440,7 +436,7 @@ it("accepts a personal certificate without inventing a subject taxpayer", async 
 });
 it("requires the captured source node to exist", async () => {
   await capture();
-  both((db) => db.prepare("delete from nodes where id=?").run(TENANT_A.nodeId));
+  both((db) => db.prepare("delete from nodes where id=?").run(TAXPAYER_A.nodeId));
   expect(await verify()).toEqual(result("invalid"));
 });
 it("permits an explicitly absent fiscal predecessor only without certificate evidence", async () => {
@@ -481,7 +477,7 @@ it("cannot certify a zero predecessor when migration invents certificate evidenc
   await capture();
   edit("before", (db) => {
     db.exec(
-      "delete from venue_credentials; delete from fiscal_certificate_reminders; delete from fiscal_certificate_installs",
+      "delete from venue_credentials; delete from fiscal_certificate_reminders; delete from verifactu_certificates",
     );
   });
   expect(await verify({ sourceSchema: null })).toEqual(result("invalid"));
@@ -493,7 +489,7 @@ it("keeps absent vault schema unavailable for a positive fiscal source", async (
 });
 it("refuses a usable credential with no installation-history schema", async () => {
   await capture();
-  both((db) => db.exec("drop table fiscal_certificate_installs"));
+  both((db) => db.exec("drop table verifactu_certificates"));
   expect(await verify()).toEqual(result("invalid"));
 });
 it("cannot bind material when the captured taxpayer is absent", async () => {

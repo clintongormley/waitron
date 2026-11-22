@@ -9,7 +9,7 @@ import { diagnosticTransport } from "./certificate-diagnosis-transport.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { VerifactuBackend } from "./backend.js";
 import { installCertificate } from "./certificate-install.js";
-import { registrosFacturacion, cadenas } from "./schema/index.js";
+import { verifactuRecords, cadenas } from "./schema/index.js";
 import { startDiagnosticServer } from "../test/certificate-diagnosis-fixtures.js";
 import {
   authority,
@@ -19,7 +19,7 @@ import {
   parentFixture,
 } from "../test/certificate-diagnosis-parent-fixtures.js";
 import { SIN_DATOS_BODY } from "../test/certificate-fixtures.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { credentialRevision, loadKeyRing } from "@waitron/credentials";
@@ -62,7 +62,7 @@ async function heldServer() {
 
 describe("certificate diagnosis without a sale or install lock", () => {
   it("commits a real sale and its fiscal record, chain and invoice counter before the query answers", async () => {
-    const { nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+    const { nodeId, seriesId } = await seedTaxpayerWithSif(suite.db, {
       nif: "89890001K",
     });
     const held = await heldServer();
@@ -113,8 +113,8 @@ describe("certificate diagnosis without a sale or install lock", () => {
       });
       const [record] = await suite.db
         .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.saleId, saleId));
+        .from(verifactuRecords)
+        .where(eq(verifactuRecords.saleId, saleId));
       expect(record).toMatchObject({ saleId, secuencia: 1 });
       const [chain] = await suite.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
       expect(chain).toMatchObject({ ultimoRegistroId: record!.id, ultimaHuella: record!.huella });

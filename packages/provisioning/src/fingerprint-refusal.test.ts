@@ -107,7 +107,7 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
     expect(db.prepare("select code, sale_id, source from incidents").all()).toEqual([
       { code: "fiscal.fingerprint_mismatch", sale_id: null, source: "readiness_test" },
     ]);
-    for (const table of ["sales", "registros_facturacion", "envios"]) {
+    for (const table of ["sales", "verifactu_records", "verifactu_submissions"]) {
       if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot identifier");
       expect(db.prepare(`select count(*) as count from "${table}"`).get()).toEqual({ count: 0 });
     }

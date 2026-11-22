@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { applyVenue, planVenue, venueFiscalSelection } from "@waitron/provisioning";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   enabledModules,
@@ -251,7 +251,7 @@ it("writes and reads back the configured hour through the real provisioning and 
     }),
   );
   expect(result.nodeId).toBe(context.binding.targetNodeId);
-  const stored = await venue.db.select().from(registroSif);
+  const stored = await venue.db.select().from(verifactuIdentities);
   expect(stored).toHaveLength(1);
   expect(stored[0]!.numeroInstalacion).toBe("0CNNY");
   expect(

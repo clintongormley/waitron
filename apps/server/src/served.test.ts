@@ -30,7 +30,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -392,7 +392,7 @@ async function snapshot(partyId: string) {
         ),
       )
       .orderBy(saleLines.id),
-    registros: await suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.id),
+    registros: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.id),
   };
 }
 

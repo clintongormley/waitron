@@ -8,8 +8,8 @@ import type {
   ReplyMismatchView,
   WarnedRecordView,
 } from "./filing-overview-types.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 const REPLY = "fiscal.respuesta_descuadrada";
 const TOTALS = "fiscal.record_totals_disagree";
@@ -44,7 +44,7 @@ export async function readFilingWarnings(
   // `listed` is the query above again, not its ids bound one by one, whose number grows with the
   // data. A reply's records come from its `registroIds` in the order sent; a validation warning's
   // candidates are every record of its sale. Each `cross join` keeps the listed alerts as the outer
-  // loop, so `registros_facturacion` is searched by its indexes rather than scanned: a box gathers
+  // loop, so `verifactu_records` is searched by its indexes rather than scanned: a box gathers
   // no planner statistics, and without them SQLite chose to scan it. The sale lookup also names
   // its index.
   const candidates = await tx.execute<{
@@ -63,15 +63,15 @@ export async function readFilingWarnings(
       where l.code = ${REPLY}
       union all
       select l.id, r.id, null
-      from listed l cross join ${registrosFacturacion} r indexed by registros_sale_idx
+      from listed l cross join ${verifactuRecords} r indexed by verifactu_records_sale_idx
         on r.sale_id = l.sale_id
       where l.code <> ${REPLY}
     )
     select n.incident_id, n.position, r.num_serie_factura, r.fecha_expedicion_factura,
       r.tipo_registro, r.fecha_hora_huso_gen_registro as generated, e.estado
     from named n
-    cross join ${registrosFacturacion} r on r.id = n.registro_id
-    left join ${envios} e on e.registro_id = r.id
+    cross join ${verifactuRecords} r on r.id = n.registro_id
+    left join ${verifactuSubmissions} e on e.registro_id = r.id
     order by n.incident_id, n.position
   `);
   const byIncident = new Map<string, typeof candidates.rows>();

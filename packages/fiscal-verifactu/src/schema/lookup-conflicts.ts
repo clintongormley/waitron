@@ -2,7 +2,7 @@ import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, newId, table, ts } from "@waitron/db";
 import type { LookupConflictEvidence } from "../conflict-types.js";
 import { filingCases } from "./filing-cases.js";
-import { registrosFacturacion } from "./registros.js";
+import { verifactuRecords } from "./verifactu-records.js";
 
 export const fiscalLookupConflicts = table(
   "fiscal_lookup_conflicts",
@@ -10,7 +10,7 @@ export const fiscalLookupConflicts = table(
     id: id("id").primaryKey().$defaultFn(newId),
     registroId: id("registro_id")
       .notNull()
-      .references(() => registrosFacturacion.id),
+      .references(() => verifactuRecords.id),
     caseId: id("case_id")
       .notNull()
       .references(() => filingCases.id),

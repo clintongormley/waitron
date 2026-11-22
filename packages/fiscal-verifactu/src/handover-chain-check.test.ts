@@ -27,7 +27,7 @@ afterEach(async () => {
 async function append(node: SeededNode, number: number) {
   const sale = await seedSale(suite.db, node, number);
   const [sif] = suite.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+    sql`select nif, numero_instalacion from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
   );
   const pending = altaFor(node, sale, number, number);
   pending.input.SistemaInformatico = {
@@ -100,7 +100,7 @@ describe("checkFiscalChains", () => {
     const changed = await copy();
     damage(
       changed,
-      "update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where secuencia = 2 and node_id = (select min(node_id) from registros_facturacion)",
+      "update verifactu_records set importe_total = printf('%.2f', importe_total + 1) where secuencia = 2 and node_id = (select min(node_id) from verifactu_records)",
     );
     expect(await check(unchanged)).toBe("ok");
     expect(await check(changed)).toBe("broken");
@@ -108,7 +108,7 @@ describe("checkFiscalChains", () => {
     try {
       const raw = db
         .prepare(
-          "select * from registros_facturacion where secuencia = 2 and node_id = (select min(node_id) from registros_facturacion)",
+          "select * from verifactu_records where secuencia = 2 and node_id = (select min(node_id) from verifactu_records)",
         )
         .get();
       const row = decodeRegistroRow(raw!);
@@ -130,7 +130,7 @@ describe("checkFiscalChains", () => {
     const shortened = await copy();
     damage(
       shortened,
-      "delete from registros_facturacion where secuencia = 2 and node_id = (select min(node_id) from registros_facturacion)",
+      "delete from verifactu_records where secuencia = 2 and node_id = (select min(node_id) from verifactu_records)",
     );
     expect(await check(unchanged)).toBe("ok");
     expect(await check(shortened)).toBe("broken");
@@ -141,13 +141,13 @@ describe("checkFiscalChains", () => {
     const dropped = await copy();
     damage(
       dropped,
-      "drop table registros_facturacion; drop table registro_sif; drop table cadenas;",
+      "drop table verifactu_records; drop table verifactu_identities; drop table cadenas;",
     );
     expect(await check(empty)).toBe("ok");
     expect(await check(dropped)).toBe("broken");
   });
 
-  it.each(["registros_facturacion", "registro_sif", "cadenas", "nodes"])(
+  it.each(["verifactu_records", "verifactu_identities", "cadenas", "nodes"])(
     "a populated copy missing %s is broken",
     async (table) => {
       await twoChains();

@@ -52,7 +52,7 @@ async function summarise(path?: string): Promise<ChainSummary[]> {
 
 function records(nodeId: string) {
   return suite.db.all<{ id: string; huella: string; secuencia: number; sif_id: string }>(
-    sql`select id, huella, secuencia, sif_id from registros_facturacion where node_id = ${nodeId} order by secuencia`,
+    sql`select id, huella, secuencia, sif_id from verifactu_records where node_id = ${nodeId} order by secuencia`,
   );
 }
 
@@ -60,7 +60,7 @@ const TIME = "2026-07-20T17:20:00.000Z";
 
 async function envio(registroId: string, estado: string) {
   await suite.db.execute(
-    sql`insert into envios (registro_id, estado, proximo_intento_en) values (${registroId}, ${estado}, ${TIME})`,
+    sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en) values (${registroId}, ${estado}, ${TIME})`,
   );
 }
 
@@ -78,7 +78,7 @@ function acksHash(acks: (string | null)[][]) {
 
 function sifFields(sifId: string) {
   const [row] = suite.db.all<{ id_sistema_informatico: string; numero_instalacion: string }>(
-    sql`select id_sistema_informatico, numero_instalacion from registro_sif where id = ${sifId}`,
+    sql`select id_sistema_informatico, numero_instalacion from verifactu_identities where id = ${sifId}`,
   );
   return {
     idSistemaInformatico: row!.id_sistema_informatico,
@@ -205,7 +205,7 @@ describe("summariseChains", () => {
     const estados = [...states, "enviando"];
     for (const [i, row] of rows.entries())
       await suite.db.execute(
-        sql`insert into envios (registro_id, estado, proximo_intento_en) values (${row.id}, ${estados[i]!}, ${time})`,
+        sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en) values (${row.id}, ${estados[i]!}, ${time})`,
       );
     await suite.db.execute(
       sql`insert into acks (registro_id, submitted_at, csv, state) values (${rows[2]!.id}, ${time}, 'csv-a', 'accepted')`,
@@ -246,13 +246,13 @@ describe("summariseChains", () => {
     await append(node, 1);
     const [row] = records(node.nodeId);
     await suite.db.execute(
-      sql`insert into envios (registro_id, estado, proximo_intento_en) values (${row!.id}, 'pendiente', '2026-07-20T17:20:00.000Z')`,
+      sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en) values (${row!.id}, 'pendiente', '2026-07-20T17:20:00.000Z')`,
     );
     const path = await copy();
     const db = new DatabaseSync(path);
     try {
       db.exec("pragma ignore_check_constraints = on");
-      db.exec("update envios set estado = 'perdido'");
+      db.exec("update verifactu_submissions set estado = 'perdido'");
     } finally {
       db.close();
     }
@@ -343,9 +343,11 @@ describe("summariseChains", () => {
 
   it("uses every state admitted by the migrated envio CHECK and no other", () => {
     const [row] = suite.db.all<{ sql: string }>(
-      sql`select sql from sqlite_schema where type = 'table' and name = 'envios'`,
+      sql`select sql from sqlite_schema where type = 'table' and name = 'verifactu_submissions'`,
     );
-    const vocabulary = /"envios_estado_ck" CHECK\(.*? in \(([^)]+)\)/s.exec(row!.sql);
+    const vocabulary = /"verifactu_submissions_estado_ck" CHECK\(.*? in \(([^)]+)\)/s.exec(
+      row!.sql,
+    );
     expect(vocabulary).not.toBeNull();
     const states = [...vocabulary![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
     expect(states.length).toBeGreaterThan(0);

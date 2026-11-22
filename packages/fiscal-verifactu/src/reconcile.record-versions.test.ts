@@ -12,8 +12,8 @@ import { readActiveConflicts } from "./conflict-evidence.js";
 import { appendToChain } from "./chain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedNode, seedSale, TEST_NIF, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -39,7 +39,7 @@ async function version(position: number, estado: string, correctsRegistroId?: st
         DescripcionOperacion: `Restaurant service version ${position}`,
       },
     });
-    await tx.insert(envios).values({
+    await tx.insert(verifactuSubmissions).values({
       registroId: record.id,
       estado,
       csv: estado === "aceptado" ? `CSV-${position}` : null,
@@ -54,7 +54,7 @@ async function authorityHolding(ids: string[]) {
   const aeat = createFakeAeat({ serverNow: NOW, tiempoEsperaInicial: 5 });
   const client = aeat.client();
   for (const id of ids) {
-    const raw = await suite.db.execute(sql`select * from registros_facturacion where id = ${id}`);
+    const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${id}`);
     const record = fromRegistroRow(decodeRegistroRow(raw.rows[0]!)) as RegistroAlta;
     const response = await client.submit(
       { ObligadoEmision: { NIF: TEST_NIF, NombreRazon: "Waitron SL" } },
@@ -79,9 +79,9 @@ function deps(client: VerifactuClient): ReconcileDeps {
 async function delivery(ids: string[]) {
   return suite.db
     .select()
-    .from(envios)
-    .where(inArray(envios.registroId, ids))
-    .orderBy(envios.registroId);
+    .from(verifactuSubmissions)
+    .where(inArray(verifactuSubmissions.registroId, ids))
+    .orderBy(verifactuSubmissions.registroId);
 }
 
 async function acknowledgements() {
@@ -89,7 +89,7 @@ async function acknowledgements() {
 }
 
 async function immutableRows() {
-  return suite.db.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+  return suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
 }
 
 it("does not resubmit earlier versions when consulta holds only the second correction's reference", async () => {
@@ -182,9 +182,7 @@ it("does not requeue a version superseded while the consulta request is in fligh
     submit: (...args) => client.submit(...args),
     consultar: async (...args) => {
       latest = await version(3, "pendiente", first);
-      const raw = await suite.db.execute(
-        sql`select * from registros_facturacion where id = ${latest}`,
-      );
+      const raw = await suite.db.execute(sql`select * from verifactu_records where id = ${latest}`);
       const record = fromRegistroRow(decodeRegistroRow(raw.rows[0]!)) as RegistroAlta;
       const response = await client.submit(
         { ObligadoEmision: { NIF: TEST_NIF, NombreRazon: "Waitron SL" } },

@@ -14,9 +14,9 @@ import {
   type RecordCorrectionRequest,
 } from "./record-remedy.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
-import { envios } from "./schema/envios.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { cadenas } from "./schema/cadenas.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -45,7 +45,7 @@ beforeEach(async () => {
       altaFor(node, saleId, 1, 1, "preproduction"),
     );
     await tx
-      .insert(envios)
+      .insert(verifactuSubmissions)
       .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
     const filingCase = await openFilingCase(tx, {
       registroId: original.id,
@@ -92,8 +92,8 @@ function apply(enabled = true, value = request, acceptance = false) {
 
 async function snapshot() {
   return {
-    records: await suite.db.select().from(registrosFacturacion),
-    deliveries: await suite.db.select().from(envios),
+    records: await suite.db.select().from(verifactuRecords),
+    deliveries: await suite.db.select().from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
@@ -175,7 +175,10 @@ it("refuses a disabled remedy for an administrator without changing the case or 
 it.each(["pendiente", "enviando", "detenido"])(
   "refuses an unknown original outcome (%s)",
   async (estado) => {
-    await suite.db.update(envios).set({ estado }).where(eq(envios.registroId, request.registroId));
+    await suite.db
+      .update(verifactuSubmissions)
+      .set({ estado })
+      .where(eq(verifactuSubmissions.registroId, request.registroId));
     const before = await snapshot();
     await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
     expect(await snapshot()).toEqual(before);
@@ -258,11 +261,11 @@ it.each([false, true])(
 );
 
 it("reports a malformed synthetic predecessor while preserving it and appending the correction", async () => {
-  const [original] = await suite.db.select().from(registrosFacturacion);
+  const [original] = await suite.db.select().from(verifactuRecords);
   const saleId = await seedSale(suite.db, node, 2);
   await withTransaction(suite.db, async (tx) => {
     const [inserted] = await tx
-      .insert(registrosFacturacion)
+      .insert(verifactuRecords)
       .values({
         ...original!,
         id: crypto.randomUUID(),
@@ -301,14 +304,14 @@ it("reports a malformed synthetic predecessor while preserving it and appending 
 
 it("corrects an accepted-with-errors delivery only under a policy that enables it, without changing its original acknowledgement facts", async () => {
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({
       estado: "aceptado_con_errores",
       codigoError: "2000",
       csv: "ORIGINAL-CSV",
       confirmadoEn: NOW,
     })
-    .where(eq(envios.registroId, request.registroId));
+    .where(eq(verifactuSubmissions.registroId, request.registroId));
   const before = await snapshot();
   await expect(apply()).rejects.toMatchObject({
     code: "fiscal.remedy_disabled",
@@ -375,9 +378,9 @@ it.each(["actionKey", "reason"] as const)(
 it("resolves successive version cases without rewriting the earlier case, events or records", async () => {
   const first = await apply();
   await suite.db
-    .update(envios)
+    .update(verifactuSubmissions)
     .set({ estado: "rechazado", codigoError: "1161" })
-    .where(eq(envios.registroId, first.registroId));
+    .where(eq(verifactuSubmissions.registroId, first.registroId));
   const before = await snapshot();
   const nextCase = await withTransaction(suite.db, (tx) =>
     openFilingCase(tx, {
@@ -439,7 +442,7 @@ it("refuses a synthetic held absent-original cancellation rather than treating i
       ...pending,
       input: { ...pending.input, SinRegistroPrevio: "S" },
     });
-    await tx.insert(envios).values({ registroId: appended.id, estado: "retenido" });
+    await tx.insert(verifactuSubmissions).values({ registroId: appended.id, estado: "retenido" });
   });
   const before = await snapshot();
   await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });

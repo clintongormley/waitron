@@ -38,7 +38,7 @@ export interface SeededNode {
 }
 
 // Module-scope, so each call's NIF is unique for the process and never collides in
-// `registro_sif_instalacion_uq`.
+// `verifactu_identities_instalacion_uq`.
 let nifSequence = 0;
 
 const NIF_CONTROL_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
@@ -173,8 +173,8 @@ export async function seedNodesForSifContention(
 }
 
 /**
- * Inserts one core `sales` row and returns its id — the FK `registros_facturacion.sale_id` needs.
- * A zero, unsettled sale: nothing ties `registros_facturacion.importe_total` to `sales.total`.
+ * Inserts one core `sales` row and returns its id — the FK `verifactu_records.sale_id` needs.
+ * A zero, unsettled sale: nothing ties `verifactu_records.importe_total` to `sales.total`.
  */
 export async function seedSale(
   db: Database | Transaction,

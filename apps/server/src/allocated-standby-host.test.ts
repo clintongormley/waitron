@@ -16,7 +16,7 @@ import {
   ALLOCATED_FISCAL_STANDBY,
   createPaperAllocationPreparation,
 } from "@waitron/fiscal-verifactu";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -342,8 +342,8 @@ async function liveTarget(target: string) {
   return {
     sif: await spare.db
       .select()
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, target), isNull(registroSif.revocadoEn))),
+      .from(verifactuIdentities)
+      .where(and(eq(verifactuIdentities.nodeId, target), isNull(verifactuIdentities.revocadoEn))),
     series: await spare.db
       .select()
       .from(invoiceSeries)
@@ -353,7 +353,7 @@ async function liveTarget(target: string) {
 }
 
 it("reserves and adopts without an active SIF or series, then opens all purposes with the real node key at takeover", async () => {
-  const primaryBefore = await primary.db.select().from(registroSif);
+  const primaryBefore = await primary.db.select().from(verifactuIdentities);
   const allocationsBefore = await primary.db.select().from(fiscalAllocations);
   const held = await reserve();
   expect(held.reserved.series).toEqual([]);
@@ -361,7 +361,7 @@ it("reserves and adopts without an active SIF or series, then opens all purposes
   await establish(held);
   expect(await liveTarget(held.standby.nodeId)).toEqual({ sif: [], series: [], allocations: [] });
   expect(await spare.db.select().from(fiscalReservations)).toHaveLength(1);
-  expect(await primary.db.select().from(registroSif)).toEqual(primaryBefore);
+  expect(await primary.db.select().from(verifactuIdentities)).toEqual(primaryBefore);
   expect(await primary.db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
   await setNodeMode({ venue: spare.db, node: spare.node }, held.standby.nodeId, "mirror", "adopt");
   const key = await mintBreakGlassSecret(

@@ -2771,7 +2771,7 @@
       "bill_payment_id": null
     }
   ],
-  "registros_facturacion": [
+  "verifactu_records": [
     {
       "source": "demo_seed",
       "device_id": null,
@@ -3765,7 +3765,7 @@
       "creado_en": "2026-10-01T09:30:00.000Z"
     }
   ],
-  "envios": [
+  "verifactu_submissions": [
     {
       "estado": "pendiente",
       "intentos": 0,

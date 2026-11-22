@@ -8,9 +8,9 @@ import { decimal, saleId as brandSaleId, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
-import { registrosFacturacion } from "./schema/registros.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { anulacionFor } from "./testing/seed.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 // What this file asserts is decided in application code, before or instead of the insert — a
@@ -24,7 +24,7 @@ let seriesId: SeriesId;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -57,7 +57,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     await useSeriesCode("Serie A");
     await expect(sell()).rejects.toMatchObject({ code: "fiscal.record_invalid" });
 
-    const registros = await suite.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(verifactuRecords);
     expect(registros).toEqual([]);
 
     // The sale itself must be gone too — `recordSale` writes the sale and the fiscal record in ONE
@@ -78,7 +78,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     const { saleId } = await sell();
     expect(saleId).toBeDefined();
 
-    const [registro] = await suite.db.select().from(registrosFacturacion);
+    const [registro] = await suite.db.select().from(verifactuRecords);
     expect(registro?.numSerieFactura).toBe("FS/1");
   });
 
@@ -141,7 +141,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     });
     expect(saleId).toBeDefined();
 
-    const registros = await suite.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(verifactuRecords);
     expect(registros).toHaveLength(1);
   });
 
@@ -207,7 +207,7 @@ describe("a record's dates are checked against the time it was generated, not th
 });
 
 describe("a recipient's name is checked as closely as the issuer's", () => {
-  /** A business customer's name is typed or pasted at the till, and `registros_facturacion` is
+  /** A business customer's name is typed or pasted at the till, and `verifactu_records` is
    * append-only, so a control character stored there could never be taken out again.
    *
    * The sale row is inserted on the SAME `withTransaction` transaction, which makes the "nothing was
@@ -269,7 +269,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       code: "fiscal.record_invalid",
     });
 
-    const registros = await suite.db.select().from(registrosFacturacion);
+    const registros = await suite.db.select().from(verifactuRecords);
     expect(registros).toEqual([]);
 
     const soldRows = await suite.db.select().from(sales);
@@ -285,7 +285,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     await useSeriesCode("FS");
     await sellToNamedRecipient("Cliente SL");
 
-    const [registro] = await suite.db.select().from(registrosFacturacion);
+    const [registro] = await suite.db.select().from(verifactuRecords);
     expect(registro?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345674" }],
     });

@@ -68,7 +68,7 @@ describe("appendToChain from many callers started together", () => {
     // Anything below 20 is a lost append, not a flake.
     expect(results).toHaveLength(WRITERS);
     const { rows } = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as int) as count from registros_facturacion where node_id = ${node.nodeId}
+      select cast(count(*) as int) as count from verifactu_records where node_id = ${node.nodeId}
     `);
     expect(rows[0]?.count).toBe(WRITERS);
   });
@@ -76,7 +76,7 @@ describe("appendToChain from many callers started together", () => {
   it("assigns every simultaneously-started append a distinct position with no gaps", async () => {
     await appendTogether(WRITERS);
     const { rows } = await suite.db.execute<{ secuencia: number }>(sql`
-      select secuencia from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+      select secuencia from verifactu_records where node_id = ${node.nodeId} order by secuencia
     `);
     expect(rows.map((r) => r.secuencia)).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
   });
@@ -92,7 +92,7 @@ describe("appendToChain from many callers started together", () => {
       primer_registro: number;
     }>(sql`
       select secuencia, huella, anterior_huella, primer_registro
-      from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+      from verifactu_records where node_id = ${node.nodeId} order by secuencia
     `);
     expect(rows[0]?.primer_registro).toBe(1);
     // Walking the WHOLE chain, not spot-checking the ends: a single crossed pair in the middle
@@ -147,7 +147,7 @@ describe("appendToChain from many callers started together", () => {
     expect(a.status).toBe("fulfilled");
     expect(b.status).toBe("fulfilled");
     const { rows } = await suite.db.execute<{ secuencia: number; anterior_huella: string | null }>(
-      sql`select secuencia, huella, anterior_huella from registros_facturacion
+      sql`select secuencia, huella, anterior_huella from verifactu_records
           where node_id = ${node.nodeId} order by secuencia`,
     );
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2]);

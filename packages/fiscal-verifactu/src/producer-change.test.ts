@@ -29,7 +29,7 @@ async function append(
 ) {
   const sale = await seedSale(suite.db, node, number);
   const [sif] = suite.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+    sql`select nif, numero_instalacion from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
   );
   const pending = altaFor(node, sale, number, number);
   pending.input.SistemaInformatico = {
@@ -92,7 +92,7 @@ describe("refuseProducerChange", () => {
     const node = await seedNode(suite.db);
     await append(node, 1);
     const [sif] = suite.db.all<{ nif: string }>(
-      sql`select nif from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+      sql`select nif from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
     );
     await suite.db.transaction((tx) =>
       registerSif(tx, {
@@ -156,7 +156,7 @@ describe("refuseProducerChange", () => {
       IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR00000000000" },
     });
     const [stored] = suite.db.all<{ software: string }>(
-      sql`select sistema_informatico as software from registros_facturacion where node_id = ${node.nodeId}`,
+      sql`select sistema_informatico as software from verifactu_records where node_id = ${node.nodeId}`,
     );
     expect(JSON.parse(stored!.software)).toMatchObject({ IDOtro: { ID: "FR00000000000" } });
     expect(JSON.parse(stored!.software)).not.toHaveProperty("NIF");

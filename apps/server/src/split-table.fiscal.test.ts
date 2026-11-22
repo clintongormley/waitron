@@ -88,7 +88,7 @@ function counts() {
   const [row] = venue.db.all<{ sales: number; records: number; parties: number }>(sql`
     select
       (select count(*) from sales) as sales,
-      (select count(*) from registros_facturacion) as records,
+      (select count(*) from verifactu_records) as records,
       (select count(*) from parties) as parties
   `);
   return row!;
@@ -110,7 +110,7 @@ function recordOf(billId: string) {
   }>(sql`
     select r.num_serie_factura as numSerie, r.huella as huella,
       r.anterior_num_serie_factura as previousNumSerie, r.anterior_huella as previousHuella
-    from registros_facturacion r join sales s on s.id = r.sale_id
+    from verifactu_records r join sales s on s.id = r.sale_id
     where s.working_order_id = ${billId}
   `);
   return row!;

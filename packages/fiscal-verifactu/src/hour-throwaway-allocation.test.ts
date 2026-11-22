@@ -3,11 +3,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createHourThrowawayAllocation } from "./hour-throwaway-allocation.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
-import { registroSif } from "./schema/sif.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { createThrowawayAllocation } from "./throwaway-allocation.js";
 const signing = vi.hoisted(() => ({ calls: 0 }));
@@ -22,7 +22,7 @@ vi.mock("node:crypto", async (original) => {
   };
 });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId };
+const node = { nodeId: TAXPAYER_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },
@@ -68,7 +68,7 @@ async function activate(
   );
 }
 beforeEach(async () => {
-  await seedTenants(suite.db);
+  await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 it("disposable preparation activates every exact hour base through the unchanged writer without paper evidence", async () => {
@@ -83,7 +83,7 @@ it("disposable preparation activates every exact hour base through the unchanged
     { code: "R-0CNNW", purpose: "corrective" },
     { code: "a/B_1.2-3-0CNNW", purpose: "standard" },
   ]);
-  const [sif] = await suite.db.select().from(registroSif);
+  const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.numeroInstalacion).toBe("0CNNW");
   expect(JSON.stringify(sif)).not.toMatch(/throwaway|custodian|privateKey/);
   const [row] = await suite.db.select().from(fiscalAllocations);
@@ -139,7 +139,7 @@ it("cannot activate disposable input on a production-stamped database", async ()
     code: "sif.allocation_invalid",
     params: { reason: "environment_mismatch" },
   });
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
 it.each([
@@ -149,7 +149,7 @@ it.each([
   { nodeId: randomUUID() },
 ])("cannot borrow disposable preparation for %j", async (change) => {
   await expect(activate(fresh(), change)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
 });
 it("cannot replace the internally prepared input even with newly authenticated authority", async () => {
   const prepared = fresh();
@@ -158,7 +158,7 @@ it("cannot replace the internally prepared input even with newly authenticated a
   await expect(activate(prepared, { input: changed })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
   });
-  expect(await suite.db.select().from(registroSif)).toEqual([]);
+  expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
 });
 it("detaches caller base values before returning its operation", async () => {
   const supplied = input();

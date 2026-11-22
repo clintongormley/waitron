@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { newId, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenantWithSif } from "../test/fixtures.js";
+import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionDelayedSource, fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -21,9 +21,9 @@ interface Identity {
 // Each test mints its own node/SIF identity; the suite empties every data table after each test,
 // so one test's rows never reach another's read.
 async function seedIdentity(db: Database): Promise<Identity> {
-  const { deviceId, nodeId } = await seedTenantWithSif(db);
+  const { deviceId, nodeId } = await seedTaxpayerWithSif(db);
   const { rows } = await db.execute<{ id: string; nif: string }>(sql`
-    select id, nif from registro_sif where node_id = ${nodeId}
+    select id, nif from verifactu_identities where node_id = ${nodeId}
   `);
   return { deviceId, nodeId, sifId: rows[0]!.id, nif: rows[0]!.nif };
 }
@@ -32,7 +32,7 @@ async function seedIdentity(db: Database): Promise<Identity> {
 // per identity, so one monotonic counter keeps every seeded registro/envío collision-free.
 let seq = 0;
 
-/** One `registros_facturacion` row generated at `genTime`, returning its id. Minimal columns,
+/** One `verifactu_records` row generated at `genTime`, returning its id. Minimal columns,
  * mirroring `seedSoldRegistro`. */
 async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<string> {
   seq += 1;
@@ -51,7 +51,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   `);
   const huella = String(s).padStart(64, "0");
   const registro = await db.execute<{ id: string }>(sql`
-    insert into registros_facturacion (
+    insert into verifactu_records (
       id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
@@ -65,7 +65,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   return registro.rows[0]!.id;
 }
 
-/** One `registros_facturacion` row generated at `genTime`, plus its 1:1 `envios` sidecar in
+/** One `verifactu_records` row generated at `genTime`, plus its 1:1 `verifactu_submissions` sidecar in
  * `estado` — the two rows the source joins. */
 async function seedWaiting(
   db: Database,
@@ -76,7 +76,7 @@ async function seedWaiting(
   const registroId = await seedRegistro(db, id, genTime);
   // `proximo_intento_en` is another `$defaultFn` column; nothing under test reads it.
   await db.execute(sql`
-    insert into envios (registro_id, estado, proximo_intento_en)
+    insert into verifactu_submissions (registro_id, estado, proximo_intento_en)
     values (${registroId}, ${estado}, ${genTime.toISOString()})
   `);
 }

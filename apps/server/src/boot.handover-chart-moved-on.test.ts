@@ -192,7 +192,7 @@ function readDisk() {
       mode: mode.mode,
       ownSif: (
         venue
-          .prepare("select count(*) as n from registro_sif where node_id = ?")
+          .prepare("select count(*) as n from verifactu_identities where node_id = ?")
           .get(standby.nodeId) as { n: number }
       ).n,
       activations: count("handover_activations"),

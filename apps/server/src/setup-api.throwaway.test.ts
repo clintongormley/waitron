@@ -373,13 +373,13 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       taxpayer: venueDb.db.all(sql`select tax_id from taxpayer`),
       deployment: venueDb.db.all(sql`select environment from deployment`),
       allocations: venueDb.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`),
-      sif: venueDb.db.all(sql`select numero_instalacion from registro_sif`),
+      sif: venueDb.db.all(sql`select numero_instalacion from verifactu_identities`),
       series: venueDb.db.all(sql`select code, purpose, next_number from invoice_series`),
     };
   }
 
   function expectThrowawayVenue(environment: string) {
-    expect(venueDb.db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
+    expect(venueDb.db.all(sql`select numero_instalacion from verifactu_identities`)).toEqual([
       { numero_instalacion: "0CNNW" },
     ]);
     expect(

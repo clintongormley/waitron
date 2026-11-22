@@ -19,7 +19,7 @@ import {
   WAITRON_ID_SISTEMA as SOFTWARE_ID,
   VerifactuBackend,
   fiscalAllocations,
-  registrosFacturacion,
+  verifactuRecords,
 } from "@waitron/fiscal-verifactu";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { readCloudAllocationReceipt } from "@waitron/fiscal-verifactu/src/cloud-evidence.js";
@@ -54,7 +54,7 @@ afterEach(async () => {
 });
 async function stage(kind: "archive" | "stream") {
   fixture = await stagedHourCrash(suite, kind, "cloud-offline-restore");
-  const original = await suite.db.select().from(registrosFacturacion);
+  const original = await suite.db.select().from(verifactuRecords);
   expect(original).toHaveLength(1);
   return { ...fixture, original };
 }
@@ -304,12 +304,12 @@ it("completes a real sale after current-hour recovery without calling fetch", as
     );
     const rows = await copy.venue
       .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.saleId, sale.saleId));
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.saleId, sale.saleId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.numSerieFactura).toBe("A-0CNQR/1");
     expect(
-      (await copy.venue.select().from(registrosFacturacion)).filter(
+      (await copy.venue.select().from(verifactuRecords)).filter(
         (row) => row.saleId !== sale.saleId,
       ),
     ).toEqual(f.original);
