@@ -276,7 +276,7 @@ function restoreSpot(
     const section = members.find(
       (member) => member.kind === "section" && member.sectionId === sectionId,
     );
-    if (section?.kind !== "section" || section.includedMenu !== undefined) return null;
+    if (section?.kind !== "section") return null;
     members = section.members;
   }
   const productIndex = members.findIndex(
@@ -327,10 +327,8 @@ function productPlacementUndo(
   const member = added[0] && productMemberAt(structure, added[0], productId);
   const spot = removed[0] && restoreSpot(structure, plan.live.document, removed[0], productId);
   if (member === null || spot === null) return NONE;
-  if (member && spot) {
-    if (member.listId === spot.listId) return NONE;
+  if (member && spot)
     return undo({ method: "moveSectionMembersInto", ...spot, members: [member], name });
-  }
   if (member) return undo({ method: "removeSectionMember", ...member, name });
   if (spot) return undo({ method: "addSectionMember", ...spot, ref, name });
   return NONE;

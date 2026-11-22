@@ -590,41 +590,43 @@ it("runs a price Undo after a save of the same row that is out, and leaves the r
   expect(prices()!.saving.has("mi-soup")).toBe(false);
 });
 
-it("waits for a Structure reorder before undoing a product placement and refreshing Preview", async () => {
-  const id = "soup-added";
+it("restores a product after its published sibling once a Structure reorder finishes", async () => {
+  const id = "soup-removed";
   const reorder = held<SectionMember[]>();
+  const restored = held<SectionMember>();
   const moveSectionMember = vi.fn(() => reorder.promise);
-  const removeSectionMember = vi.fn(async () => {
+  const addSectionMember = vi.fn(async () => {
+    const answer = await restored.promise;
     fake.state.preview = { ...fake.state.preview, changes: [rename], document: published };
-    fake.state.structure = { ...structure, nodes: [{ memberId: burger.id, ref: burger.ref }] };
+    return answer;
   });
-  const burger: SectionMember = {
-    id: "member-burger",
-    position: 1,
-    ref: { kind: "product", productId: "p-burger" },
-  };
-  const soup: SectionMember = {
-    id: "member-soup",
-    position: 0,
-    ref: { kind: "product", productId: "p-soup" },
-  };
-  const published = menuDocument([documentProduct("mi-burger", "p-burger")], {
-    "p-burger": "Burger",
-  });
-  const working = menuDocument(
-    [documentProduct("mi-soup", "p-soup"), documentProduct("mi-burger", "p-burger")],
-    { "p-soup": "Soup", "p-burger": "Burger" },
-  );
-  working.offers["mi-soup"]!.placements = [[]];
+  const burger = member("burger", 0);
+  const chips = member("chips", 1);
+  const soup = member("soup", 2);
+  const salad = member("salad", 2);
 
-  const fake = fakeApi({ moveSectionMember, removeSectionMember });
+  function member(productId: string, position: number): SectionMember {
+    return { id: `member-${productId}`, position, ref: { kind: "product", productId } };
+  }
+  const names = { burger: "Burger", chips: "Chips", soup: "Soup", salad: "Salad" };
+  const published = menuDocument(
+    ["burger", "chips", "soup", "salad"].map((key) => documentProduct(`mi-${key}`, key)),
+    names,
+  );
+  const working = menuDocument(
+    ["burger", "chips", "salad"].map((key) => documentProduct(`mi-${key}`, key)),
+    names,
+  );
+  published.offers["mi-soup"]!.placements = [[]];
+
+  const fake = fakeApi({ moveSectionMember, addSectionMember });
   fake.state.preview = {
     ...previewOf([
       rename,
       {
         id,
-        kind: "product_added",
-        productId: "p-soup",
+        kind: "product_removed",
+        productId: "soup",
         name: "Soup",
         source: "this_menu",
         under: [],
@@ -634,38 +636,41 @@ it("waits for a Structure reorder before undoing a product placement and refresh
     live: { versionId: "v-2", document: published },
     document: working,
   };
-  fake.state.structure = {
-    ...structure,
-    nodes: [soup, burger].map(({ id: memberId, ref }) => ({ memberId, ref })),
-  };
+  const nodes = (members: SectionMember[]) =>
+    members.map(({ id: memberId, ref }) => ({ memberId, ref }));
+  fake.state.structure = { ...structure, nodes: nodes([burger, chips, salad]) };
   const { el, panel } = await mount(fake.api);
   visit(`/menus/menu/${MENU}/view/structure`);
   const table = () => el.shadowRoot!.querySelector("dashboard-menu-structure-table");
   await vi.waitFor(() => expect(table()).not.toBeNull());
   table()!.dispatchEvent(
     new CustomEvent("wt-member-move", {
-      detail: { path: [], memberId: burger.id, to: 0 },
+      detail: { path: [], memberId: salad.id, to: 1 },
       bubbles: true,
       composed: true,
     }),
   );
-  await vi.waitFor(() => expect(moveSectionMember).toHaveBeenCalledWith("root", burger.id, 0));
+  await vi.waitFor(() => expect(moveSectionMember).toHaveBeenCalledWith("root", salad.id, 1));
 
-  visit(`/menus/menu/${MENU}/view/preview`);
-  await vi.waitFor(() => expect(undoButton(panel(), id)).not.toBeNull());
   try {
+    visit(`/menus/menu/${MENU}/view/preview`);
+    await vi.waitFor(() => expect(undoButton(panel(), id)).not.toBeNull());
     await userEvent.click(undoButton(panel(), id)!);
     await vi.waitFor(() => expect(undoButton(panel(), id)?.textContent).toContain("Undoing"));
-    expect(removeSectionMember).not.toHaveBeenCalled();
+    expect(addSectionMember).not.toHaveBeenCalled();
+
+    const ordered = [burger, { ...salad, position: 1 }, { ...chips, position: 2 }];
+    fake.state.structure = { ...structure, nodes: nodes(ordered) };
+    reorder.answer(ordered);
+    await vi.waitFor(() =>
+      expect(addSectionMember).toHaveBeenCalledExactlyOnceWith("root", soup.ref, 3),
+    );
   } finally {
-    reorder.answer([
-      { ...burger, position: 0 },
-      { ...soup, position: 1 },
-    ]);
+    reorder.answer([]);
+    restored.answer({ ...soup, position: 3 });
   }
 
   await vi.waitFor(() => expect(undoButton(panel(), id)).toBeNull());
-  expect(removeSectionMember).toHaveBeenCalledExactlyOnceWith("root", soup.id);
   expect(text(resultLine(panel()))).toContain("Undone");
 });
 

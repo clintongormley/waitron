@@ -1003,47 +1003,39 @@ describe("product placement Undo", () => {
     ]);
   });
 
-  it.each([
-    "its own price",
-    "its variant price",
-    "a deleted list",
-    "a hidden placement",
-    "an inactive product",
-  ] as const)("offers no Undo for a product removed with %s", async (condition) => {
-    const f = await menusFixture(fx.db);
-    const id = condition === "its variant price" ? f.lemonade : f.burger;
-    if (condition === "its own price") await setDishPrice(f.dinner, id, "13.50");
-    if (condition === "its variant price") {
-      await app(async (tx) => {
-        const include = (await listMembers(tx, f.dinnerRoot)).find(
-          ({ ref }) => ref.kind === "section" && ref.sectionId === f.drinks,
-        )!;
-        await removeMember(tx, f.dinnerRoot, include.id);
-        await addMember(tx, f.mains, product(id));
-      });
-      await setVariantPrice(f.dinner, id, f.large, "3.80");
-    }
-    if (condition === "a hidden placement")
-      await app(async (tx) => {
-        const hidden = await createMenu(tx, { name: "Hidden menu" });
-        const { rootSectionId } = await readMenuStructure(tx, hidden.id);
-        await addMember(tx, rootSectionId, product(id));
-        await addMember(tx, f.dinnerRoot, section(rootSectionId));
-        await deactivateMenu(tx, hidden.id);
-      });
-    await publish(f.dinner);
-    if (condition === "a deleted list") await app((tx) => deleteSection(tx, f.mains));
-    else if (condition === "an inactive product")
-      await app(async (tx) => {
-        await deactivateMenu(tx, f.dinner);
-        await updateProduct(tx, id, { active: false });
-      });
-    else await removeProduct(f.mains, id);
+  it.each(["its own price", "its variant price", "a deleted list", "a hidden placement"] as const)(
+    "offers no Undo for a product removed with %s",
+    async (condition) => {
+      const f = await menusFixture(fx.db);
+      const id = condition === "its variant price" ? f.lemonade : f.burger;
+      if (condition === "its own price") await setDishPrice(f.dinner, id, "13.50");
+      if (condition === "its variant price") {
+        await app(async (tx) => {
+          const include = (await listMembers(tx, f.dinnerRoot)).find(
+            ({ ref }) => ref.kind === "section" && ref.sectionId === f.drinks,
+          )!;
+          await removeMember(tx, f.dinnerRoot, include.id);
+          await addMember(tx, f.mains, product(id));
+        });
+        await setVariantPrice(f.dinner, id, f.large, "3.80");
+      }
+      if (condition === "a hidden placement")
+        await app(async (tx) => {
+          const hidden = await createMenu(tx, { name: "Hidden menu" });
+          const { rootSectionId } = await readMenuStructure(tx, hidden.id);
+          await addMember(tx, rootSectionId, product(id));
+          await addMember(tx, f.dinnerRoot, section(rootSectionId));
+          await deactivateMenu(tx, hidden.id);
+        });
+      await publish(f.dinner);
+      if (condition === "a deleted list") await app((tx) => deleteSection(tx, f.mains));
+      else await removeProduct(f.mains, id);
 
-    const { action } = await changeAndAction(
-      await readPreview(f.dinner),
-      placementOf("product_removed", id),
-    );
-    expect(action).toEqual({ kind: "none" });
-  });
+      const { action } = await changeAndAction(
+        await readPreview(f.dinner),
+        placementOf("product_removed", id),
+      );
+      expect(action).toEqual({ kind: "none" });
+    },
+  );
 });

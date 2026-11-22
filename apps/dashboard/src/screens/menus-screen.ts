@@ -1547,7 +1547,8 @@ export class MenusScreen extends LitElement {
     const preview = this.preview;
     if (menuId === null || preview === null || this.previewError) return;
     if (this.#undoBlocked(menuId)) return;
-    const action = menuChangeAction(this.#undoInput(preview), changeId);
+    const input = this.#undoInput(preview);
+    const action = menuChangeAction(input, changeId);
     if (action.kind !== "undo") return;
     const command = action.command;
     const sentFrom = this.#menuName();
@@ -1557,11 +1558,19 @@ export class MenusScreen extends LitElement {
     this.undoResult = null;
     const shown = () => this.menuId === menuId && this.view === "preview";
     const task = async () => {
+      // A queued Structure reorder can move the sibling that gives Undo its insertion position.
+      const latest =
+        (command.method === "addSectionMember" || command.method === "moveSectionMembersInto") &&
+        this.menuId === menuId &&
+        this.structure !== input.structure
+          ? menuChangeAction(this.#undoInput(preview), changeId)
+          : action;
+      const sending = latest.kind === "undo" ? latest.command : command;
       try {
         try {
-          await sendMenuUndo(this.api, command);
+          await sendMenuUndo(this.api, sending);
         } catch (error) {
-          const reason = undoRefusalText(error, command);
+          const reason = undoRefusalText(error, sending);
           // `drawsUndo` answers from what the Preview last drew, so ask it only once neither the
           // screen nor the Preview has a redraw pending, and place the refusal in the same turn as
           // that answer.

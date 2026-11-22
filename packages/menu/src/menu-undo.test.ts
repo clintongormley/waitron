@@ -321,6 +321,54 @@ function burgerOffer(grossPrice: string, largePrice: string): FrozenOffer {
   } as unknown as FrozenOffer;
 }
 
+it("checks stored list ownership even when Preview calls a placement this menu's change", () => {
+  const added = change("added", {
+    kind: "product_added",
+    productId: "burger",
+    name: "Burger",
+    under: ["Drinks"],
+    source: "this_menu",
+  });
+  const current = preview([added]);
+  current.document.offers["burger-offer"] = {
+    ...burgerOffer("12.00", "13.50"),
+    placements: [["drinks-root"]],
+  };
+  const section: DocumentMember = {
+    kind: "section",
+    sectionId: "drinks-root",
+    internalName: "Drinks",
+    includedMenu: drinks,
+    names: {},
+    image: null,
+    color: null,
+    members: [{ kind: "product", menuItemId: "burger-offer", productId: "burger" }],
+  };
+  current.document.root.members = [section];
+
+  const action = menuChangeAction(
+    {
+      preview: current,
+      languages: ["en"],
+      structure: {
+        rootSectionId: "root",
+        nodes: [
+          {
+            memberId: "drinks-include",
+            ref: { kind: "section", sectionId: "drinks-root" },
+            includedMenuId: drinks.id,
+            children: [
+              { memberId: "burger-member", ref: { kind: "product", productId: "burger" } },
+            ],
+          },
+        ],
+      },
+    },
+    added.id,
+  );
+  expect(action).toEqual({ kind: "none" });
+});
+
 function mainsInFood(name: string, color: string): DocumentMember[] {
   const section = (sectionId: string, members: DocumentMember[]): DocumentMember => ({
     kind: "section",
