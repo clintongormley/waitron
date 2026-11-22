@@ -939,7 +939,7 @@ describe("refreshBasket", () => {
     store.loadFrom("draft-1", [line]);
     store.adoptLines(outcome.adopted);
 
-    expect(() => store.vatBreakdown).not.toThrow();
+    expect(() => store.total).not.toThrow();
     expect(outcome.blocked).toEqual([{ lineNo: 1, name: "burger", reason: "unit_changed" }]);
     expect(outcome.adopted.has(0)).toBe(false);
   });

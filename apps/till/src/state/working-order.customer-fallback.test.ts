@@ -1,16 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { priceBasket } from "@waitron/menu/src/pricing.js";
-import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
 
-const original = currentContentLanguages();
-afterEach(() => {
-  setContentLanguages(original);
-});
-
-describe("till future customer preparation", () => {
-  it("passes independently resolved names and staff units to real pricing without changing source facts", () => {
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+describe("WorkingOrderStore.addProduct", () => {
+  it("totals a product without changing its source facts", () => {
     const product = {
       id: "dish",
       name: "Staff dish",
@@ -33,22 +25,9 @@ describe("till future customer preparation", () => {
       },
     };
     const before = structuredClone(product);
-    const price = vi.fn(priceBasket);
-    const store = new WorkingOrderStore(price);
+    const store = new WorkingOrderStore();
     store.addProduct(product, "2");
-    expect(store.vatBreakdown).toEqual([{ rate: "21.00", base: "20.00", tax: "4.20" }]);
     expect(store.total).toBe("24.20");
-    const [basket] = price.mock.calls.at(-1)!;
-    expect(basket[0]!.product.descriptions).toEqual({
-      fr: "Other dish",
-      en: "Staff dish",
-      es: "Staff dish",
-    });
-    expect(basket[0]!.product.variantDescriptions).toEqual({
-      es: "Requested large",
-      en: "Staff large",
-    });
-    expect(basket[0]!.product.unit.abbreviation).toEqual({ en: "sp" });
     expect(product).toEqual(before);
   });
 });

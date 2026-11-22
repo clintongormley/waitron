@@ -487,8 +487,8 @@ describe("till-tender-pay", () => {
 
   it("gates the cash tender against the extras-aware total, not the dish-only price", async () => {
     // A café ×2 (3.00) with a +0.50/dish oat-milk pick → extras-aware total (1.50 + 0.50) × 2 = 4.00.
-    // The Confirm gate reads `store.total`, so it must demand 4.00, not the dish-only 3.00 `priceBasket`
-    // would report — otherwise a short 3.00 tender would settle a 4.00 order.
+    // The Confirm gate reads `store.total`, so it must demand 4.00, not the dish-only 3.00 —
+    // otherwise a short 3.00 tender would settle a 4.00 order.
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "2", {
       extras: [

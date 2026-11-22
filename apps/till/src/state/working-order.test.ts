@@ -3,12 +3,7 @@ import { WorkingOrderStore } from "./working-order.js";
 import { lineGross, productAsVariant, toWireProductIdentity } from "./order-line.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import {
-  menuOfferToTillProduct,
-  sellingValuesOf,
-  type TillMenuOffer,
-  type TillProduct,
-} from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 // A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -442,24 +437,10 @@ describe("WorkingOrderStore", () => {
     expect(s.lines[1]).toEqual({ product: coffee, quantity: "1" });
   });
 
-  it("previews an empty basket as a zero total with no VAT bands", () => {
+  it("previews an empty basket as a zero total", () => {
     const s = new WorkingOrderStore();
     expect(s.total).toBe("0");
-    expect(s.vatBreakdown).toEqual([]);
     expect(s.lines).toHaveLength(0);
-  });
-
-  it("groups vatBreakdown by rate across a mixed-rate basket", () => {
-    const s = new WorkingOrderStore();
-    s.addProduct(coffee, "2"); // general (21.00)
-    s.addProduct(ham, "0.320"); // reduced (10.00)
-    const rates = s.vatBreakdown.map((b) => b.rate).sort();
-    expect(rates).toEqual(["10.00", "21.00"]);
-    // Every band's base + tax reconstructs its gross slice, and the bands sum to the preview total.
-    for (const band of s.vatBreakdown) {
-      expect(band.base).toBeDefined();
-      expect(band.tax).toBeDefined();
-    }
   });
 
   it("notifies subscribers on add and on clear, then empties the lines", () => {
@@ -1038,7 +1019,6 @@ describe("WorkingOrderStore", () => {
       const without = new WorkingOrderStore();
       without.addProduct(coffee, "1"); // dish 1.50 only
       expect(without.total).toBe("1.50");
-      // priceBasket sees only the dishes, so a total taken from it alone would stay 1.50.
       expect(withOption.total).toBe("2.00");
     });
 
@@ -1200,76 +1180,6 @@ describe("WorkingOrderStore", () => {
       expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
       expect(s.total).toBe("7.50");
     });
-  });
-});
-
-describe("WorkingOrderStore: the VAT preview takes each class's rate today", () => {
-  const unit = {
-    staffName: "Staff unit",
-    staffAbbreviation: "su",
-    id: "unit-each",
-    name: { es: "unidad" },
-    abbreviation: { es: "ud" },
-    precision: 0,
-    hardwareUnit: null,
-  };
-  const sellingValues = {
-    unit,
-    vatClass: "general" as const,
-    takeawayVatClass: "general" as const,
-    category: null,
-    allergens: null,
-    diet: null,
-    dietOverride: null,
-    dietaryDeclarations: [],
-    courseId: null,
-  };
-  const offer = {
-    id: "menu-item-cana",
-    productId: "cana",
-    menuId: "lunch",
-    menuName: "Lunch",
-    grossPrice: null,
-    unitPrice: "2.42",
-    available: true,
-    image: null,
-    description: null,
-    placements: [[]],
-    name: "Caña",
-    customerName: null,
-    kitchenName: null,
-    offeredModifiers: [],
-    variants: [
-      {
-        ...sellingValues,
-        id: "cana-large",
-        name: "Large",
-        customerName: null,
-        kitchenName: null,
-        image: null,
-        unitPrice: "3.63",
-        menuPrice: null,
-        available: true,
-        pricingUnit: "each" as const,
-      },
-    ],
-    ...sellingValues,
-  } satisfies TillMenuOffer;
-
-  it("prices a dish at its class's rate", () => {
-    const s = new WorkingOrderStore();
-    s.addProduct(menuOfferToTillProduct(offer, "version-1"), "1");
-    expect(s.vatBreakdown).toEqual([{ rate: "21.00", base: "2.00", tax: "0.42" }]);
-  });
-
-  it("prices a variant at its own class's rate, not the dish's", () => {
-    const s = new WorkingOrderStore();
-    const dish = menuOfferToTillProduct(
-      { ...offer, variants: [{ ...offer.variants[0]!, vatClass: "reduced" }] },
-      "version-1",
-    );
-    s.addProduct(productAsVariant(dish, dish.variants![0]!), "1");
-    expect(s.vatBreakdown).toEqual([{ rate: "10.00", base: "3.30", tax: "0.33" }]);
   });
 });
 
