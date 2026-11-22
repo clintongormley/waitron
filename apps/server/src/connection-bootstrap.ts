@@ -24,6 +24,7 @@ export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   repairAllowed?: boolean | ((c: Context) => boolean);
   continuationRequired?: boolean;
   freeSpace?: () => Promise<number | null>;
+  notSetUp?: boolean;
 }
 
 async function emptyBody(request: Request): Promise<boolean> {
@@ -105,6 +106,7 @@ export function mountConnectionBootstrap(
           continuationRequired: bootstrapOnly || transitionFailed || deps.continuationRequired,
         },
         locale: connectionLocale(c.req.query("lang") ?? c.req.header("accept-language")),
+        notSetUp: deps.notSetUp,
       });
       return c.html(html);
     },

@@ -24,6 +24,8 @@ import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { TRADING_ENV_FILE } from "@waitron/store";
 
 const { renameMock } = vi.hoisted(() => ({ renameMock: vi.fn() }));
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -232,6 +234,62 @@ it("direct repair re-enters resolution on verified HTTPS and the returned handle
 });
 
 it.each(
+  (["first-setup launch", "node entry"] as const).flatMap((entry) => [
+    { entry, identity: "no node identity", shown: true, tradingEnv: undefined },
+    { entry, identity: "a node identity", shown: false, tradingEnv: "WAITRON_NODE_ID=node-a\n" },
+  ]),
+)(
+  "$entry: a connection repair on a box with $identity warns it is not set up: $shown",
+  async ({ entry, shown, tradingEnv }) => {
+    const f = await fixture();
+    if (tradingEnv !== undefined) await writeFile(join(f.stateDir, TRADING_ENV_FILE), tradingEnv);
+    const [port] = (await retainedPorts(1)) as [number];
+    const forbidden = vi.fn(async () => {
+      throw new Error("reached before the connection was repaired");
+    });
+    const transport = {
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    };
+    if (entry === "first-setup launch") {
+      const handle = await startServerOrFirstSetupResolution(
+        { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir, ...transport },
+        {},
+        { startServer: forbidden },
+      );
+      closes.push(handle.close);
+    } else
+      await runEntry({
+        ...f,
+        args: [],
+        baseEnv: transport,
+        readRecoveryState: async () => FRESH,
+        writeRecoveryState: forbidden,
+        loadBoxEnv: forbidden,
+        runStagedRestore: forbidden,
+        runStagedReset: forbidden,
+        clearReplacedDatabases: forbidden,
+        assertNotAhead: forbidden,
+        startServer: forbidden,
+        serveStartClockWaiting: forbidden,
+        serveRecovery: async (app, options) => {
+          const handle = await serveRecovery(app, options);
+          closes.push(() => closeListener(handle));
+        },
+        installShutdownHandlers: () => {},
+        scheduleStayedUp: forbidden,
+        log: () => {},
+        exit: vi.fn(),
+      });
+    const page = await get(port, "/setup/connection?lang=es");
+    expect(page.status).toBe(200);
+    expect((await page.text()).includes(NOT_SET_UP_WORDS.es)).toBe(shown);
+    expect(forbidden).not.toHaveBeenCalled();
+  },
+);
+
+it.each(
   (["normal", "resolution", "recovery"] as const).flatMap((level) =>
     (["malformed", "expired", "mismatch", "missing-key"] as const).map((damage) => ({
       level,
@@ -389,6 +447,48 @@ it("healthy recovery keeps its protected Retry on verified HTTPS and flushes its
     'href="/legal/declaration"',
   );
 });
+
+it.each([
+  [true, true],
+  [undefined, false],
+])(
+  "a healthy recovery listener with notSetUp %s warns on its trust and landing pages: %s",
+  async (notSetUp, shown) => {
+    const f = await fixture();
+    await writeFile(
+      join(f.stateDir, "tls/server.pem"),
+      material.serverCertPem + material.serverKeyPem,
+    );
+    const [port, landingPort] = (await retainedPorts(2)) as [number, number];
+    const server = await serveRecovery(new Hono(), {
+      stateDir: f.stateDir,
+      port,
+      httpHost: "127.0.0.1",
+      log: () => {},
+      notSetUp,
+      landing: {
+        stateDir: f.stateDir,
+        httpHost: "127.0.0.1",
+        httpPort: port,
+        landingPort,
+        boxAddresses: [],
+        tls: undefined,
+      },
+    });
+    closes.push(() => closeListener(server));
+    const trust = await verifiedGet(port, "/setup/trust", material.caCertPem);
+    expect(trust.status).toBe(200);
+    expect(trust.body).toContain("Download the certificate");
+    expect(trust.body.includes(NOT_SET_UP_WORDS.en)).toBe(shown);
+    await vi.waitFor(async () => {
+      const landing = await get(landingPort, "/");
+      expect(landing.status).toBe(200);
+      const html = await landing.text();
+      expect(html).toContain("Download the certificate");
+      expect(html.includes(NOT_SET_UP_WORDS.en)).toBe(shown);
+    });
+  },
+);
 
 it("real HTTP refuses forged origins and streamed private input while an empty action remains usable", async () => {
   const f = await fixture();

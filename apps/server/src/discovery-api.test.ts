@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { it, expect, afterEach, beforeAll } from "vitest";
 import { mountDiscovery } from "./discovery-api.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 let material: SelfSignedMaterial;
@@ -222,4 +223,14 @@ it("permits the configured localhost and loopback HTTPS aliases without trusting
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ state: "healthy" });
   }
+});
+
+it.each([
+  ["/setup/trust", true, true],
+  ["/setup/trust", undefined, false],
+  ["/setup/connection", true, true],
+  ["/setup/connection", undefined, false],
+])("%s, notSetUp %s: shows the not-set-up warning: %s", async (path, notSetUp, shown) => {
+  const html = await (await appFor(await stateDirWithCa(), { notSetUp }).request(path)).text();
+  expect(html.includes(NOT_SET_UP_WORDS.en)).toBe(shown);
 });

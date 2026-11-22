@@ -9,6 +9,7 @@ import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { writeModuleConfig } from "./module-config.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments } from "@waitron/venue-service";
@@ -959,7 +960,17 @@ describe("startServer, against a migrated venue directory", () => {
 
       const trust = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(trust.status).toBe(200);
-      expect(await trust.text()).toContain("to this Waitron server");
+      const trustHtml = await trust.text();
+      expect(trustHtml).toContain("to this Waitron server");
+      expect(trustHtml).not.toContain(NOT_SET_UP_WORDS.en);
+      const connection = await fetch(
+        `https://127.0.0.1:${httpPort()}/setup/connection?lang=es`,
+        via,
+      );
+      expect(connection.status).toBe(200);
+      const connectionHtml = await connection.text();
+      expect(connectionHtml).toContain('id="connection-download"');
+      expect(connectionHtml).not.toContain(NOT_SET_UP_WORDS.es);
       for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {
         const download = await fetch(`https://127.0.0.1:${httpPort()}${path}`, via);
         expect(download.status).toBe(200);
@@ -1728,6 +1739,13 @@ describe("startServer, against a migrated venue directory", () => {
       const trust = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(trust.status).toBe(200);
       expect(trust.headers.get("content-type")).toContain("text/html");
+      expect(await trust.text()).toContain(NOT_SET_UP_WORDS.en);
+      const connection = await fetch(
+        `https://127.0.0.1:${httpPort()}/setup/connection?lang=es&app=till`,
+        via,
+      );
+      expect(connection.status).toBe(200);
+      expect(await connection.text()).toContain(NOT_SET_UP_WORDS.es);
 
       const guide = await fetch(`https://127.0.0.1:${httpPort()}/help/en/products`, via);
       expect(guide.status).toBe(200);

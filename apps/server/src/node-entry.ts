@@ -441,6 +441,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     },
     operatorTls:
       !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
+    notSetUp: isUnset(transportEnv.WAITRON_NODE_ID),
   };
   // Ordering 8 in the doc comment above.
   if (

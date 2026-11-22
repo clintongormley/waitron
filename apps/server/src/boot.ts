@@ -887,7 +887,10 @@ export function startTradingListener(
 export type LandingListenerConfig = Pick<
   ServerConfig,
   "landingPort" | "httpHost" | "stateDir" | "httpPort" | "boxAddresses" | "tls"
-> & { connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps };
+> & {
+  connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps;
+  notSetUp?: boolean;
+};
 
 /** A spare's landing pages are for its own screen only. */
 function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingListenerConfig {
@@ -927,6 +930,7 @@ export function startLandingListener(
     connectionHostnames: BOX_LEAF_HOSTNAMES,
     declarationPages,
     venueNameState,
+    notSetUp: config.notSetUp,
   });
   const server = serve(
     buildServeOptions(
@@ -1547,6 +1551,7 @@ async function bootServer(
         mintedBoxLeaf(config.stateDir) !== undefined,
       listIpv4: boxAddresses,
       discoveryEnabled: config.node === undefined,
+      notSetUp: config.node === undefined,
       serveBoxCa: config.tls === undefined,
       repairAllowed: (c) => !spare || fromBox(c),
       connectionHostnames: BOX_LEAF_HOSTNAMES,
@@ -1964,7 +1969,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       mdns,
-      startLandingListener(config, log, {}, venueName.state),
+      startLandingListener({ ...config, notSetUp: true }, log, {}, venueName.state),
     );
   }
 

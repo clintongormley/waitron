@@ -2,6 +2,7 @@ import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import type { VenueNameState } from "./mdns.js";
@@ -28,6 +29,8 @@ export interface TrustPageInput {
   device: DeviceId | "unknown";
   /** This box's own HTTPS origin, offered first because another box answers `httpsUrl`'s name. */
   ownAddress?: string;
+  /** Set only on a box with no node identity (`WAITRON_NODE_ID` unset). */
+  notSetUp?: boolean;
 }
 
 /** `waitron.local` may reach another box, so a person joining this one is sent to its own address. */
@@ -95,7 +98,7 @@ function installSection(device: DeviceId | "unknown"): string {
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
   if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
-  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress } = input;
+  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress, notSetUp } = input;
   const reachUrls = ownAddress
     ? [ownAddress, ...input.reachUrls.filter((url) => url !== ownAddress)]
     : input.reachUrls;
@@ -109,8 +112,12 @@ export function renderTrustPage(input: TrustPageInput): string {
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
     .join("");
 
+  const warning =
+    notSetUp && !ownAddress
+      ? `<p class="warning-words">${escapeHtml(NOT_SET_UP_WORDS.en)}</p><p class="warning-words" lang="es">${escapeHtml(NOT_SET_UP_WORDS.es)}</p>\n`
+      : "";
   const steps = caAvailable
-    ? `${removeSection(device)}
+    ? `${warning}${removeSection(device)}
        <section><h2>2. Get the certificate</h2>
        <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
        <p class="note">Your browser may ask you to confirm the download — choose <strong>Keep</strong>,

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import { buildLandingApp } from "./landing-app.js";
 import { DECLARATION_LINK_WORDS, DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { writeDeclarationFolder } from "./testing/declaration-folder.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
@@ -374,3 +375,29 @@ it.each(["trust page", "connection repair"] as const)(
     }
   },
 );
+
+describe("the landing page of a box that is not set up yet", () => {
+  const log = { info() {}, warn() {}, error() {} } as never;
+
+  it.each([
+    ["/", true, true],
+    ["/", undefined, false],
+    ["/setup/connection", true, true],
+    ["/setup/connection", undefined, false],
+  ])("%s, notSetUp %s: shows the not-set-up warning: %s", async (path, notSetUp, shown) => {
+    const dir = stateDirWithCa();
+    try {
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: ["https://waitron.local"],
+        httpsUrl: "https://waitron.local",
+        log,
+        notSetUp,
+      });
+      const html = await (await app.request(`http://waitron.local${path}`)).text();
+      expect(html.includes(NOT_SET_UP_WORDS.en)).toBe(shown);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

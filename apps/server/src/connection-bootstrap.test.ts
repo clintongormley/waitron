@@ -10,6 +10,7 @@ import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
+import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 
 const now = new Date("2026-10-21T00:00:00Z");
 let material: SelfSignedMaterial;
@@ -28,6 +29,7 @@ async function fixture(
   healthy = false,
   repairAllowed?: Parameters<typeof mountConnectionBootstrap>[1]["repairAllowed"],
   freeSpace?: () => Promise<number | null>,
+  notSetUp?: boolean,
 ) {
   const stateDir = await mkdtemp(join(tmpdir(), "public-connection-"));
   dirs.push(stateDir);
@@ -53,6 +55,7 @@ async function fixture(
     log,
     repairAllowed,
     freeSpace,
+    notSetUp,
   });
   return { stateDir, app, onRepaired, log };
 }
@@ -250,6 +253,15 @@ it("uses the explicit page language before browser preferences, without acceptin
   await expect(readFile(join(stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it.each([
+  [true, true],
+  [undefined, false],
+])("notSetUp %s: the connection page shows the not-set-up warning: %s", async (notSetUp, shown) => {
+  const { app } = await fixture(false, undefined, undefined, notSetUp);
+  const html = await (await app.request("/setup/connection?lang=es")).text();
+  expect(html.includes(NOT_SET_UP_WORDS.es)).toBe(shown);
 });
 
 it("offers a continuation retry after a failed post-repair handoff without rotating healthy TLS", async () => {

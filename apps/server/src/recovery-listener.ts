@@ -48,6 +48,7 @@ export interface RecoveryServeOptions {
   bootstrapOnly?: boolean;
   operatorTls?: boolean;
   freeSpace?: () => Promise<number | null>;
+  notSetUp?: boolean;
 }
 
 export function connectionDepsFor(
@@ -75,6 +76,7 @@ export function connectionDepsFor(
     onRepaired: opts.onRepaired ?? (async () => {}),
     log: opts.log,
     repairAllowed: opts.operatorTls !== true,
+    notSetUp: opts.notSetUp,
   };
 }
 
@@ -145,6 +147,7 @@ export async function serveRecovery(
               ? []
               : (opts.landing?.boxAddresses ?? listBoxIpv4()),
           discoveryEnabled: false,
+          notSetUp: opts.notSetUp,
           connectionHostnames: BOX_LEAF_HOSTNAMES,
           onConnectionRepaired: opts.onRepaired,
         },
@@ -166,7 +169,7 @@ export async function serveRecovery(
           ? startLanding(
               bootstrap
                 ? { ...opts.landing, connection: connectionDepsFor(opts, opts.landing.landingPort) }
-                : opts.landing,
+                : { ...opts.landing, notSetUp: opts.notSetUp },
               opts.log,
             )
           : undefined;
