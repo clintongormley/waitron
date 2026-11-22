@@ -309,7 +309,6 @@ it("refreshes the open alerts passively and when incidents change", async () => 
     ...[
       "settings.venue",
       "products",
-      "product_takeaway_vat_rates",
       "option_lists",
       "option_labels",
       "extra_lists",
@@ -344,7 +343,6 @@ it.each([
       "menu_items",
       "menus",
       "products",
-      "product_takeaway_vat_rates",
       "menu_item_variant_overrides",
       "settings.venue",
       "product_modifiers",
@@ -355,11 +353,7 @@ it.each([
       "units",
     ],
   ],
-  [
-    "getMenuHome",
-    ["menu-1"],
-    ["sections", "section_members", "products", "product_takeaway_vat_rates", "menus"],
-  ],
+  ["getMenuHome", ["menu-1"], ["sections", "section_members", "products", "menus"]],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
@@ -437,7 +431,6 @@ it.each([
       "settings.business_day",
       "settings.venue",
       "products",
-      "product_takeaway_vat_rates",
       "categories",
       "day_cutover_changes",
     ],
@@ -485,7 +478,6 @@ it.each([
     [
       "settings.venue",
       "products",
-      "product_takeaway_vat_rates",
       "option_lists",
       "option_labels",
       "extra_lists",
@@ -808,20 +800,34 @@ it("subscribes the venue defaults to the clock document, venue document, menu se
   ]);
 });
 
-it("subscribes every read of products to their takeaway rates as well", () => {
-  const products = Object.entries(QUERY_DEPENDENCIES).filter(([, types]) =>
-    (types as readonly string[]).includes("products"),
-  );
-  expect(products.length).toBeGreaterThan(0);
+// Only the products route's answer carries a takeaway rate (`listProducts`,
+// packages/menu/src/operations.ts).
+it.each([
+  ["listProducts", true],
+  ["listLibraryProducts", true],
+  ["getMenuHome", false],
+  ["getMenuPrices", false],
+  ["getMenuStatus", false],
+  ["getMenuPreview", false],
+  ["getSalesOverview", false],
+  ["getSalesPeriod", false],
+  ["getCategorySales", false],
+  ["getFolderRouting", false],
+  ["getCourseDeleteImpact", false],
+  ["getContentTranslationGaps", false],
+] as const)("%s subscribes to takeaway rates: %s", (name, rated) => {
+  expect(QUERY_DEPENDENCIES[name]).toContain("products");
   expect(
-    products
-      .filter(([, types]) => !(types as readonly string[]).includes("product_takeaway_vat_rates"))
+    (QUERY_DEPENDENCIES[name] as readonly string[]).includes("product_takeaway_vat_rates"),
+  ).toBe(rated);
+});
+
+it("subscribes to takeaway rates only from the products route's reads", () => {
+  expect(
+    Object.entries(QUERY_DEPENDENCIES)
+      .filter(([, types]) => (types as readonly string[]).includes("product_takeaway_vat_rates"))
       .map(([name]) => name),
-  ).toEqual([]);
-  expect(QUERY_DEPENDENCIES.listLibraryProducts).toEqual([
-    "products",
-    "product_takeaway_vat_rates",
-  ]);
+  ).toEqual(["listLibraryProducts", "listProducts"]);
 });
 
 it("subscribes the venue's privacy contact to its venue settings document alone", () => {
@@ -1052,7 +1058,6 @@ it("kitchen delete impact subscribes to every refusal, setting and naming source
   expect(dashboardQuery(api, "getCourseDeleteImpact", ["course"]).dependencies).toEqual([
     { type: "kitchen_courses" },
     { type: "products" },
-    { type: "product_takeaway_vat_rates" },
     { type: "service_steps" },
   ]);
 });
