@@ -1076,7 +1076,7 @@ it("words a test email no longer in the inbox in both languages", () => {
 it.each([
   [
     "deferred_close.ineligible",
-    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another box, or its total is zero",
     "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
   [

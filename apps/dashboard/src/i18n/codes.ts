@@ -1058,7 +1058,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "No se encontró esa factura.",
   },
   "deferred_close.ineligible": {
-    en: "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    en: "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another box, or its total is zero",
     es: "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   },
   "deferred_close.conflict": {

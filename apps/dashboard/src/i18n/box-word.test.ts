@@ -7,9 +7,8 @@ import { en, es } from "./strings.js";
 // "Servers" with a capital and a plural is the Servers page's name, which stays.
 const OTHER_SERVERS = /\b([Mm]ail|SMTP|time)[- ]servers?\b|\bServers\b/g;
 const SERVER = /\bservers?\b/i;
-// A waiter, and the mail server's settings.
+// The mail server's settings.
 const SERVER_MEANS_SOMETHING_ELSE = new Set([
-  "code:deferred_close.ineligible",
   "email.settings.remove_capture",
   "email.settings.remove_live",
 ]);
