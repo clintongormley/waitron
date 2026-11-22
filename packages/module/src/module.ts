@@ -1523,9 +1523,10 @@ export type ModuleConfigurationTransfer =
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
         bundle?: ConfigurationTransferContext,
       ) => Promise<void>;
-      /** Runs in the import's transaction after every module's rows are inserted, each module's in
-       * module order, to set what the module derives from those rows, or to remove imported rows
-       * the module does not keep, rather than letting a bundle carry them. */
+      /** Runs in the import's transaction after every module's rows and settings documents are
+       * in place, each module's in module order, to set what the module derives from those rows,
+       * to remove imported rows the module does not keep, rather than letting a bundle carry them,
+       * or to refuse an imported value the destination cannot use. */
       readonly afterImport?: (tx: Transaction) => Promise<void>;
     };
 
