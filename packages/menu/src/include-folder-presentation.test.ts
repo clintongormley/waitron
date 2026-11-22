@@ -62,7 +62,7 @@ describe("folderPresentation", () => {
 describe("folderOverridesFrom", () => {
   const languages = ["en", "es"];
 
-  it("fixes only the fields that differ from the included menu", () => {
+  it("fixes differing fields and clears a different override set back to the menu value", () => {
     expect(folderOverridesFrom(own, own, languages, {})).toEqual({});
     expect(
       folderOverridesFrom(
@@ -78,6 +78,40 @@ describe("folderOverridesFrom", () => {
         image: "old.jpg",
       }),
     ).toEqual({ color: "#112233" });
+  });
+
+  it("keeps a matching fixed name, photo and empty colour when another name changes", () => {
+    expect(
+      folderOverridesFrom(
+        { ...own, color: null },
+        { ...own, names: { en: " Drinks ", es: "Barra" }, color: null },
+        languages,
+        { names: { en: "Drinks" }, image: "drinks.jpg", color: null },
+      ),
+    ).toEqual({ names: { en: "Drinks", es: "Barra" }, image: "drinks.jpg", color: null });
+  });
+
+  it("keeps a matching fixed empty photo and colour when another name changes", () => {
+    expect(
+      folderOverridesFrom(
+        { ...own, image: null },
+        { ...own, names: { en: "Drinks", es: "Barra" }, image: null },
+        languages,
+        { image: null, color: "#445566" },
+      ),
+    ).toEqual({ names: { es: "Barra" }, image: null, color: "#445566" });
+  });
+
+  it("keeps following a menu with no photo or colour when another name changes", () => {
+    const menuWithoutPhotoOrColour = { ...own, image: null, color: null };
+    expect(
+      folderOverridesFrom(
+        menuWithoutPhotoOrColour,
+        { ...menuWithoutPhotoOrColour, names: { en: "Drinks", es: "Barra" } },
+        languages,
+        {},
+      ),
+    ).toEqual({ names: { es: "Barra" } });
   });
 
   it("a language neither side names follows, and one only the dialog names is fixed", () => {

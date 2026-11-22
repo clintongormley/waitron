@@ -122,7 +122,7 @@ it("submits only the switch when it is off", async () => {
   await toggle(el, false);
   expect(submitted(el)).toEqual({ showAsFolder: false });
 });
-it("submits only the fields that differ from the included menu", async () => {
+it("submits a different folder value and drops it when set back to the menu value", async () => {
   const el = await includeForm({
     value: { showAsFolder: true, overrides: { names: { en: "Bar" } } },
   });
@@ -139,6 +139,17 @@ it("submits only the fields that differ from the included menu", async () => {
   expect(submitted(el)).toEqual({
     showAsFolder: true,
     overrides: { names: { es: "Barra" }, image: null, color: "#256bb1" },
+  });
+});
+it("submits the matching fixed name from the folder it opened with", async () => {
+  const el = await includeForm({
+    value: { showAsFolder: true, overrides: { names: { en: "Drinks" } } },
+  });
+  el.value = null;
+  await type(el, "names-es", "Barra");
+  expect(submitted(el)).toEqual({
+    showAsFolder: true,
+    overrides: { names: { en: "Drinks", es: "Barra" } },
   });
 });
 it("keeps a fixed name in a language the form does not show", async () => {

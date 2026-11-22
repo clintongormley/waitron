@@ -22,9 +22,8 @@ export function folderPresentation(own: Presentation, folder: IncludeFolder): Pr
   };
 }
 
-/** The overrides that make the folder show `shown`: a field equal to the included menu's follows
- * it, whatever was stored; a fixed language outside `languages` is one the caller did not show, so
- * it is kept. */
+/** Keep matching fixed values so later menu edits leave them fixed.
+ * The editor shows only `languages`, so keep fixed names outside that list too. */
 export function folderOverridesFrom(
   own: Presentation,
   shown: Presentation,
@@ -36,12 +35,13 @@ export function folderOverridesFrom(
   );
   for (const language of languages) {
     const text = (shown.names[language] ?? "").trim();
-    if (text !== (own.names[language] ?? "").trim()) names[language] = text;
+    const fixedName = stored.names?.[language];
+    if (text !== (own.names[language] ?? "").trim() || text === fixedName) names[language] = text;
   }
   return {
     ...(Object.keys(names).length > 0 ? { names } : {}),
-    ...(shown.image !== own.image ? { image: shown.image } : {}),
-    ...(shown.color !== own.color ? { color: shown.color } : {}),
+    ...(shown.image !== own.image || shown.image === stored.image ? { image: shown.image } : {}),
+    ...(shown.color !== own.color || shown.color === stored.color ? { color: shown.color } : {}),
   };
 }
 
