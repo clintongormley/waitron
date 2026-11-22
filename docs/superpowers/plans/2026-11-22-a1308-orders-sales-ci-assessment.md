@@ -1,26 +1,60 @@
 # A1308 orders and sales package move
 
-The proposed split would skip **zero server test steps across the 30 sampled pull requests**. Each would still run both sets of tests under the current selection rules. Keep the move planned under the owner’s 19 November direction and hold implementation for the watcher’s decision. Package-only or remaining-server-only PRs could still benefit, but this sample does not measure them or support the earlier model of about 860 seconds saved per PR. [Build order and owner direction](2026-11-08-a1308-build-order.md#batch-2--area-slices)
+**The split would skip zero server test steps across the 30 sampled orders-and-sales PRs.**
+Each still selects the server. With both packages selected, moving suites saves no test execution
+in this group. The watcher can take that result to the owner before any groundwork starts.
+The earlier estimate of about 860 seconds also counted PRs outside this area. Those are outside
+this sample. [Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices)
 
 ## What CI ran
 
-At base `eaeb7f7e6a8e7671a6206e40be2621d3731a33c3`, Lane H took the last 30 merged PRs whose main merge diff touched production files in os1’s inventory. It matched exact PR heads to successful `ci.yml` runs on 20–22 November UTC. All ran 24 server shard steps and the stream and full-disk step. Test steps totalled 2,981–3,480 runner-seconds per PR, median 3,102, roughly 50–58 minutes of concurrent runner work. Those are raw observations. Checkout exceeded 10 seconds on 29 runs. [os1 inventory](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move) · [CI workflow](../../../.github/workflows/ci.yml)
+At `eaeb7f7e6a8e7671a6206e40be2621d3731a33c3`, Lane H matched the last 30 merged PRs touching
+production files in os1's inventory to successful CI runs on their exact heads, 20–22 November UTC.
+Each ran 24 server test groups and the stream and full-disk step. Summed test-step time
+was 2,981–3,480 seconds per PR, median 3,102. Those are raw observations from overlapping jobs.
+Twenty-nine runs exceeded the 10-second checkout cutoff. #3984 qualified after the log and GitHub
+incident checks. It ran 3,303 test-step seconds and its longest test step took 173 seconds.
+[Os1 inventory](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move) ·
+[Qualified run](https://github.com/clintongormley/waitron/actions/runs/44947249189) ·
+[GitHub incident history](https://www.githubstatus.com/api/v2/incidents.json)
 
-Only #3984 qualified. Its slowest checkout took 10 seconds, a scan of 353 download and setup steps found no HTTP 5xx, and no Actions, Git Operations, API Requests or Webhooks incident overlapped. Its server test steps totalled **3,303 runner-seconds**, the slowest took **173 seconds**, and the jobs totalled 4,110 runner-seconds including setup. Post-move runner time and wall-clock time remain unmeasured. [GitHub run](https://github.com/clintongormley/waitron/actions/runs/44947249189) · [GitHub incident history](https://www.githubstatus.com/api/v2/incidents.json)
+Replaying the actual changed paths through CI's classifier with all 146 area suites moved still
+selects the server. In the more conservative 44-suite replay, 23 PRs retained server production
+edits and four others retained server tests or helpers. Three selected every package through files
+outside the workspace members, `deploy/compose.yml` in #4088 and `bench/box-installer/run.mjs` in
+#4011 and #3956. An area-only control skipped the server, and adding a retained server test, a
+till edit or the lockfile selected it. [Classifier](../../../scripts/changed-packages.mjs#L132)
 
-The replay fed actual PR paths, including both rename endpoints, through `scopeForPaths` and `gateOutputs` with hypothetical package paths. An area-only control skipped the server. Adding a retained server test, a till edit or the lockfile selected it. In the real diffs, 27 still selected it through changed packages and three ran globally, even if all 146 candidate suites moved. #3985 also changed floor and party suites, #3921 changed `parties.ts` and the till, and #3984 changed drawer and backup tests. [Path classifier](../../../scripts/changed-packages.mjs#L132) · [CI gates](../../../scripts/changed-scope.mjs#L460)
+## What you could move
 
-## Files and possible pull requests
+The potential relocation covers 105 production files (38,736 lines), 146 suites (135,901 lines)
+and five helpers (1,417 lines). Start with 44 suites if the two bill fixture substitutions work.
+Examples are `order-preview.test.ts`, `working-order.customer-fallback.test.ts` and
+`receipt-money.test.ts`. Keep 102 area suites that import startup or till modules through their
+tests or helpers, including bill payment and refund API tests. Keep the whole-app suites already
+excluded from the 146 too. A package-only PR would skip these dependent server tests.
+[Earlier assessment](2026-11-17-a1308-orders-sales-package-move.md#full-move-inventory-and-later-acceptance) ·
+[Fixture split](2026-11-21-a1308-orders-sales-first-shared-piece.md)
 
-The inventory has **105 production files / 38,736 lines, 146 suites / 135,901 lines, and five helpers / 1,417 lines**. With two fixture substitutions, 44 suites are candidates, including `order-preview.test.ts`, `working-order.customer-fallback.test.ts` and `receipt-money.test.ts`. Keep 102 suites that import server startup or till modules, directly or through test helpers, including `bill-payments-api.test.ts`, `bill-payments-loop.test.ts` and `bill-refunds.card.test.ts`. The earlier boot, till and seven whole-app exclusions also stay. In #3984, the file reporter attributed 214 of 12,563 summed file-seconds to the 44 candidates and 1,362 to all 146. Tests run in parallel, so the sums describe work inside one run. [Earlier assessment](2026-11-17-a1308-orders-sales-package-move.md#full-move-inventory-and-later-acceptance)
+In #3984 the 44 files account for 1.7% of summed server file time (214 of 12,563 seconds).
+All 146 account for 10.8%. These shares show the test work a future PR confined to the remaining
+server could skip in that one run. Runner time and elapsed CI time after the move remain unmeasured.
 
-The earlier scan found 157 shared server modules. The current scan finds 182 direct import targets outside the candidate set, 89 reached from production. Counts below measure how many area files use each dependency. Each proposed PR needs its own estimate before anyone builds it.
+## Shared work to size if the move goes ahead
 
-1. **Bill fixture with the first suite move.** Reuse the 21 November design, +270/−230 support and +20/−10 tests. Prove both suites run without loading the till. [Fixture design](2026-11-21-a1308-orders-sales-first-shared-piece.md)
-2. **Orders errors.** Move area errors to their declaring package. `errors.ts` has 61 production importers and 36 suites in the inventory. Run `errors-reachable.test.ts` and keep refusal assertions. [Registry](../../../apps/server/src/errors.ts)
-3. **Request and till.** Keep till route registration in the server and pass the context the order operations already use. `trading-context.ts` has 28 production importers and `till-api.ts` has 10. Keep the profile and zone refusal suites. [Till route](../../../apps/server/src/till-api.ts)
-4. **Floor and kitchen.** Break the imports in both directions around `parties.ts` (16 production callers) and `kitchen-print.ts` (10). Rerun `party-move-bill.test.ts` and `kitchen-print.test.ts`. [Kitchen suite](../../../apps/server/src/kitchen-print.test.ts)
-5. **Device and document support.** Keep the equipment and print routes in the server. `device-session.ts` has nine production importers and `payment-slip-print.ts` has two. Rerun `receipt-device-evidence.test.ts`. [Device session](../../../apps/server/src/device-session.ts)
-6. **Card and refund support.** Keep provider scheduling and full-till fixtures in the server. `card-details.ts` has three production importers and 67 suites import `testing/bill-venue.ts`. Keep the card and refund API cases that exercise the server mount. [Bill fixture](../../../apps/server/src/testing/bill-venue.ts)
+The scan finds 182 distinct server modules outside the selection, including 58 test helpers.
+Production imports 89 of the 182. The earlier 157 count used the 17 November tree. The table
+sizes six possible PRs by current files and distinct area importers. It covers 24 of the 182
+targets. The remaining boundary and the amount of handwritten change still need designs.
 
-Qualify the moved tests at 98/98/98/95 coverage and verify package selection and dependency cycles with the move. Lane H’s local `receipts/a1308-orders-sales-ci-assessment/` holds the per-PR worksheet and exact file lists.
+| Possible pull request | Current footprint |
+| --- | --- |
+| Bill fixture with the first suite move | 67 suites use the fixture. The planned split changes two suites, +270/−230 support lines and +20/−10 test lines. |
+| Orders error registry | 1 server module, 61 production files and 36 suites importing it. |
+| Request context and till mounts | 6 server modules, 44 production files and 31 suites importing them. |
+| Floor and kitchen | 7 server modules, 18 production files and 33 suites importing them. |
+| Device and document support | 5 server modules, 12 production files and 18 suites importing them. |
+| Card and refund support | 4 server modules, 6 production files and 3 suites importing them. |
+
+Qualify independent coverage and CI selection with the move. The per-PR worksheet, file lists
+and import counts are local in Lane H's `receipts/a1308-orders-sales-ci-assessment/`.
