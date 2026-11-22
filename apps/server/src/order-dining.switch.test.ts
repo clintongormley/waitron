@@ -660,7 +660,7 @@ describe("the part of a line cut off within its order", () => {
     expect(source.takeaway_vat_class).toBe("reduced");
   }
 
-  it("keeps the takeaway class on a discounted cola", async () => {
+  it("files a discounted cola at its takeaway rate", async () => {
     const id = await threeColas();
     const [source] = classesOf(id);
     const { revision } = await orderOf(id);
@@ -702,7 +702,7 @@ describe("the part of a line cut off within its order", () => {
     expect(filedRates(id).length).toBeGreaterThan(1);
   });
 
-  it("keeps the takeaway class on a cola split into single units", async () => {
+  it("files a cola split into single units at its takeaway rate", async () => {
     const id = await threeColas();
     const [source] = classesOf(id);
     await inTx(venue, (tx) => splitUnitsWithinOrder(tx, venue.cfg, id, 1));

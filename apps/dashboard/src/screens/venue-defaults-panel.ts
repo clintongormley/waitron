@@ -295,6 +295,7 @@ export class VenueDefaultsPanel extends LitElement {
     const languages = fixed
       ? [fixed]
       : [...new Set([...model.receiptLanguageChoices, model.receiptLanguage])];
+    const takeawayRates = [...new Set([...model.vatRates, model.defaultTakeawayVatRate])];
     const saveAction = saveActionState(this.#scope);
     return html`<form
       @submit=${(event: Event) => {
@@ -332,7 +333,7 @@ export class VenueDefaultsPanel extends LitElement {
               label=${t("menu_settings.default_takeaway_vat")}
               required
               search="never"
-              .options=${model.vatRates.map((value) => ({ value, label: vatRateText(value) }))}
+              .options=${takeawayRates.map((value) => ({ value, label: vatRateText(value) }))}
               .value=${draft.defaultTakeawayVatRate}
               .error=${this.errors.defaultTakeawayVatRate ?? ""}
               ?disabled=${this.submitting}

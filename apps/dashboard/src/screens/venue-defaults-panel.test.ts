@@ -249,7 +249,7 @@ async function pick(el: Panel, name: string, value: string) {
   await el.updateComplete;
 }
 
-it("Edit opens both fields, required and without search, with Save quiet and disabled", async () => {
+it("where the region charges no takeaway VAT, Edit opens the receipt language and the VAT class, required and without search, with Save quiet and disabled", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
   await edit(el);
@@ -322,6 +322,23 @@ it("Edit offers the pickable takeaway rates as percentages, required and without
     { value: "7.50", label: "7.5%" },
     { value: "10.00", label: "10%" },
   ]);
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("offers a stored takeaway rate outside the pickable rates, so the field shows what is stored", async () => {
+  setLocale("en-GB");
+  const el = await mount(
+    rig({ ...TAKEAWAY, vatRates: ["0.00", "4.00", "10.00"], defaultTakeawayVatRate: "7.50" }).api,
+  );
+  await edit(el);
+  const away = combo(el, "defaultTakeawayVatRate")!;
+  expect(away.options).toEqual([
+    { value: "0.00", label: "0%" },
+    { value: "4.00", label: "4%" },
+    { value: "10.00", label: "10%" },
+    { value: "7.50", label: "7.5%" },
+  ]);
+  expect(away.value).toBe("7.50");
   expect(saveButton(el).disabled).toBe(true);
 });
 

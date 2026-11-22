@@ -273,7 +273,6 @@
   "src/state/table-precedence.test.ts": 0.3,
   "src/state/table-signals.test.ts": 0.3,
   "src/state/tender-refund.test.ts": 0.3,
-  "src/state/working-order.customer-fallback.test.ts": 0.4,
   "src/state/working-order.line-details.test.ts": 0.3,
   "src/state/working-order.test.ts": 0.3,
   "src/state/zone-menu-memory.test.ts": 0.2,

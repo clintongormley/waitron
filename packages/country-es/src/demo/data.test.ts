@@ -360,21 +360,21 @@ describe("Casa Delgado VAT classes", () => {
     )?.defaultTakeawayVatRate;
     expect(areaDefault).toBe("10.00");
     const expected = {
-      "Iberian ham": "10.00",
-      Chorizo: "10.00",
-      "Pork loin": "10.00",
-      Salchichón: "10.00",
-      Cecina: "10.00",
-      Sobrasada: "10.00",
-      Manchego: "4.00",
-      Cabrales: "4.00",
-      Idiazábal: "4.00",
-      "Torta cheese": "4.00",
-      Mahón: "4.00",
-      Anchovies: "10.00",
-      Olives: "10.00",
-      "Octopus in oil": "10.00",
-      "Tuna belly": "10.00",
+      "Iberian ham": ["reduced", "10.00"],
+      Chorizo: ["reduced", "10.00"],
+      "Pork loin": ["reduced", "10.00"],
+      Salchichón: ["reduced", "10.00"],
+      Cecina: ["reduced", "10.00"],
+      Sobrasada: ["reduced", "10.00"],
+      Manchego: ["super_reduced", "4.00"],
+      Cabrales: ["super_reduced", "4.00"],
+      Idiazábal: ["super_reduced", "4.00"],
+      "Torta cheese": ["super_reduced", "4.00"],
+      Mahón: ["super_reduced", "4.00"],
+      Anchovies: ["reduced", "10.00"],
+      Olives: ["reduced", "10.00"],
+      "Octopus in oil": ["reduced", "10.00"],
+      "Tuna belly": ["reduced", "10.00"],
     };
     for (const set of sets)
       expect(
@@ -382,7 +382,7 @@ describe("Casa Delgado VAT classes", () => {
           set.menus.deli.categories.flatMap((category) =>
             category.products.map((product) => [
               product.staffName?.en ?? product.image,
-              product.takeawayVatRate ?? areaDefault,
+              [product.vatClass, product.takeawayVatRate ?? areaDefault],
             ]),
           ),
         ),
