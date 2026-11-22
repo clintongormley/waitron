@@ -57,9 +57,9 @@ contraseñas y códigos de cambio de correo.
 Si eliges Cloud y dejas en blanco el servidor de correo, Cloud también envía los avisos sobre
 cambios de seguridad de la cuenta y de roles, y el aviso a la dirección anterior cuando otra
 persona cambia el correo de un miembro del personal en **Usuarios**. Los encargados con correo
-electrónico también pueden recibir recordatorios de caducidad del certificado y alertas por falta
-de espacio, copias de seguridad eliminadas o detenidas, actualizaciones revertidas y correcciones
-del reloj. Tu servidor de correo tiene prioridad cuando lo configuras. Para enviar correos a
+electrónico también pueden recibir alertas por falta de espacio, copias de seguridad eliminadas o
+detenidas, actualizaciones revertidas y correcciones del reloj. Tu servidor de correo tiene
+prioridad para estos avisos cuando lo configuras. Para enviar correos a
 clientes, enviar el informe diario o recibir otras alertas del servidor por correo, añade un
 servidor de correo en **Sistema → Correo**.
 
@@ -72,6 +72,10 @@ Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invit
 los enlaces para restablecer contraseñas y los códigos de cambio de correo se envían por Cloud,
 también en Demostración. Revisa el buzón real del destinatario en lugar de la Bandeja de correo
 de Demostración. Mantén un servidor de correo para los recibos y otros avisos.
+
+En un servidor configurado para enviar registros fiscales de prueba, los encargados con correo
+electrónico pueden recibir recordatorios de caducidad del certificado a través de Cloud de prueba
+si activas el correo de Cloud y dejas en blanco el servidor de correo.
 
 Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no

@@ -408,9 +408,10 @@ continue and linked Demo priority. Cloud's published interface is #1254 at
 `34a0731e39aa38e5922e3f7ed5167441cafe21a5`; D102's former release gate is replaced by this concrete
 joint test. In configured test-box Prepare, you can choose Cloud for staff email and leave the
 venue's mail server blank. In that setup, an enabled test Cloud grant also sends old-address,
-security and role-change notices. The box now supplies facts for selected box alerts and
-certificate expiry reminders through that route. They need the compatible test Cloud release
-and a joint inbox check. The full-disk alert uses direct mail, and the unusable-clock alert
+security and role-change notices. The box now supplies facts for selected box alerts and, on a
+box configured for test filings, certificate expiry reminders. Both need the compatible test
+Cloud release. The box alerts also have a joint inbox check pending. The full-disk alert uses
+direct mail, and the unusable-clock alert
 uses the box's own mail route. Setup can finish with a notice if the Cloud grant is unconfirmed.
 The hosted test release and live Google qualification remain open.
 The setup email test issue below remains separate open work.

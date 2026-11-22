@@ -1250,9 +1250,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   Demo's normal route captures account mail, reminders and alerts outside development; an enabled
   test Cloud relay takes its three selected account classes.
   A fresh Prepare box that opts into Cloud email and leaves its mail server blank can also
-  send the old-address warning, security notices, role changes, selected box alerts and
-  certificate reminders through test Cloud. The two new notice classes need the compatible
-  Cloud release and a joint inbox check.
+  send the old-address warning, security notices, role changes and selected box alerts through
+  test Cloud. A box configured for test filings can send certificate reminders through the same
+  relay. The two new notice classes need the compatible Cloud release, and box alerts have a
+  joint inbox check pending.
   Left: qualify invitations, resets and email-change codes against the live test Cloud
   (BOX-EMAIL-RELAY). Receipts and other notices still use SMTP.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
