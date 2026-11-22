@@ -178,6 +178,8 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     Math.max(0, attempt.deadline - steadyNow());
   let current: Attempt | null = null;
   let starting: Promise<unknown> | null = null;
+  /** Set while a cancel waits for the main box, which may yet answer that it is approving. */
+  let cancelling: Promise<unknown> | null = null;
 
   async function send(
     to: Pick<Attempt, "base" | "trust">,
@@ -294,7 +296,15 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     if (attempt === null) return;
     current = null;
     clearTimeout(attempt.timer);
-    if (!(await sendCancel(attempt))) return;
+    const sending = sendCancel(attempt);
+    cancelling = sending;
+    let approving: boolean;
+    try {
+      approving = await sending;
+    } finally {
+      if (cancelling === sending) cancelling = null;
+    }
+    if (!approving) return;
     // The main box is approving: keep following it, unless another attempt has begun meanwhile.
     if (current === null) {
       current = attempt;
@@ -307,7 +317,8 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
    * has ended or failed. */
   async function start(primaryUrl: string) {
     const live = current?.state.state === "waiting" || current?.state.state === "approved";
-    if (live || starting !== null) throw new AppError("mirror.join_waiting", {});
+    if (live || starting !== null || cancelling !== null)
+      throw new AppError("mirror.join_waiting", {});
     const opening = open(primaryUrl);
     starting = opening;
     try {

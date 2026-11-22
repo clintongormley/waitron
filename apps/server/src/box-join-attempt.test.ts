@@ -624,6 +624,32 @@ describe("the new box's join attempt", () => {
     expect(paths()).toEqual(["hello", "reveal"]);
   });
 
+  it("refuses to start while a Start again's cancel is still on its way to the main box", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release = () => {};
+    let held = () => {};
+    const sending = new Promise<void>((resolve) => (held = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const holdingCancel: typeof boxExchange = async (url, options) => {
+      if (url.pathname.endsWith("/cancel")) {
+        held();
+        await released;
+      }
+      return exchange(url, options);
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: holdingCancel }));
+    await attempt.start(MAIN_URL);
+    const cancelled = attempt.cancel();
+    await sending;
+
+    await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
+    release();
+    await cancelled;
+    expect(paths()).toEqual(["hello", "reveal", "cancel"]);
+    await attempt.start(MAIN_URL);
+    expect(paths()).toEqual(["hello", "reveal", "cancel", "hello", "reveal"]);
+  });
+
   it("ends a start that a cancel arrived during, once the main box has listed it", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { holding, release } = holdingHello();
