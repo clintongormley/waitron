@@ -27,7 +27,7 @@
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.18",
+    "hono": "^4.13.19",
     "lit": "^3.2.0"
   },
   "devDependencies": {
@@ -36,7 +36,7 @@
     "@vitest/coverage-v8": "^4.1.12",
     "@waitron/migrations": "workspace:*",
     "drizzle-kit": "^0.31.11",
-    "playwright": "^1.65.0",
+    "playwright": "^1.65.1",
     "typescript": "^7.0.0",
     "vite": "^8.3.8",
     "vitest": "^4.1.12"
