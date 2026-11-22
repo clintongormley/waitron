@@ -6,7 +6,7 @@ import {
   isInstallationIdentity,
   matchesInstallationChecksum,
 } from "./allocation-identity.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 describe("externally allocated installation identity", () => {
   it.each([

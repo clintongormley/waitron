@@ -37,7 +37,7 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./hour-test-clock.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 // Load this fixture before recovery-key consumers so they receive its memoised verifier.
 vi.mock("@waitron/identity", async (importOriginal) => {

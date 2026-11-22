@@ -1,6 +1,7 @@
 import { seedModuleRecord } from "../test/module-records.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
 // module-records/fiscal-verifactu.json? The cases asking this put the spare's clock on the minute of
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints

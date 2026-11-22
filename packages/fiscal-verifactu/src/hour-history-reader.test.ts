@@ -21,7 +21,7 @@ import { registroSif } from "./schema/sif.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { VerifactuBackend } from "./backend.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 async function readInventory() {
   const environment = await readDeploymentEnvironment(suite.db);

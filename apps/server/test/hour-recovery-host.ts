@@ -77,7 +77,7 @@ import {
   selectPastWaits as selectPastWaits_,
   type HourTestClock,
 } from "../src/testing/hour-test-clock.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const mocked = vi.hoisted(() => ({ internet: vi.fn(), realSecretChecks: vi.fn() }));
 export const external: { internet: Mock } = mocked;

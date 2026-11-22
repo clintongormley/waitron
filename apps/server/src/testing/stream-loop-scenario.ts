@@ -62,7 +62,7 @@ import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
 import { STREAM_LOOP_SPARE_PHASES, runLoopSpare, type StartedFollow } from "./stream-loop-spare.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";

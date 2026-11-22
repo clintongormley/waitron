@@ -27,7 +27,7 @@ import { cloudReceiptFixture } from "@waitron/fiscal-verifactu/test/cloud-fixtur
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import { stagedHourCrash } from "./testing/staged-hour-crash.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),

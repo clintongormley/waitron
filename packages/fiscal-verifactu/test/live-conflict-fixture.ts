@@ -12,7 +12,7 @@ import { VerifactuBackend } from "../src/backend.js";
 import { openFilingCase } from "../src/filing-cases.js";
 import { envios } from "../src/schema/envios.js";
 import { fiscalAllocations } from "../src/schema/allocations.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const liveConflictNode = {
   nodeId: TENANT_A.nodeId,

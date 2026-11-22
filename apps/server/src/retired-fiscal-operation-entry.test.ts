@@ -24,7 +24,7 @@ import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

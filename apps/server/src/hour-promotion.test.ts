@@ -1,6 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

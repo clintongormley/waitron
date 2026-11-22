@@ -34,7 +34,7 @@ import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 import type { RecoveryConflictRef } from "./conflict-types.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

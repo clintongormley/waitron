@@ -1,6 +1,7 @@
 import { seedModuleSettings } from "../../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
 // and the transfer of the copy (both real elsewhere); the copy, its signed indicator, its
 // acceptance and its placing are the real functions.

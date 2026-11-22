@@ -22,7 +22,7 @@ import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocati
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

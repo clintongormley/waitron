@@ -23,7 +23,7 @@ import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envel
 import { establishDormantAllocation } from "./standby-allocation.js";
 
 import { fiscalReservations } from "./schema/reservations.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

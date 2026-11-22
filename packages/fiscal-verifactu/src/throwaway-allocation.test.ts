@@ -1,4 +1,5 @@
-import { seedVenueSettings, seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";

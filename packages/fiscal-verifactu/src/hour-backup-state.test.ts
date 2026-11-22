@@ -110,7 +110,7 @@ it.each([
 });
 
 import { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const publicRow = {
   reference: "intent/fiscal-verifactu/retained",
   kind: "intent",

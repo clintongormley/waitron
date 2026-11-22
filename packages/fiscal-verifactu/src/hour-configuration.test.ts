@@ -6,7 +6,7 @@ import { withOperationAuthority } from "@waitron/module";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import { FISCAL_INITIAL_SETUP, FISCAL_OPERATIONS } from "./index.js";
 import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 afterEach(() => vi.unstubAllEnvs());
 

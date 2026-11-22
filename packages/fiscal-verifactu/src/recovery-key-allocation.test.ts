@@ -8,7 +8,7 @@ import {
   verifyPaperEvidence,
 } from "./paper-evidence.js";
 import { validateAllocationEnvelope, type AllocationContext } from "./allocation-envelope.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const primary = { nodeId: "old-node" };
 const target = { nodeId: "replacement-node" };
 const keys = generateKeyPairSync("ed25519");

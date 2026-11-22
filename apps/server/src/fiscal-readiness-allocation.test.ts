@@ -23,7 +23,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { submitFiscalReadiness, fiscalReadinessDatabaseKey } from "./fiscal-readiness-runner.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const NODE = "c0000000-0000-4000-8000-000000000001";
 const ADMIN = "c0000000-0000-4000-8000-000000000002";
 const keys = generateKeyPairSync("ed25519");

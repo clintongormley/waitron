@@ -9,7 +9,7 @@ import {
   validateInitialPaperCandidates,
   readInitialPaperCandidates,
 } from "./initial-paper-candidates.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 vi.mock("@waitron/verifactu", { spy: true });
 

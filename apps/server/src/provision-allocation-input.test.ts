@@ -25,7 +25,7 @@ import { AppError } from "@waitron/shared";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });

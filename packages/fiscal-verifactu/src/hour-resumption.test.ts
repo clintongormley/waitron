@@ -3,7 +3,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { compareHourClocks } from "./hour-clock.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import type { HourSelectionFacts } from "./hour-selection.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const binding: OperationBinding = {
   module: "fiscal-verifactu",

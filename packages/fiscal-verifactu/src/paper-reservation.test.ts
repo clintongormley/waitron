@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import * as evidence from "./paper-evidence.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const keys = generateKeyPairSync("ed25519");
 const otherKeys = generateKeyPairSync("ed25519");

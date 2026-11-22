@@ -23,7 +23,7 @@ import type { HourHistorySource } from "./hour-history.js";
 import type { HourSelectionStore } from "./hour-selection.js";
 import { decodeMinuteIdentity, encodeMinuteIdentity } from "./hour-identity.js";
 import { FISCAL_OPERATIONS } from "./index.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const at = (iso: string) => Date.parse(iso);
 const MAIN = "a0000000-0000-4000-8000-000000000008";

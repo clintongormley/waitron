@@ -12,7 +12,7 @@ import { currentSif, registerSif } from "./registro-sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = {

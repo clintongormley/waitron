@@ -17,7 +17,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { createFirstSetupOwner } from "../src/first-setup-owner.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const PASSWORD = "SYNTHETIC-owner-password";
 export const MODULE = "fiscal-verifactu";

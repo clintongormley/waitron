@@ -14,7 +14,7 @@ import * as envelope from "./allocation-envelope.js";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import { deviceId, saleId } from "@waitron/shared";
 import { altaFor } from "./testing/seed.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

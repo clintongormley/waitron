@@ -23,7 +23,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NODE = "c0000000-0000-4000-8000-000000000001";

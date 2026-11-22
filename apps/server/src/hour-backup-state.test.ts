@@ -13,7 +13,7 @@ import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { stubNodeSnapshot } from "./testing/node-copy.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const modules = ALL_MODULES.filter((m) => m.name === "fiscal-verifactu");
 const manifest = {

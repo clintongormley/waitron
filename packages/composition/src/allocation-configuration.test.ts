@@ -24,7 +24,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { fixtureSifIdentities } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {

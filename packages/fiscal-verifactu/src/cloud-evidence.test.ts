@@ -5,8 +5,8 @@ import * as fiscal from "./index.js";
 import type { AllocationContext, AllocationValidation } from "./allocation-envelope.js";
 import { validateAllocationReplay } from "./allocation-envelope.js";
 import type { ReceiptTrust } from "./cloud-evidence.js";
-import { cloudReceiptFixture } from "../test/cloud-fixture.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { canonical, cloudReceiptFixture } from "../test/cloud-fixture.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 type Payload = {
   allocation: fiscal.FiscalAllocation;
@@ -53,17 +53,6 @@ function verify(value: unknown = fixture.receipt, held = context, enrolled: unkn
   };
   expect(api.verifyCloudAllocationEvidence).toBeTypeOf("function");
   return api.verifyCloudAllocationEvidence!(value, enrolled, held);
-}
-
-// The signing fixture uses Cloud's sorted recursive JSON wire format, independently of the verifier.
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (typeof value === "object" && value !== null)
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
-      .join(",")}}`;
-  return JSON.stringify(value);
 }
 
 describe("Cloud consumed evidence and independent local recovery authority", () => {

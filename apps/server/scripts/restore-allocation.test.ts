@@ -15,7 +15,8 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";

@@ -7,7 +7,7 @@ import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { createHostedHourPreparation } from "./hour-preparation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
 vi.mock("./hour-clock-time-service.js", () => ({ observeTimeServiceHourClock: outside.internet }));

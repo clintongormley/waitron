@@ -1,6 +1,7 @@
 import { canUseDeviceProfile } from "@waitron/identity";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedBusinessDay, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";

@@ -17,7 +17,7 @@ import {
   type PaperAllocation,
   type PaperReservationContext,
 } from "./paper-evidence.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TENANT_A.nodeId };

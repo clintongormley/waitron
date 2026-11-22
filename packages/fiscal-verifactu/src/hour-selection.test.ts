@@ -7,7 +7,7 @@ import {
   type HourSelectionFacts,
   type HourSelectionStore,
 } from "./hour-selection.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const binding: OperationBinding = {
   module: "fiscal-verifactu",

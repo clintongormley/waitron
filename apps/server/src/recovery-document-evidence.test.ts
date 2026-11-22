@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 let root: string;
 let roots: { stateDir: string; venueDir: string };

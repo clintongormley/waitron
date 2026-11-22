@@ -47,7 +47,7 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./hour-test-clock.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const bases = SERIES_BASES;
 export async function stagedHourCrash(

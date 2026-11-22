@@ -15,7 +15,7 @@ import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { withEmergencyAttempt } from "./emergency-attempt.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

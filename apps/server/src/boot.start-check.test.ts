@@ -1,5 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { seedVenueSettings, SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";

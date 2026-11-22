@@ -11,7 +11,7 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };

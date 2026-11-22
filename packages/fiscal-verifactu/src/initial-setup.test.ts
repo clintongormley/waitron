@@ -21,7 +21,7 @@ import { registroSif } from "./schema/sif.js";
 import { validateInitialPaperCandidates } from "./initial-paper-candidates.js";
 import type { PaperConsumption } from "./paper-protocol.js";
 import type { AllocationContext, FiscalAllocation } from "./allocation-envelope.js";
-import { SERIES_BASES } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const context: InitialSetupContext = {
