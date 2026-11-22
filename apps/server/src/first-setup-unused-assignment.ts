@@ -1,4 +1,3 @@
-import { VENUE_DIR_NAME, VENUE_FILE, VENUE_WAL_FILE } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
@@ -45,8 +44,6 @@ export async function firstSetupUnusedAssignment(
     return false;
   const allowed = new Set([
     "state/flows/setup/record.json",
-    `${VENUE_DIR_NAME}/${VENUE_FILE}`,
-    `${VENUE_DIR_NAME}/${VENUE_WAL_FILE}`,
     "directory:state/flows/setup/documents",
   ]);
   if (

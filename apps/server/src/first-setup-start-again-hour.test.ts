@@ -355,9 +355,7 @@ it.each([
         ownerGeneration: snapshot.inspection.ownerGeneration!,
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
-    expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
-      snapshot.originals,
-    );
+    expect(await f.host.resolution.captureFirstSetupOriginals()).toEqual(snapshot);
     await unchanged();
   },
 );
@@ -382,9 +380,7 @@ it.each([
       ownerGeneration: snapshot.inspection.ownerGeneration!,
     }),
   ).rejects.toMatchObject({ code });
-  expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
-    snapshot.originals,
-  );
+  expect(await f.host.resolution.captureFirstSetupOriginals()).toEqual(snapshot);
 });
 
 it("HTTPS hour restart takes local observations without a register declaration", async () => {
@@ -516,8 +512,6 @@ it.each(["activation-started", "uncertain"] as const)(
         ownerGeneration: snapshot.inspection.ownerGeneration!,
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
-    expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
-      snapshot.originals,
-    );
+    expect(await f.host.resolution.captureFirstSetupOriginals()).toEqual(snapshot);
   },
 );

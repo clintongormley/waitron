@@ -12,6 +12,7 @@ import {
   writeFile,
   symlink,
   truncate,
+  chmod,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
@@ -637,6 +638,30 @@ it.each([
     params: { cause },
   });
   expect(changed).toBe(true);
+});
+
+it.each(
+  ["venue.db", "venue.db-wal"].flatMap((name) => [
+    { name, fault: "folder", error: { code: "setup.not_ready", params: { cause: "unexpected" } } },
+    { name, fault: "oversize", error: { code: "setup.not_ready", params: { cause: "too-large" } } },
+    { name, fault: "unreadable", error: { code: "EACCES" } },
+  ]),
+)("refuses $name made $fault after inspection", async ({ name, fault, error }) => {
+  const f = await fixture("active");
+  const path = join(f.venueDir, name);
+  if (name === "venue.db-wal") await writeFile(path, "");
+  const inspect = f.service.inspectFirstSetupResolution;
+  f.service.inspectFirstSetupResolution = async () => {
+    const result = await inspect();
+    if (fault === "oversize") await truncate(path, 128 * 1024 * 1024 + 1);
+    else if (fault === "unreadable") await chmod(path, 0o000);
+    else {
+      await rm(path);
+      await mkdir(path);
+    }
+    return result;
+  };
+  await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject(error);
 });
 
 it("leaves a damaged ownership record and its marker as they are when inspected", async () => {

@@ -23,6 +23,7 @@ import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { hasOperationalVenue, readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
+import { fingerprintFileHandle } from "./file-handle-fingerprint.js";
 export interface FirstSetupRoots {
   stateDir: string;
   venueDir: string;
@@ -48,6 +49,41 @@ export interface FirstSetupInspection {
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const missing = (error: unknown) =>
   typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+const DATABASE_SNAPSHOT_LIMIT = 128 * 1024 * 1024;
+const DATABASE_ARTIFACTS = [VENUE_FILE, VENUE_WAL_FILE];
+
+async function databaseArtifact(
+  root: string,
+  name: string,
+  strict: boolean,
+): Promise<FirstSetupArtifact> {
+  let handle;
+  try {
+    const parent = await lstat(root);
+    if (!parent.isDirectory() || parent.isSymbolicLink())
+      throw new AppError("setup.not_ready", { cause: "unexpected" });
+    handle = await open(
+      join(root, name),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const info = await handle.stat();
+    if (!info.isFile()) throw new AppError("setup.not_ready", { cause: "unexpected" });
+    if (info.size > DATABASE_SNAPSHOT_LIMIT)
+      throw new AppError("setup.not_ready", { cause: "too-large" });
+    // The stream's end is inclusive, so one extra byte detects growth after stat.
+    const { size, sha256 } = await fingerprintFileHandle(handle, DATABASE_SNAPSHOT_LIMIT);
+    if (size > DATABASE_SNAPSHOT_LIMIT)
+      throw new AppError("setup.not_ready", { cause: "too-large" });
+    return { name, status: "present", digest: sha256 };
+  } catch (error) {
+    if (missing(error)) return { name, status: "missing" };
+    if (strict) throw error;
+    return { name, status: "unreadable" };
+  } finally {
+    await handle?.close();
+  }
+}
+
 async function artifact(
   root: string,
   name: string,
@@ -174,13 +210,13 @@ export function createFirstSetupResolutionInspection(
         }
       };
       for (const file of inspection.artifacts) {
-        if (file.name.startsWith("outside-") || file.name === "flows/setup/documents") continue;
-        const venue = [VENUE_FILE, VENUE_WAL_FILE].includes(file.name);
-        await capture(
-          join(venue ? options.venueDir : options.stateDir, file.name),
-          `${venue ? "venue" : "state"}/${file.name}`,
-          file,
-        );
+        if (
+          DATABASE_ARTIFACTS.includes(file.name) ||
+          file.name.startsWith("outside-") ||
+          file.name === "flows/setup/documents"
+        )
+          continue;
+        await capture(join(options.stateDir, file.name), `state/${file.name}`, file);
       }
       const directory = async (
         path: string,
@@ -246,7 +282,7 @@ export function createFirstSetupResolutionInspection(
             (item) => `outside-receipts-${index}/${digest(item)}`,
           );
       }
-      if ((await service.inspectFirstSetupResolution()).inspectionId !== inspection.inspectionId)
+      if ((await resolution.inspect(true)).inspectionId !== inspection.inspectionId)
         throw new AppError("setup.attempt_conflict", {});
       return { inspection, originals };
     },
@@ -258,7 +294,10 @@ export function createFirstSetupResolutionInspection(
         hold.release();
       }
     },
-    async inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
+    inspectFirstSetupResolution: () => resolution.inspect(false),
+  };
+  const resolution = {
+    async inspect(strictDatabase: boolean): Promise<FirstSetupInspection> {
       let repair: Awaited<ReturnType<FirstSetupStore["readResumable"]>> | undefined;
       try {
         repair = await options.store.readResumable();
@@ -298,8 +337,8 @@ export function createFirstSetupResolutionInspection(
           ),
         );
       artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
-      for (const name of [VENUE_FILE, VENUE_WAL_FILE])
-        artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
+      for (const name of DATABASE_ARTIFACTS)
+        artifacts.push(await databaseArtifact(options.venueDir, name, strictDatabase));
       const documents = join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR);
       try {
         const directory = await lstat(documents);
