@@ -43,11 +43,11 @@ export function printedOrResent(job: typeof printJobs | typeof reprintJob): SQL 
 /**
  * A document job not printed after {@link JOBS_WAITING_MS}, or given up on (failed with no delivery
  * attempts left) however recent, until a later job standing in for it has printed: a resend of
- * the same job; for a kitchen ticket, a Reprint on the same printer for every bill and station the
- * ticket is linked to, printed itself or through a resend ({@link printedOrResent}); for a receipt, another
+ * the same job; for a linked kitchen printout, a Reprint on the same printer for every bill and station it
+ * is linked to, printed itself or through a resend ({@link printedOrResent}); for a receipt, another
  * receipt of the same sale on the same printer. A drawer pulse never counts. The printer's alert
  * ({@link printersInTrouble}) and a table's printing problem both read this.
- * "After" is `rowid` (for a kitchen ticket, its link row's), not `created_at`, which two jobs can
+ * "After" is `rowid` (for a linked printout, its link row's), not `created_at`, which two jobs can
  * share to the millisecond: SQLite gives a new row one more than the table's largest `rowid`.
  * `VACUUM` and `VACUUM INTO` kept that order in `print_jobs` and `kitchen_print_jobs`, with rows
  * deleted first to leave gaps, when measured (node:sqlite, Node v26.7.0, 2026-10-01).
@@ -103,10 +103,8 @@ const standInSource = alias(printJobs, "trouble_stand_in_source");
 const standInLink = alias(kitchenPrintJobs, "trouble_stand_in_link");
 
 /**
- * The job is a kitchen ticket, or a Printers-screen resend of one (which carries no links of its own)
- * on the ticket's printer: a job whose links, or its chain's first job's, a till Reprint on this
- * printer can cover. A resend sent to another printer is not one, since a Reprint covers only the
- * printer it prints on.
+ * A till Reprint covers a linked printout and any Printers-screen resend still on its printer.
+ * Resends use the first job's links.
  */
 const reprintCanStandIn = sql`exists (select 1 from ${printJobs} as ${standInSource}
   join ${kitchenPrintJobs} as ${standInLink} on ${standInLink.printJobId} = ${standInSource.id}

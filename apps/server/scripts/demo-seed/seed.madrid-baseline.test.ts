@@ -2907,6 +2907,16 @@ for (const locale of ["en", "es"] as const) {
       });
       for (const row of Object.values(ticketTable.rows)) row.hold_paper_queued = 0;
 
+      const kitchenJobs = expected[phase].tables.kitchen_print_jobs!;
+      kitchenJobs.columns.push({
+        name: "correction_slip",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "false",
+        pk: 0,
+      });
+      for (const row of Object.values(kitchenJobs.rows)) row.correction_slip = 0;
+
       const deliveriesTable = expected[phase].tables.invoice_deliveries!;
       deliveriesTable.foreignKeys.splice(2, 0, {
         ...personKey("person_id", 2),

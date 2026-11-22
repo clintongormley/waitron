@@ -1062,6 +1062,7 @@ CREATE TABLE `kitchen_print_jobs` (
 	`station_id` text NOT NULL,
 	`reprint` integer NOT NULL,
 	`created_at` text NOT NULL,
+	`correction_slip` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action

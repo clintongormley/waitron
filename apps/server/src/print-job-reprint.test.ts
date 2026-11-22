@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -50,6 +50,7 @@ import { inTx, send as rawGroupSend } from "./testing/bill-venue.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
+import { cancelLine } from "./testing/cancel-line.js";
 import {
   billlessSale,
   collect,
@@ -209,8 +210,11 @@ async function paidSale(setting: EscSetting) {
   }
 }
 
-/** A seated table with one fired dish, its kitchen ticket printed on the kitchen printer at `setting`. */
-async function kitchenTicket(setting: EscSetting): Promise<string> {
+/** Queue a fired dish at the requested width and return its ticket or its subsequent VOID slip. */
+async function kitchenTicket(
+  setting: EscSetting,
+  kind: "ticket" | "void" = "ticket",
+): Promise<string> {
   await inTx(venue, (tx) =>
     tx.update(printers).set(setting).where(eq(printers.id, kitchenPrinterId)),
   );
@@ -239,7 +243,18 @@ async function kitchenTicket(setting: EscSetting): Promise<string> {
       .where(eq(kitchenPrintJobs.workingOrderId, tabId)),
   );
   await setJob(link!.jobId, { status: "done" });
-  return link!.jobId;
+  if (kind === "ticket") return link!.jobId;
+  return inTx(venue, async (tx) => {
+    await cancelLine(tx, venue.cfg, tabId, 1);
+    const [slip] = await tx
+      .select({ id: printJobs.id, payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, kitchenPrinterId))
+      .orderBy(desc(sql`${printJobs}.rowid`))
+      .limit(1);
+    expect(decodeTicket(slip!.payload!)).toContain("*** ANULADO ***");
+    return slip!.id;
+  });
 }
 
 async function refundReceipt(payload: Uint8Array): Promise<string> {
@@ -559,6 +574,30 @@ describe("the print queue's resend to another printer", () => {
     expect(await narrower.json()).toMatchObject({
       error: { code: "print_job.printer_unsuitable" },
     });
+  });
+
+  it("offers and resends a correction slip only on its own printer", async () => {
+    const slip = await kitchenTicket(at58, "void");
+    await setJob(slip, exhausted);
+    const other = await printerAt(at80);
+    const listing = await printApi().request("/management-api/print-jobs", {
+      headers: { cookie: venue.adminDashboard },
+    });
+    expect(listing.status).toBe(200);
+    const jobs = (await listing.json()) as { id: string }[];
+    expect(jobs.find((job) => job.id === slip)).toMatchObject({
+      canResend: true,
+      reprintRule: "own",
+      reprintPrinterIds: [],
+    });
+
+    const refused = await resend(slip, other);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "print_job.own_printer_only" } });
+    const accepted = await resend(slip, kitchenPrinterId);
+    expect(accepted.status).toBe(202);
+    const { jobId } = (await accepted.json()) as { jobId: string };
+    expect(await jobRow(jobId)).toMatchObject({ printerId: kitchenPrinterId, resendOf: slip });
   });
 
   it("lists the queue with an expired kitchen payload without decoding a null head", async () => {

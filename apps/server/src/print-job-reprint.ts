@@ -78,9 +78,11 @@ export function reprintRule(
   return { rule: "wide_enough", fits: (printerDots) => printerDots >= widthDots };
 }
 
-/** Kitchen tickets link to the first job in the chain. */
+/** Only tickets can be sent to a different printer using their recorded width. */
 export function linkedKitchenPrintoutSql(head: SQLWrapper | string): SQL<number> {
-  return sql<number>`exists (select 1 from ${kitchenPrintJobs} where ${kitchenPrintJobs.printJobId} = ${head})`;
+  return sql<number>`exists (select 1 from ${kitchenPrintJobs}
+    where ${kitchenPrintJobs.printJobId} = ${head}
+    and ${kitchenPrintJobs.correctionSlip} = 0)`;
 }
 
 export function isCompletedReceiptOriginal(job: {

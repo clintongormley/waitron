@@ -632,7 +632,8 @@ describe("a correction slip on a printer shared by several stations", () => {
       expect(slip.printed[0]).toBe("*** VOID ***");
       expect(slip.printed.join("\n")).toContain("Steak");
       expect(slip.printed.join("\n")).not.toContain("Tart");
-      expect(slip.stationIds).toEqual([]);
+      expect(slip.stationIds).toEqual([venue.y]);
+      expect(slip.lineCount).toBe(0);
     }
   });
 });

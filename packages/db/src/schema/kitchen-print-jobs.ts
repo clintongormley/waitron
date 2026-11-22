@@ -4,13 +4,8 @@ import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrders } from "./orders.js";
 import { printJobs } from "./print-jobs.js";
 
-/**
- * Which bill and station each kitchen ticket's print job carried: one row per (job, bill, station),
- * written by `enqueueKitchenTickets` and `reprintOrderTickets`
- * (`apps/server/src/kitchen-print.ts`), written again by `moveKitchenPrintLinks` there when a merge
- * carries a bill's tickets onto another, and copied by `copyKitchenPrintLinks` there onto a bill
- * some of its dishes move to, so one job can be linked to several bills. A job no kitchen ticket made
- * (a receipt, a correction slip, a drawer pulse) has none.
+/** One link per (job, bill, station). A correction slip links to the affected bill and station.
+ * Only tickets carry dish links that can follow a dish onto another bill.
  */
 export const kitchenPrintJobs = table(
   "kitchen_print_jobs",
@@ -21,6 +16,7 @@ export const kitchenPrintJobs = table(
     stationId: id("station_id").notNull(),
     reprint: flag("reprint").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    correctionSlip: flag("correction_slip").notNull().default(false),
   },
   (t) => [
     // Cascades: the row says nothing once its job or its bill is gone. The station's key has no delete
