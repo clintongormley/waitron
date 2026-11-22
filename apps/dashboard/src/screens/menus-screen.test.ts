@@ -8988,6 +8988,7 @@ it.each([
 
 it.each([
   ["mi-burger", { code: "management.request_invalid", params: { field: "grossPrice" } }],
+  ["mi-burger", { code: "product.invalid", params: { field: "grossPrice" } }],
   ["mi-lemonade:v-small", { code: "product.variant_invalid", params: { field: "price" } }],
   ["mi-lemonade:v-small", { code: "product.variant_not_found", params: { variantId: "v-small" } }],
 ])("puts a refusal naming %s's price under its field, and focuses it", async (key, refusal) => {

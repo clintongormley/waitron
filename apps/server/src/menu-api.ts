@@ -331,7 +331,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "shared.invalid_decimal": 400,
-  // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
   "menu.not_found": 404,
   "set_menu.not_found": 404,

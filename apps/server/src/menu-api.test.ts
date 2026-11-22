@@ -5241,10 +5241,10 @@ describe("a menu price outside the product editor's rule is refused at the reque
 // (`packages/menu/src/modifier-limits.ts`), whose pattern carries no sign. Pinned at the ROUTE,
 // which the package tests on the operations behind them cannot cover. This is the set that was
 // checked, not a claim that no other route carries a price.
-describe("menu routes that already refused a negative price", () => {
+describe("menu routes whose own checks refuse a negative price", () => {
   it("the product-editor, offer-variant and extras-list writes each answer their own 400", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Already-refusing menu");
+    const menuId = await createMenuVia(app, "Price-checked menu");
     const unitId = (
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
