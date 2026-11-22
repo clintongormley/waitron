@@ -1394,6 +1394,8 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Decisions and deliberate limits
 
+- A business-day start change can move a finished drawer close to the neighbouring date in Sales. Its recorded time, count and withdrawal stay as recorded (watcher, 2026-11-22 05:35, A1325 slice 6).
+
 - **Keep part-quantity handling where it has a caller (A1197, watcher, 2026-11-22 03:30).**
   Counter order creation, table rounds and new whole dishes in a save give each ordinary dish its
   own row. A save can raise an existing unbound row in place, including from one whole dish to two.

@@ -329,12 +329,12 @@ describe("dated business-day reporting through real storage", () => {
       });
     },
   );
-  it("keeps a drawer close with the same day when the start changes after it", async () => {
+  it("shows the same finished drawer close on the newly assigned business date", async () => {
     await inTx((tx) =>
       seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
         personId: venue.adminId,
-        recordedAt: "2026-11-03T12:00:00.000Z",
+        recordedAt: "2026-11-04T03:00:00.000Z",
       }),
     );
     const path = "drawer-closes?from=2026-11-03&to=2026-11-03";
@@ -342,8 +342,11 @@ describe("dated business-day reporting through real storage", () => {
     expect(before).toMatchObject({
       closes: [{ first: { counted: "8.00" }, finished: { bankWithdrawal: "8.00" } }],
     });
-    await schedule("07:00");
-    expect(await report(path)).toEqual(before);
+    await schedule("03:00");
+    expect((await report(path)).closes).toEqual([]);
+    expect((await report("drawer-closes?from=2026-11-04&to=2026-11-04")).closes).toEqual(
+      before.closes,
+    );
   });
 });
 
