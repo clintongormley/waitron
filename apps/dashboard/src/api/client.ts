@@ -9,9 +9,9 @@ import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
 import type { MenuDefaults } from "@waitron/menu/src/settings-types.js";
 export type { MenuDefaults };
-/** The menu-settings read: the menu's defaults, and whether the venue's region charges a product a
- * second VAT class when it is taken away. */
-export type MenuSettingsAnswer = MenuDefaults & { takeawayVat: boolean };
+/** The menu-settings read: the menu's defaults, whether the venue's region charges takeaway VAT, and
+ * the takeaway rates a person may pick. */
+export type MenuSettingsAnswer = MenuDefaults & { takeawayVat: boolean; vatRates: string[] };
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type {

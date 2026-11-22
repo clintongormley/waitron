@@ -32,7 +32,7 @@ const product: ProductEditorDraft = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: null,
   color: null,
@@ -169,6 +169,16 @@ it("valid decimal price spellings compare exactly while invalid raw input remain
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
+});
+it("a takeaway rate change alone is unsaved, and choosing the saved rate again is clean", async () => {
+  const { app, editor } = await mount();
+  editor.takeawayVat = true;
+  editor.vatRates = ["0.00", "4.00", "10.00", "21.00"];
+  await editor.updateComplete;
+  await change(editor, "[name=takeaway-tax]", "4.00");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await change(editor, "[name=takeaway-tax]", "10.00");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("a dietary-only change immediately enables unload protection", async () => {
   const { editor } = await mount({ ...product, allergens: {} });

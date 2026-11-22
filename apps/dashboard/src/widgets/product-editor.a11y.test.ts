@@ -21,7 +21,7 @@ const coffee: ProductEditorDraft = {
   unitId: "each",
   unitPrice: "3.00",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   active: true,
   available: true,
   ordering: "public",
@@ -98,7 +98,7 @@ const variantPage: ProductEditorDraft = {
     image: "coffee.png",
     unitPrice: "3.00",
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
+    takeawayVatRate: "10.00",
     unitId: "each",
     primaryCategoryId: "drinks",
     courseId: "starters",
@@ -111,6 +111,7 @@ const variantPage: ProductEditorDraft = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
+  takeawayVatRate: null,
   allergens: null,
   dietaryDeclarations: null,
   primaryCategoryId: null,
@@ -159,6 +160,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "color-refused",
     "takeaway",
     "takeaway-refused",
+    "takeaway-variant",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -184,7 +186,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                 ? withModifiers
                 : state === "inactive"
                   ? { ...coffee, active: false, available: false }
-                  : state === "variant-page"
+                  : state === "variant-page" || state === "takeaway-variant"
                     ? variantPage
                     : state === "categories" || state === "category-tree"
                       ? { ...coffee, primaryCategoryId: "wine" }
@@ -223,6 +225,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                   ? { "takeaway-tax": "The server rejected this value." }
                   : {},
         takeawayVat: state.startsWith("takeaway"),
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
         ...(state.startsWith("photo")
           ? { api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never }
           : {}),
@@ -338,6 +341,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       await field.updateComplete;
       expect(field.checkVisibility()).toBe(true);
       expect(field.error !== "").toBe(state === "takeaway-refused");
+      expect((field as unknown as { value: string }).value).toBe(
+        state === "takeaway-variant" ? "" : "10.00",
+      );
     }
     if (state === "inactive") {
       // The retired controls must stay absent in this state.
