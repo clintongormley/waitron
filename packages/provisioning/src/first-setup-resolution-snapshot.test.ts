@@ -9,6 +9,7 @@ import { createFirstSetupResolutionInspection } from "./first-setup-resolution-i
 vi.mock("node:fs/promises", { spy: true });
 const roots: string[] = [];
 afterEach(async () => {
+  vi.mocked(filesystem.readFile).mockReset();
   vi.restoreAllMocks();
   await Promise.all(
     roots.splice(0).map((root) => filesystem.rm(root, { recursive: true, force: true })),
@@ -38,7 +39,7 @@ async function databaseFixture() {
   return { venueDir, service };
 }
 
-it("fingerprints both database files without whole-file reads or retaining their bytes", async () => {
+it("fingerprints both database files without readFile or returning their bytes", async () => {
   const { venueDir, service } = await databaseFixture();
   const files = [
     ["venue.db", Buffer.alloc(128 * 1024 + 1, "d")],
