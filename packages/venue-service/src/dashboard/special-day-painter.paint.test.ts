@@ -143,6 +143,28 @@ describe("the season under the paint", () => {
     expect(writes).toEqual([]);
   });
 
+  it("re-reads when the start in force moves on under the same change schedule", async () => {
+    const scheduled = painterModel();
+    const before = {
+      ...scheduled,
+      businessDayClock: {
+        ...scheduled.businessDayClock,
+        cutoverChanges: [{ effectiveBusinessDay: DEC_15, dayCutover: "07:00" }],
+      },
+    };
+    let hours = [dinner("20:00", "23:30")];
+    const { painter, seasonReads } = await mount({
+      model: () => before,
+      season: (date) => ({ ranges: hours, dayCutover: date < DEC_15 ? "06:00" : "07:00" }),
+    });
+    expect(seasonReads.length).toBe(1);
+    hours = [dinner("19:00", "22:30")];
+    painter.model = { ...before, dayCutover: "07:00" };
+    await settle(painter);
+    await expect.poll(() => seasonReads.length).toBe(2);
+    await expect.poll(() => grid(painter).underlay.get(DEC_14)).toEqual([dinner("19:00", "22:30")]);
+  });
+
   it("drops a season read that lands after a newer one", async () => {
     let release: () => void = () => {};
     let slow = false;

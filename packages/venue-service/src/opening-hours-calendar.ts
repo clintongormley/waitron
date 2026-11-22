@@ -261,9 +261,11 @@ export interface SeasonDays {
 export async function readSeasonDays(
   tx: Transaction,
   dates: readonly LocalDate[],
+  at: Date,
 ): Promise<SeasonDays> {
   const days = [...new Set(dates)];
-  const clock = wallClock(await readVenueClock(tx));
+  const stored = await readVenueClock(tx);
+  const clock = wallClock(stored);
   const seasons = await readSeasons(tx);
   const plan: DayPlan = {
     seasonIdOn: new Map(days.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
@@ -271,12 +273,14 @@ export async function readSeasonDays(
   };
   const departments = await readActiveDepartments(tx);
   const zones = await readServiceZones(tx);
+  const cut = { anchor: calendarCutAnchor(stored, at) };
   const hours = await resolveDepartmentsDays(
     tx,
     departments.map(({ id }) => id),
     days,
     clock,
     plan,
+    cut,
   );
   const closures = await resolveZoneClosedDays(
     tx,
@@ -284,6 +288,7 @@ export async function readSeasonDays(
     days,
     clock,
     plan,
+    cut,
   );
   return {
     days: days.map((date) => ({

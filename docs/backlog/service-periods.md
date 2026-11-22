@@ -62,8 +62,6 @@ Found while building A788 (the business-day start changes at the next changeover
 says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
 code, not run again here.
 
-- **A862.** The special-day painter's season days draw a past day's range uncut where the Calendar cuts it
-  (`readSeasonDays`, `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut).
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.

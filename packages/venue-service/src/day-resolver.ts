@@ -33,8 +33,8 @@ function fromChangeover<T extends { startsAt: string; endsAt: string }>(
   return [...ranges].sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
 }
 
-/** Asked for by the calendar alone: each day's season ranges as {@link cutToOwnDay} draws them,
- *  `anchor` being the start in force when the calendar is read. */
+/** Each day's season ranges as {@link cutToOwnDay} draws them, `anchor` being the start in force
+ *  when the days are read. */
 export interface CalendarCut {
   anchor: string;
 }
