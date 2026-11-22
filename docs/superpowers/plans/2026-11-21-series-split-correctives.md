@@ -90,7 +90,8 @@ and the owner's 15 November decision.** No law or ruling we hold says it.
    `invoice_corrections` table, its routes and `invoice_correction.*` codes, `recordCorrection`. A
    label naming the document becomes "Corrective", and so does the till's "credit note", a fourth
    word for the same document (`apps/till/src/i18n/strings.ts:2006-2058`,
-   `apps/till/src/i18n/codes.ts:405`).
+   `apps/till/src/i18n/codes.ts:405`). Identifiers naming the document as a credit note (`creditNotes`, the
+   invoice kind `credit_note`, `creditNoteNumber`) become "corrective" too (2026-11-22, after review).
 
 **Does a box mid-chain need anything at its next series start?** It would. A box set up with three
 series copies three at its next handover, restore, promotion or emergency switch, and
@@ -160,7 +161,7 @@ old word (`git grep -ln rectificative -- '*.mjs' '*.js' '*.sh' ':!docs'`), and n
      Leave `paper-register-history.test.ts:586` on the original bytes if it passes, since it carries
      them opaquely.
 2. **Names.** `rectificativeSeriesCode` → `correctiveSeriesCode` (170 files); `seedRectificativeSeries`,
-   `rectificativeSeriesId` and test locals likewise; `--rectificative-code` → `--corrective-code`
+   `rectificativeSeriesId` and test locals likewise; `--rectificative-code` → `--corrective-series-code`
    (`packages/provisioning/src/cli.ts:97,182,238`, both READMEs); `series.no_rectificative_for_node`
    → `series.no_corrective_for_node` in every copy (`packages/db/src/errors.ts:44`,
    `reserved-identity.ts:99`, `apps/server/src/till-api.ts:519`, `apps/till/src/i18n/codes.ts:404`,
@@ -173,8 +174,9 @@ old word (`git grep -ln rectificative -- '*.mjs' '*.js' '*.sh' ':!docs'`), and n
    "Serie rectificativa" (today "Serie de correcciones", `venue.ts:452,455`). The duplicate-code
    refusal "The series code and rectificative series code must differ."
    (`apps/setup/src/i18n/strings/shell.ts:73-74`, Spanish `:323-324`) names no pair any more, since
-   any two may clash, and is shown under the field the error names (`field` is in its params,
-   `venue-plan.ts:146-156`). "Correction" as a series or document label becomes "Corrective"
+   any two may clash. The refusal is shown under the field the error names (`field` is in its params,
+   `venue-plan.ts:146-156`), in the venue form's own words for a repeated code, on the Live claim as on
+   the final request (2026-11-22, after review). "Correction" as a series or document label becomes "Corrective"
    (`setup/strings.ts:18`, `custodian/strings.ts:246`, the till's `find_page.correction`,
    `strings.ts:757`, the corrections workbook's kind in `apps/server/src/i18n/corrections-report.ts`,
    the dashboard's `overview.corrections` and `sales.corrections` counts,
@@ -228,7 +230,7 @@ First line: "Venue reset needed: every box now has four invoice series."
 3. **Provisioning.** `fullCorrectiveSeriesCode?` with default `FFR` in `venue-plan.ts` (`:36-38`,
    the duplicate check `:146-156`, the plan `:230-232`), `first-setup-module-context.ts:29-32`,
    `recover-provisioned-venue.ts:25-29,59-61` (three becomes four), `configuration-transfer.ts:87-160,605`,
-   `first-setup-state.ts:213-224`, `cli.ts` (`--full-corrective-code`), `packages/fiscal/src/contribution.ts:228-233`,
+   `first-setup-state.ts:213-224`, `cli.ts` (`--full-corrective-series-code`), `packages/fiscal/src/contribution.ts:228-233`,
    `packages/fiscal-verifactu/src/venue-fields.ts:14-70`, `apps/server/src/setup-api.ts:609,696` and
    `setup-first-fiscal-api.ts:417`. Test first: `pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts`
    expects four series rows.
