@@ -1145,10 +1145,11 @@ describe("the day box", () => {
     });
   });
 
-  it("offers no Rota for this week to a person who may not open the rota", async () => {
+  it("hides the weekly phase and action from a person who may not open the rota", async () => {
     const { el } = await mount({ canWrite: true });
-    await openBox(el, "2026-12-03");
+    const box = await openBox(el, "2026-12-03");
     expect(boxButtons(el)).toEqual(["Edit Winter's standard week"]);
+    expect(box.shadowRoot!.textContent).not.toContain("Week’s rota");
   });
 
   it("closes the box when the month changes, and leaves it closed on the month's return", async () => {
