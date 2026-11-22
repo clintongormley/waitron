@@ -29,10 +29,6 @@ const choiceBase = css`
   }
 `;
 
-/**
- * A till dialog's radio question: a `fieldset.choice` with its `legend`, holding `.options` of
- * `label.option`s, laid out in wrapping rows or in one column.
- */
 export const choiceRowStyles = css`
   ${choiceBase}
 
