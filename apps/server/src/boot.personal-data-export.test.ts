@@ -154,6 +154,9 @@ describe("the personal-data downloads in a real start", () => {
       });
       expect(colleague.status).toBe(200);
       const colleagueFiles = unzipSync(new Uint8Array(await colleague.arrayBuffer()));
+      expect(JSON.parse(strFromU8(colleagueFiles["profile.json"]!))).toMatchObject({
+        id: manager!.id,
+      });
       expect(Object.keys(colleagueFiles)).not.toContain("payment-holds.json");
       expect(Object.keys(colleagueFiles)).not.toContain("actions.json");
 

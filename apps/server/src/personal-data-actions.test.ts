@@ -448,7 +448,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     attestedBy: ADA,
     state: "declined",
     createdAt: "2026-10-20T07:01:00.000Z",
-    receivedAt: "2026-10-20T06:53:00.000Z",
+    receivedAt: "2026-10-20T07:23:00.000Z",
   });
   await seedBillPayment(db, at, {
     method: "card",
@@ -851,7 +851,7 @@ describe("actionsPersonalData", () => {
           state: "declined",
           at: "2026-10-20T07:01:00.000Z",
           yourPart: ["requested", "attested"],
-          outcomeAt: "2026-10-20T06:53:00.000Z",
+          outcomeAt: "2026-10-20T07:23:00.000Z",
         },
         {
           sale: null,
