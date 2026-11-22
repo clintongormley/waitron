@@ -3149,7 +3149,9 @@ department's day, with the zone's season closures drawn as Closed. A zone's Clos
 as in the season painter, with "<department> closed all day" behind a date its department is
 closed; changing the department's paint leaves its zones' closures untouched. A date's ⋮ offers Copy to… and
 Clear. A one-off date uses its own changeover. If the dates have different starts, each column
-has its own ruler. Yearly repeats use a shared ruler at the venue’s start in force. Copy to…
+has its own ruler. Yearly repeats use a shared ruler at the venue’s start in force. When changing
+Every year either way, a range that crosses the destination ruler’s start or a full-day closure
+at a different start keeps the current setting and names the date to clear or repaint. Copy to…
 keeps the clock times and names the first destination whose changeover a range crosses. It keeps
 the chooser open and copies nothing until the selected dates fit.
 Opened on a public holiday with no special day, a new day starts with the holiday's

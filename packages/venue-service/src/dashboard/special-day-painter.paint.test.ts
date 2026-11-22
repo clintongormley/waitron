@@ -256,6 +256,42 @@ describe("the season under the paint", () => {
     });
   });
 
+  it.each([
+    ["yearly, hours", false, DEC_14, lunch("05:00", "06:30"), "14 Dec", false],
+    ["yearly, all-day closure", false, DEC_15, closed("06:10", "06:10"), "15 Dec", true],
+    ["one-off, hours", true, DEC_15, lunch("06:00", "06:30"), "15 Dec", false],
+    ["one-off, all-day closure", true, DEC_15, closed("06:00", "06:00"), "15 Dec", true],
+  ] as const)(
+    "keeps the draft intact when the changed ruler cannot fit the paint (%s)",
+    async (_case, repeatsYearly, date, range, label, shut) => {
+      const { painter } = await mount({
+        days: {
+          sd1: storedDay({ repeatsYearly, paint: [{ departmentId: "d1", date, ranges: [range] }] }),
+        },
+        season: (date) => ({ dayCutover: date === DEC_14 ? "05:00" : "06:10" }),
+      });
+      const year = (value: string) =>
+        painter.shadowRoot!.querySelector<HTMLInputElement>(
+          `input[name="repeatsYearly"][value="${value}"]`,
+        )!;
+      const tick = painter.shadowRoot!.querySelector<HTMLInputElement>(
+        `input[name="closed.${date}"]`,
+      )!;
+      const day = () => grid(painter).shadowRoot!.querySelector(`.day[data-column="${date}"]`)!;
+      const block = () =>
+        day().querySelector(".block:not(.underlay), .all-closed")!.getBoundingClientRect();
+      const before = block();
+      year(repeatsYearly ? "no" : "yes").click();
+      await settle(painter);
+      expect(tick.checked).toBe(shut);
+      expect(block().height).toBe(before.height);
+      expect(year(repeatsYearly ? "yes" : "no").checked).toBe(true);
+      expect(part(painter, "repeat-refusal")?.textContent).toContain(label);
+      expect(grid(painter).days.get(date)).toEqual([range]);
+      expect(saveButton(painter).disabled).toBe(true);
+    },
+  );
+
   it("keeps one ruler when every date starts at the same time", async () => {
     const { painter } = await mount();
     expect(grid(painter).shadowRoot!.querySelectorAll(".times")).toHaveLength(1);

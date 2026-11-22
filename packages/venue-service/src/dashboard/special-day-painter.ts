@@ -1,5 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
+import { live } from "lit/directives/live.js";
 import { cutoverForBusinessDay } from "@waitron/shared";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
@@ -83,7 +85,7 @@ interface Draft {
 interface Refused {
   /** Beside Save. */
   message: string;
-  field?: "name" | "dates";
+  field?: "name" | "dates" | "repeatsYearly";
   column?: LocalDate;
   /** The department (`d:<id>`) or zone (`z:<id>`) whose column is marked; any, when absent. */
   owner?: string;
@@ -234,6 +236,11 @@ function seasonSignature(model: Model): string {
 }
 const byStart = (cutover: string) => (a: Paint, b: Paint) =>
   stepSpan(a, cutover)[0] - stepSpan(b, cutover)[0];
+const paintCrossesStart = (paint: readonly Paint[], cutover: string) =>
+  paint.some((block) => {
+    const [start, end] = stepSpan(block, cutover);
+    return start >= end;
+  });
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
 
@@ -1206,6 +1213,22 @@ export class SpecialDayPainter extends LitElement {
     return yearly ? this.model.dayCutover : this.dateCutover(date);
   }
 
+  private setRepeatsYearly(value: boolean): void {
+    const painted = [...this.draft.paint.values()];
+    const incompatible = this.draft.dates.find(({ date }) => {
+      const cutover = this.columnCutover(date, value);
+      return painted.some((days) => paintCrossesStart(days.get(date) ?? [], cutover));
+    });
+    if (incompatible) {
+      this.refused = {
+        field: "repeatsYearly",
+        message: format("special.repeat_crosses_start", { date: columnLabel(incompatible.date) }),
+      };
+      return;
+    }
+    this.change({ ...this.draft, repeatsYearly: value });
+  }
+
   private departmentClosed(owner: string, date: LocalDate): boolean {
     const day = this.draft.paint.get(owner)?.get(date) ?? [];
     const cutover = this.columnCutover(date);
@@ -1268,11 +1291,7 @@ export class SpecialDayPainter extends LitElement {
 
   private readonly copyRefusal = (paint: readonly Paint[], destination: PaintColumn) => {
     const cutover = destination.cutover ?? this.model.dayCutover;
-    const crossesStart = paint.some((block) => {
-      const [start, end] = stepSpan(block, cutover);
-      return start >= end;
-    });
-    return crossesStart
+    return paintCrossesStart(paint, cutover)
       ? format("paint.copy_crosses_start", { date: destination.label })
       : undefined;
   };
@@ -1612,7 +1631,7 @@ export class SpecialDayPainter extends LitElement {
     return t(this.specialDayId === null ? "special.new" : "special.edit");
   }
   private message(): string {
-    if (this.refused) return this.refused.message;
+    if (this.refused && this.refused.field !== "repeatsYearly") return this.refused.message;
     if (this.blocked()) return t("prep.fix_fields");
     return this.loadFailed
       ? t("special.load_error")
@@ -1631,15 +1650,18 @@ export class SpecialDayPainter extends LitElement {
     const years = new Set(dates.map((date) => date.slice(0, 4))).size > 1;
     const nameError =
       errors.name ?? (this.refused?.field === "name" ? (this.refused.mark ?? "") : "");
+    const repeatRefusal =
+      this.refused?.field === "repeatsYearly" ? this.refused.message : undefined;
     const repeat = (value: boolean, label: "special.no" | "special.yes") =>
       html`<label
         ><input
           type="radio"
           name="repeatsYearly"
           value=${value ? "yes" : "no"}
-          .checked=${this.draft.repeatsYearly === value}
+          .checked=${live(this.draft.repeatsYearly === value)}
+          aria-describedby=${ifDefined(repeatRefusal ? "repeat-refusal" : undefined)}
           ?disabled=${locked}
-          @change=${() => this.change({ ...this.draft, repeatsYearly: value })}
+          @change=${() => this.setRepeatsYearly(value)}
         /><span>${t(label)}</span></label
       >`;
     return html`<section class="panel" data-test="panel">
@@ -1722,6 +1744,7 @@ export class SpecialDayPainter extends LitElement {
       <fieldset>
         <legend>${t("special.every_year")}</legend>
         <div class="segmented">${repeat(false, "special.no")}${repeat(true, "special.yes")}</div>
+        ${repeatRefusal ? html`<p id="repeat-refusal" class="error" role="alert" data-test="repeat-refusal">${repeatRefusal}</p>` : nothing}
         ${onHoliday ? html`<p class="note" data-test="holiday-note">${t("special.holiday_note")}</p>` : nothing}
         ${leap ? html`<p class="note" data-test="leap-note">${t("special.leap")}</p>` : nothing}
       </fieldset>

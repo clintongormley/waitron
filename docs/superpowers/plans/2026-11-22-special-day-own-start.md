@@ -17,6 +17,11 @@ chooser open, name that date and tell the manager to paint it separately. Copy n
 selected destinations fit. A range such as 05:30–07:00 from a 05:00 date cannot be shown as one
 block on a 06:10 date. This protects staff from copying hours they cannot see or save.
 
+The watcher's 11:19 and 11:22 decisions on 22 November followed the run-it review. At 11:22
+the watcher wrote, “turning Every year off uses the same destination-ruler check, names the date
+to fix and leaves the selection and paint intact.” Check regular ranges and all-day closures in
+both directions in Chromium.
+
 ## Test and build
 
 1. In `packages/venue-service/src/dashboard/special-day-painter.paint.test.ts`, start with a

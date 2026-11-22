@@ -89,6 +89,8 @@ const en = {
   "special.remove_date": "Remove {date}",
   "special.no_dates": "Add dates to paint them.",
   "special.every_year": "Every year",
+  "special.repeat_crosses_start":
+    "The hours for {date} do not fit that business-day start. Clear or repaint that date before changing Every year.",
   "special.holiday_note":
     "With Yes, a date on a holiday repeats on that holiday, whatever its date that year.",
   "special.leap": "Repeats only in leap years",
@@ -1018,6 +1020,8 @@ const es: Record<keyof typeof en, string> = {
   "special.remove_date": "Quitar {date}",
   "special.no_dates": "Añade fechas para pintarlas.",
   "special.every_year": "Cada año",
+  "special.repeat_crosses_start":
+    "El horario del {date} no encaja con esa hora de inicio de la jornada. Borra o vuelve a pintar esa fecha antes de cambiar Cada año.",
   "special.holiday_note":
     "Con Sí, una fecha en un festivo se repite en ese festivo, caiga en la fecha que caiga ese año.",
   "special.leap": "Se repite solo en años bisiestos",
