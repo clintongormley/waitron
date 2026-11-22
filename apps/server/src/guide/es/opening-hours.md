@@ -61,6 +61,8 @@ Para planificar el personal de una temporada, abre la temporada desde el mes que
 
 En un día especial, las fechas que siguen su temporada muestran los bloques de personal de esa temporada en tonos suaves. Al dibujar un bloque, empiezas a editar la fecha con esos bloques ya colocados. Usa el menú **⋯** de la fecha para volver a **Seguir la temporada** o **Vaciar** el personal de esa fecha. Si copias una fecha que sigue su temporada, cada fecha de destino pasa a seguir la suya.
 
+Si las fechas especiales tienen distintos inicios de jornada, usa la escala horaria junto a cada fecha. **Copiar a…** conserva las horas de los bloques. Si un bloque cruza el inicio de la jornada en una fecha seleccionada, quita esa fecha de la selección y píntala por separado.
+
 Abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
 
 ## Edita los periodos y consulta sus horarios {#periods}

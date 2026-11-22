@@ -1,5 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
@@ -144,12 +144,11 @@ function seasonEdits(
 
 /** `blocks: null` is a value (the date follows the season); a missing `blocks` is refused by
  *  `parseBlocks` as `undefined`. */
-function specialDayEdits(body: unknown, cutover: string): SpecialDayStaffingEdit[] {
+function specialDayEdits(body: unknown): SpecialDayStaffingEdit[] {
   return editList(body, SPECIAL_DAY_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
     const dateId = uuid(edit.dateId, `${field}.dateId`);
-    const blocks =
-      edit.blocks === null ? null : parseBlocks(edit.blocks, `${field}.blocks`, cutover);
+    const blocks = edit.blocks === null ? null : parseBlocks(edit.blocks, `${field}.blocks`);
     return { area, dateId, blocks };
   });
 }
@@ -173,7 +172,6 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       fn: (tx: Transaction, actor: { personId: string }) => Promise<T>,
     ): Promise<T> => gatedBy("schedule.manage", sessionId, fn);
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
-    const cutoverOf = async (tx: Transaction) => (await readVenueClock(tx)).dayCutover;
 
     const rotaBody = (body: unknown, patch: boolean) => {
       const fields = patch
@@ -309,9 +307,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
         const body = await readRawJsonBody<unknown>(c);
-        await gated(sessionId, async (tx) =>
-          saveSpecialDayStaffing(tx, id, specialDayEdits(body, await cutoverOf(tx))),
-        );
+        await gated(sessionId, async (tx) => saveSpecialDayStaffing(tx, id, specialDayEdits(body)));
         return c.body(null, 204);
       }),
     );

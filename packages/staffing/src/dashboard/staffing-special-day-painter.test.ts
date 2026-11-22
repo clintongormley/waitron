@@ -119,8 +119,8 @@ it("titles the special day and draws one column per date, which may follow the s
   expect(frame(painter).open).toBe(true);
   expect(frame(painter).heading).toBe("Christmas: special day, 24–⁠25 Dec");
   expect(grid(painter).columns).toEqual([
-    { key: "eve", label: "Thu 24 Dec" },
-    { key: "day", label: "Fri 25 Dec" },
+    { key: "eve", label: "Thu 24 Dec", cutover: "06:00" },
+    { key: "day", label: "Fri 25 Dec", cutover: "06:00" },
   ]);
   expect(grid(painter).followable).toBe(true);
   expect(grid(painter).days.get("eve")).toEqual([headChef]);
@@ -132,6 +132,24 @@ it("titles the special day and draws one column per date, which may follow the s
     "GET",
     undefined,
     { passive: true },
+  );
+});
+
+it("draws each date's scale and inherited blocks from its own business-day start", async () => {
+  const read = specialDayStaffing();
+  read.dates[1]!.cutover = "09:00";
+  read.areas[0]!.dates[1]!.seasonBlocks = [headChef];
+  const { painter } = await mount({ read: async () => read });
+  const root = grid(painter).shadowRoot!;
+  const rulers = [...root.querySelectorAll(".times")];
+  expect(rulers.map((ruler) => ruler.querySelector(".hour")?.textContent)).toEqual([
+    "06:00",
+    "09:00",
+  ]);
+  const day = root.querySelector('.day[data-column="day"]')!;
+  expect(day.querySelector(".inherited")!.getBoundingClientRect().top).toBeCloseTo(
+    day.getBoundingClientRect().top,
+    0,
   );
 });
 
@@ -1103,7 +1121,7 @@ it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Can
     const { painter } = await mount({
       read: async () => {
         const read = specialDayStaffing();
-        read.dates = scattered.map((date) => ({ dateId: date, date }));
+        read.dates = scattered.map((date) => ({ dateId: date, date, cutover: "06:00" }));
         for (const area of read.areas)
           area.dates = scattered.map((date) => ({
             dateId: date,

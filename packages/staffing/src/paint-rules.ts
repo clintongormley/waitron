@@ -1,6 +1,6 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { MAX_HEADCOUNT } from "./block-model.js";
-import { blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
+import { blockFitsDay, type AreaRef, type StaffingBlock } from "./slots.js";
 import "./errors.js";
 
 const invalid = (field: string) => new AppError("staffing.invalid", { field });
@@ -29,7 +29,11 @@ function stepTime(value: unknown, field: string): string {
   return value;
 }
 
-function parseBlock(value: unknown, field: string, cutover: string): StaffingBlock {
+export function assertBlockFitsDay(block: StaffingBlock, field: string, cutover: string): void {
+  if (!blockFitsDay(block, cutover)) throw invalid(`${field}.endsAt`);
+}
+
+function parseBlock(value: unknown, field: string, cutover?: string): StaffingBlock {
   const raw = record(value, field, BLOCK_KEYS);
   const staffRoleId = uuid(raw.staffRoleId, `${field}.staffRoleId`);
   const { headcount } = raw;
@@ -42,14 +46,13 @@ function parseBlock(value: unknown, field: string, cutover: string): StaffingBlo
     throw invalid(`${field}.headcount`);
   const startsAt = stepTime(raw.startsAt, `${field}.startsAt`);
   const endsAt = stepTime(raw.endsAt, `${field}.endsAt`);
-  // A block stays inside its business day.
-  const span = blockSpan({ startsAt, endsAt }, cutover);
-  if (startsAt === endsAt || span.end <= span.start) throw invalid(`${field}.endsAt`);
-  return { staffRoleId, headcount, startsAt, endsAt };
+  const block = { staffRoleId, headcount, startsAt, endsAt };
+  if (cutover !== undefined) assertBlockFitsDay(block, field, cutover);
+  return block;
 }
 
-/** A day's painted blocks from a request body; `cutover` is the venue's `HH:MM` changeover. */
-export function parseBlocks(value: unknown, field: string, cutover: string): StaffingBlock[] {
+/** A day's painted blocks from a request body. A dated save checks the bounds once it has the date. */
+export function parseBlocks(value: unknown, field: string, cutover?: string): StaffingBlock[] {
   if (!Array.isArray(value)) throw invalid(field);
   return value.map((item, index) => parseBlock(item, `${field}.${index}`, cutover));
 }

@@ -1278,6 +1278,55 @@ test("Copy to… copies the day by value, one change per ticked day that differs
   expect(chooser(el).matches(":popover-open")).toBe(false);
 });
 
+test("Copy to… names the date that cannot fit the block and leaves both destinations alone", async () => {
+  const early = { ...headChef, startsAt: "05:00", endsAt: "07:00" };
+  const el = await grid({ mon: [early], tue: [], wed: [] }, { followable: true });
+  el.columns = [
+    { key: "mon", label: "Monday", cutover: "04:00" },
+    { key: "tue", label: "Tuesday", cutover: "04:00" },
+    { key: "wed", label: "Wednesday", cutover: "06:00" },
+  ];
+  await el.updateComplete;
+  const seen = changes(el);
+  await userEvent.click(columnMenu(el, "mon"));
+  await userEvent.click(columnAction(el, "mon", "Copy to…")!);
+  await userEvent.click(choice(el, "Tuesday"));
+  await userEvent.click(choice(el, "Wednesday"));
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(chooser(el).matches(":popover-open")).toBe(true);
+  expect(chooser(el).querySelector('[role="alert"]')?.textContent).toContain("Wednesday");
+  expect(seen).toEqual([]);
+
+  await userEvent.click(choice(el, "Wednesday"));
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "tue", blocks: [early] }]);
+  expect(chooser(el).matches(":popover-open")).toBe(false);
+});
+
+test("the same stroke draws different clock times on dates with different starts", async () => {
+  const el = await grid({ mon: [], tue: [] }, { followable: true });
+  el.columns = [
+    { key: "mon", label: "Monday", cutover: "04:10" },
+    { key: "tue", label: "Tuesday", cutover: "06:00" },
+  ];
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 0, 60);
+  await drag(el, "tue", 0, 60);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [{ staffRoleId: "sc", headcount: 1, startsAt: "04:15", endsAt: "05:15" }],
+    },
+    {
+      key: "tue",
+      blocks: [{ staffRoleId: "sc", headcount: 1, startsAt: "06:00", endsAt: "07:00" }],
+    },
+  ]);
+});
+
 test("copying a day that follows the season makes the ticked days follow their own seasons", async () => {
   const el = await grid({ mon: null, tue: [headChef] }, { followable: true });
   el.seasonBlocks = new Map([["mon", [sous]]]);

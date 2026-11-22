@@ -27,6 +27,7 @@ import type {
   StaffingArea,
   StaffingGuideRange,
 } from "./staffing-types.js";
+import { assertBlockFitsDay } from "./paint-rules.js";
 import "./errors.js";
 
 export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
@@ -354,10 +355,14 @@ export async function readSpecialDayStaffing(
   const found = await readSpecialDayPlan(tx, specialDayId);
   if (found === null) throw new AppError("special_day.not_found", { specialDayId });
   const { name: specialDayName, plan } = found;
-  const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
   const areas = await listStaffingAreas(tx);
   const clock = await readVenueClock(tx);
   const cutover = clock.dayCutover;
+  const dates = found.dates.map(({ dateId, storedDate }) => ({
+    dateId,
+    date: storedDate,
+    cutover: cutoverForBusinessDay(clock, storedDate),
+  }));
   const seasonIds = [...new Set(dates.flatMap(({ date }) => plan.seasonIdOn.get(date) ?? []))];
   const paint = await readPaint(
     tx,
@@ -413,9 +418,19 @@ export async function saveSpecialDayStaffing(
   specialDayId: string,
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
-  const dateIds = new Set((await readSpecialDayDates(tx, specialDayId)).map((d) => d.dateId));
-  const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
-  if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
+  const dates = await readSpecialDayDates(tx, specialDayId);
+  const clock = await readVenueClock(tx);
+  const starts = new Map(
+    dates.map(({ dateId, date }) => [dateId, cutoverForBusinessDay(clock, date)]),
+  );
+  edits.forEach(({ dateId, blocks }, index) => {
+    const cutover = starts.get(dateId);
+    if (cutover === undefined)
+      throw new AppError("staffing.invalid", { field: `edits.${index}.dateId` });
+    blocks?.forEach((block, blockIndex) =>
+      assertBlockFitsDay(block, `edits.${index}.blocks.${blockIndex}`, cutover),
+    );
+  });
   await assertEditTargets(tx, edits);
   for (const edit of edits) {
     await tx

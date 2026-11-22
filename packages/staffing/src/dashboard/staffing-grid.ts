@@ -12,6 +12,7 @@ import {
   CopyChooser,
   OverflowFade,
   columnMenu,
+  columnTimeRuler,
   hourLines,
   isDeleteKey,
   paintGridStyles,
@@ -34,16 +35,17 @@ import {
   sameBlock,
   sameBlocks,
 } from "../block-model.js";
-import { blockSpan, type StaffingBlock } from "../slots.js";
+import { blockFitsDay, blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import { showHeadcount } from "./headcount-control.js";
 import { roleInitials } from "./role-initials.js";
 import { formatStaffingBlock } from "./format.js";
-import { t } from "./strings.js";
+import { t, tf } from "./strings.js";
 
 export interface StaffingColumn {
   key: string;
   label: string;
+  cutover?: string;
 }
 export interface StaffingChange {
   key: string;
@@ -294,7 +296,7 @@ export class StaffingGrid extends LitElement {
   readonly #fade = new OverflowFade(this);
   readonly #stroke = new ColumnStroke(this, {
     includeChangeover: false,
-    cutover: () => this.cutover,
+    cutover: (key) => this.#cutover(key),
     canStart: () => !this.readOnly,
     canRelease: () => !this.readOnly && (this.#resizing !== null || this.chosen !== undefined),
     released: (stretch) => this.#released(stretch),
@@ -303,6 +305,15 @@ export class StaffingGrid extends LitElement {
     columns: () => this.columns,
     trigger: (key) =>
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
+    refusal: (from, to) => {
+      const blocks = this.#day(from);
+      for (const key of to) {
+        const { label, cutover } = this.columns.find((column) => column.key === key)!;
+        if (cutover !== undefined && blocks.some((block) => !blockFitsDay(block, cutover)))
+          return tf("staffing.grid.copy_crosses_start", { date: label });
+      }
+      return undefined;
+    },
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
       for (const key of to) {
@@ -381,6 +392,10 @@ export class StaffingGrid extends LitElement {
     }
   }
 
+  #cutover(key: string): string {
+    return this.columns.find((column) => column.key === key)?.cutover ?? this.cutover;
+  }
+
   #value(key: string): readonly StaffingBlock[] | null {
     const value = this.days.get(key);
     return value === undefined ? [] : value;
@@ -420,7 +435,7 @@ export class StaffingGrid extends LitElement {
       return;
     }
     const side = edge.dataset.edge === "start" ? "start" : "end";
-    const { start, end } = resizeSpan(block, this.cutover);
+    const { start, end } = resizeSpan(block, this.#cutover(key));
     const [anchor, held] = side === "start" ? [end, start] : [start, end];
     if (this.#stroke.start(event, key, anchor, held))
       this.#resizing = { key, index: Number(edge.dataset.index), block, edge: side, anchor };
@@ -429,22 +444,17 @@ export class StaffingGrid extends LitElement {
   #stretched(stretch: Stretch): StaffingBlock[] | null {
     const day = this.#day(stretch.key);
     const resizing = this.#resizing;
+    const cutover = this.#cutover(stretch.key);
     if (resizing !== null) {
       if (!sameBlock(day[resizing.index], resizing.block)) return null;
       const moved = stretch.start === resizing.anchor ? stretch.end : stretch.start;
-      return resizeBlock(
-        day,
-        resizing.index,
-        resizing.edge,
-        clockAt(moved, this.cutover),
-        this.cutover,
-      );
+      return resizeBlock(day, resizing.index, resizing.edge, clockAt(moved, cutover), cutover);
     }
     return addBlock(this.#shownBlocks(stretch.key), {
       staffRoleId: this.chosen!,
       headcount: this.headcount,
-      startsAt: clockAt(stretch.start, this.cutover),
-      endsAt: clockAt(Math.min(stretch.end, stretch.start + MAX_BLOCK_MINUTES), this.cutover),
+      startsAt: clockAt(stretch.start, cutover),
+      endsAt: clockAt(Math.min(stretch.end, stretch.start + MAX_BLOCK_MINUTES), cutover),
     });
   }
   #released(stretch: Stretch): void {
@@ -634,8 +644,9 @@ export class StaffingGrid extends LitElement {
     index: number,
     place: { lane: number; lanes: number },
     inherited: boolean,
+    cutover: string,
   ) {
-    const { start, end } = drawnSpan(block, this.cutover);
+    const { start, end } = drawnSpan(block, cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
     const colour = this.#role(block.staffRoleId)?.colour;
     const title = `${column.label}, ${this.#formatBlock(block).spokenText}`;
@@ -702,8 +713,8 @@ export class StaffingGrid extends LitElement {
           .join("; ")
       : t(this.guideKind === "station" ? "staffing.grid.no_orders" : "staffing.grid.closed");
   }
-  #guide(range: StaffingGuideRange, departments: readonly string[]) {
-    const { start, end } = drawnSpan(range, this.cutover);
+  #guide(range: StaffingGuideRange, departments: readonly string[], cutover: string) {
+    const { start, end } = drawnSpan(range, cutover);
     const lanes = this.guideKind === "station" ? Math.max(1, departments.length) : 1;
     const lane = this.guideKind === "station" ? departments.indexOf(range.departmentId) : 0;
     return html`<div
@@ -716,13 +727,13 @@ export class StaffingGrid extends LitElement {
       <span class="guide-label">${range.periodName} ${range.startsAt}–${range.endsAt}</span>
     </div>`;
   }
-  #preview(column: StaffingColumn) {
+  #preview(column: StaffingColumn, cutover: string) {
     const stretch = this.#stroke.preview;
     if (stretch === null || stretch.key !== column.key) return nothing;
     const blocks = this.#stretched(stretch);
     const block = blocks?.[this.#resizing?.index ?? blocks.length - 1];
     if (block === undefined) return nothing;
-    const { start, end } = drawnSpan(block, this.cutover);
+    const { start, end } = drawnSpan(block, cutover);
     return html`<div
       class="preview"
       data-colour=${this.#role(block.staffRoleId)?.colour ?? nothing}
@@ -831,9 +842,13 @@ export class StaffingGrid extends LitElement {
 
   override render() {
     const guideDepartments = this.#guideDepartments();
+    const firstStart = this.columns[0]?.cutover ?? this.cutover;
+    const perDate = this.columns.some(({ cutover }) => (cutover ?? this.cutover) !== firstStart);
+    const minDay = "calc(var(--wt-space-6) * 4)";
+    const minColumn = perDate ? `calc(${minDay} + var(--times-width))` : minDay;
     // With no button inside, a read-only grid's scrolling region takes the focus itself.
     return html`<div
-        class="scroll"
+        class=${perDate ? "scroll per-date" : "scroll"}
         role="region"
         aria-label=${t("staffing.grid.label")}
         tabindex=${ifDefined(this.readOnly ? "0" : undefined)}
@@ -842,10 +857,10 @@ export class StaffingGrid extends LitElement {
         <div
           class="layout"
           style=${styleMap({
-            "--column-tracks": `repeat(${this.columns.length}, minmax(calc(var(--wt-space-6) * 4), 1fr))`,
+            "--column-tracks": `repeat(${this.columns.length}, minmax(${minColumn}, 1fr))`,
           })}
         >
-          <div class="heading corner"></div>
+          ${perDate ? nothing : html`<div class="heading corner"></div>`}
           ${this.columns.map(
             (column) =>
               html`<div
@@ -892,12 +907,13 @@ export class StaffingGrid extends LitElement {
                 }
               </div>`,
           )}
-          ${timeRuler(this.cutover)}
+          ${perDate ? nothing : timeRuler(firstStart)}
           ${this.columns.map((column) => {
             const day = this.#shownBlocks(column.key);
             const inherited = this.#value(column.key) === null;
-            const lanes = laneLayout(day, this.cutover);
-            return html`<div
+            const cutover = column.cutover ?? this.cutover;
+            const lanes = laneLayout(day, cutover);
+            const body = html`<div
               class="day"
               role="group"
               aria-label=${column.label}
@@ -914,15 +930,18 @@ export class StaffingGrid extends LitElement {
               @pointerdown=${(event: PointerEvent) => this.#onPointerdown(event, column.key)}
               @keydown=${() => this.#stroke.forgetDrag()}
             >
-              ${hourLines(this.cutover)}
+              ${hourLines(cutover)}
               <span hidden id=${`guide-description-${column.key}`}
                 >${this.#guideSummary(column.key)}</span
               >
-              ${(this.guides.get(column.key) ?? []).map((range) => this.#guide(range, guideDepartments))}
+              ${(this.guides.get(column.key) ?? []).map((range) => this.#guide(range, guideDepartments, cutover))}
               ${!this.guides.get(column.key)?.length ? html`<span class="guide-empty">${this.#guideSummary(column.key)}</span>` : nothing}
-              ${day.map((block, index) => this.#block(column, block, index, lanes[index]!, inherited))}
-              ${this.#preview(column)}
+              ${day.map((block, index) => this.#block(column, block, index, lanes[index]!, inherited, cutover))}
+              ${this.#preview(column, cutover)}
             </div>`;
+            return perDate
+              ? html`<div class="dated-column">${columnTimeRuler(cutover)}${body}</div>`
+              : body;
           })}
         </div>
       </div>

@@ -21,8 +21,8 @@ export function specialDayStaffing(): SpecialDayStaffing {
     cutover: "06:00",
     name: "Christmas",
     dates: [
-      { dateId: "eve", date: "2026-12-24" },
-      { dateId: "day", date: "2026-12-25" },
+      { dateId: "eve", date: "2026-12-24", cutover: "06:00" },
+      { dateId: "day", date: "2026-12-25", cutover: "06:00" },
     ],
     guides: {
       "department:dep-restaurant": {

@@ -215,6 +215,8 @@ const en = {
   "staffing.painter.guide_station":
     "Shaded: when {station} gets orders, one lane per department that sends it dishes",
   "staffing.grid.closed": "Closed",
+  "staffing.grid.copy_crosses_start":
+    "The copied blocks do not fit the business-day start on {date}. Paint that date separately.",
   "staffing.grid.no_orders": "Closed",
   "staffing.painter.previous_season": "Previous season",
   "staffing.painter.next_season": "Next season",
@@ -446,6 +448,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.painter.guide_station":
     "Sombreado: cuándo recibe pedidos {station}, un carril por cada departamento que le envía platos",
   "staffing.grid.closed": "Cerrado",
+  "staffing.grid.copy_crosses_start":
+    "Los bloques que quieres copiar no encajan con el inicio de la jornada del {date}. Pinta ese día por separado.",
   "staffing.grid.no_orders": "Cerrada",
   "staffing.painter.previous_season": "Temporada anterior",
   "staffing.painter.next_season": "Temporada siguiente",

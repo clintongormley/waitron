@@ -402,8 +402,8 @@ describe("special-day staffing", () => {
       cutover: "06:00",
       name: "Fiesta",
       dates: [
-        { dateId: v.aug14, date: "2026-08-14" },
-        { dateId: v.aug15, date: "2026-08-15" },
+        { dateId: v.aug14, date: "2026-08-14", cutover: "06:00" },
+        { dateId: v.aug15, date: "2026-08-15", cutover: "06:00" },
       ],
       guides: {
         [`department:${v.departmentId}`]: noGuide,
@@ -446,8 +446,8 @@ describe("special-day staffing", () => {
     const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
     expect(read.areas).toEqual([]);
     expect(read.dates).toEqual([
-      { dateId: v.aug14, date: "2026-08-14" },
-      { dateId: v.aug15, date: "2026-08-15" },
+      { dateId: v.aug14, date: "2026-08-14", cutover: "06:00" },
+      { dateId: v.aug15, date: "2026-08-15", cutover: "06:00" },
     ]);
   });
 
@@ -508,10 +508,20 @@ describe("special-day staffing", () => {
     });
   });
 
-  it("carries the venue's changeover", async () => {
+  it("carries each special date's business-day start", async () => {
     const v = await venue();
-    await inTx((tx) => seedBusinessDay(tx, { dayCutover: "04:30:00" }));
-    expect((await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId))).cutover).toBe("04:30");
+    await inTx(async (tx) => {
+      await seedBusinessDay(tx, { dayCutover: "04:30:00" });
+      await tx
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-08-15", dayCutover: "07:00:00" });
+    });
+    const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
+    expect(read.cutover).toBe("04:30");
+    expect(read.dates).toEqual([
+      { dateId: v.aug14, date: "2026-08-14", cutover: "04:30" },
+      { dateId: v.aug15, date: "2026-08-15", cutover: "07:00" },
+    ]);
   });
 
   it("guides a date by this special day's own hours when another special day repeats onto it", async () => {

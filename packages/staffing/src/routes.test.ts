@@ -826,8 +826,8 @@ describe("the staffing paint routes", () => {
       cutover: "06:00",
       name: "Fiesta",
       dates: [
-        { dateId: p.aug14, date: "2026-08-14" },
-        { dateId: p.aug15, date: "2026-08-15" },
+        { dateId: p.aug14, date: "2026-08-14", cutover: "06:00" },
+        { dateId: p.aug15, date: "2026-08-15", cutover: "06:00" },
       ],
       guides: { [`department:${p.departmentId}`]: noGuide, [`station:${p.stationId}`]: noGuide },
       areas: [
@@ -849,6 +849,32 @@ describe("the staffing paint routes", () => {
         },
       ],
     });
+  });
+
+  it("accepts a block only on the special date whose business-day start it fits", async () => {
+    const p = await painted();
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-08-15", dayCutover: "04:00:00" }),
+    );
+    const path = `${STAFFING}/special-days/${p.specialDayId}`;
+    const early = p.block({ startsAt: "05:00", endsAt: "07:00" });
+    const edit = { area: p.dept, dateId: p.aug15, blocks: [early] };
+    await answers(await p.call("PUT", path, p.manager, { edits: [edit] }), 204);
+    const saved = await (await p.call("GET", path, p.manager)).json();
+    expect(saved.areas[0]!.dates[1]!.blocks).toEqual([early]);
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { ...edit, blocks: [] },
+          { ...edit, dateId: p.aug14 },
+        ],
+      }),
+      400,
+      refusal("staffing.invalid", { field: "edits.1.blocks.0.endsAt" }),
+    );
+    await answers(await p.call("GET", path, p.manager), 200, saved);
   });
 
   it("refuses a malformed special-day edit, a date not of the special day, an unknown area and an unknown staff role with 400, and an unknown special day with 404", async () => {
