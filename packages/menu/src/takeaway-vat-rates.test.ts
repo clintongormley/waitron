@@ -123,7 +123,6 @@ describe("setTakeawayVatRate", () => {
     const id = await product();
     const rates = {
       dineIn: [{ from: null, rate: "10.00" }],
-      accepted: ["5.00"],
       pickable: ["5.00"],
       defaultTakeaway: "5.00",
     };

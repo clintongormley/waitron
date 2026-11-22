@@ -2193,7 +2193,6 @@ describe("a new product's takeaway VAT rate", () => {
   it("checks against the area's rates a caller hands in, reading neither the taxpayer nor the settings", async () => {
     const rates = {
       dineIn: [{ from: null, rate: "10.00" }],
-      accepted: ["5.00"],
       pickable: ["5.00"],
       defaultTakeaway: "5.00",
     };

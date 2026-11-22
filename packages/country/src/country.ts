@@ -63,8 +63,7 @@ export interface FiscalJurisdiction {
   readonly takeawayVat?: true;
   /** The rate for everything eaten or drunk on the premises, oldest first. */
   readonly dineInVatRates?: readonly DatedVatRate[];
-  readonly vatRates?: readonly string[];
-  /** The rates a person may choose for a product taken away, within `vatRates`. */
+  /** The rates a person may choose for a product taken away. */
   readonly pickableVatRates?: readonly string[];
   readonly defaultTakeawayVatRate?: string;
 }

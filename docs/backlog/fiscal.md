@@ -909,8 +909,8 @@ a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that
 
 ## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
 
-Spain's pack lists seven VAT rates (0, 2, 4, 5, 7.5, 10 and 21) but lets a person pick only 0,
-4, 10 and 21 for a product taken away (`pickableVatRates` in `packages/country-es/src/spain.ts`),
+Spain's pack lets a person pick only 0, 4, 10 and 21% for a product taken away, not 2, 5 or
+7.5 (`pickableVatRates` in `packages/country-es/src/spain.ts`),
 because `mapModelo303` (`packages/reporting/src/modelo-303.ts`) has a box for only those four and
 refuses any other rate, so one sale at 5% would make that period's modelo 303 download fail.
 Check which of 2, 5 and 7.5 have a row on the current modelo 303 form (the committed AEAT record

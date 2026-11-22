@@ -114,19 +114,17 @@ export function chargesTakeawayVat(country: string, territory: string): boolean 
 
 export interface AreaVatRates {
   readonly dineIn: readonly DatedVatRate[];
-  readonly accepted: readonly string[];
   readonly pickable: readonly string[];
   readonly defaultTakeaway: string;
 }
 
-/** The area's VAT rates, or `undefined` when the area is unknown or lacks its dine-in, accepted or pickable rates, or its takeaway default. */
+/** The area's VAT rates, or `undefined` when the area is unknown or lacks its dine-in or pickable rates, or its takeaway default. */
 export function vatRatesFor(country: string, territory: string): AreaVatRates | undefined {
   const jurisdiction = getCountryPack(country)?.fiscalJurisdictions.find(
     ({ id }) => id === territory,
   );
   if (
     jurisdiction?.dineInVatRates === undefined ||
-    jurisdiction.vatRates === undefined ||
     jurisdiction.pickableVatRates === undefined ||
     jurisdiction.defaultTakeawayVatRate === undefined
   ) {
@@ -134,7 +132,6 @@ export function vatRatesFor(country: string, territory: string): AreaVatRates | 
   }
   return {
     dineIn: jurisdiction.dineInVatRates,
-    accepted: jurisdiction.vatRates,
     pickable: jurisdiction.pickableVatRates,
     defaultTakeaway: jurisdiction.defaultTakeawayVatRate,
   };

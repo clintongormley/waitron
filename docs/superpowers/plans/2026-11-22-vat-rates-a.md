@@ -417,6 +417,7 @@ from then on has a takeaway rate row at the area's default; bundles carry the ro
 refuses a product without one. Nothing reads the rows or lists yet. First line: "Reset test venues:
 FISCAL: store each product's takeaway VAT rate and Spain's rate lists (VAT rates A, PR 1)".
 **Risks:** creating a product now needs a taxpayer (D7); the test files that lack one seed one (Task 1.4).
+**As built:** `accepted` (the seven-rate list) removed by the watcher 2026-11-22 09:14: nothing read it.
 
 **Size (estimated):** production about +400/−10 lines (pack and registry +80, `rateOn` and errors
 +40, the table and its wiring +60, `takeaway-vat-rates.ts` +150, `insertProduct` +10, import checks

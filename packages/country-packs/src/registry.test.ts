@@ -58,11 +58,10 @@ describe("installed country packs", () => {
     expect(chargesTakeawayVat("ES", "missing")).toBe(false);
   });
 
-  it("gives an area its pack's dine-in, accepted and pickable rates and takeaway default", () => {
+  it("gives an area its pack's dine-in and pickable rates and takeaway default", () => {
     const common = getCountryPack("ES")!.fiscalJurisdictions.find(({ id }) => id === "ES-common")!;
     expect(vatRatesFor("ES", "ES-common")).toEqual({
       dineIn: common.dineInVatRates,
-      accepted: common.vatRates,
       pickable: common.pickableVatRates,
       defaultTakeaway: common.defaultTakeawayVatRate,
     });
@@ -82,18 +81,11 @@ describe("installed country packs", () => {
     for (const [country, territory] of supported) {
       const rates = vatRatesFor(country, territory);
       expect(rates, territory).toBeDefined();
-      const { dineIn, accepted, pickable, defaultTakeaway } = rates!;
+      const { dineIn, pickable, defaultTakeaway } = rates!;
       expect(() => rateOn(dineIn, "2000-01-01"), territory).not.toThrow();
-      expect(accepted.length, territory).toBeGreaterThan(0);
-      for (const rate of pickable) expect(accepted, territory).toContain(rate);
       for (const { rate } of dineIn) expect(pickable, territory).toContain(rate);
       expect(pickable, territory).toContain(defaultTakeaway);
-      for (const rate of [
-        ...dineIn.map(({ rate }) => rate),
-        ...accepted,
-        ...pickable,
-        defaultTakeaway,
-      ]) {
+      for (const rate of [...dineIn.map(({ rate }) => rate), ...pickable, defaultTakeaway]) {
         expect(rate, territory).toBe(oneSpelling(rate));
       }
     }

@@ -105,7 +105,7 @@ it("refuses a takeaway rate the importing venue's area does not offer for pickin
       products: [GIN],
       product_takeaway_vat_rates: [{ id: "r1", product_id: "gin", starts_on: null, rate }],
     });
-  // 5% is a Spanish rate the VAT return cannot report, so it is accepted but not pickable.
+  // 5% passes the bundle's shape check but is not on Spain's pick list.
   const bundle = ginAt(500);
   expect(() => validateConfigurationBundle(bundle, [rateModule], bundle.modules)).not.toThrow();
   await expect(importBundle(bundle)).rejects.toMatchObject({
