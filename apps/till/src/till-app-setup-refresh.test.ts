@@ -619,7 +619,8 @@ describe("A768 the till follows the venue's setup revision", () => {
     await flush(el);
     await signIn(el);
 
-    const next = deferred<TillInfo>();
+    const newProfile = { ...noCourses, setupRevision: "s2", inactivityTimeoutSeconds: 45 };
+    const next = deferred<typeof newProfile>();
     api.getTill.mockReturnValueOnce(next.promise);
     api.menuState.mockResolvedValue(state("v1", "lf-1", "s2"));
     await poll(el);
@@ -628,7 +629,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     emit(shell(el), "logout");
     await flush(el);
     expect(lock(el)).not.toBeNull();
-    next.resolve({ ...noCourses, setupRevision: "s2", inactivityTimeoutSeconds: 45 });
+    next.resolve(newProfile);
     await flush(el);
 
     await signIn(el);
