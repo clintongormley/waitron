@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { departmentCourses } from "@waitron/db";
@@ -300,7 +301,6 @@ function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -1835,11 +1835,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect((await res.json()).loginDefault).toBe("es-ES");
   });
 
-  it("GET /api/till echoes cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
-    // A default of `false` would pass even if the route hardcoded it, so drive `cfg.tipsEnabled` to
-    // `true`. The per-device `cardProvider` is covered in `till-api.fiscal-sale-paths.test.ts`.
+  it("GET /api/till reads the saved tips switch", async () => {
+    await setTipsForTest(suite.db, true);
     const app = new Hono();
-    mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg, tipsEnabled: true } }, collect([]));
+    mountTillApi(app, deps(suite.db), collect([]));
 
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);

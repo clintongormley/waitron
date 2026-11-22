@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 56,
+  version: 57,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -197,6 +197,7 @@ describe("staged configuration import", () => {
     ["pre-shared-opening-hours export", { version: 43 }],
     ["pre-profile-scope export", { version: 48 }],
     ["export with a separate profile printer table", { version: 50 }],
+    ["export before the payments settings switches", { version: 56 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

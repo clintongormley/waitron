@@ -177,7 +177,6 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
   return inTx(async (tx) => {

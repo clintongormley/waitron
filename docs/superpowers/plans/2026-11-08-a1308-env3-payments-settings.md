@@ -40,6 +40,18 @@ resolver reads that object's property later (`bill-refunds.ts:124-137`), the mou
 copied the value. This is a source trace, not a runtime proof. Recheck these consumers when the
 payments slices land and settle the correction with the watcher before changing their wiring.
 
+**Current-main adjustments, 2026-11-22.** The watcher cleared these changes to the reviewed
+plan in Lane F's questions log at 19:37, 19:43 and 19:52. The existing `payments` row gains the
+two switches. Both settings writers keep the other fields, and configuration format 57 carries
+the tips switch, following the watcher’s revised decision at 20:23. A Live box refuses a
+request to enable practice providers. The overdue-card proposal also reads the tips switch in its
+transaction. The existing Card payments page gets a Settings section below Card readers.
+The simulator instance remains available to pending collections and refunds after switching to
+test providers. Replacing the old Demo reader row checks, the running-server test verifies the
+practice option and the simulated-payment notice in both directions. At 20:27 the watcher cleared
+one reread after a stale save. The screen keeps the manager's edits, shows the latest value for any
+untouched switch, and waits for another Save.
+
 **Owner lands:** no. Tips are kept off the invoice (`docs/backlog.md:2598`, the Tips row), so the
 switch's source moving changes no sale, invoice number, fiscal record or hashed value; the rule that
 clamps a tip to zero when tips are off (`apps/server/src/bill-allocation.ts:112,126`,
@@ -79,14 +91,14 @@ again until practice providers are switched on under Payments → Settings."
 4. Switching practice providers on while a sale is at the card step: the demo reader is deactivated
    in the same way a restart does today (`boot.ts:541-545`), and the next sale routes to the real
    provider.
-5. A configuration export from a Prepare venue with practice providers on, imported into a Live
-   venue: the switch arrives but is ignored there, because only a Prepare box acts on it.
+5. A configuration export carries tips. The destination keeps its practice switch and provider
+   choices (watcher's 20:23 decision on 22 November).
 
 ---
 
 ## What it builds
 
-1. `PAYMENTS_SETTINGS` (module `payments`, version 1, transfers `true`) with
+1. `PAYMENTS_SETTINGS` (module `payments`, version 1, transfers `["tipsEnabled"]`) with
    `{ tipsEnabled, testProviders }`. (No `providers` field: Stripe's return addresses stay sealed
    where they are, owner, 2026-11-09, so nothing would fill it; see env4.)
 2. Tips read from the document at the three deciding sites and in the till's setup answer.
@@ -115,7 +127,7 @@ export interface PaymentsDocument {
   tipsEnabled: boolean;
   testProviders: boolean;
 }
-/** module "payments", version 1, transfers true. `parse` fills a missing field with its default and
+/** module "payments", version 1, transfers only tipsEnabled. `parse` fills a missing field with its default and
  * answers { ok: false, field } for a field of the wrong type or an unknown top-level key. */
 export const PAYMENTS_SETTINGS: SettingsDocument<PaymentsDocument>;
 export function readPaymentsSettings(db: Database | Transaction): Promise<SettingsRead<PaymentsDocument>>;
@@ -136,11 +148,11 @@ export function createCardSimulatorSeat(input: {
 //   → { tipsEnabled: boolean; testProviders: boolean; testProvidersAvailable: boolean; revision: number }
 //     testProvidersAvailable = this box's onboarding intent is "prepare"
 // PUT  /management-api/payments/settings  body { tipsEnabled, testProviders, revision }
-//   → the GET answer after the save; 409 settings.out_of_date; 409 payments.test_providers_prepare_only
+//   → the GET answer after the save; 409 settings.out_of_date; 409 payment.test_providers_prepare_only
 //     when testProviders is true and testProvidersAvailable is false
 
 // apps/server/src/errors.ts
-"payments.test_providers_prepare_only": Record<string, never>;
+"payment.test_providers_prepare_only": Record<string, never>;
 ```
 
 `buildCardProvider(db, onboardingIntent, paymentTestProviders, paymentsEnabled)`
@@ -177,6 +189,12 @@ Counted, hand-written: about 330 lines of code (document 50, seat 35, server rea
 dashboard panel and tab 130, client and strings 25) and about 420 lines of tests (document 50, seat
 50, routes 110, panel, unsaved and a11y 170, re-pointed fixtures 40). Not counted: deleted
 `till-config.ts` and its test. About 3 hours.
+
+**Measured 2026-11-22.** The final diff adds 480 production lines, 621 test lines and 21
+test-support lines. It removes 92 production lines, 291 test lines and 20 test-support lines.
+The two retired files held 182 additional lines. The watcher cleared the earlier measured overage
+at 20:09. The simulator refund case, tips-only transfer and stale-save check account for the
+review changes.
 
 ## Finish line
 
@@ -229,7 +247,8 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
     `{ ok: false, field: "tipsEnabled" }`; `parse({ other: true })` → `field: "other"`.
   - `"fills a missing field"`: `parse({ tipsEnabled: true })` →
     `{ ok: true, doc: { tipsEnabled: true, testProviders: false } }`.
-  - `"travels in a configuration export"`: `PAYMENTS_SETTINGS.transfers === true`.
+  - `"carries tips and keeps the destination's provider and practice choices"`: export and import
+    through the provisioning package.
 - [ ] **Step 2: Run; they fail. Step 3: Implement**; add `settings: [PAYMENTS_SETTINGS]` to the
   payments descriptor. **Step 4: Run** them and `scripts/live-subscriptions.test.ts`; pass.
 - [ ] **Step 5: Commit:** `git commit -s -m "The payments settings document (A1308 env3)"`
@@ -299,7 +318,7 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
   - `"refuses an out-of-date save"`: two PUTs from revision 0 → the second is 409
     `settings.out_of_date` with `{ module: "payments", revision: 1 }`; the stored doc is the first.
   - `"refuses practice providers off a Prepare box"`: Live box, PUT `testProviders: true` → 409
-    `payments.test_providers_prepare_only`; the row is unchanged. Control: a Prepare box saves it and
+    `payment.test_providers_prepare_only`; the row is unchanged. Control: a Prepare box saves it and
     `testProvidersAvailable` is `true`.
   - `"reapplies the simulator after the practice switch changes"`: a spy seat's `reapply` is called
     once after a commit that changed `testProviders`, and not after one that changed only tips.
@@ -320,7 +339,7 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
     then enabled after toggling tips, then disabled after toggling back); `"saves with the revision it
     read"` (the PUT body carries `revision: 3` from the GET); `"keeps the draft on a clash"` (409
     `settings.out_of_date` → the bottom message is the shared wording and the switch keeps the
-    person's choice); `"explains the Prepare-only refusal"` (409 `payments.test_providers_prepare_only`
+    person's choice); `"explains the Prepare-only refusal"` (409 `payment.test_providers_prepare_only`
     → the localized message).
   - `payments-settings-panel.unsaved.test.ts`: leaving the tab or the page with a changed switch asks
     through `draftScopeFor`, as the sibling `payment-readers.unsaved.test.ts` does.
@@ -334,7 +353,7 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
   los proveedores de tarjetas"; `payments.test_providers_hint` "On this practice server, take card
   payments through your provider's test account instead of the card simulator." / "En este servidor de
   práctica, cobra con la cuenta de prueba de tu proveedor en lugar del simulador de tarjetas.";
-  code `payments.test_providers_prepare_only` "Test accounts can only be used on a practice (Prepare)
+  code `payment.test_providers_prepare_only` "Test accounts can only be used on a practice (Prepare)
   server. This server takes real payments, so the setting was not changed." / "Las cuentas de prueba
   solo se pueden usar en un servidor de práctica (Preparar). Este servidor cobra pagos reales, así
   que el ajuste no se ha cambiado." The panel's query depends on `settings.payments` in

@@ -2114,11 +2114,10 @@ move), `packages/ui/src/live-media-image.test.ts`, `packages/ui/src/components/w
 and `apps/till/src/screens/till-ticket-view.presentation.test.ts`. The dashboard never sets it, so its
 paths stay on the page's own server.
 
-Some of those values change only when the server restarts, and the revision covers them, so an open
-till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
-(`loadTillAppSettings`, `apps/server/src/till-config.ts`), the simplified-invoice limit from the fiscal
-backend at boot (`apps/server/src/boot.ts`), and the onboarding intent from the server's
-configuration.
+The till's setup read picks up tips from the payments settings and the active practice provider
+from the running server. The setup revision covers both. The simplified-invoice limit comes from
+the fiscal backend at boot (`apps/server/src/boot.ts`), and the onboarding intent comes from the
+server's configuration.
 
 Fixed until the till starts again (a reload, or a server switch, which runs `#boot` again):
 

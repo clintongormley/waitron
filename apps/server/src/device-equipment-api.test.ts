@@ -243,7 +243,7 @@ async function readerHolders(readerId: string): Promise<string[]> {
 async function pay(cookie: string, readerId?: string) {
   const workingOrderId = randomUUID();
   const reply = await send(
-    venue.appTipsOff,
+    venue.app,
     cookie,
     "POST",
     `/api/working-orders/${workingOrderId}/payments`,

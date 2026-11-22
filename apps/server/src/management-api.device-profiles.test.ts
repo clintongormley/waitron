@@ -105,7 +105,6 @@ async function setupVenue(): Promise<void> {
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const [counter] = await suite.db

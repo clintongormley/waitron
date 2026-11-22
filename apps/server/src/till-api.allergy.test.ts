@@ -50,7 +50,6 @@ beforeEach(async () => {
   cfg = {
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const [person] = await seedPersons(suite.db, { displayName: "Anna", role: "staff" });

@@ -114,7 +114,6 @@ async function seedPrintRouteFixture(db: Database) {
   cfg = {
     nodeId: brandNodeId(randomUUID()),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const { managerSid, staffSid, personId } = await withTransaction(db, async (tx) => {

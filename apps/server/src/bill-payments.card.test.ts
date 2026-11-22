@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -62,9 +63,9 @@ interface Body {
 
 const tabWithDishes = (...names: string[]) => tabWith(venue, ...names);
 
-function pay(billId: string, body: Body, opts: { cookie?: string; tipsOff?: boolean } = {}) {
+function pay(billId: string, body: Body, opts: { cookie?: string } = {}) {
   return send(
-    opts.tipsOff === true ? venue.appTipsOff : venue.app,
+    venue.app,
     opts.cookie ?? venue.cookie,
     "POST",
     `/api/working-orders/${billId}/payments`,
@@ -72,9 +73,9 @@ function pay(billId: string, body: Body, opts: { cookie?: string; tipsOff?: bool
   );
 }
 
-function preview(billId: string, body: Omit<Body, "applied" | "tip">, tipsOff = false) {
+function preview(billId: string, body: Omit<Body, "applied" | "tip">) {
   return send(
-    tipsOff ? venue.appTipsOff : venue.app,
+    venue.app,
     venue.cookie,
     "POST",
     `/api/working-orders/${billId}/payments/preview`,
@@ -654,7 +655,10 @@ describe("the steak (design §8 test 3, §3.3)", () => {
   it("offers only the pool with tips off", async () => {
     const billId = await billWith105();
 
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }, true);
+    await setTipsForTest(venue.db, false);
+    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }).finally(
+      () => setTipsForTest(venue.db, true),
+    );
 
     expect(shown.json).toEqual({
       kind: "choose",
@@ -693,7 +697,10 @@ describe("the steak (design §8 test 3, §3.3)", () => {
     venue.card.stallNextCollect();
     await cardContribution(billId, "5.00");
 
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }, true);
+    await setTipsForTest(venue.db, false);
+    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }).finally(
+      () => setTipsForTest(venue.db, true),
+    );
 
     expect(shown.status).toBe(409);
     expect(shown.json).toMatchObject({ code: "order.payment_in_flight" });

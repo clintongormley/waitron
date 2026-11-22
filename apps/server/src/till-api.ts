@@ -306,6 +306,7 @@ export interface TillApiDeps {
    * its reader's `provider`.
    */
   cardProvider?: PaymentProvider;
+  refundSimulator?: PaymentProvider;
   /**
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */

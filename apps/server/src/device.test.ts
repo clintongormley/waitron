@@ -49,7 +49,6 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const st = await withTransaction(admin, async (tx) => {

@@ -55,7 +55,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

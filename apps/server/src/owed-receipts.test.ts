@@ -170,7 +170,6 @@ const unusedBackend = {} as FiscalBackend;
 const nodeCfg: TradingContext = {
   nodeId: brandNodeId(NODE),
   locale: "es-ES",
-  tipsEnabled: false,
   simplifiedInvoiceLimit: null,
 };
 

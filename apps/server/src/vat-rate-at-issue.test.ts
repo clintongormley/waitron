@@ -43,7 +43,7 @@ import {
 } from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -173,7 +173,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
 

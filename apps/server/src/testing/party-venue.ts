@@ -131,7 +131,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));

@@ -58,7 +58,6 @@ beforeEach(async () => {
   cfg = {
     nodeId: brandNodeId(randomUUID()),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const sessions = await withTransaction(suite.db, async (tx) => {

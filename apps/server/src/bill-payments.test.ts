@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { readBillTenderLines } from "./receipt-payments.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
@@ -191,7 +192,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const rows = await db.select().from(departments);
@@ -325,10 +325,11 @@ async function cardsWithSlips(
   order: readonly { applied: string; tip: string }[],
   printCardSlip = true,
 ) {
+  await setTipsForTest(suite.db, true);
   for (const { applied, tip } of order) {
     const paid = await takeBillPayment(
       { ...fiscal(), admission: testTradingAdmission() },
-      { ...cfg, tipsEnabled: true },
+      cfg,
       billId,
       {
         submissionId: randomUUID(),

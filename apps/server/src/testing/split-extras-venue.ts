@@ -57,7 +57,6 @@ export async function setupVenue(): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
   return { cfg, menuId };

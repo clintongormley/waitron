@@ -18,8 +18,13 @@ export function transferredDocuments(
 ): SettingsDocument<object>[] {
   return modules
     .flatMap((module) => module.settings ?? [])
-    .filter((definition) => definition.transfers);
+    .filter((definition) => definition.transfers !== false);
 }
+function fieldsOf(doc: object, fields: readonly string[]): object {
+  const values = doc as Record<string, unknown>;
+  return Object.fromEntries(fields.map((field) => [field, values[field]]));
+}
+
 export async function exportSettingsDocuments(
   db: Database | Transaction,
   modules: readonly WaitronModule[],
@@ -27,7 +32,13 @@ export async function exportSettingsDocuments(
   const entries: Record<string, TransferredSettings> = {};
   for (const definition of transferredDocuments(modules)) {
     const { doc, revision } = await readSettings(db, definition);
-    if (revision > 0) entries[definition.module] = { version: definition.version, doc };
+    if (revision > 0) {
+      const fields = definition.transfers;
+      entries[definition.module] = {
+        version: definition.version,
+        doc: typeof fields === "boolean" ? doc : fieldsOf(doc, fields),
+      };
+    }
   }
   return entries;
 }
@@ -45,10 +56,19 @@ export function checkImportedSettings(
       throw new AppError("setup.request_invalid", { field: "settings" });
     if (entry.version > definition.version) throw new AppError("setup.configuration_newer", {});
     if (entry.version < definition.version) throw new AppError("setup.configuration_outdated", {});
-    const parsed = definition.parse(entry.doc);
+    const fields = typeof definition.transfers === "boolean" ? undefined : definition.transfers;
+    const extra =
+      fields === undefined
+        ? undefined
+        : Object.keys(entry.doc).find((field) => !fields.includes(field));
+    if (extra !== undefined)
+      throw new AppError("setup.request_invalid", { field: `settings.${key}.${extra}` });
+    const parsed = definition.parse(
+      fields === undefined ? entry.doc : { ...definition.defaults(), ...entry.doc },
+    );
     if (!parsed.ok)
       throw new AppError("setup.request_invalid", { field: `settings.${key}.${parsed.field}` });
-    docs.set(key, parsed.doc);
+    docs.set(key, fields === undefined ? parsed.doc : fieldsOf(parsed.doc, fields));
   }
   return docs;
 }

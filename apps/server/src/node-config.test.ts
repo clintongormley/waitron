@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { loadNodeIdentity, tryLoadNodeIdentity } from "./node-config.js";
-import { loadTillAppSettings } from "./till-config.js";
 import { loadConfig } from "./config.js";
 
 const NODE = "33333333-3333-4333-8333-333333333333";
@@ -16,26 +15,13 @@ function thrown(fn: () => unknown): unknown {
   throw new Error("expected a refusal");
 }
 
-describe("independent node and app inputs", () => {
-  it("node identity excludes app preferences", () => {
-    expect(
-      loadNodeIdentity({
-        WAITRON_NODE_ID: NODE,
-        WAITRON_TILL_TIPS: "1",
-      }),
-    ).toStrictEqual({ nodeId: NODE });
-  });
-
-  it("app settings do not establish node identity", () => {
-    const env = { WAITRON_TILL_TIPS: "true" };
-    expect(loadTillAppSettings(env)).toStrictEqual({
-      tipsEnabled: true,
-    });
+describe("node inputs", () => {
+  it("an environment choice does not establish node identity", () => {
+    const env = { WAITRON_ENV: "dev" };
     expect(tryLoadNodeIdentity(env)).toBeUndefined();
     const config = loadConfig(env, "/migrations", "/state");
     expect(config.node).toBeUndefined();
-    expect(config.tillApp).toStrictEqual(loadTillAppSettings(env));
-    expect(config).not.toHaveProperty("till");
+    expect(config.devMode).toBe(true);
   });
 
   it.each([undefined, ""])(
@@ -74,13 +60,4 @@ describe("independent node and app inputs", () => {
     expect(tryLoadNodeIdentity(retired)).toBeUndefined();
     expect(loadNodeIdentity({ ...retired, WAITRON_NODE_ID: NODE })).toStrictEqual({ nodeId: NODE });
   });
-
-  it.each([undefined, "", "true", "1", "false", "0", "yes"])(
-    "enables tips only for true or 1 (%s)",
-    (raw) => {
-      expect(loadTillAppSettings({ WAITRON_TILL_TIPS: raw }).tipsEnabled).toBe(
-        raw === "true" || raw === "1",
-      );
-    },
-  );
 });

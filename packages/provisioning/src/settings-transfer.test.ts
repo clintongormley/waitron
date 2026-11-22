@@ -16,6 +16,7 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const adjustments = ALL_MODULES.find((m) => m.name === "adjustments")!;
 const definition = adjustments.settings![0]!;
+const payments = ALL_MODULES.find((module) => module.name === "payments")!.settings![0]!;
 const doc = { maxBillComp: 4000 };
 const entries = { adjustments: { version: 1, doc } };
 const save = (value: object = doc) =>
@@ -217,6 +218,50 @@ it("refuses a menu colour no save would store", () => {
     expect.objectContaining({
       code: "setup.request_invalid",
       params: { field: "settings.menu.defaultColor" },
+    }),
+  );
+});
+
+it("carries tips and keeps the destination's provider and practice choices", async () => {
+  await withTransaction(suite.db, (tx) =>
+    saveSettings(tx, payments, {
+      doc: { providers: { stripe: false }, tipsEnabled: true, testProviders: true },
+      expectedRevision: 0,
+      personId: null,
+    }),
+  );
+  const exported = await exportSettingsDocuments(suite.db, ALL_MODULES);
+  expect(exported).toEqual({
+    payments: { version: 1, doc: { tipsEnabled: true } },
+  });
+  await withTransaction(suite.db, async (tx) => {
+    await saveSettings(tx, payments, {
+      doc: { providers: { sumup: false }, tipsEnabled: false, testProviders: true },
+      expectedRevision: 1,
+      personId: null,
+    });
+    await importSettingsDocuments(tx, exported, ALL_MODULES);
+  });
+  expect((await readSettings(suite.db, payments)).doc).toEqual({
+    providers: { sumup: false },
+    tipsEnabled: true,
+    testProviders: true,
+  });
+});
+
+it.each([
+  ["providers", { stripe: false }],
+  ["testProviders", true],
+])("refuses %s in an imported payment document", (field, value) => {
+  expect(() =>
+    checkImportedSettings(
+      { payments: { version: 1, doc: { [field]: value, tipsEnabled: true } } },
+      ALL_MODULES,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: `settings.payments.${field}` },
     }),
   );
 });

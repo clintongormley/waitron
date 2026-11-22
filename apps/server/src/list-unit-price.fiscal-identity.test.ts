@@ -20,7 +20,6 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import type {} from "./till-config.js";
 import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
@@ -128,7 +127,6 @@ async function fileOneSale(db: Database) {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {

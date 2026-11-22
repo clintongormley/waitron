@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -1678,6 +1679,7 @@ describe("money received against a bill before its invoice", () => {
     tip = "0.00",
   ): Promise<string> {
     const tendered = toScale(sumDecimals([decimal(applied), decimal(tip)]), MONEY_SCALE);
+    await setTipsForTest(venue.db, true);
     const result = await takeBillPayment(
       {
         admission: testTradingAdmission(),
@@ -1685,7 +1687,7 @@ describe("money received against a bill before its invoice", () => {
         backend: venue.backend,
         clock: venue.clock,
       },
-      { ...venue.cfg, tipsEnabled: true },
+      venue.cfg,
       billId,
       {
         submissionId: randomUUID(),

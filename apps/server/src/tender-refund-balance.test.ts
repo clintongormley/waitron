@@ -57,7 +57,6 @@ beforeEach(async () => {
   cfg = {
     nodeId,
     locale: "en-GB",
-    tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
   number = 0;

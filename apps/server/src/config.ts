@@ -8,7 +8,6 @@ import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadNodeIdentity } from "./node-config.js";
 import type { NodeIdentityConfig } from "./node-config.js";
-import { loadTillAppSettings, type TillAppSettings } from "./till-config.js";
 import { assertOutsideScratch } from "./scratch.js";
 import { isUnset } from "./env-value.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -35,8 +34,6 @@ export interface ServerConfig {
   onboardingIntent: OnboardingIntent | undefined;
   /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
   fiscalTestSubmissions: boolean;
-  /** Lets a Prepare node exercise a configured payment provider with test credentials. */
-  paymentTestProviders: boolean;
   httpPort: number;
   staff?: { host: string; port: number } | { socketPath: string };
   /**
@@ -85,7 +82,6 @@ export interface ServerConfig {
   /** Operator-supplied PEM files, both or neither; they override the box leaf under `stateDir`. */
   tls?: { certFile: string; keyFile: string };
   node?: NodeIdentityConfig;
-  tillApp: TillAppSettings;
   /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
    * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */
   managementRpId: string;
@@ -376,18 +372,6 @@ function fiscalTestSubmissions(env: Env): boolean {
   return true;
 }
 
-function paymentTestProviders(env: Env): boolean {
-  const raw = env.WAITRON_PAYMENT_TEST_PROVIDERS;
-  if (isUnset(raw)) return false;
-  if (raw !== "enabled") {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_PAYMENT_TEST_PROVIDERS",
-      reason: "not_enabled",
-    });
-  }
-  return true;
-}
-
 export function loadConfig(
   env: Env,
   defaultMigrationsRoot: string,
@@ -481,7 +465,6 @@ export function loadConfig(
     onboardingIntent:
       onboardingIntent(env, environment) ?? (environment === "production" ? "live" : undefined),
     fiscalTestSubmissions: fiscalTestSubmissions(env),
-    paymentTestProviders: paymentTestProviders(env),
     httpPort,
     landingPort,
     spareStorePort,
@@ -500,7 +483,6 @@ export function loadConfig(
     logDir,
     ...(tls === undefined ? {} : { tls }),
     node: tryLoadNodeIdentity(env),
-    tillApp: loadTillAppSettings(env),
     managementRpId,
     managementOrigin,
     ...(hasGoogleId && hasGoogleSecret

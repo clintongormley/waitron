@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import { billShare } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -284,13 +285,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     };
     const staff = await operator();
     const before = fiscalRecordCount(venue, billId);
-    const paid = await takeBillPayment(
-      paymentDeps(),
-      { ...venue.cfg, tipsEnabled: true },
-      billId,
-      request,
-      staff,
-    );
+    await setTipsForTest(venue.db, true);
+    const paid = await takeBillPayment(paymentDeps(), venue.cfg, billId, request, staff);
     expect(paid.invoice).toMatchObject({
       total: "18.00",
       tender: { charged: "15.88", tip: "0.30" },
@@ -304,23 +300,19 @@ describe("collecting an invoice that carries a corrective invoice", () => {
           .where(eq(payments.workingOrderId, billId)),
       ),
     ).toEqual([{ amount: 1588 }]);
-    const replay = await takeBillPayment(
-      paymentDeps(),
-      { ...venue.cfg, tipsEnabled: false },
-      billId,
-      request,
-      staff,
-    );
+    await setTipsForTest(venue.db, false);
+    const replay = await takeBillPayment(paymentDeps(), venue.cfg, billId, request, staff);
     expect(replay.invoice?.tender).toEqual(paid.invoice?.tender);
     expect(fiscalRecordCount(venue, billId)).toBe(before);
   });
 
   it("refuses a manual tip on an issued bill while tips are off", async () => {
+    await setTipsForTest(venue.db, false);
     const { billId, saleId } = await correctedCake();
     await expect(
       takeBillPayment(
         paymentDeps(),
-        { ...venue.cfg, tipsEnabled: false },
+        venue.cfg,
         billId,
         {
           submissionId: randomUUID(),
@@ -342,10 +334,11 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     "refuses a positive manual tip at zero due (tips enabled: %s)",
     async (tipsEnabled) => {
       const { billId } = await correctedCake({ total: "-18.00", base: "14.88" });
+      await setTipsForTest(venue.db, tipsEnabled);
       await expect(
         closeZeroBill(
           paymentDeps(),
-          { ...venue.cfg, tipsEnabled },
+          venue.cfg,
           billId,
           {
             expectedEdit: await readBillEditState(venue.db, billId),

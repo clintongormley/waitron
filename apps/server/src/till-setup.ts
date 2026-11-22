@@ -6,7 +6,7 @@ import { readSettings, readTaxpayer, roles, type Transaction } from "@waitron/db
 import { authorityForRoles, holds, BUILT_IN_ROLE_KEYS } from "@waitron/identity";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
-import { cardReaders, PAYMENTS_SETTINGS, resolveDeviceReaderId } from "@waitron/payments";
+import { cardReaders, readPaymentsSettings, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
 import { MODULES_SETTINGS, VENUE_SERVICE } from "./modules.js";
 import { listCourses } from "./kitchen.js";
@@ -117,11 +117,12 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     .select({ purpose: venueCredentials.purpose })
     .from(venueCredentials)
     .where(eq(venueCredentials.purpose, "payments.sumup"));
+  const paymentSettings = (await readPaymentsSettings(tx)).doc;
   const sumUpConnected =
     sumUpCredential !== undefined &&
     deps.paymentsEnabled !== false &&
     (await readSettings(tx, MODULES_SETTINGS)).doc.modules.payments !== false &&
-    (await readSettings(tx, PAYMENTS_SETTINGS)).doc.providers.sumup !== false;
+    paymentSettings.providers.sumup !== false;
   return {
     locale: deps.venueLocale,
     clockingAvailable: deps.workforceEnabled === true,
@@ -140,7 +141,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     defaultReaderId: simulator ? undefined : defaultReaderId,
     activeReaders: simulator ? [] : activeReaders,
     sumUpConnected,
-    tipsEnabled: deps.cfg.tipsEnabled,
+    tipsEnabled: paymentSettings.tipsEnabled,
     formFactor: device?.formFactor ?? "till",
     capabilities,
     inactivityTimeoutSeconds,

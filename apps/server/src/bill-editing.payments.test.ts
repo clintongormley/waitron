@@ -101,7 +101,6 @@ async function direct(
   if (mode === "preview")
     return previewBillPayment(
       { ...deps(), admission: testTradingAdmission() },
-      cfg,
       billId,
       request as BillPaymentAsk,
       operator.personId,
@@ -351,7 +350,6 @@ describe("payment preview actor", () => {
     await expect(
       previewBillPayment(
         { ...deps(), admission: testTradingAdmission() },
-        venue.cfg,
         p.tabId,
         ask("preview", await edit(p.tabId)),
         undefined,

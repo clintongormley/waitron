@@ -62,7 +62,7 @@ import { addDecimal, decimal, nodeId as brandNodeId, rawCentsToDecimal } from "@
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicketItem,
@@ -176,7 +176,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }

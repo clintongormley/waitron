@@ -349,7 +349,6 @@ export async function provisionAdjustmentVenue(
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {

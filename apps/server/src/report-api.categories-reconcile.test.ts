@@ -29,7 +29,6 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
-import type {} from "./till-config.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
@@ -112,7 +111,6 @@ describe("the category report reconciles with the till's sales", () => {
       seriesId: brandSeriesId(venue.seriesIds[0]!),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     });
 

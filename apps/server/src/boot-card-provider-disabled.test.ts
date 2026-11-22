@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { buildCardProvider } from "./boot.js";
+import { buildCardProvider } from "./card-simulator.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 

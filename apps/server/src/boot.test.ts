@@ -112,7 +112,6 @@ import { ALL_MODULES } from "./modules.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { deleteStreamSettings, writeStreamSettings } from "./stream-host.js";
-import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { TradingContext } from "./trading-context.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -2402,7 +2401,6 @@ describe("startServer, against a migrated venue directory", () => {
           {
             locale: "es-ES",
             ...loadNodeIdentity(TILL_ENV),
-            ...loadTillAppSettings(TILL_ENV),
             simplifiedInvoiceLimit: null,
           },
           zoneId,
@@ -3211,7 +3209,6 @@ describe("the chooser header reaches device routes through development boot", ()
     const cfg: TradingContext = {
       locale: "es-ES",
       ...loadNodeIdentity(TILL_ENV),
-      ...loadTillAppSettings(TILL_ENV),
       simplifiedInvoiceLimit: null,
     };
     const enrolDevice = async (name: string): Promise<string> => {

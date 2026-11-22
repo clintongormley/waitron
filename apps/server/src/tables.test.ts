@@ -68,7 +68,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
@@ -384,7 +383,6 @@ async function setupTabVenue(): Promise<{
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const { coffeeId, waterId, tableId, offers } = await withTransaction(db, async (tx) => {

@@ -13,6 +13,15 @@ The **Enabled**, **Disabled** and **All** filters show a module's state separate
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
 to see all optional modules.
 
+## Enable tips or a test account {#payment-settings}
+
+Open **Card payments** and go to **Settings** below **Card readers**. Turn on
+**Offer tips at the till** and choose **Save**.
+
+On a Prepare box, configure your provider's test credentials in **Modules** first. In **Card
+payments** under **Settings**, turn on **Use card providers' test accounts** and choose **Save**.
+Turn it off to return to the card simulator.
+
 ## Disconnect a card provider {#disconnect-provider}
 
 To remove a provider's saved credentials, choose **Disconnect** in its Modules row menu,

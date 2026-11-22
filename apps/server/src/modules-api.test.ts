@@ -87,7 +87,7 @@ it("shows card providers disabled while their Payments module is off", async () 
 it("lists a switched-off provider independently from its connected credentials", async () => {
   await withTransaction(suite.db, (tx) =>
     saveSettings(tx, PAYMENTS_SETTINGS, {
-      doc: { providers: { stripe: false } },
+      doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { stripe: false } },
       expectedRevision: 0,
       personId: null,
     }),
@@ -199,7 +199,7 @@ it.each(["workforce-es", "payments"])(
   async (id) => {
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { stripe: false, sumup: false } },
+        doc: { ...PAYMENTS_SETTINGS.defaults(), providers: { stripe: false, sumup: false } },
         expectedRevision: 0,
         personId: null,
       }),

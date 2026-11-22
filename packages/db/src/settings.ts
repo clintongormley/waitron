@@ -14,7 +14,7 @@ export interface SettingsDocument<T extends object> {
   readonly version: number;
   readonly defaults: () => T;
   readonly parse: (doc: unknown) => SettingsParse<T>;
-  readonly transfers: boolean;
+  readonly transfers: boolean | readonly string[];
 }
 export interface SettingsRead<T> {
   readonly doc: T;
@@ -113,7 +113,7 @@ export async function saveSettings<T extends object>(
   return { doc: parsed.doc, revision: saved.revision };
 }
 
-/** Replaces only the transferring definitions; imported documents name no source person. */
+/** Replace transferred settings while retaining fields local to the destination. */
 export async function replaceTransferredSettings(
   tx: Transaction,
   definitions: readonly SettingsDocument<object>[],
@@ -124,8 +124,22 @@ export async function replaceTransferredSettings(
     if (!byModule.has(key)) throw new Error(`Unknown settings document: ${key}`);
   }
   for (const definition of definitions) {
-    await tx.delete(settings).where(eq(settings.module, definition.module));
     const doc = docs.get(definition.module);
+    if (typeof definition.transfers !== "boolean") {
+      const current = await readSettings(tx, definition);
+      if (doc === undefined && current.revision === 0) continue;
+      const values = (doc ?? definition.defaults()) as Record<string, unknown>;
+      const transferred = Object.fromEntries(
+        definition.transfers.map((field) => [field, values[field]]),
+      );
+      await saveSettings(tx, definition, {
+        doc: { ...current.doc, ...transferred },
+        expectedRevision: current.revision,
+        personId: null,
+      });
+      continue;
+    }
+    await tx.delete(settings).where(eq(settings.module, definition.module));
     if (doc !== undefined)
       await saveSettings(tx, definition, { doc, expectedRevision: 0, personId: null });
   }

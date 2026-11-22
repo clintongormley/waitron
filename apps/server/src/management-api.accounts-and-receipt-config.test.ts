@@ -145,7 +145,6 @@ async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 

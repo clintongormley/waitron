@@ -185,7 +185,6 @@ async function setupLunch(): Promise<Lunch> {
   const cfg: TradingContext = {
     nodeId: brandNodeId(venue.nodeId),
     locale: LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(suite.db, async (tx) => {

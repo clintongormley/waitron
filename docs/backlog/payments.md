@@ -255,9 +255,9 @@ bigger brainstorm." Next: that brainstorm with the owner, before any build or fu
 A first design is kept as input ([design](../superpowers/specs/2026-10-18-a793-tips-design.md), research in
 [compliance/research/2026-10-18-a793-tips.md](../compliance/research/2026-10-18-a793-tips.md)); not
 built. A shared pot per business day split by hours clocked (kitchen included) or each person
-keeping their own, chosen on a new Tips tab in Venue settings that also replaces
-`WAITRON_TILL_TIPS`; cash tips handed out at the day's close (once a close counts the drawer,
-A239, and the asesor's L6(g) allows it), card tips paid with wages; a Tips page under Team by day
+keeping their own, chosen on a proposed Tips tab in Venue settings. Staff can already offer tips using
+the switch in Card payments → Settings. The proposal would also cover cash tips handed out at the day's close (once a close counts the drawer,
+A239, and the asesor's L6(g) allows it) and card tips paid with wages; a Tips page under Team by day
 and by pay period, frozen when a pay period closes (once the product has a step that closes one).
 The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).

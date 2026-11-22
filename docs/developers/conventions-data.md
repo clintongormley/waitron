@@ -6838,6 +6838,10 @@ row and reads as defaults; other modules' rows stay. Before go-live another docu
 refused, never converted. Keep row ids out of copied documents: this path does not rewrite JSON
 references (design R4).
 
+Format 57 carries the tips switch in the payments document. An import keeps the destination's
+provider On/Off choices and practice switch. When the bundle lacks the payments document, tips
+take their default.
+
 Keep row ids out of documents, except the short lists owned by one row allowed by design R4.
 A per-module database rule is a pair of triggers in `packages/db/triggers/core.sql`, named
 `settings_<module>_<rule>_insert` and `_update`: `before insert` and `before update of doc on settings`,

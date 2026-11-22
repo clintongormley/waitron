@@ -531,7 +531,6 @@ describe("the printer delete impact", () => {
         {
           nodeId: brandNodeId(series!.nodeId),
           locale: "es-ES",
-          tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
         v.anna,
@@ -631,7 +630,6 @@ describe("the printer delete impact", () => {
     const tillCfg: TradingContext = {
       nodeId: brandNodeId(series!.nodeId),
       locale: "es-ES",
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
     const [deli] = await seedDeviceProfiles(suite.db, { name: "Deli", formFactor: "till" });

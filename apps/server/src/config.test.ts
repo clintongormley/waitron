@@ -24,11 +24,6 @@ const ROOT = "/opt/waitron/drizzle";
 const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_NODE = { nodeId: TILL_ENV.WAITRON_NODE_ID };
-const EXPECTED_TILL_APP = {
-  // No card fields: `toEqual` fails if one is materialised.
-  tipsEnabled: false,
-};
-
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
 }
@@ -85,7 +80,6 @@ describe("loadConfig", () => {
       devMode: false,
       onboardingIntent: undefined,
       fiscalTestSubmissions: false,
-      paymentTestProviders: false,
       httpPort: 8080,
       landingPort: 80,
       spareStorePort: 7443,
@@ -101,7 +95,6 @@ describe("loadConfig", () => {
       logDir: resolve(STATE_ROOT, "logs"),
       // `tls` is absent from the object, not present-but-undefined.
       node: EXPECTED_NODE,
-      tillApp: EXPECTED_TILL_APP,
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
       venueDomain: undefined,
@@ -803,27 +796,6 @@ describe("WAITRON_FISCAL_TEST_SUBMISSIONS", () => {
       expect.objectContaining({
         code: "server.config_invalid",
         params: { variable: "WAITRON_FISCAL_TEST_SUBMISSIONS", reason: "not_enabled" },
-      }),
-    );
-  });
-});
-
-describe("WAITRON_PAYMENT_TEST_PROVIDERS", () => {
-  it("is disabled by default and enabled only by the explicit 'enabled' value", () => {
-    expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT).paymentTestProviders).toBe(false);
-    expect(
-      loadConfig({ ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "enabled" }, ROOT, STATE_ROOT)
-        .paymentTestProviders,
-    ).toBe(true);
-  });
-
-  it("rejects an ambiguous value", () => {
-    expect(() =>
-      loadConfig({ ...MIN_ENV, WAITRON_PAYMENT_TEST_PROVIDERS: "true" }, ROOT, STATE_ROOT),
-    ).toThrowError(
-      expect.objectContaining({
-        code: "server.config_invalid",
-        params: { variable: "WAITRON_PAYMENT_TEST_PROVIDERS", reason: "not_enabled" },
       }),
     );
   });

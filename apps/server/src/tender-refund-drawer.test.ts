@@ -43,7 +43,6 @@ beforeEach(async () => {
     nodeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en",
-    tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
   const [series] = await db

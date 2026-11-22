@@ -1,3 +1,4 @@
+import { setTipsForTest } from "./testing/payment-settings.js";
 import {
   billShare,
   takeReaderBillPayment,
@@ -143,7 +144,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
 
@@ -514,7 +514,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     });
     const provider = new FakePaymentProvider(suite.db);
     const filing = { ...deps(), admission: testTradingAdmission() };
-    const cfg = { ...v.cfg, tipsEnabled: true };
+    await setTipsForTest(suite.db, true);
+    const cfg = v.cfg;
     provider.crashNextCollect("captured");
     await expect(
       takeReaderBillPayment(

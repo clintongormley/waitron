@@ -68,7 +68,6 @@ it.each([
         nodeId: TENANT_A.nodeId,
         locale: "en",
         invoiceLocales: ["es"],
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       };
       const [profile] = await seedDeviceProfiles(store.venue, {

@@ -59,7 +59,6 @@ async function setup(role: "manager" | "staff" = "manager") {
       cfg: {
         nodeId: writingNodeId,
         locale: "es-ES",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },
       ring: loadKeyRing({

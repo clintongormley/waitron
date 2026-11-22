@@ -173,7 +173,7 @@ export {
   findCaptureWarning,
 } from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";
-export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS } from "./settings.js";
+export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS, readPaymentsSettings } from "./settings.js";
 
 export { PAYMENT_CHANGE_REFUSAL, PAYMENT_DELETE_REFUSAL } from "./trigger-refusals.js";
 

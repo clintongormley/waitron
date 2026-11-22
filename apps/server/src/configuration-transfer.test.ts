@@ -475,7 +475,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 56,
+  version: 57,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -4277,7 +4277,6 @@ async function shortNamedBundle(taxId: string) {
   const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   await withTransaction(suite.db, async (tx) => {
@@ -4983,7 +4982,6 @@ describe("device profile scope round trip (M4)", () => {
       const cfg: TradingContext = {
         nodeId: nodeId(source.nodeId),
         locale: "es-ES",
-        tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       };
       const ids = await withTransaction(suite.db, async (tx) => {
@@ -6160,7 +6158,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(56);
+  expect(exported.version).toBe(57);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -7865,7 +7863,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const removals = enabledTableRemovals(ALL_MODULES);
@@ -7990,7 +7987,6 @@ it("carries Long table's parts, naming the imported tables", async () => {
   const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const removals = enabledTableRemovals(ALL_MODULES);
@@ -8071,7 +8067,6 @@ it("carries a kept size, naming the imported table", async () => {
   const cfg: TradingContext = {
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const sourceIds = await withTransaction(suite.db, async (tx) => {

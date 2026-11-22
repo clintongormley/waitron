@@ -280,7 +280,6 @@ async function venue() {
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const { managerCookie, staffId, zoneId } = await withTransaction(suite.db, async (tx) => {

@@ -70,7 +70,6 @@ export async function createClockVenue(
   const cfg: TradingContext = {
     nodeId: nodeId(venue.nodeId),
     locale: "es-ES",
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const { profile, person } = await withTransaction(db, async (tx) => {

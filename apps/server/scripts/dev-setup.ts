@@ -275,7 +275,6 @@ async function seedDemoDevices(
   const cfg: TradingContext = {
     nodeId: brandNodeId(ids.nodeId),
     locale: receiptLocale,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 

@@ -66,7 +66,7 @@ import * as menu from "@waitron/menu";
 import type { DietaryLabel } from "@waitron/menu";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { OrderFlow } from "./till-config.js";
+import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicketItem,
@@ -278,7 +278,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     seriesId: brandSeriesId(randomUUID()),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.

@@ -104,7 +104,6 @@ export async function provisionSignedInTill<S extends TillSeed>(
   const cfg: TradingContext = {
     nodeId: brandNodeId(venue.nodeId),
     locale: SIGNED_IN_TILL_LOCALE,
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {

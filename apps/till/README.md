@@ -138,10 +138,11 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 
 ### Box identity and till settings
 
-| Variable            | Required | Default | What it is                                                        |
-| ------------------- | -------- | ------- | ----------------------------------------------------------------- |
-| `WAITRON_NODE_ID`   | yes      | —       | The identity of this box in the venue.                            |
-| `WAITRON_TILL_TIPS` | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it. |
+| Variable          | Required | Default | What it is                             |
+| ----------------- | -------- | ------- | -------------------------------------- |
+| `WAITRON_NODE_ID` | yes      | —       | The identity of this box in the venue. |
+
+To offer tips at the till, open **Card payments** in the dashboard and turn on **Offer tips at the till** under **Settings**.
 
 Kitchen-ticket frames and collection-number captions read the saved default content language at
 each new render: Spanish selects Spanish, every other default or missing setting selects English.
@@ -155,16 +156,14 @@ After this identity-setting rename, reset your existing throwaway demo or test v
 `wa-wt reset own demo <worktree-name>`). Provisioning writes the new settings;
 there is no fallback to the old names.
 
-The server reads box identity through `tryLoadNodeIdentity` (`apps/server/src/node-config.ts`)
-and till preferences through `loadTillAppSettings` (`apps/server/src/till-config.ts`). With
-`WAITRON_NODE_ID` unset or empty, you get setup mode even when you supply till preferences.
+The server reads box identity through `tryLoadNodeIdentity` (`apps/server/src/node-config.ts`).
+With `WAITRON_NODE_ID` unset or empty, you get setup mode.
 A malformed node identity refuses startup with `server.node_config_invalid`. Ordinary trading
 refuses the same way if the configured node has no database row. Pending adoption serves its
 status before that lookup. These errors name the setting without echoing its value.
 
-The server combines that node identity, till preferences and fiscal runtime values in
-`TradingContext` (`apps/server/src/trading-context.ts`). Its invoicing backend belongs to the
-node.
+The server combines the node identity and fiscal runtime values in
+`TradingContext` (`apps/server/src/trading-context.ts`). Its invoicing backend belongs to the node.
 
 ### A no-browser check
 

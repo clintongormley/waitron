@@ -56,7 +56,6 @@ try {
     const cfg = {
       nodeId: nodeId(venue.nodeId),
       locale: "es-ES",
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
     const [person] = await store.venue

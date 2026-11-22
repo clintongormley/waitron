@@ -553,7 +553,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         cfg: {
           nodeId: brandNodeId(nodeId),
           locale: "en-GB",
-          tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
         secureCookies: false,
@@ -589,7 +588,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         tradingContext: {
           nodeId: brandNodeId(nodeId),
           locale: "en-GB",
-          tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
         venueLocale: "en-GB",

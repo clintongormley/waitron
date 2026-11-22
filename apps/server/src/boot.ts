@@ -136,9 +136,9 @@ import {
   type StepDownResult,
 } from "./handover-stepdown.js";
 import { closeAll } from "./close-all.js";
+import { createCardSimulatorSeat } from "./card-simulator.js";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import {
-  SimulatorPaymentProvider,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   type CollectionOwners,
@@ -414,7 +414,7 @@ import { adoptFromPrimary, type AdoptDeps } from "./adopt.js";
 import { rememberCheckedAddressesIn, type BoxLookup } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
+import { writeTradingEnv, type TradingConfig } from "./trading-config.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
@@ -602,27 +602,6 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
  * buffer. A constant rather than config: it is a DoS ceiling, not an operator knob.
  */
 export const MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES;
-
-/**
- * The local simulator for a Demo or default-Prepare till; `undefined` otherwise, because every other
- * card sale routes to its reader's own provider through the pool at collect time.
- *
- * Exported for a direct test (`boot-card-provider.test.ts`).
- */
-export async function buildCardProvider(
-  db: Database,
-  onboardingIntent?: OnboardingIntent,
-  paymentTestProviders = false,
-  paymentsEnabled = true,
-): Promise<PaymentProvider | undefined> {
-  if (!paymentsEnabled) return undefined;
-  const simulated =
-    onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders);
-  if (simulated) {
-    return new SimulatorPaymentProvider(db);
-  }
-  return undefined;
-}
 
 /** The payments this box's card sweep may resolve: its own, those of the boxes it took over from
  * (`readTakenOverFrom`), and the rows naming no box only while it is the venue's singleton primary.
@@ -2619,7 +2598,6 @@ async function bootServer(
   const tradingContext: TradingContext = {
     locale: venueLocale,
     ...node,
-    ...config.tillApp,
     simplifiedInvoiceLimit: nodeBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     operationDescriptionDefault,
@@ -2944,12 +2922,11 @@ async function bootServer(
     log,
   );
   const contentLanguageRules = await readVenueContentLanguageRules(db);
-  const cardProvider = await buildCardProvider(
+  const cardSimulator = await createCardSimulatorSeat({
     db,
-    config.onboardingIntent,
-    config.paymentTestProviders,
-    enabledAtStart.some((module) => module.name === "payments"),
-  );
+    onboardingIntent: config.onboardingIntent,
+    paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
+  });
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.
   const cardPool =
@@ -3010,7 +2987,10 @@ async function bootServer(
       floorAnnotators: enabledFloorAnnotators(enabledAtStart),
       tableRemovals,
       secureCookies,
-      cardProvider,
+      get cardProvider() {
+        return cardSimulator.current();
+      },
+      refundSimulator: cardSimulator.forExistingPayments,
       pool: cardPool,
       paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
       disk: diskFull,
@@ -3355,7 +3335,9 @@ async function bootServer(
         pool: cardPool,
         paymentsEnabled: enabledAtStart.some((module) => module.name === "payments"),
         providers: CARD_PROVIDERS,
-        simulator: cardProvider,
+        simulator: cardSimulator.forExistingPayments,
+        cardSimulator,
+        onboardingIntent: config.onboardingIntent,
         attendance: attendanceRecorder,
         clockUnconfirmed: startClockHolds,
       },
@@ -3670,7 +3652,9 @@ async function bootServer(
       readTradingAdmission: () => tradingAdmission.snapshot(),
       venueLocale,
       onboardingIntent: config.onboardingIntent,
-      simulatedCardPayments: cardProvider?.provider === "simulator",
+      get simulatedCardPayments() {
+        return cardSimulator.current() !== undefined;
+      },
       modules: enabledAtStart.map((m) => m.name),
       credentialKeyRing: ring,
       rpId: config.managementRpId,
@@ -4775,7 +4759,7 @@ async function bootServer(
               db,
               pool: cardPool,
               contributions: CARD_PROVIDERS,
-              simulator: cardProvider,
+              simulator: cardSimulator.forExistingPayments,
             }),
         owners: () =>
           sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
@@ -4812,7 +4796,10 @@ async function bootServer(
           admission: tradingAdmission,
           cfg: tradingContext,
           clock: tillClock,
-          refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+          refundProviderFor: refundProvidersOf({
+            simulator: cardSimulator.forExistingPayments,
+            pool: cardPool,
+          }),
           attendance: attendanceRecorder,
           clockUnconfirmed: startClockHolds,
           signal: tenderRefundController.signal,
