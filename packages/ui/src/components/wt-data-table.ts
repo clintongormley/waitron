@@ -660,10 +660,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       .column-move-status {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
+        ${visuallyHiddenStyles}
         clip-path: inset(50%);
       }
 

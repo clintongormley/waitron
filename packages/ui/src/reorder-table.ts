@@ -7,7 +7,7 @@ import {
   type TemplateResult,
 } from "lit";
 import { DragEdgeScroll } from "./drag-edge-scroll.js";
-import { disabledStyles } from "./base-styles.js";
+import { disabledStyles, visuallyHiddenStyles } from "./base-styles.js";
 import "./components/wt-icon.js";
 
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
@@ -187,15 +187,7 @@ export class ReorderController implements ReactiveController {
        only controls and so has no visible label of its own. */
     .reorder-status,
     .visually-hidden {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
+      ${visuallyHiddenStyles}
     }
   `;
 

@@ -1,4 +1,4 @@
-import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
+import { ReorderController, reorder, visuallyHiddenStyles, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -188,15 +188,7 @@ export class VariantTable extends LitElement {
         font-family: var(--wt-font-family);
       }
       .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+        ${visuallyHiddenStyles}
       }
     `,
   ];

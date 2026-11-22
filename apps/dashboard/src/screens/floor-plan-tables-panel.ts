@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { createLabelComparator } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -154,12 +154,8 @@ export class FloorPlanTablesPanel extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
+        ${visuallyHiddenStyles}
         clip-path: inset(50%);
-        white-space: nowrap;
       }
       .foot {
         display: flex;

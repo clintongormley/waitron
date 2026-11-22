@@ -1,5 +1,6 @@
 import { css, html, type TemplateResult } from "lit";
 import { compareDecimal, formatMoney, type Decimal } from "@waitron/shared";
+import { visuallyHiddenStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 
 export const priceWasStyles = css`
@@ -8,12 +9,8 @@ export const priceWasStyles = css`
   }
 
   .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
+    ${visuallyHiddenStyles}
     clip-path: inset(50%);
-    white-space: nowrap;
   }
 `;
 

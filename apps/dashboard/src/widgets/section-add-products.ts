@@ -1,7 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  visuallyHiddenStyles,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -57,15 +63,7 @@ export class SectionAddProducts extends LitElement {
         min-width: 0;
       }
       .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+        ${visuallyHiddenStyles}
       }
       ul {
         margin: 0;
