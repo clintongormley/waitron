@@ -1627,7 +1627,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         unitPrice?: unknown;
         vatClass?: unknown;
         takeawayVatRate?: unknown;
-        takeawayVatClass?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;

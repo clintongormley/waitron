@@ -481,9 +481,6 @@ describe("an extra that is a parent with Active variants", () => {
 });
 
 describe("a variant offered as an extras item", () => {
-  // A variant's takeaway class is its own takeaway class, else its own served class, else its
-  // parent's takeaway class, else its parent's served class. Each item below stops at a different
-  // step, and the first three resolve to something other than their parent's served class.
   it("carries the served class its variant resolves to as its takeaway class, on every path", async () => {
     const items = await run(async (tx) => {
       const parent = async (name: string, vatClass: "reduced" | "zero") =>

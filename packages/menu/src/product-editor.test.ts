@@ -355,6 +355,22 @@ describe("a product's and a variant's takeaway VAT rate", () => {
     });
   });
 
+  it("refuses a rate the area does not offer on an existing product", async () => {
+    const saved = await saveNew(input);
+    await expect(save(saved.id, { ...saved, takeawayVatRate: "5.00" })).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "takeawayVatRate" },
+    });
+  });
+
+  it("refuses a rate the area does not offer on a variant", async () => {
+    const saved = await saveNew(input);
+    const variantId = saved.variants[0]!.id;
+    await expect(
+      save(variantId, { ...(await read(variantId)), takeawayVatRate: "5.00" }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });
+  });
+
   it("refuses a body still naming the retired takeaway VAT class", async () => {
     for (const takeawayVatClass of ["general", null])
       await expect(saveNew({ ...input, takeawayVatClass })).rejects.toMatchObject({
