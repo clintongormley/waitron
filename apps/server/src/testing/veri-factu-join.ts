@@ -20,7 +20,7 @@ import { planVenue } from "@waitron/provisioning";
 import { personIdForLoginEmail } from "@waitron/identity";
 import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
-import { ownContactUrl } from "../box-name.js";
+import { ownContactUrl, spareStoreUrl } from "../box-name.js";
 import {
   JOIN_REVEAL_LABEL,
   commitmentMatches,
@@ -183,10 +183,7 @@ export async function collectJoin(
   if (mainDb === undefined) throw new Error("collectJoin needs an app from mirrorBundleApp");
   const identity = generateStandbyIdentity();
   const contactUrl = ownContactUrl(spareUrl, identity.nodeId);
-  const store = new URL(contactUrl);
-  store.protocol = "https:";
-  store.port = String(storePort);
-  const storeUrl = store.origin;
+  const storeUrl = spareStoreUrl(spareUrl, identity.nodeId, storePort);
   joinAddresses += 1;
   const box = joiningBox(`10.40.0.${joinAddresses}`, { identity, contactUrl, storeUrl });
   const cookie = await signedInCookie(mainDb, await personIdForLoginEmail(mainDb, main.email));

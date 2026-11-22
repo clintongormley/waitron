@@ -42,7 +42,8 @@ import type { MirrorBundle } from "./mirror-bundle.js";
 import { writeModuleConfig } from "./module-config.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
-import { approvedJoinAttempt, finishJoining, joinStoreUrl } from "./testing/setup-join.js";
+import { spareStoreUrl } from "./box-name.js";
+import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
@@ -478,7 +479,7 @@ describe("runStagedReset", () => {
       const joined = () => ({
         identity,
         bundle,
-        storeUrl: joinStoreUrl("https://standby.example", identity.nodeId),
+        storeUrl: spareStoreUrl("https://standby.example", identity.nodeId, 7443),
       });
       expect(await postAdopt(stateDir, adopt, joined)).toBe(200);
       expect(await adopt.mock.results[0]?.value).toEqual({

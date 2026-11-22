@@ -26,13 +26,14 @@ import {
   type JoinEndReason,
 } from "./box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
-import { ownContactUrl } from "./box-name.js";
+import { ownContactUrl, spareStoreUrl } from "./box-name.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import {
   boxExchange,
   fetchPrimaryCertificate,
   isIsoTime,
   isMirrorBundle,
+  isRecord,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
@@ -97,7 +98,7 @@ interface Attempt {
   mainPublicKey: string;
   /** The last `seq` this attempt signed. */
   seq: number;
-  /** The code this attempt shows, once revealed. */
+  /** The code this attempt shows, which a failed `state` does not carry. */
   code: string;
   /**
    * When the main box ends the request, on `steadyNow`: it ends one `JOIN_REQUEST_TTL_MS` after
@@ -109,11 +110,10 @@ interface Attempt {
   timer?: ReturnType<typeof setTimeout>;
 }
 
-const fetchFailed = () => new AppError("mirror.bundle_fetch_failed", {});
+/** An attempt between its hello and its reveal, before it has a code to show. */
+type Asking = Omit<Attempt, "code" | "state">;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const fetchFailed = () => new AppError("mirror.bundle_fetch_failed", {});
 
 function jsonOf(text: string): unknown {
   try {
@@ -195,7 +195,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     }
   }
 
-  function signed(attempt: Attempt, label: string, fields: JoinField[]) {
+  function signed(attempt: Asking, label: string, fields: JoinField[]) {
     attempt.seq += 1;
     return {
       requestId: attempt.requestId,
@@ -214,7 +214,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
    * Best effort: a main box that never hears it ends the request by itself. True when the main box
    * refused it because it is approving the request, which then goes on.
    */
-  async function sendCancel(attempt: Attempt): Promise<boolean> {
+  async function sendCancel(attempt: Asking): Promise<boolean> {
     try {
       const answer = await send(attempt, "cancel", signed(attempt, JOIN_CANCEL_LABEL, []));
       return answer.status === 409 && refusalOf(answer.text).code === "mirror.join_approving";
@@ -322,9 +322,6 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const identity = generateStandbyIdentity();
     const encryption = generateKeyPairSync("x25519");
     const contactUrl = ownContactUrl(deps.advertisedOrigin, identity.nodeId);
-    const storeUrl = new URL(contactUrl);
-    storeUrl.protocol = "https:";
-    storeUrl.port = String(deps.spareStorePort);
     const addresses = ownAddresses();
     const hello: JoinHello = {
       newNodeId: identity.nodeId,
@@ -333,7 +330,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
         .export({ format: "der", type: "spki" })
         .toString("base64"),
       contactUrl,
-      storeUrl: storeUrl.origin,
+      storeUrl: spareStoreUrl(deps.advertisedOrigin, identity.nodeId, deps.spareStorePort),
       addresses,
     };
     const at = deps.now().getTime();
@@ -360,7 +357,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     ]);
     if (answered === null || !isIsoTime(answered.expiresAt)) throw fetchFailed();
 
-    const attempt: Attempt = {
+    const asking: Asking = {
       base,
       trust,
       requestId: answered.requestId,
@@ -372,24 +369,22 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       mainNodeId: answered.mainNodeId,
       mainPublicKey: answered.mainPublicKey,
       seq: 0,
-      code: "",
       deadline,
-      state: { state: "waiting", code: "", addresses, primaryUrl, timeLeftMs: 0 },
     };
     const newNonce = randomBytes(32);
     // Every try is the same message, so the main box answers a repeat with its stored answer.
     const reveal = {
-      ...signed(attempt, JOIN_REVEAL_LABEL, revealMessageFields(newNonce)),
+      ...signed(asking, JOIN_REVEAL_LABEL, revealMessageFields(newNonce)),
       newNonce: newNonce.toString("base64"),
     };
     let revealAnswer: { status: number; text: string } | undefined;
     for (let tries = 1; revealAnswer === undefined; tries++) {
       const trying = slot(TRY_LIMIT_MS);
       try {
-        revealAnswer = await send(attempt, "reveal", reveal);
+        revealAnswer = await send(asking, "reveal", reveal);
       } catch {
         if (tries === REVEAL_TRIES) {
-          await sendCancel(attempt);
+          await sendCancel(asking);
           throw fetchFailed();
         }
         await trying.ended;
@@ -403,39 +398,32 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const mainNonce = Buffer.from(revealed?.mainNonce ?? "", "base64");
     if (
       revealed === null ||
-      !commitmentMatches(
-        Buffer.from(answered.commitment, "base64"),
-        attempt.requestId,
-        mainNonce,
-      ) ||
+      !commitmentMatches(Buffer.from(answered.commitment, "base64"), asking.requestId, mainNonce) ||
       !verifyJoinMessage(
         JOIN_REVEAL_LABEL,
-        attempt.requestId,
+        asking.requestId,
         reveal.seq,
         revealAnswerFields(hello, newNonce, mainNonce),
         revealed.signature,
-        attempt.mainPublicKey,
+        asking.mainPublicKey,
       )
     ) {
-      await sendCancel(attempt);
+      await sendCancel(asking);
       throw new AppError("mirror.join_invalid", {});
     }
 
     const code = joinCode({
       ...hello,
-      mainNodeId: attempt.mainNodeId,
-      mainPublicKey: attempt.mainPublicKey,
+      mainNodeId: asking.mainNodeId,
+      mainPublicKey: asking.mainPublicKey,
       newNonce,
       mainNonce,
-      requestId: attempt.requestId,
+      requestId: asking.requestId,
     });
-    attempt.code = code;
-    attempt.state = {
-      state: "waiting",
+    const attempt: Attempt = {
+      ...asking,
       code,
-      addresses,
-      primaryUrl,
-      timeLeftMs: 0,
+      state: { state: "waiting", code, addresses, primaryUrl, timeLeftMs: 0 },
     };
     current = attempt;
     schedulePoll(attempt);

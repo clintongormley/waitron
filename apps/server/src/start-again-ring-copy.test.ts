@@ -32,7 +32,8 @@ import type { MirrorBundle } from "./mirror-bundle.js";
 import { writeModuleConfig } from "./module-config.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
-import { approvedJoinAttempt, finishJoining, joinStoreUrl } from "./testing/setup-join.js";
+import { spareStoreUrl } from "./box-name.js";
+import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
@@ -151,7 +152,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
         joinAttempt: approvedJoinAttempt(() => ({
           identity,
           bundle,
-          storeUrl: joinStoreUrl("https://standby.example", identity.nodeId),
+          storeUrl: spareStoreUrl("https://standby.example", identity.nodeId, 7443),
         })),
         adoptJoined: adopt,
         requestRestart: vi.fn(),

@@ -12,17 +12,8 @@ import {
   type JoinHello,
 } from "../box-join-code.js";
 import { lockJoinBundle } from "../box-join-seal.js";
-import { ownContactUrl } from "../box-name.js";
 import { waitUntil } from "./scenario-stages.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
-
-/** The store address a new box advertised at `advertisedOrigin` sends, as the join attempt builds it. */
-export function joinStoreUrl(advertisedOrigin: string, nodeId: string, storePort = 7443): string {
-  const store = new URL(ownContactUrl(advertisedOrigin, nodeId));
-  store.protocol = "https:";
-  store.port = String(storePort);
-  return store.origin;
-}
 
 /**
  * Stands in for `createBoxJoinAttempt` once the main box has approved: every Join is approved at

@@ -37,7 +37,7 @@ import { verifySecretAsync } from "@waitron/identity";
 import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { joinStoreUrl } from "./testing/setup-join.js";
+import { spareStoreUrl } from "./box-name.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
@@ -168,7 +168,7 @@ beforeAll(async () => {
         persisted = ring;
       },
     },
-    { identity, bundle, storeUrl: joinStoreUrl("https://spare.test", identity.nodeId) },
+    { identity, bundle, storeUrl: spareStoreUrl("https://spare.test", identity.nodeId, 7443) },
     { beforeFirstWrite: async () => {} },
   );
 
