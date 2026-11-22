@@ -39,18 +39,20 @@ describe("isInertPath", () => {
     },
   );
 
-  it.each([".codex/config.toml", ".vscode/settings.json", ".gitignore", ".editorconfig"])(
-    "treats the root config %s as inert",
-    (path) => {
-      expect(isInertPath(path)).toBe(true);
-    },
-  );
+  it.each([
+    ".codex/config.toml",
+    ".vscode/settings.json",
+    ".impeccable/design.json",
+    ".gitignore",
+    ".editorconfig",
+  ])("treats the root config %s as inert", (path) => {
+    expect(isInertPath(path)).toBe(true);
+  });
 
   it.each([
     "packages/db/src/index.ts",
     "packages/db/README.md",
     "apps/server/README.md",
-    ".impeccable/design.json",
     ".github/workflows/ci.yml",
     ".husky/pre-push",
     "pnpm-workspace.yaml",
@@ -80,7 +82,6 @@ describe("isRootScopePath", () => {
     "scripts/english-only.test.ts",
     ".husky/pre-push",
     ".github/workflows/ci.yml",
-    ".impeccable/design.json",
   ])("treats %s as root scope", (path) => {
     expect(isRootScopePath(path)).toBe(true);
   });

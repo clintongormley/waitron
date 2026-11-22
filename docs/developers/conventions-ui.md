@@ -247,8 +247,8 @@ machinery treat any path under `docs/` as documentation that nothing builds:
 
 - `.dockerignore:17` leaves `docs` out of the image's build context, so the build stage's
   `COPY . .` (`deploy/Dockerfile:25`) would never see a guide.
-- `isInertPath` in `scripts/changed-scope.mjs:126` treats every `docs/` path as inert, so a
-  guide-only change would run no CI code job and no test. Measured 2026-10-18 on this branch with
+- `isInertPath` in `scripts/changed-scope.mjs` treats every `docs/` path as inert, so a
+  guide-only change would run no CI code job. Measured 2026-10-18 on this branch with
   `scopeForPaths` from `scripts/changed-packages.mjs` and a workspace of `@waitron/server` and
   `@waitron/dashboard`: the path docs/guide/en/products.md gave `kind: "documentation"` with no
   packages, and `apps/server/src/guide/en/products.md` gave `kind: "packages"` with

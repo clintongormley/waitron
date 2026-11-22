@@ -162,7 +162,6 @@ describe("scopeForPaths", () => {
     "scripts/changed-scope.mjs",
     ".husky/pre-push",
     "scripts/changed-packages.mjs",
-    ".impeccable/design.json",
   ])("reports a root run for %s", (path) => {
     expect(scopeForPaths([path], workspace())).toMatchObject({
       kind: "root",
@@ -400,12 +399,15 @@ describe("scopeForPaths", () => {
     ).toMatchObject({ kind: "packages", packages: ["@waitron/db"] });
   });
 
-  it("does not let inert root config widen the run", () => {
-    expect(scopeForPaths([".codex/config.toml"], workspace())).toMatchObject({
-      kind: "documentation",
-      packages: [],
-    });
-  });
+  it.each([".codex/config.toml", ".impeccable/design.json"])(
+    "does not let the inert root config %s widen the run",
+    (path) => {
+      expect(scopeForPaths([path], workspace())).toMatchObject({
+        kind: "documentation",
+        packages: [],
+      });
+    },
+  );
 
   it("gives a documentation-only push its own outcome, distinct from an undetermined one", () => {
     const docs = scopeForPaths(["docs/backlog.md", "CLAUDE.md"], workspace());

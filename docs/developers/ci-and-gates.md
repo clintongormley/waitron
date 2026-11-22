@@ -798,9 +798,8 @@ pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
 A successful check prints `Built setup bundle rendered and advanced to the setup choices.`
 Chromium must be installed for the setup package's Playwright version.
 
-A machinery-only push (`scripts/`, `.husky/`, `.github/`, `.impeccable/`) is
-`scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS`
-(`scripts/changed-scope.mjs`) names, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI test command
+A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`)
+names, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI test command
 loads). A `ROOT_SCOPE_CONSUMERS` file selects the members listed against it (those that read it, or
 whose CI test job runs it): the hook typechecks them with their dependents, and CI tests them
 without. A `GLOBAL_ROOT_FILES` file typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
@@ -2162,13 +2161,12 @@ Keep the job log before re-running.
 ### CI does not run every check on every push
 
 The `changes` job skips the expensive `code`-gated jobs when every changed path is inert —
-documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
-`.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
-`scripts/`, `.husky/`, `.github/`, and `.impeccable/`, which belongs to no package and is read only
-by a root guard), and on a pull request
-narrows the shards and mutation jobs to the changed packages themselves. A root file a member
-depends on is the exception — a root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`
-lists, because a member file reads it or the ci.yml job that tests the member runs it first: that map selects those members, so its
+documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, `.impeccable/`,
+the root `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
+`scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
+the changed packages themselves. A root file a member depends on is the exception — a
+root file `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs` lists, because a member file reads
+it or the ci.yml job that tests the member runs it first: that map selects those members, so its
 change is `code=true`. A root file a ci.yml test command loads as a Vitest reporter
 (`scripts/vitest-file-progress.mjs`) is in `GLOBAL_ROOT_FILES` instead, and its change runs
 everything (`scope=global`): every tested member loads it, and a hand-kept list of them had to
