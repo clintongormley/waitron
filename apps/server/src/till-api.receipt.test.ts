@@ -344,10 +344,9 @@ async function startOnVenuePrinter(deviceId: string): Promise<void> {
     .where(eq(devices.id, deviceId));
 }
 
-async function printJobsFor(
-  cfg: TradingContext,
-): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
-  void cfg;
+async function printJobsFor(): Promise<
+  { printerId: string; status: string; payload: Uint8Array }[]
+> {
   return withTransaction(suite.db, async (tx) => {
     return (
       await tx
@@ -361,7 +360,7 @@ async function printJobsFor(
   });
 }
 
-async function drawerOpensFor(cfg: TradingContext): Promise<
+async function drawerOpensFor(): Promise<
   {
     reason: string;
     saleId: string | null;
@@ -372,7 +371,6 @@ async function drawerOpensFor(cfg: TradingContext): Promise<
     viaOverride: boolean;
   }[]
 > {
-  void cfg;
   return withTransaction(suite.db, async (tx) => {
     return tx
       .select({
@@ -1028,7 +1026,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       expect(text).not.toContain(receiptLabelsFor("es-ES").taxableBase);
       expect(await saleCount()).toBe(1);
       expect(await fiscalRecordCount()).toBe(1);
-      expect(await drawerOpensFor(cfg)).toEqual([]);
+      expect(await drawerOpensFor()).toEqual([]);
     },
   );
 
@@ -1075,7 +1073,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
     expect(await saleCount()).toBe(1);
     expect(await fiscalRecordCount()).toBe(1);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("refuses absent, automatically retrying and completed originals even when a duplicate has failed", async () => {
@@ -1430,7 +1428,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       headers: { cookie },
     });
     expect(reprint.status).toBe(200);
-    const printed = decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload));
+    const printed = decodeTicket(new Uint8Array((await printJobsFor())[0]!.payload));
     expect(printed).toContain("Agua para clientes");
     expect(printed).not.toContain("Agua recién traducida");
     expect(printed).not.toContain("Staff water");
@@ -1460,7 +1458,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const reprint = () =>
       app.request(`/api/sales/${orderId}/reprint`, { method: "POST", headers: { cookie } });
     expect((await reprint()).status).toBe(200);
-    const beforeJob = (await printJobsFor(cfg))[0]!;
+    const beforeJob = (await printJobsFor())[0]!;
     const beforeText = decodeTicket(new Uint8Array(beforeJob.payload));
     expect(beforeText).toContain("Deli Recibos SL");
     expect(beforeText).toContain("Guest trading name");
@@ -1487,7 +1485,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     );
     expect(saved.changed).toBe(true);
     expect((await reprint()).status).toBe(200);
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(2);
     const text = decodeTicket(new Uint8Array(jobs[1]!.payload));
     expect(text).not.toContain("New venue display");
@@ -1523,7 +1521,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const workingOrderId = await ringSale(app, cookie, each.menuItemId);
     expect(await fiscalRecordCount()).toBe(1);
     expect(await saleCount()).toBe(1);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
       method: "POST",
@@ -1537,7 +1535,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
     // Exactly ONE new outbox job, to the device's printer, carrying the full receipt and NO drawer kick
     // (a reprint never opens the drawer).
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
     expect(jobs[0]!.status).toBe("queued");
@@ -1566,7 +1564,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       expect(res.status).toBe(200);
     }
     // Two paper jobs, one immutable fiscal record — a reprint never re-files.
-    expect(await printJobsFor(cfg)).toHaveLength(2);
+    expect(await printJobsFor()).toHaveLength(2);
     expect(await fiscalRecordCount()).toBe(1);
     expect(await saleCount()).toBe(1);
   });
@@ -1584,7 +1582,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       headers: { cookie },
     });
     expect(res.status).toBe(200); // nothing to reprint → no-op, no error
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
   });
 
   it("refuses with receipt.no_printer (409) when the device has no receipt printer set", async () => {
@@ -1605,7 +1603,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "receipt.no_printer" },
     });
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
     expect(await suite.db.select().from(receiptReprints)).toEqual([]);
     expect(await fiscalRecordCount()).toBe(1);
   });
@@ -1649,7 +1647,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(res.status).toBe(200);
 
     // Exactly ONE job — the kick and NOTHING else (no receipt): the payload equals the kick sequence.
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
     expect(jobs[0]!.status).toBe("queued");
@@ -1657,7 +1655,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect([...payload]).toEqual([...DRAWER_KICK]);
     expect(decodeTicket(payload)).not.toContain("VERI*FACTU"); // no receipt, just the kick
 
-    const opens = await drawerOpensFor(cfg);
+    const opens = await drawerOpensFor();
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
@@ -1682,8 +1680,8 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
       error: { code: "drawer.no_printer" },
     });
     // Refused before any write: no job, no audit row.
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("refuses an unattached cash drawer without writing a command or audit", async () => {
@@ -1698,8 +1696,8 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(await res.json()).toEqual({
       error: { code: "drawer.not_attached", params: { printerId } },
     });
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("requires a session (401 without one)", async () => {
@@ -1728,8 +1726,8 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "device.unauthorized", params: {} } });
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 });
 
@@ -1784,11 +1782,11 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
     const res = await press(till.cookie);
 
     expect(res.status).toBe(200);
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs.map((job) => [job.printerId, [...job.payload]])).toEqual([
       [printerId, [...DRAWER_KICK]],
     ]);
-    expect(await drawerOpensFor(cfg)).toEqual([
+    expect(await drawerOpensFor()).toEqual([
       {
         reason: "manual",
         saleId: null,
@@ -1812,8 +1810,8 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
     const res = await press(till.cookie);
 
     expect(res.status).toBe(200);
-    expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([ownPrinter]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+    expect((await printJobsFor()).map((job) => job.printerId)).toEqual([ownPrinter]);
+    expect((await drawerOpensFor()).map((row) => [row.deviceId, row.printerId])).toEqual([
       [till.deviceId, ownPrinter],
     ]);
   });
@@ -1827,8 +1825,8 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
 
     for (const till of [first, second]) expect((await press(till.cookie)).status).toBe(200);
 
-    expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([printerId, printerId]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+    expect((await printJobsFor()).map((job) => job.printerId)).toEqual([printerId, printerId]);
+    expect((await drawerOpensFor()).map((row) => [row.deviceId, row.printerId])).toEqual([
       [first.deviceId, printerId],
       [second.deviceId, printerId],
     ]);
@@ -1875,8 +1873,8 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
         params: code === "authorization.not_permitted" ? { permission: "cash.drawer" } : {},
       },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
   });
 
   it.each([false, true])(
@@ -1898,7 +1896,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
         ),
       });
       expect(res.status).toBe(200);
-      expect(await drawerOpensFor(cfg)).toEqual([
+      expect(await drawerOpensFor()).toEqual([
         {
           reason: "manual",
           saleId: null,
@@ -1993,7 +1991,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200); // the operator's OWN role satisfies the gate — no override needed
 
-    const opens = await drawerOpensFor(cfg);
+    const opens = await drawerOpensFor();
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
@@ -2001,7 +1999,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
       authorizedBy: supervisorId,
       viaOverride: false,
     });
-    expect(await printJobsFor(cfg)).toHaveLength(1); // the kick still fires
+    expect(await printJobsFor()).toHaveLength(1); // the kick still fires
   });
 
   it("a staff operator opens with a VALID supervisor override — via_override true, authorized_by the supervisor", async () => {
@@ -2022,7 +2020,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     // The audit records the OPERATOR who performed the open AND the supervisor who authorized it — the
     // authorized_by=supervisor + via_override=true pair is producible ONLY by authorize()'s override
     // branch consuming { personId: supervisorId, pin } and confirming the supervisor holds cash.drawer.
-    const opens = await drawerOpensFor(cfg);
+    const opens = await drawerOpensFor();
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
@@ -2031,7 +2029,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
       viaOverride: true,
     });
     // The kick still fires to the device's drawer printer.
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
   });
@@ -2051,8 +2049,8 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
       error: { code: "authorization.not_permitted" },
     });
     // The gate refuses before any write — no kick, no audit row.
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("the gate runs BEFORE the printer check — a staff operator with no override is 403 even with NO printer", async () => {
@@ -2087,8 +2085,8 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "pin.invalid" },
     });
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("an override by a VALID staff credential (correct PIN, lacks cash.drawer) is 403 — proves the PERMISSION is checked", async () => {
@@ -2111,7 +2109,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
@@ -2130,7 +2128,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "pin.invalid" },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("an override with a NON-STRING pin is 401 pin.invalid — never reaches verifyPin", async () => {
@@ -2152,7 +2150,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "pin.invalid" },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
@@ -2171,7 +2169,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "pin.invalid" },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
@@ -2207,7 +2205,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
       notAUuid: refused,
       wrongPin: refused,
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("a well-formed body with NO override, sent by staff, is still 403 (an empty body is no override)", async () => {
@@ -2281,13 +2279,13 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     expect(await throttled.json()).toEqual({
       error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
     });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
 
     clockAt.now += 2_001;
     const opened = await openWith(app, cookie, { personId: supervisorId, pin: "5555" });
     expect(opened.status).toBe(200);
-    expect(await drawerOpensFor(cfg)).toMatchObject([
+    expect(await drawerOpensFor()).toMatchObject([
       { personId: operatorId, authorizedBy: supervisorId, viaOverride: true },
     ]);
   });
@@ -2308,7 +2306,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
     expect((await openWith(app, cookie, { personId: supervisorId, pin: "5555" })).status).toBe(200);
     await wrongThrice();
     expect((await openWith(app, cookie, { personId: supervisorId, pin: "5555" })).status).toBe(200);
-    expect(await drawerOpensFor(cfg)).toHaveLength(2);
+    expect(await drawerOpensFor()).toHaveLength(2);
   });
 
   it("signing in again on the same till does not start the count again", async () => {
@@ -2414,7 +2412,7 @@ describe("original receipt and payment slip actions", () => {
       });
       expect(res.status).toBe(200);
     }
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(2);
     const original = jobs
       .map((j) => new Uint8Array(j.payload))
@@ -2614,7 +2612,7 @@ describe("payment slip persisted capture facts", () => {
         ),
       );
       expect(await slipAskedAtPayment(cfg, id)).toEqual({});
-      const jobs = await printJobsFor(cfg);
+      const jobs = await printJobsFor();
       expect(jobs).toHaveLength(1);
       const text = decodeTicket(new Uint8Array(jobs.at(-1)!.payload));
       const labels = receiptLabelsFor(saved);
@@ -2648,7 +2646,7 @@ describe("payment slip persisted capture facts", () => {
         ),
       );
       expect(await slipAskedAtPayment(cfg, id)).toEqual({});
-      const jobs = await printJobsFor(cfg);
+      const jobs = await printJobsFor();
       expect(jobs).toHaveLength(1);
       const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
       expect(text).toContain("JUSTIFICANTE DE PAGO");
@@ -2674,7 +2672,7 @@ describe("payment slip persisted capture facts", () => {
       ),
     );
     expect(await slipAskedAtPayment(cfg, id)).toEqual({});
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(1);
     const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
     const labels = receiptLabelsFor("es-ES");
@@ -2698,7 +2696,7 @@ describe("payment slip persisted capture facts", () => {
     expect(await cashSaleAskingSlip(app, cookie, each.menuItemId)).not.toHaveProperty(
       "slipPrintFailed",
     );
-    const [job] = (await printJobsFor(cfg)).filter((printed) =>
+    const [job] = (await printJobsFor()).filter((printed) =>
       decodeTicket(new Uint8Array(printed.payload)).includes("JUSTIFICANTE DE PAGO"),
     );
     const payload = new Uint8Array(job!.payload);
@@ -2728,7 +2726,7 @@ describe("payment slip with nothing to print", () => {
     });
     expect(await saleCount()).toBe(1);
     expect(await fiscalRecordCount()).toBe(1);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
   });
 
   it("prints no slip for a capture that records no settlement instant, and says so", async () => {
@@ -2745,7 +2743,7 @@ describe("payment slip with nothing to print", () => {
     );
     const log = vi.fn<Logger>();
     expect(await slipAskedAtPayment(cfg, id, log)).toEqual({ slipPrintFailed: true });
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
     expect(log.mock.calls).toEqual([
       ["warn", "payment.slip_print_failed", { workingOrderId: id, reason: "settlement_missing" }],
     ]);
@@ -2832,7 +2830,7 @@ describe("persisted cash receipt facts", () => {
       headers: { cookie },
     });
     expect(printed.status).toBe(200);
-    const jobs = await printJobsFor(cfg);
+    const jobs = await printJobsFor();
     expect(jobs).toHaveLength(1);
     const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
     expect(text).toMatch(/Efectivo\s+20,00/);
@@ -2868,7 +2866,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
     headers: { cookie },
   });
   expect(res.status).toBe(200);
-  const jobs = await printJobsFor(cfg);
+  const jobs = await printJobsFor();
   expect(jobs).toHaveLength(1);
   const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
   expect(text).toContain("Deli Recibos SL");
@@ -2952,14 +2950,14 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   });
 
   it("opens the drawer on an override while another writer commits during the PIN check", async () => {
-    const { app, cookie, supervisorId, operatorId, cfg } = await staffAtDrawerTill();
+    const { app, cookie, supervisorId, operatorId } = await staffAtDrawerTill();
     watchDerivations("5555", anotherWriter, anotherWriter, anotherWriter);
 
     const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
 
     expect(res.status).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
-    expect(await drawerOpensFor(cfg)).toEqual([
+    expect(await drawerOpensFor()).toEqual([
       expect.objectContaining({
         personId: operatorId,
         authorizedBy: supervisorId,
@@ -2969,7 +2967,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   });
 
   it("refuses an override whose supervisor is suspended while the PIN's key is being derived, writing nothing", async () => {
-    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    const { app, cookie, supervisorId } = await staffAtDrawerTill();
     watchDerivations("5555", suspend(supervisorId));
 
     const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "5555" });
@@ -2977,8 +2975,8 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
     expect(res.status).toBe(401);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.invalid");
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
   });
 
   it("derives no key for an override sent by an operator who holds cash.drawer", async () => {
@@ -2996,7 +2994,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   });
 
   it("checks a staff override outside the write lock before refusing the open", async () => {
-    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
+    const { app, cookie, supervisorId } = await staffAtDrawerTill();
 
     watchDerivations("0000", anotherWriter);
 
@@ -3004,13 +3002,13 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "pin.invalid", params: {} } });
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
+    expect(await printJobsFor()).toEqual([]);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
   });
 
   it("counts wrong override PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
-    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+    const { app, cookie, supervisorId } = await staffAtDrawerTill(
       createPinThrottle({ now: () => 1_000_000 }),
     );
 
@@ -3028,11 +3026,11 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
     // As many keys as when the five are sent in turn: none for the one the limit refuses.
     expect(derived).toBe(4);
     expect(right.status).toBe(429);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("derives no key for an override the wrong-PIN limit refuses", async () => {
-    const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill(
+    const { app, cookie, supervisorId } = await staffAtDrawerTill(
       createPinThrottle({ now: () => 1_000_000 }),
     );
     for (let i = 0; i < 4; i += 1) {
@@ -3045,7 +3043,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
     expect(res.status).toBe(429);
     expect(await watchedOrder()).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 });
 
@@ -3218,7 +3216,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     await ringSale(app, await signIn(device.cookie), each.menuItemId);
 
     expect(await jobs()).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("opens a handheld's drawer on a cash sale when its profile allows the drawer", async () => {
@@ -3238,7 +3236,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       [drawer, "drawer", [...DRAWER_KICK]],
     ]);
     expect(
-      (await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId, row.personId]),
+      (await drawerOpensFor()).map((row) => [row.reason, row.printerId, row.personId]),
     ).toEqual([["bill_payment", drawer, operatorId]]);
   });
 
@@ -3255,7 +3253,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     await ringSale(app, await signIn(till.cookie), each.menuItemId);
 
     expect(await jobs()).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("opens the drawer by hand from a handheld whose profile allows it", async () => {
@@ -3278,7 +3276,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     expect(res.status).toBe(200);
     expect((await jobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
     expect(
-      (await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId, row.personId]),
+      (await drawerOpensFor()).map((row) => [row.reason, row.printerId, row.personId]),
     ).toEqual([["manual", drawer, operatorId]]);
   });
 
@@ -3301,7 +3299,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
     });
     expect(await jobs()).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it("opens the drawer by hand on the device's drawer printer, not its receipt printer", async () => {
@@ -3325,7 +3323,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     expect((await jobs()).map((job) => [job.printerId, job.kind, job.payload])).toEqual([
       [drawer, "drawer", [...DRAWER_KICK]],
     ]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId])).toEqual([
+    expect((await drawerOpensFor()).map((row) => [row.reason, row.printerId])).toEqual([
       ["manual", drawer],
     ]);
   });
@@ -3349,7 +3347,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       error: { code: "drawer.no_printer", params: { deviceId: device.deviceId } },
     });
     expect(await jobs()).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 });
 
@@ -3462,7 +3460,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
   });
 
   it("enrolls the explicit original once with the requesting staff member, preserving invoice and drawer", async () => {
-    const { cfg, printerId, sale, post, supervisorId } = await issued();
+    const { printerId, sale, post, supervisorId } = await issued();
     const invoices = await suite.db.select().from(sales);
     const fiscal = await suite.db.select().from(registrosFacturacion);
     const responses = await Promise.all([post("receipt"), post("receipt")]);
@@ -3489,7 +3487,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     expect(decodeTicket(jobs[0]!.payload)).not.toContain("DUPLICADO");
     expect(await suite.db.select().from(sales)).toEqual(invoices);
     expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor()).toEqual([]);
   });
 
   it.each(["queued", "sent"] as const)(
@@ -3832,9 +3830,7 @@ describe("card details on the receipt", () => {
       headers: { cookie },
     });
     expect(reprint.status).toBe(200);
-    const lines = decodeTicket(new Uint8Array((await printJobsFor(cfg)).at(-1)!.payload)).split(
-      "\n",
-    );
+    const lines = decodeTicket(new Uint8Array((await printJobsFor()).at(-1)!.payload)).split("\n");
     const cardLine = lines.find((line) => line.includes("Visa ****4034"));
     expect(cardLine).toBeDefined();
     expect(cardLine).not.toContain("(");

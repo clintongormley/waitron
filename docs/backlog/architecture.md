@@ -1048,12 +1048,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 - **Unread configuration parameters remain in `apps/server/src` test code.** The test helpers
   `offerProducts`, `createTable` and `defaultLayout` (in `apps/server/src/testing/`) keep an unread
-  `_cfg` parameter (`git grep -n '_cfg:' apps/server/src`); the `asApp`, `printJobsFor`,
-  `drawerOpensFor` and `fiscalRecordCount` helpers in eight test files take a `cfg` they only
-  discard (`git grep -n 'void cfg;' apps/server/src`). Each is mechanical but touches every call
-  site: on 2026-11-22, from about 40 (`fiscalRecordCount`) to about 760 (`asApp`), counted as lines
-  matching `<name>(` with `git grep -c`, counting `asApp`, `printJobsFor`, `drawerOpensFor` and
-  `fiscalRecordCount` only in the files whose copy discards `cfg`.
+  `_cfg` parameter (`git grep -n '_cfg:' apps/server/src`); the `asApp` helper in six test files
+  takes a `cfg` it only discards (`git grep -n 'void cfg;' apps/server/src`). Each is mechanical
+  but touches every call site: on 2026-11-22 about 760 lines matching `asApp(` in those six files
+  (`git grep -c`).
 
 ## Bundle: Printer, reader and device delete wording
 
