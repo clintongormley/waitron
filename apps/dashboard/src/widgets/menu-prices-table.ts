@@ -458,7 +458,8 @@ export class MenuPricesTable extends LitElement {
     super.connectedCallback();
     this.#scope = draftScopeFor(this, {
       id: this,
-      current: () => this.#changes().length > 0,
+      // The submitted batch is already being sent and cannot be discarded on leave.
+      current: () => !this.saving && this.#changes().length > 0,
       snapshot: (dirty) => dirty,
       equal: (before, after) => before === after,
       restore: () => this.#cancel(),
@@ -871,6 +872,7 @@ export class MenuPricesTable extends LitElement {
       return;
     }
     this.saving = true;
+    this.#scope?.changed();
     const { saved, refused } = await this.savePrices(saves);
     if (!this.isConnected) return;
     const drafts = new Map(this.drafts);

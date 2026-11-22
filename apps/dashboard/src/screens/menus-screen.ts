@@ -1385,13 +1385,10 @@ export class MenusScreen extends LitElement {
   }
 
   #open(menuId: string, view: Tab = TABS[0], priceFilter: "clashes" | null = null): void {
-    if (this.menus.some((menu) => menu.id === menuId && menu.kind === "set_menu"))
-      view = "set-menu";
-    if (this.view !== "prices" || !navigationGuardFor(window)) {
-      this.#select(menuId);
-      this.showPriceClashes = priceFilter === "clashes";
-      this.#showView(view);
-    }
+    this.#select(menuId);
+    if (this.#selectedMenu()?.kind === "set_menu") view = "set-menu";
+    this.showPriceClashes = priceFilter === "clashes";
+    this.#showView(view);
     this.#url.write({ dashboard: "menus", menu: menuId, view, "price-filter": priceFilter });
   }
 

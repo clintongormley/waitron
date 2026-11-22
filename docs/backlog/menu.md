@@ -797,7 +797,9 @@ From A344 (#1375, a menu's Price overrides tab shows its clashes):
   one for every menu) wins over starting on Clashes; the red line still gives the count. Under
   Clashes a product that clashes itself stays folded until opened, as the table folds any row
   that matches a filter in its own right. Once a load has had no clash, a clash that comes back
-  (Undo, a live re-read) does not switch the filter back to Clashes.
+  (Undo, a live re-read) does not switch the filter back to Clashes. Update, 2026-11-22: the
+  [Save bar](../developers/design-system.md#a-value-saved-from-its-own-table-row) replaced Undo.
+  A live re-read still follows the same rule.
 
 From A345 (#1383, a menu with clashes cannot be published, from anywhere):
 

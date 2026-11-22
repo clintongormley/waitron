@@ -44,9 +44,14 @@ it.each([
   ["tab", structure],
   ["breadcrumb", "/menus"],
   ["browser Back", structure],
-])("keeps or discards price drafts when leaving by %s", async (via, destination) => {
+  ["tab while saving", structure],
+])("handles leaving Price overrides by %s", async (via, destination) => {
   history.replaceState(null, "", structure);
-  const write = vi.fn();
+  let finishSave!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finishSave = resolve;
+  });
+  const write = vi.fn(() => pending);
   const api = {
     listMenus: async () => [{ id: "lunch", name: "Lunch", kind: "menu", active: true }],
     listSections: async () => [],
@@ -79,13 +84,21 @@ it.each([
         ?.shadowRoot!.querySelector("input");
     await vi.waitFor(() => expect(field()).toBeInstanceOf(HTMLInputElement));
     await userEvent.fill(field()!, "11");
+    const structureTab = tab().shadowRoot!.querySelector('[data-key="structure"]')!;
+    if (via === "tab while saving") {
+      await userEvent.click(prices()!.shadowRoot!.querySelector('[data-test="prices-save"]')!);
+      expect(write).toHaveBeenCalledExactlyOnceWith("lunch", "burger", { grossPrice: "11" });
+      await userEvent.click(structureTab);
+      await vi.waitFor(() => expect(location.pathname).toBe(destination));
+      expect(dialog.open).toBe(false);
+      return;
+    }
+
     const leave = async () => {
       if (via === "browser Back") history.back();
       else {
         const control =
-          via === "tab"
-            ? tab().shadowRoot!.querySelector('[data-key="structure"]')
-            : screen.shadowRoot!.querySelector('[data-test="back"]');
+          via === "tab" ? structureTab : screen.shadowRoot!.querySelector('[data-test="back"]');
         await userEvent.click(control!);
       }
       await vi.waitFor(() => expect(dialog.open).toBe(true));
@@ -108,6 +121,7 @@ it.each([
     await guard.write(priceOverrides);
     await vi.waitFor(() => expect(field()?.value).toBe(""));
   } finally {
+    finishSave();
     guard.dispose();
   }
 });

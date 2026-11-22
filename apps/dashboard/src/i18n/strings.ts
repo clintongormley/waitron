@@ -3782,8 +3782,7 @@ export const en = {
     "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
   "menus.schedule_not_saved":
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
-  "menus.price_not_saved":
-    "The price change for {name} was not saved. Open Price overrides to try again.",
+  "menus.price_not_saved": "Could not save prices for {name}. Open Price overrides to try again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
   "menus.guest_sharing_unavailable":
     "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it.",
@@ -8538,7 +8537,7 @@ export const es: Record<StringKey, string> = {
   "menus.schedule_not_saved":
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.price_not_saved":
-    "No se ha guardado el cambio de precio de {name}. Abre Precios propios para volver a intentarlo.",
+    "No se pudieron guardar los precios de {name}. Abre Precios propios para volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
   "menus.guest_sharing_unavailable":
     "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",
