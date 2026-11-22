@@ -94,21 +94,23 @@ function checkMenuShells(tables: Readonly<Record<string, Rows>>): void {
 }
 
 /** Every top-level product has one takeaway rate from the beginning; a variant may have none and
- * takes its parent's. Checked only where the bundle carries the table, which it does whenever it
- * carries products. */
+ * takes its parent's. No product has two rates from one day. */
 function checkTakeawayVatRates(tables: Readonly<Record<string, Rows>>): void {
   const rates = tables.product_takeaway_vat_rates;
   if (rates === undefined) return;
-  const firstRows = new Map<unknown, number>();
-  for (const row of rates)
-    if (row.starts_on == null)
-      firstRows.set(row.product_id, (firstRows.get(row.product_id) ?? 0) + 1);
   const refuse = () => {
     throw new AppError("setup.request_invalid", { field: "product_takeaway_vat_rates" });
   };
-  for (const count of firstRows.values()) if (count > 1) refuse();
+  const days = new Set<string>();
+  const withFirstRow = new Set<unknown>();
+  for (const row of rates) {
+    const day = JSON.stringify([row.product_id, row.starts_on ?? null]);
+    if (days.has(day)) refuse();
+    days.add(day);
+    if (row.starts_on == null) withFirstRow.add(row.product_id);
+  }
   for (const row of tables.products ?? [])
-    if (row.parent_id == null && firstRows.get(row.id) !== 1) refuse();
+    if (row.parent_id == null && !withFirstRow.has(row.id)) refuse();
 }
 
 /** A takeaway rate the importing venue's area does not offer for picking is refused, as a save

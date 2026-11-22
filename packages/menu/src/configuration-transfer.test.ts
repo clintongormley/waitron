@@ -748,13 +748,27 @@ describe("validateMenuConfiguration: takeaway VAT rates", () => {
     ).toThrowError(refused);
   });
 
-  it("refuses a product with two rows from the beginning", () => {
+  it("refuses a variant with two rows from the beginning", () => {
     expect(() =>
       validateMenuConfiguration({
         products,
         product_takeaway_vat_rates: [
           { product_id: "gin", starts_on: null, rate: 1000 },
-          { product_id: "gin", starts_on: null, rate: 2100 },
+          { product_id: "single", starts_on: null, rate: 1000 },
+          { product_id: "single", starts_on: null, rate: 2100 },
+        ],
+      }),
+    ).toThrowError(refused);
+  });
+
+  it("refuses a product with two rows from one day", () => {
+    expect(() =>
+      validateMenuConfiguration({
+        products,
+        product_takeaway_vat_rates: [
+          { product_id: "gin", starts_on: null, rate: 1000 },
+          { product_id: "gin", starts_on: "2027-01-01", rate: 2100 },
+          { product_id: "gin", starts_on: "2027-01-01", rate: 1000 },
         ],
       }),
     ).toThrowError(refused);
