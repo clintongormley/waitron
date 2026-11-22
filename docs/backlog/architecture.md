@@ -390,6 +390,7 @@ On go-live day, make these changes together (owner, 2026-10-21 about 15:35–15:
    sweep again for procedures added since its pin and retain them in permanent docs or user
    guides. Then delete `docs/superpowers/` and `docs/handoffs/`, and gitignore both directories.
    Check permanent docs for links to the deleted files and keep any instructions still needed.
+3. Rewrite the **Pre-release** line under _Evidence on Hand_ in `PRODUCT.md`.
 
 Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-live day.
 The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,

@@ -42,7 +42,8 @@ What future design leads with (owner, 2026-11-22):
   card payment falls back to another route or cash. Losing the internet does not block one either,
   except while the box's time is unconfirmed: a box that files records and whose internet time
   service is not synchronised waits, after a start or a clock jump of over a minute, for its time to
-  be confirmed (`CLAUDE.md` §5).
+  be confirmed. Such a box also goes back to waiting, once, when the tax agency refuses as dated in
+  the future a record written since its time was last confirmed (`CLAUDE.md` §5).
   The box can also pause sales for reasons inside the venue, such as a full disk or a till that
   cannot reach the main box.
 - **The venue owns its till.** The source is available, a venue may run it on its own hardware at
@@ -98,8 +99,7 @@ venue having to think about it.
 - **Browsers:** features that are widely available may be used freely; newer ones only with a
   fallback, so an older iPad still works.
 - **Hard constraints that design must not work around:** tax records are permanent and invoice
-  numbers are never reused, so no screen may offer to edit or delete a filed record. Pre-release
-  data may be reset at any time until the first venue goes live.
+  numbers are never reused, so no screen may offer to edit or delete a filed record.
 
 ## Brand Commitments
 
