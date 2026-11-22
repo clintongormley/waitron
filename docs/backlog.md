@@ -1619,9 +1619,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
-- **The venue's menu routes are named unlike their neighbours.** S5 moved them to
-  `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
-  hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
+- **The venue's default-menu route is named unlike its neighbours.**
+  `/management-api/venue/default-menu` (`apps/server/src/menu-api.ts`) puts `venue` in a path
+  segment of its own, while every other venue route starts with one hyphenated segment
+  (`/management-api/venue-details`, `/venue-defaults`, `/venue-privacy`). Pick one shape before
   go-live.
 
 - **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
