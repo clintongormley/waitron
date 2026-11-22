@@ -6475,7 +6475,12 @@ it("signs in and out on a kitchen display without replacing its station board", 
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   pad.shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!.click();
   await screen!.updateComplete;
-  screen!.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+  const submit = screen!.shadowRoot!.querySelector<HTMLElement>(".submit")!;
+  const panel = screen!.shadowRoot!.querySelector<HTMLElement>(".compact")!;
+  expect(submit.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    panel.getBoundingClientRect().bottom,
+  );
+  submit.click();
   await flush(el);
   expect(api.login).toHaveBeenCalledWith("p1", "1");
   expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")?.textContent?.trim()).toBe(

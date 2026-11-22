@@ -77,7 +77,6 @@ import type { TillSaleResult } from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";

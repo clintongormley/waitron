@@ -89,6 +89,12 @@ export class TillLockScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      .compact .actions {
+        position: sticky;
+        inset-block-end: 0;
+        background: var(--wt-color-bg);
+      }
+
       .compact .roster {
         grid-template-columns: repeat(
           auto-fill,
@@ -521,15 +527,18 @@ export class TillLockScreen extends LitElement {
       </div>`;
     if (!this.compactOpen && (this.staff?.length ?? 0) === 0) return nothing;
     return html`<div class="compact">
-      <div class="compact-controls">
-        <wt-button
-          data-kitchen-sign-in
-          variant="secondary"
-          ?disabled=${this.signingIn}
-          @click=${() => void this.#showCompact(!this.compactOpen)}
-          >${t(this.compactOpen ? "action.cancel" : "action.login")}</wt-button
-        >
-      </div>
+      ${
+        this.selected === undefined
+          ? html`<div class="compact-controls">
+              <wt-button
+                data-kitchen-sign-in
+                variant="secondary"
+                @click=${() => void this.#showCompact(!this.compactOpen)}
+                >${t(this.compactOpen ? "action.cancel" : "action.login")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
       ${
         this.compactOpen
           ? html`<div class="screen">
