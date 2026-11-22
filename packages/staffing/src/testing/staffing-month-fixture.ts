@@ -87,6 +87,7 @@ export function staffingMonth(month = "2026-12"): StaffingMonth {
     month,
     today: "2026-12-02",
     areas: AREAS,
+    weekStatus: {},
     seasons: [
       { id: "autumn", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
       { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },

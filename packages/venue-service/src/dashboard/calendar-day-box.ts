@@ -149,6 +149,7 @@ export class CalendarDayBox extends LitElement {
   @property({ attribute: false }) rows: readonly DayBoxRow[] = [];
   @property({ type: Boolean }) sectioned = false;
   @property() message = "";
+  @property() detailLine = "";
   /** A failed read, drawn as an alert beside the rows it leaves shown, if any. */
   @property() error = "";
 
@@ -351,6 +352,7 @@ export class CalendarDayBox extends LitElement {
                 )
               : this.#rows(this.rows)
       }
+      ${this.detailLine ? html`<p class="line">${this.detailLine}</p>` : nothing}
       <div class="actions" ?hidden=${!this.hasActions}>
         <slot
           @slotchange=${(event: Event) =>

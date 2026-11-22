@@ -34,6 +34,12 @@ export async function readStaffingMonth(
     month,
     today: frame.today,
     areas,
+    weekStatus: Object.fromEntries(
+      [...rota.selected].map(([week, { status }]) => [
+        week,
+        status === "published" ? "published" : "draft",
+      ]),
+    ),
     seasons: frame.seasons.map(({ id, name, startsOn, lastDay, colour }) => ({
       id,
       name,

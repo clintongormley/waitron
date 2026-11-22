@@ -47,17 +47,10 @@ Before adding cadence editing, decide how the first partial period follows a clo
 Keep saved periods and snapshots intact. The
 [owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
-## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
+## A763 point 9. The Rota tab opens the week last picked
 
-**Owner, 2026-10-16.** The owner's point, as written:
-
-> **Staffing month: the Monday "Rota for this week" link goes**
-> (board 6; today the `rota-week` button in
-> `staffing-month.ts`), so Monday's box is the same height as the others. The day box already
-> offers "Rota for this week" on every day (A720 Part 5); it is still to state where that week's
-> rota stands. The Rota tab opens the week of the day last picked in the month, else the current
-> week.
-
+**Owner, 2026-10-16.** The Rota tab opens the week of the day last picked in Staffing, or the current week.
+[Original request and plan](../superpowers/plans/2026-11-22-d-a763-9-staffing-rota-week.md).
 
 ## A586. Each person's contract terms
 
@@ -183,9 +176,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Staffing month day box
 
-- **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
-  opens the week last picked (owner, 2026-10-16).**
-  [Detail](workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes).
+- **A763 point 9. The Rota tab opens the week last picked (owner, 2026-10-16).**
+  [Detail](#a763-point-9-the-rota-tab-opens-the-week-last-picked).
 
 ## Decisions and deliberate limits
 

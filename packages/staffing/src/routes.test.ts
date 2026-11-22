@@ -1020,7 +1020,7 @@ describe("the staffing paint routes", () => {
 });
 
 describe("the staffing month route", () => {
-  it("reads a month's slot counts to a viewer", async () => {
+  it("reads a month's slot counts and week status to a viewer", async () => {
     const p = await painted();
     await answers(
       await p.call("PUT", `${STAFFING}/seasons/${p.seasonId}?month=2026-06`, p.manager, {
@@ -1028,10 +1028,16 @@ describe("the staffing month route", () => {
       }),
       204,
     );
+    await withTransaction(suite.db, async (tx) => {
+      const backend = new WorkforceBackend();
+      const versionId = await backend.createRosterVersion(tx, { period: "2026-08-10" });
+      await backend.publishRoster(tx, { versionId });
+    });
     const response = await p.call("GET", `${STAFFING}/month?month=2026-08`, p.supervisor);
     expect(response.status).toBe(200);
     const month = (await response.json()) as StaffingMonth;
     expect(month.month).toBe("2026-08");
+    expect(month.weekStatus).toEqual({ "2026-08-10": "published" });
     expect(month.days.find((d) => d.date === "2026-08-21")!.areas).toEqual([
       {
         area: p.grill,

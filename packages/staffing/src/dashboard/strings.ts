@@ -114,6 +114,7 @@ const en = {
   "staffing.rota.working": "working {times}",
   "staffing.rota.show_everyone": "Show everyone",
   "staffing.rota.week_link": "Rota for this week",
+  "staffing.rota.week_status": "Week’s rota is {status}",
   "staffing.rota.empty": "No active areas.",
   "staffing.rota.unpainted_title": "No staffing is painted for {area} this week",
   "staffing.rota.unpainted_season":
@@ -341,6 +342,7 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.working": "trabajando {times}",
   "staffing.rota.show_everyone": "Mostrar a todo el equipo",
   "staffing.rota.week_link": "Turnos de esta semana",
+  "staffing.rota.week_status": "Turnos de la semana en estado {status}",
   "staffing.rota.empty": "No hay áreas activas.",
   "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
   "staffing.rota.unpainted_season":
