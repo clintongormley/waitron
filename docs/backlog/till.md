@@ -1400,23 +1400,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
   per dish count the part carved off comes back as a row of its own.
 
-## Bundle: Part-quantity handling of whole dishes
-
-1 entry, size S.
-
-- **A1197. Is part-quantity handling of a whole dish still reachable outside tests? (left open by
-  A803 slice 1, D12 and D26).** New dishes reach an order through `createOpenOrder`, `placeGroups`
-  and the whole-order save's new lines, and each of those stores every whole dish (a unit with no
-  decimal places, no scale and no measure) as a line of its own. Tests still write one line
-  holding several whole dishes: through grouped helpers in `apps/server/src/testing/`
-  (`addGroupedTabRound` in `order-writer-fixture.ts` is one), by pricing a round and inserting it
-  unexpanded, or by setting a row's quantity by hand. A803 slice 1's D12 kept the part-quantity
-  paths (part cancel, part serve, part split and transfer, part adjustment and item payment) for
-  measured lines and grouped counter lines. Not traced: which of them a
-  measured line still uses, and whether the save's rise of an existing line that is not a portion,
-  or a transfer's part row, can still produce a line of several whole dishes. Establish that, then
-  remove the rest together with the tests that reach them only through a grouped row a test wrote.
-
 ## Bundle: Add a device: loose ends from A268
 
 1 entry, size S.
@@ -1443,6 +1426,34 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Decisions and deliberate limits
 
+- **Keep part-quantity handling where it has a caller (A1197, watcher, 2026-11-22 03:30).**
+  Counter order creation, table rounds and new whole dishes in a save give each ordinary dish its
+  own row. A save can raise an existing unbound row in place, including from one whole dish to two.
+  The counter test starts with a row inserted without expansion, so it establishes the raise and
+  leaves the origin of such a row in current use unverified. Move dishes between bills moves
+  whole rows. A held-group move within a bill can carve an unbound row out of a measured or
+  already grouped row. That split and the one used for repricing feed the receipt and sale lines.
+  [Order creation and edits](../../apps/server/src/working-order.ts),
+  [table rounds](../../apps/server/src/order-groups.ts),
+  [Move dishes](../../apps/server/src/bill-actions.ts),
+  [raise tests](../../apps/server/src/order-portions.filing.test.ts).
+  - The till can serve or undo part of one row when its unit has zero decimal places and more than
+    one unit is available for the action. Measures such as centilitres can have zero decimal
+    places too. The till sends the available amount for a row with decimal places. The server
+    accepts a quantity in the line's precision for serve and undo. Finish table passes the
+    unserved amount to cancellation with the charge kept. For a line with decimal places the
+    server requires the whole available amount.
+    [Till serve and undo](../../apps/till/src/screens/till-table-order-screen.ts),
+    [server serve and undo](../../apps/server/src/working-order.ts),
+    [zero-decimal measure test](../../packages/menu/src/units.operations.test.ts),
+    [Finish table](../../apps/server/src/finish-party-service.ts),
+    [service cancellation](../../apps/server/src/line-cancel.ts).
+  - A cancellation that reduces the charge can take part of a measured row. A comp or discount
+    refuses a partial quantity on a line with decimal places. Item payment can take whole units
+    from a larger zero-decimal row without extras. These paths use the stored row and its unit
+    precision, so a zero-decimal check alone cannot identify an ordinary whole dish.
+    [Price adjustments](../../apps/server/src/adjustments-apply.ts),
+    [item payments](../../apps/server/src/bill-payments.ts).
 - **A table's seats are a guide, never a limit (owner, 2026-10-08, A429 decision 6).** The seat
   count is one number, used as a guide and for bookings; the till seats a larger party without a
   refusal.
@@ -2833,7 +2844,7 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1197, A1198, A1201 and A1217 under
+ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1198, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
