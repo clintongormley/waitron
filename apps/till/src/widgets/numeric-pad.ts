@@ -1,6 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, dispatchWtChange, decimalMark } from "@waitron/ui";
+import { baseStyles, dispatchWtChange, decimalMark, visuallyHiddenStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
@@ -73,19 +73,11 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
         width: 100%;
       }
 
-      /* Visually-hidden but kept in the accessibility tree, so the decimal and backspace keys take
-         their spoken name from slotted text rather than an aria-label on the roleless wt-button host
-         (which axe aria-prohibited-attr flags once the button is nested two shadow roots deep). */
+      /* The decimal and backspace keys take their spoken name from this slotted text rather than an
+         aria-label on the roleless wt-button host (which axe aria-prohibited-attr flags once the
+         button is nested two shadow roots deep). */
       .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+        ${visuallyHiddenStyles}
       }
     `,
   ];

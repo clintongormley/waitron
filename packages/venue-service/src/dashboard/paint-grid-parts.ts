@@ -3,7 +3,7 @@ import { styleMap } from "lit/directives/style-map.js";
 import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { popoverVisibilityStyles } from "@waitron/ui";
+import { popoverVisibilityStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { t } from "./strings.js";
 import { clockAt } from "../day-paint.js";
 import { stepMinuteAt } from "../paint-model.js";
@@ -566,12 +566,7 @@ export const paintGridStyles = css`
     border-block-end: var(--wt-field-line-width-active) solid var(--wt-color-danger);
   }
   .column-error {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
+    ${visuallyHiddenStyles}
   }
   .heading.corner {
     left: 0;

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
@@ -259,4 +260,21 @@ it("redraws its key names and decimal mark when the language changes while it is
   expect(spoken("backspace")).toBe("Borrar");
   expect(spoken(".")).toBe("Punto decimal");
   expect(mark()).toBe(",");
+});
+
+it("hides a key's spoken name from sight while keeping it in the accessibility tree", async () => {
+  const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "" });
+  const name = el.shadowRoot!.querySelector<HTMLElement>('[data-key="backspace"] .sr-only')!;
+  const style = getComputedStyle(name);
+  expect([style.position, style.width, style.height, style.overflow]).toEqual([
+    "absolute",
+    "1px",
+    "1px",
+    "hidden",
+  ]);
+  expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
+  expect(name.textContent!.trim()).toBe("Backspace");
+  await expect
+    .element(page.elementLocator(el).getByRole("button", { name: "Backspace", exact: true }))
+    .toBeInTheDocument();
 });

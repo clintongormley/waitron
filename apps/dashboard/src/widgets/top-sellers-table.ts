@@ -1,5 +1,6 @@
 import { type TemplateResult, css, html } from "lit";
 import { formatMoney } from "@waitron/shared";
+import { visuallyHiddenStyles } from "@waitron/ui";
 import { quantity } from "../quantity.js";
 import { currentLocale } from "../i18n/t.js";
 import type { TopSellerRow } from "../api/client.js";
@@ -75,14 +76,6 @@ export const topSellersStyles = css`
     font-weight: var(--wt-font-weight-normal);
   }
   .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+    ${visuallyHiddenStyles}
   }
 `;
