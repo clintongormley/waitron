@@ -18,6 +18,9 @@ function recordingApi() {
     updateSection: record("updateSection"),
     setIncludeFolder: record("setIncludeFolder"),
     setHomeDisplay: record("setHomeDisplay"),
+    addSectionMember: record("addSectionMember"),
+    removeSectionMember: record("removeSectionMember"),
+    moveSectionMembersInto: record("moveSectionMembersInto"),
   } as unknown as MenuUndoApi;
   return { api, calls };
 }
@@ -58,6 +61,28 @@ const display: MenuUndoCommand = {
   patch: { columns: 3 },
 };
 
+const ref = { kind: "product", productId: "p1" } as const;
+const addMember: MenuUndoCommand = {
+  method: "addSectionMember",
+  listId: "root",
+  ref,
+  position: 0,
+  name: "Soup",
+};
+const removeMember: MenuUndoCommand = {
+  method: "removeSectionMember",
+  listId: "mains",
+  memberId: "member-soup",
+  name: "Soup",
+};
+const moveMember: MenuUndoCommand = {
+  method: "moveSectionMembersInto",
+  listId: "root",
+  members: [{ listId: "mains", memberId: "member-soup" }],
+  position: 1,
+  name: "Soup",
+};
+
 describe("sendMenuUndo", () => {
   it.each([
     [rename, "renameMenu", ["m1", "Dinner"]],
@@ -70,6 +95,13 @@ describe("sendMenuUndo", () => {
       ["root", "include-drinks", { showAsFolder: true, overrides: { color: null } }],
     ],
     [display, "setHomeDisplay", ["m1", "handheld", { columns: 3 }]],
+    [addMember, "addSectionMember", ["root", ref, 0]],
+    [removeMember, "removeSectionMember", ["mains", "member-soup"]],
+    [
+      moveMember,
+      "moveSectionMembersInto",
+      ["root", [{ listId: "mains", memberId: "member-soup" }], 1],
+    ],
   ] as const)(
     "sends %o as one %s call with its arguments and no display name",
     async (command, method, args) => {
@@ -133,6 +165,49 @@ describe("undoRefusalText", () => {
     ],
   ] as const)("words %s from %o", (code, command, expected, params?: Record<string, unknown>) => {
     expect(undoRefusalText(refused(code, params), command)).toBe(expected);
+  });
+
+  it.each([
+    [
+      addMember,
+      "menu_section.not_found",
+      "The list Soup was in has been deleted.",
+      "Se ha eliminado la lista en la que estaba Soup.",
+    ],
+    [
+      removeMember,
+      "menu_section.not_found",
+      "The section is gone or Soup is no longer in it.",
+      "La sección ya no existe o Soup ya no está en ella.",
+    ],
+    [
+      moveMember,
+      "menu_section.not_found",
+      "The section is gone or Soup is no longer in it.",
+      "La sección ya no existe o Soup ya no está en ella.",
+    ],
+    [
+      addMember,
+      "menu_section.member_duplicate",
+      "That list already contains Soup.",
+      "Esa lista ya contiene Soup.",
+    ],
+    [
+      moveMember,
+      "menu_section.member_duplicate",
+      "That list already contains Soup.",
+      "Esa lista ya contiene Soup.",
+    ],
+    [
+      addMember,
+      "menu_section.membership_invalid",
+      "Soup is inactive, so it can't be put back. Make it active in Products, then try again.",
+      "Soup está inactivo y no se puede volver a añadir. Actívalo en Productos y vuelve a intentarlo.",
+    ],
+  ] as const)("words a placement refusal for %o and %s", (command, code, english, spanish) => {
+    expect(undoRefusalText(refused(code), command)).toBe(english);
+    setLocale("es");
+    expect(undoRefusalText(refused(code), command)).toBe(spanish);
   });
 
   it.each(["menu_section.not_found", "menu_section.wrong_role"])(

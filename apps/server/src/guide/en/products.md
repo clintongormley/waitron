@@ -336,6 +336,8 @@ own sections leaves the source as it was; included menus still point to the same
 Open **Preview** to review your changes before publishing. When a change offers **Undo**,
 choose it to restore its published value. For an included menu, this restores direct display or
 the folder along with the names, photo and colour it had when published.
+If you added, moved or removed a product in this menu's own lists, **Undo** can put it back
+where it was when you published.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 

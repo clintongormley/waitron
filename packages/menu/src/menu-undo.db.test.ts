@@ -11,16 +11,37 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
-import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";
+import {
+  menusFixture,
+  offerOf,
+  product,
+  section,
+  type MenusFixture,
+} from "../test/menus-fixture.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
 import type { MenuChange, MenuPreview } from "@waitron/shared";
 import { readMenuHome, setHomeDisplay } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { menuChangeActions, type MenuChangeAction, type MenuUndoCommand } from "./menu-undo.js";
-import { updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
+import {
+  createMenu,
+  deactivateMenu,
+  updateMenuDetails,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { createSectionIn, updateSection, SECTION_NAME } from "./sections.js";
+import {
+  addMember,
+  createSectionIn,
+  deleteSection,
+  listMembers,
+  moveMembersInto,
+  removeMember,
+  updateSection,
+  SECTION_NAME,
+} from "./sections.js";
 import { setMenuVariantPrice, setProductVariants } from "./variants.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
@@ -51,6 +72,12 @@ function run(tx: Transaction, command: MenuUndoCommand): Promise<unknown> {
       return updateSection(tx, command.sectionId, command.patch);
     case "setIncludeFolder":
       return setIncludeFolder(tx, command.listId, command.memberId, command.input);
+    case "addSectionMember":
+      return addMember(tx, command.listId, command.ref, command.position);
+    case "removeSectionMember":
+      return removeMember(tx, command.listId, command.memberId);
+    case "moveSectionMembersInto":
+      return moveMembersInto(tx, command.listId, command.members, command.position);
     case "setHomeDisplay":
       return setHomeDisplay(tx, command.menuId, command.device, command.patch);
   }
@@ -776,5 +803,247 @@ describe("variant price Undo", () => {
         fields: expect.arrayContaining(["variants"]),
       }),
     );
+  });
+});
+
+describe("product placement Undo", () => {
+  type PlacementChange = "product_added" | "product_moved" | "product_removed";
+
+  const placementOf = (kind: PlacementChange, productId: string) => (change: MenuChange) =>
+    change.kind === kind && change.productId === productId;
+
+  async function undoPlacement(f: MenusFixture, kind: PlacementChange, productId: string) {
+    await app((tx) => updateMenuDetails(tx, f.dinner, { name: "Dinner specials" }));
+    const command = await undoAndCheck(f.dinner, f.lunch, placementOf(kind, productId));
+    expect((await readPreview(f.dinner)).changes.map(({ kind }) => kind)).toEqual(["menu_renamed"]);
+    return command;
+  }
+
+  async function removeProduct(listId: string, productId: string) {
+    await app(async (tx) => {
+      const member = (await listMembers(tx, listId)).find(
+        ({ ref }) => ref.kind === "product" && ref.productId === productId,
+      )!;
+      await removeMember(tx, listId, member.id);
+    });
+  }
+
+  async function storedRefs(listId: string) {
+    return (await app((tx) => listMembers(tx, listId))).map(({ ref }) => ref);
+  }
+
+  it("takes a newly added product out of its one own list", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    const member = await app((tx) => addMember(tx, f.mains, product(f.soup)));
+
+    expect(await undoPlacement(f, "product_added", f.soup)).toEqual({
+      method: "removeSectionMember",
+      listId: f.mains,
+      memberId: member.id,
+      name: "Soup",
+    });
+    expect(await storedRefs(f.mains)).toEqual([product(f.burger)]);
+  });
+
+  it("offers no Undo for a new product added to two lists", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.dinner);
+    await app(async (tx) => {
+      await addMember(tx, f.mains, product(f.soup));
+      await addMember(tx, f.dinnerRoot, product(f.soup));
+    });
+
+    const { action } = await changeAndAction(
+      await readPreview(f.dinner),
+      placementOf("product_added", f.soup),
+    );
+    expect(action).toEqual({ kind: "none" });
+  });
+
+  it.each(["product_added", "product_removed"] as const)(
+    "opens the included menu for its %s change",
+    async (kind) => {
+      const f = await menusFixture(fx.db);
+      await publish(f.dinner);
+      const added = kind === "product_added";
+      const id = added ? f.soup : f.lager;
+      if (added) await app((tx) => addMember(tx, f.drinks, product(id)));
+      else await removeProduct(f.beer, id);
+
+      const { action } = await changeAndAction(await readPreview(f.dinner), placementOf(kind, id));
+      expect(action).toEqual({ kind: "edit_menu", menuId: f.drinksMenu, tab: "structure" });
+    },
+  );
+
+  it.each(["added", "removed"] as const)(
+    "puts back one %s placement while the product stays on the menu",
+    async (change) => {
+      const f = await menusFixture(fx.db);
+      const addSecond = () => app((tx) => addMember(tx, f.dinnerRoot, product(f.burger), 0));
+      if (change === "removed") await addSecond();
+      await setDishPrice(f.dinner, f.burger, "13.50");
+      await publish(f.lunch);
+      await publish(f.dinner);
+      const publishedOrder = await storedRefs(f.dinnerRoot);
+      if (change === "added") await addSecond();
+      else await removeProduct(f.dinnerRoot, f.burger);
+
+      expect((await undoPlacement(f, "product_moved", f.burger)).method).toBe(
+        change === "added" ? "removeSectionMember" : "addSectionMember",
+      );
+      expect(await storedRefs(f.dinnerRoot)).toEqual(publishedOrder);
+      expect(offerIn(await readPreview(f.dinner), f.burger).grossPrice).toBe("13.50");
+    },
+  );
+
+  it("moves the stored member back at its published position and keeps its menu price", async () => {
+    const f = await menusFixture(fx.db);
+    const burger = (await app((tx) => listMembers(tx, f.mains)))[0]!;
+    await app(async (tx) => {
+      await addMember(tx, f.mains, product(f.soup), 0);
+      await addMember(tx, f.mains, product(f.lemonade));
+    });
+    await setDishPrice(f.dinner, f.burger, "13.50");
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) =>
+      moveMembersInto(tx, f.dinnerRoot, [{ listId: f.mains, memberId: burger.id }]),
+    );
+
+    expect(await undoPlacement(f, "product_moved", f.burger)).toEqual({
+      method: "moveSectionMembersInto",
+      listId: f.mains,
+      members: [{ listId: f.dinnerRoot, memberId: burger.id }],
+      position: 1,
+      name: "Burger",
+    });
+    expect(await app((tx) => listMembers(tx, f.mains))).toEqual([
+      expect.objectContaining({ ref: product(f.soup), position: 0 }),
+      { ...burger, position: 1 },
+      expect.objectContaining({ ref: product(f.lemonade), position: 2 }),
+    ]);
+    expect(offerIn(await readPreview(f.dinner), f.burger).grossPrice).toBe("13.50");
+  });
+
+  it.each(["two placements", "the containing section"] as const)(
+    "offers no product Undo after moving %s",
+    async (moved) => {
+      const f = await menusFixture(fx.db);
+      const another = await app((tx) =>
+        createSectionIn(tx, f.dinnerRoot, { internalName: "Another" }),
+      );
+      const third =
+        moved === "two placements"
+          ? await app(async (tx) => {
+              await addMember(tx, f.dinnerRoot, product(f.burger));
+              return createSectionIn(tx, f.dinnerRoot, { internalName: "Third" });
+            })
+          : null;
+      await publish(f.dinner);
+      await app(async (tx) => {
+        if (third !== null) {
+          const rootBurger = (await listMembers(tx, f.dinnerRoot)).find(
+            ({ ref }) => ref.kind === "product" && ref.productId === f.burger,
+          )!;
+          await moveMembersInto(tx, another.id, [
+            { listId: f.dinnerRoot, memberId: rootBurger.id },
+          ]);
+          const [burger] = await listMembers(tx, f.mains);
+          await moveMembersInto(tx, third.id, [{ listId: f.mains, memberId: burger!.id }]);
+        } else {
+          const mains = (await listMembers(tx, f.dinnerRoot)).find(
+            ({ ref }) => ref.kind === "section" && ref.sectionId === f.mains,
+          )!;
+          await moveMembersInto(tx, another.id, [{ listId: f.dinnerRoot, memberId: mains.id }]);
+        }
+      });
+
+      const { action } = await changeAndAction(
+        await readPreview(f.dinner),
+        placementOf("product_moved", f.burger),
+      );
+      expect(action).toEqual({ kind: "none" });
+    },
+  );
+
+  it("restores a removed product after its published include sibling, counting a stored hidden sibling", async () => {
+    const f = await menusFixture(fx.db);
+    const hidden = await app(async (tx) => {
+      const menu = await createMenu(tx, { name: "Hidden menu" });
+      const { rootSectionId } = await readMenuStructure(tx, menu.id);
+      await addMember(tx, f.dinnerRoot, section(rootSectionId), 0);
+      await deactivateMenu(tx, menu.id);
+      await addMember(tx, f.dinnerRoot, product(f.soup), 2);
+      return rootSectionId;
+    });
+    await publish(f.lunch);
+    await publish(f.dinner);
+    const published = await readPreview(f.dinner);
+    expect(published.document.root.members.map((member) => member.kind)).toEqual([
+      "section",
+      "product",
+      "section",
+    ]);
+    await removeProduct(f.dinnerRoot, f.soup);
+
+    expect(await undoPlacement(f, "product_removed", f.soup)).toEqual({
+      method: "addSectionMember",
+      listId: f.dinnerRoot,
+      ref: product(f.soup),
+      position: 2,
+      name: "Soup",
+    });
+    expect(await storedRefs(f.dinnerRoot)).toEqual([
+      section(hidden),
+      section(f.drinks),
+      product(f.soup),
+      section(f.mains),
+    ]);
+  });
+
+  it.each([
+    "its own price",
+    "its variant price",
+    "a deleted list",
+    "a hidden placement",
+    "an inactive product",
+  ] as const)("offers no Undo for a product removed with %s", async (condition) => {
+    const f = await menusFixture(fx.db);
+    const id = condition === "its variant price" ? f.lemonade : f.burger;
+    if (condition === "its own price") await setDishPrice(f.dinner, id, "13.50");
+    if (condition === "its variant price") {
+      await app(async (tx) => {
+        const include = (await listMembers(tx, f.dinnerRoot)).find(
+          ({ ref }) => ref.kind === "section" && ref.sectionId === f.drinks,
+        )!;
+        await removeMember(tx, f.dinnerRoot, include.id);
+        await addMember(tx, f.mains, product(id));
+      });
+      await setVariantPrice(f.dinner, id, f.large, "3.80");
+    }
+    if (condition === "a hidden placement")
+      await app(async (tx) => {
+        const hidden = await createMenu(tx, { name: "Hidden menu" });
+        const { rootSectionId } = await readMenuStructure(tx, hidden.id);
+        await addMember(tx, rootSectionId, product(id));
+        await addMember(tx, f.dinnerRoot, section(rootSectionId));
+        await deactivateMenu(tx, hidden.id);
+      });
+    await publish(f.dinner);
+    if (condition === "a deleted list") await app((tx) => deleteSection(tx, f.mains));
+    else if (condition === "an inactive product")
+      await app(async (tx) => {
+        await deactivateMenu(tx, f.dinner);
+        await updateProduct(tx, id, { active: false });
+      });
+    else await removeProduct(f.mains, id);
+
+    const { action } = await changeAndAction(
+      await readPreview(f.dinner),
+      placementOf("product_removed", id),
+    );
+    expect(action).toEqual({ kind: "none" });
   });
 });
