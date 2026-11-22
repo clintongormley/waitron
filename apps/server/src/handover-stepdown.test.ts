@@ -679,7 +679,7 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
-  it("a supersession naming no successor writes no restriction and still restarts", async () => {
+  it("a supersession naming no successor writes no restriction, names no other box on the page, and still restarts", async () => {
     const r = rig(suite.node);
     r.app.post("/no-successor", async (c) =>
       c.json(

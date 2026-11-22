@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -356,13 +357,8 @@ describe("a closed gate's page for a person", () => {
       expect(html).toContain("<h1>This box is standing down</h1>");
       expect(html).toContain("<p>Another box now runs the venue.</p>");
       expect(html).toContain("<p>Restarting…</p>");
+      expect(res.headers.get("x-waitron-standing-down")).toBe("1");
       const script = scriptOf(html);
-      expect(script).toContain("location.pathname + location.search");
-      expect(script).toContain('cache: "no-store"');
-      expect(script).toContain('headers: { accept: "text/html" }');
-      expect(script).toContain("AbortSignal.timeout(5000)");
-      expect(script).toContain("response.ok");
-      expect(script).toContain("setTimeout(ask, 5000)");
       const hash = createHash("sha256").update(script).digest("base64");
       const policy = res.headers.get("content-security-policy") ?? "";
       expect(policy).toContain("default-src 'none'");
@@ -374,6 +370,78 @@ describe("a closed gate's page for a person", () => {
         .slice(1);
       expect(scriptSrc).toContain(`'sha256-${hash}'`);
       expect(scriptSrc).toHaveLength(2);
+    },
+  );
+
+  type Answer = () => Promise<Response>;
+
+  async function runAsking(answers: Answer[], turns: number) {
+    const html = await (await closedApp().request("/till/")).text();
+    const timers: (() => void)[] = [];
+    const asked: { to: string; init: RequestInit }[] = [];
+    const replaced: string[] = [];
+    runInNewContext(scriptOf(html), {
+      location: {
+        pathname: "/till/",
+        search: "?x=1",
+        replace: (to: string) => replaced.push(to),
+      },
+      fetch: (to: string, init: RequestInit) => (asked.push({ to, init }), answers.shift()!()),
+      setTimeout: (fn: () => void, ms: number) => (expect(ms).toBe(5000), timers.push(fn)),
+      AbortSignal: { timeout: (ms: number) => ({ timeoutMs: ms }) },
+    });
+    for (let turn = 0; turn < turns; turn++) {
+      expect(timers).toHaveLength(1);
+      timers.shift()!();
+      await new Promise((r) => setImmediate(r));
+    }
+    return { timers, asked, replaced };
+  }
+
+  const plain =
+    (status: number): Answer =>
+    () =>
+      Promise.resolve(new Response("", { status }));
+
+  it("keeps asking through a failed request, its own page and a gateway's 502, 503 or 504, then moves on a 200", async () => {
+    const { timers, asked, replaced } = await runAsking(
+      [
+        () => Promise.reject(new TypeError("Failed to fetch")),
+        async () => closedApp().request("/till/?x=1"),
+        plain(502),
+        plain(503),
+        plain(504),
+        plain(200),
+      ],
+      6,
+    );
+    expect(asked.map((a) => a.to)).toEqual(Array(6).fill("/till/?x=1"));
+    expect(asked[0]!.init).toEqual({
+      cache: "no-store",
+      headers: { accept: "text/html" },
+      signal: { timeoutMs: 5000 },
+    });
+    expect(replaced).toEqual(["/till/?x=1"]);
+    expect(timers).toHaveLength(0);
+  });
+
+  it.each([200, 404, 500])(
+    "keeps asking on a %i carrying the standing-down mark",
+    async (status) => {
+      const marked: Answer = () =>
+        Promise.resolve(new Response("", { status, headers: { "X-Waitron-Standing-Down": "1" } }));
+      const { timers, replaced } = await runAsking([marked, plain(200)], 2);
+      expect(replaced).toEqual(["/till/?x=1"]);
+      expect(timers).toHaveLength(0);
+    },
+  );
+
+  it.each([404, 500])(
+    "moves on an unmarked %i, the answer of a box restarted into recovery or a failed restricted page",
+    async (status) => {
+      const { timers, replaced } = await runAsking([plain(status)], 1);
+      expect(replaced).toEqual(["/till/?x=1"]);
+      expect(timers).toHaveLength(0);
     },
   );
 

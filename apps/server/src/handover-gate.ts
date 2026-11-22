@@ -33,14 +33,18 @@ function isPersonPage(c: Context): boolean {
   return path === "/till" || path.startsWith("/till/") || isDashboardPath(path);
 }
 
-// Asks by script rather than a `Refresh` header: a refresh that lands while the restarting box has
-// no listener leaves the browser on its own error page, which never asks again.
+const STANDING_DOWN_HEADER = "X-Waitron-Standing-Down";
+
+// Asks by script rather than a `Refresh` header: in Chromium, a refresh that lands while the
+// restarting box has no listener leaves its own error page, which never asks again. An unmarked
+// 502, 503 or 504 keeps it asking too: a gateway in front of a box with no listener may give one.
 const ASK_AGAIN_SCRIPT = `(() => {
   const here = location.pathname + location.search;
   const ask = async () => {
     try {
       const response = await fetch(here, { cache: "no-store", headers: { accept: "text/html" }, signal: AbortSignal.timeout(5000) });
-      if (response.ok) return location.replace(here);
+      if (response.headers.get("${STANDING_DOWN_HEADER.toLowerCase()}") === null && ![502, 503, 504].includes(response.status))
+        return location.replace(here);
     } catch {}
     setTimeout(ask, 5000);
   };
@@ -52,6 +56,7 @@ function standingDownPage(c: Context, successorKnown: boolean): Response {
   const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
   const text = STANDING_DOWN_PAGE_WORDS[locale];
   c.header("Vary", "Accept-Language");
+  c.header(STANDING_DOWN_HEADER, "1");
   const successor = successorKnown ? `<p>${escapeHtml(text.body)}</p>\n` : "";
   return boxPageAnswer(
     c,
@@ -71,8 +76,8 @@ ${successor}<p>${escapeHtml(text.restarting)}</p>
 /**
  * Counts the requests inside while open; once closed, refuses every request `allowed` does not name:
  * a GET or HEAD of a till or dashboard page gets the standing-down page, anything else the
- * boundary's JSON refusal. A Hono middleware is not inside a route's error boundary, so both are
- * written directly rather than thrown.
+ * boundary's JSON refusal (an `/api/*` preflight aside, below). A Hono middleware is not inside a
+ * route's error boundary, so both are written directly rather than thrown.
  *
  * The gate runs ahead of the start's own CORS layer, so a closed gate applies `cors` itself to an
  * `/api/*` refusal and answers that path's preflight: without them a till on another box's page
