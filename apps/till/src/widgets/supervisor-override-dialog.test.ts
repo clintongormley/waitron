@@ -6,6 +6,8 @@ import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   TillSupervisorOverrideDialog,
+  approverRefusal,
+  refusalCode,
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
 import type { StaffMember } from "../api/client.js";
@@ -306,5 +308,125 @@ describe("typing the supervisor's PIN with a keyboard", () => {
     const { el } = await pinFor();
     expect(pad(el)).not.toBeNull();
     expect(textFieldsIn(root(el))).toEqual([]);
+  });
+});
+
+describe("a throttled approval PIN counts down like sign-in", () => {
+  const countdown = (n: number) => t("override.throttled").replace("{n}", String(n));
+  const authorize = (el: TillSupervisorOverrideDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>(".authorize")!;
+
+  async function throttledFor(seconds: number) {
+    const { el } = await mount();
+    await pick(el, "sup-1");
+    el.error = { code: "pin.throttled", retryAfterSeconds: seconds };
+    await el.updateComplete;
+    return el;
+  }
+
+  it("shows the seconds left, keeps them while the person types, and ticks down", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await throttledFor(3);
+      expect((await shownError(el))!.textContent!.trim()).toBe(
+        "Too many wrong PINs. Try again in 3s",
+      );
+
+      await typePin(el, "12");
+      expect((await shownError(el))!.textContent!.trim()).toBe(countdown(3));
+      expect(authorize(el).disabled).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await el.updateComplete;
+      expect((await shownError(el))!.textContent!.trim()).toBe(countdown(2));
+      expect(authorize(el).disabled).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await el.updateComplete;
+      expect(await shownError(el)).toBeNull();
+      expect(authorize(el).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not authorize with Enter or a click while counting", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await throttledFor(2);
+      const confirmed = vi.fn();
+      el.addEventListener("override-confirm", confirmed);
+      await typePin(el, "1234");
+      authorize(el).click();
+      pad(el)!.dispatchEvent(new CustomEvent("pad-enter"));
+      await el.updateComplete;
+      expect(confirmed).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts the count for a new refusal", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await throttledFor(3);
+      await vi.advanceTimersByTimeAsync(2000);
+      el.error = null;
+      await el.updateComplete;
+      el.error = { code: "pin.throttled", retryAfterSeconds: 5 };
+      await el.updateComplete;
+      expect((await shownError(el))!.textContent!.trim()).toBe(countdown(5));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends the count when the person goes Back, so another approver can try at once", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await throttledFor(30);
+      root(el).querySelector<HTMLElement>(".back")!.click();
+      await el.updateComplete;
+      await pick(el, "adm-1");
+      expect(await shownError(el)).toBeNull();
+      await typePin(el, "1");
+      expect(authorize(el).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the wait-a-moment wording when the refusal carries no seconds", async () => {
+    const el = await throttledFor(0);
+    expect((await shownError(el))!.textContent!.trim()).toBe(t("pin.throttled"));
+    await typePin(el, "1");
+    expect(authorize(el).disabled).toBe(false);
+  });
+
+  it("counts in Spanish", async () => {
+    const { el } = await mount();
+    setLocale("es-ES");
+    await pick(el, "sup-1");
+    el.error = { code: "pin.throttled", retryAfterSeconds: 4 };
+    await el.updateComplete;
+    expect((await shownError(el))!.textContent!.trim()).toBe(
+      es["override.throttled"].replace("{n}", "4"),
+    );
+  });
+});
+
+describe("approverRefusal", () => {
+  it("keeps a throttled refusal's seconds and reduces everything else to its code", () => {
+    expect(approverRefusal({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 })).toEqual({
+      code: "pin.throttled",
+      retryAfterSeconds: 5,
+    });
+    expect(approverRefusal({ code: "pin.throttled", status: 429 })).toBe("pin.throttled");
+    expect(approverRefusal({ code: "pin.throttled", retryAfterSeconds: 0 })).toBe("pin.throttled");
+    expect(approverRefusal({ code: "pin.invalid", retryAfterSeconds: 5 })).toBe("pin.invalid");
+    expect(approverRefusal(new Error("boom"))).toBe("server.internal");
+    expect(refusalCode({ code: "pin.throttled", retryAfterSeconds: 5 })).toBe("pin.throttled");
+    expect(refusalCode("pin.invalid")).toBe("pin.invalid");
+    expect(refusalCode(null)).toBeNull();
   });
 });

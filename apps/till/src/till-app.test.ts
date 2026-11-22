@@ -6673,6 +6673,28 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("counts the approver's wait down in the drawer's PIN prompt after too many wrong PINs", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+    overrideDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+    await flush(el);
+
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el);
+
+    const actions = overrideDialog(el)!.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe(t("override.throttled").replace("{n}", "5"));
+  });
+
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],

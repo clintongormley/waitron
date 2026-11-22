@@ -645,6 +645,26 @@ describe("till-app: an adjustment someone must approve", () => {
     expect(dialog(el)).not.toBeNull();
   });
 
+  it("counts the approver's wait down in the PIN prompt after too many wrong PINs", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
+      applyAdjustment: vi
+        .fn()
+        .mockRejectedValue({ code: "pin.throttled", retryAfterSeconds: 5, status: 429 }),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    await pinPad(el, "7777");
+
+    expect(
+      (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
+        .textContent,
+    ).toBe("Too many wrong PINs. Try again in 5s");
+    expect(dialog(el)).not.toBeNull();
+  });
+
   it("goes back to the confirm step when the approver prompt is cancelled", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),

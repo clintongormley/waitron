@@ -674,6 +674,7 @@ export const en = {
   "override.enter_pin": "Enter their PIN",
   "override.no_supervisors": "Nobody here can approve this",
   "override.error": "Could not authorize, try again",
+  "override.throttled": "Too many wrong PINs. Try again in {n}s",
   // Quantity entry for fractional and hardware-mapped units.
   "weigh.prompt": "Enter quantity",
   // Held (parked) orders
@@ -2986,6 +2987,7 @@ export const es: Record<StringKey, string> = {
   "override.enter_pin": "Introduce su PIN",
   "override.no_supervisors": "Aquí nadie puede aprobarlo",
   "override.error": "No se pudo autorizar, inténtalo de nuevo",
+  "override.throttled": "Demasiados PIN incorrectos. Inténtalo de nuevo en {n}s",
   "weigh.prompt": "Introduce la cantidad",
   "held.label_prompt": "Nombra este pedido (opcional)",
   "held.title": "Pedidos aparcados",

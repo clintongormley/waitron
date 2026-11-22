@@ -17,6 +17,31 @@ export interface OverrideConfirmDetail {
   pin: string;
 }
 
+/** An approver's PIN refused: its code, or a throttled refusal with the seconds the server makes them wait. */
+export type ApproverRefusal = string | { code: string; retryAfterSeconds: number };
+
+/** The refusal a thrown request error hands the dialog: the wait travels only with `pin.throttled`. */
+export function approverRefusal(error: unknown): ApproverRefusal {
+  const { code, retryAfterSeconds } = (error ?? {}) as {
+    code?: unknown;
+    retryAfterSeconds?: unknown;
+  };
+  if (typeof code !== "string") return "server.internal";
+  return code === "pin.throttled" && typeof retryAfterSeconds === "number" && retryAfterSeconds > 0
+    ? { code, retryAfterSeconds }
+    : code;
+}
+
+function waitSeconds(refusal: ApproverRefusal | null): number {
+  return refusal === null || typeof refusal === "string"
+    ? 0
+    : Math.max(0, refusal.retryAfterSeconds);
+}
+
+export function refusalCode(refusal: ApproverRefusal | null): string | null {
+  return refusal === null || typeof refusal === "string" ? refusal : refusal.code;
+}
+
 /** It NEVER surfaces the raw code — a domain code is an internal contract, not UI copy. */
 export function overrideErrorText(code: string): string {
   if (code === "pin.invalid" || code === "pin.throttled") return t(code);
@@ -64,12 +89,15 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   @property({ attribute: false }) authorizers: StaffMember[] = [];
 
-  @property() error: string | null = null;
+  @property({ attribute: false }) error: ApproverRefusal | null = null;
 
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private dismissed = false;
   @state() private active = true;
+  /** Seconds left before the chosen approver may try again; `0` when no wait runs. */
+  @state() private throttleRemaining = 0;
+  #throttleTimer?: ReturnType<typeof setInterval>;
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -82,6 +110,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   override disconnectedCallback(): void {
     this.pin = "";
+    this.#endThrottle();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -91,7 +120,12 @@ export class TillSupervisorOverrideDialog extends LitElement {
   /** A freshly-delivered error (the parent nulls then re-sets it per attempt) must always show, even
    * after the operator dismissed the previous one by typing — so any change to `error` re-arms it. */
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("error")) this.dismissed = false;
+    if (changed.has("error")) {
+      this.dismissed = false;
+      this.#endThrottle();
+      const seconds = waitSeconds(this.error);
+      if (seconds > 0) this.#startThrottle(seconds);
+    }
     if (!this.active || this.#scope) return;
     this.#leave = leaveCoordinatorFor(this);
     this.#scope = this.#leave?.register<string>({
@@ -113,6 +147,21 @@ export class TillSupervisorOverrideDialog extends LitElement {
     return t(supervisor[which]);
   }
 
+  #startThrottle(seconds: number): void {
+    this.throttleRemaining = Math.ceil(seconds);
+    this.#throttleTimer = setInterval(() => {
+      this.throttleRemaining -= 1;
+      if (this.throttleRemaining <= 0) this.#endThrottle();
+    }, 1000);
+  }
+
+  #endThrottle(): void {
+    this.throttleRemaining = 0;
+    if (this.#throttleTimer === undefined) return;
+    clearInterval(this.#throttleTimer);
+    this.#throttleTimer = undefined;
+  }
+
   #select(person: StaffMember): void {
     if (!this.isConnected || !this.active) return;
     this.selected = person;
@@ -124,6 +173,8 @@ export class TillSupervisorOverrideDialog extends LitElement {
   #back(): void {
     if (!this.isConnected || !this.active) return;
     const proceed = () => {
+      // The wait is the approver's own, so another approver may try at once.
+      this.#endThrottle();
       this.selected = undefined;
       this.pin = "";
     };
@@ -143,7 +194,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
   #confirm(): void {
     if (!this.isConnected || !this.active) return;
     const person = this.selected;
-    if (person === undefined || this.pin === "") return;
+    if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
     const pin = this.pin;
     this.pin = "";
     this.#scope?.commit("");
@@ -222,7 +273,13 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   #renderPin(person: StaffMember) {
-    const showError = this.error !== null && !this.dismissed;
+    const throttled = this.throttleRemaining > 0;
+    const code = refusalCode(this.error);
+    const errorText = throttled
+      ? t("override.throttled").replace("{n}", String(this.throttleRemaining))
+      : code !== null && waitSeconds(this.error) === 0 && !this.dismissed
+        ? overrideErrorText(code)
+        : "";
     return html`
       <p class="operator">${person.displayName}</p>
       <p class="prompt">${this.#text("enter_pin")}</p>
@@ -233,14 +290,14 @@ export class TillSupervisorOverrideDialog extends LitElement {
         @wt-change=${(event: Event) => this.#onPadChange(event)}
         @pad-enter=${() => pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
       ></till-numeric-pad>
-      <wt-form-actions slot="footer" .error=${showError ? overrideErrorText(this.error!) : ""}>
+      <wt-form-actions slot="footer" .error=${errorText}>
         <wt-button slot="cancel" class="back" variant="secondary" @click=${() => this.#back()}>
           ${t("action.back")}
         </wt-button>
         <wt-button
           class="authorize"
           variant="primary"
-          ?disabled=${this.pin === ""}
+          ?disabled=${this.pin === "" || throttled}
           @click=${() => this.#confirm()}
         >
           ${t("action.authorize")}

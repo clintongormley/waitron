@@ -213,7 +213,12 @@ import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-pass-screen.js";
 import "./widgets/supervisor-override-dialog.js";
-import type { OverrideConfirmDetail } from "./widgets/supervisor-override-dialog.js";
+import {
+  approverRefusal,
+  refusalCode,
+  type ApproverRefusal,
+  type OverrideConfirmDetail,
+} from "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
 import "./widgets/cancel-item-dialog.js";
 import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
@@ -1494,7 +1499,7 @@ interface CancellingItem {
   approval?: {
     choice: CancelItemChoice;
     authorizers: StaffMember[];
-    error: string | null;
+    error: ApproverRefusal | null;
   };
 }
 
@@ -1554,7 +1559,7 @@ interface FinishingTable {
   command?: Omit<FinishTableResolution, "approver"> | FinishTableCollect;
   unconfirmed?: boolean;
   retryApproverId?: string;
-  approval?: { authorizers: StaffMember[]; error: string | null };
+  approval?: { authorizers: StaffMember[]; error: ApproverRefusal | null };
 }
 
 interface Adjusting {
@@ -1773,7 +1778,7 @@ const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 
 interface LateSendApprovalAsked {
   lateSend: LateSend;
-  pinError: string | undefined;
+  pinError: ApproverRefusal | undefined;
 }
 
 /** A refusal of a request that carried `lateSend` asking for a manager's PIN, with the PIN's own
@@ -1790,7 +1795,7 @@ function lateSendApprovalAsked(
     };
   const refused = asRefusal(error)?.refused;
   return lateSend.override !== undefined && refused !== undefined && APPROVER_REFUSALS.has(refused)
-    ? { lateSend, pinError: refused }
+    ? { lateSend, pinError: approverRefusal(error) }
     : undefined;
 }
 
@@ -3601,7 +3606,7 @@ export class TillApp extends LitElement {
    * again carrying `lateSend` with the manager's override. */
   @state() private lateSendApproval: {
     authorizers: StaffMember[];
-    error: string | null;
+    error: ApproverRefusal | null;
     lateSend: LateSend;
     busy: boolean;
     /** Closed by the waiter while its send was in flight; the dialog cannot reopen, so the send's
@@ -4091,7 +4096,7 @@ export class TillApp extends LitElement {
     busy: boolean;
     refusal: DialogRefusal | null;
     approvers?: StaffMember[];
-    pinError: string | null;
+    pinError: ApproverRefusal | null;
     reasons: AdjustmentReason[] | null;
     reasonsLoading: boolean;
     fill?: RefundFill;
@@ -4313,7 +4318,7 @@ export class TillApp extends LitElement {
   @state() private overrideAuthorizers?: StaffMember[];
   /** An error code shown inside the open override dialog; cleared before each attempt so a repeat
    * re-shows. */
-  @state() private overrideError: string | null = null;
+  @state() private overrideError: ApproverRefusal | null = null;
   /** The device's equipment as the server last said; `null` until it has been read, while the pay
    * screens offer the reader the boot read named. */
   @state() private deviceEquipment: DeviceEquipment | null = null;
@@ -4474,7 +4479,7 @@ export class TillApp extends LitElement {
   > & { controller: AbortController };
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
   @state() private adjustApprovers?: StaffMember[];
-  @state() private adjustApproverError: string | null = null;
+  @state() private adjustApproverError: ApproverRefusal | null = null;
   /** Each opening of the adjustment dialog, so an answer to a closed one changes nothing. */
   #adjustments = 0;
   /** The payments of the bill on screen, while its party's bills say it holds any. */
@@ -4561,18 +4566,18 @@ export class TillApp extends LitElement {
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
-  @state() private departureApproverError: string | null = null;
+  @state() private departureApproverError: ApproverRefusal | null = null;
   @state() private cancelCrediting: CancelCrediting | null = null;
   #cancelCreditings = 0;
   /** The people who may approve the cancel being sent; set, their PIN prompt is open. */
   @state() private cancelCreditApprovers?: StaffMember[];
-  @state() private cancelCreditApproverError: string | null = null;
+  @state() private cancelCreditApproverError: ApproverRefusal | null = null;
   /** The open refund dialog, over the bill payment dialog. */
   @state() private billRefunding: BillRefunding | null = null;
   #billRefunds = 0;
   /** The people who can approve the refund being confirmed; set, their PIN prompt is open. */
   @state() private refundApprovers?: StaffMember[];
-  @state() private refundApproverError: string | null = null;
+  @state() private refundApproverError: ApproverRefusal | null = null;
   /** The last refund sent that no result answered, which the same refund resends under its id. */
   #unansweredRefund: RefundSubmission | null = null;
   /** Each refund send. Only the one started last writes {@link #unansweredRefund}, so an earlier
@@ -9831,7 +9836,7 @@ export class TillApp extends LitElement {
           this.tenderRefunding = { ...this.tenderRefunding, busy: true };
           await this.#askTenderRefundApprover();
         } else if (APPROVER_REFUSALS.has(refusal.code))
-          this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
+          this.tenderRefunding = { ...this.tenderRefunding, pinError: approverRefusal(error) };
         else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
       }
     });
@@ -12577,7 +12582,7 @@ export class TillApp extends LitElement {
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "pin.invalid" || code === "pin.throttled") {
-        this.overrideError = code;
+        this.overrideError = approverRefusal(error);
       } else {
         this.#closeOverrideDialog();
         this.#showDrawerError(code);
@@ -15636,7 +15641,7 @@ export class TillApp extends LitElement {
 
   async #askLateSendApproval(
     lateSend: LateSend,
-    pinError: string | undefined,
+    pinError: ApproverRefusal | undefined,
     retry: (lateSend: LateSend) => Promise<void>,
     current: () => boolean = () => true,
   ): Promise<void> {
@@ -15647,10 +15652,8 @@ export class TillApp extends LitElement {
         this.lateSendApproval = { ...open, busy: false, error: pinError };
       else {
         this.lateSendApproval = null;
-        this.errorKey =
-          pinError === "pin.invalid" || pinError === "pin.throttled"
-            ? pinError
-            : { code: pinError };
+        const code = refusalCode(pinError)!;
+        this.errorKey = code === "pin.invalid" || code === "pin.throttled" ? code : { code };
       }
       return;
     }
@@ -17406,7 +17409,11 @@ export class TillApp extends LitElement {
         limit.done();
       }
     } else if (stage === "approved" && APPROVER_REFUSALS.has(code) && open.approval !== undefined) {
-      this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
+      this.cancellingItem = {
+        ...open,
+        busy: false,
+        approval: { ...open.approval, error: approverRefusal(error) },
+      };
     } else if (stage !== "preview" && isNetworkFailure(error)) {
       this.#closeCancelItem();
       if (open.counter !== undefined) {
@@ -17773,7 +17780,7 @@ export class TillApp extends LitElement {
     const open = this.adjusting!;
     const code = (error as { code?: string } | undefined)?.code;
     if (stage === "approved" && code !== undefined && APPROVER_REFUSALS.has(code)) {
-      this.adjustApproverError = code;
+      this.adjustApproverError = approverRefusal(error);
       this.adjusting = { ...open, busy: false };
       return;
     }
@@ -20729,7 +20736,11 @@ export class TillApp extends LitElement {
         APPROVER_REFUSALS.has(code) &&
         open.approval !== undefined
       ) {
-        this.finishingTable = { ...open, busy: false, approval: { ...open.approval, error: code } };
+        this.finishingTable = {
+          ...open,
+          busy: false,
+          approval: { ...open.approval, error: approverRefusal(error) },
+        };
       } else {
         const field = refusalField(code, "cancel", false);
         this.finishingTable = {
@@ -21178,7 +21189,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (APPROVER_REFUSALS.has(refusal.code)) {
-      this.departureApproverError = refusal.code;
+      this.departureApproverError = approverRefusal(error);
       this.departing = { ...now, busy: false };
       return;
     }
@@ -21747,7 +21758,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (APPROVER_REFUSALS.has(refusal.code)) {
-      this.cancelCreditApproverError = refusal.code;
+      this.cancelCreditApproverError = approverRefusal(error);
       this.cancelCrediting = { ...open, busy: false };
       return;
     }
@@ -23966,7 +23977,7 @@ export class TillApp extends LitElement {
     if (now === null) return;
     const refusal = outcomeUnknown ? { code: "network" } : refusalOf(error);
     if (APPROVER_REFUSALS.has(refusal.code)) {
-      this.refundApproverError = refusal.code;
+      this.refundApproverError = approverRefusal(error);
       this.billRefunding = { ...now, busy: false };
     } else {
       this.#closeRefundApprovers();
