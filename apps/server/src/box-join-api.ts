@@ -6,10 +6,15 @@ import { createPublicKey } from "node:crypto";
 import { isIP } from "node:net";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isAppError, isUuid } from "@waitron/shared";
+import { AppError, diskFullIn, firstCodeInCauseChain, isUuid } from "@waitron/shared";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
-import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import {
+  codeOf,
+  createErrorBoundary,
+  readJsonBody,
+  requireManagementSession,
+} from "@waitron/server-kit";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { withOperationAuthority } from "@waitron/module";
 import {
@@ -457,13 +462,16 @@ export function mountBoxJoinPersonApi(
           requests.approve.abandon(requestId);
           throw error;
         }
-        // The chart names the spare now, so a second tap or the new box's cancel must not follow.
+        // The chart names the spare now, so a second tap must not follow.
         requests.approve.stop(requestId);
-        throw new AppError(
-          "mirror.join_stopped_after_listing",
-          {},
-          { reason: isAppError(error) ? error.code : "server.internal" },
-        );
+        // A full disk keeps its own answer: removing the listing would need the disk too.
+        if (diskFullIn(error) || firstCodeInCauseChain(error, (code) => code === "ENOSPC") !== null)
+          throw error;
+        log("error", "mirror.join_failed", {
+          errorCode: codeOf(error),
+          requestId: c.get("requestId"),
+        });
+        throw new AppError("mirror.join_stopped_after_listing", {});
       }
       return c.body(null, 202);
     }),

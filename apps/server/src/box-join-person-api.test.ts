@@ -28,9 +28,10 @@ import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/tes
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
-import { nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import { joinCode } from "./box-join-code.js";
 import type { BoxJoinRequests } from "./box-join-requests.js";
+import type { Logger } from "./logger.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -183,9 +184,10 @@ async function withReservingModule<T>(
   }
 }
 
-function mount(): void {
+function mount(log?: Logger): void {
   app = new Hono();
   requests = mountBoxJoin(app, {
+    log,
     appDb: db,
     node: suite.node,
     ring: RING,
@@ -507,14 +509,21 @@ describe("the main box's person routes for a joining box", () => {
   });
 
   it("ends the request and says the spare was listed when the approval fails after listing it", async () => {
+    const lines: [string, string, Record<string, unknown>][] = [];
+    mount((level, event, fields = {}) => lines.push([level, event, fields]));
     const listed = await listedRequest("192.168.1.20");
     afterIssue = () => {
       afterIssue = () => {};
-      throw new Error("failed after the chart was saved");
+      throw new AppError("membership.write_contended", { attempts: 8 });
     };
     expect(await approve(listed.requestId, { code: listed.code })).toEqual(
       refusal(409, "mirror.join_stopped_after_listing"),
     );
+    expect(lines).toContainEqual([
+      "error",
+      "mirror.join_failed",
+      expect.objectContaining({ errorCode: "membership.write_contended" }),
+    ]);
     expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).toContain(
       listed.box.hello.newNodeId,
     );
@@ -522,6 +531,18 @@ describe("the main box's person routes for a joining box", () => {
     expect(await approve(listed.requestId, { code: listed.code })).toEqual(
       refusal(404, "mirror.join_not_found"),
     );
+  });
+
+  it("answers a full disk after listing as a full disk, and still ends the request", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    afterIssue = () => {
+      afterIssue = () => {};
+      throw new AppError("storage.disk_full", {});
+    };
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+      refusal(507, "storage.disk_full"),
+    );
+    expect(await poll(listed)).toEqual({ state: "ended", reason: "stopped" });
   });
 
   it("says the spare was listed when its request ended while the copy was built", async () => {
