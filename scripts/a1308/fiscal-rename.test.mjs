@@ -23,6 +23,20 @@ describe("VeriFactu name map", () => {
     expect(renameSource("packages/fiscal-verifactu/src/query.ts", after)).toBe(after);
   });
 
+  it("renames a constraint in a regex and a fixture name in test prose", () => {
+    const before = [
+      "// This test calls seedTenants.",
+      'const label = "seedTenants";',
+      'const check = /"envios_estado_ck" CHECK/;',
+    ].join("\n");
+    const after = [
+      "// This test calls seedTaxpayers.",
+      'const label = "seedTaxpayers";',
+      'const check = /"verifactu_submissions_estado_ck" CHECK/;',
+    ].join("\n");
+    expect(renameSource("packages/fiscal-verifactu/src/query.test.ts", before)).toBe(after);
+  });
+
   it("renames the imported binding while preserving unrelated properties", () => {
     const before = [
       'import { envios } from "./schema/envios.js";',

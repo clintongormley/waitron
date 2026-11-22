@@ -18,10 +18,8 @@ function pattern(words) {
   return new RegExp(`(?<![A-Za-z0-9_])(?:${alternatives.join("|")})(?![A-Za-z0-9_])`, "g");
 }
 
-const mappedText = { ...names.sql, ...names.strings, ...names.files };
-const documentNames = { ...mappedText, ...otherIdentifiers };
+const mappedText = { ...names.sql, ...names.strings, ...names.files, ...otherIdentifiers };
 const textPattern = pattern(mappedText);
-const documentPattern = pattern(documentNames);
 
 export function renameDocument(text, file) {
   const keep = names.keep.filter((entry) => entry.file === file).map((entry) => entry.text);
@@ -33,7 +31,7 @@ export function renameDocument(text, file) {
     : [text];
   return pieces
     .map((piece) =>
-      keep.includes(piece) ? piece : piece.replace(documentPattern, (name) => documentNames[name]),
+      keep.includes(piece) ? piece : piece.replace(textPattern, (name) => mappedText[name]),
     )
     .join("");
 }
@@ -128,7 +126,7 @@ export function renameSource(file, text) {
       const next = isSpecifier ? modulePath(file, node.text) : node.text;
       if (next !== node.text) edit(start + 1, end - 1, next);
       else renameTextAt(start, end);
-    } else if (ts.isTemplateLiteralToken(node)) {
+    } else if (ts.isTemplateLiteralToken(node) || ts.isRegularExpressionLiteral(node)) {
       renameTextAt(start, end);
     }
     for (const range of ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []) {
