@@ -40,9 +40,9 @@ import { EquipmentPoll } from "./state/equipment-poll.js";
 import { TillApi as CollectApi } from "./api/client.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
-import { ServerRouter } from "./api/server-router.js";
+import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
-import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
+import { countText, currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -6789,6 +6789,43 @@ describe("till-app", () => {
     expect(overrideDialog(el)).toBeNull();
     expect(currentApi.listDrawerAuthorizers).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("a drawer open the till refuses itself while no box answers says so, asks no supervisor, and is not sent again when a box answers", async () => {
+    let answering = false;
+    const router = new ServerRouter({
+      origin: "https://deli.test",
+      storage: memoryStorage(),
+      fetchImpl: async () => {
+        if (!answering) throw new TypeError("Failed to fetch");
+        return Response.json({ acceptingSales: true, term: 1 });
+      },
+    });
+    await router.probeNow();
+    const wire = vi.fn(async () => new Response(null, { status: 204 }));
+    const client = new CollectApi("", withServerTarget(wire, router));
+    const openDrawer = vi.fn(client.openDrawer.bind(client));
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await expect.poll(() => openDrawer.mock.calls.length).toBe(1);
+    await expect(openDrawer.mock.results[0]!.value).rejects.toMatchObject({
+      code: "server.waiting_sales",
+      status: 503,
+    });
+    await flush(el);
+    const said = el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "";
+    expect(said).toContain(codeMessage("server.waiting_sales"));
+    expect(said).not.toContain(t("drawer.error"));
+    expect(wire).not.toHaveBeenCalled();
+    expect(overrideDialog(el)).toBeNull();
+    expect(currentApi.listDrawerAuthorizers).not.toHaveBeenCalled();
+
+    answering = true;
+    await router.probeNow();
+    await flush(el);
+    expect(openDrawer).toHaveBeenCalledTimes(1);
+    expect(wire).not.toHaveBeenCalled();
   });
 
   it("a permission refusal fetches the eligible supervisors and opens the override dialog", async () => {
@@ -13792,6 +13829,50 @@ describe("till-app", () => {
         );
       },
     );
+    it.each(
+      [true, false].flatMap((unanswered) =>
+        (["cash", "card"] as const).map((method) => ({ unanswered, method })),
+      ),
+    )(
+      "Find a bill says no box is taking sales on a $method collection the till refuses itself, only when no earlier send went unanswered (earlier unanswered: $unanswered)",
+      async ({ unanswered, method }) => {
+        const noBoxAnswering = { code: "server.waiting_sales", status: 503 };
+        const collect = unanswered
+          ? vi
+              .fn()
+              .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+              .mockRejectedValue(noBoxAnswering)
+          : vi.fn().mockRejectedValue(noBoxAnswering);
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: collect,
+        });
+        const form = await openCollection(el);
+        const pay = async () => {
+          emit(form, "find-bill-pay", {
+            workingOrderId: "wo-debt",
+            tender:
+              method === "card"
+                ? { method, amount: "30.00", externalRef: "terminal-original" }
+                : { method, amount: "30.00" },
+            invoiced: true,
+          });
+          await flush(el);
+          await form.updateComplete;
+        };
+        await pay();
+        await pay();
+        expect(collect).toHaveBeenCalledTimes(2);
+        expect(collect.mock.calls[1]).toEqual(collect.mock.calls[0]);
+        const shown = form.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "wt-form-actions",
+        )!.error;
+        expect(shown).not.toBe(t("sale.error"));
+        expect(shown).toBe(
+          unanswered ? t("sale.unconfirmed") : codeMessage("server.waiting_sales"),
+        );
+      },
+    );
     describe("Find a bill's pay on a full disk and a wrong clock", () => {
       async function findBillRefused(refusal: object, tender: object) {
         const { el } = await mountApp({
@@ -17920,6 +18001,41 @@ describe("the main-server strip", () => {
     expect(shellStrip(el)).not.toBeNull();
     expect(shellStrip(el)!.spareAnswering).toBe(true);
     expect(waitingLine(el)).toBeUndefined();
+  });
+
+  it("hands both the strip and the sign-in panel the time the silence began, and only the sign-in draws it as a panel", async () => {
+    const { el, router } = await mount();
+    await silentFor(el, router, 20_000);
+    expect(lockStrip(el)!.panel).toBe(true);
+    expect(lockStrip(el)!.silentSince).toBe(T0);
+    await signIn(el, ["node.manage"]);
+    expect(shellStrip(el)!.panel).toBe(false);
+    expect(shellStrip(el)!.silentSince).toBe(T0);
+  });
+
+  it("counts the last contact on the strip and the sign-in panel from the main box's last answer", async () => {
+    answering.main = true;
+    const { el, router } = await mount();
+    await router.probeNow();
+    await vi.advanceTimersByTimeAsync(4_900);
+    answering.main = false;
+    await vi.advanceTimersByTimeAsync(100);
+    await router.probeNow();
+    expect(router.mainSilentSince).toBe(T0 + 5_000);
+    expect(router.mainLastAnsweredAt).toBe(T0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await settle(el);
+    const lastContact = (strip: Strip) =>
+      strip.shadowRoot!.querySelector("[data-last-contact]")!.textContent!.trim();
+    const twentyFive = () =>
+      countText(25, "server.last_contact_seconds", "server.last_contact_seconds_one");
+    expect(lockStrip(el)!.lastAnsweredAt).toBe(T0);
+    await lockStrip(el)!.updateComplete;
+    expect(lastContact(lockStrip(el)!)).toBe(twentyFive());
+    await signIn(el, ["node.manage"]);
+    expect(shellStrip(el)!.lastAnsweredAt).toBe(T0);
+    await shellStrip(el)!.updateComplete;
+    expect(lastContact(shellStrip(el)!)).toBe(twentyFive());
   });
 
   it("a till attached to a router already silent shows the strip 20 seconds after the silence began", async () => {

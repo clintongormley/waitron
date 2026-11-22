@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SERVERS_STORAGE_KEY, ServerRouter, withServerTarget } from "./server-router.js";
+import {
+  MAIN_SILENT_MS,
+  NO_BOX_ANSWERING,
+  SERVERS_STORAGE_KEY,
+  ServerRouter,
+  withServerTarget,
+} from "./server-router.js";
+import { TillApi } from "./client.js";
 
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
@@ -1085,6 +1092,223 @@ describe("withServerTarget", () => {
     await r.probeNow();
     expect(r.current).toBe(CLOUD);
   });
+
+  describe("while no box answers", () => {
+    function hangingBase(): typeof fetch & { calls: string[] } {
+      const calls: string[] = [];
+      const base = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(String(input));
+        return new Promise<Response>((resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+          if (String(input).includes("/answer")) resolve(new Response("{}"));
+        });
+      });
+      return Object.assign(base as unknown as typeof fetch, { calls });
+    }
+
+    it("refuses a request started then at once, without sending it, in the till's waiting words", async () => {
+      const table: Record<string, Answer> = { [BOX]: "down", [CLOUD]: "down" };
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers([{ url: CLOUD }]);
+      await r.probeNow();
+      expect(r.refusesNewRequests).toBe(true);
+      const base = hangingBase();
+      const res = await withServerTarget(base, r)("/api/working-orders", { method: "POST" });
+      expect(base.calls).toEqual([]);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: { code: NO_BOX_ANSWERING } });
+      expect(NO_BOX_ANSWERING).toBe("server.waiting_sales");
+    });
+
+    it("reaches the caller as that refusal through the till's API", async () => {
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch({ [BOX]: "down" }),
+        storage: memoryStorage(),
+      });
+      await r.probeNow();
+      const api = new TillApi("", withServerTarget(hangingBase(), r));
+      await expect(api.listMySwaps()).rejects.toMatchObject({
+        code: "server.waiting_sales",
+        status: 503,
+      });
+    });
+
+    it("leaves a request started before then waiting for its answer", async () => {
+      const table: Record<string, Answer> = { [BOX]: { acceptingSales: true, term: 1 } };
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(table),
+        storage: memoryStorage(),
+      });
+      await r.probeNow();
+      let release!: (res: Response) => void;
+      const base = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          }),
+      ) as unknown as typeof fetch;
+      const pending = withServerTarget(base, r)("/api/working-orders/o-1/payments", {
+        method: "POST",
+      });
+      table[BOX] = "down";
+      await r.probeNow();
+      expect(r.refusesNewRequests).toBe(true);
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(settled).toBe(false);
+      release(new Response("{}", { status: 201 }));
+      expect((await pending).status).toBe(201);
+    });
+
+    it("sends requests again once a box answers", async () => {
+      const table: Record<string, Answer> = { [BOX]: "down" };
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(table),
+        storage: memoryStorage(),
+      });
+      await r.probeNow();
+      table[BOX] = { acceptingSales: true, term: 1 };
+      await r.probeNow();
+      expect(r.refusesNewRequests).toBe(false);
+      const base = hangingBase();
+      expect((await withServerTarget(base, r)("/api/answer")).status).toBe(200);
+      expect(base.calls).toEqual([`${BOX}/api/answer`]);
+    });
+
+    it("sends requests to a box that answers without taking sales", async () => {
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch({ [BOX]: { acceptingSales: false, term: 1 } }),
+        storage: memoryStorage(),
+      });
+      await r.probeNow();
+      expect(r.waiting).toBe(true);
+      expect(r.refusesNewRequests).toBe(false);
+      const base = hangingBase();
+      await withServerTarget(base, r)("/api/answer");
+      expect(base.calls).toEqual([`${BOX}/api/answer`]);
+    });
+
+    it("refuses a new request while an older one holds the till on a silent box another box replaced", async () => {
+      const table: Record<string, Answer> = {
+        [BOX]: { acceptingSales: true, term: 1 },
+        [CLOUD]: "down",
+      };
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers([{ url: CLOUD }]);
+      await r.probeNow();
+      const releases: Array<(response: Response) => void> = [];
+      const base = vi.fn(
+        () => new Promise<Response>((resolve) => releases.push(resolve)),
+      ) as unknown as typeof fetch & { mock: { calls: [string][] } };
+      const send = withServerTarget(base, r);
+      const older = send("/api/working-orders/o-1/payments", { method: "POST" });
+      table[BOX] = "down";
+      table[CLOUD] = { acceptingSales: true, term: 2 };
+      await r.probeNow();
+      expect(r.waiting).toBe(false);
+      expect(r.current).toBe(BOX);
+
+      const res = await send("/api/answer");
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: { code: NO_BOX_ANSWERING } });
+      expect(base.mock.calls.map(([url]) => url)).toEqual([
+        `${BOX}/api/working-orders/o-1/payments`,
+      ]);
+
+      releases[0]!(new Response("{}", { status: 201 }));
+      expect((await older).status).toBe(201);
+      await r.probeNow();
+      expect(r.current).toBe(CLOUD);
+      expect(r.refusesNewRequests).toBe(false);
+      void send("/api/answer");
+      expect(base.mock.calls.map(([url]) => url)).toEqual([
+        `${BOX}/api/working-orders/o-1/payments`,
+        `${CLOUD}/api/answer`,
+      ]);
+    });
+
+    it("sends again once the silent box an older request holds the till on answers", async () => {
+      const table: Record<string, Answer> = {
+        [BOX]: { acceptingSales: true, term: 1 },
+        [CLOUD]: "down",
+      };
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers([{ url: CLOUD }]);
+      await r.probeNow();
+      const base = vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch & {
+        mock: { calls: [string][] };
+      };
+      const send = withServerTarget(base, r);
+      void send("/api/working-orders/o-1/payments", { method: "POST" });
+      table[BOX] = "down";
+      table[CLOUD] = { acceptingSales: true, term: 2 };
+      await r.probeNow();
+      expect(r.refusesNewRequests).toBe(true);
+      table[BOX] = { acceptingSales: false, term: 1 };
+      await r.probeNow();
+      expect(r.current).toBe(BOX);
+      expect(r.refusesNewRequests).toBe(false);
+    });
+
+    it("keeps probing every box and handing them the chart while it refuses", async () => {
+      const calls: string[] = [];
+      let recovered = false;
+      const fetchImpl: typeof fetch = async (input, init) => {
+        calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+        if (init?.method === "POST") return new Response(null, { status: 204 });
+        if (!recovered || String(input).startsWith(BOX)) throw new TypeError("Failed to fetch");
+        return Response.json({ acceptingSales: false, term: 1 });
+      };
+      const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+      r.setServers([{ url: CLOUD }]);
+      r.offerChart({ body: { term: 2 } });
+      await r.probeNow();
+      expect(r.refusesNewRequests).toBe(true);
+      calls.length = 0;
+      recovered = true;
+      await r.probeNow();
+      await vi.waitFor(() =>
+        expect(calls).toEqual([
+          `GET ${BOX}/api/node`,
+          `GET ${CLOUD}/api/node`,
+          `POST ${CLOUD}/api/node/membership`,
+        ]),
+      );
+      expect(r.refusesNewRequests).toBe(true);
+    });
+
+    it("sends a request naming another address, and before the first probe has answered", async () => {
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch({ [BOX]: "down" }),
+        storage: memoryStorage(),
+      });
+      const base = hangingBase();
+      await withServerTarget(base, r)("/api/answer");
+      await r.probeNow();
+      await withServerTarget(base, r)("https://elsewhere.test/answer");
+      expect(base.calls).toEqual([`${BOX}/api/answer`, "https://elsewhere.test/answer"]);
+    });
+  });
 });
 
 describe("ServerRouter — the main box and the spare", () => {
@@ -1239,6 +1463,201 @@ describe("ServerRouter — the main box and the spare", () => {
     await r.probeNow();
     expect(r.mainSilentSince).toBe(T0);
     expect(r.spare).toEqual({ url: B, answering: false });
+  });
+
+  describe("after a power cut, with requests that hang until they time out", () => {
+    /** Answers like `probeFetch`, except that an origin marked "hang" never answers: its request
+     * waits until the router's own time limit aborts it, as one to a box without power does. */
+    function hangingFetch(table: Record<string, Answer | "hang">): typeof fetch {
+      const answering = probeFetch(table as Record<string, Answer>);
+      return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (table[new URL(String(input)).origin] !== "hang") return answering(input, init);
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        );
+      }) as unknown as typeof fetch;
+    }
+
+    it("counts the main box's silence from the page origin's first unanswered probe when the origin stood in for it", async () => {
+      vi.useFakeTimers({ now: T0 });
+      const table: Record<string, Answer | "hang"> = {
+        [VENUE]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [A]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+      };
+      const r = new ServerRouter({
+        origin: VENUE,
+        fetchImpl: hangingFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers(chartList);
+      r.start();
+      await r.probeNow();
+      expect(r.statuses().map((s) => s.url)).toEqual([VENUE, B]);
+      expect(r.mainSilentSince).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(4_900);
+      const cut = Date.now();
+      table[VENUE] = "hang";
+      table[A] = "hang";
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(r.mainSilentSince).toBe(T0 + 5_000);
+      expect(r.mainSilentSince! + MAIN_SILENT_MS - cut).toBeLessThanOrEqual(23_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(r.mainSilentSince).toBe(T0 + 5_000);
+      r.stop();
+    });
+
+    it("remembers when the main box last answered, through the page origin standing in for it too", async () => {
+      vi.useFakeTimers({ now: T0 });
+      const table: Record<string, Answer | "hang"> = {
+        [VENUE]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [A]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+      };
+      const r = new ServerRouter({
+        origin: VENUE,
+        fetchImpl: hangingFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers(chartList);
+      expect(r.mainLastAnsweredAt).toBeNull();
+      await r.probeNow();
+      expect(r.statuses().map((s) => s.url)).toEqual([VENUE, B]);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await r.probeNow();
+      expect(r.mainLastAnsweredAt).toBe(T0 + 3_000);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      table[VENUE] = "hang";
+      table[A] = "hang";
+      const round = r.probeNow();
+      await vi.advanceTimersByTimeAsync(8_000);
+      await round;
+      expect(r.mainSilentSince).toBe(T0 + 5_000);
+      expect(r.mainLastAnsweredAt).toBe(T0 + 3_000);
+    });
+
+    it.each([
+      ["an error status", () => new Response(null, { status: 503 })],
+      ["an unreadable body", () => new Response("not json", { status: 200 })],
+    ])(
+      "counts the page origin answering with %s as contact with the box it last said it was",
+      async (_, answer) => {
+        vi.useFakeTimers({ now: T0 });
+        const table: Record<string, Answer | "hang"> = {
+          [VENUE]: { acceptingSales: true, term: 1, nodeId: "a" },
+          [A]: { acceptingSales: true, term: 1, nodeId: "a" },
+          [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+        };
+        let originBroken = false;
+        const hanging = hangingFetch(table);
+        const r = new ServerRouter({
+          origin: VENUE,
+          fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) =>
+            originBroken && new URL(String(input)).origin === VENUE
+              ? Promise.resolve(answer())
+              : hanging(input, init)) as typeof fetch,
+          storage: memoryStorage(),
+        });
+        r.setServers(chartList);
+        await r.probeNow();
+        expect(r.mainLastAnsweredAt).toBe(T0);
+
+        await vi.advanceTimersByTimeAsync(3_000);
+        originBroken = true;
+        table[A] = "hang";
+        const round = r.probeNow();
+        await vi.advanceTimersByTimeAsync(8_000);
+        await round;
+        expect(r.mainLastAnsweredAt).toBe(T0 + 3_000);
+      },
+    );
+
+    it("remembers when a shown main box last answered, and has nothing before its first answer", async () => {
+      vi.useFakeTimers({ now: T0 });
+      const table: Record<string, Answer | "hang"> = {
+        [VENUE]: "hang",
+        [A]: "hang",
+        [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+      };
+      const r = new ServerRouter({
+        origin: VENUE,
+        fetchImpl: hangingFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers(chartList);
+      let round = r.probeNow();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await round;
+      expect(r.mainSilentSince).toBe(T0);
+      expect(r.mainLastAnsweredAt).toBeNull();
+
+      table[A] = { acceptingSales: true, term: 1, nodeId: "a" };
+      round = r.probeNow();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await round;
+      expect(r.mainSilentSince).toBeNull();
+      expect(r.mainLastAnsweredAt).toBe(T0 + 4_000);
+      table[A] = "hang";
+      round = r.probeNow();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await round;
+      expect(r.mainSilentSince).toBe(T0 + 8_000);
+      expect(r.mainLastAnsweredAt).toBe(T0 + 4_000);
+    });
+
+    it("counts a shown main box's silence from its first unanswered probe, not from its time limit", async () => {
+      vi.useFakeTimers({ now: T0 });
+      const table: Record<string, Answer | "hang"> = {
+        [VENUE]: "hang",
+        [A]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+      };
+      const r = new ServerRouter({
+        origin: VENUE,
+        fetchImpl: hangingFetch(table),
+        storage: memoryStorage(),
+      });
+      r.setServers(chartList);
+      r.start();
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(r.mainSilentSince).toBeNull();
+      const cut = Date.now();
+      table[A] = "hang";
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(r.mainSilentSince).toBe(T0 + 5_000);
+      expect(r.mainSilentSince! + MAIN_SILENT_MS - cut).toBeLessThanOrEqual(23_000);
+      r.stop();
+    });
+
+    it("keeps probing a silent main box and clears its silence when it answers again", async () => {
+      vi.useFakeTimers({ now: T0 });
+      const table: Record<string, Answer | "hang"> = {
+        [VENUE]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [A]: { acceptingSales: true, term: 1, nodeId: "a" },
+        [B]: { acceptingSales: false, term: 1, nodeId: "b" },
+      };
+      const fetchImpl = hangingFetch(table);
+      const r = new ServerRouter({ origin: VENUE, fetchImpl, storage: memoryStorage() });
+      r.setServers(chartList);
+      r.start();
+      await vi.advanceTimersByTimeAsync(4_900);
+      table[VENUE] = "hang";
+      table[A] = "hang";
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(r.waiting).toBe(true);
+      expect(r.mainSilentSince).not.toBeNull();
+      table[VENUE] = { acceptingSales: true, term: 1, nodeId: "a" };
+      table[A] = { acceptingSales: true, term: 1, nodeId: "a" };
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(r.waiting).toBe(false);
+      expect(r.mainSilentSince).toBeNull();
+      r.stop();
+    });
   });
 
   it("a change of standing alone repaints", () => {

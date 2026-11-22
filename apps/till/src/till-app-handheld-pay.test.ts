@@ -7,6 +7,8 @@ import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { TillApi as RealTillApi } from "./api/client.js";
+import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
   AllocationPreview,
@@ -937,6 +939,24 @@ describe("a presented bill on a handheld", () => {
     );
   });
 
+  it.each([
+    { method: "cash", tendered: "150.00", guestCount: 4 },
+    { method: "manual", externalRef: "OP-4417" },
+  ] as const)(
+    "a sheet send of $method the till refuses itself while no box answers says no box is taking sales",
+    async (detail) => {
+      const { el } = await openPresented({
+        collectOrder: vi.fn().mockRejectedValue({ code: "server.waiting_sales", status: 503 }),
+      });
+      await payFromSheet(el, detail);
+
+      expect(presented(el)!.open).toBe(true);
+      const said = await sheetMessage(el);
+      expect(said).not.toBe(t("sale.error"));
+      expect(said).toBe(codeMessage("server.waiting_sales"));
+    },
+  );
+
   it("a sheet send on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
     const { el } = await openPresented({
       collectOrder: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
@@ -1454,6 +1474,53 @@ describe("an unanswered presented payment on a handheld", () => {
     expect(error ?? "").not.toContain(codeMessage("handover.stepping_down"));
     await expectLockedOn(el, "manual");
   });
+
+  it.each(["cash", "manual"] as const)(
+    "a %s resend the till refuses itself while no box answers stays locked as unconfirmed, and goes out with the same id once one answers",
+    async (method) => {
+      let answering = true;
+      const router = new ServerRouter({
+        origin: "https://deli.test",
+        fetchImpl: async () => {
+          if (!answering) throw noAnswer();
+          return Response.json({ acceptingSales: true, term: 1 });
+        },
+      });
+      await router.probeNow();
+      const posted: string[] = [];
+      const wire: typeof fetch = async (_url, options) => {
+        if (options?.method === "GET") return Response.json(balanceOf({ status: "placed" }));
+        posted.push(String(options?.body));
+        if (posted.length === 1) {
+          answering = false;
+          await router.probeNow();
+          throw noAnswer();
+        }
+        return Response.json({ outcome: "settled", invoice: invoiceOf("120.00", "F2") });
+      };
+      const client = new RealTillApi("", withServerTarget(wire, router));
+      const send = vi.fn(client.collectOrder.bind(client));
+      const { el } = await sentWithNoAnswer(method, send);
+      await resend(el);
+
+      await expect(send.mock.results[1]!.value).rejects.toMatchObject({
+        code: "server.waiting_sales",
+        status: 503,
+      });
+      expect(posted).toHaveLength(1);
+      const error = presented(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-form-actions",
+      )!.error;
+      expect(error ?? "").toBe("");
+      await expectLockedOn(el, method);
+
+      answering = true;
+      await router.probeNow();
+      await resend(el);
+      expect(posted).toHaveLength(2);
+      expect(JSON.parse(posted[1]!).submissionId).toBe(JSON.parse(posted[0]!).submissionId);
+    },
+  );
 
   it("a part payment of the bill is refused as unconfirmed", async () => {
     const send = vi.fn().mockRejectedValue(noAnswer());

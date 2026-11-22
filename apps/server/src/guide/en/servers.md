@@ -80,8 +80,9 @@ Use a spare that has finished joining this venue. Switch off the old main box an
 because two running main boxes could take payments and file separately. This declaration cannot
 be undone.
 
-On a till or handheld, the red **The main box is not answering** strip offers **Switch to the
-spare box** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
+On a till or handheld, **The main box is not answering.** fills the sign-in screen in red, in place
+of the PIN pad while the main box stays silent, and shows as a red strip on other screens. It offers **Switch to
+the spare box** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
 spare, and **Don't switch, go back** (after declaring, **Leave this page (the switch is saved)**)
 or **Continue to this box** brings you back to the till. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
@@ -125,7 +126,7 @@ clock check. An unfinished controlled handover offers its own progress page. If 
 answers, open its **Servers** link or switch it off and check again. If the copy cannot be
 verified against the declaration, stop and keep both boxes’ data intact.
 
-If emergency hosting is available for your venue, the strip also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
+If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 
 ## Keep the failed box’s data {#old-box-returns}
 
@@ -380,7 +381,7 @@ screen does too. The address beside the revealed code belongs to that code.
 The card also lists people with permission and an authenticator, and people who need to set
 one up in their profile. The card does not start the venue.
 
-If the main box stops answering, keep the till open. When the red strip offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
+If the main box stops answering, keep the till open. When the red strip or panel offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
 
 Have the emergency code, your Waitron password and an authenticator or recovery code ready. The dialog lists the roles allowed to start the venue; Cloud checks availability before continuing. The option stays hidden until Cloud has made emergency hosting available for your venue.
 

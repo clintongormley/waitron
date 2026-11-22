@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
@@ -89,6 +89,36 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await flush(el);
     await expectNoA11yViolations(host);
   });
+
+  it.each([
+    ["with the switch to the spare", true],
+    ["with no box answering, so no switch", false],
+  ])(
+    "has no violations on the full-screen panel %s, Check again inside it",
+    async (_name, spareAnswering) => {
+      const { el, host } = await mountWidget<TillLockScreen>(
+        "till-lock-screen",
+        {
+          api: stubApi(),
+          serverWaiting: true,
+          mainServerSilent: true,
+          spareAnswering,
+          mainSilentSince: Date.now() - 22_000,
+        },
+        theme,
+      );
+      await flush(el);
+      const panel = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("till-main-server-strip")!;
+      await panel.updateComplete;
+      expect(panel.querySelector("[data-check-again]")).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector("[data-switch-to-spare]") !== null).toBe(
+        spareAnswering,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("has no violations on the storage and clock-waiting lines", async () => {
     const { el, host } = await mountWidget<TillLockScreen>(
