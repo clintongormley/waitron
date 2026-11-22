@@ -487,7 +487,7 @@ describe("each offer's colour", () => {
   it("reads the venue default only for a menu that offers products", async () => {
     const f = await menusFixture(fx.db);
     const empty = await app((tx) => createMenu(tx, { name: "Empty" }));
-    const reads = vi.spyOn(settings, "readMenuSettings");
+    const reads = vi.spyOn(settings, "readMenuDefaultColor");
     await build(f.lunch);
     expect(reads).toHaveBeenCalledTimes(1);
     reads.mockClear();

@@ -151,6 +151,7 @@ it.each([false, true])(
 it("round-trips the saved menu document with its starter-unit history", async () => {
   const doc = {
     defaultProductVatClass: "zero" as const,
+    defaultTakeawayVatRate: "4.00",
     defaultColor: "#b12525",
     starterUnitsCreated: true,
   };
@@ -165,7 +166,12 @@ it("round-trips the saved menu document with its starter-unit history", async ()
 it.each(["general", "reduced", "super_reduced", "zero"])(
   "imports the %s menu VAT default",
   (value) => {
-    const doc = { defaultProductVatClass: value, defaultColor: null, starterUnitsCreated: true };
+    const doc = {
+      defaultProductVatClass: value,
+      defaultTakeawayVatRate: null,
+      defaultColor: null,
+      starterUnitsCreated: true,
+    };
     expect(checkImportedSettings({ menu: { version: 1, doc } }, ALL_MODULES).get("menu")).toEqual(
       doc,
     );
@@ -179,7 +185,12 @@ it.each([null, undefined, "", "unknown", 10, ["reduced"]])(
         {
           menu: {
             version: 1,
-            doc: { defaultProductVatClass: value, defaultColor: null, starterUnitsCreated: true },
+            doc: {
+              defaultProductVatClass: value,
+              defaultTakeawayVatRate: null,
+              defaultColor: null,
+              starterUnitsCreated: true,
+            },
           },
         },
         ALL_MODULES,
@@ -193,7 +204,12 @@ it.each([null, undefined, "", "unknown", 10, ["reduced"]])(
   },
 );
 it.each(["#b12525", null])("imports the menu default colour %s", (defaultColor) => {
-  const doc = { defaultProductVatClass: "general", defaultColor, starterUnitsCreated: true };
+  const doc = {
+    defaultProductVatClass: "general",
+    defaultTakeawayVatRate: null,
+    defaultColor,
+    starterUnitsCreated: true,
+  };
   expect(checkImportedSettings({ menu: { version: 1, doc } }, ALL_MODULES).get("menu")).toEqual(
     doc,
   );
@@ -206,6 +222,7 @@ it("refuses a menu colour no save would store", () => {
           version: 1,
           doc: {
             defaultProductVatClass: "general",
+            defaultTakeawayVatRate: null,
             defaultColor: "#ABCDEF",
             starterUnitsCreated: true,
           },

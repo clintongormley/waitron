@@ -35,6 +35,7 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
+import { readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
   insertFirstTakeawayVatRate,
@@ -137,7 +138,8 @@ export interface CreateProductInput {
   vatClass: VatClass;
   /** Omitted or null leaves it empty. */
   takeawayVatClass?: VatClass | null;
-  /** One of the area's pickable rates ("10.00"); omitted takes the area's takeaway default. */
+  /** One of the area's pickable rates ("10.00"); omitted takes the venue's default for new
+   * products. */
   takeawayVatRate?: string;
   /** Omitted leaves it null (unreviewed). */
   allergens?: ProductAllergens;
@@ -963,8 +965,8 @@ export async function deactivateMenu(
     });
 }
 
-/** A caller creating several products passes `rates` from one {@link readVenueVatRates}; without
- * it the area is read here. */
+/** A caller creating several products passes `rates` from one {@link readNewProductVatRates},
+ * whose `defaultTakeaway` an omitted `takeawayVatRate` takes; without it they are read here. */
 export async function createProduct(
   tx: Transaction,
   input: CreateProductInput,
@@ -1040,7 +1042,11 @@ async function insertProduct(
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
-  const areaRates = rates ?? (await readVenueVatRates(tx, venue));
+  const areaRates =
+    rates ??
+    (input.takeawayVatRate === undefined
+      ? await readNewProductVatRates(tx, venue)
+      : await readVenueVatRates(tx, venue));
   const takeawayVatRate = checkPickableTakeawayVatRate(
     input.takeawayVatRate === undefined ? areaRates.defaultTakeaway : input.takeawayVatRate,
     areaRates,

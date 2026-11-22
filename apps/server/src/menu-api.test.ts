@@ -18,7 +18,14 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { addMember, createMenu, menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
+import {
+  addMember,
+  createMenu,
+  menuReleases,
+  menuVersions,
+  readTakeawayVatSchedules,
+  sectionMembers,
+} from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -6806,6 +6813,9 @@ it("keeps a shared snapshot's revision with its data when a write commits before
   }
 });
 
+/** Spain's pickable takeaway rates: the ones its VAT return can report. */
+const SPAIN_PICKABLE = ["0.00", "4.00", "10.00", "21.00"];
+
 describe("menu settings routes", () => {
   it("no longer serves a VAT-default write, and still serves the read and the colour write", async () => {
     const app = mountApp();
@@ -6877,8 +6887,10 @@ describe("menu settings routes", () => {
       expect(loaded.status).toBe(200);
       expect(await loaded.json()).toEqual({
         defaultProductVatClass,
+        defaultTakeawayVatRate: "10.00",
         defaultColor: null,
         takeawayVat: true,
+        vatRates: SPAIN_PICKABLE,
       });
     }
     expect(
@@ -6890,6 +6902,57 @@ describe("menu settings routes", () => {
       ).rows,
     ).toEqual([{ updated_by: managerPersonId, person_id: managerPersonId }]);
   });
+
+  it("saves the venue's takeaway rate for new products, and a new product starts at it", async () => {
+    const app = mountWithVenueDefaults();
+    const before = await send(app, "GET", "/management-api/menu-settings");
+    expect(await before.json()).toMatchObject({
+      defaultTakeawayVatRate: "10.00",
+      vatRates: SPAIN_PICKABLE,
+    });
+    try {
+      const saved = await send(app, "PUT", "/management-api/venue-defaults", {
+        body: { defaultTakeawayVatRate: "4.00" },
+      });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).defaultTakeawayVatRate).toBe("4.00");
+      const loaded = await send(app, "GET", "/management-api/menu-settings");
+      expect((await loaded.json()).defaultTakeawayVatRate).toBe("4.00");
+      const created = await send(app, "POST", "/management-api/products", {
+        body: {
+          categoryId: null,
+          name: "Cheese",
+          pricingUnit: "each",
+          unitPrice: "6",
+          vatClass: "general",
+        },
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const schedules = await withTransaction(suite.db, (tx) => readTakeawayVatSchedules(tx, [id]));
+      expect(schedules.get(id)).toEqual([{ from: null, rate: "4.00" }]);
+    } finally {
+      await send(app, "PUT", "/management-api/venue-defaults", {
+        body: { defaultTakeawayVatRate: "10.00" },
+      });
+    }
+  });
+
+  it.each(["5.00", "3.00", "4", null, 4])(
+    "refuses a takeaway rate for new products of %j and keeps the saved one",
+    async (defaultTakeawayVatRate) => {
+      const app = mountWithVenueDefaults();
+      const refused = await send(app, "PUT", "/management-api/venue-defaults", {
+        body: { defaultTakeawayVatRate },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: { code: "product.invalid", params: { field: "defaultTakeawayVatRate" } },
+      });
+      const loaded = await send(app, "GET", "/management-api/menu-settings");
+      expect((await loaded.json()).defaultTakeawayVatRate).toBe("10.00");
+    },
+  );
 
   it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
     const app = mountWithVenueDefaults();
@@ -6923,13 +6986,16 @@ describe("menu settings routes", () => {
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
     });
     const loaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await loaded.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: "#b12525",
       takeawayVat: true,
+      vatRates: SPAIN_PICKABLE,
     });
 
     expect(
@@ -6944,12 +7010,18 @@ describe("menu settings routes", () => {
       body: { color: null },
     });
     expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ defaultProductVatClass: "reduced", defaultColor: null });
+    expect(await cleared.json()).toEqual({
+      defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: null,
+    });
     const reloaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await reloaded.json()).toEqual({
       defaultProductVatClass: "reduced",
+      defaultTakeawayVatRate: "10.00",
       defaultColor: null,
       takeawayVat: true,
+      vatRates: SPAIN_PICKABLE,
     });
   });
 

@@ -1515,7 +1515,11 @@ it.each([
   async (locale, heading) => {
     setLocale(locale);
     const el = await mountBrowser({ defaultColor: "#b12525" });
-    let finish!: (value: { defaultProductVatClass: "general"; defaultColor: string }) => void;
+    let finish!: (value: {
+      defaultProductVatClass: "general";
+      defaultTakeawayVatRate: "10.00";
+      defaultColor: string;
+    }) => void;
     vi.mocked(el.api.saveMenuDefaultColor).mockImplementationOnce(
       () => new Promise((resolve) => (finish = resolve)),
     );
@@ -1533,7 +1537,11 @@ it.each([
     await el.updateComplete;
     expect(vi.mocked(el.api.saveMenuDefaultColor).mock.calls).toStrictEqual([["#256bb1"]]);
     expect(chooserClosed(el)).toBe(false);
-    finish({ defaultProductVatClass: "general", defaultColor: "#256bb1" });
+    finish({
+      defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: "#256bb1",
+    });
     await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
     expect(el.api.updateCategory).not.toHaveBeenCalled();
   },

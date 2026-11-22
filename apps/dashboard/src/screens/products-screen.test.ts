@@ -3559,11 +3559,13 @@ it("closing a guarded linked product retires its field query before opening anot
 it("waits for the venue's VAT default before enabling Add product", async () => {
   let resolve!: (value: {
     defaultProductVatClass: "reduced";
+    defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
   }) => void;
   const pending = new Promise<{
     defaultProductVatClass: "reduced";
+    defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
   }>((yes) => {
@@ -3582,7 +3584,12 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
-  resolve({ defaultProductVatClass: "reduced", defaultColor: null, takeawayVat: false });
+  resolve({
+    defaultProductVatClass: "reduced",
+    defaultTakeawayVatRate: "10.00",
+    defaultColor: null,
+    takeawayVat: false,
+  });
   await pending;
   await flush(el);
   expect((await add()).disabled).toBe(false);
@@ -3636,6 +3643,7 @@ it("paints All products' square, an uncategorised product and a new product's in
 
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "general",
+    defaultTakeawayVatRate: "10.00",
     defaultColor: "#256bb1",
     takeawayVat: false,
   });
@@ -3673,6 +3681,7 @@ it("reads the venue's default into a new editor without replacing an open draft"
   await editor(el).updateComplete;
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "reduced",
+    defaultTakeawayVatRate: "10.00",
     defaultColor: null,
     takeawayVat: false,
   });

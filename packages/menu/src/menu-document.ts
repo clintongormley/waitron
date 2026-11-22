@@ -17,7 +17,7 @@ import {
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
-import { readMenuSettings } from "./settings.js";
+import { readMenuDefaultColor } from "./settings.js";
 import { directMenuChildren } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
 import type {
@@ -246,7 +246,7 @@ export async function buildMenuDocuments(
   const dishFacts = await readDishFacts(
     tx,
     offeredProducts,
-    offeredProducts.length === 0 ? null : (await readMenuSettings(tx)).defaultColor,
+    offeredProducts.length === 0 ? null : await readMenuDefaultColor(tx),
   );
   const extraImages = await readEffectiveImages(tx, [
     ...new Set(

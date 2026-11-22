@@ -1270,7 +1270,12 @@ describe("configuration transfer database path", () => {
     );
     expect(transferred.settings.menu).toEqual({
       version: 1,
-      doc: { defaultProductVatClass: "zero", defaultColor: "#abcced", starterUnitsCreated: true },
+      doc: {
+        defaultProductVatClass: "zero",
+        defaultTakeawayVatRate: null,
+        defaultColor: "#abcced",
+        starterUnitsCreated: true,
+      },
     });
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
@@ -1279,6 +1284,7 @@ describe("configuration transfer database path", () => {
     });
     expect((await readSettings(targetSuite.db, MENU_SETTINGS)).doc).toEqual({
       defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: null,
       defaultColor: "#abcced",
       starterUnitsCreated: true,
     });

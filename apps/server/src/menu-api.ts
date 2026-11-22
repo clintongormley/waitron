@@ -26,6 +26,7 @@ import {
   type ShownFolderCounts,
   menuExists,
   readMenuSettings,
+  readVenueVatRates,
   saveMenuDefaultColor,
   type MenuDefaults,
   readContentLanguages,
@@ -129,14 +130,17 @@ import { setProductCourse } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 
-/** The menu's defaults, and whether the venue's region charges a product a second VAT class when
- * it is taken away: it travels here so anyone who may edit products reads it. */
+/** The menu's defaults, whether the venue's region charges a product a second VAT class when it
+ * is taken away, and the takeaway rates a person may pick: they travel here so anyone who may edit
+ * products reads them. */
 async function readMenuSettingsAnswer(
   tx: Transaction,
-): Promise<MenuDefaults & { takeawayVat: boolean }> {
+): Promise<MenuDefaults & { takeawayVat: boolean; vatRates: string[] }> {
+  const rates = await readVenueVatRates(tx);
   return {
-    ...(await readMenuSettings(tx)),
+    ...(await readMenuSettings(tx, rates)),
     takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
+    vatRates: [...rates.pickable],
   };
 }
 
