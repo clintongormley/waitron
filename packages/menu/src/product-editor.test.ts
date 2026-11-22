@@ -121,7 +121,7 @@ describe("one save builds one query on the content-language setting", () => {
     active: true,
   });
 
-  it("by the product editor, for a product with three named variants", async () => {
+  it("by the product editor, for a new product with three named variants, plus one read of the venue's area", async () => {
     const reads = await withTransaction(fx.db, async (tx) => {
       const counting = countingSettingsReads(tx);
       await saveProductEditor(
@@ -132,7 +132,7 @@ describe("one save builds one query on the content-language setting", () => {
       );
       return counting.reads();
     });
-    expect(reads).toBe(1);
+    expect(reads).toBe(2);
   });
 
   it("by a variant save of three named variants", async () => {
