@@ -331,6 +331,7 @@ export class WtPriceInput extends LitElement {
               name=${this.name || nothing}
               .value=${live(formatDecimalInput(this.value, this.decimalLocale || this.locale || "en"))}
               inputmode="decimal"
+              autocomplete="off"
               placeholder=${formatDecimalInput(this.placeholder || this.hint, this.decimalLocale || this.locale || "en") || nothing}
               ?required=${this.required}
               ?disabled=${this.disabled}

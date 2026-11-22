@@ -5,6 +5,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } fro
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
 import { trackDialog } from "./track-dialog.js";

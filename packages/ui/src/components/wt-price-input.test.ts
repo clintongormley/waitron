@@ -49,6 +49,12 @@ test("reflects the initial value into the native input", async () => {
   expect(input.value).toBe("1.25");
 });
 
+test("the browser offers no remembered amounts in the amount input", async () => {
+  const el = await mount('<wt-price-input label="Price" name="price"></wt-price-input>');
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[part="amount"]')!;
+  expect(input.getAttribute("autocomplete")).toBe("off");
+});
+
 test("emits wt-change with the typed value", async () => {
   const el = await mount("<wt-price-input></wt-price-input>");
   let received: string | undefined;
