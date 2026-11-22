@@ -133,10 +133,12 @@ async function holdChartNamingOnlyMainBox(): Promise<number> {
   return term;
 }
 
-/** Runs `body` with the fiscal module reserving at a join, recording each reservation's operator. */
+/** Runs `body` with the fiscal module reserving at a join, recording each reservation's operator; a
+ * given `reserveFails` is thrown in place of reserving. */
 async function withReservingModule<T>(
   standbyNodeId: string,
   body: (moduleOperation: unknown, operators: unknown[]) => Promise<T>,
+  reserveFails?: Error,
 ): Promise<T> {
   const fixture = await standbyContract(
     db,
@@ -169,6 +171,7 @@ async function withReservingModule<T>(
                   ? null
                   : readOperationAuthority(operation.authority, operation.binding)?.operatorId,
               );
+              if (reserveFails !== undefined) throw reserveFails;
               return standby.reserve(...args);
             },
           },
@@ -537,16 +540,39 @@ describe("the main box's person routes for a joining box", () => {
     );
   });
 
-  it("answers a full disk after listing as a full disk, and still ends the request", async () => {
+  it("says the spare was listed when a full disk stops the approval after listing it", async () => {
+    const lines: [string, string, Record<string, unknown>][] = [];
+    mount((level, event, fields = {}) => lines.push([level, event, fields]));
     const listed = await listedRequest("192.168.1.20");
     afterIssue = () => {
       afterIssue = () => {};
       throw new AppError("storage.disk_full", {});
     };
     expect(await approve(listed.requestId, { code: listed.code })).toEqual(
-      refusal(507, "storage.disk_full"),
+      refusal(409, "mirror.join_stopped_after_listing"),
     );
+    expect(lines).toContainEqual([
+      "error",
+      "mirror.join_failed",
+      expect.objectContaining({ errorCode: "storage.disk_full" }),
+    ]);
     expect(await poll(listed)).toEqual({ state: "ended", reason: "stopped" });
+  });
+
+  it("answers a full disk before listing as a full disk, leaving the request waiting", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    const chartBefore = await readNodeMembership(db);
+    await withReservingModule(
+      listed.box.hello.newNodeId,
+      async (moduleOperation) => {
+        expect(await approve(listed.requestId, { code: listed.code, moduleOperation })).toEqual(
+          refusal(507, "storage.disk_full"),
+        );
+      },
+      new AppError("storage.disk_full", {}),
+    );
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+    expect(await poll(listed)).toEqual({ state: "waiting" });
   });
 
   it("says the spare was listed when its request ended while the copy was built", async () => {

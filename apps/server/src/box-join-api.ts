@@ -6,7 +6,7 @@ import { createPublicKey } from "node:crypto";
 import { isIP } from "node:net";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, diskFullIn, firstCodeInCauseChain, isUuid } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import {
@@ -464,9 +464,6 @@ export function mountBoxJoinPersonApi(
         }
         // The chart names the spare now, so neither a second tap nor the new box's cancel follows.
         requests.approve.stop(requestId);
-        // A full disk keeps its own answer: removing the listing would need the disk too.
-        if (diskFullIn(error) || firstCodeInCauseChain(error, (code) => code === "ENOSPC") !== null)
-          throw error;
         log("error", "mirror.join_failed", {
           errorCode: codeOf(error),
           requestId: c.get("requestId"),
