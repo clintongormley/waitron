@@ -9501,11 +9501,10 @@ export async function listTablesWithState(
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
-             -- KDS order-timing alerts (design §3/§6): the wait start + thresholds of each unserved
-             -- kitchen line whose ticket item was fired or requested, so a HELD one does not age
-             -- here, and a pass-controlled one ages from requested_at (D65); one JSON object per
-             -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split),
-             -- reduced with classifyBand/worstBand in JS below. A line never sent has no
+             -- Order-timing alerts: the wait start + thresholds of each unserved kitchen line whose
+             -- ticket item was fired or requested, so a HELD one does not age here, and a
+             -- pass-controlled one ages from requested_at; one JSON object per line -- never a band
+             -- label, reduced with classifyBand/worstBand in JS below. A line never sent has no
              -- ticket_items row and is excluded, same as a served one.
              --
              -- json_group_array returns JSON TEXT rather than a value the driver parses, so the

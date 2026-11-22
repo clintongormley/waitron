@@ -412,7 +412,7 @@ async function setupTabVenue(): Promise<{
   return { cfg, coffeeId, waterId, tableId, offers };
 }
 
-describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
+describe("listTablesWithState — readyToServe (N listos)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
@@ -462,7 +462,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   });
 });
 
-describe("listTablesWithState — A773 no dispatch state", () => {
+describe("listTablesWithState — no dispatch state", () => {
   it("reports ready food without a dispatch field and keeps service and Undo counts", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 

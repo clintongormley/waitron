@@ -4293,7 +4293,7 @@ describe("basket-wide modifier resolution (perf)", () => {
   });
 });
 
-describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
+describe("fireLines (routing resolver + snapshot)", () => {
   it("fires a zone-less order at the station that claimed its folder", async () => {
     const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -5200,7 +5200,7 @@ describe("a sale on a Spanish public holiday", () => {
   });
 });
 
-describe("an order whose card payment is in flight (plan D22)", () => {
+describe("an order whose card payment is in flight", () => {
   async function payingHeldOrder(orderFlow?: OrderFlow) {
     const venue = await setupVenue(orderFlow);
     // Placing fires the line, which needs a station to reach.
@@ -6616,7 +6616,7 @@ describe("waiter line release / hold-and-fire", () => {
   });
 });
 
-describe("setLineCourse (A1: move a held line to another course)", () => {
+describe("setLineCourse (move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
     const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -6778,7 +6778,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
 
 // sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
 // These cases exercise those writes and the skip of already-fired items.
-describe("sendLines (A2: fire specific held lines / send-all)", () => {
+describe("sendLines (fire specific held lines / send-all)", () => {
   /** A fixed instant well in the past — an aged `queued_at` the send's refresh moves off, so the
    *  refresh is observable. */
   const AGED = "2000-01-01T00:00:00.000Z";
@@ -7006,7 +7006,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   });
 });
 
-describe("correction slips on line changes and cancellations (A6)", () => {
+describe("correction slips on line changes and cancellations", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
    *  an optional course. Station routing is left to the venue default. */
   async function namedProduct(tx: Transaction, name: string, courseId?: string): Promise<string> {
@@ -7177,7 +7177,7 @@ describe("correction slips on line changes and cancellations (A6)", () => {
 // time, never stored. These cases prove the hold short-circuit and the parent correlation under
 // modifier expansion.
 // ---------------------------------------------------------------------------------------------------
-describe("addTabRound hold-on-send (A3)", () => {
+describe("addTabRound hold-on-send", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
     const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -7259,7 +7259,7 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 });
 
-describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
+describe("the pass board (cross-station expo/pass read)", () => {
   it("shows one order's two-station single-course dishes with their station names and course, excluding collected/abandoned orders", async () => {
     const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -8572,7 +8572,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 
 // The product default (`product.course_id`) is not re-screened: that would reject a legitimately
 // deactivated default. These cases exercise the shared resolver through `addTabRound`.
-describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
+describe("priceOrderLines course-override validation", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
     const tableId = await makeTable(tx, cfg);
@@ -8899,7 +8899,7 @@ describe("frozen answers through a fractional quantity edit", () => {
     });
   });
 
-  it("refuses an extras pick on a dish sold in millilitres (A821)", async () => {
+  it("refuses an extras pick on a dish sold in millilitres", async () => {
     const { cfg, coffeeId, coffeeOfferId, zoneId } = await setupVenue();
     const bacon = await withTransaction(db, async (tx) => {
       const ml = await menu.createUnit(
@@ -11766,7 +11766,7 @@ describe("line release on an order with no service context", () => {
   });
 });
 
-describe("A884 deleted lists", () => {
+describe("deleted lists", () => {
   it.each(["options", "extras"] as const)(
     "adds a dish after its %s list is deleted without republishing",
     async (kind) => {

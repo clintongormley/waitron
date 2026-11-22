@@ -16,8 +16,7 @@ their full text.
   changes sent lines (read, not run). The walk-up concurrent double-pay case in
   `working-order.pay-and-dispatch.test.ts` replays through the settled branch and never reaches
   `payWorkingOrder`'s duplicate-key catch; nothing checks that a location or status foreign-key
-  refusal in `tables.ts` is not reported as a zone fault. Stale test titles: many "(KDS-…)" and
-  "(A1)"-style plan tags.
+  refusal in `tables.ts` is not reported as a zone fault.
 
 ## Till widget points from #616 that were read but not run
 
