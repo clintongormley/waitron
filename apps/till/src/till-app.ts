@@ -7651,7 +7651,6 @@ export class TillApp extends LitElement {
           return "failed";
         if (this.#basketRefreshAutomatic && this.#counterMenuBusy()) {
           this.#counterOffersDue = true;
-          this.#counterMenuPending = true;
           return "failed";
         }
         this.#counterOffersDue = false;

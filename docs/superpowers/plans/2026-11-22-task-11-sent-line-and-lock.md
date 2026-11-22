@@ -20,7 +20,7 @@ setter and park path as they are. Both Task 11 bullets go from `docs/backlog/til
 In `apps/till/src/till-app.ts`, identify automatic counter refreshes from `#onMenuState` and
 `#followDefault`. Reuse the poll's busy check (`#requestsOut()` or store edits locked) after
 the offers read, before loading or reconciling the offers. On deferral, set `#counterOffersDue`
-and `#counterMenuPending` and return the existing failed result to the automatic caller.
+and return the existing failed result to the automatic caller.
 The prior menu version stays loaded so the next poll knows to read again. Check the edit lock in
 `#followDefault` before starting a read for an empty basket.
 
