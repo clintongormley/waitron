@@ -3781,7 +3781,7 @@ export class DashboardApi {
   }
 
   setVenueDefaultMenu(menuId: string): Promise<void> {
-    return this.#request<void>("/management-api/venue/default-menu", "PUT", { menuId });
+    return this.#request<void>("/management-api/venue-default-menu", "PUT", { menuId });
   }
 
   listCategories(): Promise<CategorySummary[]> {

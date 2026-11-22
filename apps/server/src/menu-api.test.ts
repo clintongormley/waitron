@@ -1466,7 +1466,7 @@ describe("mountMenuApi — the venue's menus", () => {
     await suite.db.execute(sql`update menus set is_default = 0`);
   });
 
-  const defaultPath = () => "/management-api/venue/default-menu";
+  const defaultPath = () => "/management-api/venue-default-menu";
 
   it("PUT default-menu sets the default (204)", async () => {
     const app = mountApp();
@@ -1479,6 +1479,19 @@ describe("mountMenuApi — the venue's menus", () => {
       sql`select id as menu_id from menus where is_default = 1`,
     );
     expect(rows.rows).toEqual([{ menu_id: day }]);
+  });
+
+  it("no longer answers the old /management-api/venue/default-menu path", async () => {
+    const app = mountApp();
+    const house = await createMenuVia(app, "House");
+    const res = await send(app, "PUT", "/management-api/venue/default-menu", {
+      body: { menuId: house },
+    });
+    expect(res.status).toBe(404);
+    const rows = await suite.db.execute<{ menu_id: string }>(
+      sql`select id as menu_id from menus where is_default = 1`,
+    );
+    expect(rows.rows).toEqual([]);
   });
 
   it("answers 409 when a set menu is named as the default or in ordinary Prices", async () => {
