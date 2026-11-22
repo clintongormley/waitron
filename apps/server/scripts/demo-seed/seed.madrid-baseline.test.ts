@@ -1455,6 +1455,12 @@ for (const locale of ["en", "es"] as const) {
         personKey("acknowledged_by", 0),
         ...incidentTable.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
       ];
+      incidentTable.columns.splice(
+        incidentTable.columns.findIndex((column) => column.name === "detected_at") + 1,
+        0,
+        { name: "release_version", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(incidentTable.rows)) row.release_version = null;
       parties.foreignKeys = [
         personKey("allergy_answered_by", 0),
         personKey("closed_by", 1),
