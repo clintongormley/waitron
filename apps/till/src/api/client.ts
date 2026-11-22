@@ -1516,6 +1516,7 @@ export interface KitchenNoteSnapshot {
  */
 export interface HeldOrder {
   id: string;
+  serviceMode?: OrderFlow | "table_tab" | null;
   /** The service zone the order is recorded in; null for one with none. */
   zoneId: string | null;
   expectedEdit: BillEditExpected | null;
@@ -3573,6 +3574,7 @@ export class TillApi {
   }): Promise<{
     id: string;
     orderNumber: number;
+    serviceMode: HeldOrder["serviceMode"];
     revision?: number;
     setMenus?: BillSetMenuState;
   }> {

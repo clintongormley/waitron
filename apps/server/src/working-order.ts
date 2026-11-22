@@ -1517,6 +1517,7 @@ export interface ParkOrderRequest {
 export interface ParkOrderResult {
   id: string;
   orderNumber: number;
+  serviceMode: ServiceMode | null;
   revision?: number;
   setMenus?: BillSetMenuState;
 }
@@ -1725,10 +1726,12 @@ export async function parkOrder(
         dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
-      if (req.firstSetMenu === undefined) return { id: req.id, orderNumber };
+      const serviceMode = (await VENUE_SERVICE.findOrderContext(tx, req.id))?.serviceMode ?? null;
+      const reply = { id: req.id, orderNumber, serviceMode };
+      if (req.firstSetMenu === undefined) return reply;
       const { menuId, personId } = req.firstSetMenu;
       const setMenus = await setSetMenuCount(tx, cfg, req.id, menuId, 1, personId);
-      return { id: req.id, orderNumber, revision: await readOrderRevision(tx, req.id), setMenus };
+      return { ...reply, revision: await readOrderRevision(tx, req.id), setMenus };
     });
   } catch (error) {
     if (!isUniqueViolation(error)) {
@@ -1738,14 +1741,22 @@ export async function parkOrder(
     // venue file at a time, so that row is readable in a fresh transaction: replay its number.
     return withTransaction(deps.db, async (tx) => {
       const [existing] = await tx
-        .select({ orderNumber: workingOrders.orderNumber, revision: workingOrders.revision })
+        .select({
+          orderNumber: workingOrders.orderNumber,
+          revision: workingOrders.revision,
+          serviceMode: workingOrders.serviceMode,
+        })
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // The colliding id is not `open`: an id reuse, not a retry.
       if (existing === undefined) {
         throw error;
       }
-      const reply = { id: req.id, orderNumber: existing.orderNumber };
+      const reply = {
+        id: req.id,
+        orderNumber: existing.orderNumber,
+        serviceMode: existing.serviceMode,
+      };
       return req.firstSetMenu === undefined
         ? reply
         : { ...reply, revision: existing.revision, setMenus: await readBillSetMenus(tx, req.id) };
@@ -5327,6 +5338,7 @@ export interface HeldOrderSummary {
 /** A retrieved order with the stored commercial snapshot needed to rebuild its basket. */
 export interface HeldOrder {
   id: string;
+  serviceMode: ServiceMode | null;
   /** The service zone the order is recorded in; null for one with none. */
   zoneId: string | null;
   expectedEdit: OrderEditAuthority["expectedEdit"];
@@ -5500,6 +5512,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
     const [order] = await tx
       .select({
         id: workingOrders.id,
+        serviceMode: workingOrders.serviceMode,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         revision: workingOrders.revision,
@@ -5676,6 +5689,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
     const zoneId = (await VENUE_SERVICE.findOrderZones(tx, [order.id])).get(order.id) ?? null;
     return {
       id: order.id,
+      serviceMode: order.serviceMode,
       zoneId,
       expectedEdit:
         edit === null

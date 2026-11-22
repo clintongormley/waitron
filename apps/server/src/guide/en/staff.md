@@ -192,6 +192,10 @@ Leave every job unticked to let nobody sign in. When you add a profile, it start
 job selected. Copying a profile keeps its selections. When you add a job later, select it on the
 profiles where its holders need to sign in.
 
+After you change the idle timeout or clocking in a device profile, an open till
+picks up the change as soon as its order is clear. To open the new starting
+screen, sign out and sign in again.
+
 ## Hours and breaks {#hours}
 
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.

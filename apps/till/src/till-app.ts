@@ -2698,6 +2698,8 @@ export class TillApp extends LitElement {
       return await work();
     } finally {
       this.#reloadHolds--;
+      this.#reconcileSavedDeviceZones();
+      this.#reconcileProfileSetup();
       this.#reloadWhenSettled();
     }
   }
@@ -3310,6 +3312,8 @@ export class TillApp extends LitElement {
    * when no read sent after it has applied its own. */
   #setupAsked = 0;
   #setupApplied = 0;
+  #profileSetupApplied = 0;
+  #pendingProfileSetup?: { till: TillInfo; asked: number };
   #preLoginChoice?: string;
   /** Keys the lock screen: a language picked there draws it afresh, dropping a typed PIN, but one the
    * till puts back itself must not, or a sign-in still waiting for its answer is lost. */
@@ -3383,6 +3387,7 @@ export class TillApp extends LitElement {
       this.#evaluateBasket(false);
       this.#syncBasketDraft();
       this.#reconcileSavedDeviceZones();
+      this.#reconcileProfileSetup();
     });
     this.#store.on("refused", (payload) => {
       const refusal = payload as BasketRefusal;
@@ -5380,6 +5385,7 @@ export class TillApp extends LitElement {
     if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
     this.#syncCandidateProtection();
     this.#reconcileSavedDeviceZones();
+    this.#reconcileProfileSetup();
     if (this.operatorName !== "" && !this.#loginPending) {
       if (this.#counterMenuPending) this.#followDefault();
       if (this.#tableMenuPending) this.#followTableMenu();
@@ -5534,6 +5540,7 @@ export class TillApp extends LitElement {
     const bootGeneration = ++this.#bootGeneration;
     this.#refusedPerson = undefined;
     this.#setupRead = undefined;
+    this.#pendingProfileSetup = undefined;
     // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
     // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
     // so nothing would stop a battery reporter started now.
@@ -5572,7 +5579,7 @@ export class TillApp extends LitElement {
         setLocale(this.#preLoginLocale());
       this.orderFlow = "prepay";
       this.#applyVenueSetup(till, asked);
-      this.#applyProfileSetup(till);
+      this.#applyProfileSetup(till, asked);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/till/tabs/*`
       // destinations, so the tab is published only when the shell opens.
       this.activeTabKey = this.#requestedTab();
@@ -6545,8 +6552,7 @@ export class TillApp extends LitElement {
       session !== this.#operatorSession ||
       api !== this.api ||
       !this.isConnected;
-    const clocking =
-      this.#clockingAvailable && this.capabilities.includes("clock-in") && !this.#clockAccessLost;
+    const clocking = this.#clockingAllowed() && !this.#clockAccessLost;
     if (clocking) {
       this.operatorName = displayName;
       this.operatorPersonId = personId;
@@ -7551,6 +7557,7 @@ export class TillApp extends LitElement {
       this.#tableOffers.versions.get(product.menuId ?? "") === product.menuVersionId);
 
   #clearBasket(): void {
+    this.collectFlow = undefined;
     this.#store.clear();
     this.#followDefault();
   }
@@ -9015,6 +9022,7 @@ export class TillApp extends LitElement {
     this.#counterStoredInvoice = storedInvoiceOf(id, order);
     this.counterDiningChoice = { orderId: id, choice: order.diningChoice };
     this.counterLines = listed;
+    this.#setSavedCounterFlow(order.serviceMode);
     this.#commitBasket(this.#basketPayload());
     unlock();
     return true;
@@ -9119,7 +9127,7 @@ export class TillApp extends LitElement {
             return;
           }
         } else {
-          await api.parkOrder({
+          const parked = await api.parkOrder({
             id,
             lines,
             label,
@@ -9128,8 +9136,10 @@ export class TillApp extends LitElement {
             ...(lateSend === undefined ? {} : { lateSend }),
           });
           if (!current()) return;
+          this.#setSavedCounterFlow(parked?.serviceMode);
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
           this.#commitBasket(payload);
+          if (parked?.serviceMode === "prepay") return;
         }
         const choiceRevision = await this.#saveInvoiceChoice(id, null, api);
         if (choiceRevision !== undefined) {
@@ -10363,6 +10373,10 @@ export class TillApp extends LitElement {
     await this.#refreshWaiting();
   }
 
+  #setSavedCounterFlow(mode: HeldOrder["serviceMode"]): void {
+    this.collectFlow = mode === "prepay" || mode === "ticket_then_pay" ? mode : undefined;
+  }
+
   /** The mode the basket's pay controls and receipt follow. */
   #basketFlow(): OrderFlow {
     return this.collectFlow ?? this.orderFlow;
@@ -10454,7 +10468,7 @@ export class TillApp extends LitElement {
     try {
       if (!store.persisted) {
         if (!("count" in change) || change.count === 0) return codeMessage("server.internal");
-        const { revision, setMenus } = await api.parkOrder({
+        const { revision, setMenus, serviceMode } = await api.parkOrder({
           id,
           zoneId,
           dining: "takeaway",
@@ -10464,6 +10478,7 @@ export class TillApp extends LitElement {
         if (!current()) return;
         if (revision === undefined || setMenus === undefined) return codeMessage("server.internal");
         store.markPersisted(true);
+        this.#setSavedCounterFlow(serviceMode);
         this.counterDiningChoice = {
           orderId: id,
           choice: store.diningStart?.policy === "till_choice" ? "open" : "none",
@@ -10759,7 +10774,7 @@ export class TillApp extends LitElement {
     );
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
-    this.collectFlow = undefined;
+    this.#setSavedCounterFlow(order.serviceMode);
   }
 
   /** `order`'s lines rebuilt against `offered`, and the one banner that says what the rebuild
@@ -11862,6 +11877,7 @@ export class TillApp extends LitElement {
     if (!current()) return;
     this.#pendingDeviceZoneSetupRead = false;
     this.#pendingDeviceZoneSetup = { till: setup, asked };
+    this.#queueProfileSetup(setup, asked);
     this.#reconcileSavedDeviceZones();
   }
 
@@ -11878,15 +11894,17 @@ export class TillApp extends LitElement {
       return;
     this.#pendingDeviceZoneSelection = null;
     if (this.#pendingDeviceZoneSetup) {
-      const previousTimeout = this.#inactivityTimeoutSeconds;
       const { till, asked } = this.#pendingDeviceZoneSetup;
       this.#applyVenueSetup(till, asked);
-      this.#applyProfileSetup(till);
       this.#pendingDeviceZoneSetup = undefined;
       this.activeProfileId = selection.profileId;
-      if (this.#inactivityTimeoutSeconds !== previousTimeout) this.#configureSessionActivity();
     }
     this.deviceZoneSelection = selection;
+    const mode = selection.zones.find((zone) => zone.id === this.counterServiceZoneId)?.serviceMode;
+    if (mode === "prepay" || mode === "ticket_then_pay") {
+      if (this.#store.persisted) this.collectFlow ??= this.orderFlow;
+      this.orderFlow = mode;
+    }
     this.deviceZonesNotice = "";
     if (this.formFactor === "till") this.profileServiceZones = [...selection.zones];
     const tab = this.#resolveScreen(this.activeTabKey ?? null);
@@ -12275,7 +12293,9 @@ export class TillApp extends LitElement {
     const read: Promise<void> = this.api
       .getTill({ signal: limit.signal })
       .then((till) => {
-        if (generation === this.#bootGeneration) this.#applyVenueSetup(till, asked);
+        if (generation !== this.#bootGeneration) return;
+        this.#applyVenueSetup(till, asked);
+        this.#queueProfileSetup(till, asked);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -12292,13 +12312,62 @@ export class TillApp extends LitElement {
     const till = await this.api.getTill({ signal });
     if (signal.aborted || generation !== this.#bootGeneration || asked < this.#setupApplied) return;
     if (till.setupRevision === this.#setupRevision) this.#setupApplied = asked;
-    else this.#applyVenueSetup(till, asked);
+    else {
+      this.#applyVenueSetup(till, asked);
+      this.#queueProfileSetup(till, asked);
+    }
+  }
+
+  #queueProfileSetup(till: TillInfo, asked: number): void {
+    if (
+      this.operatorName === "" ||
+      asked < (this.#pendingProfileSetup?.asked ?? this.#profileSetupApplied)
+    )
+      return;
+    this.#pendingProfileSetup = { till, asked };
+    this.#reconcileProfileSetup();
+  }
+
+  #clockingAllowed(): boolean {
+    return this.#clockingAvailable && this.capabilities.includes("clock-in");
+  }
+
+  #reconcileProfileSetup(): void {
+    const pending = this.#pendingProfileSetup;
+    if (
+      !this.isConnected ||
+      pending === undefined ||
+      this.operatorName === "" ||
+      this.#loginPending ||
+      this.profileBusy ||
+      this.#requestsOut() ||
+      this.#counterHasItems ||
+      this.#store.persisted ||
+      this.#partylessDraft.lines.length > 0 ||
+      (this.#orderScreenShown() && this.activeTableId !== undefined) ||
+      this.leave.coordinator.isDirty(undefined, [this.#basketOwner])
+    )
+      return;
+    const clocking = this.#clockingAllowed();
+    const timeout = this.#inactivityTimeoutSeconds;
+    this.#applyProfileSetup(pending.till, pending.asked);
+    if (timeout !== this.#inactivityTimeoutSeconds) this.#configureSessionActivity();
+    if (clocking === this.#clockingAllowed()) return;
+    this.#clockAccessLost = false;
+    if (this.#clockingAllowed()) {
+      this.#startAttendance(this.operatorPersonId, this.#signIns, this.#operatorSession, false);
+      this.#startClocking(this.operatorPersonId, this.#signIns, this.#operatorSession, false);
+    } else {
+      this.#stopClocking();
+      if (this.drill?.kind === "hours") this.#popDrill();
+    }
   }
 
   /** The parts of the till's setup that come from the device's profile. */
-  #applyProfileSetup(till: TillInfo): void {
+  #applyProfileSetup(till: TillInfo, asked: number): void {
+    this.#profileSetupApplied = asked;
+    if ((this.#pendingProfileSetup?.asked ?? 0) <= asked) this.#pendingProfileSetup = undefined;
     this.#clockingAvailable = till.clockingAvailable === true;
-    this.#clockAccessLost = false;
     this.formFactor = till.formFactor;
     this.capabilities = till.capabilities;
     this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
@@ -12311,7 +12380,7 @@ export class TillApp extends LitElement {
       const till = await this.api.getTill();
       if (session !== this.#operatorSession) return;
       this.#applyVenueSetup(till, asked);
-      this.#applyProfileSetup(till);
+      this.#applyProfileSetup(till, asked);
     } catch {
       if (session === this.#operatorSession) this.errorKey = "boot.error";
       return;
@@ -22148,6 +22217,7 @@ export class TillApp extends LitElement {
     this.#pendingDeviceZoneSelection = null;
     this.#pendingDeviceZoneSetup = undefined;
     this.#pendingDeviceZoneSetupRead = false;
+    this.#pendingProfileSetup = undefined;
     this.#clearTenderRefundSession();
     this.#stopClocking();
     this.#readerPayments.clear();
@@ -24086,6 +24156,8 @@ export class TillApp extends LitElement {
             partyId: this.orderParty.id,
           }
         : undefined;
+    const pending = this.#pendingProfileSetup;
+    if (pending !== undefined) this.#applyProfileSetup(pending.till, pending.asked);
     this.operatorName = "";
     this.#loginPending = false;
     this.#preLoginChoice = undefined;

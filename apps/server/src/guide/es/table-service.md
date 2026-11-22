@@ -30,6 +30,10 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+Si en tu zona de servicio cambia el momento de cobrar, comprueba los botones
+antes de enviar o cobrar un pedido sin guardar. Un pedido guardado conserva
+el momento de cobro que tenía al guardarlo.
+
 Si se rechaza el cobro en efectivo de un pedido aparcado que has editado, los cambios siguen en
 la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guardar los cambios sin cobrar.
 

@@ -28,6 +28,10 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
+If your service area changes when payment is due, check the buttons before you
+send or pay for an unsaved basket. A saved order keeps the payment timing it
+had when you saved it.
+
 If cash is refused while you pay an edited parked order, your edits stay in the basket.
 Correct the payment amount and try again, or park the order to save the edits without paying.
 

@@ -3,14 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Service periods, opening hours and departments". This file holds
 their full text.
 
-## Refresh service settings on an open till
-
-A till already signed in keeps its loaded payment flow when a department or zone policy changes.
-Its menu-state poll does not carry the policy, and reloading offers after a menu change still
-keeps that flow. A fresh sign-in reads the changed policy. Decide when an empty till should adopt
-new settings and how an existing basket keeps its recorded facts, then update the poll and its
-consumer. Left open by A366 slice 6 Part A. This entry does not establish when the behavior began.
-
 ## Split an order's recorded service mode into two facts
 
 The owner requested this future change on 2026-10-09 while answering slice 6 decision 4.
