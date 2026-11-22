@@ -72,8 +72,8 @@ invitation does not list your roles or include the venue's optional privacy link
 does not arrive, request a fresh link or code; an earlier message may still arrive later.
 If you rely on Cloud email and it becomes unavailable, restore Cloud. Outside Demo, you can
 also add a mail server in **System → Email**. If your saved mail settings are unusable,
-invitations, password resets and email-change codes wait for working settings. Correct the
-settings and send another test.
+queued invitations, password resets and email-change codes wait for working settings. Correct
+the settings and send another test before requesting a fresh link or code.
 
 ## Check the test result {#test-results}
 
@@ -98,7 +98,8 @@ Continue becomes available after the server accepts a test of those settings for
 With box administration (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the server clears its saved login details too; enter them again if you set it up later.
 
-Outside development, removing the server stops receipt email. If you have enabled test Cloud
-email, Cloud can send [account email](email.md#cloud-account-email). Sales continue. On a
-development box without Cloud email, check the test inbox. If the settings fail to reload after
-removal, retry loading them. The removal has already succeeded.
+Outside development, keep a mail server for receipt email, the daily report and notices that
+Cloud does not handle. If you have enabled test Cloud email, Cloud can send
+[account email](email.md#cloud-account-email). Sales continue. On a development box without
+Cloud email, check the test inbox. If the settings fail to reload after removal, retry loading
+them. The removal has already succeeded.

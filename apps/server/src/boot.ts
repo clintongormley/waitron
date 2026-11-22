@@ -2654,8 +2654,14 @@ async function bootServer(
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
   const usesSavedAccountSmtp = async (tx: Transaction) => !captureOnly && (await hasSavedSmtp(tx));
   const accountMailMode = async (tx: Transaction) => {
-    if (await usesSavedAccountSmtp(tx))
-      return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
+    if (await usesSavedAccountSmtp(tx)) {
+      try {
+        return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
+      } catch (error) {
+        log("error", "mail.delivery_unavailable", { rule: "notice", errorCode: codeOf(error) });
+        return "unconfigured" as const;
+      }
+    }
     try {
       if (await cloudConnection?.emailRelayEnabled()) return "cloud" as const;
     } catch {

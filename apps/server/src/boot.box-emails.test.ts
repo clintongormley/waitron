@@ -452,13 +452,14 @@ describe("the running server's notice and email checks", () => {
     },
   );
   it.each([
-    ["prepare", false, "venue@example.test", "smtp"],
-    ["prepare", false, "one@example.test, two@example.test", "unconfigured"],
-    ["demo", true, "venue@example.test", "smtp"],
-    ["demo", false, "venue@example.test", "cloud"],
+    ["prepare", false, "venue@example.test", "smtp", 5],
+    ["prepare", false, "one@example.test, two@example.test", "unconfigured", 5],
+    ["prepare", false, "venue@example.test", "unconfigured", 7],
+    ["demo", true, "venue@example.test", "smtp", 5],
+    ["demo", false, "venue@example.test", "cloud", 5],
   ] as const)(
-    "routes paired %s account mail with development=%s and saved sender %s through %s",
-    async (intent, development, from, mode) => {
+    "routes paired %s account mail with development=%s and saved sender %s through %s (key %s)",
+    async (intent, development, from, mode, keyByte) => {
       const venue = await setupVenue(suite.db);
       const booted: Booted = {};
       let submitted: Record<string, unknown> | undefined;
@@ -520,13 +521,20 @@ describe("the running server's notice and email checks", () => {
         expect(await withTransaction(suite.db, holder.managementMode!)).toBe("cloud");
         const url = "smtp://smtp.example.test:2525";
         const ring = loadKeyRing({
-          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, keyByte).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
         });
         await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, { url, from }));
         const requestsBeforeSend = f.requests.length;
 
-        await runMailPass(holder.mail!);
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe(mode);
+        expect(await withTransaction(suite.db, holder.profileMode!)).toBe(mode);
+
+        const mail = holder.mail!;
+        await mailSendJob({ ...mail, maxSleepMs: 60_000 }).pass({
+          now: mail.now(),
+          signal: mail.signal,
+        });
 
         if (mode === "cloud") {
           expect(submitted).toMatchObject({
@@ -537,8 +545,6 @@ describe("the running server's notice and email checks", () => {
           expect(f.requests.slice(requestsBeforeSend).map((request) => request[2])).toEqual([]);
         }
         expect(holder.smtp).toEqual(mode === "smtp" ? [expect.objectContaining({ url })] : []);
-        expect(await withTransaction(suite.db, holder.managementMode!)).toBe(mode);
-        expect(await withTransaction(suite.db, holder.profileMode!)).toBe(mode);
         expect(
           suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
         ).toMatchObject({ status: mode === "unconfigured" ? "pending" : "sent" });

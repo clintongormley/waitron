@@ -82,8 +82,8 @@ llega un correo, solicita un enlace o código nuevo; un mensaje anterior aún pu
 Si dependes del correo de Cloud y deja de estar disponible, restablece Cloud. Fuera de
 Demostración, también puedes añadir un servidor de correo en **Sistema → Correo**. Si los ajustes
 de correo guardados no funcionan, las invitaciones, los enlaces para restablecer contraseñas y
-los códigos de cambio de correo quedan pendientes hasta que los corrijas. Corrige los ajustes y
-envía otra prueba.
+los códigos de cambio de correo que ya están en cola quedan pendientes. Corrige los ajustes y
+envía otra prueba antes de solicitar un enlace o código nuevo.
 
 ## Comprueba el resultado de la prueba {#test-results}
 
@@ -112,7 +112,8 @@ Con el permiso de administración del equipo (Admin de forma predeterminada), el
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
-Fuera de desarrollo, al quitar el servidor se detiene el envío de recibos por correo. Si has activado
-el correo de Cloud de prueba, Cloud puede enviar el [correo de cuentas](email.md#cloud-account-email).
-Las ventas continúan. En una caja de desarrollo sin correo de Cloud, consulta el buzón de prueba.
-Si los ajustes no se cargan tras quitar el servidor, vuelve a cargarlos. El servidor ya se ha quitado.
+Fuera de desarrollo, conserva un servidor de correo para enviar recibos, el informe diario y los
+avisos que Cloud no gestiona. Si has activado el correo de Cloud de prueba, Cloud puede enviar el
+[correo de cuentas](email.md#cloud-account-email). Las ventas continúan. En una caja de desarrollo
+sin correo de Cloud, consulta el buzón de prueba. Si los ajustes no se cargan tras quitar el servidor,
+vuelve a cargarlos. El servidor ya se ha quitado.
