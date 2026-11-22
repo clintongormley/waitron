@@ -145,7 +145,9 @@ async function cardReaderDeleteRules(
     ? [named("provider_pairing", provider)]
     : registrationKept
       ? [named("provider_registration_kept", provider)]
-      : [];
+      : seat !== undefined && !canUnpair
+        ? [named("provider_registration_stays", provider)]
+        : [];
   const removes: DeleteImpactItem[] = [
     named(
       "device_reader",

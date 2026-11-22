@@ -345,9 +345,14 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     },
   );
 
-  it.each(["en", "es-ES"] as const)(
-    "renders the delete dialog saying the reader stays registered at the provider accessibly (%s)",
-    async (locale) => {
+  it.each([
+    ["en", "provider_registration_kept"],
+    ["es-ES", "provider_registration_kept"],
+    ["en", "provider_registration_stays"],
+    ["es-ES", "provider_registration_stays"],
+  ] as const)(
+    "renders the delete dialog saying the reader stays registered at the provider accessibly (%s, %s)",
+    async (locale, key) => {
       setLocale(locale);
       const { host, dialog } = await openReaderDelete(
         stubApi({
@@ -355,7 +360,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
             ...deleteImpact(false),
             ends: [
               {
-                key: "provider_registration_kept",
+                key,
                 count: 1,
                 targets: [{ id: "acme", name: "acme" }],
               },

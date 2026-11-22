@@ -29,6 +29,10 @@ export function readerDeleteCopy(providerName: (providerId: string) => string): 
       return fill("payments.delete_kept_at_provider", {
         provider: item.targets.map(({ id }) => providerName(id)).join(", "),
       });
+    if (key === "provider_registration_stays")
+      return fill("payments.delete_stays_at_provider", {
+        provider: item.targets.map(({ id }) => providerName(id)).join(", "),
+      });
     if (key === "reader_holder")
       return fill("payments.delete_holder", { names: deleteTargetNames(item.targets) });
     const counted = Object.hasOwn(COUNTED, key) ? COUNTED[key] : undefined;

@@ -3343,7 +3343,7 @@ export const en = {
     "Unpairing cannot be undone here. This reader returns to standalone use. Adding it back will need a pairing code.",
   "payments.delete_heading": "Delete reader?",
   "payments.delete_refusals": "Why it can't be deleted",
-  "payments.delete_ends": "What ends",
+  "payments.delete_ends": "At the card provider",
   "payments.delete_removes": "Settings that are removed",
   "payments.delete_irreversible":
     "History is kept. Add the reader again to use it. Removed assignments stay cleared.",
@@ -3354,6 +3354,8 @@ export const en = {
   "payments.delete_pairing": "Unpairs it from {provider}",
   "payments.delete_kept_at_provider":
     "{provider} isn't connected, so the reader stays registered at {provider}. Remove it there too.",
+  "payments.delete_stays_at_provider":
+    "The reader stays registered at {provider}. Remove it there too if you no longer use it.",
   "payments.delete_device_reader": "Chosen on {count} devices: {names}",
   "payments.delete_device_reader_one": "Chosen on 1 device: {names}",
   "payments.delete_device_default": "Default on {count} devices: {names}",
@@ -8076,7 +8078,7 @@ export const es: Record<StringKey, string> = {
     "La desvinculación no se puede deshacer aquí. Este lector volverá a funcionar de forma independiente. Para añadirlo de nuevo necesitarás un código de vinculación.",
   "payments.delete_heading": "¿Eliminar el lector?",
   "payments.delete_refusals": "Por qué no se puede eliminar",
-  "payments.delete_ends": "Qué finaliza",
+  "payments.delete_ends": "En el proveedor de tarjetas",
   "payments.delete_removes": "Configuración que se elimina",
   "payments.delete_irreversible":
     "Se conserva el historial. Para usar el lector, añádelo de nuevo. Las asignaciones eliminadas no se recuperan.",
@@ -8087,6 +8089,8 @@ export const es: Record<StringKey, string> = {
   "payments.delete_pairing": "Se desvincula de {provider}",
   "payments.delete_kept_at_provider":
     "{provider} no está conectado, así que el lector sigue registrado en {provider}. Elimínalo también allí.",
+  "payments.delete_stays_at_provider":
+    "El lector sigue registrado en {provider}. Elimínalo también allí si ya no lo usas.",
   "payments.delete_device_reader": "Elegido en {count} dispositivos: {names}",
   "payments.delete_device_reader_one": "Elegido en 1 dispositivo: {names}",
   "payments.delete_device_default": "Predeterminado en {count} dispositivos: {names}",

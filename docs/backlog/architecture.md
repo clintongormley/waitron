@@ -432,8 +432,6 @@ reset and operator gates; this entry does not start that job.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
-- A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
-  a SumUp reader's does while SumUp is not connected. Step 3b.
 - The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
   device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
   has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
