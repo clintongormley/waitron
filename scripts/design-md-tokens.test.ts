@@ -13,14 +13,17 @@ import { parse } from "yaml";
  * the `[data-theme="light"]` block and a `night-*` or Sky copy against both dark blocks; each
  * `rounded` and `spacing` step; each typography role's `fontSize`, `control` included, with a
  * `var()` inside the token resolved, and its `fontFamily`; design.json's `colorMeta` keys against
- * the frontmatter's colours; its `shadows` and `motion` values; and, in every sample's CSS, that each
- * `var(--wt-*)` names a declared token and falls back to that token's light value, spaces and
- * quotes ignored. Each list must hold at least one entry, so deleting a whole list fails.
+ * the frontmatter's colours; its `shadows` and `motion` values; that each string in its `narrative`,
+ * other than the rules' `section` labels, appears in DESIGN.md with runs of whitespace made one
+ * space; and, in every sample's CSS, that each `var(--wt-*)` names a declared token and falls back
+ * to that token's light value, spaces and quotes ignored. Each list must hold at least one entry, so
+ * deleting a whole list fails.
  *
  * Weaker than its name: it reads the files as text and renders nothing. It does not check
- * DESIGN.md's prose (sizes, the shadow values in backticks), the frontmatter's `fontWeight`,
- * `letterSpacing` and `components` entries, design.json's `typographyMeta`, `breakpoints`,
- * `narrative` and `tonalRamp` arrays, a literal value in a sample's CSS that does not go through a
+ * DESIGN.md's prose against the token files (sizes, the shadow values in backticks), the
+ * frontmatter's `fontWeight`, `letterSpacing` and `components` entries, design.json's
+ * `typographyMeta`, `breakpoints` and `colorMeta` values (only its keys), the `section` labels, a
+ * sample's `description` and `html`, a literal value in a sample's CSS that does not go through a
  * `var(--wt-*)`, or whether a sample reads the same token as the component it stands for.
  */
 
@@ -151,6 +154,7 @@ interface Sidecar {
     motion: { name: string; value: string }[];
   };
   components: { name: string; css: string }[];
+  narrative: unknown;
 }
 
 const sidecar = JSON.parse(read(".impeccable/design.json")) as Sidecar;
@@ -174,6 +178,19 @@ function varCalls(css: string): { token: string; fallback: string | undefined }[
   }
   return calls;
 }
+
+/** Every string inside `value`, at any depth, leaving out the rules' `section` labels. */
+function prose(value: unknown, key?: string): string[] {
+  if (typeof value === "string") return key === "section" ? [] : [value];
+  if (Array.isArray(value)) return value.flatMap((each) => prose(each));
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).flatMap(([name, each]) => prose(each, name));
+  }
+  return [];
+}
+
+/** Text with each run of whitespace, line breaks included, made one space. */
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** The light value of a token: structure.css's, or one per light colour block. */
 const lightValues = (token: string) =>
@@ -255,6 +272,13 @@ describe(".impeccable/design.json", () => {
       ),
     );
     expect(stale).toEqual([]);
+  });
+
+  it("copies its narrative word for word from DESIGN.md", () => {
+    const strings = prose(sidecar.narrative);
+    expect(strings.length).toBeGreaterThan(0);
+    const markdown = oneLine(designMd);
+    expect(strings.filter((text) => !markdown.includes(oneLine(text)))).toEqual([]);
   });
 
   it("reads at least one token in every sample's CSS", () => {
