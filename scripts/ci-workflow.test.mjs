@@ -14,6 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { runInNewContext } from "node:vm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { mutationCallers } from "./mutation-workflow.mjs";
 import {
   LIGHT_A_PACKAGES,
@@ -32,15 +33,15 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except the cases
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
-// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-transfer cases reading every
+// two apt cases, a `--with-deps` case, the push-concurrency, pnpm-setup, checkout and artifact-transfer cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
 // the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
-// Line matching rather than a YAML parser, because there is no YAML library in this workspace.
-// Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
-// file ever starts disagreeing with the workflow.
+// Most extractions match lines; the push-concurrency cases parse with the `yaml` package. If a line
+// extraction ever disagrees with a workflow, compare it with `yaml`'s parse rather than reasoning
+// about the regexes.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
 const { AbortController } = globalThis;
@@ -4888,6 +4889,116 @@ function workflowTexts(name) {
   expect(callers.length).toBeGreaterThan(0);
   return callers.map(({ minutes }) => text.replaceAll("${{ inputs.minutes }}", String(minutes)));
 }
+
+/** A workflow file parsed as YAML; anything without an `on` throws, naming the file. */
+function workflowOf(name, text) {
+  let workflow;
+  try {
+    workflow = parse(text);
+  } catch (error) {
+    throw new Error(`${name}: ${error.message}`, { cause: error });
+  }
+  if (typeof workflow !== "object" || workflow === null || !("on" in workflow)) {
+    throw new Error(`${name} has no \`on:\``);
+  }
+  return workflow;
+}
+
+function pushTriggered(name, text) {
+  const { on } = workflowOf(name, text);
+  if (Array.isArray(on)) return on.includes("push");
+  return on === "push" || (typeof on === "object" && on !== null && Object.hasOwn(on, "push"));
+}
+
+/**
+ * Fixed groups allowed on push because `queue: max` lets pending runs wait in turn rather than a
+ * newer one cancelling the one waiting. Receipt: `docs/developers/ci-and-gates.md`, "Automatic
+ * private package releases".
+ */
+const QUEUED_PUSH_GROUPS = ["publish-ui.yml"];
+
+/** ci.yml's per-push group, whole: whitespace inside `${{ }}` aside, nothing else passes. */
+const PER_PUSH_GROUP =
+  /^\$\{\{\s*github\.workflow\s*\}\}-\$\{\{\s*github\.event_name\s*!=\s*'pull_request'\s*&&\s*github\.run_id\s*\|\|\s*github\.ref\s*\}\}$/;
+
+/** Why a push workflow's top-level group fails the guard, or null when it passes. */
+function pushGroupProblem(name, text) {
+  const { concurrency: block } = workflowOf(name, text);
+  if (block === undefined) return null;
+  const {
+    group,
+    queue,
+    "cancel-in-progress": cancel,
+  } = typeof block === "string" ? { group: block } : (block ?? {});
+  if (QUEUED_PUSH_GROUPS.includes(name)) {
+    return String(queue) === "max" && String(cancel) === "false"
+      ? null
+      : `${name} is allowed a fixed group only with \`queue: max\` and \`cancel-in-progress: false\``;
+  }
+  return PER_PUSH_GROUP.test(String(group))
+    ? null
+    : `${name}'s group ${group} is not ci.yml's per-push expression, the only per-push group this guard accepts`;
+}
+
+describe("the push workflows' concurrency groups", () => {
+  const PER_PUSH =
+    "${{ github.workflow }}-${{ github.event_name != 'pull_request' && github.run_id || github.ref }}";
+  const withGroup = (group) => `on: push\nconcurrency:\n  group: ${group}\n`;
+
+  it("gives every push its own group in every push-triggered workflow", () => {
+    const read = (name) => readFileSync(join(workflowsDir, name), "utf8");
+    const pushed = workflowFiles.filter((name) => pushTriggered(name, read(name)));
+    expect(pushed).toEqual(expect.arrayContaining(["ci.yml", ...QUEUED_PUSH_GROUPS]));
+    expect(pushed.map((name) => pushGroupProblem(name, read(name))).filter(Boolean)).toEqual([]);
+  });
+
+  it("reports a group by ref, passes no group, and refuses a run-id-only group", () => {
+    expect(pushGroupProblem("x.yml", withGroup("${{ github.ref }}"))).toMatch(/x\.yml/);
+    expect(pushGroupProblem("x.yml", "on: push\njobs: {}\n")).toBeNull();
+    expect(pushGroupProblem("x.yml", `on: push\nconcurrency: "${PER_PUSH}"\n`)).toBeNull();
+    expect(pushGroupProblem("x.yml", withGroup("${{ github.run_id }}"))).toMatch(
+      /x\.yml.*not ci\.yml's per-push expression/,
+    );
+  });
+
+  it("refuses a fixed group with the expression only in a comment or behind `true ||`", () => {
+    expect(pushGroupProblem("x.yml", withGroup(`fixed # ${PER_PUSH}`))).toMatch(/x\.yml/);
+    const alwaysTrue = PER_PUSH.replace("${{ github.event_name", "${{ true || github.event_name");
+    expect(pushGroupProblem("x.yml", withGroup(alwaysTrue))).toMatch(/x\.yml/);
+  });
+
+  it("reads quoted keys, flow-style documents and lists, and throws on a repeated key", () => {
+    const quoted = '"on":\n  "push":\n"concurrency":\n  group: fixed\n';
+    const flow = '  {"on": "push", "concurrency": {"group": "fixed"}}\n';
+    const list = "on: [pull_request, push]\nconcurrency: fixed\n";
+    for (const text of [quoted, flow, list]) {
+      expect(pushTriggered("x.yml", text)).toBe(true);
+      expect(pushGroupProblem("x.yml", text)).toMatch(/x\.yml/);
+    }
+    const repeated = `${withGroup(PER_PUSH)}concurrency:\n  group: fixed\n`;
+    expect(() => pushGroupProblem("x.yml", repeated)).toThrow(/x\.yml.*unique/);
+    expect(() => pushTriggered("x.yml", "jobs: {}\n")).toThrow(/x\.yml/);
+  });
+
+  it("does not take a nested input named push, or a comment, as a push trigger", () => {
+    const input = "on:\n  workflow_dispatch:\n    inputs:\n      push:\n        type: boolean\n";
+    expect(pushTriggered("x.yml", input)).toBe(false);
+    expect(pushTriggered("x.yml", "on: workflow_dispatch # push\n")).toBe(false);
+  });
+
+  it("allows publish-ui.yml's fixed group only with `queue: max` and no cancellation", () => {
+    const fixed = (extra) => `on: push\nconcurrency:\n  group: ui\n${extra}`;
+    const queued = fixed("  queue: max\n  cancel-in-progress: false\n");
+    expect(pushGroupProblem("publish-ui.yml", queued)).toBeNull();
+    expect(pushGroupProblem("publish-ui.yml", fixed("  cancel-in-progress: false\n"))).toMatch(
+      /publish-ui\.yml/,
+    );
+    expect(
+      pushGroupProblem("publish-ui.yml", fixed("  queue: max\n  cancel-in-progress: true\n")),
+    ).toMatch(/publish-ui\.yml/);
+    expect(pushGroupProblem("other.yml", queued)).toMatch(/other\.yml/);
+  });
+});
 
 describe("the workflow step reader", () => {
   it("reads a step's id, condition, action, settings, environment and inputs", () => {
