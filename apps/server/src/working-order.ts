@@ -1545,8 +1545,9 @@ export interface ParkOrderResult {
 
 /**
  * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
- * gross lines its rows were built from so a walk-up files its sale from the same lines. Shared so a
- * walk-up order has the same shape as a parked one. The empty-basket refusal stays with each caller.
+ * gross lines its rows were built from, for their totals: they carry no VAT rates, and a sale is
+ * filed from the stored lines. Shared so a walk-up order has the same shape as a parked one. The
+ * empty-basket refusal stays with each caller.
  */
 export async function createOpenOrder(
   tx: Transaction,

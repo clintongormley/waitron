@@ -800,7 +800,7 @@ it("subscribes the venue defaults to the clock document, venue document, menu se
   ]);
 });
 
-// Only the products route's answer carries a takeaway rate (`listProducts`,
+// Of the live queries, only the products route's answer carries a takeaway rate (`listProducts`,
 // packages/menu/src/operations.ts).
 it.each([
   ["listProducts", true],

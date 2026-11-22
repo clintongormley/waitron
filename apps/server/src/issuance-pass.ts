@@ -11,7 +11,7 @@ import type { GrossOrder } from "./working-order.js";
  * the gross lines it files, before `issueMoment` rates them, and a replay or reprint never does.
  *
  * `order.identities[i]` is the working-order line `order.gross.lines[i]` was priced from, as
- * `priceStoredOrderForIssuance` and `createOpenOrder` both return them; for a row grouped from
+ * `priceStoredOrderForIssuance` returns them; for a row grouped from
  * portions, its first. The menu is read from that line's context: every portion of a round holds a
  * copy of one context (`expandPortionRows`), and contexts are never updated.
  */
