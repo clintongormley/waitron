@@ -1,4 +1,4 @@
-import type { TranslationQuery } from "./client.js";
+import type { HomeDisplay, TranslationQuery } from "./client.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -712,7 +712,7 @@ it("reads a shared menu snapshot through one encoded GET, preserving independent
   const headers: Headers[] = [];
   const response = {
     structure: { status: 200, body: { rootSectionId: "root" } },
-    home: { status: 200, body: { handheld: { columns: 5 } } },
+    home: { status: 200, body: { handheld: { columns: 2 } } },
     status: {
       status: 409,
       body: { error: { code: "menu.reset_required", params: { menuId: "menu&one" } } },
@@ -734,11 +734,11 @@ it("reads a shared menu snapshot through one encoded GET, preserving independent
 });
 
 it("refreshes the shared menu snapshot for product and publication changes", async () => {
-  let columns = 3;
+  let handheld: Partial<HomeDisplay> = { columns: 3 };
   const reads: string[] = [];
   const api = new DashboardApi("", async (path) => {
     reads.push(path);
-    return Response.json({ home: { status: 200, body: { handheld: { columns } } } });
+    return Response.json({ home: { status: 200, body: { handheld } } });
   });
   const observed = api.liveData.observe(
     dashboardQuery(api, "getMenuRead", ["menu-1", ["home", "preview"]]),
@@ -746,18 +746,18 @@ it("refreshes the shared menu snapshot for product and publication changes", asy
   );
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-    columns = 5;
+    handheld = { columns: 2 };
     api.liveData.invalidate([{ type: "products", id: "changed-product" }]);
     await vi.waitFor(() =>
       expect(observed.snapshot.value).toEqual({
-        home: { status: 200, body: { handheld: { columns: 5 } } },
+        home: { status: 200, body: { handheld: { columns: 2 } } },
       }),
     );
-    columns = 6;
+    handheld = { columns: 2, tiles: "thumbnails" };
     api.liveData.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() =>
       expect(observed.snapshot.value).toEqual({
-        home: { status: 200, body: { handheld: { columns: 6 } } },
+        home: { status: 200, body: { handheld: { columns: 2, tiles: "thumbnails" } } },
       }),
     );
     expect(reads).toHaveLength(3);
