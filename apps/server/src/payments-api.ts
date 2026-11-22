@@ -86,7 +86,7 @@ import {
   authorizeManager,
   createPinThrottle,
   requireFreshManagementSignIn,
-  verifyPersonCredential,
+  verifyThrottledCredential,
   type Permission,
   type PinThrottle,
   type SecretCheck,
@@ -403,6 +403,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     deps.backend.refuseUntilRecordable(tx, deps.clock.now());
 
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
+  const attempts = { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT };
 
   const managerPinToCheck = async (
     sessionId: string,
@@ -416,37 +417,16 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     return { personId: authorizedBy, pin };
   };
 
-  /** Re-checks the manager's own PIN, refusing `pin.throttled` after too many wrong ones. */
-  const verifyManagerPin = async (
-    tx: Transaction,
-    personId: string,
-    pin: unknown,
-    checked: SecretCheck | undefined,
-  ) => {
-    pinThrottle.check(DASHBOARD_PIN_SLOT, personId);
-    try {
-      if (typeof pin !== "string") throw new AppError("pin.invalid", {}, { reason: "malformed" });
-      await verifyPersonCredential(tx, personId, pin, checked);
-    } catch (error) {
-      if (isAppError(error) && error.code === "pin.invalid") {
-        pinThrottle.recordFailure(DASHBOARD_PIN_SLOT, personId);
-      }
-      throw error;
-    }
-    pinThrottle.clear(DASHBOARD_PIN_SLOT, personId);
-  };
-
   const pinGated = async <T>(
     sessionId: string,
     pin: unknown,
     fn: (tx: Transaction, personId: string, print: SettledSlipPrinter) => Promise<T>,
   ): Promise<T> => {
     const credential = await managerPinToCheck(sessionId, pin);
-    const attempts = { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT };
     const transaction = (checked: SecretCheck | undefined) =>
       withSettledSlip((print) =>
         gated(sessionId, async (tx, personId) => {
-          await verifyManagerPin(tx, personId, pin, checked);
+          await verifyThrottledCredential(tx, personId, pin, attempts, checked);
           return fn(tx, personId, print);
         }),
       );
