@@ -2,6 +2,11 @@
 
 Abre la dirección del servidor para entrar al panel de gestión, o añade `/till/` para abrir la caja. Actualiza los marcadores y accesos directos antiguos de la caja para que terminen en `/till/`. El navegador conserva su registro como dispositivo.
 
+En un teléfono o una tableta Android, la página puede decir primero que no se encuentra; cuando
+Chrome pregunte si puede acceder a los dispositivos de tu red local, permítelo. Una VPN activada en
+el dispositivo, como Google VPN, puede impedir que abra `waitron.local`: desactiva la VPN en los
+dispositivos que usan la caja.
+
 ## Cuando abres el servidor de reserva {#spare}
 
 Si ves **Este es el servidor de reserva del local**, abre el servidor principal para llegar a las

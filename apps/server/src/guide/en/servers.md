@@ -2,6 +2,10 @@
 
 Open the box’s address for the dashboard, or add `/till/` to open the till. Update any older till bookmark or home-screen shortcut to end in `/till/`. Your enrolled browser keeps its device sign-in.
 
+On an Android phone or tablet the page may first say it cannot be found; when Chrome then asks
+whether it can reach devices on your local network, allow it. A VPN switched on in the device, such
+as Google VPN, can stop it opening `waitron.local`: switch the VPN off on devices that run the till.
+
 ## When you open the spare box {#spare}
 
 If you see **This is the venue’s spare box**, open the main box to reach the restaurant screens
