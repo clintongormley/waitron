@@ -5,7 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { MONEY_SCALE, compareDecimal, decimal, toScale } from "@waitron/shared";
 import type { TabLine } from "../api/client.js";
-import { fill, named, t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { billLabel } from "../state/bill-state.js";
 import {
@@ -17,6 +17,7 @@ import {
   type SplitPicks,
   type SplitSource,
 } from "../state/split-selection.js";
+import { draftHolderRow, draftHolderStyles } from "./draft-holder-row.js";
 import { tickStyles } from "./portion-picker.js";
 
 /** `split-take-over`: a bill's holder as the panel's read showed them. */
@@ -45,6 +46,7 @@ export class TillSplitPicker extends LitElement {
   static override styles = [
     baseStyles,
     tickStyles,
+    draftHolderStyles,
     css`
       :host {
         display: block;
@@ -98,14 +100,6 @@ export class TillSplitPicker extends LitElement {
       }
       .note {
         margin: 0;
-      }
-      .held {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -183,21 +177,13 @@ export class TillSplitPicker extends LitElement {
   }
 
   #holder(source: SplitSource, held: NonNullable<SplitSource["held"]>): TemplateResult {
-    const name = held.ownerName ?? "";
-    const words = held.takenFromYou
-      ? named(name, t("table.draft_taken_by"), t("table.draft_taken_by_unnamed"))
-      : named(name, t("table.others_draft"), t("table.others_draft_unnamed"));
-    return html`<div class="held">
-      <span>${words}</span>
-      <wt-button
-        variant="secondary"
-        data-split-take-over=${source.bill.workingOrderId}
-        aria-label=${`${t("table.take_over")} · ${billLabel(source.bill)}`}
-        @click=${() => this.#takeOver(source, held)}
-      >
-        ${t("table.take_over")}
-      </wt-button>
-    </div>`;
+    return draftHolderRow({
+      billId: source.bill.workingOrderId,
+      label: billLabel(source.bill),
+      ownerName: held.ownerName,
+      takenFromYou: held.takenFromYou,
+      takeOver: () => this.#takeOver(source, held),
+    });
   }
 
   #bill(source: SplitSource): TemplateResult {

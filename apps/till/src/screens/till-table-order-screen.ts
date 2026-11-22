@@ -7438,9 +7438,23 @@ export class TillTableOrderScreen extends LitElement {
     const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
     const toBillId = this.#moveDishesChosen();
     if (lineIds.length === 0 || toBillId === undefined) return;
-    this.#retireActions();
-    this.#dispatch("move-dishes", { lineIds, toBillId });
+    const rows = this.#moveDishesRows();
+    const picks = this.moveDishesPicks;
     this.#closeActions();
+    const review = () => {
+      if (!this.isConnected || this.actionStep !== "closed") return;
+      this.actionVerb = "move-dishes";
+      this.actionStep = "move-dishes";
+      this.moveDishesPicks = tidyPicks(rows, this.#dishGroupsFor(this.#dishSources()), picks);
+      this.moveDishesTo =
+        toBillId === null ||
+        this.#otherOpenBills().some(({ bill }) => bill.workingOrderId === toBillId)
+          ? toBillId
+          : undefined;
+      this.#stepFocus = "step";
+      this.#watchActions();
+    };
+    this.#dispatch("move-dishes", { lineIds, toBillId, review });
   }
 
   #backButton(slot?: string): TemplateResult {

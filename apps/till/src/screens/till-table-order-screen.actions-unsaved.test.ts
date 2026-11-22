@@ -747,7 +747,10 @@ it("A803 move dishes unsaved: Move releases the protection before it sends", asy
     .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   await screen.updateComplete;
   expect(app.commands).toEqual([
-    { type: "move-dishes", detail: { lineIds: ["line-1"], toBillId: "other" } },
+    {
+      type: "move-dishes",
+      detail: { lineIds: ["line-1"], toBillId: "other", review: expect.any(Function) },
+    },
   ]);
   expect(app.protectionAtSubmit).toEqual([false]);
   expect((await question(app)).open).toBe(false);

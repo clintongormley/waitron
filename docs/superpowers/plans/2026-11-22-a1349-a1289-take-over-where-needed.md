@@ -1,7 +1,7 @@
 # Take over unsent orders during joins and moves
 
-**Finish line.** Join a table, Move guests, Move this bill and Move dishes show the bills holding
-up the action. Staff can take over the named unsent orders one at a time, then review and retry.
+**Finish line.** Join a table, Move guests, Move this bill, Move dishes and Merge bills show
+the bills holding up the action. Staff can take over the named unsent orders one at a time, then review and retry.
 This includes Join with and drag-to-join on the floor and Move to table from Held orders on the
 counter. Move dishes keeps the selected dishes and destination for review. The watcher assigned
 A1349/A1289 at 00:42 on 22 November 2026 in the Lane H queue.
@@ -25,29 +25,30 @@ and requires another review. Closing the panel, leaving the visit or changing si
 
 **Return to the action.** In `till-app.ts` and the table order screen, handle conflicts before
 ordinary recovery. Restore Move dishes picks and destination against the latest eligible rows.
-For a floor join, Review prepares the original drop again from the current floor and opens the
-seats prompt if needed. A join without a seats prompt still needs a new press. In the counter's
+For a floor join, close the dialog and let staff drag or press Join again for fresh reads. In the counter's
 held-order move, handle conflicts from both the allergy preview and the move write. Reopen the
 target choice for review and run the current draft and allergy checks on a fresh press. The
 party-scoped endpoint can take over destination drafts. If the refusal names the counter bill
 itself, explain the limit and let staff choose another table or stop. Each retry uses fresh
-observations. Merge bills, server changes and a new counter takeover endpoint are outside
-this item. A1289 refers to Move dishes.
+observations. Merge bills uses the same take-over for a bill in the party. Server changes
+and a counter takeover endpoint are outside this item.
 
-**Proposed words for the watcher** in `apps/till/src/i18n/strings.ts`.
+**Wording cleared by the watcher at 01:00 on 22 November** in `apps/till/src/i18n/strings.ts`.
 
 | Where | English | Spanish |
 | --- | --- | --- |
-| Join or whole move | Unsent orders are holding up this change. Take over the orders below, then review the change. | Hay pedidos sin enviar que impiden el cambio. Toma los pedidos de abajo y luego revisa el cambio. |
+| Join or whole move | Unsent orders are holding up this change. Choose Take over draft on each bill below, then try again. | Hay pedidos sin enviar que impiden el cambio. Elige Tomar el pedido en cada cuenta de abajo y vuelve a intentarlo. |
 | Move dishes | The dishes haven't moved. Take over the orders below, then review the move. | Los platos siguen en su cuenta. Toma los pedidos de abajo y luego revisa el traslado. |
-| Counter bill without a party | This counter order has unsent dishes you can't take over here. Choose another table or leave the order where it is. | Este pedido de barra tiene platos sin enviar que no puedes tomar aquí. Elige otra mesa o deja el pedido donde está. |
+| Counter bill without a party | Someone else has unsent dishes on this counter order. Choose a table with no unsent orders, or leave the order where it is. | Otra persona tiene platos sin enviar en este pedido de barra. Elige una mesa sin pedidos pendientes o deja el pedido donde está. |
 
-**Checks and size.** Test first. In `src/till-app-parties.test.ts` cover the three table actions
-and check the off-screen bill goes to its own party. In `src/till-app-move-dishes.test.ts` show
-the chosen dishes and destination survive the refusal, Cancel sends no takeover, and a new
-press uses fresh edits. In `src/screens/till-floor-screen.today-joins.test.ts` check the join
-waits for a new press. In `src/till-app-allergy.move.test.ts` check the counter's preview and
-write refusals and the message for a counter bill without a party. Keep the split-picker and
-server ownership tests. Open the refusal in EN/ES, light and dark, at phone and desktop widths.
-Update both till guides and remove both backlog entries, their detail and stale A803 links from
-`docs/backlog.md` and `docs/backlog/till.md`. Expect about 470 production lines and 320 test lines.
+**Checks and size.** Test first. The watcher cleared two pull requests at 01:00 on 22 November:
+1. Shared rows and dialog and the five table-screen actions. Test draft ownership and labels in
+   `state/bill-edit-conflicts.test.ts` and `widgets/bill-edit-conflicts-dialog.test.ts`. Keep the
+   picker’s selection and focus tests. Check action routing in `till-app-parties.test.ts`, and
+   restore and explicit retry in `till-app-move-dishes.test.ts`. Update both guides and remove A1289.
+2. Both floor joins and the counter move. Test explicit retry and the counter's preview and write
+   refusals in `till-floor-screen.today-joins.test.ts` and `till-app-allergy.move.test.ts`. Update
+   both guides and remove A1349 and the stale A803 links.
+
+Keep the server ownership tests. Look in EN/ES, light and dark, at phone and desktop widths. The
+original estimate across both slices was 470 production lines and 320 test lines.

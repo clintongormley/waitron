@@ -743,7 +743,11 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     await send(el, "wo-1");
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ lineIds: ["h1"], toBillId: "wo-1" });
+    expect(captured!.detail).toEqual({
+      lineIds: ["h1"],
+      toBillId: "wo-1",
+      review: expect.any(Function),
+    });
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
   });
 

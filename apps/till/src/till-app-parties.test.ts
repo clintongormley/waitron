@@ -12712,6 +12712,80 @@ describe("till-app: table relocation editing observations", () => {
     },
   );
 
+  it.each(commands)("$method offers the other party's draft from its refusal", async (command) => {
+    const { billId } = destinationEdits[0]!;
+    const conflict = {
+      billId,
+      editorId: "luis",
+      editorName: "Luis",
+      editorVersion: 6,
+      draftId: "draft-luis",
+      draftRevision: 4,
+    };
+    const send = vi.fn().mockRejectedValue({
+      code: "draft.taken_over",
+      status: 409,
+      billId,
+      draftId: conflict.draftId,
+      ownerId: conflict.editorId,
+      ownerName: conflict.editorName,
+      edit: conflict,
+      conflicts: [conflict],
+    });
+    const takeOverDraft = vi.fn().mockRejectedValue({ code: "draft.out_of_date", status: 409 });
+    const { el } = await mountApp({
+      listDrafts: observations(),
+      [command.method]: send,
+      takeOverDraft,
+    });
+    emit(await openPartyTable(el), command.event, command.detail);
+    const dialog = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    const root = dialog()!.shadowRoot!;
+    await userEvent.click(root.querySelector<HTMLElement>('[data-split-take-over="wo-7"]')!);
+    await userEvent.click(root.querySelector<HTMLElement>("[data-confirm-take-over]")!);
+    expect(takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v7",
+      "draft-luis",
+      {
+        revision: 4,
+        expectedEdit: { billId, editorVersion: 6, draftId: "draft-luis", draftRevision: 4 },
+        submissionId: expect.any(String),
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it("offers the draft on the bill being merged", async () => {
+    const conflict = {
+      billId: "wo-check",
+      editorId: "luis",
+      editorName: "Luis",
+      editorVersion: 4,
+      draftId: "draft-luis",
+      draftRevision: 3,
+    };
+    const mergeBills = vi.fn().mockRejectedValue({
+      code: "draft.taken_over",
+      status: 409,
+      billId: conflict.billId,
+      draftId: conflict.draftId,
+      ownerId: conflict.editorId,
+      ownerName: conflict.editorName,
+      edit: conflict,
+      conflicts: [conflict],
+    });
+    const { el } = await mountApp({ mergeBills, listDrafts: observations() });
+    emit(await openPartyTable(el), "merge-bills", { fromBillId: "wo-check" });
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("till-bill-edit-conflicts-dialog")
+          ?.shadowRoot?.querySelector('[data-split-take-over="wo-check"]'),
+      ).toBeTruthy(),
+    );
+  });
+
   it.each(commands)("$method refuses missing source metadata", async (command) => {
     const { el } = await mountApp({ listDrafts: observations("wo-4") });
     const order = await openPartyTable(el);
