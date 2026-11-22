@@ -144,15 +144,6 @@ export function createFirstSetupResolutionInspection(
         [...(options.expectedMigrationSets ?? []), ...requiredSets],
       );
     },
-    async recheckEmptyDatabase(roots: FirstSetupRoots, requiredSets: readonly string[]) {
-      const inspected = await inspectDatabase(
-        roots,
-        await artifact(roots.venueDir, VENUE_FILE, 128 * 1024 * 1024, false),
-        options.migrationsRoot ?? null,
-        [...(options.expectedMigrationSets ?? []), ...requiredSets],
-      );
-      return inspected.emptyDatabase;
-    },
     async captureFirstSetupOriginals() {
       const inspection = await service.inspectFirstSetupResolution();
       const originals: { name: string; bytes: Buffer | null }[] = [];
