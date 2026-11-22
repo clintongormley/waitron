@@ -241,13 +241,13 @@ working. Prices and receipts:
 This is now the payment part of [A508](till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay);
 the ordering surface is A508 and [A509](till.md#a509-online-ordering-for-collection-at-the-counter).
 
-## Check how real Stripe answers a malformed reader id, and one from another Stripe account
+## Check how real Stripe answers a reader id from another Stripe account
 
-The add-reader route answers `reader.reference_unknown` when Stripe's
-library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts`
-`readers.add`), and its tests used a local server pretending to be Stripe answering 404
-`resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
-sandbox case beside `checkout.sandbox.test.ts` would settle it.
+The add-reader route answers `reader.reference_unknown` when Stripe's library throws
+`StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts` `readers.add`).
+`reader-add.sandbox.test.ts` shows test-mode Stripe answers that way for an unknown, a malformed
+and an empty id. Whether it does for a real reader that belongs to another Stripe account is
+unchecked: it needs a second test-mode account holding a simulated reader.
 
 ## A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets
 
@@ -281,10 +281,10 @@ Remaining Stripe qualification and maintenance.
   [Detail](payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
-- **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
-  left open by A519 (#1566). Whether test-mode Stripe answers those two cases the same way is
-  unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
-  [Detail](payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
+- **Check how real Stripe answers a reader id from another Stripe account** — left open by A519
+  (#1566); unknown, malformed and empty ids are settled by `reader-add.sandbox.test.ts`. Needs a
+  second test-mode account.
+  [Detail](payments.md#check-how-real-stripe-answers-a-reader-id-from-another-stripe-account)
 - **Check Stripe's reader paging on real Stripe.** The reader list (`readers.list` in
   `packages/payments-stripe/src/card-provider.ts`) asks for 100 readers a page and follows
   `starting_after` until Stripe says there are no more. Its tests use a fake Stripe, and no sandbox
