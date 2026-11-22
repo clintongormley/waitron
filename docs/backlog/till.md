@@ -2757,14 +2757,6 @@ booking stays, and seating it is refused `table.in_joined_table` once the reset 
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
 refuses it, as a delete is refused, or only warns.
 
-## Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16)
-
-Left open by the product folders work. Since A429 slice 3 the
-floor screen re-reads the floor every 15 seconds while a zone's map is on screen
-(`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
-events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
-few seconds on every till; choose the interval and cost first.
-
 ## A921. On a narrow till, should the person's name give room to the tab strip?
 
 A question for the owner, left open by A582 slice 4a. On a till (not a handheld) the bar's
