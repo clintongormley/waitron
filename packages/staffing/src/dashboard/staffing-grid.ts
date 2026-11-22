@@ -130,14 +130,18 @@ export class StaffingGrid extends LitElement {
         border-color: transparent;
       }
       .block.inherited {
-        background: color-mix(
-          in srgb,
-          var(--period-fill, var(--wt-color-border)) 22%,
-          var(--wt-color-surface)
-        );
+        background: var(--wt-color-surface);
         border: 1px dashed var(--wt-color-border);
         color: var(--wt-color-text);
         pointer-events: none;
+      }
+      .block.inherited::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--period-fill, var(--wt-color-border));
+        opacity: calc(var(--wt-opacity-disabled) / 2);
       }
       button.block {
         cursor: pointer;
