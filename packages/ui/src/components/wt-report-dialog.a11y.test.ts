@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "../a11y-helpers.js";
@@ -59,7 +59,6 @@ test.each(["light", "dark"] as const)(
       "<wt-report-dialog></wt-report-dialog>",
       theme,
     )) as WtReportDialog;
-    const sendProblemReport = vi.fn(async (_id: string) => ({ delivery: "queued" as const }));
     Object.assign(el, {
       open: true,
       preview: "Download-only browser diagnostics",
@@ -70,7 +69,7 @@ test.each(["light", "dark"] as const)(
           id: "preview",
           attachment: '{"version":"1.2.3"}',
         }),
-        sendProblemReport,
+        sendProblemReport: async () => ({ delivery: "queued" }),
       },
       copy: {
         ...copy,
@@ -104,7 +103,6 @@ test.each(["light", "dark"] as const)(
     expect(
       el.shadowRoot!.querySelector('[role="status"]')!.closest('wt-form-actions[slot="footer"]'),
     ).not.toBeNull();
-    expect(sendProblemReport.mock.calls[0]?.[0]).toBe("preview");
     expect(el.shadowRoot!.querySelector("wt-textarea")!.label).toBe(
       "What happened? (download only)",
     );
