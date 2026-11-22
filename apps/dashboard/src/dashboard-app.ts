@@ -1847,6 +1847,7 @@ export class DashboardApp extends LitElement {
     this.#permissionContinuation.reset();
     this.sessionNoticeCode = code;
     this.screen = "login";
+    diag.record("info", "nav", { screen: "login" });
     this.#broadcastSessionDeadline(0);
     this.#url.write({ dashboard: next }, true);
     this.#permissionContinuation.notify();
