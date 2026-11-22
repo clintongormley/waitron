@@ -3,7 +3,6 @@ import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.j
 import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
@@ -20,9 +19,13 @@ import {
   type LeaveCoordinator,
   type WtButton,
 } from "@waitron/ui";
-import { renderGroupError, renderSwitchGroup } from "../widgets/device-profile-switch-group.js";
+import { renderSwitchGroup } from "../widgets/device-profile-switch-group.js";
 import { renderDeviceProfileWhere } from "../widgets/device-profile-where.js";
 import { renderDeviceProfileWho } from "../widgets/device-profile-who.js";
+import {
+  renderDeviceProfilePrinterLists,
+  renderDeviceProfileReaders,
+} from "../widgets/device-profile-equipment.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -89,7 +92,6 @@ type PrinterDefaultKey =
 /** A receipt printer, or on the invoice list an A4 printer too. */
 type ListablePrinter = Pick<Printer, "id" | "name" | "active">;
 type PrinterChoice = { printer: ListablePrinter; listed: boolean; label: string };
-const printerIdOf = ({ printer }: PrinterChoice) => printer.id;
 
 function equipmentInOrder<T extends { id: string; active: boolean }>(
   pool: readonly T[],
@@ -2218,104 +2220,28 @@ export class DeviceProfilesScreen extends LitElement {
     }));
   }
 
-  #renderPrinterList(
-    list: (typeof PRINTER_LISTS)[number],
-    choices: PrinterChoice[],
-    errors: FieldErrors,
-  ): TemplateResult {
-    const visible = choices.map(printerIdOf);
-    const drawn = choices.filter((choice) => choice.listed).map(printerIdOf);
-    const listError = list.key === "cashDrawerPrinterIds" ? errors.drawerList : undefined;
-    const defaultError = errors[list.defaultField] ?? "";
-    return html`<div
-        class="field"
-        role="group"
-        aria-labelledby="${list.test}-heading"
-        aria-describedby=${listError ? `${list.test}-error` : nothing}
-        data-test=${list.test}
-      >
-        <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
-        <div class="toggles">
-          ${repeat(choices, printerIdOf, ({ printer, listed, label }) => {
-            const position = drawn.indexOf(printer.id);
-            return html`<div class="printer-choice">
-              <wt-switch
-                data-test="${list.test}-${printer.id}"
-                data-printer-id=${printer.id}
-                name=${list.key}
-                label=${label}
-                .checked=${listed}
-                @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                  this.#onPrinterToggle(e, list, printer.id, visible)}
-              ></wt-switch>
-              ${
-                listed
-                  ? html`<span class="order"
-                      ><wt-button
-                        variant="ghost"
-                        size="sm"
-                        data-test="${list.test}-up-${printer.id}"
-                        aria-label="${t("device_profiles.move_up")} ${printer.name}"
-                        ?disabled=${position === 0}
-                        @click=${(event: Event) => void this.#movePrinter(list.key, drawn, visible, printer.id, -1, event.currentTarget as WtButton)}
-                        >${t("device_profiles.move_up")}</wt-button
-                      >
-                      <wt-button
-                        variant="ghost"
-                        size="sm"
-                        data-test="${list.test}-down-${printer.id}"
-                        aria-label="${t("device_profiles.move_down")} ${printer.name}"
-                        ?disabled=${position === drawn.length - 1}
-                        @click=${(event: Event) => void this.#movePrinter(list.key, drawn, visible, printer.id, 1, event.currentTarget as WtButton)}
-                        >${t("device_profiles.move_down")}</wt-button
-                      ></span
-                    >`
-                  : nothing
-              }
-            </div>`;
-          })}
-        </div>
-        ${renderGroupError(list.test, listError)}
-      </div>
-      <wt-combobox
-        class="field"
-        data-test="${list.test}-default"
-        name=${list.defaultKey}
-        label=${t(list.defaultLabel)}
-        search="auto"
-        show-empty-option
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("device_profiles.default_none") },
-          ...choices
-            .filter((choice) => choice.listed)
-            .map(({ printer, label }) => ({ value: printer.id, label })),
-        ]}
-        .value=${this.draftPrinterLists[list.defaultKey] ?? ""}
-        .error=${defaultError}
-        .invalid=${defaultError !== ""}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPrinterDefault(e, list)}
-      ></wt-combobox>`;
-  }
-
   #renderPrinterLists(errors: FieldErrors): TemplateResult | typeof nothing {
-    const lists =
-      this.printersState === "ready"
-        ? PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }))
-        : [];
-    const empty = lists.every(({ choices }) => choices.length === 0);
-    const unread =
-      empty && (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters"));
-    // The failed read is the form's bottom message.
-    if (unread && this.printerReading.size === 0) return nothing;
-    if (this.printersState === "loading" || unread)
-      return html`<p class="field" role="status" data-test="printers-loading">
-        <wt-spinner decorative size="sm"></wt-spinner> ${t("device_profiles.printers_loading")}
-      </p>`;
-    if (empty)
-      return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;
-    return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices, errors))}`;
+    return renderDeviceProfilePrinterLists({
+      loading: this.printersState === "loading",
+      reading: this.printerReading.size > 0,
+      readFailed:
+        this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters"),
+      lists:
+        this.printersState === "ready"
+          ? PRINTER_LISTS.map((list) => ({
+              list,
+              choices: this.#printerChoices(list.key),
+              listError: list.key === "cashDrawerPrinterIds" ? errors.drawerList : undefined,
+              defaultError: errors[list.defaultField] ?? "",
+              defaultValue: this.draftPrinterLists[list.defaultKey] ?? "",
+            }))
+          : [],
+      onPrinterToggle: (event, list, printerId, visible) =>
+        this.#onPrinterToggle(event, list, printerId, visible),
+      onMovePrinter: (list, drawn, visible, printerId, by, button) =>
+        void this.#movePrinter(list.key, drawn, visible, printerId, by, button),
+      onPrinterDefault: (event, list) => this.#onPrinterDefault(event, list),
+    });
   }
 
   #renderReaders(errors: FieldErrors): TemplateResult | typeof nothing {
@@ -2325,47 +2251,15 @@ export class DeviceProfilesScreen extends LitElement {
       reader.active
         ? reader.name
         : `${reader.name} (${t(reader.canEnable ? "payments.reader_unavailable" : "payments.reader_unpaired")})`;
-    const choices = equipmentInOrder(this.readers, this.#loadedReaders.readerIds, listed);
-    const visible = choices.map(({ id }) => id);
-    const error = errors.readerDefault ?? "";
-    return html`${renderSwitchGroup(
-        "profile-readers",
-        t("device_profiles.card_readers"),
-        undefined,
-        html`${repeat(
-          choices,
-          ({ id }) => id,
-          (reader) =>
-            html`<wt-switch
-              data-test="profile-reader-${reader.id}"
-              name="readerIds"
-              label=${label(reader)}
-              .checked=${listed.includes(reader.id)}
-              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                this.#onReaderToggle(e, reader.id, visible)}
-            ></wt-switch>`,
-        )}`,
-      )}
-      <wt-combobox
-        class="field"
-        data-test="profile-readers-default"
-        name="defaultReaderId"
-        label=${t("device_profiles.reader_default")}
-        search="auto"
-        show-empty-option
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("device_profiles.default_none") },
-          ...choices
-            .filter(({ id }) => listed.includes(id))
-            .map((reader) => ({ value: reader.id, label: label(reader) })),
-        ]}
-        .value=${this.draftReaders.defaultReaderId ?? ""}
-        .error=${error}
-        .invalid=${error !== ""}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onReaderDefault(e)}
-      ></wt-combobox>`;
+    return renderDeviceProfileReaders({
+      choices: equipmentInOrder(this.readers, this.#loadedReaders.readerIds, listed).map(
+        (reader) => ({ id: reader.id, label: label(reader), listed: listed.includes(reader.id) }),
+      ),
+      defaultValue: this.draftReaders.defaultReaderId ?? "",
+      error: errors.readerDefault ?? "",
+      onReaderToggle: (event, readerId, visible) => this.#onReaderToggle(event, readerId, visible),
+      onReaderDefault: (event) => this.#onReaderDefault(event),
+    });
   }
 
   #kindListsShown(kind: KitchenScreenKind): boolean {
