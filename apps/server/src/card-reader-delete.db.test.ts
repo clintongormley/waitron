@@ -350,13 +350,6 @@ describe("the card reader delete impact", () => {
     expect(impact.ends).toEqual([kept]);
   });
 
-  it("names no pairing for a provider that cannot unpair, connected or not", async () => {
-    const v = await seedVenueWithReaders({ unpairedAt: null });
-    const impact = await read(seats, v.r);
-    expect(impact.refusals).toEqual([]);
-    expect(impact.ends).toEqual([stays]);
-  });
-
   it.each([
     { state: "connected", connect: true },
     { state: "not connected", connect: false },

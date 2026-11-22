@@ -32,7 +32,7 @@ const languages: Language[] = [
     fixed: [
       "Delete reader?",
       "Why it can't be deleted",
-      "What ends",
+      "At the card provider",
       "Settings that are removed",
       "History is kept. Add the reader again to use it. Removed assignments stay cleared.",
       "Delete",
@@ -74,7 +74,7 @@ const languages: Language[] = [
     fixed: [
       "¿Eliminar el lector?",
       "Por qué no se puede eliminar",
-      "Qué finaliza",
+      "En el proveedor de tarjetas",
       "Configuración que se elimina",
       "Se conserva el historial. Para usar el lector, añádelo de nuevo. Las asignaciones eliminadas no se recuperan.",
       "Eliminar",

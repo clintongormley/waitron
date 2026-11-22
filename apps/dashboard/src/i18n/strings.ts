@@ -3343,7 +3343,7 @@ export const en = {
     "Unpairing cannot be undone here. This reader returns to standalone use. Adding it back will need a pairing code.",
   "payments.delete_heading": "Delete reader?",
   "payments.delete_refusals": "Why it can't be deleted",
-  "payments.delete_ends": "What ends",
+  "payments.delete_ends": "At the card provider",
   "payments.delete_removes": "Settings that are removed",
   "payments.delete_irreversible":
     "History is kept. Add the reader again to use it. Removed assignments stay cleared.",
@@ -8078,7 +8078,7 @@ export const es: Record<StringKey, string> = {
     "La desvinculación no se puede deshacer aquí. Este lector volverá a funcionar de forma independiente. Para añadirlo de nuevo necesitarás un código de vinculación.",
   "payments.delete_heading": "¿Eliminar el lector?",
   "payments.delete_refusals": "Por qué no se puede eliminar",
-  "payments.delete_ends": "Qué finaliza",
+  "payments.delete_ends": "En el proveedor de tarjetas",
   "payments.delete_removes": "Configuración que se elimina",
   "payments.delete_irreversible":
     "Se conserva el historial. Para usar el lector, añádelo de nuevo. Las asignaciones eliminadas no se recuperan.",
