@@ -1,4 +1,4 @@
-import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -10,6 +10,9 @@ import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
+  kitchenPrintJobs,
+  printJobs,
+  printers,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   withTransaction,
@@ -35,6 +38,8 @@ import { planVenue } from "@waitron/provisioning";
 import { enabledModules } from "@waitron/module";
 import { recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
+import { buildConfigurationBundle, importConfigurationTables } from "./configuration-transfer.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 
@@ -350,6 +355,147 @@ describe("provisionVenue", () => {
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
     await recoverProvisionedVenue(db, request);
     expect(await counts()).toEqual({ default_stations: 1, stations: 1, cells: 0 });
+  });
+
+  it("never runs first setup's import over a venue that holds a kitchen print link: setup is refused as already done and the link and its station stay", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+    const [station] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.isDefault, true));
+    const linkId = await withTransaction(db, async (tx) => {
+      const order = await seedWorkingOrder(tx, { label: "Table 8", status: "open" });
+      const [printer] = await tx
+        .insert(printers)
+        .values({ name: "Kitchen", transport: "cloud_poll", pollId: randomUUID() })
+        .returning();
+      const [job] = await tx
+        .insert(printJobs)
+        .values({ printerId: printer!.id, payload: new Uint8Array([1, 2, 3]), status: "queued" })
+        .returning();
+      const [link] = await tx
+        .insert(kitchenPrintJobs)
+        .values({
+          printJobId: job!.id,
+          workingOrderId: order.id,
+          stationId: station!.id,
+          reprint: false,
+        })
+        .returning();
+      return link!.id;
+    });
+    const beforeCommit = vi.fn(async () => {});
+
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir, beforeCommit },
+      { ...request, configurationImport: true },
+    ).catch((e: unknown) => e);
+
+    expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
+    expect(beforeCommit).not.toHaveBeenCalled();
+    expect(
+      await db
+        .select({ id: kitchenPrintJobs.id, stationId: kitchenPrintJobs.stationId })
+        .from(kitchenPrintJobs)
+        .where(eq(kitchenPrintJobs.id, linkId)),
+    ).toEqual([{ id: linkId, stationId: station!.id }]);
+    expect(
+      await db
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, station!.id)),
+    ).toEqual([{ id: station!.id }]);
+  });
+
+  describe("over a database with no taxpayer", () => {
+    const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+
+    it("refuses first setup with a configuration import at commit when the database holds a kitchen print link, which would dangle from its deleted station and its print job from its deleted printer, and keeps the link and its station", async () => {
+      const db = ownerDb();
+      const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+      const modules = enabledModules(ALL_MODULES, ES_CONFIG);
+      const sourceVenue = {
+        ...request.venue,
+        admin: { ...request.venue.admin, email: "source@example.test" },
+      };
+      const exported = await applyHistoricalTestVenue(planVenue(sourceVenue, modules), {
+        db: source.db,
+        modules,
+      });
+      const bundle = await buildConfigurationBundle(
+        source.db,
+        exported,
+        modules,
+        new Date("2026-10-16T11:00:00Z"),
+        await schemaVersionsByModule({ venue: source.db, node: source.node }, modules),
+      );
+      expect(bundle.tables.kitchen_stations!.length).toBeGreaterThan(0);
+      const { stationId, linkId } = await withTransaction(db, async (tx) => {
+        const [station] = await tx.insert(kitchenStations).values({ name: "Grill" }).returning();
+        const order = await seedWorkingOrder(tx, { label: "Table 8", status: "open" });
+        const [printer] = await tx
+          .insert(printers)
+          .values({ name: "Kitchen", transport: "cloud_poll", pollId: randomUUID() })
+          .returning();
+        const [job] = await tx
+          .insert(printJobs)
+          .values({ printerId: printer!.id, payload: new Uint8Array([1, 2, 3]), status: "queued" })
+          .returning();
+        const [link] = await tx
+          .insert(kitchenPrintJobs)
+          .values({
+            printJobId: job!.id,
+            workingOrderId: order.id,
+            stationId: station!.id,
+            reprint: false,
+          })
+          .returning();
+        return { stationId: station!.id, linkId: link!.id };
+      });
+      expect((await db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([{ n: 0 }]);
+      const versions = await schemaVersionsByModule({ venue: db, node: suite.node }, modules);
+      let dangling: { table: string; parent: string }[] = [];
+
+      const error = await provisionVenue(
+        {
+          ownerDb: db,
+          moduleConfig: ES_CONFIG,
+          database: "waitron",
+          stateDir,
+          beforeCommit: async (tx) => {
+            await importConfigurationTables(tx, bundle, modules, versions);
+            dangling = (
+              await tx.execute<{ table: string; parent: string }>(sql`pragma foreign_key_check`)
+            ).rows;
+          },
+        },
+        { ...request, configurationImport: true },
+      ).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: "ERR_SQLITE_ERROR",
+        errcode: 787,
+        message: "FOREIGN KEY constraint failed",
+      });
+      expect(dangling.map(({ table, parent }) => `${table} -> ${parent}`).sort()).toEqual([
+        "kitchen_print_jobs -> kitchen_stations",
+        "print_jobs -> printers",
+      ]);
+      expect((await db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([{ n: 0 }]);
+      expect(
+        await db
+          .select({ id: kitchenPrintJobs.id, stationId: kitchenPrintJobs.stationId })
+          .from(kitchenPrintJobs),
+      ).toEqual([{ id: linkId, stationId }]);
+      expect(await db.select({ id: kitchenStations.id }).from(kitchenStations)).toEqual([
+        { id: stationId },
+      ]);
+    });
   });
 
   it("recovers the exact committed venue by venue, node and series after a process dies before file publication", async () => {

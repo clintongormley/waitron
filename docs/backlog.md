@@ -612,8 +612,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
 
-- **Loose ends left by service Task 5 (#750): printer policy, dish units, group and station
-  records, and screen refresh.**
+- **Loose ends left by service Task 5 (#750): printer policy, dish units, group records,
+  and screen refresh.**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
 - **A venue's second station does not start on the pass printer.** **Add a station** starts with the
