@@ -28,6 +28,7 @@ export type MachineAction =
   | "translation-status"
   | "translation-collect"
   | "translation-release"
+  | "translation-abandon"
   | "address-lookup"
   | "tunnel-provision"
   | "error-report"
@@ -165,6 +166,7 @@ export function readMachineClaims(value: unknown): MachineClaims {
         "translation-status",
         "translation-collect",
         "translation-release",
+        "translation-abandon",
         "address-lookup",
         "tunnel-provision",
         "error-report",

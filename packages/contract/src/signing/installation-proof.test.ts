@@ -104,6 +104,7 @@ it.each([
   "translation-status",
   "translation-collect",
   "translation-release",
+  "translation-abandon",
   "address-lookup",
   "tunnel-provision",
   "error-report",
@@ -115,6 +116,21 @@ it.each([
     signed = proof(value);
   expect(verifyMachine(signed, publicKey, claims.origin, action, now)).toEqual(value);
   expect(() => check(signed)).toThrow(InstallationError);
+});
+it("refuses a translation release proof as an abandon, and an abandon proof as a release", () => {
+  for (const [signedFor, verifiedAs] of [
+    ["translation-release", "translation-abandon"],
+    ["translation-abandon", "translation-release"],
+  ] as const)
+    expect(() =>
+      verifyMachine(
+        proof({ ...claims, action: signedFor }),
+        publicKey,
+        claims.origin,
+        verifiedAs,
+        now,
+      ),
+    ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
 });
 it("refuses an unknown action in signed routing claims", () => {
   const bytes = encodeMachine({ ...claims, action: "unknown" });
