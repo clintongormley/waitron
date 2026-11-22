@@ -77,7 +77,7 @@ async function readPaint(
   tx: Transaction,
   areas: readonly StaffingArea[],
   days: SQL | undefined,
-  cutover: string,
+  cutoverFor: (dayKey: string) => string,
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
   const rows = await tx
     .select({
@@ -122,7 +122,8 @@ async function readPaint(
       });
   }
   for (const byDay of paint.values())
-    for (const blocks of byDay.values())
+    for (const [dayKey, blocks] of byDay) {
+      const cutover = cutoverFor(dayKey);
       blocks.sort((a, b) => {
         const x = blockSpan(a, cutover);
         const y = blockSpan(b, cutover);
@@ -133,6 +134,7 @@ async function readPaint(
           a.headcount - b.headcount
         );
       });
+    }
   return paint;
 }
 
@@ -294,7 +296,7 @@ export async function readSeasonStaffing(
   const context = await readSeasonStaffingContext(tx, seasonId, month);
   const { cutover, seasons: all } = context;
   const areas = await listStaffingAreas(tx);
-  const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
+  const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), () => cutover);
   const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "season",
     seasonId,
@@ -363,6 +365,7 @@ export async function readSpecialDayStaffing(
     date: storedDate,
     cutover: cutoverForBusinessDay(clock, storedDate),
   }));
+  const starts = new Map(dates.map(({ dateId, cutover }) => [dateDayKey(dateId), cutover]));
   const seasonIds = [...new Set(dates.flatMap(({ date }) => plan.seasonIdOn.get(date) ?? []))];
   const paint = await readPaint(
     tx,
@@ -374,7 +377,7 @@ export async function readSpecialDayStaffing(
       ),
       inArray(staffingDays.seasonId, seasonIds),
     ),
-    cutover,
+    (key) => starts.get(key) ?? cutover,
   );
   const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "dates",
@@ -474,7 +477,7 @@ export async function resolveStaffing(
     tx,
     areas,
     or(inArray(staffingDays.seasonId, seasonIds), inArray(staffingDays.specialDayDateId, dateIds)),
-    cutover,
+    () => cutover,
   );
   for (const day of businessDays) {
     const special = plan.special.get(day);

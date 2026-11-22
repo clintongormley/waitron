@@ -524,6 +524,22 @@ describe("special-day staffing", () => {
     ]);
   });
 
+  it("lists a dated override's blocks in clock order from that date's start", async () => {
+    const v = await venue();
+    const early = block(v.waiter, { startsAt: "05:00", endsAt: "07:00" });
+    const lunch = block(v.cook);
+    await inTx(async (tx) => {
+      await tx
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-08-15", dayCutover: "04:00:00" });
+      await saveSpecialDayStaffing(tx, v.specialDayId, [
+        { area: dept(v), dateId: v.aug15, blocks: [lunch, early] },
+      ]);
+    });
+    const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
+    expect(read.areas[0]!.dates[1]!.blocks).toEqual([early, lunch]);
+  });
+
   it("guides a date by this special day's own hours when another special day repeats onto it", async () => {
     const v = await venue();
     const periodId = await inTx(async (tx) => {
