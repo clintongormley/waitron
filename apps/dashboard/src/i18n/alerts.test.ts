@@ -370,7 +370,7 @@ it("points the disk warning at the Box status page, in three sentences, in both 
 
 describe("the copy when it goes to the standby server, not the owner's bucket", () => {
   const CHECK_EN =
-    "Check that the standby server is switched on and connected to the restaurant's network.";
+    "Check that the standby box is switched on and connected to the restaurant's network.";
   const CHECK_ES =
     "Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.";
 
@@ -379,42 +379,42 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
       "backup.stream_behind",
       { seconds: 70, phase: "upload" },
       `The spare copy is 70 seconds behind while changes wait to be sent to the spare. Sales continue. ${CHECK_EN}`,
-      `La copia de reserva lleva 70 segundos de retraso mientras hay cambios pendientes de enviar al equipo de reserva. Las ventas continúan. ${CHECK_ES}`,
+      `La copia de reserva lleva 70 segundos de retraso mientras hay cambios pendientes de enviar al servidor de reserva. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.stream_paused",
       {},
-      `The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. ${CHECK_EN}`,
+      `The copy to the standby box is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. ${CHECK_EN}`,
       `La copia en el servidor en espera está en pausa: este servidor no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.stream_bucket_unusable",
       {},
-      `The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. ${CHECK_EN}`,
+      `The standby box is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. ${CHECK_EN}`,
       `El servidor en espera no está recibiendo los datos del restaurante: este servidor no consigue contactar con él, o el servidor en espera está rechazando este servidor. Las ventas continúan. ${CHECK_ES}`,
     ],
     [
       "backup.disabled",
       {},
-      "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
+      "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby box is not receiving the restaurant's data. Check that the standby box is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
       "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
     ],
     [
       "backup.stream_stopped",
       { reason: "start_failed" },
-      "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
+      "The copy to the standby box is not running, so new changes are not reaching the standby box. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
       "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este servidor lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del servidor y pulsa Reiniciar el servidor.",
     ],
     [
       "backup.stream_refused",
       {},
-      "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+      "The copy to the standby box has stopped because another box is writing this venue's copy to the standby box. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
       "La copia en el servidor en espera se ha detenido porque otro servidor está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
     ],
     [
       "backup.stream_settings_unusable",
       {},
-      "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
+      "The copy to the standby box has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
       "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio servidor. Las ventas continúan. Es un fallo de Waitron o de la instalación de este servidor, y reiniciar el servidor no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
     ],
   ])("words %s for the standby, never naming a bucket or the internet", (code, params, en, es) => {
@@ -429,7 +429,7 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
       expect(bucket).toContain(lang === "en" ? "Restart the box" : "Reiniciar el servidor");
       expect(bucket).toContain(lang === "en" ? "old copies" : "copias antiguas");
       const spare = alertMessage("backup.stream_retention_blocked", { toSpare: true }, lang);
-      expect(spare).toContain(lang === "en" ? "standby server" : "servidor en espera");
+      expect(spare).toContain(lang === "en" ? "standby box" : "servidor en espera");
       expect(spare).not.toMatch(/bucket|internet|contact support|switched on|encendido/i);
       for (const text of [bucket, spare]) {
         expect(text).toContain(lang === "en" ? "running normally" : "funciona con normalidad");
@@ -1116,7 +1116,7 @@ it("names the actual pending phase and the two clocks in both languages", () => 
     expect(device).toContain(
       locale === "en" ? "connected device's clock" : "reloj de un dispositivo conectado",
     );
-    expect(peer).toContain(locale === "en" ? "spare box's clock" : "reloj del equipo de reserva");
+    expect(peer).toContain(locale === "en" ? "spare box's clock" : "reloj del servidor de reserva");
     for (const message of [device, peer]) {
       expect(message).toContain(locale === "en" ? "this box's clock" : "reloj de este servidor");
       expect(message).toContain(locale === "en" ? "20 seconds" : "20 segundos");

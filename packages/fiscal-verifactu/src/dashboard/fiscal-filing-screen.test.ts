@@ -197,7 +197,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(parts.indexOf("conflict")).toBeLessThan(parts.indexOf("progress"));
     const link = notice.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("/recovery/fiscal-conflict");
-    expect(text(screen, "[data-test=conflict]")).toContain("server key");
+    expect(text(screen, "[data-test=conflict]")).toContain("box key");
     const line = text(screen, "[data-test=conflict] li");
     expect(line).toContain("T1/41");
     expect(line).toContain("Correcto");
@@ -1051,7 +1051,7 @@ describe("putting a case right", () => {
     const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
     await vi.waitFor(() =>
       expect(actions.error).toBe(
-        "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
+        "The box is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
       ),
     );
     expect(action(details).disabled).toBe(false);
@@ -1288,7 +1288,7 @@ function replacementServer(
 
 /** The bottom message when the box's day and the venue's day by this device's clock differ. */
 const differs = (server: string, device: string) =>
-  `The server's date, ${calendar(server)}, and the venue's date by this device's clock, ${calendar(device)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`;
+  `The box's date, ${calendar(server)}, and the venue's date by this device's clock, ${calendar(device)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`;
 
 /** The element focus is on, looking through shadow roots. */
 function focused(): Element | null {
@@ -1588,7 +1588,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);
     const undated =
-      "The server cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.";
+      "The box cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.";
     expect(bottomMessage(details)).toBe(undated);
     expect(action(details).getAttribute("variant")).toBe("secondary");
     await pick(screen, details, "2026-11-02");
@@ -1611,7 +1611,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       "fiscal.correction_unsupported",
       "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
     ],
-    ["series.no_corrective_for_node", "This server has no corrective invoice series"],
+    ["series.no_corrective_for_node", "This box has no corrective invoice series"],
   ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {
     const request = replacementServer(futureCase("2026-11-03"), async () => {
       throw refusal(code);

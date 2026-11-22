@@ -39,7 +39,7 @@ describe("dashboard-switch-label", () => {
     expect(text(el, "switch-label-name")).toBe("box-abcd.waitron.local");
     expect(text(el, "switch-label-address")).toBe(SWITCH_PAGE);
     expect(text(el, "switch-label-words")).toBe(
-      "If the main server fails, scan this with any till or phone on the venue's network",
+      "If the main box fails, scan this with any till or phone on the venue's network",
     );
     const figure = el.shadowRoot!.querySelector("figure")!;
     expect([...figure.children].map((child) => child.getAttribute("data-test"))).toEqual([

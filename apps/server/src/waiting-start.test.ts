@@ -1021,6 +1021,18 @@ describe("the waiting start", () => {
       expect(await page()).not.toContain(statement);
     });
 
+    it("names its Spanish action as the Servers page's warning quotes it", async () => {
+      const spanish = await (
+        await h
+          .app()
+          .request("https://box.test/", { headers: { "accept-language": "es-ES" } }, tls())
+      ).text();
+      expect(spanish).toContain("<h2>Seguir como servidor principal</h2>");
+      expect(spanish).toContain(
+        '<button type="submit" disabled>Seguir como servidor principal</button>',
+      );
+    });
+
     it("either statement unticked keeps the action disabled", async () => {
       const blank = await page();
       expect(blank).toContain('<button type="submit" disabled>Carry on as the main box</button>');

@@ -33,7 +33,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
 }
 
 it.each([
-  ["en-GB", "Backup encryption key", "Server key"],
+  ["en-GB", "Backup encryption key", "Box key"],
   ["es-ES", "Clave de cifrado de copias", "Clave del servidor"],
 ] as const)("names the two keys separately on the pack in %s", async (locale, backup, server) => {
   setLocale(locale);
@@ -350,7 +350,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(offered?.classList.contains("warn")).toBe(false);
     expect(offered?.textContent?.trim()).toBe(
       locale === "en-GB"
-        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new server key."
+        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new box key."
         : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
     );
     expect(row(el, "server-key")).toContain("1");

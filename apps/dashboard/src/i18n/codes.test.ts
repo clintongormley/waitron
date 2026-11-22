@@ -85,7 +85,7 @@ it("words the office-printer refusals in both languages", () => {
 
 it("words a Cloud connection with nothing left to finish in both languages, naming Connect to Cloud", () => {
   expect(codeMessage("cloud.request_not_found", "en")).toBe(
-    "This server has no Cloud connection request waiting to finish. Choose Connect to Cloud to start again.",
+    "This box has no Cloud connection request waiting to finish. Choose Connect to Cloud to start again.",
   );
   expect(codeMessage("cloud.request_not_found", "es")).toBe(
     "Este servidor no tiene ninguna solicitud de conexión con Cloud pendiente de terminar. Elige Conectar con Cloud para empezar de nuevo.",
@@ -559,7 +559,7 @@ it.each([
   ["backup.spare_stream_active", "then save again", "vuelve a guardar"],
   [
     "handover.operation_in_progress",
-    "before starting another handover or removing a server",
+    "before starting another handover or removing a box",
     "antes de iniciar otro traspaso o retirar un servidor",
   ],
 ])("words %s as the next step a person can take", (code, enStep, esStep) => {
@@ -1051,7 +1051,7 @@ it("has a sentence in both languages for these handover refusals", () => {
 
 it("words a handover a newer list of servers stopped as what happened, not as a fault", () => {
   expect(codeMessage("handover.superseded_during_start", "en")).toBe(
-    "Another box took over or the venue’s list of servers changed. Open the current main box’s address to continue.",
+    "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
   );
   expect(codeMessage("handover.superseded_during_start", "es")).toBe(
     "Otro servidor ha pasado a llevar el local o ha cambiado la lista de servidores. Abre la dirección del servidor principal actual para continuar.",
@@ -1091,7 +1091,7 @@ it.each([
 
 it("says a standby server cannot be switched on from another device, in English and Spanish", () => {
   expect(codeMessage("promotion.from_box_only", "en")).toBe(
-    "In this version a standby server cannot be switched on from another device. Nothing was changed.",
+    "In this version a standby box cannot be switched on from another device. Nothing was changed.",
   );
   expect(codeMessage("promotion.from_box_only", "es")).toBe(
     "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
@@ -1151,62 +1151,62 @@ it("explains an invalid contains tag in both languages", () => {
 it.each([
   [
     "handover.stepping_down",
-    "This server is handing over or has handed over the venue, so it refused this action. Use the main server’s address once that server is taking sales.",
+    "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",
     "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
   ],
   [
     "handover.known_handover",
-    "This server has already handed over the venue. Open the current main server’s address to continue.",
+    "This box has already handed over the venue. Open the current main box’s address to continue.",
     "Este servidor ya ha traspasado el local. Abre la dirección del servidor principal actual para continuar.",
   ],
   [
     "handover.peer_unknown",
-    "The sending server is not trusted for this request. Check the list of servers on the current main server before trying again.",
+    "The sending box is not trusted for this request. Check the list of boxes on the current main box before trying again.",
     "El servidor que envía la solicitud no está autorizado para hacerla. Revisa la lista de servidores en el servidor principal actual antes de volver a intentarlo.",
   ],
   [
     "handover.not_stepped_down",
-    "The old server has not confirmed that it stopped for this handover. Keep both servers connected and check the handover’s progress on the old server.",
+    "The old box has not confirmed that it stopped for this handover. Keep both boxes connected and check the handover’s progress on the old box.",
     "El servidor antiguo no ha confirmado que se haya detenido para este traspaso. Mantén ambos servidores conectados y consulta el progreso del traspaso en el servidor antiguo.",
   ],
   [
     "handover.operation_unknown",
-    "That server has no record of this handover. Open Servers on the current main server to check the current handover.",
+    "That box has no record of this handover. Open Servers on the current main box to check the current handover.",
     "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
   ],
   [
     "handover.final_copy_changed",
-    "The old server’s venue data changed after its final copy was made. Keep both servers connected while the copy is requested again.",
+    "The old box’s venue data changed after its final copy was made. Keep both boxes connected while the copy is requested again.",
     "Los datos del local en el servidor antiguo han cambiado después de hacer su copia final. Mantén ambos servidores conectados mientras se vuelve a pedir la copia.",
   ],
   [
     "handover.source_unreachable",
-    "This server could not complete this handover step. It retries by itself. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    "This box could not complete this handover step. It retries by itself. Check both boxes’ power, connections and free disk space, and the old box’s entry in the list of boxes.",
     "Este servidor no ha podido completar este paso del traspaso. Lo reintenta solo. Comprueba la alimentación, las conexiones y el espacio libre de ambos servidores, y la entrada del servidor antiguo en la lista de servidores.",
   ],
   [
     "handover.not_a_spare",
-    "This server is not a spare and cannot accept this handover. Open Servers on the main server and choose a joined spare.",
+    "This box is not a spare and cannot accept this handover. Open Servers on the main box and choose a joined spare.",
     "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   ],
   [
     "handover.membership_mismatch",
-    "The servers disagree about the venue or its list of servers, or the sender is not listed as main. Check Servers on the current main server before trying again.",
+    "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check Servers on the current main box before trying again.",
     "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
   ],
   [
     "handover.indicator_untrusted",
-    "The final copy’s description could not be verified as coming from the old server. Check the list of servers on the current main server before trying again.",
+    "The final copy’s description could not be verified as coming from the old box. Check the list of boxes on the current main box before trying again.",
     "No se ha podido verificar que la descripción de la copia final venga del servidor antiguo. Revisa la lista de servidores en el servidor principal actual antes de volver a intentarlo.",
   ],
   [
     "handover.copy_damaged",
-    "This copy failed its database check. A controlled handover requests another copy, but that cannot repair invalid data on the old server. If the checks keep failing, use the emergency procedure with a working backup.",
+    "This copy failed its database check. A controlled handover requests another copy, but that cannot repair invalid data on the old box. If the checks keep failing, use the emergency procedure with a working backup.",
     "Esta copia no ha superado la comprobación de su base de datos. Un traspaso controlado pide otra copia, pero eso no repara datos inválidos en el servidor antiguo. Si las comprobaciones siguen fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
   ],
   [
     "handover.chain_broken",
-    "The records in this copy failed their check, so this server has not taken over. Use the emergency procedure with a backup that passes its checks.",
+    "The records in this copy failed their check, so this box has not taken over. Use the emergency procedure with a backup that passes its checks.",
     "Los registros de esta copia no han superado su comprobación, así que este servidor no ha tomado el relevo. Usa el procedimiento de emergencia con una copia de seguridad que supere las comprobaciones.",
   ],
   [
@@ -1216,42 +1216,42 @@ it.each([
   ],
   [
     "handover.summary_mismatch",
-    "The copy’s contents do not match the old server’s description. Repeating the check does not repair that copy. Use the emergency procedure with a working backup.",
+    "The copy’s contents do not match the old box’s description. Repeating the check does not repair that copy. Use the emergency procedure with a working backup.",
     "El contenido de la copia no coincide con la descripción del servidor antiguo. Repetir la comprobación no repara esa copia. Usa el procedimiento de emergencia con una copia de seguridad válida.",
   ],
   [
     "handover.summary_unreadable",
-    "This server could not read the copy’s contents to check them. Keep both servers connected while it retries. If it keeps failing, use the emergency procedure with a working backup.",
+    "This box could not read the copy’s contents to check them. Keep both boxes connected while it retries. If it keeps failing, use the emergency procedure with a working backup.",
     "Este servidor no ha podido leer el contenido de la copia para comprobarlo. Mantén ambos servidores conectados mientras lo reintenta. Si sigue fallando, usa el procedimiento de emergencia con una copia de seguridad válida.",
   ],
   [
     "handover.copy_lacks_destination",
-    "This copy has no usable record of this spare. Check the list of servers on the old server; a controlled handover needs a spare that has finished joining.",
+    "This copy has no usable record of this spare. Check the list of boxes on the old box; a controlled handover needs a spare that has finished joining.",
     "Esta copia no tiene un registro válido de este servidor de reserva. Revisa la lista de servidores en el servidor antiguo; un traspaso controlado necesita un servidor de reserva que haya terminado de unirse.",
   ],
   [
     "handover.authoriser_not_permitted",
-    "The person who authorised this handover lacks Manage boxes permission in this copy. Check their permissions on the main server before starting another handover.",
+    "The person who authorised this handover lacks Manage boxes permission in this copy. Check their permissions on the main box before starting another handover.",
     "La persona que autorizó este traspaso no tiene permiso de Gestionar servidores en esta copia. Revisa sus permisos en el servidor principal antes de iniciar otro traspaso.",
   ],
   [
     "handover.preparation_state_unusable",
-    "This server cannot read or add to its module preparation file, so it has not placed the accepted copy. This is a fault in Waitron or this server’s disk. Retry a normal boot only after that file is repaired.",
+    "This box cannot read or add to its module preparation file, so it has not placed the accepted copy. This is a fault in Waitron or this box’s disk. Retry a normal boot only after that file is repaired.",
     "Este servidor no puede leer o ampliar su archivo de preparación de módulos, así que no ha colocado la copia aceptada. Es un fallo de Waitron o del disco de este servidor. Reintenta un arranque normal solo después de reparar ese archivo.",
   ],
   [
     "handover.accepted_copy_missing",
-    "The accepted copy is no longer on this server’s disk. This is a fault in Waitron or this server’s disk. Retry a normal boot only if that copy has been put back.",
+    "The accepted copy is no longer on this box’s disk. This is a fault in Waitron or this box’s disk. Retry a normal boot only if that copy has been put back.",
     "La copia aceptada ya no está en el disco de este servidor. Es un fallo de Waitron o del disco de este servidor. Reintenta un arranque normal solo si esa copia ha vuelto a su sitio.",
   ],
   [
     "handover.indicator_mismatch",
-    "The final copy’s description cannot be read or does not match this handover. Check the handover’s progress on both servers before trying again.",
+    "The final copy’s description cannot be read or does not match this handover. Check the handover’s progress on both boxes before trying again.",
     "La descripción de la copia final no se puede leer o no corresponde a este traspaso. Consulta el progreso del traspaso en ambos servidores antes de volver a intentarlo.",
   ],
   [
     "handover.copy_check_failed",
-    "This server could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, check this copy again, or use a working backup.",
+    "This box could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, check this copy again, or use a working backup.",
     "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, vuelve a comprobar esta copia o usa una copia de seguridad válida.",
   ],
   [
@@ -1316,7 +1316,7 @@ it("a source preflight refusal keeps trading and names Stop and the handover gui
 it("says how far a month file had got when the server ran short of space, in the language's style", () => {
   const params = { writtenBytes: 1_200_000_000 };
   expect(codeMessage("tax_office.space_ran_out", "en", params)).toBe(
-    "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 1.2 GB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.",
+    "The box ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 1.2 GB; free more space than that on the box, for example by keeping fewer backups under Backups, then try again.",
   );
   expect(codeMessage("tax_office.space_ran_out", "es", params)).toBe(
     "El servidor se quedó sin espacio en disco mientras preparaba este archivo, así que lo detuvo y lo borró. El archivo ya ocupaba 1,2 GB; libera más espacio que eso en el servidor, por ejemplo guardando menos copias de seguridad en Copias de seguridad, y vuelve a intentarlo.",
@@ -1326,13 +1326,13 @@ it("says how far a month file had got when the server ran short of space, in the
 it("words the tax office's month-file refusals, with the disk's sizes in the language's style", () => {
   const params = { freeBytes: 2_200_000_000, neededBytes: 2_415_919_104 };
   expect(codeMessage("tax_office.space_low", "en", params)).toBe(
-    "The server's disk is nearly full: it has 2.2 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+    "The box's disk is nearly full: it has 2.2 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the box, under Backups, frees space; then try again.",
   );
   expect(codeMessage("tax_office.space_low", "es", params)).toBe(
     "El disco del servidor está casi lleno: tiene 2,2 GB libres y preparar este archivo necesita 2,4 GB. Guardar menos copias de seguridad en el servidor, en Copias de seguridad, libera espacio; después vuelve a intentarlo.",
   );
   expect(codeMessage("tax_office.download_missing", "en")).toBe(
-    "This file is no longer on the server. Choose Download again to prepare it.",
+    "This file is no longer on the box. Choose Download again to prepare it.",
   );
   expect(codeMessage("tax_office.download_missing", "es")).toBe(
     "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",

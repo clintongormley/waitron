@@ -651,7 +651,7 @@ it("says the file is no longer on the server when Save finds it gone, and downlo
 
   await vi.waitFor(() =>
     expect(actionError(el)).toBe(
-      "This file is no longer on the server. Choose Download again to prepare it.",
+      "This file is no longer on the box. Choose Download again to prepare it.",
     ),
   );
   expect(startDownload).not.toHaveBeenCalled();
@@ -752,7 +752,7 @@ it("says why the month could not be downloaded, and keeps the list", async () =>
 
   await vi.waitFor(() =>
     expect(actionError(el)).toBe(
-      "Invoices for a month are already being prepared on the server. Try again once that file is ready.",
+      "Invoices for a month are already being prepared on the box. Try again once that file is ready.",
     ),
   );
   expect(monthButton(el).loading).toBe(false);
@@ -774,7 +774,7 @@ it("names the free and needed space when the disk is too full to prepare the mon
 
   await vi.waitFor(() =>
     expect(actionError(el)).toBe(
-      "The server's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+      "The box's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the box, under Backups, frees space; then try again.",
     ),
   );
   expect(table(el).errorMessage).toBe("");
@@ -786,7 +786,7 @@ const spaceLow = {
   params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
 };
 const RAN_OUT_EN =
-  "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.";
+  "The box ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the box, for example by keeping fewer backups under Backups, then try again.";
 const ranOut = {
   code: "tax_office.space_ran_out" as const,
   params: { writtenBytes: 412_000_000 },

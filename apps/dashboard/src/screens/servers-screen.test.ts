@@ -640,7 +640,7 @@ describe("servers screen retiring a joined spare", () => {
       joined,
       [
         "This spare is switched off *",
-        "Nobody is restoring this venue from a backup or switching it to another server right now *",
+        "Nobody is restoring this venue from a backup or switching it to another box right now *",
       ],
     ],
   ])("asks for the declarations only on a row the server flags", async (rows, labels) => {
@@ -651,7 +651,7 @@ describe("servers screen retiring a joined spare", () => {
     );
     expect(dialog(el).querySelector("[data-test=declare-explanation]")?.textContent?.trim()).toBe(
       labels.length > 0
-        ? "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now."
+        ? "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now."
         : undefined,
     );
   });

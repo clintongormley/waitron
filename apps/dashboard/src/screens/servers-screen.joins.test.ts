@@ -203,7 +203,7 @@ describe("a box asking to join, on the Servers screen", () => {
     await flush(el);
     await flush(el);
     expect(await message(el)).toBe(
-      "The list of servers was being changed at the same moment. Try again.",
+      "The list of boxes was being changed at the same moment. Try again.",
     );
     expect(choiceButtons(el).every((b) => !b.disabled)).toBe(true);
     choiceButtons(el)[0]!.click();
@@ -553,7 +553,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.membership_full", params: { limit: 8 } },
-    "This venue's list of servers already holds 8 boxes, the most it can hold. Clear a removed box from the list on this page before adding another.",
+    "This venue's list of boxes already holds 8 boxes, the most it can hold. Clear a removed box from the list on this page before adding another.",
   ],
   [
     "check",
@@ -563,7 +563,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "membership.held_untrusted", params: { reason: "untrusted" } },
-    "This box cannot check its own list of servers, so it cannot add a box. Nothing was changed.",
+    "This box cannot check its own list of boxes, so it cannot add a box. Nothing was changed.",
   ],
   [
     "check",

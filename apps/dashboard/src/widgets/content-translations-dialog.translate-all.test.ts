@@ -119,7 +119,7 @@ const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("Translate all in the translations dialog", () => {
   it.each([
-    ["en-GB", "This server is not connected to Waitron Cloud"],
+    ["en-GB", "This box is not connected to Waitron Cloud"],
     ["es-ES", "Este servidor no está conectado a Waitron Cloud"],
   ])(
     "explains a missing Cloud connection in %s for a refused start and a failed run",

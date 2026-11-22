@@ -437,7 +437,7 @@ describe("stream-settings-panel: the bucket form", () => {
   it.each([
     [
       "en-GB",
-      "This venue has a standby server, listed under Servers, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row under Servers, then save again.",
+      "This venue has a standby box, listed under Servers, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row under Servers, then save again.",
     ],
     [
       "es-ES",
