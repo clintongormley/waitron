@@ -82,7 +82,7 @@ describe("reads of a sale's filed alta", () => {
     const plan = await planOf((tx) => backend().filedFiguresFor(tx, [brandSaleId(newId())]));
     expect(plan).toEqual([
       "SEARCH r USING INDEX verifactu_records_sale_idx (sale_id=?)",
-      "SEARCH e USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
+      "SEARCH e USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
 
@@ -93,7 +93,7 @@ describe("reads of a sale's filed alta", () => {
     );
     expect(plan).toEqual([
       "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
-      "SEARCH verifactu_submissions USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
+      "SEARCH verifactu_submissions USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
 
