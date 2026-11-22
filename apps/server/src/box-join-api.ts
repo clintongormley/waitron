@@ -417,7 +417,7 @@ export function mountBoxJoinPersonApi(
           storeUrl: hello.storeUrl,
           at: newBoxNow(view),
         };
-        let issue = () => issueMirrorBundle(deps, spare);
+        let issue = (signingKey: string) => issueMirrorBundle(deps, spare, signingKey);
         if (body.moduleOperation !== undefined) {
           const operation = parseStandbyOperationInput(body.moduleOperation);
           if (operation === null)
@@ -429,11 +429,12 @@ export function mountBoxJoinPersonApi(
             binding.targetNodeId !== spare.standby.nodeId
           )
             throw new AppError("module.operation_invalid", { module: binding.module });
-          issue = () =>
+          issue = (signingKey) =>
             withOperationAuthority({ ...binding }, approverId, (authority) =>
               issueMirrorBundle(
                 deps,
                 spare,
+                signingKey,
                 new Map([[binding.module, { ...operation, authority }]]),
               ),
             );
@@ -444,7 +445,7 @@ export function mountBoxJoinPersonApi(
           deps.ring,
           deps.designated.nodeId,
         );
-        const bundle = await issue();
+        const bundle = await issue(mainPrivateKey);
         const locked = lock(Buffer.from(JSON.stringify(bundle)), mainPrivateKey);
         if (!requests.approve.finish(requestId, locked))
           throw new AppError("mirror.join_stopped_after_listing", {});

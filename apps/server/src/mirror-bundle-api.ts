@@ -2,7 +2,7 @@ import { type KeyRing, credentialRevision, writePairLinkTx } from "@waitron/cred
 import "./errors.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, type ErrorCode } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
@@ -40,7 +40,6 @@ import {
   HELD_DOCUMENT_REFUSALS,
   type StoredTrustDeps,
 } from "./membership-trust.js";
-import { readNodeIdentityKey } from "./node-identity.js";
 import type { ModuleOperations } from "@waitron/module";
 import { readModuleConfig } from "./module-config.js";
 import { isBareOrigin } from "./config.js";
@@ -69,19 +68,6 @@ export interface MirrorBundleIssueDeps {
  */
 export const MAX_CLOCK_GAP_MS = 10 * 60_000;
 
-/** This box's refusals of a join that the new box passes on to its setup page, each answered 409. */
-export const JOIN_REFUSALS = [
-  "mirror.spare_already_joined",
-  "mirror.bucket_stream_active",
-  "mirror.standby_name_taken",
-  "mirror.clocks_apart",
-  "backup.recovery_key_missing",
-] as const satisfies readonly ErrorCode[];
-
-export const JOIN_REFUSAL_STATUS = Object.fromEntries(
-  JOIN_REFUSALS.map((code) => [code, 409]),
-) as Record<(typeof JOIN_REFUSALS)[number], ContentfulStatusCode>;
-
 /** What {@link issueMirrorBundle} refuses. `membership.write_contended` is transient, so the caller retries. */
 export const ISSUE_STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
@@ -89,8 +75,12 @@ export const ISSUE_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
   "mirror.not_provisioned": 409,
+  "mirror.spare_already_joined": 409,
+  "mirror.bucket_stream_active": 409,
+  "mirror.standby_name_taken": 409,
+  "mirror.clocks_apart": 409,
+  "backup.recovery_key_missing": 409,
   "module.config_invalid": 500,
-  ...JOIN_REFUSAL_STATUS,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
@@ -114,11 +104,14 @@ interface JoiningSpare {
 
 /**
  * Reserves the spare's identity, lists it in the chart and records its pending pair link, then
- * answers its bundle. `moduleOperations` carry the caller's authority to each module.
+ * answers its bundle. `signingKey` is this box's node key, which the caller has unsealed before
+ * anything is written; the check below, the bundle's endorsement and every chart round sign or
+ * verify with it. `moduleOperations` carry the caller's authority to each module.
  */
 export async function issueMirrorBundle(
   deps: MirrorBundleIssueDeps,
   spare: JoiningSpare,
+  signingKey: string,
   moduleOperations?: ModuleOperations,
 ): Promise<MirrorBundle> {
   const { standby } = spare;
@@ -126,9 +119,6 @@ export async function issueMirrorBundle(
   // reservation. Each mint round below checks the chart it re-reads again.
   const held = await readNodeMembership(deps.appDb);
   assertHeldDocumentReadable(held);
-  // Unsealed once for the whole request: the check below, the bundle's endorsement and every
-  // chart round sign or verify with it.
-  const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
   await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
   await refuseBeforeReserving(deps, held, standby.nodeId, spare.at);
   const moduleConfig = await readModuleConfig(deps.appDb);

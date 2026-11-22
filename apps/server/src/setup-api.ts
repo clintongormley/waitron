@@ -55,7 +55,6 @@ import type { TradingConfig } from "./trading-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
-import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
 import { isLoopbackHost } from "./primary-url.js";
 import type { BoxJoinAttempt, JoinedBox } from "./box-join-attempt.js";
 import { JOIN_STATUS } from "./box-join-api.js";
@@ -353,7 +352,6 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "server.unreleased_build": 409,
   "provisioning.second_venue": 409,
   "provisioning.foreign_taxpayer": 409,
-  ...JOIN_REFUSAL_STATUS,
   "setup.connection_insecure": 403,
   "setup.owner_required": 403,
   "setup.not_ready": 503,
@@ -366,12 +364,12 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
-const JOIN_ADOPT_REQUEST = "adopt-joined";
+// Finish joining reads nothing from its body, so every resend counts as the same request.
+const JOIN_ADOPT_REQUEST_HASH = createHash("sha256").update("adopt-joined").digest("hex");
 
 const runJoin = createErrorBoundary(
   {
     ...JOIN_STATUS,
-    ...JOIN_REFUSAL_STATUS,
     "setup.request_invalid": 400,
     "setup.connection_insecure": 403,
     "setup.owner_required": 403,
@@ -1325,12 +1323,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
         const joined = joinAttempt.joined();
         if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
-        // Finish joining reads nothing from its body, so every resend counts as the same request.
-        const requestHash = createHash("sha256").update(JOIN_ADOPT_REQUEST).digest("hex");
         const response =
           deps.operations === undefined
             ? await run(joined)
-            : await runOperation(c.req.raw, "adopt", requestHash, async (operation) => {
+            : await runOperation(c.req.raw, "adopt", JOIN_ADOPT_REQUEST_HASH, async (operation) => {
                 if (operation.phase !== "started") {
                   throw new AppError("setup.adopt_incomplete", {});
                 }
