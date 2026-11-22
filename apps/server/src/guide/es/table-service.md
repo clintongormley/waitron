@@ -884,7 +884,7 @@ tiene ninguna.
 
 Una mesa unida guardada empieza como sus mesas reales juntas en un grupo con nombre. Para añadir una mesa, abre sus detalles en el mapa y elige **Unir con…**. Para separar mesas, abre el grupo, elige **Separar mesas…**, marca las mesas que quieres sacar y confirma **Separar**. Usa **Unir con…** para volver a añadir una mesa al grupo.
 
-Antes de unir mesas para sentar a clientes, marca como recogida o movida cualquier mesa que esté por recoger o por mover, ya que **Unir con…** no la muestra hasta entonces.
+Cuando unes mesas para sentar a clientes, **Unir con…** deja fuera cualquier mesa que esté por recoger o por mover hasta que la marques como recogida o movida.
 
 Si un pedido sin enviar impide unir mesas desde el mapa, elige **Tomar el pedido** en cada cuenta
 indicada. Cierra el aviso y vuelve a arrastrar la mesa o a elegir **Unir con…**.

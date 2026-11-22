@@ -232,6 +232,7 @@ interface FloorContext {
 interface PendingDrop {
   context: FloorContext;
   places: Map<string, TodayPlacement>;
+  acrossZones: boolean;
   answeredAt?: number;
 }
 
@@ -1405,7 +1406,11 @@ export class TillFloorScreen extends LitElement {
   }
 
   #previewDrop(api: TillApi, action: DropAction): PendingDrop {
-    const drop = { context: this.#context(api), places: pendingPlaces(this.#zone.visible, action) };
+    const drop = {
+      context: this.#context(api),
+      places: pendingPlaces(this.#zone.visible, action),
+      acrossZones: action.kind === "move",
+    };
     this.#drops = new Set(this.#drops).add(drop);
     this.requestUpdate();
     return drop;
@@ -1418,7 +1423,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   #dropCurrent(drop: PendingDrop): boolean {
-    return this.#drops.has(drop) && this.#inContext(drop.context);
+    return this.#drops.has(drop) && this.#inContext(drop.context, drop.acrossZones);
   }
 
   /** The room's revision as this screen last saw it: the highest of its read and each answer, its
@@ -1460,7 +1465,6 @@ export class TillFloorScreen extends LitElement {
 
   #onDrop(drop: FloorMapDrop): void {
     this.#clearJoin();
-    if (this.askingSeats?.drop !== undefined) this.#closeSeats();
     this.refusal = null;
     this.refusedZoneId = null;
     const action = dropAction(this.#zone.visible, drop);
@@ -1661,14 +1665,14 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  #inContext(context: FloorContext): boolean {
+  #inContext(context: FloorContext, acrossZones = false): boolean {
     return (
       this.isConnected &&
       this.api === context.api &&
       this.operatorSession === context.operatorSession &&
       this.#connection === context.connection &&
-      this.#zone.activeKey === context.zone &&
-      this.selectedZoneId === context.selectedZone
+      (acrossZones ||
+        (this.#zone.activeKey === context.zone && this.selectedZoneId === context.selectedZone))
     );
   }
 
@@ -1682,7 +1686,7 @@ export class TillFloorScreen extends LitElement {
     // A read started before the answer may still show the old placement.
     for (const drop of this.#drops) {
       if (
-        !this.#inContext(drop.context) ||
+        !this.#dropCurrent(drop) ||
         (this.tablesAnswered &&
           drop.answeredAt !== undefined &&
           this.tablesReadAt > drop.answeredAt)
@@ -1806,6 +1810,7 @@ export class TillFloorScreen extends LitElement {
     seats: number,
     drop: PendingDrop,
   ): Promise<void> {
+    drop.acrossZones = true;
     await this.#settle(
       this.#send(revision, (sent) =>
         api.mergeToday(

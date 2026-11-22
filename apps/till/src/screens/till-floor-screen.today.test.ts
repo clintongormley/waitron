@@ -736,6 +736,66 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     ]);
   });
 
+  it("a room switch keeps queued drops and their answers", async () => {
+    const api = stubApi();
+    let acceptFirst!: (answer: FloorAnswer) => void;
+    let rejectSecond!: (reason: unknown) => void;
+    api.moveToday
+      .mockReturnValueOnce(new Promise<FloorAnswer>((resolve) => (acceptFirst = resolve)))
+      .mockReturnValueOnce(new Promise<FloorAnswer>((_, reject) => (rejectSecond = reject)));
+    const el = await mount(at7(), api, [zone(), zone({ id: "z2", name: "Terrace" })]);
+    const refreshes = countRefreshes(el);
+    const choose = async (id: string) => {
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-zone="${id}"]`)!.click();
+      await el.updateComplete;
+    };
+
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await drop(el, { tableId: "t2", x: 26, y: 5, targetId: null });
+    await choose("z2");
+    acceptFirst({ zoneId: "z1", revision: 8 });
+    await vi.waitFor(() => {
+      expect(api.moveToday).toHaveBeenNthCalledWith(2, "t2", { x: 26, y: 5 }, 8);
+    });
+
+    expect(refreshes.count).toBe(1);
+    await choose("z1");
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 26]);
+    await choose("z2");
+    rejectSecond({ code: "table.fixed" });
+    await settle(el);
+    expect(refreshes.count).toBe(2);
+    expect(refusal(el)).toBe("That table is fixed in place");
+    await choose("z1");
+    expect([drawnAt(el, "t1"), drawnAt(el, "t2")]).toEqual([12, 20]);
+  });
+
+  it("a confirmed merge keeps its answer across a room switch", async () => {
+    const api = stubApi();
+    let answer!: (result: FloorAnswer) => void;
+    api.mergeToday.mockReturnValueOnce(new Promise<FloorAnswer>((resolve) => (answer = resolve)));
+    const el = await mount(at7(), api, [zone(), zone({ id: "z2", name: "Terrace" })]);
+    const refreshes = countRefreshes(el);
+    await drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+    el.shadowRoot!.querySelector("till-today-seats-dialog")!.dispatchEvent(
+      new CustomEvent("today-seats-confirm", {
+        detail: { seats: 8 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+    await el.updateComplete;
+    answer({ zoneId: "z1", revision: 8 });
+    await settle(el);
+
+    expect(refreshes.count).toBe(1);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 }, 8);
+  });
+
   it("a change refused as out of date says the floor has changed, drops the drawn drop and re-reads", async () => {
     const api = stubApi();
     api.moveToday.mockRejectedValueOnce({
