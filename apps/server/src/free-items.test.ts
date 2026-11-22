@@ -18,7 +18,7 @@ import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { estimatedCost, listFreeItems, type FreeItem } from "./free-items.js";
 import { cancelItem } from "./line-cancel.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { cancelReasonId, ensureOperator, observedCancelItem } from "./testing/cancel-line.js";
 import {
@@ -264,7 +264,7 @@ describe("which adjustment a free row stands for", () => {
     expect(await freeOn(billId)).toEqual([row({})]);
   });
 
-  it("lists a comp of a dish's three portions while two of them stay on the bill", async () => {
+  it("lists, for a comp of a dish's three portions, the two still on the bill", async () => {
     const { billId } = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await cancel(billId, 1, "remove_charge");
@@ -276,14 +276,14 @@ describe("which adjustment a free row stands for", () => {
     ]);
     expect(await freeOn(billId)).toEqual([
       row({
-        quantity: decimal("3.000"),
-        menuPrice: decimal("36.00"),
-        amountTakenOff: decimal("36.00"),
+        quantity: decimal("2.000"),
+        menuPrice: decimal("24.00"),
+        amountTakenOff: decimal("24.00"),
       }),
     ]);
   });
 
-  it("lists a comp of a grouped line still on the bill after a cut moved part of it to a new course", async () => {
+  it("lists, for a comp of a grouped line, the part a cut moved to a new course once the rest is taken off", async () => {
     const { partyId, billId } = await bill([{ name: "Burger", quantity: "3" }], {
       shape: "grouped",
       release: "hold",
@@ -306,13 +306,7 @@ describe("which adjustment a free row stands for", () => {
         lineTotal,
       ]),
     ).toEqual([[false, "1.000", "0.00"]]);
-    expect(await freeOn(billId)).toEqual([
-      row({
-        quantity: decimal("3.000"),
-        menuPrice: decimal("36.00"),
-        amountTakenOff: decimal("36.00"),
-      }),
-    ]);
+    expect(await freeOn(billId)).toEqual([row({})]);
   });
 
   it("lists a comp whose bill was settled, under the bill's invoice", async () => {
@@ -389,6 +383,20 @@ describe("the free list", () => {
     ]);
   });
 
+  it("lists, for a whole bill given free, only the dishes still on it, and nothing once none is", async () => {
+    const some = await bill([{ name: "Burger" }, { name: "Salad" }]);
+    await adjust(some.billId, { action: "discount_percent", percentBp: 10000 });
+    await cancel(some.billId, 2, "remove_charge");
+    const none = await bill([{ name: "Burger" }, { name: "Salad" }]);
+    await adjust(none.billId, { action: "discount_percent", percentBp: 10000 });
+    await cancel(none.billId, 2, "remove_charge");
+    await cancel(none.billId, 1, "remove_charge");
+    expect(await rowsOf(venue, none.billId)).toEqual([]);
+    expect(await freeOn(some.billId, none.billId)).toEqual([
+      row({ item: null, quantity: null, kind: "discount" }),
+    ]);
+  });
+
   it("lists a comped dish cancelled with its charge kept, and not the cancel", async () => {
     const { billId } = await bill([{ name: "Burger" }, { name: "Salad" }]);
     await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
@@ -417,6 +425,40 @@ describe("the free list", () => {
     await pay(billId);
     const invoice = await pay(moved.billId);
     expect(await freeOn(billId)).toEqual([row({ invoice: number(invoice) })]);
+  });
+
+  it("names, for a whole bill given free and then merged into another, the bill its dishes are on", async () => {
+    const { partyId, billId } = await bill([
+      { name: "Burger" },
+      { name: "Salad" },
+      { name: "Water" },
+    ]);
+    const party = async (tx: Transaction) =>
+      (await tx.select().from(parties).where(eq(parties.id, partyId)))[0]!.revision;
+    const other = await inTx(venue, async (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 3 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await party(tx),
+      }),
+    );
+    await adjust(billId, { action: "discount_percent", percentBp: 10000 });
+    await inTx(venue, async (tx) =>
+      mergeBills(tx, venue.cfg, other.billId, billId, {
+        operatorId: venue.staffId,
+        expectedPartyRevision: await party(tx),
+      }),
+    );
+    const invoice = await pay(other.billId);
+    expect(await freeOn(billId)).toEqual([
+      row({
+        item: null,
+        quantity: null,
+        kind: "discount",
+        invoice: number(invoice),
+        menuPrice: decimal("22.00"),
+        amountTakenOff: decimal("22.00"),
+      }),
+    ]);
   });
 
   it("leaves out a partial discount, every cancel, and a period the bill was not opened in", async () => {
@@ -512,6 +554,27 @@ describe("the estimated cost", () => {
         item: null,
         quantity: null,
         kind: "discount",
+        menuPrice: decimal("23.10"),
+        amountTakenOff: decimal("23.10"),
+        estimatedCost: decimal("14.00"),
+      }),
+    ]);
+  });
+
+  it("takes a dish's extra at the extra's own rate", async () => {
+    await setMargin(departmentId, 3000);
+    const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }]);
+    expect((await rowsOf(venue, billId)).map(({ name }) => name)).toEqual([
+      "Pizza",
+      "Olives",
+      "Salad",
+    ]);
+    await reprice(billId, 1, 1100, "reduced");
+    await reprice(billId, 2, 1210, "general");
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    expect(await freeOn(billId)).toEqual([
+      row({
+        item: "Pizza",
         menuPrice: decimal("23.10"),
         amountTakenOff: decimal("23.10"),
         estimatedCost: decimal("14.00"),

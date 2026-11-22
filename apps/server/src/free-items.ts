@@ -1,4 +1,4 @@
-import { asc, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import {
   listAdjustmentEntries,
   MAX_ENTRY_PAGE_SIZE,
@@ -26,6 +26,7 @@ import {
   decimal,
   divideDecimal,
   isZeroDecimal,
+  MONEY_SCALE,
   multiplyDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -34,6 +35,8 @@ import {
   type Decimal,
   type VatClass,
 } from "@waitron/shared";
+import { addDays } from "@waitron/venue-service";
+import { inIds } from "./kitchen-print.js";
 
 /** One dish or bill given free: a comp, or a discount that left it at zero. */
 export interface FreeItem {
@@ -44,12 +47,13 @@ export interface FreeItem {
   invoice: { seriesCode: string; number: number } | null;
   /** The line's name; null for the whole bill. */
   item: string | null;
+  /** How much of the dish is still on a bill; null for the whole bill. */
   quantity: Decimal | null;
   kind: "comp" | "discount";
   department: string | null;
-  /** The list value of what was given free; for a whole bill, of the rows it took money off that
-   * are still on a bill. */
+  /** The list value of the rows the adjustment took money off that are still on a bill. */
   menuPrice: Decimal;
+  /** What the adjustment took off those rows. */
   amountTakenOff: Decimal;
   /** Null when the department, or the bill, has no estimated margin. */
   estimatedCost: Decimal | null;
@@ -62,6 +66,30 @@ const ONE = decimal("1");
 const WHOLE_BP = decimal("10000");
 
 /**
+ * `Σ numerator ÷ denominator`, rounded half up to the cent once. A quotient need not end as a
+ * decimal, so the sum is taken over one common denominator and divided only for the final cent.
+ */
+function sumOfQuotients(parts: readonly { numerator: Decimal; denominator: Decimal }[]): Decimal {
+  const byDenominator = new Map<Decimal, Decimal>();
+  for (const { numerator, denominator } of parts) {
+    byDenominator.set(
+      denominator,
+      addDecimal(byDenominator.get(denominator) ?? decimal("0"), numerator),
+    );
+  }
+  const denominators = [...byDenominator.keys()];
+  const numerator = sumDecimals(
+    [...byDenominator.values()].map((sum, i) =>
+      denominators.reduce(
+        (product, denominator, j) => (i === j ? product : multiplyDecimal(product, denominator)),
+        sum,
+      ),
+    ),
+  );
+  return divideDecimal(numerator, denominators.reduce(multiplyDecimal, ONE), MONEY_SCALE);
+}
+
+/**
  * The prices without VAT, summed, less the margin: `Σ gross ÷ (1 + rate) × (10000 − margin) ÷
  * 10000`, rounded half up to the cent once (plan D14). Rates are percentages ("10.00").
  */
@@ -70,42 +98,20 @@ export function estimatedCost(
   marginBp: number | null,
 ): Decimal | null {
   if (marginBp === null) return null;
-  // A price without VAT need not end as a decimal, so the sum is taken over one common
-  // denominator, the product of each rate's (100 + rate), and divided only for the final cent.
-  const grossByRate = new Map<Decimal, Decimal>();
-  for (const { gross, rate } of prices) {
-    grossByRate.set(rate, addDecimal(grossByRate.get(rate) ?? decimal("0"), gross));
-  }
-  const divisors = [...grossByRate.keys()].map((rate) => addDecimal(HUNDRED, rate));
-  const numerator = sumDecimals(
-    [...grossByRate.values()].map((gross, i) =>
-      divisors.reduce(
-        (product, divisor, j) => (i === j ? product : multiplyDecimal(product, divisor)),
-        multiplyDecimal(gross, HUNDRED),
-      ),
-    ),
+  const kept = decimal(String(10000 - marginBp));
+  return sumOfQuotients(
+    prices.map(({ gross, rate }) => ({
+      numerator: multiplyDecimal(multiplyDecimal(gross, HUNDRED), kept),
+      denominator: multiplyDecimal(addDecimal(HUNDRED, rate), WHOLE_BP),
+    })),
   );
-  return divideDecimal(
-    multiplyDecimal(numerator, decimal(String(10000 - marginBp))),
-    multiplyDecimal(divisors.reduce(multiplyDecimal, ONE), WHOLE_BP),
-    2,
-  );
-}
-
-function among(column: SQLWrapper, ids: readonly string[]): SQL {
-  return sql`${column} in (select value from json_each(${JSON.stringify([...new Set(ids)])}))`;
-}
-
-function dayBefore(day: string): string {
-  const date = new Date(`${day}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
 }
 
 /**
  * The period's free dishes and bills, oldest first: the Adjustments report's entries on the bills
  * opened over the period's first to last business day (D10) that are not cancels and left their
- * subject at zero, less a dish's whose line has since left the bill (D3).
+ * subject at zero, each told by the rows it took money off that are still on a bill, and left out
+ * when none is (D3).
  */
 export async function listFreeItems(
   tx: Transaction,
@@ -120,7 +126,7 @@ export async function listFreeItems(
     const page = await listAdjustmentEntries(tx, {
       ...clock,
       fromBusinessDay: first,
-      toBusinessDay: dayBefore(next),
+      toBusinessDay: addDays(next, -1),
       limit: MAX_ENTRY_PAGE_SIZE,
       ...(after === null ? {} : { after }),
     });
@@ -134,12 +140,16 @@ export async function listFreeItems(
   if (entries.length === 0) return [];
   entries.reverse();
 
-  // The rows each adjustment took money off that are still on a bill.
+  // A split after printing abandons the bill and copies its rows, with what each adjustment took
+  // off them, to a new one; cancelling a placed bill abandons it too. Neither leaves its rows on a
+  // bill.
   const reduced = await tx
     .select({
       adjustmentId: adjustmentLines.adjustmentId,
-      id: workingOrderLines.id,
+      reduction: adjustmentLines.reduction,
+      reducedQuantity: adjustmentLines.quantity,
       workingOrderId: workingOrderLines.workingOrderId,
+      dining: workingOrders.dining,
       parentLineId: workingOrderLines.parentLineId,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
       vatClass: workingOrderLines.vatClass,
@@ -151,10 +161,14 @@ export async function listFreeItems(
     })
     .from(adjustmentLines)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
-      among(
-        adjustmentLines.adjustmentId,
-        entries.map((entry) => entry.id),
+      and(
+        inIds(
+          adjustmentLines.adjustmentId,
+          entries.map((entry) => entry.id),
+        ),
+        ne(workingOrders.status, "abandoned"),
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));
@@ -167,8 +181,8 @@ export async function listFreeItems(
   const bills = await tx
     .select({
       id: workingOrders.id,
+      status: workingOrders.status,
       departmentId: workingOrders.departmentId,
-      dining: workingOrders.dining,
       seriesCode: invoiceSeries.code,
       number: sales.invoiceNumber,
     })
@@ -176,7 +190,7 @@ export async function listFreeItems(
     .leftJoin(sales, eq(sales.workingOrderId, workingOrders.id))
     .leftJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(
-      among(workingOrders.id, [
+      inIds(workingOrders.id, [
         ...entries.map((entry) => entry.workingOrderId),
         ...reduced.map((line) => line.workingOrderId),
       ]),
@@ -193,43 +207,38 @@ export async function listFreeItems(
       marginBp: departments.estimatedMarginBp,
     })
     .from(departments)
-    .where(among(departments.id, departmentIds));
+    .where(inIds(departments.id, departmentIds));
   const departmentById = new Map(named.map((department) => [department.id, department]));
 
   const items: FreeItem[] = [];
   for (const entry of entries) {
-    const date = civilDateOf(new Date(entry.createdAt), clock.timeZone);
-    const rateOf = (line: (typeof reduced)[number], dining: string): Decimal =>
-      vatRateOn((dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass, date);
     const lines = linesOf.get(entry.id) ?? [];
-    let bill: (typeof bills)[number];
-    let departmentId: string | null;
-    let menuPrice: Decimal;
-    let prices: { gross: Decimal; rate: Decimal }[];
-    if (entry.lineId === null) {
-      bill = billById.get(entry.workingOrderId)!;
-      departmentId = bill.departmentId;
-      prices = lines.map((line) => ({
-        gross: divideDecimal(
-          multiplyDecimal(
-            centsToDecimal(line.listUnitPriceGross ?? line.unitPriceGross),
-            thousandthsToDecimal(line.quantity),
-          ),
-          thousandthsToDecimal(line.priceQuantity),
-          2,
-        ),
-        rate: rateOf(line, billById.get(line.workingOrderId)!.dining),
-      }));
-      menuPrice = sumDecimals(prices.map(({ gross }) => gross));
-    } else {
-      const line = lines.find((one) => one.parentLineId === null) ?? lines[0];
-      if (line === undefined) continue;
-      bill = billById.get(line.workingOrderId)!;
-      departmentId = line.offerDepartmentId ?? bill.departmentId;
-      menuPrice = entry.nominalValue;
-      prices = [{ gross: entry.nominalValue, rate: rateOf(line, bill.dining) }];
-    }
+    if (lines.length === 0) continue;
+    const date = civilDateOf(new Date(entry.createdAt), clock.timeZone);
+    const dishes = lines.filter((line) => line.parentLineId === null);
+    const first = dishes[0] ?? lines[0]!;
+    const own = billById.get(entry.workingOrderId)!;
+    const bill =
+      entry.lineId === null && own.status !== "abandoned"
+        ? own
+        : billById.get(first.workingOrderId)!;
+    const departmentId =
+      entry.lineId === null ? bill.departmentId : (first.offerDepartmentId ?? bill.departmentId);
     const department = departmentId === null ? undefined : departmentById.get(departmentId);
+    const prices = lines.map((line) => ({
+      gross: divideDecimal(
+        multiplyDecimal(
+          centsToDecimal(line.listUnitPriceGross ?? line.unitPriceGross),
+          thousandthsToDecimal(line.quantity),
+        ),
+        thousandthsToDecimal(line.priceQuantity),
+        MONEY_SCALE,
+      ),
+      rate: vatRateOn(
+        (line.dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass,
+        date,
+      ),
+    }));
     items.push({
       adjustmentId: entry.id,
       date,
@@ -238,11 +247,26 @@ export async function listFreeItems(
           ? null
           : { seriesCode: bill.seriesCode, number: bill.number },
       item: entry.lineName,
-      quantity: entry.quantity,
+      quantity:
+        entry.lineId === null
+          ? null
+          : thousandthsToDecimal(
+              (dishes.length > 0 ? dishes : lines).reduce((sum, line) => sum + line.quantity, 0),
+            ),
       kind: entry.action === "comp" ? "comp" : "discount",
       department: department?.name ?? null,
-      menuPrice,
-      amountTakenOff: entry.reduction,
+      menuPrice: sumDecimals(prices.map(({ gross }) => gross)),
+      // Each row records what was taken off the quantity its line held then; a row split off
+      // since carries the same figures, so a row's part is its share of that quantity.
+      amountTakenOff: sumOfQuotients(
+        lines.map((line) => ({
+          numerator: multiplyDecimal(
+            centsToDecimal(line.reduction),
+            thousandthsToDecimal(line.quantity),
+          ),
+          denominator: thousandthsToDecimal(line.reducedQuantity),
+        })),
+      ),
       estimatedCost: estimatedCost(prices, department?.marginBp ?? null),
       reason: entry.reasonName,
       note: entry.note,
