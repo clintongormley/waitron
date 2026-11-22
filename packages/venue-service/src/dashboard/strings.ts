@@ -315,7 +315,8 @@ const en = {
   "prep.printer_deleted": "A printer you chose was deleted.",
   "prep.printers_not_permitted": "You can't change printers.",
   "prep.printers_need_active": "Enable the station to change its printers.",
-  "prep.printers_every_station": "New stations start with the printers every station uses.",
+  "prep.printers_every_station":
+    "Starts with the printers every station uses. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
   "prep.screens": "Station screens",
   "prep.devices": "Devices",
   "prep.none": "None",
@@ -1255,7 +1256,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.printers_not_permitted": "No puedes cambiar las impresoras.",
   "prep.printers_need_active": "Habilita la estación para cambiar sus impresoras.",
   "prep.printers_every_station":
-    "Las estaciones nuevas empiezan con las impresoras que usan todas las estaciones.",
+    "Al principio aparecen marcadas las impresoras que usan todas las estaciones. Deja marcada la impresora del pase para que los platos de esta estación salgan en la comanda del pase.",
   "prep.screens": "Pantallas de estación",
   "prep.devices": "Dispositivos",
   "prep.none": "Ninguno",
