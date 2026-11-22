@@ -1061,6 +1061,7 @@ export class LoginScreen extends LitElement {
               class="change-account"
               variant="ghost"
               data-test="change-account"
+              aria-label=${t("login.change_email")}
               ?disabled=${this.busy}
               @click=${() => {
                 if (!this.busy) this.#cancelLogin();

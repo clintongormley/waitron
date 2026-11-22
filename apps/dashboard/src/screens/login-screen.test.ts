@@ -736,11 +736,12 @@ describe("login-screen", () => {
       .not.toBeInTheDocument();
     expect(navigator.credentials.get).not.toHaveBeenCalled();
 
-    const change = page.getByRole("button", { name: t("action.change"), exact: true });
+    const changeAction = el.shadowRoot!.querySelector("wt-button[data-test=change-account]")!;
+    const changeName = "Cambiar correo electrónico";
+    expect(changeAction.shadowRoot!.querySelector("button")!.ariaLabel).toBe(changeName);
+    expect(changeAction.textContent?.trim()).toBe(t("action.change"));
+    const change = page.getByRole("button", { name: changeName, exact: true });
     await expect.element(change).toBeVisible();
-    expect(el.shadowRoot!.querySelector("[data-test=change-account]")?.textContent?.trim()).toBe(
-      t("action.change"),
-    );
     await change.click();
 
     await flush(el);
@@ -4005,6 +4006,12 @@ describe("login-screen: a passkey Waitron no longer holds", () => {
 });
 
 describe("login-screen: chosen email", () => {
+  let restoreViewport: [number, number];
+  beforeEach(() => {
+    restoreViewport = [window.innerWidth, window.innerHeight];
+  });
+  afterEach(() => page.viewport(...restoreViewport));
+
   it("wraps a long address within the sign-in card on a phone", async () => {
     await page.viewport(320, 800);
     const email = "a.very.long.address.for.an.account@example.restaurant.test";
@@ -4019,7 +4026,7 @@ describe("login-screen: chosen email", () => {
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.every(({ left, right }) => left >= card.left && right <= card.right)).toBe(true);
     await expect
-      .element(page.getByRole("button", { name: t("action.change"), exact: true }))
+      .element(page.getByRole("button", { name: t("login.change_email"), exact: true }))
       .toBeVisible();
   });
 
