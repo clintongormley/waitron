@@ -32,8 +32,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
-import type { DatedRate } from "@waitron/shared";
+import type { DatedRate, DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -799,7 +798,7 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
       kitchenName: "VINO",
       unitId: null,
       unitPrice: "4.00",
-      vatClass: "reduced",
+      vatClass: "general",
       takeawayVatRate: "10.00",
     });
     const [wine125, wine175] = await setProductVariants(
@@ -838,6 +837,8 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
     variantId: string,
     schedules: Map<string, readonly DatedRate[]>,
   ): BasketItem {
+    const vatRates = schedules.get(variantId);
+    if (vatRates === undefined) throw new Error(`no takeaway VAT schedule for ${variantId}`);
     const selected = selectMenuVariant(offer, variantId);
     const text = customerPresentationText(selected, "es-ES");
     return {
@@ -845,7 +846,7 @@ describe("a takeaway variant line is filed at its own effective takeaway VAT rat
         ...selected,
         descriptions: text.product,
         variantDescriptions: text.variant,
-        vatRates: schedules.get(variantId)!,
+        vatRates,
       },
       quantity: "1",
     };
