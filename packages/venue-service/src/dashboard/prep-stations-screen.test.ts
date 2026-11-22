@@ -5201,7 +5201,7 @@ describe("The station editor", () => {
     await settle(el);
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["watcher"]);
     expect(q(el, "wt-modal p.note")?.textContent).toBe(
-      "Ticked: the printers every station uses now. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
+      "Starts with the printers every station uses. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
     );
     await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
     q(el, '[data-test="save-station"]')!.click();
@@ -5235,7 +5235,7 @@ describe("The station editor", () => {
       "watcher",
     ]);
     expect(q(el, "wt-modal p.note")?.textContent).toBe(
-      "Ticked: the printers every station uses now. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
+      "Starts with the printers every station uses. Keep your pass printer ticked so this station's dishes print on the pass ticket.",
     );
   });
   it("Add station starts with no printers when no station is active or none share a printer", async () => {
