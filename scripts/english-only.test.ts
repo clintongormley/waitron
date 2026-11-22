@@ -261,7 +261,7 @@ describe("configuration", () => {
   });
 
   it("never scans a vocabulary owner's package", () => {
-    // A module's terms are legitimate inside its own package by definition (spec §2).
+    // A module's terms are legitimate inside its own package by definition.
     for (const owner of OWNERS) {
       const own = TRACKED.filter((p) => p.startsWith(`packages/${owner.packageDir}/`));
       expect(own.length, owner.module).toBeGreaterThan(0);
@@ -383,7 +383,7 @@ describe("each module's vocabulary declaration", () => {
 
   it("has one declaring home per word: the base list re-absorbs no module's term", () => {
     // Two MODULES may share a word (a second fiscal regime will also say `huella`); the base list
-    // may not — that is what stops the central list quietly growing back (spec §2).
+    // may not — that is what stops the central list quietly growing back.
     const clashes = OWNERS.flatMap((o) =>
       o.terms.filter((t) => SPANISH_WORDS.has(t)).map((t) => `${t} (owned by ${o.module})`),
     );
