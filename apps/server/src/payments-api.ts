@@ -1039,11 +1039,19 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const providerId = requireString(body.providerId, "providerId");
-      const name = requireString(body.name, "name");
+      const name = requireString(body.name, "name").trim();
+      if (!name) throw new AppError("management.request_invalid", { field: "name" });
       const code = body.code === undefined ? undefined : requireString(body.code, "code");
+      if (code?.trim() === "") throw new AppError("management.request_invalid", { field: "code" });
       const reference =
         body.reference === undefined ? undefined : requireString(body.reference, "reference");
+      if (reference?.trim() === "")
+        throw new AppError("management.request_invalid", { field: "reference" });
       const seat = cardProviderById(deps.providers, providerId); // payment.provider_unknown
+      if (seat.readerAdd.kind === "reference" && reference === undefined)
+        throw new AppError("management.request_invalid", { field: "reference" });
+      if (seat.readerAdd.kind === "pairing-poll" && code === undefined)
+        throw new AppError("management.request_invalid", { field: "code" });
       await gated(sessionId, (tx) => requireEnabled(tx, seat));
       // The provider must be connected first — else the seat's own credential read would fail with an
       // opaque `credentials.missing`. Pre-check gives the actionable `reader.provider_disconnected`.
