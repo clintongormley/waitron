@@ -273,6 +273,16 @@ export class OpeningHoursScreen extends LitElement {
       this.moduleView = { id: view!, params: this.moduleParams() };
       return;
     }
+    if (this.moduleView && (view === "season" || view === "special-day")) {
+      const month = this.moduleMonth();
+      this.baseHref = this.hoursUrl({ month }).href;
+      this.view = "month";
+      this.requestedMonth = month;
+      this.departmentId = "";
+      this.stationId = "";
+      this.show = "";
+      this.pushedPainter = undefined;
+    }
     this.moduleView = undefined;
     const named = {
       seasonId: this.url.read("season") ?? "",

@@ -55,7 +55,7 @@ Abre **Temporadas** en **Operaciones del local**. Elige una fila para cambiar su
 
 En **Calendario** → **Personal**, elige una fecha para ver cuántas personas necesita cada área y el horario de cada puesto. Si puedes gestionar los turnos, el recuadro del día muestra **Borrador** o **Publicado** para los turnos de esa semana. Selecciona **Turnos de esta semana** para abrir esa semana en **Turnos**.
 
-Para planificar el personal de una temporada, abre la temporada desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula. En el editor de **Personal**, selecciona **Horario de apertura** para ver el horario de la misma temporada o del mismo día especial.
+Para planificar el personal de una temporada, abre la temporada desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula. En el editor de **Personal**, selecciona **Horario de apertura** para ver el horario de la misma temporada o del mismo día especial. Al cerrarlo, vuelves a Horario de apertura en el mismo mes.
 
 En un día especial, las fechas que siguen su temporada muestran los bloques de personal de esa temporada en tonos suaves. Al dibujar un bloque, empiezas a editar la fecha con esos bloques ya colocados. Usa el menú **⋯** de la fecha para volver a **Seguir la temporada** o **Vaciar** el personal de esa fecha. Si copias una fecha que sigue su temporada, cada fecha de destino pasa a seguir la suya.
 

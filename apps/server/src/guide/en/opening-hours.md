@@ -55,7 +55,7 @@ Open **Seasons** under **Venue operations**. Choose a row to change its name, co
 
 In **Calendar** → **Staffing**, select a date to see how many people each area needs and the hours for each role. If you can manage the rota, the day box shows whether that week’s rota is **Draft** or **Published**. Select **Rota for this week** to open it.
 
-To plan staffing for a season, open the season from the month you want to plan. Check any dated change to the business-day start above the grid. In a Staffing painter, select **Opening hours** to see the timetable for the same season or special day.
+To plan staffing for a season, open the season from the month you want to plan. Check any dated change to the business-day start above the grid. In a Staffing painter, select **Opening hours** to see the timetable for the same season or special day. Close it to return to Opening hours for the same month.
 
 On a special day, a date that follows its season shows the season’s staffing in faint blocks. Drawing a block starts an override with those blocks already in place. Use the date’s **⋯** menu to **Follow the season** again or **Clear** staffing for that date. If you copy a date that follows the season, the selected dates follow their own seasons.
 

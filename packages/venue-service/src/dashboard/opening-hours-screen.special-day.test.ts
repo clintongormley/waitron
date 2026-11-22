@@ -251,6 +251,8 @@ describe("the special-day painter's address", () => {
     expect(
       replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
     ).toEqual([month, switchTo]);
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-12");
   });
 
   it("opens a stored special day over the Year on a direct load, fed the screen's model and api, and closes to the Year", async () => {

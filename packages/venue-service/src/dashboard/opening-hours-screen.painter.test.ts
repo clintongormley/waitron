@@ -7,6 +7,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
+import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { drag, frame, grid, settle, withBar } from "../testing/season-painter-fixture.js";
 import "./opening-hours-screen.js";
 
@@ -41,6 +42,8 @@ function request(model: () => OpeningHoursModel, writes: unknown[] = []): Dashbo
     if (path === "/management-api/stations") return stations;
     const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
     if (year) return yearRead(Number(year[1]));
+    const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
+    if (month) return monthModel({ month: month[1]! });
     if (path.endsWith("/special-days")) return [];
     if (path.endsWith("/menu-periods/painted-in"))
       return [{ periodId: "p1", seasons: [{ id: "spring", name: "Spring" }], specialDays: [] }];
@@ -162,45 +165,66 @@ async function choose(app: PainterApp, decision: "keep" | "discard") {
 }
 
 describe("the season painter's address", () => {
-  it("replaces a Staffing season step and switch through the app's history guard", async () => {
+  it("replaces Staffing steps and switches, then closes in Opening hours at the Staffing month", async () => {
     let host: CalendarViewHost | undefined;
-    const address = "/opening-hours/view/staffing/month/2026-12/painter/season/season/winter";
-    const { el } = await mountApp(address, {
-      ctx: { request: request(withBar) },
-      views: [
-        {
-          canWrite: true,
-          view: {
-            id: "staffing",
-            order: 10,
-            labelKey: "staffing",
-            requiresPermission: "schedule.manage",
-            create(_ctx, viewHost) {
-              host = viewHost;
-              return { render: () => html`<p>Staffing</p>` };
+    const march = "/opening-hours/view/month/month/2026-03";
+    history.replaceState(null, "", march);
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      const { app: mountedApp, el } = await mountApp(undefined, {
+        ctx: { request: request(withBar) },
+        views: [
+          {
+            canWrite: true,
+            view: {
+              id: "staffing",
+              order: 10,
+              labelKey: "staffing",
+              requiresPermission: "schedule.manage",
+              create(_ctx, viewHost) {
+                host = viewHost;
+                return { render: () => html`<p>Staffing</p>` };
+              },
             },
           },
-        },
-      ],
-    });
-    await expect.poll(() => host).toBeDefined();
-    const pushed = vi.spyOn(history, "pushState");
-    const replaced = vi.spyOn(history, "replaceState");
-    const step = "/opening-hours/view/staffing/month/2026-12/painter/season/season/spring";
-    const switchTo = "/opening-hours/view/season/season/spring/department/d1";
-    host!.open(
-      "staffing",
-      { month: "2026-12", painter: "season", season: "spring" },
-      { replace: true },
-    );
-    await expect.poll(() => location.pathname).toBe(step);
-    host!.open("season", { season: "spring", department: "d1" }, { replace: true });
-    await expect.poll(() => painterOf(el)?.seasonId).toBe("spring");
-    expect(location.pathname).toBe(switchTo);
-    expect(pushed).not.toHaveBeenCalled();
-    expect(
-      replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
-    ).toEqual([step, switchTo]);
+        ],
+      });
+      app = mountedApp;
+      await expect.poll(() => drawnView(el)).toBe("month");
+      await guard.write(
+        new URL(
+          "/opening-hours/view/staffing/month/2026-12/painter/season/season/winter",
+          location.href,
+        ),
+      );
+      await expect.poll(() => host).toBeDefined();
+      const pushed = vi.spyOn(history, "pushState");
+      const replaced = vi.spyOn(history, "replaceState");
+      const step = "/opening-hours/view/staffing/month/2026-12/painter/season/season/spring";
+      const switchTo = "/opening-hours/view/season/season/spring/department/d1";
+      host!.open(
+        "staffing",
+        { month: "2026-12", painter: "season", season: "spring" },
+        { replace: true },
+      );
+      await expect.poll(() => location.pathname).toBe(step);
+      host!.open("season", { season: "spring", department: "d1" }, { replace: true });
+      await expect.poll(() => painterOf(el)?.seasonId).toBe("spring");
+      expect(location.pathname).toBe(switchTo);
+      expect(pushed).not.toHaveBeenCalled();
+      expect(
+        replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+      ).toEqual([step, switchTo]);
+      await cancel(await shownPainter(el));
+      await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-12");
+    } finally {
+      guard.dispose();
+    }
   });
 
   it("opens over the Year on a direct load, fed the screen's live model and api", async () => {
