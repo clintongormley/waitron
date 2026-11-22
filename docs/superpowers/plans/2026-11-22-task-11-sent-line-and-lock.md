@@ -21,7 +21,8 @@ In `apps/till/src/till-app.ts`, identify automatic counter refreshes from `#onMe
 `#followDefault`. Reuse the poll's busy check (`#requestsOut()` or store edits locked) after
 the offers read, before loading or reconciling the offers. On deferral, set `#counterOffersDue`
 and `#counterMenuPending` and return the existing failed result to the automatic caller.
-The prior menu version stays loaded so the next poll knows to read again.
+The prior menu version stays loaded so the next poll knows to read again. Check the edit lock in
+`#followDefault` before starting a read for an empty basket.
 
 Keep the existing shared in-flight request. When an explicit refresh or a send-refusal retry
 joins that read, treat it as explicit, so the poll's busy check does not frustrate the retry.
@@ -31,11 +32,13 @@ joins that read, treat it as explicit, so the poll's busy check does not frustra
 
 1. In `apps/till/src/till-app-menu-refresh.test.ts`, pause the offers read started by a poll,
    take the edit lock, and let the answer finish. The line should still name the old version.
-   Release the lock, poll again and check that the line takes the new version.
+   Release the lock, poll again and check that the line takes the new version. Cover the empty
+   basket separately: while locked, a poll should make no offers read.
 2. In the same file, have a send refused for its menu version join a poll's in-flight offers read.
    Check that the send retries once with the new version. Reuse the silent-adoption and send-retry
-   fixtures. Watch the first case fail on the current code, then both cases pass on the fix.
-3. Run the full changed test file, the queue's unchanged fiscal and menu checks, and finish the
-   branch. The HTTP refusal suite already passed on the branch base.
+   fixtures. The retry already works on the old code. In a disposable checkout of the fix,
+   remove the joining caller's explicit mark and verify that the retry fails, then restore it.
+3. Run the full till menu-refresh test file and finish the branch. The HTTP refusal suite already
+   passed on the branch base. CI owns the fiscal runs.
 
 Estimate 20–35 production lines and 45–80 test lines added. No new support file.

@@ -3611,6 +3611,7 @@ export class TillApp extends LitElement {
   @state() private basketStale = false;
   /** The refresh flow in flight, which a second trigger joins rather than repeats. */
   #basketRefreshing?: Promise<"adopted" | "confirming" | "failed">;
+  #basketRefreshAutomatic = false;
   /** Identify the latest poll-started reload of each zone's offers. Kept apart from the staff
    * actions' counters, so a reload never discards a zone switch's or a table open's answer. */
   #counterRefreshRequest = 0;
@@ -7340,7 +7341,7 @@ export class TillApp extends LitElement {
         keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen) ||
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
       this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
-      const busy = this.#requestsOut() || this.#store.editsLocked;
+      const busy = this.#counterMenuBusy();
       const counterMoved =
         menusMoved(this.menus, state.menus) || state.liveFields !== this.#counterOffers.liveFields;
       if ((counterMoved || serviceMoved) && busy) {
@@ -7348,7 +7349,7 @@ export class TillApp extends LitElement {
         this.#counterMenuPending = true;
       }
       if ((counterMoved || serviceMoved) && !busy && this.basketRefresh === undefined)
-        void this.#refreshBasket().then(() => this.#followDefault());
+        void this.#refreshBasket("automatic").then(() => this.#followDefault());
       else this.#followDefault();
     }
     if (zoneId === this.#tableZoneId && !this.#tableOpenUnclaimed()) {
@@ -7464,12 +7465,16 @@ export class TillApp extends LitElement {
       this.#menuMemory().remember(identity, service.periodOccurrenceKey, menuId);
   }
 
+  #counterMenuBusy(): boolean {
+    return this.#requestsOut() || this.#store.editsLocked;
+  }
+
   #followDefault(): void {
-    if (this.#store.lines.length === 0 && !this.#requestsOut()) {
+    if (this.#store.lines.length === 0 && !this.#counterMenuBusy()) {
       if (this.#basketRefreshing !== undefined) return;
       if (this.#counterOffersDue) {
         this.#counterOffersDue = false;
-        void this.#refreshBasket().then((result) => {
+        void this.#refreshBasket("automatic").then((result) => {
           if (result === "failed") this.#counterOffersDue = true;
           else this.#followDefault();
         });
@@ -7619,8 +7624,14 @@ export class TillApp extends LitElement {
    * The refresh flow (D9), not through {@link #onCounterZoneSelected}, which discards an offers
    * load while the basket has lines: reload the counter zone's offers, then compare the basket.
    */
-  #refreshBasket(): Promise<"adopted" | "confirming" | "failed"> {
-    if (this.#basketRefreshing !== undefined) return this.#basketRefreshing;
+  #refreshBasket(
+    source: "automatic" | "explicit" = "explicit",
+  ): Promise<"adopted" | "confirming" | "failed"> {
+    if (this.#basketRefreshing !== undefined) {
+      if (source === "explicit") this.#basketRefreshAutomatic = false;
+      return this.#basketRefreshing;
+    }
+    this.#basketRefreshAutomatic = source === "automatic";
     const session = this.#operatorSession;
     const api = this.api;
     const pending = (async () => {
@@ -7638,6 +7649,12 @@ export class TillApp extends LitElement {
           zoneId !== this.counterServiceZoneId
         )
           return "failed";
+        if (this.#basketRefreshAutomatic && this.#counterMenuBusy()) {
+          this.#counterOffersDue = true;
+          this.#counterMenuPending = true;
+          return "failed";
+        }
+        this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
       } catch {
         return "failed";

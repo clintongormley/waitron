@@ -565,6 +565,44 @@ describe("a basket that spans a publish", () => {
     ]);
   });
 
+  it("defers a poll answer while the basket is locked for editing", async () => {
+    const offers = Promise.withResolvers<ZoneOffers>();
+    const listZoneOffers = vi.fn().mockReturnValueOnce(offers.promise);
+    const { el } = await mountApp({ listZoneOffers });
+    const { store } = await toCounter(el);
+    add(el, "Lemonade");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    expect(listZoneOffers).toHaveBeenCalledOnce();
+
+    const unlock = store.lockEdits();
+    const v2 = menu("v2", V1.offers);
+    listZoneOffers.mockResolvedValue(v2);
+    offers.resolve(v2);
+    await flush(el);
+    expect(store.lines[0]!.product.menuVersionId).toBe("v1");
+
+    unlock();
+    await poll(el);
+    expect(listZoneOffers).toHaveBeenCalledTimes(2);
+    expect(store.lines[0]!.product.menuVersionId).toBe("v2");
+  });
+
+  it("does not read new offers while an empty basket is locked for editing", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
+    });
+    const { store } = await toCounter(el);
+    const unlock = store.lockEdits();
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+
+    unlock();
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledOnce();
+  });
+
   it("shows Lemonade €3.00 → €2.50 and waits; confirming re-prices it and the next request asserts v2", async () => {
     const { el } = await mountApp({
       listZoneOffers: vi
@@ -818,6 +856,27 @@ describe("a pay refused because the menu changed", () => {
       [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null }],
     ]);
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+  });
+
+  it("retries a refused payment using the offers read already started by the poll", async () => {
+    const offers = Promise.withResolvers<ZoneOffers>();
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockReturnValue(offers.promise),
+      recordSale: vi.fn().mockRejectedValueOnce(refusal).mockResolvedValueOnce(saleResult),
+    });
+    await toCounter(el);
+    add(el, "Lemonade");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledOnce();
+
+    await pay(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    offers.resolve(menu("v2", V1.offers));
+    await flush(el);
+
+    expect(api.listZoneOffers).toHaveBeenCalledOnce();
+    expect(api.recordSale.mock.calls.map((call) => call[0][0].menuVersionId)).toEqual(["v1", "v2"]);
   });
 
   it("retries only once: a second refusal is shown in the menu-change words", async () => {
