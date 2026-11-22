@@ -1458,7 +1458,7 @@ above; the evidence that it works is the recorded run in
 
 ## What the model enforces, not just labels
 
-`records` is the rig's stand-in for `registros_facturacion`, and it is append-only in the way the real
+`records` is the rig's stand-in for `verifactu_records`, and it is append-only in the way the real
 table is rather than only in its comments. Two parts, and **both are needed**: `BEFORE UPDATE` and
 `BEFORE DELETE` triggers that `RAISE(ABORT)`, plus `PRAGMA recursive_triggers = ON` in `openNode`.
 Without the pragma, `INSERT OR REPLACE` deletes the conflicting row internally, that internal delete
