@@ -13,7 +13,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   addProductToMenu,
@@ -78,6 +78,7 @@ interface Fixture {
 
 async function fixture(): Promise<Fixture> {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const lunch = await createMenu(tx, { name: "Lunch menu" });

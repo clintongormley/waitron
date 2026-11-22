@@ -6,6 +6,7 @@ import {
   isCalendarDate,
   localCalendarDate,
   localToday,
+  rateOn,
   vatRateOn,
   vatRatesOn,
   type DatedRate,
@@ -130,6 +131,82 @@ describe("vatRateOn", () => {
     expect(refusal(() => vatRateOn("general", "2026-09-27", table))).toEqual(
       tableInvalid("vatRateOn", "general", "first_entry_missing_or_dated"),
     );
+  });
+});
+
+describe("rateOn", () => {
+  const TWO: readonly DatedRate[] = [
+    { from: null, rate: "10.00" },
+    { from: "2027-01-01", rate: "4.00" },
+  ];
+  const scheduleInvalid = (reason: "first_entry_missing_or_dated" | "not_oldest_first") => ({
+    code: "vat_rate.schedule_invalid",
+    params: { caller: "rateOn", reason },
+  });
+
+  it("gives the last entry in force on the date, the dated one from its own day", () => {
+    expect(rateOn(TWO, "2026-12-31")).toBe(decimal("10.00"));
+    expect(rateOn(TWO, "2027-01-01")).toBe(decimal("4.00"));
+    expect(rateOn(TWO, "1990-01-01")).toBe(decimal("10.00"));
+  });
+
+  it("writes the rate at two places whatever spelling the list uses", () => {
+    expect(rateOn([{ from: null, rate: "7.5" }], "2026-12-31")).toBe(decimal("7.50"));
+  });
+
+  it("refuses a date that is not a real YYYY-MM-DD calendar day", () => {
+    for (const bad of ["2026-02-30", "2027-1-01", ""]) {
+      expect(refusal(() => rateOn(TWO, bad))).toEqual({
+        code: "vat_rate.date_invalid",
+        params: { caller: "rateOn", value: bad },
+      });
+    }
+  });
+
+  it("refuses an empty list", () => {
+    expect(refusal(() => rateOn([], "2026-12-31"))).toEqual(
+      scheduleInvalid("first_entry_missing_or_dated"),
+    );
+  });
+
+  it("refuses a list whose first entry is dated", () => {
+    expect(refusal(() => rateOn([{ from: "2020-01-01", rate: "10.00" }], "2026-12-31"))).toEqual(
+      scheduleInvalid("first_entry_missing_or_dated"),
+    );
+  });
+
+  it("refuses a list out of order, repeating a date or with a second undated entry", () => {
+    for (const schedule of [
+      [
+        { from: null, rate: "10.00" },
+        { from: "2028-01-01", rate: "4.00" },
+        { from: "2027-01-01", rate: "5.00" },
+      ],
+      [
+        { from: null, rate: "10.00" },
+        { from: "2027-01-01", rate: "4.00" },
+        { from: "2027-01-01", rate: "5.00" },
+      ],
+      [
+        { from: null, rate: "10.00" },
+        { from: null, rate: "4.00" },
+      ],
+    ]) {
+      expect(refusal(() => rateOn(schedule, "2026-12-31"))).toEqual(
+        scheduleInvalid("not_oldest_first"),
+      );
+    }
+  });
+
+  it("refuses an entry dated with something other than a calendar date", () => {
+    const schedule = [
+      { from: null, rate: "10.00" },
+      { from: "2027-13-01", rate: "4.00" },
+    ];
+    expect(refusal(() => rateOn(schedule, "2026-12-31"))).toEqual({
+      code: "vat_rate.date_invalid",
+      params: { caller: "rateOn", value: "2027-13-01" },
+    });
   });
 });
 

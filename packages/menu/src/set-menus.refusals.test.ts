@@ -1,5 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { useMenuDb } from "../test/fixtures.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { requireMenuRoot } from "./menu-structure.js";
 import {
@@ -77,6 +78,8 @@ async function fixture(tx: Transaction) {
 
 let f: Awaited<ReturnType<typeof fixture>>;
 beforeEach(async () => {
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   f = await app(fixture);
 });
 

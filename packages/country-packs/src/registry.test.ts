@@ -20,7 +20,9 @@ import {
   resolveInstalledCountryLocale,
   resolveInstalledReceiptLanguageRules,
   resolveInstalledStartingContentLanguages,
+  vatRatesFor,
 } from "./registry.js";
+import { basisPointsToDecimal, rateOn, stringToBasisPoints } from "@waitron/shared";
 
 describe("installed country packs", () => {
   it("has one pack per unique country code", () => {
@@ -54,6 +56,39 @@ describe("installed country packs", () => {
     expect(chargesTakeawayVat("GB", "GB-vat")).toBe(false);
     expect(chargesTakeawayVat("XX", "ES-common")).toBe(false);
     expect(chargesTakeawayVat("ES", "missing")).toBe(false);
+  });
+
+  it("gives an area its pack's dine-in and pickable rates and takeaway default", () => {
+    const common = getCountryPack("ES")!.fiscalJurisdictions.find(({ id }) => id === "ES-common")!;
+    expect(vatRatesFor("ES", "ES-common")).toEqual({
+      dineIn: common.dineInVatRates,
+      pickable: common.pickableVatRates,
+      defaultTakeaway: common.defaultTakeawayVatRate,
+    });
+    expect(vatRatesFor("ES", "ES-canary")).toBeUndefined();
+    expect(vatRatesFor("XX", "ES-common")).toBeUndefined();
+    expect(vatRatesFor("ES", "missing")).toBeUndefined();
+  });
+
+  it("gives every supported area with modules complete, consistent rate lists in one spelling", () => {
+    const supported = COUNTRY_PACKS.flatMap((pack) =>
+      pack.fiscalJurisdictions
+        .filter(({ supported, modules }) => supported && modules !== undefined)
+        .map(({ id }) => [pack.countryCode, id] as const),
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    const oneSpelling = (rate: string) => basisPointsToDecimal(stringToBasisPoints(rate));
+    for (const [country, territory] of supported) {
+      const rates = vatRatesFor(country, territory);
+      expect(rates, territory).toBeDefined();
+      const { dineIn, pickable, defaultTakeaway } = rates!;
+      expect(() => rateOn(dineIn, "2000-01-01"), territory).not.toThrow();
+      for (const { rate } of dineIn) expect(pickable, territory).toContain(rate);
+      expect(pickable, territory).toContain(defaultTakeaway);
+      for (const rate of [...dineIn.map(({ rate }) => rate), ...pickable, defaultTakeaway]) {
+        expect(rate, territory).toBe(oneSpelling(rate));
+      }
+    }
   });
 
   it("resolves venue locales through installed country and area preferences", () => {

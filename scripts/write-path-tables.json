@@ -21,5 +21,6 @@
   "invoice_correction_refunds": ["apps/server/src/invoice-correction-legs.ts"],
   "bill_advances": ["apps/server/src/bill-advances.ts"],
   "roles": ["packages/identity/src/roles.ts"],
-  "person_roles": ["packages/identity/src/roles.ts"]
+  "person_roles": ["packages/identity/src/roles.ts"],
+  "product_takeaway_vat_rates": ["packages/menu/src/takeaway-vat-rates.ts"]
 }

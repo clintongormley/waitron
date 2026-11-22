@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   createMenu,
   createProduct,
@@ -39,6 +39,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await run(async (tx) => {
     const menu = await createMenu(tx, { name: "Bar" });
     menuId = menu.id;

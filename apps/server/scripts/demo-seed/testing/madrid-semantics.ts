@@ -360,6 +360,9 @@ export async function canonicalMadridSemantics(
       case "product_modifiers":
         key = parts("product_id", "sort");
         break;
+      case "product_takeaway_vat_rates":
+        key = parts("product_id", "starts_on");
+        break;
       case "routing_cells":
         key = parts("category_id", "product_id", "zone_id");
         break;

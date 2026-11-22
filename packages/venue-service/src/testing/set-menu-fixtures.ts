@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { kitchenCourses, menuItems, products, type Transaction } from "@waitron/db";
-import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedTakeawayVatRate, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import {
   addMember,
   addProducts,
@@ -60,6 +60,7 @@ export async function setMenuFixture(tx: Transaction) {
       )
       .returning({ id: products.id })
   ).map(({ id }) => id);
+  await seedTakeawayVatRate(tx, [soup!, sirloin!, bravas!]);
   const [{ id: largeBravas }] = await tx
     .insert(products)
     .values({ name: "Large", parentId: bravas!, courseId: drinks!, unitPrice: 800 })

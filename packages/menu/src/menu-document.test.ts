@@ -20,7 +20,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
@@ -524,6 +524,7 @@ describe("readDishFacts", () => {
   let variantId: string;
   beforeEach(async () => {
     await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
     await seedLegacySellingUnits(fx.db);
     ({ productId, variantId } = await app(async (tx) => {
       const product = await createProduct(tx, {

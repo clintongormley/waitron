@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
@@ -43,6 +43,7 @@ const options: { doneness: string; dressing: string } = { doneness: "", dressing
 
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await run(async (tx) => {
     const product = async (name: string, unitPrice: string) =>
       (

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1b467742-c9de-4d8a-ab09-4033225551bf",
+  "id": "b494f89d-5336-4b9f-959e-26d497f5dfcf",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15161,6 +15161,84 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "product_takeaway_vat_rates": {
+      "name": "product_takeaway_vat_rates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_on": {
+          "name": "starts_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rate": {
+          "name": "rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "product_takeaway_vat_rates_product_day_key": {
+          "name": "product_takeaway_vat_rates_product_day_key",
+          "columns": [
+            "product_id",
+            "starts_on"
+          ],
+          "isUnique": true
+        },
+        "product_takeaway_vat_rates_product_first_key": {
+          "name": "product_takeaway_vat_rates_product_first_key",
+          "columns": [
+            "product_id"
+          ],
+          "isUnique": true,
+          "where": "\"product_takeaway_vat_rates\".\"starts_on\" is null"
+        }
+      },
+      "foreignKeys": {
+        "product_takeaway_vat_rates_product_fk": {
+          "name": "product_takeaway_vat_rates_product_fk",
+          "tableFrom": "product_takeaway_vat_rates",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "product_takeaway_vat_rates_rate_ck": {
+          "name": "product_takeaway_vat_rates_rate_ck",
+          "value": "\"product_takeaway_vat_rates\".\"rate\" between 0 and 10000"
+        },
+        "product_takeaway_vat_rates_starts_on_ck": {
+          "name": "product_takeaway_vat_rates_starts_on_ck",
+          "value": "length(\"product_takeaway_vat_rates\".\"starts_on\") = 10 and \"product_takeaway_vat_rates\".\"starts_on\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+        }
+      }
     },
     "adjustment_reasons": {
       "name": "adjustment_reasons",

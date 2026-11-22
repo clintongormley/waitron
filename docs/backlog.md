@@ -347,8 +347,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** The owner's
   answer (owner, 2026-11-18, question 5 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)) keeps the plan of two
-  dated rates per product, taken on the day the meal ends; the adviser is still to confirm the details. Design next. Drinks served
+  dated rates per product, taken on the day the meal ends; the adviser is still to confirm the details. Piece A of the
+  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is planned as four pull requests, the first of which stores
+  each product's takeaway rate ([plan](superpowers/plans/2026-11-22-vat-rates-a.md)). Drinks served
   without food may take 21%: unsettled, and the adviser will come back on it. [Detail](backlog/fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)
+
+- **Offer 2%, 5% and 7.5% taken away once modelo 303 can report them.** Spain's pick list for a
+  takeaway rate stops at 0, 4, 10 and 21% because the modelo 303 download has no box for the
+  others. [Detail](backlog/fiscal.md#offer-2-5-and-75-taken-away-once-modelo-303-can-report-them)
 
 - **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
   A802 slice 5b, #3108).** The correction window ticks whole dishes; an earlier ordinary refund does not

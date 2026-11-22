@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { createProduct } from "./operations.js";
 
@@ -9,6 +9,7 @@ const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suit
 
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await seedLegacySellingUnits(suite.db);
 });
 

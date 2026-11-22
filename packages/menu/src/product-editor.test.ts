@@ -1,9 +1,8 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, products, withTransaction } from "@waitron/db";
-import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { kitchenCourses, products, settings, VENUE_SETTINGS, withTransaction } from "@waitron/db";
+import { seedBusinessDay, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
@@ -25,6 +24,7 @@ beforeEach(() => seedLibraryImages(fx.db, "coffee.webp"));
 let input: ProductEditorInput;
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   const setup = await withTransaction(fx.db, async (tx) => ({
     unit: await createUnit(
       tx,
@@ -149,6 +149,13 @@ describe("one save builds one query on the content-language setting", () => {
     });
     expect(reads).toBe(1);
   });
+});
+
+it("refuses a new product while no venue is saved", async () => {
+  await fx.db.delete(settings).where(eq(settings.module, VENUE_SETTINGS.module));
+  await expect(
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en")),
+  ).rejects.toMatchObject({ code: "venue.not_found" });
 });
 
 it("reads a product with no unit as unitId null", async () => {
@@ -564,10 +571,11 @@ describe("a variant's own page", () => {
   let routing: { courseId: string };
   beforeEach(async () => {
     const setup = await withTransaction(fx.db, async (tx) => {
-      await seedVenue(tx, {
+      await seedVenueSettings(tx, {
         name: "Main",
         invoiceLocales: ["en-GB"],
       });
+      await seedBusinessDay(tx);
       const [course] = await tx
         .insert(kitchenCourses)
         .values({ name: "Drinks" })

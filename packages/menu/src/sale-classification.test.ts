@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { SaleLineClassification } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { createProduct } from "./operations.js";
@@ -26,6 +26,7 @@ const sessionOf = (tx: Transaction) =>
 /** Drinks > Alcoholic drinks > Cocktails, and a separate top-level Extras. */
 async function fixture() {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const drinks = await createCategory(tx, { name: "Drinks" });

@@ -118,13 +118,23 @@ export interface ErrorParams {
   "diet.invalid_label": { field: string; value: string };
   /** A diet override both adds and removes the same contains-tag — a contradiction. */
   "diet.add_remove_conflict": { tag: string };
-  /** `value`, a date handed to `caller` or one in its rate table, is not a `YYYY-MM-DD` calendar date. */
-  "vat_rate.date_invalid": { caller: "vatRateOn" | "vatRatesOn"; value: string };
+  /** `value`, a date handed to `caller` or an entry's date in the rates it was handed, is not a
+   * `YYYY-MM-DD` calendar date. */
+  "vat_rate.date_invalid": { caller: "vatRateOn" | "vatRatesOn" | "rateOn"; value: string };
   /** `caller`'s rate table lists `vatClass` with a missing or dated first entry, or not dated oldest
    * first. */
   "vat_rate.table_invalid": {
     caller: "vatRateOn" | "vatRatesOn";
     vatClass: "general" | "reduced" | "super_reduced" | "zero";
+    reason: "first_entry_missing_or_dated" | "not_oldest_first";
+  };
+  /** The venue's tax area has no VAT rates: there is no taxpayer (`country` null), no pack or
+   * territory the packs know, or the territory lacks its dine-in or pickable rates, or its takeaway default. */
+  "vat_rate.area_unsupported": { country: string | null; territory: string };
+  /** The dated rate list handed to `caller` is empty, starts with a dated entry, or is not dated
+   * oldest first. */
+  "vat_rate.schedule_invalid": {
+    caller: "rateOn";
     reason: "first_entry_missing_or_dated" | "not_oldest_first";
   };
 }

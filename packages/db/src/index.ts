@@ -393,6 +393,7 @@ export {
   optionLabels,
   optionLists,
   productModifiers,
+  productTakeawayVatRates,
   sectionMembers,
   sections,
   units,

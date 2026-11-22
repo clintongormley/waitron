@@ -47,6 +47,13 @@ export interface FiscalModules {
   readonly tax: string;
 }
 
+/** A rate and the local calendar date (`YYYY-MM-DD`, inclusive) it takes effect; `from: null` is
+ * the first entry only. */
+export interface DatedVatRate {
+  readonly from: string | null;
+  readonly rate: string;
+}
+
 export interface FiscalJurisdiction {
   readonly id: string;
   readonly areaCodes: readonly string[];
@@ -54,6 +61,11 @@ export interface FiscalJurisdiction {
   readonly modules?: FiscalModules;
   /** Food and drink taken away may be charged at a different VAT class from eaten in. */
   readonly takeawayVat?: true;
+  /** The rate for everything eaten or drunk on the premises, oldest first. */
+  readonly dineInVatRates?: readonly DatedVatRate[];
+  /** The rates a person may choose for a product taken away. */
+  readonly pickableVatRates?: readonly string[];
+  readonly defaultTakeawayVatRate?: string;
 }
 
 /** The fixed words a printed receipt carries, one set per receipt language. */

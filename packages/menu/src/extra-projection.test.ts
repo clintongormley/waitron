@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, updateExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
@@ -42,6 +42,7 @@ const offers = { burger: "", pizza: "" };
 
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await run(async (tx) => {
     const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {

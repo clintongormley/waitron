@@ -1,5 +1,5 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -13,7 +13,7 @@ import {
 } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { Hono } from "hono";
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { mountMenuApi } from "./menu-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -24,9 +24,13 @@ const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
-    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
   },
+});
+
+beforeEach(async () => {
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
 });
 
 async function fixture() {

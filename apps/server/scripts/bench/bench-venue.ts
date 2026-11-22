@@ -29,6 +29,7 @@ import {
   createCategory,
   createProduct,
   menuItems,
+  readVenueVatRates,
 } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
@@ -356,6 +357,7 @@ async function seed(
     for (const id of Object.values(stations)) await updateStation(tx, id, { printHeldWork: true });
 
     const menu = await createMenu(tx, { name: MENU_NAME });
+    const vatRates = await readVenueVatRates(tx);
     let made = 0;
     for (const [index, course] of COURSES.entries()) {
       const category = await createCategory(tx, { name: course.name });
@@ -366,15 +368,19 @@ async function seed(
           : Math.round(BENCH_PROFILE.dishes * course.share);
       for (let n = 1; n <= count; n++) {
         const label = `${course.name} ${String(made + n).padStart(3, "0")}`;
-        await createProduct(tx, {
-          categoryId: category.id,
-          name: label,
-          customerName: { [LOCALE]: `House ${label.toLowerCase()}` },
-          kitchenName: label.toUpperCase().replace(/\s+/g, "-"),
-          pricingUnit: "each",
-          unitPrice: price(course.from, course.to),
-          vatClass: "general",
-        });
+        await createProduct(
+          tx,
+          {
+            categoryId: category.id,
+            name: label,
+            customerName: { [LOCALE]: `House ${label.toLowerCase()}` },
+            kitchenName: label.toUpperCase().replace(/\s+/g, "-"),
+            pricingUnit: "each",
+            unitPrice: price(course.from, course.to),
+            vatClass: "general",
+          },
+          vatRates,
+        );
       }
       made += count;
     }

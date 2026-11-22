@@ -899,13 +899,25 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Next: plans for the design's pieces A, B
-and C. From M7v, owner rulings
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
+requests, the first storing each product's takeaway rate; pieces B and C have no plan yet. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
 copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
 a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
+
+## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
+
+Spain's pack lets a person pick only 0, 4, 10 and 21% for a product taken away, not 2, 5 or
+7.5 (`pickableVatRates` in `packages/country-es/src/spain.ts`),
+because `mapModelo303` (`packages/reporting/src/modelo-303.ts`) has a box for only those four and
+refuses any other rate, so one sale at 5% would make that period's modelo 303 download fail.
+Check which of 2, 5 and 7.5 have a row on the current modelo 303 form (the committed AEAT record
+design, `packages/reporting/reference/DR303e26.xlsx`) and map those; the code says the 5% row is
+gone from the 2026 form (`DEVENGADO_BOXES` in `packages/reporting/src/modelo-303.ts`). A rate
+with no row cannot be offered taken away. `apps/server/src/vat-rates-reportable.test.ts` fails if
+the pick list is widened without the mapping.
 
 ## Correcting a paid invoice: what A802 left open
 

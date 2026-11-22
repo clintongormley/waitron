@@ -13,6 +13,11 @@ export {
 } from "@waitron/shared";
 export { isProductOrdering, PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 export * from "./units.js";
+export {
+  readTakeawayVatSchedules,
+  readVenueVatRates,
+  setTakeawayVatRate,
+} from "./takeaway-vat-rates.js";
 // Listed rather than `export *`: `createProductSkippingNameCheck`,
 // `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
 // unique-name rule and are kept out of the package entry point.

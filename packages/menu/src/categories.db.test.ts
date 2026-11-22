@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createCategory,
@@ -23,6 +23,7 @@ const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suit
 
 async function fixture() {
   await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await seedLegacySellingUnits(suite.db);
   const a = await app((tx) => createCategory(tx, { name: "A" }));
   const b = await app((tx) => createCategory(tx, { name: "B" }));

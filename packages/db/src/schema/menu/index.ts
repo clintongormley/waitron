@@ -7,3 +7,4 @@ export * from "./sections.js";
 export * from "./publication.js";
 export * from "./suggestions.js";
 export * from "./set-menus.js";
+export * from "./product-takeaway-vat-rates.js";

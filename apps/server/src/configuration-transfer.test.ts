@@ -3,6 +3,7 @@ import {
   readPrinterHoldsForTest,
   holdPrinterForTest,
   seedPerson,
+  seedTakeawayVatRate,
 } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
@@ -927,6 +928,7 @@ describe("configuration transfer database path", () => {
         unitPrice: 150,
         vatClass: "general",
       });
+      await seedTakeawayVatRate(tx, "22222222-aaaa-aaaa-aaaa-222222222222");
       await tx
         .update(products)
         .set({ image: uploaded.image.filename })
@@ -4464,6 +4466,9 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   }
 });
 
+/** The takeaway rate a hand-made product copy `copy` needs, so only its name is wrong. */
+const copyRate = { id: "copy-rate", product_id: "copy", starts_on: null, rate: 1000 };
+
 it("refuses a bundle holding duplicate names whole, at staging and at import", async () => {
   const source = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: suite.db,
@@ -4501,6 +4506,7 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     tables: {
       ...clean.tables,
       products: [...clean.tables.products!, { ...product, id: "copy", name: "WATER " }],
+      product_takeaway_vat_rates: [...clean.tables.product_takeaway_vat_rates!, copyRate],
     },
   };
 
@@ -4646,6 +4652,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
         flagless,
         { ...flagless, id: "copy", name: "WATER " },
       ],
+      product_takeaway_vat_rates: [...clean.tables.product_takeaway_vat_rates!, copyRate],
     },
   };
   const withTextFlag: ConfigurationBundle = {

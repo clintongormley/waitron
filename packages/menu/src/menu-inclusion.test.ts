@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useMenuDb, seedLegacySellingUnits } from "../test/fixtures.js";
 import { createMenu, createProduct, updateMenuDetails } from "./operations.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
@@ -23,6 +23,7 @@ const section = (sectionId: string) => ({ kind: "section" as const, sectionId })
 const product = (productId: string) => ({ kind: "product" as const, productId });
 async function fixture() {
   await seedTaxpayer(fx.db);
+  await seedVenueSettings(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const a = await createMenu(tx, { name: "Evening" });

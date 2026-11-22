@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { now, products, type Transaction } from "@waitron/db";
+import { now, products, readSettings, VENUE_SETTINGS, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
-import { readContentLanguages } from "./content-languages.js";
+import { contentLanguagesOr, savedContentLanguagesIn } from "./content-languages.js";
 import { mergeOptionalTranslations } from "./optional-translations.js";
 import {
   createProductSkippingNameCheck,
@@ -137,7 +137,8 @@ export async function saveProductEditor(
     await archiveProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
-  const config = await readContentLanguages(tx, fallbackLanguage);
+  const venue = await readSettings(tx, VENUE_SETTINGS);
+  const config = contentLanguagesOr(savedContentLanguagesIn(venue.doc), fallbackLanguage);
   const body = input as Record<string, unknown>;
   if (productId !== null) {
     const [previous] = await tx
@@ -169,24 +170,29 @@ export async function saveProductEditor(
       value.variants,
     );
   if (productId === null) {
-    const created = await createProductSkippingNameCheck(tx, {
-      categoryId: null,
-      name: value.name,
-      customerName: value.customerName,
-      description: value.description,
-      kitchenName: value.kitchenName,
-      unitId: value.unitId,
-      // The parser refuses a blank on a product with no parent, which every created one is.
-      unitPrice: value.unitPrice!,
-      vatClass: value.vatClass!,
-      takeawayVatClass: value.takeawayVatClass,
-      active: value.active,
-      available: value.available ?? true,
-      ordering: value.ordering,
-      ...(value.image === null ? {} : { image: value.image }),
-      ...(value.allergens === null ? {} : { allergens: value.allergens }),
-      dietaryDeclarations: value.dietaryDeclarations!,
-    });
+    const created = await createProductSkippingNameCheck(
+      tx,
+      {
+        categoryId: null,
+        name: value.name,
+        customerName: value.customerName,
+        description: value.description,
+        kitchenName: value.kitchenName,
+        unitId: value.unitId,
+        // The parser refuses a blank on a product with no parent, which every created one is.
+        unitPrice: value.unitPrice!,
+        vatClass: value.vatClass!,
+        takeawayVatClass: value.takeawayVatClass,
+        active: value.active,
+        available: value.available ?? true,
+        ordering: value.ordering,
+        ...(value.image === null ? {} : { image: value.image }),
+        ...(value.allergens === null ? {} : { allergens: value.allergens }),
+        dietaryDeclarations: value.dietaryDeclarations!,
+      },
+      // With no venue saved, the create reads the settings again and refuses as `venue.not_found`.
+      venue.revision === 0 ? undefined : venue.doc,
+    );
     productId = created.id;
   } else {
     await (isVariant ? updateProduct : updateProductSkippingNameCheck)(tx, productId, {

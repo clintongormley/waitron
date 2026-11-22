@@ -2,6 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createMenu, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { readProductExtras } from "./extra-projection.js";
@@ -26,6 +27,8 @@ let dish = "";
 
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
 beforeEach(async () => {
+  await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries({ sourdough: "2.50", rye: "3.25" })) {

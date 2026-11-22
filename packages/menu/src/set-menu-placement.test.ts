@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { menuItems, menus, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
 import { readTranslationRows, resolveTranslationRow } from "./content-translation-targets.js";
@@ -39,6 +39,7 @@ async function menusFixture(tx: Transaction) {
 
 async function dishesFixture() {
   await seedTaxpayer(suite.db);
+  await seedVenueSettings(suite.db);
   await seedLegacySellingUnits(suite.db);
   return app(async (tx) => {
     const fixture = await menusFixture(tx);

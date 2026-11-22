@@ -1,6 +1,7 @@
 import { AppError } from "../errors.js";
-import { decimal } from "../money.js";
+import { decimal, toScale } from "../money.js";
 import type { Decimal } from "../money.js";
+import { RATE_SCALE } from "../scales.js";
 
 export const VAT_CLASSES = ["general", "reduced", "super_reduced", "zero"] as const;
 export type VatClass = (typeof VAT_CLASSES)[number];
@@ -30,7 +31,7 @@ export const VAT_RATE_TABLE: VatRateTable = Object.freeze({
   zero: Object.freeze([Object.freeze({ from: null, rate: "0.00" })]),
 });
 
-type Caller = "vatRateOn" | "vatRatesOn";
+type Caller = "vatRateOn" | "vatRatesOn" | "rateOn";
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -52,28 +53,25 @@ function assertCalendarDate(caller: Caller, value: string): void {
 // above. Any other table may have changed since it last passed, so it is checked on every lookup.
 let shippedTablePassed = false;
 
-function assertWellFormed(caller: Caller, table: VatRateTable): void {
+type ScheduleFault = "first_entry_missing_or_dated" | "not_oldest_first";
+
+function scheduleFault(caller: Caller, entries: readonly DatedRate[]): ScheduleFault | undefined {
+  if (entries[0]?.from !== null) return "first_entry_missing_or_dated";
+  for (let i = 1; i < entries.length; i += 1) {
+    const from = entries[i]!.from;
+    const previous = entries[i - 1]!.from;
+    if (from === null || (previous !== null && from <= previous)) return "not_oldest_first";
+    assertCalendarDate(caller, from);
+  }
+  return undefined;
+}
+
+function assertWellFormed(caller: "vatRateOn" | "vatRatesOn", table: VatRateTable): void {
   if (table === VAT_RATE_TABLE && shippedTablePassed) return;
   for (const vatClass of VAT_CLASSES) {
-    const entries = table[vatClass];
-    if (entries[0]?.from !== null) {
-      throw new AppError("vat_rate.table_invalid", {
-        caller,
-        vatClass,
-        reason: "first_entry_missing_or_dated",
-      });
-    }
-    for (let i = 1; i < entries.length; i += 1) {
-      const from = entries[i]!.from;
-      const previous = entries[i - 1]!.from;
-      if (from === null || (previous !== null && from <= previous)) {
-        throw new AppError("vat_rate.table_invalid", {
-          caller,
-          vatClass,
-          reason: "not_oldest_first",
-        });
-      }
-      assertCalendarDate(caller, from);
+    const reason = scheduleFault(caller, table[vatClass]);
+    if (reason !== undefined) {
+      throw new AppError("vat_rate.table_invalid", { caller, vatClass, reason });
     }
   }
   if (table === VAT_RATE_TABLE) shippedTablePassed = true;
@@ -85,6 +83,16 @@ function rateIn(entries: readonly DatedRate[], date: string): Decimal {
     if (entry.from! <= date) rate = entry.rate;
   }
   return decimal(rate);
+}
+
+/** The rate in force on the local calendar date `date` (`YYYY-MM-DD`), at two places. */
+export function rateOn(schedule: readonly DatedRate[], date: string): Decimal {
+  assertCalendarDate("rateOn", date);
+  const reason = scheduleFault("rateOn", schedule);
+  if (reason !== undefined) {
+    throw new AppError("vat_rate.schedule_invalid", { caller: "rateOn", reason });
+  }
+  return toScale(rateIn(schedule, date), RATE_SCALE);
 }
 
 /** The rate `vatClass` carries on the local calendar date `date` (`YYYY-MM-DD`). */
