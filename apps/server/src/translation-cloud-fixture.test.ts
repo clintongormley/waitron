@@ -42,6 +42,28 @@ const job = (items: unknown[], fields: Record<string, unknown> = {}) =>
     houseStyle: [],
     ...fields,
   });
+const twentyLanguages = [
+  "en",
+  "es",
+  "fr",
+  "de",
+  "it",
+  "pt",
+  "nl",
+  "sv",
+  "da",
+  "fi",
+  "pl",
+  "cs",
+  "el",
+  "hu",
+  "ro",
+  "bg",
+  "hr",
+  "sk",
+  "sl",
+  "et",
+];
 const pinta = [item("product:1", "PINTA", ["ca"])];
 const house = { kind: "product", staffName: "CARAJILLO", names: { ca: "Cigaló" } };
 const one = job([item("product:1", "PINTA", ["ca", "es"])]);
@@ -277,7 +299,7 @@ it.each([
     job(pinta, {
       languages: {
         default: "ca",
-        enabled: ["ca", ...Array.from({ length: 20 }, (_, i) => `l${String.fromCharCode(97 + i)}`)],
+        enabled: ["ca", ...twentyLanguages],
       },
     }),
   ],
@@ -341,6 +363,14 @@ it("accepts a context head listed before its member, and counts only items with 
       status: 200,
       json: { version: 1, state: "queued", total: 1 },
     });
+  }));
+
+it("accepts 20 enabled languages", () =>
+  withCloud(async (f) => {
+    const body = job([item("product:1", "PINTA", ["en"])], {
+      languages: { default: "en", enabled: twentyLanguages },
+    });
+    expect(await submit(f, body)).toMatchObject({ status: 200, json: { state: "queued" } });
   }));
 
 it("accepts an enabled language tag with a variant, as Cloud does", () =>
