@@ -538,7 +538,7 @@ does not depend on a module offering a throwaway allocation. The wizard hides bo
 offers Reload if either is requested anyway. The development USB recipe writes
 `WAITRON_INSTALLATION_ORIGIN=usb` to its `.env`; compose passes it to the app. USB
 preproduction setup hides and refuses Demo, including supplied operations, while
-retaining Prepare, Live and Join or recover. Production takes precedence and also
+retaining Prepare your restaurant, Start a new restaurant and Join or recover a restaurant. Production takes precedence and also
 refuses Prepare. Missing or empty origin retains hand-installed choices; other
 values fail configuration parsing. The USB Demo refusal offers Reload and names
 the available choices. Same-box production re-setup remains part of B3.

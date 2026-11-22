@@ -24,7 +24,7 @@ export interface DiscoveryDeps {
   serveBoxCa?: boolean;
   /** Asked for each connection page and write; never asked when `serveBoxCa` is false, which refuses them. */
   repairAllowed?: (c: Context) => boolean;
-  /** Read on each page view; absent where no venue-name watch runs. */
+  /** Read on each trust-page view and each discovery read; absent where no venue-name watch runs. */
   venueNameState?: () => VenueNameState;
   notSetUp?: boolean;
   /** Injected for tests. */

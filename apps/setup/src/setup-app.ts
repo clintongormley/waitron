@@ -251,10 +251,10 @@ const sayWith =
   () =>
     format(key, params);
 
-/** The fields a new tax ID enters afresh rather than taking from the export. */
 const VENUE_NAME_READ_EVERY_MS = 1_000;
 const VENUE_NAME_REREADS = 3;
 
+/** The fields a new tax ID enters afresh rather than taking from the export. */
 const TAXPAYER_FIELDS = [
   "taxId",
   "legalName",

@@ -584,9 +584,9 @@ venue patch; the request returns `400 setup.request_invalid` naming `country` be
 Run `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts` and
 `pnpm --filter @waitron/server exec vitest run src/setup-api.test.ts` for these checks.
 
-**DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
-shows only on the path where the wizard skipped the connection question, and the question is not
-asked there.
+**The mode screen has no certificate note (2026-11-22, SETUP-FIRST-PAGE-PLAIN part 1),** superseding
+the owner's 2026-09-29 decision that it stay as built (C40, #833): the owner approved pictures of the
+first page without it (2026-11-22 22:08). The provisioning page keeps its own certificate link.
 
 **The wizard has no spacing values of its own — DECIDED (owner, 2026-09-29): leave it.** It
 borrows the pop-up's side spacing (`--wt-modal-inline-margin` and `--wt-modal-inline-padding`, in

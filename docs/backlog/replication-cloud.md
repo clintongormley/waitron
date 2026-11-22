@@ -338,11 +338,11 @@ box with failover to another local box”, remains the target of the
 [A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md). A second box is a
 choice for later venues (the owner's answer to question 4 of that design).
 
-- **Setup wizard choice, open since #443.** Whether to keep offering “Add a mirror node” remains
-  an owner decision. Joining and takeover run in tests, but two started boxes remain unqualified.
-  Decide `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and `role-screen.ts`'s row
-  together; removing or disabling the option is a product decision. Read the A947 design, §4,
-  when settling this choice.
+- **Setup wizard choice, open since #443.** Setup's first page keeps offering to join, and leads
+  with **Join it as a spare** when another box answers the venue's name (owner, 2026-11-22 20:53:
+  "Can we not detect that another box answers to waitron.local, say that, and offer to join?";
+  pictures approved 22:08). Joining and takeover run in tests, but two started boxes remain
+  unqualified.
 - **Retirement and rejoin still lack a drain confirmation.** From source reading, `retireSelf`
   checks membership before self-eviction, and `rejoinAsSecondary` checks fencing and a carrier
   before wiping. Neither proves the old box's tail was carried forward. `rejoin --accept-loss`

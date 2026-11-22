@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SetupApp, type Screen } from "./setup-app.js";
-import type { SetupApi } from "./api/client.js";
+import type { SetupApi, VenueNameState } from "./api/client.js";
 import type { SetupModeScreen } from "./screens/mode-screen.js";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "./i18n/t.js";
 
-type VenueName = "other-box-answers" | "no-other-box" | "not-asked" | "ask-failed";
 type State = { screen: Screen };
 
 const mounted: HTMLElement[] = [];
@@ -27,7 +26,7 @@ function stubApi(getDiscovery: ReturnType<typeof vi.fn>): SetupApi {
   } as unknown as SetupApi;
 }
 
-const answers = (...states: VenueName[]) => {
+const answers = (...states: VenueNameState[]) => {
   const fn = vi.fn();
   for (const venueName of states)
     fn.mockResolvedValueOnce({ caDownloadAvailable: false, venueName });

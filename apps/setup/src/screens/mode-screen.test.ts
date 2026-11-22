@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./mode-screen.js";
 import type { SetupModeScreen } from "./mode-screen.js";
 
@@ -241,7 +242,6 @@ describe("setup-mode-screen", () => {
 
   it("says nothing about certificates", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    expect(q(el, "[data-test=cert-note]")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("certificate");
   });
 
@@ -330,7 +330,6 @@ describe("setup-mode-screen", () => {
     "draws no production line: the Start a new restaurant choice says sales go to AEAT (%s)",
     async (environment) => {
       const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", { environment });
-      expect(q(el, "[data-test=production-warning]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     },
   );
@@ -371,56 +370,38 @@ describe("setup-mode-screen in Spanish", () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "production",
     });
-    expect(text(q(el, "h1")!)).toBe("Configura este servidor");
+    expect(text(q(el, "h1")!)).toBe(es["mode.heading"]);
     const { el: practice } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "preproduction",
     });
     const rows = [...practice.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];
     expect(rows.map((row) => [row.getAttribute("heading"), text(row)])).toEqual([
-      [
-        "Demostración",
-        "Un servidor de práctica. No se envía nada a la AEAT, así que puedes explorarlo y descartarlo sin riesgo.",
-      ],
-      [
-        "Prepara tu restaurante",
-        "Introduce tus cartas, tu personal y tus planos reales, y practica con pagos de prueba. No se envía nada a la AEAT.",
-      ],
-      [
-        "Empezar un restaurante nuevo",
-        "Cada venta se envía a la AEAT. No podrás cambiarlo después.",
-      ],
-      [
-        "Unirse a un restaurante o recuperarlo",
-        "Añade este servidor como reserva de un restaurante que ya está en marcha, o recupera uno desde una copia de seguridad.",
-      ],
+      [es["mode.demo.heading"], es["mode.demo.copy"]],
+      [es["mode.prepare.heading"], es["mode.prepare.copy"]],
+      [es["mode.live.heading"], es["mode.live.copy"]],
+      [es["mode.existing.heading"], es["mode.existing.copy"]],
     ]);
     const { el: found } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "production",
       otherBoxFound: true,
     });
-    expect(text(q(found, "[data-test=other-box]")!)).toBe(
-      "Ya hay otro servidor Waitron con un restaurante en marcha en esta red.",
-    );
+    expect(text(q(found, "[data-test=other-box]")!)).toBe(es["mode.other_box"]);
     expect(q(found, "[data-test=choose-join-spare]")!.getAttribute("heading")).toBe(
-      "Unirse como reserva",
+      es["mode.join_spare.heading"],
     );
-    expect(text(q(found, "[data-test=choose-join-spare]")!)).toBe(
-      "Añade este servidor como reserva del restaurante que ya está en marcha. Puede tomar el relevo si el servidor principal falla.",
-    );
-    expect(text(q(found, "h2")!)).toBe("Otras opciones");
+    expect(text(q(found, "[data-test=choose-join-spare]")!)).toBe(es["mode.join_spare.copy"]);
+    expect(text(q(found, "h2")!)).toBe(es["mode.others.heading"]);
     expect(q(found, "[data-test=choose-recover]")!.getAttribute("heading")).toBe(
-      "Recuperar un restaurante",
+      es["mode.recover.heading"],
     );
-    expect(text(q(found, "[data-test=choose-recover]")!)).toBe(
-      "Recupera un restaurante desde una copia de seguridad.",
-    );
+    expect(text(q(found, "[data-test=choose-recover]")!)).toBe(es["mode.recover.copy"]);
     q(el, "[data-test=choose-live]")!.click();
     await el.updateComplete;
-    expect(text(q(el, "h2")!)).toBe("Esto es permanente");
+    expect(text(q(el, "h2")!)).toBe(es["mode.confirm.heading"]);
     expect(q(el, "[data-test=understand]")!.getAttribute("label")).toBe(
-      "Entiendo que no se puede deshacer",
+      es["mode.confirm.understand"],
     );
-    expect(text(q(el, "[data-test=confirm-live]")!)).toBe("Empezar un restaurante nuevo");
+    expect(text(q(el, "[data-test=confirm-live]")!)).toBe(es["mode.confirm.button"]);
   });
 
   it("switches language while mounted and keeps the live confirm open", async () => {
@@ -429,7 +410,7 @@ describe("setup-mode-screen in Spanish", () => {
     await el.updateComplete;
     setLocale("es-ES");
     await el.updateComplete;
-    expect(text(q(el, "h1")!)).toBe("Configura este servidor");
-    expect(text(q(el, "[data-test=live-cancel]")!)).toBe("Volver");
+    expect(text(q(el, "h1")!)).toBe(es["mode.heading"]);
+    expect(text(q(el, "[data-test=live-cancel]")!)).toBe(es["mode.confirm.back"]);
   });
 });

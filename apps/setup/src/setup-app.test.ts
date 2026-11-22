@@ -3400,7 +3400,7 @@ describe("connection checks", () => {
     boot.resolve({ provisioned: false, environment: "production", needs: ["venue"] });
     await flush(el);
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=production-warning]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]")).not.toBeNull();
   });
 
   it("writes nothing when the boot read answers after the element is detached", async () => {

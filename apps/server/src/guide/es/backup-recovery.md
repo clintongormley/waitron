@@ -55,8 +55,7 @@ copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo»
 restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el kit de recuperación
 (para tu bucket), y la clave del servidor de esa copia. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor», donde eliges cómo configurar
-este servidor; si ya hay otro servidor Waitron con un restaurante en marcha en la red, esa página lo
-dice y ofrece primero **Unirse como reserva**. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
+este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», elige ahí
 **Unirse o recuperar** para restaurar.
 
