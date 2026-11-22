@@ -90,7 +90,11 @@ export async function stepDown(
   // claimed is still sent.
   let signalFailure: { error: unknown } | null = null;
   try {
-    deps.gate.close({ allowed: STEPDOWN_ALLOWED, self: request.self });
+    deps.gate.close({
+      allowed: STEPDOWN_ALLOWED,
+      self: request.self,
+      successorKnown: request.binding !== undefined || request.successorNodeId !== null,
+    });
     signalDuties(deps.duties);
   } catch (error) {
     signalFailure = { error };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -326,29 +327,53 @@ describe("a closed gate's refusal across origins", () => {
 });
 
 describe("a closed gate's page for a person", () => {
-  function closedApp() {
+  function closedApp(close: { successorKnown?: boolean } = {}) {
     const gate = createHandoverGate();
     const app = new Hono();
     app.use("*", gate.middleware);
     app.get("*", (c) => c.text("app page"));
-    gate.close({ allowed: () => false });
+    gate.close({ allowed: () => false, ...close });
     return app;
   }
 
+  function scriptOf(html: string): string {
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    const asking = scripts.filter((script) => script.includes("location.replace"));
+    expect(asking).toHaveLength(1);
+    return asking[0]!;
+  }
+
   it.each(["/till/", "/till", "/devices"])(
-    "answers GET %s with a page saying the box is standing down, refreshing every 5 seconds",
+    "answers GET %s with a page saying the box is standing down, asking again every 5 seconds",
     async (path) => {
       const res = await closedApp().request(path);
       expect(res.status).toBe(503);
       expect(res.headers.get("content-type")).toMatch(/^text\/html/);
       expect(res.headers.get("cache-control")).toBe("no-store");
-      expect(res.headers.get("refresh")).toBe("5");
+      expect(res.headers.get("refresh")).toBeNull();
       expect(res.headers.get("vary")).toBe("Accept-Language");
-      expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
       const html = await res.text();
       expect(html).toContain("<h1>This box is standing down</h1>");
       expect(html).toContain("<p>Another box now runs the venue.</p>");
       expect(html).toContain("<p>Restarting…</p>");
+      const script = scriptOf(html);
+      expect(script).toContain("location.pathname + location.search");
+      expect(script).toContain('cache: "no-store"');
+      expect(script).toContain('headers: { accept: "text/html" }');
+      expect(script).toContain("AbortSignal.timeout(5000)");
+      expect(script).toContain("response.ok");
+      expect(script).toContain("setTimeout(ask, 5000)");
+      const hash = createHash("sha256").update(script).digest("base64");
+      const policy = res.headers.get("content-security-policy") ?? "";
+      expect(policy).toContain("default-src 'none'");
+      const directives = policy.split("; ");
+      expect(directives).toContain("connect-src 'self'");
+      const scriptSrc = directives
+        .find((directive) => directive.startsWith("script-src "))!
+        .split(" ")
+        .slice(1);
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+      expect(scriptSrc).toHaveLength(2);
     },
   );
 
@@ -356,7 +381,7 @@ describe("a closed gate's page for a person", () => {
     const res = await closedApp().request("/till/", { method: "HEAD" });
     expect(res.status).toBe(503);
     expect(res.headers.get("content-type")).toMatch(/^text\/html/);
-    expect(res.headers.get("refresh")).toBe("5");
+    expect(res.headers.get("refresh")).toBeNull();
   });
 
   it("speaks Spanish to a Spanish browser", async () => {
@@ -367,6 +392,29 @@ describe("a closed gate's page for a person", () => {
     expect(html).toContain("<p>Otro servidor lleva ahora el local.</p>");
     expect(html).toContain("<p>Reiniciando…</p>");
   });
+
+  it.each([
+    ["en", "This box is standing down", "Restarting…", "Another box now runs the venue."],
+    [
+      "es",
+      "Este servidor se está retirando",
+      "Reiniciando…",
+      "Otro servidor lleva ahora el local.",
+    ],
+  ])(
+    "names no other box when the gate was closed with no successor known (%s)",
+    async (language, title, restarting, successor) => {
+      const res = await closedApp({ successorKnown: false }).request("/till/", {
+        headers: { "Accept-Language": language },
+      });
+      expect(res.status).toBe(503);
+      const html = await res.text();
+      expect(html).toContain(`<h1>${title}</h1>`);
+      expect(html).toContain(`<p>${restarting}</p>`);
+      expect(html).not.toContain(successor);
+      scriptOf(html);
+    },
+  );
 
   it.each([
     ["GET", "/api/orders"],

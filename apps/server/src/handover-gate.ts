@@ -9,7 +9,8 @@ import "./errors.js";
 export interface HandoverGate {
   middleware: MiddlewareHandler;
   readonly closed: AbortSignal;
-  close(deps: { allowed: (c: Context) => boolean; self?: Context }): void;
+  /** `successorKnown` (default true) says whether another box is known to run the venue now. */
+  close(deps: { allowed: (c: Context) => boolean; self?: Context; successorKnown?: boolean }): void;
   isClosed(): boolean;
   settled(limitMs: number): Promise<{ remaining: readonly { method: string; path: string }[] }>;
 }
@@ -22,30 +23,48 @@ export function steppingDownResponse(c: Context): Response {
   });
 }
 
-/** The paths `restrictedPageRoute` answers, so a box that restarts restricted shows its page at the next refresh. */
+/**
+ * The paths `restrictedPageRoute` answers, so the standing-down page's own asking lands on that page
+ * once the box has restarted restricted.
+ */
 function isPersonPage(c: Context): boolean {
   if (c.req.method !== "GET" && c.req.method !== "HEAD") return false;
   const path = c.req.path;
   return path === "/till" || path.startsWith("/till/") || isDashboardPath(path);
 }
 
-function standingDownPage(c: Context): Response {
+// Asks by script rather than a `Refresh` header: a refresh that lands while the restarting box has
+// no listener leaves the browser on its own error page, which never asks again.
+const ASK_AGAIN_SCRIPT = `(() => {
+  const here = location.pathname + location.search;
+  const ask = async () => {
+    try {
+      const response = await fetch(here, { cache: "no-store", headers: { accept: "text/html" }, signal: AbortSignal.timeout(5000) });
+      if (response.ok) return location.replace(here);
+    } catch {}
+    setTimeout(ask, 5000);
+  };
+  setTimeout(ask, 5000);
+})();`;
+
+function standingDownPage(c: Context, successorKnown: boolean): Response {
   c.set("refusalCode", "handover.stepping_down");
   const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
   const text = STANDING_DOWN_PAGE_WORDS[locale];
   c.header("Vary", "Accept-Language");
-  c.header("Refresh", "5");
+  const successor = successorKnown ? `<p>${escapeHtml(text.body)}</p>\n` : "";
   return boxPageAnswer(
     c,
     renderLogoBoxPage(
       locale,
       text.title,
       `<h1>${escapeHtml(text.title)}</h1>
-<p>${escapeHtml(text.body)}</p>
-<p>${escapeHtml(text.restarting)}</p>`,
+${successor}<p>${escapeHtml(text.restarting)}</p>
+<script>${ASK_AGAIN_SCRIPT}</script>`,
     ),
     503,
     "no-store",
+    { inline: [ASK_AGAIN_SCRIPT], connectSelf: true },
   );
 }
 
@@ -65,9 +84,10 @@ export function createHandoverGate(deps: { cors?: MiddlewareHandler } = {}): Han
   const inside = new Set<Context>();
   const atZero = new Set<() => void>();
   let allowed: ((c: Context) => boolean) | null = null;
+  let successorKnown = true;
 
   const refuse = async (c: Context): Promise<Response> => {
-    if (isPersonPage(c)) return standingDownPage(c);
+    if (isPersonPage(c)) return standingDownPage(c, successorKnown);
     const cors = deps.cors;
     if (cors === undefined || !c.req.path.startsWith("/api/")) return steppingDownResponse(c);
     try {
@@ -99,8 +119,9 @@ export function createHandoverGate(deps: { cors?: MiddlewareHandler } = {}): Han
         leave(c);
       }
     },
-    close: ({ allowed: names, self }) => {
+    close: ({ allowed: names, self, successorKnown: known = true }) => {
       allowed = names;
+      successorKnown = known;
       closed.abort();
       if (self !== undefined) leave(self);
     },
