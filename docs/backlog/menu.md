@@ -63,9 +63,6 @@ Left open:
 - A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
 - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
   else the copy indexed last.
-- The Edit dialog needs a direct way to make a matching fixed photo or colour follow the included
-  menu again. Today you save a different value, then reopen the dialog and save the menu's value.
-
 
 ## Products table scrolling (W80, #1187)
 

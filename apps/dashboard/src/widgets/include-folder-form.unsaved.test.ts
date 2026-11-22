@@ -198,6 +198,16 @@ it("Discard restores a starting point with the switch on: the switch and the fie
   expect(nameValue(form, "names-es")).toBe("Bebidas");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+it("Discard restores a fixed colour after choosing to follow the included menu", async () => {
+  const { app, form } = await mount({ showAsFolder: true, overrides: { color: null } });
+  const follow = page.getByRole("button", { name: "Use included menu colour", exact: true });
+  await expect.element(follow, { timeout: 600 }).toBeEnabled();
+  await follow.click();
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await discardByNavigation(app, form);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await expect.element(follow).toBeEnabled();
+});
 it("Discard restores a starting point with the switch off, filling the hidden fields from the stored folder", async () => {
   const { app, form } = await mount({ showAsFolder: false, overrides: { names: { en: "Bar" } } });
   await toggle(form);

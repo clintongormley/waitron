@@ -1,6 +1,6 @@
 import { t } from "../i18n/t.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -141,6 +141,76 @@ it("submits a different folder value and drops it when set back to the menu valu
     overrides: { names: { es: "Barra" }, image: null, color: "#256bb1" },
   });
 });
+it.each([
+  ["colour", { names: { en: "Bar" }, image: "own-photo" }],
+  ["photo", { names: { en: "Bar" }, color: "#112233" }],
+] as const)("releases a matching fixed %s when Save is pressed", async (fieldName, overrides) => {
+  const el = await includeForm({
+    value: {
+      showAsFolder: true,
+      overrides: { names: { en: "Bar" }, image: "own-photo", color: "#112233" },
+    },
+  });
+  const submittedBeforeSave = vi.fn();
+  el.addEventListener("wt-submit", submittedBeforeSave, { once: true });
+  const reset = page.getByRole("button", { name: `Use included menu ${fieldName}`, exact: true });
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  (reset.element() as HTMLElement).focus();
+  await userEvent.keyboard("{Enter}");
+  await expect.element(reset).not.toBeInTheDocument();
+  const save = el.shadowRoot!.querySelector('[data-test="save"]')!;
+  await expect.poll(() => el.shadowRoot!.activeElement, { timeout: 600 }).toBe(save);
+  expect(save.shadowRoot!.activeElement).toBe(save.shadowRoot!.querySelector("button"));
+  expect(submittedBeforeSave).not.toHaveBeenCalled();
+  expect(submitted(el)).toEqual({ showAsFolder: true, overrides });
+});
+
+it.each([null, "#112233"])("releases fixed no colour over %s", async (menuColor) => {
+  const el = await includeForm({
+    own: { ...own, color: menuColor },
+    value: { showAsFolder: true, overrides: { color: null } },
+  });
+  const none = el.shadowRoot!.querySelector("[data-color='']")!;
+  expect(none.getAttribute("aria-checked")).toBe("true");
+  const reset = page.getByRole("button", { name: "Use included menu colour", exact: true });
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  await reset.click();
+  expect(none.getAttribute("aria-checked")).toBe(menuColor === null ? "true" : "false");
+  if (menuColor !== null) expect(colorInput(el)!.value).toBe("#112233");
+  expect(submitted(el)).toEqual({ showAsFolder: true, overrides: {} });
+});
+
+it("keeps following when a released colour is changed away and back to the menu colour", async () => {
+  const el = await includeForm({
+    own: { ...own, color: "#256bb1" },
+    value: { showAsFolder: true, overrides: { color: "#256bb1" } },
+  });
+  const reset = page.getByRole("button", { name: "Use included menu colour", exact: true });
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  await reset.click();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-color='']")!.click();
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+  await expect.element(reset).not.toBeInTheDocument();
+  expect(submitted(el)).toEqual({ showAsFolder: true, overrides: {} });
+});
+
+it("returns to a clean draft when the only edit was an unsaved photo override", async () => {
+  const el = await includeForm({ value: null });
+  const reset = page.getByRole("button", { name: "Use included menu photo", exact: true });
+  await expect.element(reset).not.toBeInTheDocument();
+  emit(uploadOf(el)!, "image-changed", { image: null });
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  await reset.click();
+  expect(uploadOf(el)!.image).toBe("own-photo");
+  await expect
+    .element(page.getByRole("button", { name: t("action.save"), exact: true }))
+    .toBeDisabled();
+  const cancel = el.shadowRoot!.querySelector('[data-test="cancel"]')!;
+  await expect.poll(() => el.shadowRoot!.activeElement, { timeout: 600 }).toBe(cancel);
+  expect(cancel.shadowRoot!.activeElement).toBe(cancel.shadowRoot!.querySelector("button"));
+});
+
 it("submits the matching fixed name from the folder it opened with", async () => {
   const el = await includeForm({
     value: { showAsFolder: true, overrides: { names: { en: "Drinks" } } },

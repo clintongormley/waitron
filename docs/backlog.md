@@ -473,8 +473,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the menu
 
-- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** Folder photos,
-  shortcut placement and a direct reset for a matching fixed photo or colour remain open.
+- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** Folder photos
+  and shortcut placement remain open.
   [Detail](backlog/menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
 
 - **A very long number is cut off in an extras list form.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
