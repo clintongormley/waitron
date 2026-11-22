@@ -153,6 +153,7 @@ export async function businessDayClockConflicts(
   const periods: Placement[] = seasonPeriods.map((row) => ({ ...row, ...undated }));
   const closures: Placement[] = seasonClosures.map((row) => ({ ...row, ...undated }));
   const groups = new Map<string, Placement[]>();
+  const orderOf = new Map<string, string[]>();
   for (const placement of [...periods, ...closures, ...specialPlacements]) {
     if (
       placement.date !== null &&
@@ -168,9 +169,23 @@ export async function businessDayClockConflicts(
         : `special:${placement.specialDayDateId}`;
     const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${day}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
+    orderOf.set(key, [
+      placement.departmentName,
+      placement.departmentId,
+      placement.zoneName ?? "",
+      placement.zoneId ?? "",
+      placement.specialDayDateId === null ? `0:${day}` : `1:${placement.date}`,
+      placement.specialDayDateId ?? "",
+    ]);
   }
+  const byOrder = (a: string, b: string) => {
+    const left = orderOf.get(a)!,
+      right = orderOf.get(b)!;
+    const at = left.findIndex((part, index) => part !== right[index]);
+    return at === -1 ? 0 : left[at]! < right[at]! ? -1 : 1;
+  };
   const conflicts: BusinessDayClockConflict[] = [];
-  for (const key of [...groups.keys()].sort()) {
+  for (const key of [...groups.keys()].sort(byOrder)) {
     const placements = groups.get(key)!;
     const oldCutover = cutoverForBusinessDay(before, effectiveBusinessDay);
     const newCutover = cutoverForBusinessDay(candidate, effectiveBusinessDay);
@@ -201,7 +216,7 @@ export async function businessDayClockConflicts(
       : new Set(placements.filter((p) => !parses([p])));
     const invalidBefore = new Set([...failing].filter((p) => !parsesUnder([p], oldCutover)));
     const crossing = new Set([...failing].filter((p) => !invalidBefore.has(p)));
-    const overlapping = !together && failing.size === 0;
+    const overlapping = !together && !parses(placements.filter((p) => !failing.has(p)));
     for (const [rangeIndex, p] of placements.entries()) {
       const startsAt = p.startsAt.slice(0, 5),
         endsAt = p.endsAt.slice(0, 5);
@@ -212,7 +227,7 @@ export async function businessDayClockConflicts(
         Number(time < cutover || (end && time === cutover));
       let reason: BusinessDayClockConflict["reason"] | null = null;
       if (startsAt === endsAt) reason = "all_day";
-      else if (overlapping || invalidBefore.has(p)) reason = "overlap";
+      else if ((overlapping && !failing.has(p)) || invalidBefore.has(p)) reason = "overlap";
       else if (crossing.has(p)) {
         const span = rangeSpan({ startsAt, endsAt }, newCutover);
         reason =
