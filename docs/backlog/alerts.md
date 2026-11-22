@@ -28,13 +28,14 @@ separate follow-ups.
   serialiser.
 - **Slice 3 — triage and forwarding.** A dashboard _Problem reports_ screen and automated GitHub-issue
   creation (through Waitron Cloud — see below).
-- **Hardening carried out of Slice 1, for Slice 2:** route the dashboard's boot-probe-fail and
-  logout transitions, and a sign-in that leaves the address unchanged, through the nav trail
-  (today only a history move records one); add setup route vocabulary and resolved transitions
-  (setup records no nav event). Stored capture must send only what `captureClientReport`
-  (`packages/diagnostics/src/client-report.ts`) keeps, never the raw trail: the trail itself keeps
-  any string (cut to 300 characters), number or boolean under any key, up to 20 fields, including
-  error messages and stacks.
+- **Hardening carried out of Slice 1, for Slice 2:** route the dashboard's boot-probe-fail
+  transition, and a sign-in that leaves the address unchanged, through the nav trail (today a
+  change of the dashboard's address and a return to sign-in through `#returnToLogin` record one;
+  a first load that shows sign-in without passing through `#returnToLogin` does not); add setup
+  route vocabulary and resolved transitions (setup records no nav event). Stored capture must send
+  only what `captureClientReport` (`packages/diagnostics/src/client-report.ts`) keeps, never the
+  raw trail: the trail itself keeps any string (cut to 300 characters), number or boolean under
+  any key, up to 20 fields, including error messages and stacks.
 - **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
   Slices 2 and 3 and replace one part of Slice 3; design them together before building:
   - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub

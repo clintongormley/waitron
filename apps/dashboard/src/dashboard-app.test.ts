@@ -2861,16 +2861,55 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // `diag` is a MODULE SINGLETON shared across every test, so scope the assertion to events appended
-    // after this baseline rather than the total length (which leaks across tests).
-    const before = diag.snapshot().length;
-    navSales(el)!.click();
+    const record = vi.spyOn(diag, "record");
+    try {
+      navSales(el)!.click();
+      await flush(el);
+      expect(record.mock.calls.filter(([, event]) => event === "nav")).toEqual([
+        ["info", "nav", { screen: "sales" }],
+      ]);
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it("records a nav event to login on the diagnostics trail when the person signs out", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
     await flush(el);
-    const nav = diag
-      .snapshot()
-      .slice(before)
-      .find((e) => e.event === "nav");
-    expect(nav?.fields.screen).toBe("sales");
+    const record = vi.spyOn(diag, "record");
+    try {
+      logoutBtn(el)!.click();
+      await flush(el);
+      expect(login(el)).not.toBeNull();
+      expect(record.mock.calls.filter(([, event]) => event === "nav")).toEqual([
+        ["info", "nav", { screen: "login" }],
+      ]);
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it("records a nav event to login on the diagnostics trail when the session expires", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    const record = vi.spyOn(diag, "record");
+    try {
+      window.dispatchEvent(
+        new CustomEvent("waitron-session-invalid", {
+          detail: { code: "management_session.expired" },
+        }),
+      );
+      await el.updateComplete;
+      expect(login(el)).not.toBeNull();
+      expect(record.mock.calls.filter(([, event]) => event === "nav")).toEqual([
+        ["info", "nav", { screen: "login" }],
+      ]);
+    } finally {
+      record.mockRestore();
+    }
   });
 
   it("renders each nav group header and all nav items", async () => {
