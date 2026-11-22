@@ -91,7 +91,7 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { guideHref, type GuideLink } from "../help-guide.js";
-import { allergenLabel, vatClassName } from "../i18n/domain.js";
+import { allergenLabel, vatClassName, vatRateNumber, vatRateText } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
 
@@ -1442,27 +1442,16 @@ export class ProductEditor extends LitElement {
     ></wt-segmented-control>`;
   }
 
-  /** A rate ("7.50") as the person's locale writes a number, "7.5" or "7,5". */
-  private rateNumber(rate: string): string {
-    return new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 }).format(
-      Number(rate),
-    );
-  }
-  /** A rate ("7.50") as a percentage: "7.5%", "7,5 %". */
-  private rateText(rate: string): string {
-    return fill("editor.rate_percent", { rate: this.rateNumber(rate) });
-  }
-
   /** On a variant the empty choice is its product's rate (packages/menu/src/variant-fallback.ts). */
   private renderTakeawayTax() {
     const parent = this.inherited;
     const same = parent
       ? fill("editor.takeaway_vat_same", {
           product: parent.name,
-          rate: this.rateNumber(parent.takeawayVatRate),
+          rate: vatRateNumber(parent.takeawayVatRate),
         })
       : null;
-    const rates = this.vatRates.map((rate) => ({ value: rate, label: this.rateText(rate) }));
+    const rates = this.vatRates.map((rate) => ({ value: rate, label: vatRateText(rate) }));
     return html`<wt-combobox
       name="takeaway-tax"
       label=${t("editor.takeaway_vat")}
@@ -1607,7 +1596,7 @@ export class ProductEditor extends LitElement {
       ...(tax ? [{ label: t("product.vat"), value: this.taxLabel(tax) }] : []),
       ...(takeaway === null
         ? []
-        : [{ label: t("editor.takeaway_vat"), value: this.rateText(takeaway) }]),
+        : [{ label: t("editor.takeaway_vat"), value: vatRateText(takeaway) }]),
     ];
   }
 

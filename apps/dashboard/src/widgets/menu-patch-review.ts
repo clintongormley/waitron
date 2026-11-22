@@ -19,7 +19,6 @@ const FIELD_LABELS: Record<string, StringKey> = {
   image: "image.label",
   price: "editor.price",
   vatClass: "product.vat",
-  takeawayVatClass: "editor.takeaway_vat",
 };
 
 const CHILD_KINDS = new Set(["variant", "extra", "option_label"]);
@@ -76,7 +75,7 @@ export function refusalWords({ code, params }: Refusal): string {
 
 function words(field: string, value: unknown, isNew: boolean): string {
   if (field === "price") return formatMoney(value as string, currentLocale());
-  if (field === "vatClass" || field === "takeawayVatClass") return vatClassName(value as string);
+  if (field === "vatClass") return vatClassName(value as string);
   if (field === "image")
     return t(
       value === null

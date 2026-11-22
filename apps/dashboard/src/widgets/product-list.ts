@@ -31,6 +31,7 @@ import {
   allergenStateName,
   productArchivedName,
   vatClassName,
+  vatRateText,
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
@@ -1056,8 +1057,7 @@ export class ProductList extends LitElement {
         // its price, since nothing else on the row would show it.
         cell: (row) => {
           const vat = row.variant?.effective.vatClass;
-          const takeaway = this.takeawayVat ? row.variant?.effective.takeawayVatClass : undefined;
-          const productTakeaway = row.product.takeawayVatClass ?? row.product.vatClass;
+          const takeaway = this.takeawayVat ? row.variant?.effective.takeawayVatRate : undefined;
           return html`<span data-test="price">${this.#price(row)}</span>
             <span part="price-unit" data-test="price-unit">${this.#unitWord(row.product)}</span>${
               vat === undefined || vat === row.product.vatClass
@@ -1066,10 +1066,10 @@ export class ProductList extends LitElement {
                     >${t("product.vat")}: ${vatClassName(vat)}</span
                   >`
             }${
-              takeaway === undefined || takeaway === productTakeaway
+              takeaway === undefined || takeaway === row.product.takeawayVatRate
                 ? nothing
                 : html`<span part="vat-note" data-test="takeaway-vat-note"
-                    >${t("editor.takeaway_vat")}: ${vatClassName(takeaway)}</span
+                    >${t("editor.takeaway_vat")}: ${vatRateText(takeaway)}</span
                   >`
             }`;
         },

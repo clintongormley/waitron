@@ -33,6 +33,9 @@ const stored: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "reduced",
+  defaultTakeawayVatRate: "10.00",
+  takeawayVat: false,
+  vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {

@@ -19,15 +19,22 @@ import type { DashboardApi, VenueDefaults } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { vatClassLabel } from "../i18n/domain.js";
+import { vatClassLabel, vatRateText } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-language.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
-type Draft = Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass">;
+type Draft = Pick<
+  VenueDefaults,
+  "receiptLanguage" | "defaultProductVatClass" | "defaultTakeawayVatRate"
+>;
 type Field = keyof Draft;
-const FIELDS: readonly Field[] = ["receiptLanguage", "defaultProductVatClass"];
+const FIELDS: readonly Field[] = [
+  "receiptLanguage",
+  "defaultProductVatClass",
+  "defaultTakeawayVatRate",
+];
 const LANGUAGE_REFUSALS = new Set(["receipt.language_orders_open", "receipt.language_fixed"]);
 
 function changes(expected: Draft, draft: Draft): Partial<Draft> {
@@ -132,6 +139,7 @@ export class VenueDefaultsPanel extends LitElement {
     this.#expected = {
       receiptLanguage: model.receiptLanguage,
       defaultProductVatClass: model.defaultProductVatClass,
+      defaultTakeawayVatRate: model.defaultTakeawayVatRate,
     };
     this.draft = {
       ...this.#expected,
@@ -190,6 +198,7 @@ export class VenueDefaultsPanel extends LitElement {
     const expected = {
       receiptLanguage: model.receiptLanguage,
       defaultProductVatClass: model.defaultProductVatClass,
+      defaultTakeawayVatRate: model.defaultTakeawayVatRate,
     };
     const draft = {
       ...expected,
@@ -248,6 +257,8 @@ export class VenueDefaultsPanel extends LitElement {
         this.errors = { receiptLanguage: t("receipts.language_invalid") };
       else if (code === "product.invalid" && field === "defaultProductVatClass")
         this.errors = { defaultProductVatClass: t("menu_settings.invalid") };
+      else if (code === "product.invalid" && field === "defaultTakeawayVatRate")
+        this.errors = { defaultTakeawayVatRate: t("menu_settings.takeaway_invalid") };
       else this.actionError = codeMessage(code);
       this.submitting = false;
       if (Object.keys(this.errors).length > 0) {
@@ -314,6 +325,21 @@ export class VenueDefaultsPanel extends LitElement {
         ?disabled=${this.submitting}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("defaultProductVatClass", event)}
       ></wt-combobox>
+      ${
+        model.takeawayVat
+          ? html`<wt-combobox
+              name="defaultTakeawayVatRate"
+              label=${t("menu_settings.default_takeaway_vat")}
+              required
+              search="never"
+              .options=${model.vatRates.map((value) => ({ value, label: vatRateText(value) }))}
+              .value=${draft.defaultTakeawayVatRate}
+              .error=${this.errors.defaultTakeawayVatRate ?? ""}
+              ?disabled=${this.submitting}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("defaultTakeawayVatRate", event)}
+            ></wt-combobox>`
+          : nothing
+      }
       ${this.content ? receiptLanguageWarning(draft.receiptLanguage, this.content) : nothing}
       <wt-form-actions
         .error=${Object.keys(this.errors).length > 0 ? t("form.fix_fields") : this.actionError}
@@ -405,6 +431,15 @@ export class VenueDefaultsPanel extends LitElement {
                     value: vatClassLabel(model.defaultProductVatClass),
                     dataTest: "saved-defaultProductVatClass",
                   },
+                  ...(model.takeawayVat
+                    ? [
+                        {
+                          label: t("menu_settings.default_takeaway_vat"),
+                          value: vatRateText(model.defaultTakeawayVatRate),
+                          dataTest: "saved-defaultTakeawayVatRate",
+                        },
+                      ]
+                    : []),
                 ])}
                 ${this.content ? receiptLanguageWarning(model.receiptLanguage, this.content) : nothing}
                 ${

@@ -309,6 +309,7 @@ it("refreshes the open alerts passively and when incidents change", async () => 
     ...[
       "settings.venue",
       "products",
+      "product_takeaway_vat_rates",
       "option_lists",
       "option_labels",
       "extra_lists",
@@ -331,7 +332,7 @@ it.each([
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
-  ["listLibraryProducts", [], ["products"]],
+  ["listLibraryProducts", [], ["products", "product_takeaway_vat_rates"]],
   ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
   ["getMenuStructures", [], ["sections", "section_members", "menus"]],
   [
@@ -343,6 +344,7 @@ it.each([
       "menu_items",
       "menus",
       "products",
+      "product_takeaway_vat_rates",
       "menu_item_variant_overrides",
       "settings.venue",
       "product_modifiers",
@@ -353,7 +355,11 @@ it.each([
       "units",
     ],
   ],
-  ["getMenuHome", ["menu-1"], ["sections", "section_members", "products", "menus"]],
+  [
+    "getMenuHome",
+    ["menu-1"],
+    ["sections", "section_members", "products", "product_takeaway_vat_rates", "menus"],
+  ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
@@ -431,6 +437,7 @@ it.each([
       "settings.business_day",
       "settings.venue",
       "products",
+      "product_takeaway_vat_rates",
       "categories",
       "day_cutover_changes",
     ],
@@ -478,6 +485,7 @@ it.each([
     [
       "settings.venue",
       "products",
+      "product_takeaway_vat_rates",
       "option_lists",
       "option_labels",
       "extra_lists",
@@ -790,12 +798,29 @@ it("subscribes menu defaults to their stored settings and the rows that decide t
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced", takeawayVat: true });
 });
 
-it("subscribes the venue defaults to the clock document, venue document and menu settings", () => {
+it("subscribes the venue defaults to the clock document, venue document, menu settings and the taxpayer row that decides takeaway VAT", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },
     { type: "settings.venue" },
     { type: "settings.menu" },
+    { type: "taxpayer" },
+  ]);
+});
+
+it("subscribes every read of products to their takeaway rates as well", () => {
+  const products = Object.entries(QUERY_DEPENDENCIES).filter(([, types]) =>
+    (types as readonly string[]).includes("products"),
+  );
+  expect(products.length).toBeGreaterThan(0);
+  expect(
+    products
+      .filter(([, types]) => !(types as readonly string[]).includes("product_takeaway_vat_rates"))
+      .map(([name]) => name),
+  ).toEqual([]);
+  expect(QUERY_DEPENDENCIES.listLibraryProducts).toEqual([
+    "products",
+    "product_takeaway_vat_rates",
   ]);
 });
 
@@ -1027,6 +1052,7 @@ it("kitchen delete impact subscribes to every refusal, setting and naming source
   expect(dashboardQuery(api, "getCourseDeleteImpact", ["course"]).dependencies).toEqual([
     { type: "kitchen_courses" },
     { type: "products" },
+    { type: "product_takeaway_vat_rates" },
     { type: "service_steps" },
   ]);
 });

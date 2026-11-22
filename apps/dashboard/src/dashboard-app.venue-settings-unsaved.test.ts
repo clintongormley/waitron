@@ -101,6 +101,9 @@ async function mount(
           receiptLanguageChoices: ["es-ES"],
           fixedReceiptLanguage: null,
           defaultProductVatClass: "general",
+          defaultTakeawayVatRate: "10.00",
+          takeawayVat: false,
+          vatRates: ["0.00", "4.00", "10.00", "21.00"],
         }),
         getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         getVenueDepartments: async () => [],
@@ -1026,6 +1029,9 @@ const defaultsModel: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "general",
+  defaultTakeawayVatRate: "10.00",
+  takeawayVat: false,
+  vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
 function storedDefaults() {
   let stored = defaultsModel;

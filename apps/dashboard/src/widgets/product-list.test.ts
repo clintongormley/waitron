@@ -208,7 +208,7 @@ function product(
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
+    takeawayVatRate: "10.00",
     active: true,
     available: true,
     ordering: "public",
@@ -229,7 +229,7 @@ function product(
         allergens: base.allergens,
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
-        takeawayVatClass: base.takeawayVatClass ?? base.vatClass,
+        takeawayVatRate: base.takeawayVatRate,
         primaryCategoryId: base.primaryCategoryId,
         courseId: variant.courseId ?? base.courseId,
       },
@@ -1170,7 +1170,7 @@ describe("product-list", () => {
           name: "Wine by the glass",
           unitPrice: "4.00",
           vatClass: "reduced",
-          takeawayVatClass: "reduced",
+          takeawayVatRate: "10.00",
           primaryCategoryId: "food",
           variants: [
             {
@@ -1185,7 +1185,7 @@ describe("product-list", () => {
                 allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
-                takeawayVatClass: "general",
+                takeawayVatRate: "21.00",
                 primaryCategoryId: "food",
                 courseId: null,
               },
@@ -1217,7 +1217,7 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           vatClass: "reduced",
-          takeawayVatClass: "reduced",
+          takeawayVatRate: "10.00",
           variants: [
             {
               ...bunVariant,
@@ -1231,7 +1231,7 @@ describe("product-list", () => {
                 allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
-                takeawayVatClass: "general",
+                takeawayVatRate: "21.00",
                 primaryCategoryId: "category-1",
                 courseId: null,
               },
@@ -1280,9 +1280,9 @@ describe("product-list", () => {
   });
 
   it.each([true, false])(
-    "notes a variant's takeaway VAT under its price only where it differs from its product's and the region charges it (%s)",
+    "notes a variant's takeaway rate under its price only where it differs from its product's and the region charges it (%s)",
     async (takeawayVat) => {
-      const variant = (id: string, vatClass: VatClass, takeawayVatClass: VatClass) => ({
+      const variant = (id: string, vatClass: VatClass, takeawayVatRate: string) => ({
         ...bunVariant,
         id,
         name: id,
@@ -1290,7 +1290,7 @@ describe("product-list", () => {
           allergens: null,
           unitPrice: "4.00",
           vatClass,
-          takeawayVatClass,
+          takeawayVatRate,
           primaryCategoryId: "category-1",
           courseId: null,
         },
@@ -1302,13 +1302,12 @@ describe("product-list", () => {
             id: "wine",
             unitPrice: "4.00",
             vatClass: "reduced",
-            // Empty: taken away it charges its served class, Reduced.
-            takeawayVatClass: null,
+            takeawayVatRate: "10.00",
             variants: [
-              variant("served", "general", "reduced"),
-              variant("away", "reduced", "zero"),
-              variant("both", "general", "super_reduced"),
-              variant("same", "reduced", "reduced"),
+              variant("served", "general", "10.00"),
+              variant("away", "reduced", "0.00"),
+              variant("both", "general", "7.50"),
+              variant("same", "reduced", "10.00"),
             ],
           }),
         ],
@@ -1324,10 +1323,11 @@ describe("product-list", () => {
           ),
         ].map((note) => note.textContent!.trim());
       const served = `${t("product.vat")}: ${vatClassName("general")}`;
-      const away = (tax: string) => `${t("editor.takeaway_vat")}: ${vatClassName(tax)}`;
       expect(notes("wine:served")).toEqual([served]);
-      expect(notes("wine:away")).toEqual(takeawayVat ? [away("zero")] : []);
-      expect(notes("wine:both")).toEqual(takeawayVat ? [served, away("super_reduced")] : [served]);
+      expect(notes("wine:away")).toEqual(takeawayVat ? ["IVA para llevar: 0 %"] : []);
+      expect(notes("wine:both")).toEqual(
+        takeawayVat ? [served, "IVA para llevar: 7,5 %"] : [served],
+      );
       expect(notes("wine:same")).toEqual([]);
       expect(notes("wine")).toEqual([]);
     },
@@ -6453,7 +6453,7 @@ describe("A668 effective allergen cells", () => {
                 effective: {
                   unitPrice: "1.00",
                   vatClass: "reduced",
-                  takeawayVatClass: "reduced",
+                  takeawayVatRate: "10.00",
                   primaryCategoryId: null,
                   allergens: {},
                   courseId: null,
@@ -6497,7 +6497,7 @@ describe("A668 effective allergen cells", () => {
       effective: {
         unitPrice: "1.00",
         vatClass: "reduced",
-        takeawayVatClass: "reduced",
+        takeawayVatRate: "10.00",
         primaryCategoryId: null,
         allergens,
         courseId: null,

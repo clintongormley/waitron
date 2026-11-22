@@ -106,6 +106,8 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
       "fixedReceiptLanguage",
       "receiptLanguage",
       "receiptLanguageChoices",
+      "takeawayVat",
+      "vatRates",
     ]);
     const refused = await write(managerCookie);
     expect(refused.status).toBe(403);

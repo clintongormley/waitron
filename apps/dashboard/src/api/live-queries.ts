@@ -17,6 +17,7 @@ const MENU_PUBLICATION_READS = [
   "option_lists",
   "product_modifiers",
   "products",
+  "product_takeaway_vat_rates",
   "section_members",
   "sections",
   "set_menu_dish_courses",
@@ -26,7 +27,11 @@ const MENU_PUBLICATION_READS = [
   "units",
 ] as const;
 
-const CURRENT_CLASSIFICATION_READS = ["products", "categories"] as const;
+const CURRENT_CLASSIFICATION_READS = [
+  "products",
+  "product_takeaway_vat_rates",
+  "categories",
+] as const;
 
 /** Dependencies describe the read model, independently of which operation changes it. */
 const HIERARCHY_DELETE_READS = [
@@ -60,6 +65,7 @@ const HIERARCHY_DELETE_READS = [
 const TRANSLATION_READS = [
   "settings.venue",
   "products",
+  "product_takeaway_vat_rates",
   "option_lists",
   "option_labels",
   "extra_lists",
@@ -152,6 +158,7 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
     "party_tables",
     "products",
+    "product_takeaway_vat_rates",
     "settings.business_day",
     "settings.venue",
     "day_cutover_changes",
@@ -193,6 +200,7 @@ export const QUERY_DEPENDENCIES = {
     "tenders",
     "sale_settlements",
     "products",
+    "product_takeaway_vat_rates",
 
     "day_cutover_changes",
   ],
@@ -283,6 +291,7 @@ export const QUERY_DEPENDENCIES = {
     "menu_items",
     "menus",
     "products",
+    "product_takeaway_vat_rates",
     "menu_item_variant_overrides",
     "settings.venue",
     "product_modifiers",
@@ -306,13 +315,14 @@ export const QUERY_DEPENDENCIES = {
     "settings.business_day",
     "settings.venue",
   ],
-  getMenuHome: ["sections", "section_members", "products", "menus"],
+  getMenuHome: ["sections", "section_members", "products", "product_takeaway_vat_rates", "menus"],
   listCategories: ["categories"],
   getCategory: ["categories"],
-  listLibraryProducts: ["products"],
+  listLibraryProducts: ["products", "product_takeaway_vat_rates"],
   listUnits: ["units"],
   listProducts: [
     "products",
+    "product_takeaway_vat_rates",
     "categories",
     // A product's attached extras and options lists, read from `product_modifiers` alone
     // (`readProductModifiers`, packages/menu/src/product-modifiers.ts) — it names no list
@@ -325,6 +335,7 @@ export const QUERY_DEPENDENCIES = {
     "routing_cell_periods",
     "kitchen_stations",
     "products",
+    "product_takeaway_vat_rates",
     "floor_zones",
     "settings.business_day",
     "settings.venue",
@@ -377,7 +388,12 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
     "table_merges",
   ],
-  getCourseDeleteImpact: ["kitchen_courses", "products", "service_steps"],
+  getCourseDeleteImpact: [
+    "kitchen_courses",
+    "products",
+    "product_takeaway_vat_rates",
+    "service_steps",
+  ],
   listStations: ["kitchen_stations"],
   listCourses: ["kitchen_courses"],
   listZones: ["floor_zones"],
@@ -423,7 +439,7 @@ export const QUERY_DEPENDENCIES = {
     "day_cutover_changes",
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
-  getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
+  getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu", "taxpayer"],
   getVenuePrivacy: ["settings.venue"],
   getProfile: ["persons", "webauthn_credentials"],
   // The taxpayer's legal name; the language list itself is fixed.

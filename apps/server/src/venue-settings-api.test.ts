@@ -594,6 +594,8 @@ describe("venue defaults", () => {
         fixedReceiptLanguage: "ca-ES",
         defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
     });
   });
@@ -606,6 +608,8 @@ describe("venue defaults", () => {
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
     });
   });
@@ -626,6 +630,8 @@ describe("venue defaults", () => {
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
       expect(await stored()).toEqual({ languages: ["gl-ES"], vatClass: initialVatClass });
     });
@@ -650,6 +656,8 @@ describe("venue defaults", () => {
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "4.00",
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
       });
       expect(await stored()).toEqual(untouched());
       expect((await (await read()).json()).defaultTakeawayVatRate).toBe("4.00");

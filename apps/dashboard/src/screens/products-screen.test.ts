@@ -128,7 +128,7 @@ const products: Product[] = [
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
-    takeawayVatClass: "reduced",
+    takeawayVatRate: "10.00",
     active: true,
     available: true,
     ordering: "public",
@@ -156,7 +156,7 @@ const value: ProductEditorValue = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
-  takeawayVatClass: null,
+  takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: "c1",
   color: null,
@@ -2756,7 +2756,7 @@ describe("menu-screen", () => {
               allergens: null,
               unitPrice: "8.50",
               vatClass: "reduced",
-              takeawayVatClass: "reduced",
+              takeawayVatRate: "10.00",
               primaryCategoryId: "c1",
               courseId: null,
             },
@@ -2786,7 +2786,7 @@ describe("menu-screen", () => {
         image: null,
         unitPrice: "8.50",
         vatClass: "reduced",
-        takeawayVatClass: "reduced",
+        takeawayVatRate: "10.00",
         unitId: "u1",
         primaryCategoryId: "c1",
         courseId: null,
@@ -3562,12 +3562,14 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
     defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
+    vatRates: string[];
   }) => void;
   const pending = new Promise<{
     defaultProductVatClass: "reduced";
     defaultTakeawayVatRate: "10.00";
     defaultColor: null;
     takeawayVat: false;
+    vatRates: string[];
   }>((yes) => {
     resolve = yes;
   });
@@ -3589,6 +3591,7 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
     defaultTakeawayVatRate: "10.00",
     defaultColor: null,
     takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
   });
   await pending;
   await flush(el);
@@ -3646,6 +3649,7 @@ it("paints All products' square, an uncategorised product and a new product's in
     defaultTakeawayVatRate: "10.00",
     defaultColor: "#256bb1",
     takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
   });
   liveData.refresh();
   await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
@@ -3684,6 +3688,7 @@ it("reads the venue's default into a new editor without replacing an open draft"
     defaultTakeawayVatRate: "10.00",
     defaultColor: null,
     takeawayVat: false,
+    vatRates: ["0.00", "4.00", "10.00", "21.00"],
   });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
@@ -3755,7 +3760,7 @@ describe("archived product entry", () => {
                   allergens: null,
                   unitPrice: "8.50",
                   vatClass: "reduced",
-                  takeawayVatClass: "reduced",
+                  takeawayVatRate: "10.00",
                   primaryCategoryId: "c1",
                 },
               },

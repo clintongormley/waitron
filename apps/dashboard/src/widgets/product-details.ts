@@ -10,7 +10,7 @@ import type { CategorySummary, ProductEditorValue } from "../api/client.js";
 import type { ModifierListChoice, UnitChoice } from "./product-editor-model.js";
 import { modifierListName, modifierListNames } from "./product-editor-model.js";
 import { priceText } from "./form-fields.js";
-import { allergenLabel, vatClassName } from "../i18n/domain.js";
+import { allergenLabel, vatClassName, vatRateText } from "../i18n/domain.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-product-details")
@@ -107,9 +107,7 @@ export class ProductDetails extends LitElement {
     const price = value.unitPrice ?? parent?.unitPrice ?? null;
     const unitId = parent ? parent.unitId : value.unitId;
     const tax = value.vatClass ?? parent?.vatClass ?? null;
-    // An empty takeaway class charges the item's own served class, else, on a variant, its
-    // product's takeaway class (packages/menu/src/variant-fallback.ts).
-    const takeaway = value.takeawayVatClass ?? value.vatClass ?? parent?.takeawayVatClass ?? null;
+    const takeaway = value.takeawayVatRate ?? parent?.takeawayVatRate ?? null;
     const categoryId = parent ? parent.primaryCategoryId : value.primaryCategoryId;
     const category = this.categories.find(({ id }) => id === categoryId);
     const allergens = value.allergens ?? parent?.allergens ?? null;
@@ -131,7 +129,7 @@ export class ProductDetails extends LitElement {
       ${this.#field(t("product.vat"), tax === null ? null : vatClassName(tax))}
       ${
         this.takeawayVat
-          ? this.#field(t("editor.takeaway_vat"), takeaway === null ? null : vatClassName(takeaway))
+          ? this.#field(t("editor.takeaway_vat"), takeaway === null ? null : vatRateText(takeaway))
           : nothing
       }
       ${this.#field(t("editor.classification"), categoryId === null ? null : (category?.name ?? t("editor.missing_choice")))}

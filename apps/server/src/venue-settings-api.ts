@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { readMenuSettings, saveMenuDefaultTakeawayVatRate, saveMenuSettings } from "@waitron/menu";
+import {
+  readMenuSettings,
+  readVenueVatRates,
+  saveMenuDefaultTakeawayVatRate,
+  saveMenuSettings,
+} from "@waitron/menu";
 import {
   readVenue,
   saveVenueFields,
@@ -23,6 +28,7 @@ import {
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import {
   normalizeVenueText,
@@ -119,13 +125,16 @@ async function readVenueDefaults(
   tx: Transaction,
   { venue, rules }: ReceiptLanguageState,
 ): Promise<VenueDefaults> {
-  const { defaultProductVatClass, defaultTakeawayVatRate } = await readMenuSettings(tx);
+  const rates = await readVenueVatRates(tx);
+  const { defaultProductVatClass, defaultTakeawayVatRate } = await readMenuSettings(tx, rates);
   return {
     receiptLanguage: venue.invoiceLocales[0]!,
     receiptLanguageChoices: [...rules.choices],
     fixedReceiptLanguage: rules.fixed?.locale ?? null,
     defaultProductVatClass,
     defaultTakeawayVatRate,
+    takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
+    vatRates: [...rates.pickable],
   };
 }
 

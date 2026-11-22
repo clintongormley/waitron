@@ -200,6 +200,16 @@ export function vatClassName(value: string, locale: string = currentLocale()): s
   return resolveNameTable(VAT_CLASS_NAMES, value, locale);
 }
 
+/** A rate ("7.50") as the person's locale writes a number, "7.5" or "7,5". */
+export function vatRateNumber(rate: string, locale: string = currentLocale()): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(rate));
+}
+
+/** A rate ("7.50") as a percentage: "7.5%", "7,5 %". */
+export function vatRateText(rate: string): string {
+  return fill("editor.rate_percent", { rate: vatRateNumber(rate) });
+}
+
 export function vatClassLabel(value: VatClass): string {
   const rate = vatRateOn(value, localToday()).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
   return `${vatClassName(value)} (${rate}%)`;

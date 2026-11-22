@@ -78,7 +78,6 @@ const INPUT_NAMES: Record<string, string> = {
   description: "description",
   price: "price",
   vatClass: "tax",
-  takeawayVatClass: "takeaway-tax",
 };
 
 function refusalText(field: string, error: unknown): string {
@@ -144,9 +143,6 @@ export class MenuPatchDialog extends LitElement {
   @property() menuId = "";
   @property() menuName = "";
   @property({ type: Boolean }) open = false;
-  /** Whether the venue's region charges a separate class taken away. */
-  @property({ attribute: false }) takeawayVat = false;
-
   @state() private wideEdit = false;
   #layout: Element | null = null;
   #resizeFrame = 0;
@@ -699,16 +695,10 @@ export class MenuPatchDialog extends LitElement {
     );
   }
 
-  /** A variant's price and VAT class, and its takeaway class where that differs, as putting the
-   * draft live would leave them. */
+  /** A variant's price and VAT class as putting the draft live would leave them. */
   #variantValues(target: MenuPatchTarget): string {
     const price = formatMoney(this.#putValue(target, "price") as string, currentLocale());
-    const served = this.#putValue(target, "vatClass") as string;
-    const takeaway = this.#putValue(target, "takeawayVatClass") as string;
-    const values = `${price} · ${vatClassName(served)}`;
-    return this.takeawayVat && takeaway !== served
-      ? `${values} · ${t("editor.takeaway_vat")}: ${vatClassName(takeaway)}`
-      : values;
+    return `${price} · ${vatClassName(this.#putValue(target, "vatClass") as string)}`;
   }
 
   /** The field's value as putting the draft live would leave it: its staged change's, else the
@@ -1017,9 +1007,7 @@ export class MenuPatchDialog extends LitElement {
 
   #renderForm(target: MenuPatchTarget, label: string): TemplateResult {
     const fields = PATCH_FIELDS[target.kind].filter(
-      (field) =>
-        (field !== "takeawayVatClass" || this.takeawayVat) &&
-        this.#liveValue(target, field) !== undefined,
+      (field) => this.#liveValue(target, field) !== undefined,
     );
     const offer = target.kind === "offer" ? this.live!.document.offers[target.menuItemId]! : null;
     const variants = offer?.variants ?? [];
@@ -1117,11 +1105,9 @@ export class MenuPatchDialog extends LitElement {
       case "price":
         return priceField(context, "price", t("editor.price"), value as string, change, true);
       case "vatClass":
-      case "takeawayVatClass":
-        // Both are plain values: a published menu holds the takeaway class already resolved.
         return html`<wt-combobox
           name=${name!}
-          label=${t(field === "vatClass" ? "product.vat" : "editor.takeaway_vat")}
+          label=${t("product.vat")}
           required
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
