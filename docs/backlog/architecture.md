@@ -51,10 +51,11 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
   transaction" (a test title, which a comments-only change cannot touch).
 
-## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
+## `centsToDecimal` refuses a count past the safe-integer limit, but not one past the money bound
 
-- A count past 99999999999999 cents
-  that reaches `centsToDecimal` by another route is still turned into an amount without refusal.
+- `centsToDecimal` refuses a count that is not a safe integer with `shared.invalid_cents`. A whole
+  count between 99999999999999 and `Number.MAX_SAFE_INTEGER` that reaches it by a route other
+  than `decimalToCents` (which refuses it, #583) is still turned into an amount without refusal.
 
 ## Comments and test titles still cite sections of specs that were deleted
 
@@ -1047,9 +1048,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
 - **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert**
   [Detail](architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
-- **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
-  digit bound**
-  [Detail](architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
+- **`centsToDecimal` refuses a count past the safe-integer limit, but not one past the money
+  bound**
+  [Detail](architecture.md#centstodecimal-refuses-a-count-past-the-safe-integer-limit-but-not-one-past-the-money-bound)
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).
   **Next action:** fold into the comment-pruning sweeps: re-point each to
   the pull request that built the work, or drop the tag.

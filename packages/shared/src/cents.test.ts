@@ -45,6 +45,21 @@ describe("centsToDecimal", () => {
       params: { value: "NaN" },
     });
   });
+
+  it("refuses a whole number too large to be held exactly", () => {
+    expect(refusalOf(() => centsToDecimal(Number.MAX_SAFE_INTEGER + 2))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: String(Number.MAX_SAFE_INTEGER + 2) },
+    });
+    expect(refusalOf(() => centsToDecimal(-(Number.MAX_SAFE_INTEGER + 2)))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: String(-(Number.MAX_SAFE_INTEGER + 2)) },
+    });
+  });
+
+  it("renders the largest whole number held exactly", () => {
+    expect(centsToDecimal(Number.MAX_SAFE_INTEGER)).toBe("90071992547409.91");
+  });
 });
 
 describe("decimalToCents", () => {

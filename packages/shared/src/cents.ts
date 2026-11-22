@@ -29,7 +29,7 @@ export function stringToCents(value: string): number {
  * hashes — "0" and "0.00" are one amount and two different byte strings.
  */
 export function centsToDecimal(cents: number): Decimal {
-  if (!Number.isInteger(cents)) {
+  if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value: String(cents) });
   }
   return scaledLiteral(cents, MONEY_SCALE);
