@@ -94,6 +94,49 @@ describe("dashboard-alerts-bell", () => {
     expect(q(el, "wt-count-badge")!.getAttribute("tone")).toBe("notice");
   });
 
+  it.each([
+    ["en-GB", "light", 400, "In Devices, assign it to a till"],
+    ["en-GB", "dark", 1280, "In Devices, assign it to a till"],
+    ["es-ES", "light", 1280, "En Dispositivos, asígnalo a un TPV"],
+    ["es-ES", "dark", 400, "En Dispositivos, asígnalo a un TPV"],
+  ] as const)(
+    "shows a drawer reminder in %s, %s, at %ipx",
+    async (locale, theme, width, guidance) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 800);
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<AlertsBell>(
+          "dashboard-alerts-bell",
+          {
+            alerts: [
+              {
+                ...ongoing,
+                key: "drawer.close_overdue:back-bar:2026-11-21",
+                code: "drawer.close_overdue_unassigned",
+                params: { drawer: "Back bar" },
+                area: "drawers",
+                screen: "devices",
+              },
+            ],
+            canOpen: (screen) => screen === "devices",
+          },
+          theme,
+        );
+        el.open();
+        const item = q(el, "[data-test=alert-item]")!;
+        expect(item.textContent).toContain("Back bar");
+        expect(item.textContent).toContain(guidance);
+        expect(q(el, "[data-test=alert-go-to]")?.textContent).toContain(
+          locale === "en-GB" ? "Go to Devices" : "Ir a Dispositivos",
+        );
+        expect(item.scrollWidth).toBeLessThanOrEqual(item.clientWidth + 1);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+
   it("counts open alerts, red when any is an error and amber when any is a warning, and says the count", async () => {
     setLocale("en-GB");
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {

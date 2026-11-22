@@ -289,12 +289,15 @@ describe("bills.close_of_day", () => {
     }
     await look(definition);
     expect(issued(bill)).toBe(true);
-    expect(await queued()).toEqual([
+    const mailed = await queued();
+    expect(mailed).toEqual([
       expect.objectContaining({
         personId: recipient!.id,
         params: { businessDay: addDays(today, -1) },
       }),
     ]);
+    await look(job());
+    expect(await queued()).toEqual(mailed);
   });
 
   it("reports a caught-up bill on the day its table opened", async () => {

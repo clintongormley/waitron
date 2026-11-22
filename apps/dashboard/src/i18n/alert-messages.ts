@@ -475,6 +475,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
     es: "El agente de impresión «{agent}» está en silencio: lleva varios minutos sin dar señales. La impresión puede verse afectada.",
   },
+  "drawer.close_overdue": {
+    en: "The drawer “{drawer}” needs a close. Choose Close drawer on its till.",
+    es: "Falta cerrar el cajón «{drawer}». Elige Cerrar cajón en su TPV.",
+  },
+  "drawer.close_overdue_unassigned": {
+    en: "The drawer “{drawer}” needs a close. In Devices, assign it to a till so staff can close it.",
+    es: "Falta cerrar el cajón «{drawer}». En Dispositivos, asígnalo a un TPV para que el personal pueda cerrarlo.",
+  },
   "printer.jobs_waiting": {
     en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
     es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",

@@ -12,3 +12,12 @@ the bank and what stayed in the drawer. Pending counts appear for any dates you 
 To print another copy, choose an active receipt printer in the **Printer** field above the reports.
 Select **Reprint close** on the finished row. Use a different receipt printer if the drawer's own printer is unavailable. The card
 figure shows payments taken before refunds.
+
+## Follow up on a missed drawer close {#drawer-close-reminders}
+
+If a cash drawer still needs a close after hours, check **Alerts** on the dashboard. On the assigned
+till, choose **More → Close drawer**. If the alert says the drawer has no till, assign it to a till
+in **Devices** first.
+
+If you receive the daily Sales email, use its link to open **Sales & takings** and look up earlier closes.
+The email includes the day's saved counts, differences and any drawer reminders already due.

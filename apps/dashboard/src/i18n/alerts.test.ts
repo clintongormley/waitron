@@ -147,6 +147,7 @@ const UNMARKED_SLOTS: readonly string[] = [
   "destination",
   "device",
   "dishes",
+  "drawer",
   "externalRef",
   "hostEnvironment",
   "hours",

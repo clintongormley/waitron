@@ -23,6 +23,7 @@ import {
   isReceiptPrinter,
   printers,
   readNodeMembership,
+  readVenueClock,
   sales,
   type Transaction,
 } from "@waitron/db";
@@ -61,6 +62,7 @@ import {
 } from "./station-outputs-down.js";
 import { FIRST_START_PENDING, type HostStreamView } from "./stream-host.js";
 import type { SpareFollowFacts } from "./spare-follow.js";
+import { readDrawerCloseReminders } from "./drawer-close-reminders.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -1052,6 +1054,27 @@ export function jobFailingAlertSource(deps: {
             screen: "box-status",
           },
         ];
+      });
+    },
+  };
+}
+
+export function drawerCloseAlertSource(): AlertSource {
+  return {
+    area: "drawers",
+    permission: "report.view",
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
+      const drawers = await readDrawerCloseReminders(tx, await readVenueClock(tx), now);
+      return drawers.map(({ id, name, since, needsTill }) => {
+        const alert = {
+          key: `drawer.close_overdue:${id}:${since}`,
+          params: { drawer: name },
+          severity: "warning",
+          since,
+        } as const;
+        return needsTill
+          ? { ...alert, code: "drawer.close_overdue_unassigned", screen: "devices" }
+          : { ...alert, code: "drawer.close_overdue", screen: "sales" };
       });
     },
   };
