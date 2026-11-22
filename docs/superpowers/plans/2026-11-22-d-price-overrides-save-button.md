@@ -1,40 +1,43 @@
-# Save a menu's price overrides together
+# Add a Save bar for menu price overrides
 
-Owner, 2026-11-22 19:17, as recorded in Lane D's PRICE-OVERRIDES-SAVE-BUTTON queue item:
+Owner, 2026-11-22 19:17, recorded in Lane D's PRICE-OVERRIDES-SAVE-BUTTON queue item:
 “also editing price overrides shouldn't autosave but should have a save button at the bottom (which doesn't scroll away)”.
-The same item records the watcher's instruction to remove this tab's Undo message.
+The watcher assigned this tab's Undo removal at 19:41 after the owner's 19:16 request
+“meh, i think let's remove undo altogether. better than having it half done”.
 
-- [ ] In `apps/dashboard/src/widgets/menu-prices-table.ts`, make edits to a menu's product and variant
-  overrides a single draft tracked by `draftScopeFor`. Keep the existing exact price comparison, row
-  labels, inherited-price hints, filters and Escape to reset one field. Typing, Enter in a field,
-  and moving focus send no writes. Use the sticky `wt-form-actions` below the table, with Cancel
-  to restore saved values and Save quiet until a value changes. Validate on Save, show field errors
-  and the localized correction line via `FormFeedback`, then keep Save disabled until corrected.
-  Remove the price toast and Undo handler.
-- [ ] In `apps/dashboard/src/screens/menus-screen.ts`, let the existing guarded URL change select
-  the tab and menu after the leave decision. Keep the Prices view and its draft while deciding.
-  Use one draft per open Price overrides tab. Keep editing retains the draft, and Discard leaves
-  without writing. Save sends only changed fields, in sequence, through `updateMenuItem` and
-  `setMenuVariantPrice` as today. Block a second submit while that Save is in progress. Acknowledge
-  each successful write and refresh once if any succeeded. Keep only refused edits available to
-  retry and show named refusals by the field or other refusals above the buttons. Keep refresh
-  errors separate and report a refusal that arrives after leaving through the existing Menus
-  notice. The current routes save independently, so one refusal can leave other prices saved.
-  The set-menu surcharge editor in `set-menu-dishes.ts` has its own handler and keeps it.
-- [ ] Start with failing browser cases in `apps/dashboard/src/screens/menus-screen.test.ts` for
-  several edits with zero writes before Save, existing route payloads including blank-as-clear,
-  a partial refusal with one refresh and retry of only what failed, and a failed refresh after
-  a successful write. In `apps/dashboard/src/widgets/menu-prices-table.test.ts`, cover equal prices,
-  malformed input, Cancel, filtered or collapsed drafted rows, and the bar remaining in view
-  through a long scroll. Preserve row, inheritance and error coverage when retiring cases for
-  autosave or Undo. In `apps/dashboard/src/screens/menus-screen.unsaved.test.ts`, drive a tab click
-  and browser Back through Keep and Discard. Run those files and `menus-screen.a11y.test.ts`
-  with dashboard Vitest, and inspect English and Spanish in light and dark at phone and desktop widths.
-- [ ] Remove stale outcome strings from `apps/dashboard/src/i18n/strings.ts`. Update the English and
-  Spanish `apps/server/src/guide/*/products.md` guide and the row-edit exception in
-  `docs/developers/design-system.md`. Remove the A343 Undo keyboard entry from
-  `docs/backlog/menu.md` and its index entry in `docs/backlog.md`. Run the guide content and link
-  tests before branch review.
+- [ ] In `apps/dashboard/src/widgets/menu-prices-table.ts`, track the menu's product and variant
+  draft via `draftScopeFor`. Keep price comparison by amount, row labels, inheritance, filters and
+  Escape to reset one field. Typing stages changes and moving focus sends nothing. Enter invokes the same
+  Save button via `submitOnEnter`. Use `wt-form-actions` below the table, with its built-in sticky
+  positioning and focus clearance. Use `saveActionState` to keep Save quiet when clean. Cancel
+  restores saved values.
+  Validate on Save and show errors via `FormFeedback`, with Save disabled until corrected.
+  Reveal a collapsed invalid row. Name filtered-out errors above the buttons and keep the filter.
+  Remove the toast and Undo wiring.
+- [ ] In `apps/dashboard/src/screens/menus-screen.ts`, reset the tab strip's eager selection as
+  `venue-settings-screen.ts` does and let the guarded URL restore select the tab. Defer
+  `#backToList` under the same guard. Mount the price draft only on its tab, keyed by menu.
+  The widget passes its changed price rows to the screen's async Save callback. Use the existing
+  `updateMenuItem` and `setMenuVariantPrice` routes in sequence. The submitted values are shown
+  read-only, with Save and Cancel disabled while pending. The widget applies the callback's
+  saved keys and field or form refusals, clears only saved edits, then asks the screen for one
+  refresh if anything saved. Refused edits remain available to retry. The routes save separately,
+  so one refusal can leave other prices saved. Keep a refresh error separate. A refusal after
+  leaving goes to the Menus notice or the existing session-scoped late notice in
+  `apps/dashboard/src/dashboard-app.ts`, with price wording. The set-menu surcharge editor
+  (`set-menu-dishes.ts`) owns its own save handler.
+- [ ] First run failing browser cases in `menus-screen.test.ts` for no writes on blur or tab change,
+  exact payloads on Save including blank-as-clear, retry after partial refusal, and a failed refresh
+  after success. In `menu-prices-table.test.ts`, test equal prices, Enter through Save, malformed
+  and hidden fields, Cancel, and the bar and focused field during a long scroll. Preserve price
+  rendering and refusal assertions when retiring autosave and Undo tests. Add
+  `screens/menus-screen.prices.unsaved.test.ts` for tab click, menu breadcrumb and browser Back
+  with Keep and Discard. Update `widgets/menu-prices-table.a11y.test.ts` for the footer. Run these
+  files and `menus-screen.a11y.test.ts` with dashboard Vitest. Inspect EN/ES, both themes, phone and desktop.
+- [ ] In `apps/dashboard/src/i18n/strings.ts`, retire `menu_prices.saved`, `menu_prices.cleared` and
+  `menu_prices.undo`. Update both `apps/server/src/guide/*/products.md` variant sections to tell
+  readers to edit prices and choose Save, or Cancel to discard. Update both Price overrides
+  exceptions in `docs/developers/design-system.md`. Delete the A343 Undo entry in
+  `docs/backlog/menu.md` and its `docs/backlog.md` pointer. Run the guide content and link tests.
 
-Expected additions are 160–260 product lines and 220–350 test lines, with about 250–380 product
-lines and 450–700 test lines removed as the per-field send, queue and toast cases go away.
+Estimate: +180–270 and −250–380 product lines, +230–370 and −450–700 test lines.
