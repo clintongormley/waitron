@@ -26,6 +26,7 @@ export type InputFieldDecoration = {
   autocomplete?: string;
   placeholder?: string | typeof nothing;
   extraDescriptionIds?: string[];
+  /** Give the end slot its own layout class so the shared overlay leaves it alone. */
   endClass?: string;
   end?: TemplateResult;
 };
@@ -201,7 +202,7 @@ export class WtInput extends LitElement {
     const passwordVisibility = this.visibilityText;
     const revealed = this.visibility === "shown";
     const hasEnd = !decoration?.endClass && (this.hasEnd || passwordVisibility || decoration?.end);
-    const fieldClass = decoration?.fieldClass || (hasEnd ? "has-end" : "");
+    const fieldClass = decoration?.fieldClass || (hasEnd ? "has-end" : undefined);
     const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
     const input = html`
       <input

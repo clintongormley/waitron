@@ -15,7 +15,7 @@ currency sign, sizing, override marker and fixed or clickable unit. The unit sit
   own tag. Use a protected `fieldDecoration` getter for the input part, displayed placeholder,
   extra description IDs, field style and end-slot fallback. A protected `renderFieldContents`
   arranges the shared label, input and slot. Give the price slot a class outside the default
-  overlay rules and use `display: contents` so the unit can sit beside or wrap below the amount.
+  overlay rules so the unit can sit beside or wrap below the amount.
 - [ ] In `packages/ui/src/components/wt-price-input.ts`, extend `WtInput` and remove duplicate
   properties and the input handler. Use `decimalLocale || locale || "en"` for editing and the
   displayed placeholder. Keep the amount wrapper for currency measurement. The existing shadow

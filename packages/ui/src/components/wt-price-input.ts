@@ -35,10 +35,6 @@ export class WtPriceInput extends WtInput {
   static override styles = [
     ...WtInput.styles,
     css`
-      .price-end {
-        display: contents;
-      }
-
       /* Beside a unit button the label sits in the amount box, so a long one stops at the button
          rather than under it; beside a fixed unit it sits in the field box and spans past it. */
       .amount-box {
@@ -274,7 +270,7 @@ export class WtPriceInput extends WtInput {
 
   protected override get fieldDecoration(): InputFieldDecoration {
     return {
-      fieldClass: this.showsFixedUnit ? "fixed" : "",
+      fieldClass: this.showsFixedUnit ? "fixed" : undefined,
       inputPart: "amount",
       autocomplete: "off",
       placeholder: formatDecimalInput(this.placeholder || this.hint, this.inputLocale) || nothing,
