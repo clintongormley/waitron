@@ -29,9 +29,9 @@ const profile: OwnProfile = {
   },
   passkeys: [],
 };
-async function open() {
+async function open(ownProfile = profile) {
   const api = {
-    getProfile: vi.fn(async () => profile),
+    getProfile: vi.fn(async () => ownProfile),
     freshSignInPasskeyOptions: vi.fn(),
     confirmFreshSignIn: vi.fn(async () => {}),
     liveData: new LiveData(),
@@ -139,7 +139,10 @@ it("Enter on the passkey button confirms through the shared endpoint using the r
     },
     getClientExtensionResults: () => ({}),
   } as unknown as PublicKeyCredential);
-  const { api, result, signIn } = await open();
+  const { api, result, signIn } = await open({
+    ...profile,
+    passkeys: [{ id: "cred-mine", createdAt: "", lastUsedAt: null, provider: null }],
+  });
   api.freshSignInPasskeyOptions.mockResolvedValue({
     challengeHandle: "h1",
     options: { challenge: "AQID" },

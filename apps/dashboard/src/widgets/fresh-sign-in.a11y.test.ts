@@ -89,7 +89,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
     await expect
       .poll(() =>
         root.querySelector(
-          "[data-test=use-passkey], [data-test=no-way-in], [data-test=profile-failed]",
+          "wt-input[name=current-password], [data-test=use-passkey], [data-test=no-way-in], [data-test=profile-failed]",
         ),
       )
       .toBeTruthy();

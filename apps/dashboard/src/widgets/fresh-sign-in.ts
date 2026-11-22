@@ -279,18 +279,22 @@ export class FreshSignIn extends LitElement {
       ${ways.password ? autofillUsername(this.profile!.email) : nothing}
       ${ways.password ? this.#passwordField() : nothing}
       ${this.profile!.hasTotp ? this.#codeField() : nothing}
-      <div>
-        <wt-button
-          data-test="use-passkey"
-          variant=${ways.password ? "secondary" : "primary"}
-          ?disabled=${this.disabled}
-          @click=${() =>
-            this.dispatchEvent(
-              new CustomEvent("sign-in-passkey", { bubbles: true, composed: true }),
-            )}
-          >${t(ways.password ? "fresh_sign_in.use_passkey_instead" : "fresh_sign_in.use_passkey")}</wt-button
-        >
-      </div>
+      ${
+        ways.passkey
+          ? html`<div>
+              <wt-button
+                data-test="use-passkey"
+                variant=${ways.password ? "secondary" : "primary"}
+                ?disabled=${this.disabled}
+                @click=${() =>
+                  this.dispatchEvent(
+                    new CustomEvent("sign-in-passkey", { bubbles: true, composed: true }),
+                  )}
+                >${t(ways.password ? "fresh_sign_in.use_passkey_instead" : "fresh_sign_in.use_passkey")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
     `;
   }
 
