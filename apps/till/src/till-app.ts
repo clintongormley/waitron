@@ -5353,6 +5353,7 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (this.billEditConflicts?.current() === false) this.billEditConflicts = null;
     const answered = this.#mealEndOnScreen();
     if (answered !== undefined) answered.seen = true;
     if (this.#splitReadParty !== undefined && this.#splitReadParty !== this.orderParty?.id) {

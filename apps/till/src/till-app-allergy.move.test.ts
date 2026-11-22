@@ -133,6 +133,12 @@ const held: HeldOrderSummary = {
   signals: [],
 };
 
+const ownedCounter = {
+  workingOrderId: "counter-bill",
+  partyId: null,
+  edit: { ...sourceEdit, editorId: "p1", editorName: "Ana", draftId: "d1", draftRevision: 1 },
+};
+
 it.each(["preview", "write"])(
   "a held-order move takes over a destination draft refused by the %s",
   async (stage) => {
@@ -153,17 +159,7 @@ it.each(["preview", "write"])(
     const { el, screen } = await counter(
       {
         listWorkingOrders: vi.fn().mockResolvedValue([held]),
-        getFindBill: vi.fn().mockResolvedValue({
-          workingOrderId: "counter-bill",
-          partyId: null,
-          edit: {
-            ...sourceEdit,
-            editorId: "p1",
-            editorName: "Ana",
-            draftId: "d1",
-            draftRevision: 1,
-          },
-        }),
+        getFindBill: vi.fn().mockResolvedValue(ownedCounter),
         listDrafts: vi.fn(async () => ({ drafts: [], billEdits: [received] })),
         previewBillMoveAllergy: read,
         moveBill: write,
@@ -216,6 +212,45 @@ it.each(["preview", "write"])(
     expect(write.mock.lastCall?.[2].expectedEdits).toContainEqual(updated);
   },
 );
+
+it("retires a counter take-over when browser history leaves the counter", async () => {
+  const conflict = {
+    ...ownedCounter.edit,
+    billId: "b2",
+    editorId: "luis",
+    editorName: "Luis",
+    draftId: "d2",
+  };
+  const { el, move } = await counter(
+    {
+      getFindBill: vi.fn().mockResolvedValue(ownedCounter),
+      listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [conflict] }),
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockRejectedValue({ code: "draft.taken_over", conflicts: [conflict] }),
+    },
+    "none",
+  );
+  for (const screen of ["floor", "counter"]) {
+    emit(shell(el), "screen-select", { screen });
+    await flush(el);
+    expect(shell(el).activeScreen).toBe(screen);
+  }
+  const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+  move();
+  await vi.waitFor(() => expect(prompt()).not.toBeNull());
+  for (const screen of ["floor", "counter"]) {
+    const moved = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    if (screen === "floor") history.back();
+    else history.forward();
+    await moved;
+    await flush(el);
+    expect(shell(el).activeScreen).toBe(screen);
+    expect(prompt()).toBeNull();
+  }
+});
 
 it("explains what staff can do when the counter order itself has an unsent draft", async () => {
   const conflict = {
