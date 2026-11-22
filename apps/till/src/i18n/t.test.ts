@@ -190,10 +190,10 @@ it("words a clock.unusable payment refusal with Check the time only while it is 
 it.each([
   [
     "en-GB",
-    "Payments wait: the server is waiting for devices to connect and agree with its time (1 of 2 so far)",
-    "Payment not recorded: the server is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
-    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
-    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
+    "Payments wait: the box is waiting for devices to connect and agree with its time (1 of 2 so far)",
+    "Payment not recorded: the box is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
+    "Card charged, but the payment is not recorded: the box is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
+    "Card charged, but the payment is not recorded: the box is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
   ],
   [
     "es-ES",

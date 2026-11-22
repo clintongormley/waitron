@@ -7,7 +7,7 @@ afterEach(() => setLocale("en-GB"));
 it.each([
   [
     "en-GB",
-    "This server is no longer the main server, so it cannot record this. Wait for the till to move to the main server, then try again.",
+    "This box is no longer the main box, so it cannot record this. Wait for the till to move to the main box, then try again.",
   ],
   [
     "es-ES",
@@ -20,7 +20,7 @@ it.each([
 it.each([
   [
     "en-GB",
-    "This server is no longer the main server, so it cannot record this payment. If you already charged a card on the terminal, refund it there. Wait for the till to move to the main server, then try again.",
+    "This box is no longer the main box, so it cannot record this payment. If you already charged a card on the terminal, refund it there. Wait for the till to move to the main box, then try again.",
   ],
   [
     "es-ES",

@@ -25,10 +25,10 @@ when they share a profile.
 ## Retry a counter send after a lost reply {#counter-send-retry}
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send
-already reached the server, the retry returns its original result and moves the till on as placed.
-It adds no second station ticket or collection-number slip. While the server is out of disk space,
+already reached the box, the retry returns its original result and moves the till on as placed.
+It adds no second station ticket or collection-number slip. While the box is out of disk space,
 the retry is refused and the till says the order was not saved, even if the first send already
-reached the server.
+reached the box.
 
 ## Read the allergy copy with its dish {#allergy-copies}
 
@@ -72,7 +72,7 @@ affects, and **Got it** clears it. Each station printer prints one slip listing 
 stations it serves. A party with more than one affected bill gets one notice per station and one
 slip per printer, listing those bill numbers. Read the list before acknowledging it.
 
-If **Got it** is refused because the server is out of disk space, the notice stays on screen.
+If **Got it** is refused because the box is out of disk space, the notice stays on screen.
 Tell a manager and keep using its instructions until you can acknowledge it.
 
 ## Match changed names to the original orders {#party-names}
@@ -380,8 +380,8 @@ Once released, a dish can move through preparation to Ready at its station. A di
 waits for the pass](kitchen-service.md#station-waits) goes to the pass's **To fire** column
 instead: see
 [Work the pass](kitchen-service.md#pass-screen).
-While the server is out of disk space, moving a dish on is refused. The station says
-**Not saved: the server is out of disk space. Tell a manager.** and the dish stays where it was.
+While the box is out of disk space, moving a dish on is refused. The station says
+**Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
 
 Confirm allergy instructions in the table's allergy window before requesting cooking. At a
 station or the pass, read the copy already attached to each dish. The station screens do not open

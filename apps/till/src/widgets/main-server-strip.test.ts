@@ -117,6 +117,6 @@ it("shows the Cloud check's busy state and neutral refusal even without a spare"
   )!;
   expect(cloud).not.toBeNull();
   expect(cloud.loading).toBe(true);
-  expect(el.shadowRoot!.textContent).toContain("The main server is answering again.");
+  expect(el.shadowRoot!.textContent).toContain("The main box is answering again.");
   expect(el.shadowRoot!.textContent).not.toContain(t("server.main_still_answering"));
 });

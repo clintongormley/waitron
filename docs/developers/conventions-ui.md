@@ -2221,7 +2221,7 @@ handheld at the PIN screen" in `apps/till/src/till-app.notices.test.ts`.
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in
 `apps/till/src/i18n/strings.ts`, in English and Spanish. It words only the codes it names, so a
-code it does not name is drawn as "The server needs attention · See Box status in the dashboard", in its own tone,
+code it does not name is drawn as "The box needs attention · See Box status in the dashboard", in its own tone,
 whatever the strings file holds. `scripts/staff-notice-codes.test.ts` requires, for every code a
 source sends, words in both languages in the strings file and a wording from `staffNoticeText` in
 both languages other than that one. It is weaker than its name:

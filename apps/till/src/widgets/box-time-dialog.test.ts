@@ -94,8 +94,8 @@ describe("till-box-time-dialog", () => {
     const el = await open(fakeApi(BOX_BEHIND));
     expect(words(el)).toBe(
       [
-        "It is very important that the time on the server is correct.",
-        "The server's clock says the current date and time is:",
+        "It is very important that the time on the box is correct.",
+        "The box's clock says the current date and time is:",
         clockDateTime(Date.parse(BOX_BEHIND)),
         "This device's clock says the current date and time is:",
         clockDateTime(TILL_AT),
@@ -104,7 +104,7 @@ describe("till-box-time-dialog", () => {
     );
     expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
     expect(controls(el).map((name) => flat(control(el, name)))).toEqual([
-      "The server",
+      "The box",
       "This device",
       "Both times are wrong",
     ]);
@@ -114,8 +114,8 @@ describe("till-box-time-dialog", () => {
     const el = await open(fakeApi(BOX_AGREES));
     expect(words(el)).toBe(
       [
-        "It is very important that the time on the server is correct.",
-        "The server's clock says the current date and time is:",
+        "It is very important that the time on the box is correct.",
+        "The box's clock says the current date and time is:",
         clockDateTime(Date.parse(BOX_AGREES)),
         "This device's clock says the current date and time is:",
         clockDateTime(TILL_AT),
@@ -276,12 +276,12 @@ describe("till-box-time-dialog", () => {
       await press(el, name);
       expect(words(el)).toBe(
         [
-          "It is very important that the time on the server is correct.",
-          "The server's clock says the current date and time is:",
+          "It is very important that the time on the box is correct.",
+          "The box's clock says the current date and time is:",
           clockDateTime(Date.parse(boxAt)),
           "This device's clock says the current date and time is:",
           clockDateTime(TILL_AT),
-          "Please correct the time on this device and then reconnect to the server.",
+          "Please correct the time on this device and then reconnect to the box.",
         ].join(" "),
       );
       expect(controls(el)).toEqual(["close"]);

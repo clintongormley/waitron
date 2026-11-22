@@ -284,6 +284,10 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   screens. See [design-system.md](docs/developers/design-system.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names.
+- **The Waitron machine is "box" in English and "servidor" in Spanish, never "equipo"; the
+  dashboard page keeps its name "Servers"** (owner, 2026-11-22). Guard:
+  `apps/till/src/i18n/box-word.test.ts`, weaker than its name: English "server" in the till's
+  string, help and refusal tables only; it reads no Spanish and no guide, dashboard or setup text.
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a fixture gives the three DIFFERENT text**. Which surface reads which: [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.**
 - **Compare saved selections by values — not by JSON key order, not by the order they were sent, and
@@ -310,7 +314,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Nothing guards it.
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a code it
-  does not name is drawn as "The server needs attention". Guard:
+  does not name is drawn as "The box needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
   text. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;

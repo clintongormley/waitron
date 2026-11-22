@@ -80,8 +80,8 @@ Use a spare that has finished joining this venue. Switch off the old main box an
 because two running main boxes could take payments and file separately. This declaration cannot
 be undone.
 
-On a till or handheld, the red **The main server is not answering** strip offers **Switch to the
-spare server** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
+On a till or handheld, the red **The main box is not answering** strip offers **Switch to the
+spare box** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
 spare, and **Don't switch, go back** (after declaring, **Leave this page (the switch is saved)**)
 or **Continue to this box** brings you back to the till. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
@@ -191,7 +191,7 @@ handover on the spare. Keep the old box and its data, switched on and connected:
 invoice records to the new box by itself, and until they arrive the venue cannot be handed over
 again ([read more](servers.md#old-box-returns)).
 
-On a till, keep the screen open; it follows the main server once that server is taking sales.
+On a till, keep the screen open; it follows the main box once that box is taking sales.
 
 ## When a box no longer runs the venue {#handed-over}
 

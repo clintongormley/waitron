@@ -4772,10 +4772,10 @@ any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requi
 
 **"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
-staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
+staff signed in on a till see `clock.unconfirmed`, "Payments wait: the box is waiting for
 devices to connect and agree with its time (… of 2 so far)" (after a jump, "Payments wait: the
-server's clock jumped …"; after AEAT refuses a sale as dated in the future, "The tax agency refused
-a sale because the server's date was ahead. Payments wait until someone checks the time.", with no
+box's clock jumped …"; after AEAT refuses a sale as dated in the future, "The tax agency refused
+a sale because the box's date was ahead. Payments wait until someone checks the time.", with no
 count), with “Check the time”, whatever the
 start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and does not ask the start-up window; it

@@ -58,7 +58,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",
   },
   "fiscal.chain_handed_over": {
-    en: "This server is no longer the main server, so it cannot record this. Wait for the till to move to the main server, then try again.",
+    en: "This box is no longer the main box, so it cannot record this. Wait for the till to move to the main box, then try again.",
     es: "Este servidor ya no es el servidor principal, así que no puede registrar esto. Espera a que la caja pase al servidor principal y vuelve a intentarlo.",
   },
   "allergy.unanswered": { en: en["allergy.unanswered"], es: es["allergy.unanswered"] },
@@ -358,7 +358,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este artículo está en espera y todavía no se puede enviar ni servir",
   },
   "deferred_close.ineligible": {
-    en: "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    en: "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another box, or its total is zero",
     es: "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   },
   "deferred_close.conflict": {
@@ -462,7 +462,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ahora no se puede volver a imprimir el recibo original. Comprueba su estado",
   },
   "invoice_delivery.email_unavailable": {
-    en: "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
+    en: "This invoice can't be emailed from this box. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
     es: "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
   },
   "invoice.choice_locked": {
@@ -518,7 +518,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The server's invoice records need checking, so no invoice can be corrected now.",
+    en: "The box's invoice records need checking, so no invoice can be corrected now.",
     es: "Hay que revisar los registros de facturas del servidor, así que ahora no se puede rectificar ninguna factura.",
   },
   "sale.correction_amount_invalid": {
@@ -977,7 +977,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
   // waiter at a stopped till has no step of their own (2026-11-06, A1384).
   "storage.disk_full": {
-    en: "Not saved: the server is out of disk space. Tell a manager.",
+    en: "Not saved: the box is out of disk space. Tell a manager.",
     es: "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
   },
   "sale.charged_not_recorded": {
@@ -985,19 +985,19 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
   },
   "clock.unusable": {
-    en: "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+    en: "Can't be recorded: the box's clock is wrong. It can be set in the dashboard, under Box status.",
     es: "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
   },
   "clock.unconfirmed": {
-    en: "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
+    en: "Can't be recorded: the box is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
     es: "No se puede registrar: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en la parte superior de la pantalla.",
   },
   "clock.set_refused": {
-    en: "The server's clock was not set. Use “Check the time” to see why.",
+    en: "The box's clock was not set. Use “Check the time” to see why.",
     es: "No se ha puesto en hora el reloj del servidor. Usa «Comprobar la hora» para ver por qué.",
   },
   "clock.set_failed": {
-    en: "The server could not set its clock. Nothing was changed.",
+    en: "The box could not set its clock. Nothing was changed.",
     es: "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   },
   "clock.check_expired": {
@@ -1005,7 +1005,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
   "handover.stepping_down": {
-    en: "This server is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main server once that server is taking sales.",
+    en: "This box is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main box once that box is taking sales.",
     es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
   },
   "server.internal": {
@@ -1062,7 +1062,7 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     es: "Esta factura no tiene registro presentado, así que no se puede rectificar.",
   },
   wrong_node: {
-    en: "This invoice was filed by another server, so this one cannot correct it.",
+    en: "This invoice was filed by another box, so this one cannot correct it.",
     es: "Otro servidor presentó esta factura, así que este no la puede rectificar.",
   },
   voided: {
@@ -1129,6 +1129,18 @@ const DINING_FIXED: Record<string, { en: string; es: string }> = {
     en: "This order is sold to take away, and its department does not let the till switch it to eat here",
     es: "Este pedido se vende para llevar y su departamento no deja que la caja lo cambie a para tomar aquí",
   },
+};
+
+/** Every table above, for guards that read the till's wording. */
+export const CODE_TABLES: Readonly<Record<string, unknown>> = {
+  CODE_MESSAGES,
+  DEFERRED_INELIGIBLE,
+  CORRECTION_NOT_ADMITTED,
+  TAKEN_OFF_NOTHING_LEFT,
+  TAKEN_OFF_NOT_FULLY_PAID,
+  MONEY_SHORT_NOTHING_LEFT,
+  MONEY_SHORT_ADVANCES,
+  DINING_FIXED,
 };
 
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */

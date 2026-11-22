@@ -2314,7 +2314,7 @@ describe("till-app simplified-invoice limit", () => {
   it.each([
     [
       "en-GB",
-      "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones. To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer.",
+      "This invoice can't be emailed from this box. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones. To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer.",
     ],
     [
       "es-ES",

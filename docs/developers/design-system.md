@@ -6808,11 +6808,11 @@ the shell it takes the waiting line's place. It is app-owned, not a `wt-*` primi
 
 - **Look.** Unlike the notice strip, the whole strip is filled with `--wt-color-danger`, its words
   bold in `--wt-color-on-danger`: the design asks for a red strip.
-- **States.** "The main server is not answering" with a **Switch to the spare server** button while
+- **States.** "The main box is not answering" with a **Switch to the spare box** button while
   the spare answers and the button is allowed; the same words without the button on a kitchen
-  display showing its kitchen screen or for a signed-in person without `node.manage`; "No server is answering…" with no button
+  display showing its kitchen screen or for a signed-in person without `node.manage`; "No box is answering…" with no button
   when the spare is silent too; and the refusal in place of those words when a press found the main
-  server answering.
+  box answering.
 - **Announcing.** The strip is `role="alert"`.
 
 Cases: `apps/till/src/widgets/main-server-strip.test.ts`, its `main-server-strip.a11y.test.ts`,

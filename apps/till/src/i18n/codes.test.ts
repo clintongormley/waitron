@@ -600,7 +600,7 @@ it("explains a pending invoice delivery and a refused original instead of the ge
 
 it("says invoice email is unavailable and names no paper choice, which the email form lacks, in both languages", () => {
   expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
-    "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
+    "This invoice can't be emailed from this box. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
   );
   expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
     "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
@@ -790,7 +790,7 @@ it("says a start whose time is unconfirmed means nothing can be recorded, and po
     codeMessage("clock.unconfirmed", "en-GB"),
     codeMessage("clock.unconfirmed", "es-ES"),
   ]).toEqual([
-    "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
+    "Can't be recorded: the box is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
     "No se puede registrar: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en la parte superior de la pantalla.",
   ]);
 });
@@ -800,7 +800,7 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     [
       "storage.disk_full",
       "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
-      "Not saved: the server is out of disk space. Tell a manager.",
+      "Not saved: the box is out of disk space. Tell a manager.",
     ],
     [
       "sale.charged_not_recorded",
@@ -810,7 +810,7 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     [
       "clock.unusable",
       "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
-      "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+      "Can't be recorded: the box's clock is wrong. It can be set in the dashboard, under Box status.",
     ],
   ];
   for (const [code, spanish, english] of cases) {
@@ -869,7 +869,7 @@ it("A773 pass asks the pass to check a refreshed screen when its card went stale
 it.each([
   [
     "deferred_close.ineligible",
-    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another box, or its total is zero",
     "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
   [
@@ -914,7 +914,7 @@ it.each([
   ],
   [
     "other_node",
-    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another box, or its total is zero",
     "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
 ])("words deferred_close.ineligible by its reason %s", (reason, english, spanish) => {
@@ -1232,7 +1232,7 @@ it.each([
 
 it("keeps a till on the handover screen while it follows the main server", () => {
   expect(codeMessage("handover.stepping_down", "en")).toBe(
-    "This server is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main server once that server is taking sales.",
+    "This box is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main box once that box is taking sales.",
   );
   expect(codeMessage("handover.stepping_down", "es")).toBe(
     "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",
@@ -1382,7 +1382,7 @@ it("words the table refusals Print the bill shows in their own words, in both la
     ],
     [
       "clock.unusable",
-      "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+      "Can't be recorded: the box's clock is wrong. It can be set in the dashboard, under Box status.",
       "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
     ],
   ];
