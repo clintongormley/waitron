@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendDrawerEntry,
   billPayments,
+  liveBackupQuery,
   recordActivity,
   withTransaction,
   workingOrderLines,
@@ -21,6 +22,7 @@ import {
   seedVenueWithSeries,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
+import { latestChangeAtMs, latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
@@ -115,6 +117,50 @@ describe("the old box's since rule", () => {
     expect(await sinceRule(suite.db, null)).toEqual({
       kind: "own",
       fromMs: Date.parse("2026-11-21T12:00:00.000Z") - 7 * DAY,
+    });
+  });
+});
+
+describe("the latest sale or order time, from each column's maximum", () => {
+  it.each([
+    "sales.issued_at",
+    "working_orders.opened_at",
+    "working_orders.settled_at",
+    "working_orders.collected_at",
+    "working_order_lines.sent_at",
+    "working_order_lines.served_at",
+  ])("takes %s when it is the latest, as the row-by-row read does", async (column) => {
+    const query = liveBackupQuery(suite.db);
+    expect(await latestChangeAtMsFromMaxima(query)).toBeNull();
+    const early = CUTOFF - 60 * MINUTE;
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: iso(column === "sales.issued_at" ? CUTOFF : early),
+      total: "10.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+    });
+    const orderId = await order(1, {
+      opened: column === "working_orders.opened_at" ? CUTOFF : early,
+    });
+    await line(orderId, 1, {
+      sent: column === "working_order_lines.sent_at" ? CUTOFF : early,
+      served: column === "working_order_lines.served_at" ? CUTOFF : early,
+    });
+    await close(orderId, {
+      settled: column === "working_orders.settled_at" ? CUTOFF : early,
+      collected: column === "working_orders.collected_at" ? CUTOFF : early,
+    });
+    expect(await latestChangeAtMsFromMaxima(query)).toBe(CUTOFF);
+    expect(await latestChangeAtMs(query)).toBe(CUTOFF);
+  });
+
+  it("refuses a latest value it cannot read as a time, as the row-by-row read does", async () => {
+    const orderId = await order(1, { opened: CUTOFF });
+    await suite.db.run(
+      sql`update working_orders set opened_at = 'not a time' where id = ${orderId}`,
+    );
+    await expect(latestChangeAtMsFromMaxima(liveBackupQuery(suite.db))).rejects.toMatchObject({
+      code: "handover.copy_check_failed",
     });
   });
 });

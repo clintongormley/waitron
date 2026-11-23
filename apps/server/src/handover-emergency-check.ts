@@ -33,6 +33,30 @@ export async function latestChangeAtMs(query: BackupQuery): Promise<number | nul
   return latest;
 }
 
+/**
+ * {@link latestChangeAtMs} from each column's text maximum: six values instead of every row. The
+ * text maximum is the latest time only while every writer of these columns stores
+ * `toISOString()`'s spelling.
+ */
+export async function latestChangeAtMsFromMaxima(query: BackupQuery): Promise<number | null> {
+  let latest: number | null = null;
+  for await (const { value } of query.rows(`
+    select max(issued_at) as value from sales
+    union all select max(opened_at) from working_orders
+    union all select max(settled_at) from working_orders
+    union all select max(collected_at) from working_orders
+    union all select max(sent_at) from working_order_lines
+    union all select max(served_at) from working_order_lines
+  `)) {
+    if (value === null) continue;
+    const instant = typeof value === "string" ? Date.parse(value) : NaN;
+    if (!Number.isFinite(instant))
+      throw new AppError("handover.copy_check_failed", { module: "core" });
+    latest = Math.max(latest ?? instant, instant);
+  }
+  return latest;
+}
+
 /** Reads the live copy, including its WAL, without taking either database's write lock. */
 export async function checkEmergencyCopy(deps: {
   venueDir: string;

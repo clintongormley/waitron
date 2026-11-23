@@ -17,14 +17,13 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { latestChangeAtMs } from "./handover-emergency-check.js";
+import { latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
 import type { HeardCopy } from "./old-box-holdings.js";
 
 /** Where the old box's "since" tabs start listing rows, and which rule chose it. */
 export type SinceRule =
   { kind: "copy"; fromMs: number } | { kind: "own"; fromMs: number } | { kind: "all" };
 
-// Margins chosen with the watcher and the owner, not measured.
 const COPY_MARGIN_MS = 10 * 60_000;
 const OWN_SPAN_MS = 7 * 24 * 60 * 60_000;
 
@@ -34,7 +33,7 @@ export async function sinceRule(db: Database, copy: HeardCopy | null): Promise<S
     return copy.lastChangeAtMs === null
       ? { kind: "all" }
       : { kind: "copy", fromMs: copy.lastChangeAtMs - COPY_MARGIN_MS };
-  const own = await latestChangeAtMs(liveBackupQuery(db));
+  const own = await latestChangeAtMsFromMaxima(liveBackupQuery(db));
   return own === null ? { kind: "all" } : { kind: "own", fromMs: own - OWN_SPAN_MS };
 }
 
