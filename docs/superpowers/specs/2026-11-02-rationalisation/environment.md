@@ -368,8 +368,8 @@ adding the runbook's two folder names, gives this table's 151 `WAITRON_*` names.
 | `WAITRON_BREAKGLASS_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_BREAKGLASS_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_RECOVERY_PASSPHRASE` | delete | (none) | Owner, 2026-11-04: it goes with the recovery bundle, read only by the `unpack` command (recovery-unpack-command.ts:58). What the bundle's removal reaches: §1. |
-| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only in the original proposal | ENV8 kept the startup fallback on 2026-11-23. See [Measure 1](#5-measure-or-test-before-building). |
-| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only in the original proposal | ENV8 kept the startup fallback on 2026-11-23. See [Measure 1](#5-measure-or-test-before-building). |
+| `WAITRON_NODE_RECOVERY_KEY` | keep | command or start input | The `restore` command reads the key. A staged restore can also use the startup key when the request carries no staged key. See the 2026-11-23 decision under [Measure 1](#5-measure-or-test-before-building). |
+| `WAITRON_RECOVERY_OPERATION_FILE` | keep | command or start input | The `restore` command reads the file. A staged restore can also use the startup file when the request carries no operation. See the 2026-11-23 decision under [Measure 1](#5-measure-or-test-before-building). |
 | `WAITRON_ADMIN_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_ADMIN_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_INITIAL_VENUE_INPUT` | keep | one-off command input | Read only by a command an operator runs by hand. |
