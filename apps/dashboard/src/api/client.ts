@@ -2039,7 +2039,6 @@ export interface ServerRow {
   needsResetStatement: boolean;
   /** This server has ordered the old main box to reset. */
   reset: null | "ordered";
-  /** Wipe and remove is offered for this old main box. */
   canReset: boolean;
   /**
    * Wipe and remove is offered for this old main box only as an order accepting that what it has
@@ -5427,7 +5426,6 @@ export class DashboardApi {
     );
   }
 
-  /** Orders the replaced old main box to reset; pressing again answers the standing order. */
   orderServerReset(
     nodeId: string,
     acceptLoss = false,
