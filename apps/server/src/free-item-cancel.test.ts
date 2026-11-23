@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments } from "@waitron/adjustments";
 import {
@@ -461,6 +461,63 @@ describe("a free item holding a share comes back with the last paid dish", () =>
       [dish(t, "Salad", 0).id, dish(t, "Salad", 1).id, soup.id].sort(),
     );
     await refused(t, () => cancel(t, soup, { withFree: [water.id] }), "not_listed");
+  });
+
+  it("brings the water back with a paid dish whose own filed share rounds to nothing", async () => {
+    await takeawayRates(venue, { Fish: "4.00" });
+    const t = await ticket([{ name: "Fish", quantity: "0.001" }, { name: "Water" }]);
+    const fish = dish(t, "Fish");
+    const water = dish(t, "Water");
+    // A gram of fish was paid €0.01; it filed €0.00 and the water €0.01.
+    expect(await consent(t, fish)).toMatchObject({
+      refundValue: { quantity: "0.001", gross: "0.00" },
+      withFree: [{ lineId: water.id, refundAmount: "0.01" }],
+    });
+    expect(await consent(t, water)).toMatchObject({ givenFree: true, comesBackWith: [fish.id] });
+    await refused(t, () => cancel(t, water), "free_item");
+
+    const answer = await cancel(t, fish, { quantity: "0.001", withFree: [water.id] });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect((await written(t)).cancels).toEqual([
+      { lineId: fish.id, refundValue: 0 },
+      { lineId: water.id, refundValue: 1 },
+    ]);
+  });
+
+  it("keeps the water from the salad while a paid soup whose value cannot be read stays", async () => {
+    await takeawayRates(venue, { Soup: "4.00" });
+    const t = await ticket([{ name: "Salad" }, { name: "Soup" }, { name: "Water" }]);
+    const salad = dish(t, "Salad");
+    const soup = dish(t, "Soup");
+    const water = dish(t, "Water");
+    await inTx(venue, async (tx) => {
+      // A stored extra no filed row stands for stands in for any paid dish the sale cannot value.
+      const name = "working_order_lines_require_open_parent_insert";
+      const [trigger] = tx.all<{ sql: string }>(
+        sql`select sql from sqlite_master where type = 'trigger' and name = ${name}`,
+      );
+      tx.run(sql.raw(`drop trigger ${name}`));
+      const [row] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, water.id));
+      await tx.insert(workingOrderLines).values({
+        ...row!,
+        id: randomUUID(),
+        lineNo: 99,
+        parentLineId: soup.id,
+        cohortId: null,
+        cohortOrdinal: null,
+        wholePortion: null,
+      });
+      tx.run(sql.raw(trigger!.sql));
+    });
+    expect(await consent(t, soup)).not.toHaveProperty("refundValue");
+
+    expect(await consent(t, salad)).not.toHaveProperty("withFree");
+    const answer = await consent(t, water);
+    expect([...(answer.comesBackWith as string[])].sort()).toEqual([salad.id, soup.id].sort());
+    await refused(t, () => cancel(t, salad, { withFree: [water.id] }), "not_listed");
   });
 
   it.each([

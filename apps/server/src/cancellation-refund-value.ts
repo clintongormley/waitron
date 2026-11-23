@@ -61,28 +61,33 @@ export function rowRefundValueIn(
   };
 }
 
-/** A dish line of a settled bill whose filed value is above €0, and its portions cancelled so far. */
-export interface ShareHolder {
+/** A paid dish line of a settled bill, and its portions cancelled so far. */
+export interface PaidDish {
   line: Stored;
-  value: Value;
   cancelled: number;
 }
 
-const NO_HOLDERS: { free: ShareHolder[]; paid: ShareHolder[] } = { free: [], paid: [] };
+/** A free item of a settled bill whose filed value is above €0. */
+export interface ShareHolder extends PaidDish {
+  value: Value;
+}
+
+const NO_HOLDERS: { free: ShareHolder[]; paid: PaidDish[] } = { free: [], paid: [] };
 
 const isFree = (line: Stored) =>
   line.parentLineId === null && line.lineTotal === 0 && (line.listUnitPriceGross ?? 0) > 0;
 
 /**
- * The bill's dish lines holding a share of what its sale filed (plan 2026-11-19 §4.3.1): free items,
- * charged €0 with a menu price above €0, and paid dishes, every other. Neither when no free item
- * holds a share.
+ * A settled bill's free items holding a share of what its sale filed (plan 2026-11-19 §4.3.1), each
+ * charged €0 with a menu price above €0 and filed above €0, and its paid dishes: every other dish
+ * line charged above €0 with its extras, whatever its filed share. Neither when no free item holds
+ * a share.
  */
 export async function readShareHolders(
   tx: Transaction,
   billId: string,
   saleId: string,
-): Promise<{ free: ShareHolder[]; paid: ShareHolder[] }> {
+): Promise<{ free: ShareHolder[]; paid: PaidDish[] }> {
   const stored = await readStored(tx, billId);
   if (!stored.some(isFree)) return NO_HOLDERS;
   return shareHoldersIn(tx, await readBillFiling(tx, billId, saleId, stored));
@@ -92,36 +97,39 @@ export async function readShareHolders(
 export async function shareHoldersIn(
   tx: Transaction,
   filing: BillFiling,
-): Promise<{ free: ShareHolder[]; paid: ShareHolder[] }> {
-  if (!filing.stored.some(isFree)) return NO_HOLDERS;
-  const dishes = filing.stored.filter((line) => line.parentLineId === null);
+): Promise<{ free: ShareHolder[]; paid: PaidDish[] }> {
+  const candidates = filing.stored.filter(isFree);
   const values = refundValues(
     filing,
-    dishes.map((dish) => dish.id),
+    candidates.map((line) => line.id),
   );
-  const holding = dishes.flatMap((line, i) => {
+  const holding = candidates.flatMap((line, i) => {
     const value = values[i];
     return value === undefined || isZeroDecimal(decimal(value.gross)) ? [] : [{ line, value }];
   });
-  if (!holding.some(({ line }) => isFree(line))) return NO_HOLDERS;
-  const cancelled = await readLineCancellations(
-    tx,
-    holding.map(({ line }) => line.id),
+  if (holding.length === 0) return NO_HOLDERS;
+  const charged = new Map<string, number>();
+  for (const line of filing.stored) {
+    const dish = line.parentLineId ?? line.id;
+    charged.set(dish, (charged.get(dish) ?? 0) + line.lineTotal);
+  }
+  const paid = filing.stored.filter(
+    (line) => line.parentLineId === null && !isFree(line) && charged.get(line.id)! > 0,
   );
-  const holders = holding.map((holder) => ({
-    ...holder,
-    cancelled: cancelled.get(holder.line.id) ?? 0,
-  }));
+  const cancelled = await readLineCancellations(tx, [
+    ...holding.map(({ line }) => line.id),
+    ...paid.map((line) => line.id),
+  ]);
   return {
-    free: holders.filter(({ line }) => isFree(line)),
-    paid: holders.filter(({ line }) => !isFree(line)),
+    free: holding.map((holder) => ({ ...holder, cancelled: cancelled.get(holder.line.id) ?? 0 })),
+    paid: paid.map((line) => ({ line, cancelled: cancelled.get(line.id) ?? 0 })),
   };
 }
 
 /** Whether cancelling `off` portions (thousandths, by line id) leaves no paid dish a portion that is
  * not cancelled; a served portion is not cancelled. */
 export function isLastPaidDish(
-  paid: readonly ShareHolder[],
+  paid: readonly PaidDish[],
   off: ReadonlyMap<string, number>,
 ): boolean {
   return (
@@ -132,7 +140,7 @@ export function isLastPaidDish(
 
 /** The paid dishes, with their unserved portions (thousandths), whose cancel with Refund ticked
  * makes the bill's last paid dish; none while a paid dish keeps a served portion. */
-export function lastPaidDishes(paid: readonly ShareHolder[]): Map<string, number> {
+export function lastPaidDishes(paid: readonly PaidDish[]): Map<string, number> {
   const off = new Map(
     paid.flatMap(({ line, cancelled }) => {
       const { remaining } = serviceQuantities(line.quantity, line.servedQuantity, cancelled);

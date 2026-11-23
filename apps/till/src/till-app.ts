@@ -20541,6 +20541,7 @@ export class TillApp extends LitElement {
     const budgets = new Map<string, ReturnType<typeof decimal>>();
     let refundAtTill = false;
     const consents = new Map<string, CancellationRead>();
+    const unvalued = new Map<string, FinishingTable["receipts"][number]>();
     try {
       for (const dish of observation.dishes) {
         const consent = await asked.api.getCancellation(asked.partyId, dish.lineId, {
@@ -20585,15 +20586,27 @@ export class TillApp extends LitElement {
         );
         const budget = budgets.get(consent.saleId)!;
         const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
-        if (compareDecimal(amount, decimal("0")) <= 0) continue;
-        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
-        budgets.set(consent.saleId, subtractDecimal(budget, amount));
-        receipts.push({
+        const receipt = {
           saleId: consent.saleId,
           workingOrderId: dish.billId,
           lineId: dish.lineId,
           label: this.#paymentBillLabel(dish.billId) ?? dish.name,
-        });
+        };
+        if (compareDecimal(gross, decimal("0")) === 0) unvalued.set(dish.lineId, receipt);
+        if (compareDecimal(amount, decimal("0")) <= 0) continue;
+        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
+        budgets.set(consent.saleId, subtractDecimal(budget, amount));
+        receipts.push(receipt);
+      }
+      // A paid dish whose own share is €0.00 still brings back a free item that gives money back.
+      for (const [lineId, consent] of consents) {
+        if (consent.givenFree !== true || refunds[lineId] === undefined) continue;
+        for (const paid of consent.comesBackWith ?? []) {
+          const receipt = unvalued.get(paid);
+          if (receipt === undefined || refunds[paid] !== undefined) continue;
+          refunds[paid] = toScale(decimal("0"), MONEY_SCALE);
+          receipts.push(receipt);
+        }
       }
       if (!current() || !this.#billCompositionUnchanged(asked)) return;
       this.finishingTable = {

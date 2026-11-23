@@ -808,6 +808,26 @@ it("sends no free items when Refund is unticked", async () => {
     { lineId: "dish-1", quantity: "3", outcome: "keep_charge", reasonId: "house", consent },
   ]);
 });
+it("offers Refund for a last paid dish worth €0.00 on its own when the free item coming back is worth more", async () => {
+  const consent: CancellationRead = {
+    ...withWater(),
+    refundValue: { quantity: "3.000", gross: "0.00" },
+    withFree: [{ lineId: "water-1", name: "Water", quantity: "1.000", refundAmount: "0.01" }],
+  };
+  const el = await mount({ consent, refundAvailable: true });
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(true);
+  expect(freeLine(el)).toBe("Comes back with it, given free: 1 × Water");
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €0.01");
+});
+it("offers no Refund tick for a dish worth €0.00 with no free item coming back", async () => {
+  const consent: CancellationRead = {
+    ...read("settled"),
+    saleId: "sale",
+    refundValue: { quantity: "3.000", gross: "0.00" },
+  };
+  const el = await mount({ consent, refundAvailable: true });
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+});
 it("offers no Refund tick for a dish given free", async () => {
   const consent: CancellationRead = { ...read("settled"), saleId: "sale", givenFree: true };
   const el = await mount({ consent, refundAvailable: true });

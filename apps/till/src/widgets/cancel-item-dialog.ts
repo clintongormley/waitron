@@ -204,6 +204,7 @@ export class TillCancelItemDialog extends LitElement {
       return this.#canRefund() && !this.#freeServed() ? ["keep_charge", "refund"] : ["keep_charge"];
     return this.#started() ? ["keep_charge", "remove_charge"] : ["remove_charge"];
   }
+  /** A last paid dish whose own share is €0.00 still gives back the free items that come with it. */
   #canRefund(): boolean {
     const value = this.consent?.refundValue;
     return (
@@ -211,7 +212,13 @@ export class TillCancelItemDialog extends LitElement {
       this.consent?.givenFree !== true &&
       value !== undefined &&
       compareDecimal(decimal(value.quantity), decimal("0")) > 0 &&
-      compareDecimal(decimal(value.gross), decimal("0")) > 0
+      compareDecimal(
+        sumDecimals([
+          decimal(value.gross),
+          ...(this.consent?.withFree ?? []).map((item) => decimal(item.refundAmount)),
+        ]),
+        decimal("0"),
+      ) > 0
     );
   }
   #defaultOutcome(): Outcome | null {

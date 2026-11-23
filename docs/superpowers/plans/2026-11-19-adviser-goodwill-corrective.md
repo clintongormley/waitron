@@ -440,7 +440,10 @@ come back together.
   €0 — the Given free sheet's test (`free-items.ts:137-139`) — whose filed value
   (`byPosition` or `byPortion`, `cancellation-refund-value.ts:89-152`) is above €0. Only a ticket
   A445 shared has one: before it, such a line files €0 (section 3, finding section 1);
-- a **paid dish** is any other dish line whose filed value is above €0;
+- a **paid dish** is any other dish line charged above €0, its extras included, whatever its filed
+  share: one whose share rounds to €0.00, or whose filed value cannot be read, still has to come
+  back before the free item can, and its window (and Finish table) offers Refund while the free
+  items coming back with it give money back (A445 review);
 - the **last paid dish** is a cancel with Refund ticked after which no paid dish of the bill has a
   portion that is not cancelled. A served portion counts as not cancelled: after payment only
   unserved portions can be cancelled (`availableOf`, `apps/server/src/line-cancel.ts:210-213`).

@@ -725,6 +725,30 @@ it("says on a free item's row whether it gives money back, in English and Spanis
   await click(el, '[data-dish="croquetas"] input[name=refund]');
   expect(line()).toBe(es["finish_table.free_refunded"]);
 });
+it("ticks a paid dish worth €0.00 on its own whose free item gives money back, and sends both", async () => {
+  const el = await mountFree({
+    dishes: [water(), salad()],
+    refunds: { flan: "0.00", water: "0.01" },
+    freeItems: { water: ["flan"] },
+  });
+  await reason(el);
+  expect(
+    root(el).querySelector<HTMLInputElement>('[data-dish="flan"] input[name=refund]')!.checked,
+  ).toBe(true);
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €0.01");
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBe(true);
+  expect(refundOf(calls, "flan")).toBe(true);
+});
+it("gives a paid dish worth €0.00 no tick when its free item gives no money back", async () => {
+  const el = await mountFree({
+    dishes: [water(), salad()],
+    refunds: { flan: "0.00" },
+    freeItems: { water: ["flan"] },
+  });
+  expect(root(el).querySelector('[data-dish="flan"] input[name=refund]')).toBeNull();
+});
 it("sends a free item's Refund when the money left gave it no amount of its own", async () => {
   const el = await mountFree({
     refunds: { flan: "7.00" },

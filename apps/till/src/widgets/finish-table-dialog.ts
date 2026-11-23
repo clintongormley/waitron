@@ -135,8 +135,17 @@ export class TillFinishTableDialog extends LitElement {
       dish.context.components.some((item) => item.firedAt !== null)
     );
   }
+  /** A paid dish whose own refund is €0.00 can still bring back a free item that gives money back. */
   #canRefund(dish: UnservedDish): boolean {
-    return compareDecimal(decimal(this.refunds[dish.lineId] ?? "0"), decimal("0")) > 0;
+    const above = (lineId: string) =>
+      compareDecimal(decimal(this.refunds[lineId] ?? "0"), decimal("0")) > 0;
+    return (
+      above(dish.lineId) ||
+      (this.refunds[dish.lineId] !== undefined &&
+        Object.entries(this.freeItems).some(
+          ([free, paid]) => paid.includes(dish.lineId) && above(free),
+        ))
+    );
   }
   #isFree(lineId: string): boolean {
     return Object.hasOwn(this.freeItems, lineId);
