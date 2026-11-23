@@ -75,7 +75,7 @@ it("does not expose clock selection until the final copy is actually placed", as
   });
   try {
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("Preparing the final copy"),
+      expect(el.shadowRoot!.textContent).toContain("Getting the latest copy from the main box"),
     );
     expect(el.shadowRoot!.querySelector('[name="handover-password"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("vf-recovery-hour")).toBeNull();

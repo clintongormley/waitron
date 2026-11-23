@@ -16,7 +16,14 @@ import {
   startAuthentication,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { baseStyles, pageTitleStyles, focusFirstInvalid } from "@waitron/ui";
+import {
+  baseStyles,
+  pageTitleStyles,
+  focusFirstInvalid,
+  formMessage,
+  formMessageStyles,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 import { formatDuration } from "@waitron/shared";
 import {
   SetupApi,
@@ -74,6 +81,7 @@ export class SetupHandoverScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    formMessageStyles,
     css`
       /* Keeps the card's margins inside the page rather than collapsing into the body's. */
       :host {
@@ -150,6 +158,51 @@ export class SetupHandoverScreen extends LitElement {
       h2 {
         font-size: var(--wt-font-size-lg);
       }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
+      ol.progress {
+        list-style: none;
+        padding: 0;
+        margin-block: var(--wt-space-4);
+      }
+      ol.progress li {
+        display: flex;
+        align-items: start;
+        gap: var(--wt-space-3);
+        margin-block: var(--wt-space-3);
+      }
+      ol.progress .mark {
+        display: inline-flex;
+        justify-content: center;
+        flex: none;
+        inline-size: var(--wt-space-4);
+      }
+      li[data-state="done"] .mark {
+        color: var(--wt-color-success);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      li[data-state="waiting"] {
+        color: var(--wt-color-text-muted);
+      }
+      .fact {
+        margin-block: var(--wt-space-4);
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-lifted);
+      }
+      .fact h2 {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .fact p {
+        margin: 0;
+      }
+      .fact strong {
+        display: block;
+      }
+      .note {
+        color: var(--wt-color-text-muted);
+      }
       a,
       summary {
         color: var(--wt-color-primary-text);
@@ -162,8 +215,17 @@ export class SetupHandoverScreen extends LitElement {
   /** Read once: the page later replaces its address with the operation's. */
   @property({ attribute: false }) pageUrl = location.href;
   @state() private copyPreview?: EmergencyHandoverPreview;
-  /** A checked copy folds the sign-in and backup choice away; later steps still send the sign-in. */
+  /** A controlled handover the last check named; kept while that copy is checked again. */
+  @state() private controlledOperationId?: string;
+  /** A checked copy folds the sign-in away; later steps still send the sign-in. */
   @state() private signInOpen = true;
+  /** Before a switch is declared: Continue was pressed, so the copy is being prepared. */
+  @state() private preparing = false;
+  /** Which step of preparing the copy the page is on; checking follows bringing it up to date. */
+  @state() private copyStep: "follow" | "check" = "follow";
+  /** Proceed was pressed on the prepared copy, so the statements are asked. */
+  @state() private proceeded = false;
+  @state() private backupOpen = false;
   @state() private backup?: File;
   @state() private backupKey = "";
   @state() private needsBackupKey = false;
@@ -234,19 +296,19 @@ export class SetupHandoverScreen extends LitElement {
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
   }
-  /** Whether the backup choice is drawn with the sign-in: no other copy can be chosen otherwise. */
   get #offersOtherCopy(): boolean {
-    return this.#isEmergency && !this.#declared && !this.copyPreview?.operation;
+    return this.#isEmergency && !this.#declared && this.controlledOperationId === undefined;
   }
-  /** The button that opened it is gone, so focus moves to the first field it reveals. */
-  async #openSignIn(): Promise<void> {
-    this.signInOpen = true;
+  /** The pressed button is gone with the page it was on, so focus moves to the new heading. */
+  async #focusHeading(still: () => boolean = () => true): Promise<void> {
     await this.updateComplete;
-    const root = this.shadowRoot!;
-    (
-      root.querySelector<HTMLElement>('[name="handover-email"]') ??
-      root.querySelector<HTMLElement>('[name="handover-sign-in-method"]')
-    )?.focus();
+    if (still()) this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus();
+  }
+  /** The page before Switch: sign-in, the copy being prepared, or the statements. */
+  get #page(): "sign-in" | "preparing" | "ready" | undefined {
+    if (!this.#isEmergency || this.#declared) return undefined;
+    if (!this.preparing) return "sign-in";
+    return this.copyPreview && this.proceeded ? "ready" : "preparing";
   }
   get #signInShown(): boolean {
     return !this.copyPreview || this.signInOpen || (this.attempted && !this.#valid());
@@ -326,7 +388,8 @@ export class SetupHandoverScreen extends LitElement {
     this.following = this.heldOffered = this.heldWaiting = this.heldChosen = false;
     this.heldCopy = undefined;
     this.#signInChecked = false;
-    this.copyPreview = undefined;
+    this.copyPreview = this.controlledOperationId = undefined;
+    this.preparing = this.proceeded = this.backupOpen = false;
     this.declarationSaved = false;
     this.declaredAtMs = undefined;
     this.reason = "";
@@ -380,8 +443,7 @@ export class SetupHandoverScreen extends LitElement {
   async #startSwitching(): Promise<void> {
     this.switchStarted = true;
     this.#stopSilentTicker();
-    await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus();
+    await this.#focusHeading();
   }
   /**
    * True when the main server stayed silent and no later check, or leaving the page, replaced this
@@ -408,10 +470,7 @@ export class SetupHandoverScreen extends LitElement {
     const changesPage = this.mainCheck === "checking" || serversUrl !== undefined;
     this.mainCheck = serversUrl === undefined ? "clear" : { serversUrl };
     if (changesPage)
-      void this.updateComplete.then(() => {
-        if (this.isConnected && this.#mainCheckController === controller)
-          this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus();
-      });
+      void this.#focusHeading(() => this.isConnected && this.#mainCheckController === controller);
     return serversUrl === undefined;
   }
   /** The main server's Servers page when it answers; never rejects. */
@@ -449,9 +508,7 @@ export class SetupHandoverScreen extends LitElement {
           variant="secondary"
           @click=${() => {
             this.#startMainCheck();
-            void this.updateComplete.then(() =>
-              this.shadowRoot!.querySelector<HTMLElement>("h1")?.focus(),
-            );
+            void this.#focusHeading();
           }}
           >${t("handover.emergency.main_check_again")}</wt-button
         >
@@ -475,13 +532,19 @@ export class SetupHandoverScreen extends LitElement {
           @click=${() => void this.#startSwitching()}
           >${t("handover.emergency.start")}</wt-button
         >
-        <a class="button" data-test="go-back" href=${this.#leaveHref}>${t(this.#leaveLabel)}</a>
+        ${this.#goBackButton()}
       </div>`;
   }
   get #heading(): StringKey {
-    if (this.restarting || activated(this.status) || closed(this.status)) return "handover.heading";
+    const page = this.#page;
+    if ((this.restarting && page !== "preparing") || activated(this.status) || closed(this.status))
+      return "handover.heading";
     if (this.mainCheck === "checking") return "handover.emergency.checking_heading";
     if (this.mainCheck !== "clear") return "handover.emergency.main_answering";
+    if (page === "preparing") return "handover.emergency.preparing_heading";
+    if (page === "ready") return "handover.emergency.ready_heading";
+    if (this.status?.scenario === "emergency" && !this.copyPreview)
+      return "handover.emergency.switching_heading";
     return this.#explaining ? "handover.emergency.silent_heading" : "handover.heading";
   }
   #resetSelection(): void {
@@ -684,7 +747,10 @@ export class SetupHandoverScreen extends LitElement {
       "handover.copy_mismatch",
     ].includes(code ?? "");
     const key = this.#refusalKey(code, error, cause);
-    if (SIGN_IN_REFUSAL_KEYS.has(key)) this.signInOpen = true;
+    if (SIGN_IN_REFUSAL_KEYS.has(key)) {
+      this.signInOpen = true;
+      if (!this.copyPreview) this.preparing = false;
+    }
     return t(key);
   }
   #refusalKey(
@@ -773,6 +839,8 @@ export class SetupHandoverScreen extends LitElement {
   }
   async #showPreview(preview: EmergencyHandoverPreview): Promise<boolean> {
     this.copyPreview = preview;
+    this.controlledOperationId =
+      preview.operation?.reason === null ? preview.operation.operationId : undefined;
     this.signInOpen = false;
     this.#signInChecked = true;
     this.copyRefused = false;
@@ -795,6 +863,12 @@ export class SetupHandoverScreen extends LitElement {
     this.busy = true;
     this.actionError = "";
     this.heldOffered = this.heldChosen = false;
+    if (!this.preparing && !this.#declared) {
+      this.preparing = true;
+      void this.#focusHeading();
+    }
+    this.copyStep = "follow";
+    this.proceeded = false;
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
       let preview: EmergencyHandoverPreview | undefined;
@@ -839,6 +913,7 @@ export class SetupHandoverScreen extends LitElement {
         if (!unlock && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
           this.signInOpen = true;
+          this.preparing = false;
         }
       } else {
         this.actionError = t(refusal);
@@ -854,11 +929,15 @@ export class SetupHandoverScreen extends LitElement {
     }
     clearTimeout(this.#heldTimer);
     this.following = this.heldOffered = false;
+    this.copyStep = "check";
     if (answer.state === "taken") {
+      this.busy = true;
       try {
         await this.#readPreview();
       } catch (cause) {
         if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
+      } finally {
+        if (!controller.signal.aborted) this.busy = false;
       }
       return;
     }
@@ -887,8 +966,11 @@ export class SetupHandoverScreen extends LitElement {
       this.heldWaiting = false;
       // A refusal of the passkey path's sign-in leaves the take's explanation in place.
       if (this.usePasskey && PROOF_REFUSALS.has(String((cause as { code: unknown }).code))) {
-        if (this.heldCopy === undefined)
+        if (this.heldCopy === undefined) {
           this.actionError = `${this.actionError} ${t("handover.emergency.held_passkey_refused")}`;
+          this.signInOpen = true;
+          this.preparing = false;
+        }
         return;
       }
       this.actionError = this.#emergencyError(cause);
@@ -899,10 +981,11 @@ export class SetupHandoverScreen extends LitElement {
     this.following = this.heldWaiting = false;
   }
   async #useHeldCopy(): Promise<void> {
-    if (this.busy || !this.#valid()) return;
+    if (this.busy) return;
     this.#restartPolling();
     this.following = this.heldOffered = false;
     this.heldChosen = this.busy = true;
+    this.copyStep = "check";
     this.actionError = "";
     await this.#readHeldCopy(this.#controller!, true);
   }
@@ -926,14 +1009,19 @@ export class SetupHandoverScreen extends LitElement {
   }
   async #waitForPlaced(controller: AbortController): Promise<void> {
     try {
-      await this.#readPreview(false);
+      const preview = await this.#step(
+        (signIn) => this.api.previewEmergencyHandover(signIn),
+        false,
+      );
       if (controller.signal.aborted) return;
+      // Until the restart places the copy, the old process may still answer with the one it held.
       if (
-        this.copyPreview?.copy.source !==
-        (this.followRestarting ? "followed-copy" : "selected-backup")
+        preview.operation?.reason == null &&
+        preview.copy.source !== (this.followRestarting ? "followed-copy" : "selected-backup")
       )
         throw new TypeError("copy not placed");
       this.backupRestarting = this.followRestarting = this.restarting = this.busy = false;
+      await this.#showPreview(preview);
     } catch (cause) {
       if (controller.signal.aborted) return;
       const code = (cause as { code?: string }).code;
@@ -959,6 +1047,8 @@ export class SetupHandoverScreen extends LitElement {
       this.backup = undefined;
       this.backupKey = "";
       this.copyPreview = undefined;
+      this.copyStep = "check";
+      this.backupOpen = this.proceeded = false;
       this.#pendingDeclaration = undefined;
       this.statements = {
         sourceSwitchedOff: false,
@@ -987,6 +1077,9 @@ export class SetupHandoverScreen extends LitElement {
     if (this.busy || !this.#validDeclaration() || this.copyRefused) return;
     this.busy = true;
     this.actionError = "";
+    // A copy refusal the switch request itself answered saved nothing; one from a check of the copy
+    // afterwards may be of a switch already saved, so it never sends the person back to choose a copy.
+    let switchRefused = false;
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
       if (this.#pendingDeclaration && (await this.#readPreview())) {
@@ -1007,7 +1100,10 @@ export class SetupHandoverScreen extends LitElement {
       const declaration = this.#pendingDeclaration;
       const answer = await this.#step((signIn) =>
         this.api.declareEmergencyHandover({ ...declaration, signIn }),
-      );
+      ).catch((cause: unknown) => {
+        switchRefused = typeof (cause as { code?: unknown } | null)?.code === "string";
+        throw cause;
+      });
       this.declaredAtMs = answer.declaration.body.declaredAtMs;
       this.signInOpen = false;
       await this.#resume(this.#pendingDeclaration.operationId);
@@ -1018,14 +1114,9 @@ export class SetupHandoverScreen extends LitElement {
         cause !== null &&
         "code" in cause &&
         cause.code === "handover.copy_mismatch" &&
-        !this.#declared
+        switchRefused
       ) {
-        this.#pendingDeclaration = undefined;
-        this.statements = {
-          sourceSwitchedOff: false,
-          noParallelRecovery: false,
-          missingTailAccepted: false,
-        };
+        this.#backToPreparing();
         try {
           await this.#readPreview();
           this.actionError = t("handover.emergency.copy_changed");
@@ -1045,9 +1136,25 @@ export class SetupHandoverScreen extends LitElement {
         }
       }
       if (!this.actionError) this.actionError = this.#emergencyError(cause);
+      if (this.copyRefused && this.#offersOtherCopy) {
+        if (switchRefused) this.#backToPreparing();
+        else this.actionError = t("handover.emergency.copy_unchecked_only");
+      }
     } finally {
       this.busy = false;
     }
+  }
+  /** The copy is to be checked again, or replaced, so its facts and the statements are asked anew. */
+  #backToPreparing(): void {
+    this.copyPreview = undefined;
+    this.#pendingDeclaration = undefined;
+    this.statements = {
+      sourceSwitchedOff: false,
+      noParallelRecovery: false,
+      missingTailAccepted: false,
+    };
+    this.proceeded = false;
+    void this.#focusHeading();
   }
   #joinedLine(preview: EmergencyHandoverPreview) {
     return html`<p>
@@ -1076,76 +1183,34 @@ export class SetupHandoverScreen extends LitElement {
   }
   #activityLine(date: number | null) {
     return html`<p>
-      ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
+      ${date === null ? t("handover.emergency.no_date") : html`<strong>${t("handover.emergency.latest_activity")}</strong> ${new Date(date).toLocaleString(currentLocale())}`}
     </p>`;
   }
-  #followContent() {
-    if (this.copyPreview) return nothing;
-    const held = this.heldOffered ? this.heldCopy : undefined;
-    return html`${this.following ? html`<p role="status">${t("handover.emergency.catching_up")}</p>` : nothing}
-    ${this.heldWaiting ? html`<p role="status">${t("handover.emergency.held_waiting")}</p>` : nothing}
-    ${this.following && held ? html`<p>${t("handover.emergency.still_catching_up")}</p>` : nothing}
-    ${held ? html`<section data-test="held-copy">${this.#copyLines(held)}</section>` : nothing}`;
+  #copyHeading(preview: EmergencyHandoverPreview): StringKey {
+    return preview.copy.source === "selected-backup"
+      ? "handover.emergency.selected_backup"
+      : preview.copy.source === "followed-copy" && !this.heldChosen
+        ? "handover.emergency.followed"
+        : "handover.emergency.copy";
   }
+  /** After Switch: the switch is saved, and what was declared folds behind Details. */
   #emergencyContent() {
     const preview = this.copyPreview;
     if (!preview) return nothing;
     const declaredAt = this.declaredAtMs ?? preview.operation?.declaredAtMs;
-    const about = html`${this.#copyLines(preview)}
-      <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>`;
-    return html`<section data-test="emergency-copy" data-wording-version="a1018-emergency-v1">
-      <h2>
-        ${t(preview.copy.source === "selected-backup" ? "handover.emergency.selected_backup" : preview.copy.source === "followed-copy" && !this.heldChosen ? "handover.emergency.followed" : "handover.emergency.copy")}
-      </h2>
-      ${
-        this.#declared
-          ? html`<p>${t("handover.emergency.saved")}</p>
-              <details data-test="emergency-details">
-                <summary>${t("handover.emergency.details")}</summary>
-                ${about}
-                <p>${this.reason}</p>
-                ${declaredAt ? html`<p>${t("handover.emergency.declared_at")} ${new Date(declaredAt).toLocaleString(currentLocale())}</p>` : nothing}
-              </details>`
-          : html`${about}
-              ${preview.operation ? html`<p><a href=${`/handover/${encodeURIComponent(preview.operation.operationId)}`}>${t("handover.emergency.controlled_link")}</a></p>` : nothing}
-              <p>${t("handover.emergency.warning")}</p>
-              <div class="statements">
-                ${(["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
-                  (key) =>
-                    html`<label
-                      ><input
-                        type="checkbox"
-                        name=${key}
-                        required
-                        .checked=${this.statements[key]}
-                        ?disabled=${this.busy || !!this.#pendingDeclaration}
-                        @change=${(event: Event) => {
-                          this.statements = {
-                            ...this.statements,
-                            [key]: (event.currentTarget as HTMLInputElement).checked,
-                          };
-                        }}
-                      /><span
-                        >${t(`handover.emergency.${key}`)} <span aria-hidden="true">*</span></span
-                      ></label
-                    >`,
-                )}
-              </div>
-              <wt-textarea
-                name="emergency-reason"
-                label=${t("handover.emergency.reason")}
-                required
-                .value=${this.reason}
-                ?disabled=${this.busy || !!this.#pendingDeclaration}
-                .error=${this.reason.length > 500 ? t("handover.emergency.reason_long") : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  this.reason = event.detail.value;
-                }}
-              ></wt-textarea>`
-      }
+    return html`<section data-test="emergency-copy">
+      <h2>${t(this.#copyHeading(preview))}</h2>
+      <p>${t("handover.emergency.saved")}</p>
+      <details data-test="emergency-details">
+        <summary>${t("handover.emergency.details")}</summary>
+        ${this.#copyLines(preview)}
+        <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>
+        <p>${this.reason}</p>
+        ${declaredAt ? html`<p>${t("handover.emergency.declared_at")} ${new Date(declaredAt).toLocaleString(currentLocale())}</p>` : nothing}
+      </details>
     </section>`;
   }
-  #fields() {
+  #signInFields() {
     const field = (
       name: "email" | "password" | "code",
       key: "handover.email" | "handover.password" | "handover.code",
@@ -1168,8 +1233,9 @@ export class SetupHandoverScreen extends LitElement {
           if (name === "email") this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) {
             this.password = this.code = "";
-            this.copyPreview = this.heldCopy = undefined;
+            this.copyPreview = this.heldCopy = this.controlledOperationId = undefined;
             this.heldOffered = this.following = this.heldWaiting = this.heldChosen = false;
+            this.preparing = this.proceeded = false;
             this.declarationSaved = false;
             this.declaredAtMs = undefined;
             this.reason = "";
@@ -1186,7 +1252,7 @@ export class SetupHandoverScreen extends LitElement {
         }}
       ></wt-input>`;
     const passkey = this.usePasskey;
-    const signIn = html`<p>
+    return html`<p>
         ${t(passkey ? "handover.emergency.sign_in_passkey" : this.#isEmergency ? "handover.emergency.sign_in" : "handover.sign_in")}
       </p>
       ${
@@ -1209,59 +1275,277 @@ export class SetupHandoverScreen extends LitElement {
             ></wt-segmented-control>`
           : nothing
       }
-      ${passkey ? nothing : html`${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`}
+      ${passkey ? nothing : html`${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`}`;
+  }
+  get #formError(): string {
+    return this.actionError
+      ? this.actionError
+      : this.reason.length > 500 || (this.attempted && !this.#valid())
+        ? t("handover.fix")
+        : "";
+  }
+  /** Continue: on the sign-in before a switch, and on a page reopened on an unfinished one. */
+  #continueButton() {
+    return html`<wt-button
+      data-test="emergency-preview"
+      .disabled=${this.busy || this.following || this.heldWaiting || !this.#valid()}
+      variant=${this.#valid() && !this.following && !this.heldWaiting ? "primary" : "secondary"}
+      @click=${() => void this.#previewCopy()}
+      >${t("handover.emergency.continue")}</wt-button
+    >`;
+  }
+  #links() {
+    return html`<p>
+      ${this.refusalLink ? html`<a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a>` : nothing}
+      ${this.#leaveLink()}
+    </p>`;
+  }
+  #refusalLink() {
+    return this.refusalLink
+      ? html`<p><a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a></p>`
+      : nothing;
+  }
+  #signInPage() {
+    return html`${this.#signInFields()}
+      <wt-form-actions .error=${this.#formError}>${this.#continueButton()}</wt-form-actions>
+      ${this.#links()}`;
+  }
+  #progressRow(name: "follow" | "check", label: StringKey, state: "done" | "working" | "waiting") {
+    return html`<li data-test=${`step-${name}`} data-state=${state}>
+      <span class="mark" aria-hidden="true"
+        >${state === "done" ? "✓" : state === "working" ? html`<wt-spinner decorative size="sm"></wt-spinner>` : "–"}</span
+      ><span
+        ><span class="visually-hidden">${t(`handover.emergency.step_${state}`)} </span
+        ><span class="label">${t(label)}</span></span
+      >
+    </li>`;
+  }
+  /** Preparing the venue: brings the copy up to date and checks it; then offers it, or a backup instead. */
+  #preparingPage() {
+    const preview = this.copyPreview;
+    const working =
+      this.busy || this.following || this.heldWaiting || this.restarting || this.backupRestarting;
+    const followed = preview
+      ? preview.copy.source === "followed-copy" && !this.heldChosen
+      : !this.heldChosen && !this.backupRestarting;
+    const followState =
+      preview || this.copyStep === "check" ? "done" : working ? "working" : "waiting";
+    const checkState = preview
+      ? "done"
+      : working && this.copyStep === "check"
+        ? "working"
+        : "waiting";
+    const held = !preview && this.heldOffered ? this.heldCopy : undefined;
+    const refused = !preview && !working && this.actionError !== "";
+    const backupOffered =
+      this.#offersOtherCopy && !this.backupOpen && !this.busy && !this.restarting;
+    return html`<div role="status">
+        <ol class="progress">
+          ${followed ? this.#progressRow("follow", "handover.emergency.step_follow", followState) : nothing}
+          ${this.#progressRow("check", "handover.emergency.step_check", checkState)}
+        </ol>
+      </div>
       ${
-        this.#offersOtherCopy
-          ? html`
-              <p>${t("handover.emergency.backup_intro")}</p>
-              <wt-file-input
-                name="handover-backup"
-                label=${t("handover.emergency.backup_file")}
-                .files=${this.backup ? [this.backup] : []}
-                .copy=${fileInputCopy()}
-                .locale=${currentLocale()}
-                ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
-                  event.stopPropagation();
-                  this.backup = event.detail.files[0];
+        this.restarting
+          ? html`<p role="status">
+              ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : "handover.emergency.followed_restarting")}
+            </p>`
+          : nothing
+      }
+      ${this.heldWaiting ? html`<p role="status">${t("handover.emergency.held_waiting")}</p>` : nothing}
+      ${
+        held
+          ? html`<section data-test="held-copy">
+              ${this.following ? html`<p>${t("handover.emergency.still_catching_up")}</p>` : nothing}
+              ${this.#copyLines(held)}
+            </section>`
+          : nothing
+      }
+      ${
+        preview
+          ? html`<section class="fact" data-test="emergency-copy">
+              <h2>${t(this.#copyHeading(preview))}</h2>
+              ${preview.copy.source === "mirror-copy" ? this.#joinedLine(preview) : nothing}
+              ${this.#activityLine(preview.copy.lastChangeAtMs)}
+            </section>`
+          : nothing
+      }
+      ${this.#controlledLink()} ${preview && this.signInOpen ? this.#signInFields() : nothing}
+      ${this.backupOpen ? this.#backupFields() : nothing} ${formMessage(this.#formError)}
+      <div class="choices">
+        ${
+          this.backup
+            ? html`<wt-button
+                data-test="emergency-backup"
+                .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)}
+                variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"}
+                @click=${() => void this.#selectBackup()}
+                >${t("handover.emergency.use_backup")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          held
+            ? html`<wt-button
+                data-test="emergency-held"
+                .disabled=${this.busy}
+                variant=${this.backup ? "secondary" : "primary"}
+                @click=${() => void this.#useHeldCopy()}
+                >${t("handover.emergency.use_held")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          preview
+            ? html`<wt-button
+                data-test="proceed"
+                .disabled=${working || this.copyRefused}
+                variant=${working || this.backup || this.copyRefused ? "secondary" : "primary"}
+                @click=${() => {
+                  this.proceeded = true;
                   this.actionError = "";
+                  void this.#focusHeading();
                 }}
-              ></wt-file-input>
-              ${
-                this.needsBackupKey
-                  ? html`<wt-input
-                      name="handover-backup-key"
-                      type="password"
-                      label=${t("handover.emergency.backup_key")}
-                      required
-                      .value=${this.backupKey}
-                      ?disabled=${this.busy}
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                        this.backupKey = event.detail.value;
-                        this.actionError = "";
-                      }}
-                    ></wt-input>`
-                  : nothing
-              }
-            `
+                >${t("handover.emergency.proceed")}</wt-button
+              >`
+            : refused
+              ? html`<wt-button
+                  data-test="emergency-preview"
+                  .disabled=${!this.#valid()}
+                  variant=${this.#valid() && !this.backup && !held ? "primary" : "secondary"}
+                  @click=${() => void this.#previewCopy()}
+                  >${t("handover.try_again")}</wt-button
+                >`
+              : nothing
+        }
+        ${this.#goBackButton()}
+      </div>
+      ${
+        backupOffered
+          ? html`<p>
+              <wt-button
+                variant="link"
+                data-test="upload-backup"
+                @click=${async () => {
+                  this.backupOpen = true;
+                  await this.updateComplete;
+                  this.shadowRoot!.querySelector<HTMLElement>('[name="handover-backup"]')?.focus();
+                }}
+                >${t("handover.emergency.upload_backup")}</wt-button
+              >
+            </p>`
+          : nothing
+      }
+      <p class="note">${t("handover.emergency.keep_open")}</p>
+      ${this.#refusalLink()}`;
+  }
+  #backupFields() {
+    return html`<p>${t("handover.emergency.backup_intro")}</p>
+      <wt-file-input
+        name="handover-backup"
+        label=${t("handover.emergency.backup_file")}
+        .files=${this.backup ? [this.backup] : []}
+        .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
+        ?disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+          event.stopPropagation();
+          this.backup = event.detail.files[0];
+          this.actionError = "";
+        }}
+      ></wt-file-input>
+      ${
+        this.needsBackupKey
+          ? html`<wt-input
+              name="handover-backup-key"
+              type="password"
+              label=${t("handover.emergency.backup_key")}
+              required
+              .value=${this.backupKey}
+              ?disabled=${this.busy}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                this.backupKey = event.detail.value;
+                this.actionError = "";
+              }}
+            ></wt-input>`
           : nothing
       }`;
-    return html`${
-        this.#signInShown
-          ? signIn
-          : this.#offersOtherCopy
-            ? html`<p>
-                <wt-button
-                  variant="ghost"
-                  data-test="different-copy"
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#openSignIn()}
-                  >${t("handover.emergency.different_copy")}</wt-button
-                >
-              </p>`
-            : nothing
-      }
-      ${this.#isEmergency ? html`${this.#followContent()}${this.#emergencyContent()}` : nothing}
+  }
+  #controlledLink() {
+    const operationId = this.controlledOperationId;
+    return operationId === undefined
+      ? nothing
+      : html`<p>
+          <a href=${`/handover/${encodeURIComponent(operationId)}`}
+            >${t("handover.emergency.controlled_link")}</a
+          >
+        </p>`;
+  }
+  #goBackButton() {
+    return html`<a class="button" data-test="go-back" href=${this.#leaveHref}
+      >${t(this.#leaveLabel)}</a
+    >`;
+  }
+  /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
+  #readyPage() {
+    return html`<section data-test="emergency-ready" data-wording-version="a1018-emergency-v2">
+        ${this.#signInShown ? this.#signInFields() : nothing} ${this.#controlledLink()}
+        <div class="statements">
+          ${(["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
+            (key) =>
+              html`<label
+                ><input
+                  type="checkbox"
+                  name=${key}
+                  required
+                  .checked=${this.statements[key]}
+                  ?disabled=${this.busy || !!this.#pendingDeclaration}
+                  @change=${(event: Event) => {
+                    this.statements = {
+                      ...this.statements,
+                      [key]: (event.currentTarget as HTMLInputElement).checked,
+                    };
+                  }}
+                /><span
+                  >${t(`handover.emergency.${key}`)} <span aria-hidden="true">*</span></span
+                ></label
+              >`,
+          )}
+        </div>
+        <wt-textarea
+          name="emergency-reason"
+          label=${t("handover.emergency.reason")}
+          required
+          .value=${this.reason}
+          ?disabled=${this.busy || !!this.#pendingDeclaration}
+          .error=${this.reason.length > 500 ? t("handover.emergency.reason_long") : ""}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.reason = event.detail.value;
+          }}
+        ></wt-textarea>
+      </section>
+      ${formMessage(this.#formError)}
+      <div class="choices">
+        <wt-button
+          data-test="emergency-declare"
+          .disabled=${this.busy || !this.#validDeclaration() || this.copyRefused}
+          variant=${this.#validDeclaration() && !this.copyRefused ? "danger" : "secondary"}
+          @click=${() => void this.#declareEmergency()}
+          >${t("handover.emergency.declare")}</wt-button
+        >
+        ${this.#goBackButton()}
+      </div>
+      ${this.#refusalLink()}`;
+  }
+  #fields() {
+    const page = this.#page;
+    if (page === "sign-in") return this.#signInPage();
+    if (page === "preparing") return this.#preparingPage();
+    if (page === "ready") return this.#readyPage();
+    const reopened = this.#isEmergency && !this.copyPreview;
+    return html`${reopened ? html`<p>${t("handover.emergency.switching_body")}</p>` : nothing}
+      ${this.#signInShown ? this.#signInFields() : nothing}
+      ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
           ? html`<p>${t("handover.zone")}</p>
@@ -1269,58 +1553,31 @@ export class SetupHandoverScreen extends LitElement {
               ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
           : nothing
       }
-      <wt-form-actions
-        .error=${this.actionError ? this.actionError : this.reason.length > 500 || (this.attempted && !this.#valid()) ? t("handover.fix") : ""}
-      >
-        ${this.backup && !this.#declared ? html`<wt-button data-test="emergency-backup" .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)} variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"} @click=${() => void this.#selectBackup()}>${t("handover.emergency.use_backup")}</wt-button>` : nothing}
+      <wt-form-actions .error=${this.#formError}>
         ${
-          this.#isEmergency && !this.copyPreview
-            ? html`${
-                  this.heldOffered && this.heldCopy
-                    ? html`<wt-button
-                        data-test="emergency-held"
-                        .disabled=${this.busy || !this.#valid()}
-                        variant=${this.#valid() ? "primary" : "secondary"}
-                        @click=${() => void this.#useHeldCopy()}
-                        >${t("handover.emergency.use_held")}</wt-button
-                      >`
-                    : nothing
-                }<wt-button
-                  data-test="emergency-preview"
-                  .disabled=${this.busy || this.following || this.heldWaiting || !this.#valid()}
-                  variant=${this.#valid() && !this.following && !this.heldWaiting && !this.heldOffered ? "primary" : "secondary"}
-                  @click=${() => void this.#previewCopy()}
-                  >${t("handover.emergency.check")}</wt-button
-                >`
-            : this.#isEmergency && !this.#declared
-              ? html`<wt-button
-                  data-test="emergency-declare"
-                  .disabled=${this.busy || !this.#validDeclaration() || this.copyRefused}
-                  variant=${this.#validDeclaration() && !this.copyRefused ? "danger" : "secondary"}
-                  @click=${() => void this.#declareEmergency()}
-                  >${t("handover.emergency.declare")}</wt-button
-                >`
-              : this.entry
-                ? this.activationHeld || this.retrying
-                  ? html`<wt-button
-                      data-test="retry-activation"
-                      .disabled=${!this.busy && !this.#valid()}
-                      ?loading=${this.busy}
-                      variant="primary"
-                      @click=${() => void this.#retry()}
-                      >${t("handover.try_again")}</wt-button
-                    >`
-                  : nothing
-                : html`<wt-button
-                    data-test="authenticate"
-                    .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
-                    variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
-                    @click=${() => void this.#authenticate()}
-                    >${t("handover.compare")}</wt-button
+          reopened
+            ? this.#continueButton()
+            : this.entry
+              ? this.activationHeld || this.retrying
+                ? html`<wt-button
+                    data-test="retry-activation"
+                    .disabled=${!this.busy && !this.#valid()}
+                    ?loading=${this.busy}
+                    variant="primary"
+                    @click=${() => void this.#retry()}
+                    >${t("handover.try_again")}</wt-button
                   >`
+                : nothing
+              : html`<wt-button
+                  data-test="authenticate"
+                  .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
+                  variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
+                  @click=${() => void this.#authenticate()}
+                  >${t("handover.compare")}</wt-button
+                >`
         }
       </wt-form-actions>
-      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a>` : nothing} ${this.#leaveLink()}</p>` : nothing}`;
+      ${this.#isEmergency ? this.#links() : nothing}`;
   }
   #content() {
     const status = this.status;
@@ -1328,7 +1585,7 @@ export class SetupHandoverScreen extends LitElement {
       return html`<p role="status">${t("handover.done")}</p>
         <a href=${this.#leaveHref}>${t("handover.continue")}</a>`;
     if (closed(status)) return html`<p role="status">${t("handover.closed")}</p>`;
-    if (this.restarting)
+    if (this.restarting && this.#page !== "preparing")
       return html`<p role="status">
         ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
       </p>`;

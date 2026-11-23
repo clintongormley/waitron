@@ -79,7 +79,7 @@ it and add it as a new spare.
 ## Start here when the main box has failed {#emergency}
 
 Use a spare that has finished joining this venue. Switch off the old main box and keep it off,
-because two running main boxes could take payments and file separately. This declaration cannot
+because two running main boxes could take payments and file separately. A switch cannot
 be undone.
 
 On a till or handheld, **The main box is not answering.** fills the sign-in screen in red, in place
@@ -88,7 +88,7 @@ the spare box** on the sign-in screen, and to anyone with **Manage boxes**. It o
 spare. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
 box that restarts for longer than about 20 seconds, during an update for example, brings a
-reloading device here too; if you did not mean to switch, do not declare anything, and reload the
+reloading device here too; if you did not mean to switch, do not switch, and reload the
 page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label).
@@ -101,30 +101,33 @@ from there; if the main box is broken, switch it off and choose **Check again**.
 
 If the main box is silent, the page says what switching does and, when the spare knows, for how
 long. Check that the main box is plugged in and its network cable is connected; if it starts
-working again, keep using it. Until you declare, **Go back to the till** (**Go back** when you did
-not come from a till) leaves without switching; after declaring, **Leave this page (the switch is
+working again, keep using it. Until you choose **Switch to this box**, **Go back to the till** (**Go back** when you did
+not come from a till) leaves without switching; after switching, **Leave this page (the switch is
 saved)** or **Continue to this box** brings you back.
 
 Choose **Start switching**, then sign in with an administrator account’s password and
-current authenticator code, if set up, or choose **Use your passkey**; then choose **Check this
-copy**, and with a passkey, use it when the page asks. Type the password
+current authenticator code, if set up, or choose **Use your passkey**; then choose **Continue**,
+and with a passkey, use it when the page asks. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
-again. The spare first brings its
-copy up to date and restarts; keep the page open. If that takes more than a minute or cannot be done, **Use the copy this spare holds**
-offers the copy already on it, usually the one from when it joined, with nothing newer. Read the copy's latest dated
-activity. Anything newer may be missing; if no date is available, the page says so.
+again.
+
+**Preparing the venue** applies the changes the spare already received from the main box, then
+checks the copy. The spare may restart; keep the page open. If that takes more than a minute or
+cannot be done, **Use the copy this spare holds** offers the copy already on it, usually the one
+from when it joined, with nothing newer. When the copy is checked, read **Latest sale or order in
+this copy**: anything newer may be missing. Then choose **Proceed**.
+
+To use an encrypted backup instead, choose **Upload a backup file instead** on **Preparing the
+venue**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup
+encryption key**. The box keeps its saved key. Keep this page open while the spare restarts, then
+check **Selected backup** and its latest sale or order before you choose **Proceed**. Choose a
+backup made after this spare joined its current main box.
 
 If the page reports too little temporary space, free disk space on the spare before choosing
 the backup again.
 
-After **Check this copy** the sign-in folds away; **Use a different copy** brings it back, with the
-backup choice. To use an encrypted backup instead, choose its file and select **Use this backup**. If asked,
-enter that backup's **Backup encryption key**. The box keeps its saved key. Keep this page open while the spare
-restarts, then review **Selected backup** and its latest activity before declaring. Choose a backup
-made after this spare joined its current main box.
-
-Tick all three statements and give your reason. Choose **Declare the old main
-box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
+On **Ready to switch**, tick all three statements and say why you are switching. Choose **Switch
+to this box**. At the clock check, tick **These details are correct.** and choose **Proceed**:
 the page compares the clocks, creates the new invoice series and lists each with what it is for. If this box cannot check its time over the internet, the page first shows this box's time
 and this device's: check that both are right (both are shown in the venue's time zone), then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets this box's time from
 the device you are using and the page carries on; after **The box** or **Both times are wrong**,
@@ -132,13 +135,15 @@ correct this device's time and reconnect. Choose **Continue** to start the venue
 current replacement when asked and try the step again. With a passkey, the page asks for it when
 the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
 
-If the copy changes before you declare, review the new activity and tick the three statements
-again.
+If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
+latest sale or order, choose **Proceed** and tick the three statements again. If the copy fails its
+check when you choose **Switch to this box**, the page goes back there too: choose **Try again** or
+**Upload a backup file instead**.
 
-If an answer is lost, keep the page open and check the copy again before retrying. Reloading or
-opening the address on another device finds your saved declaration; sign in and continue with the
+Once you have chosen **Switch to this box**, reloading or
+opening the address on another device finds the switch; sign in and continue with the
 clock check. An unfinished controlled handover offers its own progress page. If the copy cannot
-be verified against the declaration, stop and keep both boxes’ data intact.
+be verified against the saved switch, stop and keep both boxes’ data intact.
 
 If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 

@@ -83,7 +83,7 @@ volver a usar esa máquina, restablécela y añádela como un nuevo servidor de 
 
 Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el servidor principal
 anterior y mantenlo apagado, porque dos servidores principales encendidos podrían cobrar y enviar
-registros por separado. Esta declaración no se puede deshacer.
+registros por separado. El cambio no se puede deshacer.
 
 En una caja o un terminal de camarero, **El servidor principal no responde.** ocupa en rojo la
 pantalla de inicio de sesión, en lugar del teclado del PIN mientras el servidor principal no responda, y aparece
@@ -92,7 +92,7 @@ pantalla de inicio de sesión, y a quien tenga **Gestionar servidores**. Abre es
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
 más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
-que recargue; si no querías cambiar, no declares nada y recarga la página cuando el servidor
+que recargue; si no querías cambiar, no hagas el cambio y recarga la página cuando el servidor
 principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva.
@@ -106,31 +106,34 @@ averiado, apágalo y elige **Comprobar otra vez**.
 
 Si el servidor principal no responde, la página dice qué hace el cambio y, cuando el servidor de
 reserva lo sabe, desde hace cuánto. Comprueba que el servidor principal está enchufado y que su
-cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que declares, **Volver
-a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras declarar, **Salir de
+cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que elijas **Cambiar a este servidor**, **Volver
+a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras hacer el cambio, **Salir de
 esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
 
 Elige **Empezar el cambio** y después identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, o elige **Usar tu passkey**;
-después elige **Comprobar esta copia** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
-vuelve a poner al día su copia antes de que puedas intentarlo de nuevo. El servidor de reserva primero pone al día su copia y se reinicia; mantén la página
-abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de reserva** ofrece la copia que ya tiene,
-normalmente la de cuando se incorporó, sin nada posterior. Revisa la última actividad con fecha de la copia. Puede faltar la actividad posterior; si no hay
-ninguna fecha disponible, la página lo indica.
+después elige **Continuar** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
+vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
 
-Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
-reserva antes de volver a elegir la copia.
+**Preparando el local** aplica los cambios que el servidor de reserva ya recibió del servidor
+principal y después comprueba la copia. El servidor de reserva puede reiniciarse; mantén la página
+abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de
+reserva** ofrece la copia que ya tiene, normalmente la de cuando se incorporó, sin nada posterior.
+Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia**: puede faltar lo
+posterior. Después elige **Seguir**.
 
-Tras **Comprobar esta copia** el inicio de sesión se pliega; **Usar otra copia** lo vuelve a mostrar,
-junto con la elección de la copia de seguridad. Para usar una copia de seguridad cifrada, elige su
-archivo y pulsa **Usar esta copia de seguridad**.
+Para usar una copia de seguridad cifrada, elige **Subir un archivo de copia de seguridad en su lugar** en
+**Preparando el local**, elige el archivo y pulsa **Usar esta copia de seguridad**.
 Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
-última actividad antes de declarar. Elige una copia hecha después de que este servidor de reserva
-se uniera a su principal actual.
+última venta o pedido antes de elegir **Seguir**. Elige una copia hecha después de que este
+servidor de reserva se uniera a su principal actual.
 
-Marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
-el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
+Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
+reserva antes de volver a elegir la copia de seguridad.
+
+En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige
+**Cambiar a este servidor**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas y muestra
 para qué sirve cada una. Si este servidor no puede comprobar su hora por internet, la página
 muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y
@@ -142,13 +145,14 @@ passkey, la página te la pide cuando el servidor de reserva la necesita, normal
 nuevo pasados 15 minutos. El
 motivo y las declaraciones se conservan.
 
-Si la copia cambia antes de declarar, revisa la nueva actividad y vuelve a marcar las tres
-declaraciones.
+Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
+última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones. Si la copia no
+supera su comprobación al elegir **Cambiar a este servidor**, la página también vuelve allí: elige
+**Volver a intentarlo** o **Subir un archivo de copia de seguridad en su lugar**.
 
-Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
-reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración
-guardada; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
-ofrece su página de progreso. Si no se puede verificar la copia con la declaración, para y
+Una vez elegido **Cambiar a este servidor**, al recargar o abrir la dirección en otro
+dispositivo se encuentra el cambio; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
+ofrece su página de progreso. Si no se puede verificar la copia con el cambio guardado, para y
 conserva los datos de ambos servidores.
 
 Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
