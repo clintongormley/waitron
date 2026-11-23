@@ -17,7 +17,6 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { formatIsoMinute } from "../date-utils.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
@@ -33,7 +32,9 @@ const LUNCH_PATH = "/menus/menu/menu-lunch/view/structure";
 const PREVIEW_PATH = "/menus/menu/menu-lunch/view/preview";
 const PRICES_PATH = "/menus/menu/menu-lunch/view/prices";
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
-const LIVE_WORDS = `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`;
+/** The screen's clock, 1 hour 15 minutes after PUBLISHED_AT. */
+const NOW = "2026-09-26T11:30:00.000Z";
+const LIVE_WORDS = "(Live: version 2 · 1 hour ago)";
 
 const burger = {
   id: "p-burger",
@@ -132,7 +133,10 @@ function api(
 
 async function mount(client: DashboardApi = api(), path = LUNCH_PATH): Promise<MenusScreen> {
   history.replaceState(null, "", path);
-  const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client });
+  const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
+    api: client,
+    now: () => new Date(NOW),
+  });
   await vi.waitFor(() => {
     if (el.shadowRoot!.querySelector('[data-test="loading"], [data-test="structure-loading"]'))
       throw new Error("loading");
@@ -145,10 +149,17 @@ function q<T extends Element = HTMLElement>(el: MenusScreen, selector: string): 
   return el.shadowRoot!.querySelector<T>(selector);
 }
 
-/** A node's visible text, without a `wt-tabs` label's hidden bold copy. */
+/** A node's visible text, without a `wt-tabs` label's hidden bold copy, and with each relative
+ * time's words, which its shadow root holds. */
 function text(node: Element | null): string {
+  const times = [...(node?.querySelectorAll("wt-relative-time") ?? [])];
   const copy = node?.cloneNode(true) as Element | undefined;
   copy?.querySelectorAll('.bold-copy[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+  copy
+    ?.querySelectorAll("wt-relative-time")
+    .forEach((time, index) =>
+      time.replaceWith(times[index]!.shadowRoot?.querySelector("time")?.textContent ?? ""),
+    );
   return (copy?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
@@ -357,9 +368,7 @@ describe("the menu editor's heading", () => {
     setLocale("es-ES");
     const el = await mount();
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-        `(Publicada: versión 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
-      ),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Publicada: versión 2 · hace 1 hora)"),
     );
   });
 
@@ -368,7 +377,7 @@ describe("the menu editor's heading", () => {
     [
       "published and current",
       async (): Promise<MenuStatus> => ({ ...CHANGED, state: "current" }),
-      `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
+      LIVE_WORDS,
     ],
     ["still being checked", never, "(Checking…)"],
     [
@@ -440,7 +449,7 @@ describe("the menu editor's heading", () => {
     ["Structure", LUNCH_PATH],
     ["Preview", PREVIEW_PATH],
   ])(
-    "makes the clash words a link to the Prices tab on the %s tab, underlined in red",
+    "makes the clash words a link to the Prices tab filtered to the clashes on the %s tab, underlined in red",
     async (_tab, path) => {
       const el = await mount(
         api(async () => ({ ...CHANGED, clashes: 2 })),
@@ -449,7 +458,7 @@ describe("the menu editor's heading", () => {
       await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
       const link = clashWords(el)!;
       expect(link.tagName).toBe("A");
-      expect(link.getAttribute("href")).toBe(PRICES_PATH);
+      expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
       expect(text(link)).toBe("Publishing waits on 2 clashes");
       const style = getComputedStyle(link);
       expect(style.textDecorationLine).toContain("underline");
@@ -468,15 +477,21 @@ describe("the menu editor's heading", () => {
     expect(clashWords(el)!.querySelector("a")).toBeNull();
   });
 
-  it("opens the Prices tab on a plain click on the clash words", async () => {
+  it("opens the Prices tab filtered to the clashes on a plain click on the clash words, as the list's clash link does", async () => {
     const seen = watchClicks();
     const el = await mount(api(async () => ({ ...CHANGED, clashes: 2 })));
     await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
     clashWords(el)!.click();
     await el.updateComplete;
     expect(seen).toEqual([true]);
-    expect(location.pathname).toBe(PRICES_PATH);
+    expect(location.pathname).toBe(`${PRICES_PATH}/filter/clashes`);
     expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
+    await vi.waitFor(() =>
+      expect(
+        q<HTMLElementTagNameMap["dashboard-menu-prices-table"]>(el, "dashboard-menu-prices-table")!
+          .clashesFor,
+      ).toBe("menu-lunch"),
+    );
   });
 
   it.each(MODIFIERS)(
@@ -626,7 +641,7 @@ it.each(["light", "dark"] as const)(
     history.replaceState(null, "", PREVIEW_PATH);
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
-      { api: client },
+      { api: client, now: () => new Date(NOW) },
       theme,
     );
     const heading = () => text(q(el, '[data-test="menu-status"]'));

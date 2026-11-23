@@ -33,6 +33,80 @@ function read(
   return { value: ahead > 0 ? count : -count || 0, unit, changesIn };
 }
 
+const DAY = 86_400_000;
+/** The longest wait `setTimeout` keeps; a longer one fires at once. */
+const LONGEST_WAIT = 2 ** 31 - 1;
+
+function partsOf(
+  at: number,
+  locale: string | undefined,
+  options: Intl.DateTimeFormatOptions,
+): Partial<Record<Intl.DateTimeFormatPartTypes, string>> {
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const part of new Intl.DateTimeFormat(locale, options).formatToParts(at))
+    parts[part.type] = part.value;
+  return parts;
+}
+
+/** The instant `at`'s wall clock in `timeZone` would be, were that wall clock UTC's. */
+function wallClock(at: number, timeZone: string | undefined): { year: number; asUtc: number } {
+  const p = partsOf(at, "en-GB", {
+    timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
+  });
+  const year = Number(p.year);
+  return {
+    year,
+    asUtc: Date.UTC(
+      year,
+      Number(p.month) - 1,
+      Number(p.day),
+      Number(p.hour),
+      Number(p.minute),
+      Number(p.second),
+    ),
+  };
+}
+
+/** A moment a day or more gone, as its weekday and time while under six days, then as its day and
+ * month, with the year once it is not this year's. */
+function readCalendar(
+  at: number,
+  now: number,
+  locale: string | undefined,
+  timeZone: string | undefined,
+): { words: string; changesIn: number | null } {
+  const distance = now - at;
+  if (distance < 6 * DAY) {
+    const p = partsOf(at, locale, {
+      timeZone,
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    return { words: `${p.weekday}, ${p.hour}:${p.minute}`, changesIn: 6 * DAY - distance };
+  }
+  const thisYear = wallClock(now, timeZone).year;
+  const p = partsOf(at, locale, { timeZone, day: "numeric", month: "short", year: "numeric" });
+  if (wallClock(at, timeZone).year !== thisYear)
+    return { words: `${p.day} ${p.month} ${p.year}`, changesIn: null };
+  const newYear = Date.UTC(thisYear + 1, 0, 1);
+  const startOfNextYear = newYear - (wallClock(newYear, timeZone).asUtc - newYear);
+  return {
+    words: `${p.day} ${p.month}`,
+    changesIn: Math.min(startOfNextYear - now, LONGEST_WAIT),
+  };
+}
+
 @customElement("wt-relative-time")
 export class WtRelativeTime extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -82,6 +156,9 @@ export class WtRelativeTime extends LitElement {
   @property({ attribute: "time-zone" }) timeZone = "";
   /** For a deadline: a moment already gone reads "now" rather than how long ago it was. */
   @property({ type: Boolean }) future = false;
+  /** A moment a day or more gone reads as a weekday and time, then as a date, rather than as a
+   * count of days. */
+  @property({ type: Boolean }) calendar = false;
   /** Replaced by a test, or by a screen whose own clock is replaced. */
   @property({ attribute: false }) now = (): Date => new Date();
 
@@ -130,18 +207,25 @@ export class WtRelativeTime extends LitElement {
       return;
     }
     const locale = this.locale || undefined;
-    const { value, unit, changesIn } = read(at, this.now().getTime(), this.future);
+    const timeZone = this.timeZone || undefined;
+    const now = this.now().getTime();
+    const exact = new Intl.DateTimeFormat(locale, {
+      dateStyle: "long",
+      timeStyle: "short",
+      timeZone,
+    }).format(at);
+    if (this.calendar && !this.future && now - at >= DAY) {
+      this.#reading = { ...readCalendar(at, now, locale, timeZone), exact };
+      return;
+    }
+    const { value, unit, changesIn } = read(at, now, this.future);
     this.#reading = {
       // Zero is the only value worded by "auto" ("now"): any other keeps its number, because
       // "auto" turns one day into "yesterday" whatever the calendar says.
       words: new Intl.RelativeTimeFormat(locale, {
         numeric: value === 0 ? "auto" : "always",
       }).format(value, unit),
-      exact: new Intl.DateTimeFormat(locale, {
-        dateStyle: "long",
-        timeStyle: "short",
-        timeZone: this.timeZone || undefined,
-      }).format(at),
+      exact,
       changesIn,
     };
   }

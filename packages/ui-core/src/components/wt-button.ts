@@ -31,7 +31,7 @@ export class WtButton extends LitElement {
         width: 100%;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
+        padding: var(--wt-space-2) var(--wt-button-padding-inline, var(--wt-space-4));
         border: 1px solid transparent;
         border-radius: var(--wt-radius-md);
         font: inherit;

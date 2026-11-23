@@ -361,6 +361,24 @@ test("an owning menu can centre a start-aligned button through inheritance", asy
   expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).justifyContent).toBe("center");
 });
 
+test("an owner can narrow a button's inline padding through inheritance, keeping its tap height", async () => {
+  const el = await mount("<wt-button>Edit</wt-button>");
+  const inner = el.shadowRoot!.querySelector("button")!;
+  const probe = document.createElement("span");
+  probe.style.paddingInline = "var(--wt-space-4)";
+  host.append(probe);
+  expect(getComputedStyle(inner).paddingInlineStart).toBe(
+    getComputedStyle(probe).paddingInlineStart,
+  );
+  host.style.setProperty("--wt-button-padding-inline", "var(--wt-space-2)");
+  probe.style.paddingInline = "var(--wt-space-2)";
+  expect(getComputedStyle(inner).paddingInlineStart).toBe(
+    getComputedStyle(probe).paddingInlineStart,
+  );
+  expect(getComputedStyle(inner).paddingInlineEnd).toBe(getComputedStyle(probe).paddingInlineEnd);
+  expect(inner.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+});
+
 describe("a button that starts loading while focused", () => {
   type Button = HTMLElement & { loading: boolean; updateComplete: Promise<unknown> };
 

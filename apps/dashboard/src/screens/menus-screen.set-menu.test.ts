@@ -126,7 +126,7 @@ async function mount(path = "/menus", client = api(), theme?: "light" | "dark") 
   ).el;
 }
 
-it("shows the set menu kind and price without a publication status in the list", async () => {
+it("shows the set menu kind and price, and says in Status that it goes live with the menus that offer it", async () => {
   const el = await mount();
   const root = el.shadowRoot!;
   await vi.waitFor(() => {
@@ -134,7 +134,9 @@ it("shows the set menu kind and price without a publication status in the list",
     const row = table?.shadowRoot?.querySelector('[data-test="open-daily"]')?.closest("tr");
     expect(row?.textContent).toContain("Set menu");
     expect(row?.textContent).toContain("€14.00");
-    expect(row?.querySelector('[data-test="status-daily"]')).toBeNull();
+    expect(row?.querySelector('[data-test="status-daily"]')?.textContent?.trim()).toBe(
+      "Goes live with the menus that offer it",
+    );
   });
 });
 

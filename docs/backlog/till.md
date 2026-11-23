@@ -345,8 +345,7 @@ is not forced later, and nothing in the code rules out the two sharing a millise
 Left OPEN by W106 (battery, #1240): (1) dashboard places still showing a bare `YYYY-MM-DD HH:MM`
 (`formatIsoMinute`), not changed: the Devices "Last seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
 printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
-queue's Created and Delivered columns; the menu status and preview's "published {time}"
-(`apps/dashboard/src/widgets/menu-preview.ts`); and the adjustments report's time column
+queue's Created and Delivered columns; and the adjustments report's time column
 (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`). Whether any of them should
 use `wt-relative-time` is the owner's call. (2) `wt-relative-time`'s words are an inline button
 below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a sentence
@@ -1234,8 +1233,8 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
-  - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
-    preview and the adjustments report should use `wt-relative-time`, and whether its inline
+  - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers and the
+    adjustments report should use `wt-relative-time`, and whether its inline
     words may stay below `--wt-tap-min`, are the owner's call.
     [Detail](till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
 

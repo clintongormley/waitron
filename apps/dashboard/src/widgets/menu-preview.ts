@@ -1,5 +1,5 @@
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
@@ -21,7 +21,7 @@ import type {
   ProductChangeField,
   SectionChangeField,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { relativeTime } from "./relative-time.js";
 import { codeMessage } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
@@ -130,24 +130,26 @@ const SOURCES: Record<MenuChange["source"], StringKey> = {
   set_menu: "menu_preview.source_set_menu",
 };
 
-/** A menu's publication state in words, for the menus list and the editor: what it is, and the live
- * version and its publication time beside it. */
-export function statusWords(status: MenuStatus): {
+/**
+ * A menu's publication state in words, read against `now`: its label, and for a live menu its
+ * version and how long ago it was published. The editor's heading shows the version and time (the
+ * label for a menu never published); the menus list shows the label and time.
+ */
+export function statusWords(
+  status: MenuStatus,
+  now: () => Date,
+): {
   label: string;
-  live: { version: string; time: string } | null;
+  live: { version: string; time: TemplateResult } | null;
 } {
   if (status.state === "unpublished") return { label: t("menu_status.unpublished"), live: null };
-  const number = { number: String(status.version) };
-  const time = formatIsoMinute(status.publishedAt);
-  return status.state === "current"
-    ? {
-        label: t("menu_status.current"),
-        live: { version: fill("menu_status.current_version", number), time },
-      }
-    : {
-        label: t("menu_status.changed"),
-        live: { version: fill("menu_status.changed_version", number), time },
-      };
+  const version = fill("menu_status.changed_version", { number: String(status.version) });
+  // No time zone: the statuses read carries none, so this reads in the browser's zone.
+  const time = relativeTime("{time}", status.publishedAt, { calendar: true, now });
+  return {
+    label: t(status.state === "current" ? "menu_status.current" : "menu_status.changed"),
+    live: { version, time },
+  };
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
