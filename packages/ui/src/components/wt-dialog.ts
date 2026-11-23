@@ -34,15 +34,17 @@ export class WtDialog extends LitElement {
     css`
       :host {
         --wt-table-max: none;
-        --wt-tabs-sticky-surface: var(--wt-color-surface-raised);
-        --wt-form-actions-surface: var(--wt-color-surface-raised);
+        /* A screen sets this on its dialog to paint the whole window, footer included. */
+        --wt-dialog-surface: var(--wt-color-surface-raised);
+        --wt-tabs-sticky-surface: var(--wt-dialog-surface);
+        --wt-form-actions-surface: var(--wt-dialog-surface);
       }
 
       dialog {
         padding: 0;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-surface-raised);
+        background: var(--wt-dialog-surface);
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         max-width: var(--wt-dialog-max-width);

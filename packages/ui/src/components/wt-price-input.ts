@@ -5,6 +5,7 @@ import { WtInput, type InputFieldDecoration } from "@waitron/ui-core/components/
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import { disabledStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import "./wt-icon.js";
 
 const initialCurrencyMeasurements = new Map<Element, (width: number) => void>();
 
@@ -125,19 +126,53 @@ export class WtPriceInput extends WtInput {
         color: var(--wt-color-text-muted);
       }
 
+      /* A unit too long for the field gives up width before the amount does; its text is cut with
+         an ellipsis, never the chevron, and the whole unit stays the button's accessible name. */
       button.unit {
-        flex: none;
+        flex: 0 1 auto;
         align-self: center;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-1);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
+        padding: var(--wt-space-2);
+        border: 0;
         border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+        background: none;
+        color: var(--wt-color-primary-text);
         font: inherit;
+        font-weight: var(--wt-font-weight-bold);
+        text-wrap: nowrap;
         cursor: pointer;
+      }
+
+      /* Inline, so the button still centres its line natively and the text keeps its baseline. */
+      .unit-label {
+        display: inline-flex;
+        align-items: baseline;
+        max-width: 100%;
+      }
+
+      .unit-text {
+        min-width: 0;
+        overflow: clip;
+        text-overflow: ellipsis;
+        text-wrap: nowrap;
+      }
+
+      .unit-chevron {
+        flex: none;
+        margin-inline-start: var(--wt-space-2);
+      }
+
+      button.unit wt-icon {
+        color: var(--wt-color-primary);
+        vertical-align: middle;
+      }
+
+      /* The amount's text sits below the field's middle by half the difference of its block
+         padding; the same difference in the button's own padding lowers its label onto that line. */
+      .field:not([data-compact]) button.unit {
+        padding-block: calc(var(--wt-space-3) + var(--wt-font-size-sm) - var(--wt-space-2)) 0;
       }
 
       button.unit:disabled {
@@ -253,7 +288,14 @@ export class WtPriceInput extends WtInput {
         ?disabled=${this.disabled}
         @click=${this.onUnitClick}
       >
-        ${this.unit}
+        ${
+          this.unit
+            ? html`<span class="unit-label"
+                ><span class="unit-text">${this.unit}</span
+                ><span class="unit-chevron"><wt-icon name="chevron-down"></wt-icon></span
+              ></span>`
+            : nothing
+        }
       </button>`;
     return this.unit
       ? html`<span id=${this.unitId} class="unit" part="unit">${this.unit}</span>`

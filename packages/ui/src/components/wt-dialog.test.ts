@@ -258,6 +258,26 @@ test("paints from the raised surface token", async () => {
   expect(getComputedStyle(dialog).backgroundColor).toBe("rgb(30, 31, 32)");
 });
 
+test("a screen can set the dialog's surface", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 31, 32)");
+  el.style.setProperty("--wt-dialog-surface", "rgb(1, 2, 3)");
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  expect(getComputedStyle(dialog).backgroundColor).toBe("rgb(1, 2, 3)");
+  const resolved = (name: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    dialog.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  };
+  expect(resolved("--wt-form-actions-surface")).toBe("rgb(1, 2, 3)");
+  expect(resolved("--wt-tabs-sticky-surface")).toBe("rgb(1, 2, 3)");
+});
+
 test("paints its border from the border token", async () => {
   const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
   el.open = true;

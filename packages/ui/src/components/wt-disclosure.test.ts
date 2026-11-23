@@ -2,39 +2,13 @@ import { expect, test, afterEach } from "vitest";
 import { commands } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-disclosure.js";
+import "./wt-card.js";
 
 afterEach(cleanup);
 
-test("a ruled section paints its full heading line and spaces summary rows at normal line height", async () => {
+test("a custom closed summary is visible below the heading and hides on open", async () => {
   const el = (await mount(
-    '<wt-disclosure ruled heading="Descriptors"><p>body</p></wt-disclosure>',
-  )) as HTMLElementTagNameMap["wt-disclosure"];
-  el.summaryRows = [
-    { label: "Name", value: "None", lines: 1 },
-    { label: "Description", value: "None", lines: 2 },
-  ];
-  await el.updateComplete;
-  host.style.setProperty("--wt-color-border", "rgb(8, 9, 10)");
-  const heading = el.shadowRoot!.querySelector<HTMLElement>(".heading")!;
-  const header = el.shadowRoot!.querySelector<HTMLElement>(".header")!;
-  const title = el.shadowRoot!.querySelector<HTMLElement>(".title");
-  expect(title).not.toBeNull();
-  const line = getComputedStyle(title!);
-  expect(line.borderBottomWidth).toBe("1px");
-  expect(line.borderBottomColor).toBe("rgb(8, 9, 10)");
-  expect(title!.getBoundingClientRect().width).toBe(header.getBoundingClientRect().width);
-  const summary = el.shadowRoot!.querySelector<HTMLElement>(".summary")!;
-  expect(summary.getBoundingClientRect().top).toBeGreaterThan(
-    heading.getBoundingClientRect().bottom,
-  );
-  expect(parseFloat(getComputedStyle(summary).lineHeight)).toBeGreaterThan(
-    parseFloat(getComputedStyle(summary).fontSize),
-  );
-});
-
-test("a custom closed summary is visible below the ruled heading and hides on open", async () => {
-  const el = (await mount(
-    '<wt-disclosure ruled heading="Selling"><span slot="summary">Unavailable</span><p>body</p></wt-disclosure>',
+    '<wt-disclosure heading="Selling"><span slot="summary">Unavailable</span><p>body</p></wt-disclosure>',
   )) as HTMLElementTagNameMap["wt-disclosure"];
   const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="summary"]');
   expect(slot).not.toBeNull();
@@ -42,16 +16,6 @@ test("a custom closed summary is visible below the ruled heading and hides on op
   el.open = true;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('slot[name="summary"]')).toBeNull();
-});
-
-test("an open ruled section leaves token spacing between its heading line and its first field", async () => {
-  const el = await mount(
-    '<wt-disclosure ruled open heading="Kitchen"><div>Kitchen name</div></wt-disclosure>',
-  );
-  const title = el.shadowRoot!.querySelector(".title")!.getBoundingClientRect();
-  const content = el.firstElementChild!.getBoundingClientRect();
-  const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3"));
-  expect(content.top - title.bottom).toBe(gap);
 });
 
 function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise<Animation> {
@@ -93,15 +57,52 @@ function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise
 
 async function finishHeightTransition(body: HTMLElement, animation: Animation): Promise<void> {
   animation.finish();
+  // Chromium sends the finished transition's end event only once another frame is drawn.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
   await expect
     .poll(() => ({ animating: body.classList.contains("animating"), height: body.style.height }))
     .toEqual({ animating: false, height: "" });
 }
 
-test("the section chevron is large enough to read beside its heading", async () => {
+/** The colour a plain element styled `color: var(<token>)` computes to on the test host. */
+function tokenColour(token: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  host.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
+
+test("the section chevron is small and muted beside its heading", async () => {
   const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  host.style.setProperty("--wt-font-size-sm", "12px");
   const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
-  expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+  expect(chevron.getBoundingClientRect().width).toBe(12);
+  expect(getComputedStyle(chevron).color).toBe(tokenColour("--wt-color-text-muted"));
+});
+
+test("a summary the page slots in is drawn small and muted like the component's own", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="H"><span slot="summary">x</span><p>body</p></wt-disclosure>',
+  );
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const slotted = el.querySelector<HTMLElement>('[slot="summary"]')!;
+  expect(getComputedStyle(slotted).fontSize).toBe("11px");
+  expect(getComputedStyle(slotted).color).toBe(tokenColour("--wt-color-text-muted"));
+});
+
+test("a warning value is drawn in the warning colour", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Allergens"><p>body</p></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  el.summaryFields = [{ label: "Allergens", value: "Not yet reviewed", warning: true }];
+  await el.updateComplete;
+  const warning = el.shadowRoot!.querySelector(".summary-warning")!;
+  expect(warning.textContent).toBe("Not yet reviewed");
+  expect(getComputedStyle(warning).color).toBe(tokenColour("--wt-color-warning"));
 });
 
 test("collapsed by default; body hidden", async () => {
@@ -587,7 +588,7 @@ test("the header click stays inside the disclosure, so a listener above it sees 
   expect(clicks).toBe(0);
 });
 
-test("summary fields put each value after its bold name, joined with a middot, while closed", async () => {
+test("summary fields put each value after its name, joined with a middot, while closed", async () => {
   const el = (await mount(
     '<wt-disclosure heading="Pricing"><p>body</p></wt-disclosure>',
   )) as import("./wt-disclosure.js").WtDisclosure;
@@ -603,9 +604,8 @@ test("summary fields put each value after its bold name, joined with a middot, w
   );
   const names = [...summary.querySelectorAll(".summary-label")];
   expect(names.map((name) => name.textContent)).toEqual(["Base price:", "VAT:"]);
-  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
-  // The values stay in the summary's own weight; only the names are bold.
-  expect(getComputedStyle(summary).fontWeight).not.toBe("800");
+  const weight = getComputedStyle(summary).fontWeight;
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual([weight, weight]);
   el.open = true;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
@@ -624,7 +624,7 @@ test("summary fields win over a summary string given beside them", async () => {
 });
 
 async function withRows(
-  rows: readonly (import("./wt-disclosure.js").SummaryField & { lines: number })[],
+  rows: import("./wt-disclosure.js").WtDisclosure["summaryRows"],
   attributes = "",
 ) {
   const el = (await mount(
@@ -635,10 +635,13 @@ async function withRows(
   return el;
 }
 
-test("summary rows put each value after its bold name, one row under another, while closed", async () => {
+test("summary rows put each value after its name, one row under another, while closed", async () => {
   const el = await withRows([
-    { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
-    { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
+    {
+      fields: [{ label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera" }],
+      lines: 1,
+    },
+    { fields: [{ label: "Description", value: "EN: Seared · ES: Sellado" }], lines: 2 },
   ]);
   host.style.setProperty("--wt-font-weight-bold", "800");
   const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
@@ -648,8 +651,8 @@ test("summary rows put each value after its bold name, one row under another, wh
   ]);
   const names = rows.map((row) => row.querySelector(".summary-label")!);
   expect(names.map((name) => name.textContent)).toEqual(["Name:", "Description:"]);
-  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
-  expect(getComputedStyle(rows[0]!).fontWeight).not.toBe("800");
+  const weight = getComputedStyle(rows[0]!).fontWeight;
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual([weight, weight]);
   expect(rows[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
     rows[0]!.getBoundingClientRect().bottom,
   );
@@ -664,7 +667,7 @@ test("summary rows put each value after its bold name, one row under another, wh
 });
 
 test("summary rows paint from the muted-text token", async () => {
-  const el = await withRows([{ label: "Name", value: "EN: Beef", lines: 1 }]);
+  const el = await withRows([{ fields: [{ label: "Name", value: "EN: Beef" }], lines: 1 }]);
   host.style.setProperty("--wt-color-text-muted", "rgb(9, 9, 9)");
   host.style.setProperty("--wt-font-size-sm", "11px");
   const row = el.shadowRoot!.querySelector(".summary-row")!;
@@ -675,8 +678,8 @@ test("summary rows paint from the muted-text token", async () => {
 test("each summary row is cut with an ellipsis after its own number of lines, never widening the header", async () => {
   const long = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
   const el = await withRows([
-    { label: "Name", value: long, lines: 1 },
-    { label: "Description", value: long, lines: 2 },
+    { fields: [{ label: "Name", value: long }], lines: 1 },
+    { fields: [{ label: "Description", value: long }], lines: 2 },
   ]);
   host.style.width = "320px";
   const [name, description] = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
@@ -701,7 +704,7 @@ test("each summary row is cut with an ellipsis after its own number of lines, ne
 });
 
 test("an unbroken value is cut rather than widening a phone-width header", async () => {
-  const el = await withRows([{ label: "Name", value: "x".repeat(400), lines: 1 }]);
+  const el = await withRows([{ fields: [{ label: "Name", value: "x".repeat(400) }], lines: 1 }]);
   host.style.width = "320px";
   const row = el.shadowRoot!.querySelector<HTMLElement>(".summary-row")!;
   // Wrapped onto lines the clamp then cuts, so the ellipsis shows, rather than running off sideways.
@@ -713,7 +716,10 @@ test("an unbroken value is cut rather than widening a phone-width header", async
 });
 
 test("summary rows win over summary fields and a summary string given beside them", async () => {
-  const el = await withRows([{ label: "Name", value: "EN: Beef", lines: 1 }], 'summary="plain"');
+  const el = await withRows(
+    [{ fields: [{ label: "Name", value: "EN: Beef" }], lines: 1 }],
+    'summary="plain"',
+  );
   el.summaryFields = [{ label: "VAT", value: "Reduced (10%)" }];
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".summary")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
@@ -762,8 +768,11 @@ test("a summary field marked as a placeholder draws its value in italic, its nam
 
 test("a summary row marked as a placeholder draws its value in italic, its name upright", async () => {
   const el = await withRows([
-    { label: "Name", value: "EN: A glass", lines: 1 },
-    { label: "Description", value: "EN: Roasted in house", lines: 2, placeholder: true },
+    { fields: [{ label: "Name", value: "EN: A glass" }], lines: 1 },
+    {
+      fields: [{ label: "Description", value: "EN: Roasted in house", placeholder: true }],
+      lines: 2,
+    },
   ]);
   const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
   expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
@@ -840,4 +849,288 @@ test("the chevron turns, and under reduced motion it turns at once", async () =>
   } finally {
     await commands.emulateReducedMotion(null);
   }
+});
+
+test("summary rows draw each row's fields joined with a middot", async () => {
+  const el = await withRows([
+    {
+      fields: [
+        { label: "A", value: "1" },
+        { label: "B", value: "2", warning: true },
+      ],
+      lines: 2,
+    },
+    { fields: [{ label: "C", value: "3", placeholder: true }], lines: 2 },
+  ]);
+  const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
+  expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "A: 1 · B: 2",
+    "C: 3",
+  ]);
+  expect(rows[0]!.querySelector(".summary-warning")!.textContent).toBe("2");
+  expect(rows[1]!.querySelector(".summary-placeholder")!.textContent).toBe("3");
+});
+
+test("a wrapped summary row indents its later lines", async () => {
+  const long = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+  const el = await withRows([{ fields: [{ label: "Name", value: long }], lines: 4 }]);
+  host.style.setProperty("--wt-space-4", "16px");
+  host.style.width = "200px";
+  const row = el.shadowRoot!.querySelector<HTMLElement>(".summary-row")!;
+  const style = getComputedStyle(row);
+  expect(style.textIndent).toBe("-16px");
+  expect(style.paddingInlineStart).toBe("16px");
+  const text = document.createRange();
+  text.selectNodeContents(row);
+  const lines = [...text.getClientRects()]
+    .filter((rect) => rect.width > 0)
+    .sort((a, b) => a.top - b.top || a.left - b.left);
+  const first = lines[0]!;
+  const second = lines.find((rect) => rect.top >= first.bottom - 1)!;
+  expect(second).toBeDefined();
+  expect(second.left - first.left).toBeCloseTo(16, 0);
+});
+
+test("closing waits for the body to finish before showing the summary", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+  await finishHeightTransition(body, closing);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+function frames(count: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const step = () => (--count === 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  });
+}
+
+async function mountClosingInWrapper() {
+  await mount(
+    '<div class="wrapper"><wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure></div>',
+  );
+  const wrapper = host.querySelector<HTMLElement>(".wrapper")!;
+  const el = wrapper.querySelector("wt-disclosure")!;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  return { wrapper, el, body };
+}
+
+test("a close cut short by its parent being hidden still shows the summary when the parent returns", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("a close whose parent is hidden before its height starts to move still shows the summary when the parent returns", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  wrapper.style.display = "none";
+  await frames(3);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("the cancelled close a reopen replaces does not cut the reopening short", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  const cancelled = new Promise((resolve) =>
+    body.addEventListener("transitioncancel", resolve, { once: true }),
+  );
+  el.open = true;
+  await el.updateComplete;
+  const reopening = await pauseHeightTransition(body, closing);
+  reopening.currentTime = Number(reopening.effect!.getTiming().duration) / 2;
+  await cancelled;
+  await frames(2);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  await finishHeightTransition(body, reopening);
+  expect(body.getBoundingClientRect().height).toBe(200);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
+/** Toggles a section part-way through its first movement, paused where the body's height is a
+ * whole number of pixels, so no leftover sub-pixel transition is running when the cancel arrives. */
+async function toggleAtExactHeight(startOpen: boolean) {
+  const el = (await mount(
+    `<wt-disclosure heading="Kitchen" summary="BAR" ${startOpen ? "open" : ""}><div style="height: 400px">body</div></wt-disclosure>`,
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = !startOpen;
+  await el.updateComplete;
+  const first = await pauseHeightTransition(body);
+  first.effect!.updateTiming({ easing: "linear" });
+  first.currentTime = Number(first.effect!.getTiming().duration) / 2;
+  expect(body.getBoundingClientRect().height).toBe(200);
+  const cancelled = new Promise((resolve) =>
+    body.addEventListener("transitioncancel", resolve, { once: true }),
+  );
+  el.open = startOpen;
+  await el.updateComplete;
+  await cancelled;
+  await frames(2);
+  return { el, body };
+}
+
+test("reopening a close at a whole-pixel height still animates the reopening", async () => {
+  const { body } = await toggleAtExactHeight(true);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.getBoundingClientRect().height).toBeLessThan(400);
+});
+
+test("closing an opening at a whole-pixel height still animates the close and withholds the summary", async () => {
+  const { el, body } = await toggleAtExactHeight(false);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
+test("a reopen whose parent is hidden before its new height is set settles open", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  const closing = await pauseHeightTransition(body);
+  closing.effect!.updateTiming({ easing: "linear" });
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  el.open = true;
+  await el.updateComplete;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(200);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
+test("a section moved before its new height is set still settles a later close cut short", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  el.remove();
+  wrapper.append(el);
+  await frames(2);
+  el.open = true;
+  await el.whenSettled();
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("under reduced motion the summary shows as soon as the section closes", async () => {
+  await commands.emulateReducedMotion("reduce");
+  try {
+    const el = (await mount(
+      '<wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure>',
+    )) as import("./wt-disclosure.js").WtDisclosure;
+    el.open = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
+});
+
+test("a section forced open by an error and then closed shows its summary at once", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR" has-error><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  expect(el.open).toBe(true);
+  el.open = false;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("the summary fades in after a close, not on first render, and never under reduced motion", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR"><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const summary = () => el.shadowRoot!.querySelector<HTMLElement>("[part=summary]")!;
+  expect(getComputedStyle(summary()).animationName).toBe("none");
+  el.open = true;
+  await el.whenSettled();
+  el.open = false;
+  await el.whenSettled();
+  await el.updateComplete;
+  expect(getComputedStyle(summary()).animationName).not.toBe("none");
+  await commands.emulateReducedMotion("reduce");
+  try {
+    expect(getComputedStyle(summary()).animationName).toBe("none");
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
+});
+
+test("a card section looks like a raised wt-card", async () => {
+  await mount(
+    '<wt-disclosure card heading="Kitchen" summary="BAR"><p>body</p></wt-disclosure><wt-card raised><p>body</p></wt-card>',
+  );
+  const disclosure = host.querySelector("wt-disclosure")!;
+  const card = host.querySelector("wt-card")! as HTMLElement & { updateComplete: Promise<unknown> };
+  await card.updateComplete;
+  expect(disclosure.hasAttribute("card")).toBe(true);
+  host.style.setProperty("--wt-color-surface", "rgb(1, 1, 1)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(2, 3, 4)");
+  host.style.setProperty("--wt-color-border", "rgb(5, 6, 7)");
+  host.style.setProperty("--wt-radius-lg", "13px");
+  host.style.setProperty("--wt-shadow-1", "1px 2px 3px 4px rgb(8, 9, 10)");
+  host.style.setProperty("--wt-space-4", "19px");
+  const look = (element: Element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      border: [
+        style.borderTopWidth,
+        style.borderTopStyle,
+        style.borderTopColor,
+        style.borderLeftColor,
+      ],
+      radius: style.borderTopLeftRadius,
+      shadow: style.boxShadow,
+      padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft],
+    };
+  };
+  const section = disclosure.shadowRoot!.querySelector(".section")!;
+  const frame = card.shadowRoot!.querySelector(".card")!;
+  expect(look(section)).toEqual(look(frame));
+  expect(look(section).background).toBe("rgb(2, 3, 4)");
+  expect(look(section).padding).toEqual(["19px", "19px", "19px", "19px"]);
 });

@@ -76,16 +76,14 @@ Finally, mark the old preference sold out again and save.
 
 ## Attach a list to a product {#attach}
 
-Open the product in **Products** and use its **Modifiers** section. It starts open when the product
-already has lists attached; while it is folded, it shows the names of the attached lists, or "None".
-One control adds either kind, and the section holds both kinds in a single ordered list; each row
-shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
+Open the product in **Products** and use its **Modifiers** group, below the variants. One control
+adds either kind, and the group holds both kinds in a single ordered list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
 or focus the handle and use the up and down arrow keys. That same control lists extras lists under
 an **Extras** heading and options lists under **Options**, and each group starts with its own choice
 to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without
 abandoning the product you are editing.
 
-If the dish's unit prevents extras, this section tells you before you attach a list.
+If the dish's unit prevents extras, this group tells you before you attach a list.
 
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price per portion when you set one. With the price blank, its
@@ -118,7 +116,7 @@ changes together. To take one or more sent dishes off the bill, use **Void…**,
 The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
-that one product's Modifiers section.
+that one product's Modifiers group.
 
 ## Allergens and dietary information {#allergens}
 

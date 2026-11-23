@@ -203,25 +203,20 @@ async function mountDisclosure(
   };
 }
 
-describe.each(["", "ruled"])("wt-disclosure %s", (attributes) => {
-  test("wt-disclosure: a help-mode badge takes no room, off or on", async () => {
-    const bare = await mountDisclosure(attributes, "");
-    const without = boxOf(bare.header);
-    expect(bare.header.getBoundingClientRect().width).toBe(
-      bare.section.getBoundingClientRect().width,
-    );
-    cleanup();
+test("wt-disclosure: a help-mode badge takes no room, off or on", async () => {
+  const bare = await mountDisclosure("", "");
+  const without = boxOf(bare.header);
+  expect(bare.header.getBoundingClientRect().width).toBe(
+    bare.section.getBoundingClientRect().width,
+  );
+  cleanup();
 
-    const { el, header, section, tooltip } = await mountDisclosure(
-      attributes,
-      badgeMarkup("help-mode"),
-    );
-    expectSameBox(boxOf(header), without);
-    expect(header.getBoundingClientRect().width).toBe(section.getBoundingClientRect().width);
-    await turnHelp(true, tooltip, el);
-    expectSameBox(boxOf(header), without);
-    expect(header.getBoundingClientRect().width).toBe(section.getBoundingClientRect().width);
-  });
+  const { el, header, section, tooltip } = await mountDisclosure("", badgeMarkup("help-mode"));
+  expectSameBox(boxOf(header), without);
+  expect(header.getBoundingClientRect().width).toBe(section.getBoundingClientRect().width);
+  await turnHelp(true, tooltip, el);
+  expectSameBox(boxOf(header), without);
+  expect(header.getBoundingClientRect().width).toBe(section.getBoundingClientRect().width);
 });
 
 test("wt-disclosure: with help on the badge hangs over the heading row's top trailing corner", async () => {

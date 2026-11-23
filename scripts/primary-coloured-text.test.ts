@@ -58,6 +58,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     draws: "the add tile's + icon",
   },
   {
+    file: "apps/dashboard/src/widgets/variant-table.ts",
+    selector: '[data-test="pricing-unit"] wt-icon',
+    draws: "the Price heading's unit chevron",
+  },
+  {
     file: "apps/setup/src/screens/provisioning-screen.ts",
     selector: ".in-flight wt-spinner",
     draws: "the provisioning spinner's ring",
@@ -81,6 +86,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     file: "packages/ui/src/components/wt-number-stepper.ts",
     selector: "button",
     draws: "the − and + icons",
+  },
+  {
+    file: "packages/ui/src/components/wt-price-input.ts",
+    selector: "button.unit wt-icon",
+    draws: "the unit link's chevron",
   },
 ];
 

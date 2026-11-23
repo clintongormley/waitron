@@ -10,9 +10,9 @@ afterEach(cleanup);
 afterEach(() => setHelpMode(false));
 
 describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (theme) => {
-  test.each(["", "open", "has-error"])("ruled section %s", async (state) => {
+  test.each(["", "open", "has-error"])("section with a slotted summary %s", async (state) => {
     await mountThemed(
-      `<wt-disclosure ruled heading="Selling" ${state}><span slot="summary">Available</span><p>Anyone can order</p></wt-disclosure>`,
+      `<wt-disclosure heading="Selling" ${state}><span slot="summary">Available</span><p>Anyone can order</p></wt-disclosure>`,
       theme,
     );
     await expectNoA11yViolations(host);
@@ -62,8 +62,11 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
       theme,
     )) as WtDisclosure;
     el.summaryRows = [
-      { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
-      { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
+      {
+        fields: [{ label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera" }],
+        lines: 1,
+      },
+      { fields: [{ label: "Description", value: "EN: Seared · ES: Sellado" }], lines: 2 },
     ];
     await el.updateComplete;
     // Without this the scan could pass on a header that drew no rows.
@@ -86,17 +89,67 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("collapsed, with a value drawn as a warning", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Allergens"><p>body</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryFields = [
+      { label: "Allergens", value: "Not yet reviewed", warning: true },
+      { label: "Course", value: "Mains", placeholder: true, warning: true },
+    ];
+    await el.updateComplete;
+    // Without this the scan could pass on a header that drew no warning value.
+    expect(el.shadowRoot!.querySelectorAll(".summary-warning")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   test("collapsed, with a summary row drawn as a placeholder", async () => {
     const el = (await mountThemed(
       '<wt-disclosure heading="Descriptors"><p>body</p></wt-disclosure>',
       theme,
     )) as WtDisclosure;
     el.summaryRows = [
-      { label: "Name", value: "None specified", lines: 1 },
-      { label: "Description", value: "EN: Roasted in house", lines: 2, placeholder: true },
+      { fields: [{ label: "Name", value: "None specified" }], lines: 1 },
+      {
+        fields: [{ label: "Description", value: "EN: Roasted in house", placeholder: true }],
+        lines: 2,
+      },
     ];
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-placeholder")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  test.each(["", "open"])("card section %s", async (state) => {
+    const el = await mountThemed(
+      `<wt-disclosure card heading="Selling" summary="Available" ${state}><p>Anyone can order</p></wt-disclosure>`,
+      theme,
+    );
+    // Without this the scan could pass on a section that drew no card.
+    expect(getComputedStyle(el.shadowRoot!.querySelector(".section")!).borderTopWidth).toBe("1px");
+    await expectNoA11yViolations(host);
+  });
+
+  test("collapsed, with a two-row summary holding a warning", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Details"><p>body</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryRows = [
+      {
+        fields: [
+          { label: "Prep station", value: "Bar" },
+          { label: "Allergens", value: "Not yet reviewed", warning: true },
+        ],
+        lines: 2,
+      },
+      { fields: [{ label: "VAT", value: "Reduced (10%)", placeholder: true }], lines: 2 },
+    ];
+    await el.updateComplete;
+    // Without this the scan could pass on a header that drew no rows or no warning.
+    expect(el.shadowRoot!.querySelectorAll(".summary-row")).toHaveLength(2);
+    expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-warning")).toHaveLength(1);
     await expectNoA11yViolations(host);
   });
 

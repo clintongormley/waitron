@@ -536,7 +536,7 @@ does not say which. What the save path can carry is pinned where it is thrown, i
 `packages/menu/src/product-editor.test.ts` ("names the missing language, and nothing else" and
 "refuses nutrition input without naming any field"): generic allergen and dietary refusals name
 neither a field nor a language. The kind-specific `allergen.kinds_required` and
-`allergen.invalid_kind` refusals are mapped explicitly to the editor's Nutrition section by
+`allergen.invalid_kind` refusals are mapped explicitly to the Allergens and diet group in the editor's Details card by
 `products-screen.ts`; they do not acquire a `field` parameter.
 
 `productEditorTranslationField` (`apps/dashboard/src/widgets/product-editor.ts`) resolves the

@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { cardFrameStyles, cardRaisedStyles } from "@waitron/ui-core/components/wt-card";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -10,12 +11,25 @@ export interface SummaryField {
   value: string;
   /** Drawn in italic, as a field's placeholder is: what a blank field will use, not its own value. */
   placeholder?: boolean;
+  /** Drawn in the warning colour, for a value that needs someone's attention. */
+  warning?: boolean;
 }
 
-const summaryPart = ({ label, value, placeholder }: SummaryField) =>
-  html`<span class="summary-label">${label}:</span> ${
-      placeholder ? html`<span class="summary-placeholder">${value}</span>` : value
+export interface SummaryRow {
+  fields: readonly SummaryField[];
+  /** The row is cut with an ellipsis after this many lines. */
+  lines: number;
+}
+
+const summaryPart = ({ label, value, placeholder, warning }: SummaryField) => {
+  const shown = warning ? html`<span class="summary-warning">${value}</span>` : value;
+  return html`<span class="summary-label">${label}:</span> ${
+      placeholder ? html`<span class="summary-placeholder">${shown}</span>` : shown
     }`;
+};
+
+const summaryParts = (fields: readonly SummaryField[]) =>
+  fields.map((field, index) => html`${index ? " · " : nothing}${summaryPart(field)}`);
 
 /**
  * A section holding a validation error must not be hidden: while `has-error` is set the section is
@@ -96,12 +110,12 @@ export class WtDisclosure extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .summary-label {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       .summary-placeholder {
         font-style: italic;
+      }
+
+      .summary-warning {
+        color: var(--wt-color-warning);
       }
 
       .summary-rows {
@@ -109,37 +123,16 @@ export class WtDisclosure extends LitElement {
         flex-direction: column;
       }
 
-      .title {
-        grid-column: 1 / -1;
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-        min-height: var(--wt-tap-min);
-        border-bottom: 1px solid var(--wt-color-border);
-        padding-block-end: var(--wt-space-2);
-      }
-      .title .heading {
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-      .title .chevron {
-        flex: none;
-      }
       .summary-slot {
         grid-column: 1 / -1;
-      }
-      :host([ruled]) .summary-slot {
-        margin-block-start: var(--wt-space-2);
-      }
-      :host([ruled]) .summary {
-        line-height: calc(var(--wt-font-size-sm) + var(--wt-space-2));
-      }
-      :host([ruled]) .body > slot {
-        display: block;
-        padding-block-start: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .summary-row {
+        /* A hanging indent: a row that wraps sets its later lines in from its first. */
+        padding-inline-start: var(--wt-space-4);
+        text-indent: calc(-1 * var(--wt-space-4));
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: var(--summary-row-lines);
@@ -153,8 +146,9 @@ export class WtDisclosure extends LitElement {
         grid-column: 2;
         grid-row: 1;
         justify-self: start;
-        width: var(--wt-font-size-lg);
-        height: var(--wt-font-size-lg);
+        width: var(--wt-font-size-sm);
+        height: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
         transition: transform 150ms ease;
       }
 
@@ -167,24 +161,50 @@ export class WtDisclosure extends LitElement {
       :host([open]) .chevron {
         transform: rotate(180deg);
       }
+
+      .summary-slot.fade-in {
+        animation: wt-disclosure-summary-in var(--wt-duration-disclosure) ease;
+      }
+
+      @keyframes wt-disclosure-summary-in {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .summary-slot.fade-in {
+          animation: none;
+        }
+      }
+
+      :host([card]) .section {
+        ${cardFrameStyles}
+        ${cardRaisedStyles}
+      }
     `,
   ];
 
   @property() heading = "";
-  @property({ type: Boolean, reflect: true }) ruled = false;
   @property() summary = "";
-  /** The closed line as named values, each after its bold name; used instead of `summary` when it
+  /** The closed line as named values, each after its name; used instead of `summary` when it
    * holds any. */
   @property({ attribute: false }) summaryFields: readonly SummaryField[] = [];
-  /** The closed line as one row per named value, each cut with an ellipsis after its `lines`
+  /** The closed line as rows of named values, each row cut with an ellipsis after its `lines`
    * lines; used instead of `summaryFields` and `summary` when it holds any. */
-  @property({ attribute: false }) summaryRows: readonly (SummaryField & { lines: number })[] = [];
+  @property({ attribute: false }) summaryRows: readonly SummaryRow[] = [];
+  /** Drawn as a raised card, as `<wt-card raised>` is. */
+  @property({ type: Boolean, reflect: true }) card = false;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
   private readonly bodyId = uniqueId("wt-disclosure-body");
   private bodyHidden = true;
   private openingFromHidden = false;
+  /** While a close animates, the summary waits, so it never shows over the shrinking body. */
+  private closing = false;
+  /** Set by a close, so a summary already showing when the section first draws does not fade. */
+  private summaryFades = false;
   private firstRender = true;
   private animationFrame = 0;
   private animationGeneration = 0;
@@ -200,6 +220,7 @@ export class WtDisclosure extends LitElement {
 
   private finishAnimation(body?: HTMLElement): void {
     cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = 0;
     this.contentObserver?.disconnect();
     this.contentObserver = undefined;
     if (body) {
@@ -207,6 +228,10 @@ export class WtDisclosure extends LitElement {
       body.classList.remove("animating");
       this.bodyHidden = !this.open;
       body.hidden = this.bodyHidden;
+    }
+    if (this.closing) {
+      this.closing = false;
+      this.requestUpdate();
     }
     for (const resolve of this.settlement) resolve();
     this.settlement.clear();
@@ -240,7 +265,16 @@ export class WtDisclosure extends LitElement {
     if (this.open) {
       this.openingFromHidden = this.bodyHidden;
       this.bodyHidden = false;
-    } else this.openingFromHidden = false;
+      this.closing = false;
+    } else {
+      this.openingFromHidden = false;
+      if (changed.has("open") && this.hasUpdated) this.summaryFades = true;
+      // The same tests `updated` uses to skip the animation, so a close that will not animate
+      // shows its summary in this render.
+      if (changed.has("open") && this.hasUpdated && !this.hasError && !this.motionQuery?.matches)
+        this.closing =
+          (this.shadowRoot?.querySelector(".body")?.getBoundingClientRect().height ?? 0) > 0;
+    }
   }
 
   override updated(changed: PropertyValues<this>): void {
@@ -265,8 +299,11 @@ export class WtDisclosure extends LitElement {
     body.style.height = `${height}px`;
     void body.offsetHeight;
     this.animationFrame = requestAnimationFrame(() => {
+      this.animationFrame = 0;
       if (generation !== this.animationGeneration) return;
       body.style.height = `${targetHeight}px`;
+      // A body that stopped being drawn starts no transition, so no event would ever settle it.
+      if (!this.heightTransitionRunning(body)) this.finishAnimation(body);
     });
     if (this.open) {
       this.contentObserver = new ResizeObserver(() => {
@@ -288,6 +325,26 @@ export class WtDisclosure extends LitElement {
     this.finishAnimation(event.currentTarget as HTMLElement);
   }
 
+  private heightTransitionRunning(body: HTMLElement): boolean {
+    return body
+      .getAnimations()
+      .some(
+        (animation) =>
+          animation instanceof CSSTransition && animation.transitionProperty === "height",
+      );
+  }
+
+  /** A parent that stops being drawn cancels the transition and starts none. A toggle's cancel can
+   * arrive before the frame that sets its new height, so that frame decides instead; a content
+   * resize's arrives with its new transition already running. */
+  private onBodyTransitionCancel(event: TransitionEvent): void {
+    if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
+    const body = event.currentTarget as HTMLElement;
+    if (!body.classList.contains("animating")) return;
+    if (this.animationFrame !== 0 || this.heightTransitionRunning(body)) return;
+    this.finishAnimation(body);
+  }
+
   private onToggle(event: Event): void {
     if (this.hasError) return;
     event.stopPropagation();
@@ -301,20 +358,16 @@ export class WtDisclosure extends LitElement {
     if (this.summaryRows.length)
       return html`<span class="summary summary-rows"
         >${this.summaryRows.map(
-          ({ lines, ...field }) =>
+          ({ fields, lines }) =>
             html`<span
               class="summary-row"
               style=${styleMap({ "--summary-row-lines": String(lines) })}
-              >${summaryPart(field)}</span
+              >${summaryParts(fields)}</span
             >`,
         )}</span
       >`;
     if (this.summaryFields.length)
-      return html`<span class="summary"
-        >${this.summaryFields.map(
-          (field, index) => html`${index ? " · " : nothing}${summaryPart(field)}`,
-        )}</span
-      >`;
+      return html`<span class="summary">${summaryParts(this.summaryFields)}</span>`;
     return this.summary ? html`<span class="summary">${this.summary}</span>` : nothing;
   }
 
@@ -330,8 +383,9 @@ export class WtDisclosure extends LitElement {
             aria-controls=${this.bodyId}
             @click=${this.onToggle}
           >
-            ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
-            ${this.open ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
+            <span class="heading">${this.heading}</span
+            ><wt-icon class="chevron" name="chevron-down"></wt-icon>
+            ${this.open || this.closing ? nothing : html`<span class=${this.summaryFades ? "summary-slot fade-in" : "summary-slot"} part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
           </button>
           <slot name="help"></slot>
         </div>
@@ -342,6 +396,7 @@ export class WtDisclosure extends LitElement {
           ?inert=${!this.open}
           aria-hidden=${this.open ? "false" : "true"}
           @transitionend=${this.onBodyTransitionEnd}
+          @transitioncancel=${this.onBodyTransitionCancel}
         >
           <slot></slot>
         </div>

@@ -2,11 +2,22 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 import type { ProductNutritionPicker } from "./product-nutrition-picker.js";
+
+/** The allergen and dietary values on the closed Details line. */
+function nutritionSummary(el: ProductEditor) {
+  const labels = [t("modifiers.allergens"), t("editor.nutrition.dietary")];
+  return el
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+      'wt-disclosure[data-section="details"]',
+    )!
+    .summaryRows.flatMap(({ fields }) => fields)
+    .filter(({ label }) => labels.includes(label));
+}
 
 registerIcons(DASHBOARD_ICONS);
 const locale = currentLocale();
@@ -57,7 +68,7 @@ async function mount(value: ProductEditorDraft = product) {
     locales: ["en"],
   });
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-section="nutrition"]',
+    '[data-section="details"]',
   )!;
   await fold.updateComplete;
   const submit = vi.fn();
@@ -66,7 +77,7 @@ async function mount(value: ProductEditorDraft = product) {
 }
 async function open(el: ProductEditor) {
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-section="nutrition"]',
+    '[data-section="details"]',
   )!;
   if (!fold.open) {
     await userEvent.click(fold.shadowRoot!.querySelector("button")!);
@@ -189,41 +200,32 @@ it("nutrition Same as saves null while keeping the variant's explicit diet", asy
 });
 
 it.each<{ allergens: ProductEditorDraft["allergens"]; want: string }>([
-  { allergens: null, want: "Allergens: Not yet reviewed · Dietary: None" },
-  { allergens: {}, want: "Allergens: None · Dietary: None" },
+  { allergens: null, want: "Allergens: Not yet reviewed" },
+  { allergens: {}, want: "Allergens: None" },
   {
     allergens: { gluten: { kinds: ["wheat" as const] }, eggs: {}, milk: {} },
-    want: "Allergens: Cereals containing gluten (Wheat), Eggs, Milk · Dietary: None",
+    want: "Allergens: Cereals containing gluten (Wheat), Eggs, Milk",
   },
 ])("nutrition closed summary distinguishes $want", async ({ allergens, want }) => {
   const { el } = await mount({ ...product, allergens });
-  const summary = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nutrition-summary"]');
-  expect(summary).not.toBeNull();
-  expect(summary!.textContent!.replace(/\s+/g, " ").trim()).toBe(want);
-  if (allergens === null)
-    expect(
-      getComputedStyle(summary!.querySelector('[data-test="nutrition-allergens"]')!).color,
-    ).not.toBe(getComputedStyle(summary!).color);
+  const fields = nutritionSummary(el);
+  expect(fields.map(({ label, value }) => `${label}: ${value}`).join(" · ")).toBe(want);
+  expect(fields[0]!.warning ?? false).toBe(allergens === null);
 });
 
-it("nutrition summary lists chosen diets before italic implications and inherited allergens in italic", async () => {
+it("nutrition summary lists chosen diets before implied ones, as plain text, and inherited allergens as a placeholder", async () => {
   const { el } = await mount({
     ...product,
     parentId: "bread",
     inherited: parent,
     dietaryDeclarations: ["vegan", "halal"],
   });
-  const summary = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nutrition-summary"]')!;
-  expect(summary).not.toBeNull();
-  expect(summary.textContent!.replace(/\s+/g, " ")).toContain(
-    "Vegan, Halal, Vegetarian, No meat, No fish",
-  );
-  const implied = [...summary.querySelectorAll<HTMLElement>("[data-implied]")];
-  expect(implied.map((node) => node.textContent)).toEqual(["Vegetarian", "No meat", "No fish"]);
-  expect(implied.every((node) => getComputedStyle(node).fontStyle === "italic")).toBe(true);
-  expect(
-    getComputedStyle(summary.querySelector('[data-test="nutrition-allergens"]')!).fontStyle,
-  ).toBe("italic");
+  const [allergens, dietary] = nutritionSummary(el);
+  expect(allergens!.placeholder).toBe(true);
+  expect(dietary).toEqual({
+    label: "Dietary",
+    value: "Vegan, Halal, Vegetarian, No meat, No fish",
+  });
 });
 
 it("nutrition ignores forged field changes while the editor is suspended", async () => {

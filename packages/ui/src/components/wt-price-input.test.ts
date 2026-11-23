@@ -50,14 +50,18 @@ test("unit-haspopup tells assistive technology what the unit button opens; witho
   expect(button().hasAttribute("aria-haspopup")).toBe(false);
 });
 
-test("the unit button paints its border and text from tokens", async () => {
+test("the unit button is a link-style control: text from the primary-text token, chevron from the primary (icon) token, no border or fill", async () => {
   const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
-  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
-  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
   const button = el.shadowRoot!.querySelector("button.unit")!;
   const styles = getComputedStyle(button);
-  expect(styles.borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(styles.borderTopStyle).toBe("none");
+  expect(styles.backgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(styles.color).toBe("rgb(4, 5, 6)");
+  const icon = button.querySelector('wt-icon[name="chevron-down"]')!;
+  expect(icon).not.toBeNull();
+  expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
 });
 
 test("reflects the initial value into the native input", async () => {
@@ -874,17 +878,18 @@ test("hide-label makes the field box compact, the tap-target height", async () =
   expect(field(labelled).field.hasAttribute("data-compact")).toBe(false);
 });
 
-test("the unit button sits inside the field box at its trailing end, centred on it", async () => {
+test("the unit button sits inside the field box at its trailing end, its label on the amount's line", async () => {
   const el = await mount(
-    '<wt-price-input label="Price" unit="kg" style="width: 300px"></wt-price-input>',
+    '<wt-price-input label="Price" unit="kg" value="9.00" style="width: 300px"></wt-price-input>',
   );
   host.style.setProperty("--wt-space-1", "5px");
   const box = field(el).field.getBoundingClientRect();
-  const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  const unit = button.getBoundingClientRect();
   expect(box.right - unit.right).toBe(5);
-  expect(unit.top).toBeGreaterThan(box.top);
-  expect(unit.bottom).toBeLessThan(box.bottom);
-  expect(Math.abs(unit.top + unit.height / 2 - (box.top + box.height / 2))).toBeLessThanOrEqual(1);
+  expect(unit.top).toBeGreaterThanOrEqual(box.top);
+  expect(unit.bottom).toBeLessThanOrEqual(box.bottom);
+  expect(Math.abs(baselineIn(button) - amountBaseline(field(el).input))).toBeLessThanOrEqual(1);
 });
 
 test("a long label never runs under the unit button", async () => {
@@ -894,6 +899,36 @@ test("a long label never runs under the unit button", async () => {
   const label = field(el).label!.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
   expect(label.right).toBeLessThanOrEqual(unit.left);
+});
+
+test("a unit too long for the field is cut with an ellipsis inside the box, keeping the amount's room and its whole name", async () => {
+  const unit = "per large catering platter";
+  const { el, input } = await mountPrice(
+    `<wt-price-input label="Price" unit="${unit}" locale="en-GB" value="12.50" style="width: 264px"></wt-price-input>`,
+  );
+  const { el: short } = await mountPrice(
+    '<wt-price-input label="Price" unit="kg" locale="en-GB" value="12.50" style="display: inline-block"></wt-price-input>',
+  );
+  const { field: box } = field(el);
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  const chevron = button.querySelector("wt-icon")!.getBoundingClientRect();
+  expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
+  expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box.getBoundingClientRect().right,
+  );
+  expect(chevron.right).toBeLessThanOrEqual(button.getBoundingClientRect().right);
+  expect(chevron.width).toBeGreaterThan(0);
+  expect(input.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+    field(short).input.getBoundingClientRect().width,
+  );
+  expect(button.getBoundingClientRect().height).toBe(
+    short.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect().height,
+  );
+  const text = button.querySelector<HTMLElement>(".unit-text")!;
+  expect(getComputedStyle(text).textOverflow).toBe("ellipsis");
+  expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
+  expect(button.textContent!.trim()).toBe(unit);
+  expect(button.hasAttribute("aria-label")).toBe(false);
 });
 
 /** The input's text line: its box less its block padding. */
@@ -952,6 +987,54 @@ test.each(["", "hide-label"])(
   },
 );
 
+/** Where a zero-size marker appended to `parent` sits: the top of an empty inline-block is its baseline. */
+function baselineIn(parent: Node) {
+  const marker = document.createElement("span");
+  marker.style.cssText = "display: inline-block; width: 0; height: 0; vertical-align: baseline";
+  parent.appendChild(marker);
+  const y = marker.getBoundingClientRect().top;
+  marker.remove();
+  return y;
+}
+
+/** The amount's baseline: a probe in the input's font, centred in its content box as the input
+ * centres its one line. */
+function amountBaseline(input: HTMLInputElement) {
+  const box = input.getBoundingClientRect();
+  const s = getComputedStyle(input);
+  const px = (v: string) => Number.parseFloat(v);
+  const probe = document.createElement("div");
+  probe.style.cssText = `position: fixed; display: flex; align-items: center; margin: 0;
+    left: ${box.left}px; width: ${box.width}px;
+    top: ${box.top + px(s.borderTopWidth) + px(s.paddingTop)}px;
+    height: ${box.height - px(s.borderTopWidth) - px(s.borderBottomWidth) - px(s.paddingTop) - px(s.paddingBottom)}px`;
+  const line = document.createElement("span");
+  line.style.cssText = `font: ${s.font}; line-height: ${s.lineHeight}; white-space: pre`;
+  line.textContent = input.value;
+  probe.append(line);
+  document.body.append(probe);
+  const y = baselineIn(line);
+  probe.remove();
+  return y;
+}
+
+test.each([
+  ["en-GB", "1.60", ""],
+  ["en-GB", "1.60", "hide-label"],
+  ["es-ES", "1,60", ""],
+  ["es-ES", "1,60", "hide-label"],
+])(
+  "the unit button's label sits on the amount's text line (%s, %s, %s)",
+  async (locale, value, hide) => {
+    const { el, input } = await mountPrice(
+      `<wt-price-input label="Price" unit="Each" locale="${locale}" value="${value}" ${hide}></wt-price-input>`,
+    );
+    const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+    expect(field(el).field.hasAttribute("data-compact")).toBe(hide !== "");
+    expect(Math.abs(baselineIn(button) - amountBaseline(input))).toBeLessThanOrEqual(1);
+  },
+);
+
 test("a fixed unit is drawn as text with no box of its own", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
   host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
@@ -961,16 +1044,19 @@ test("a fixed unit is drawn as text with no box of its own", async () => {
   expect(unit.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
-test("the unit button is its own rounded box inside the field, with the tap-target size", async () => {
-  const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
-  host.style.setProperty("--wt-radius-md", "7px");
-  host.style.setProperty("--wt-tap-min", "47px");
-  const unit = el.shadowRoot!.querySelector("button.unit")!;
-  const style = getComputedStyle(unit);
-  expect([style.borderStartStartRadius, style.borderEndStartRadius]).toEqual(["7px", "7px"]);
-  expect(style.borderInlineStartWidth).toBe("1px");
-  expect(unit.getBoundingClientRect().height).toBe(47);
-});
+test.each(["", "hide-label"])(
+  "the unit button's hit area is at least the tap-target size and clear of the amount (%s)",
+  async (hide) => {
+    const el = await mount(
+      `<wt-price-input label="Price" unit="kg" value="9.00" ${hide}></wt-price-input>`,
+    );
+    host.style.setProperty("--wt-tap-min", "47px");
+    const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+    expect(unit.height).toBeGreaterThanOrEqual(47);
+    expect(unit.width).toBeGreaterThanOrEqual(47);
+    expect(unit.left).toBeGreaterThanOrEqual(field(el).input.getBoundingClientRect().right);
+  },
+);
 
 test("a disabled field's fixed unit is muted, as its value is", async () => {
   const el = await mount(

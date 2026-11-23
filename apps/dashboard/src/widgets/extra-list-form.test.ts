@@ -1025,7 +1025,7 @@ it("lists the customer-facing names in the closed section's line, but not the ki
   ]);
 });
 
-it("draws each language's code in bold with a colon, before its name, on the closed line", async () => {
+it("draws each language's code in the line's own weight with a colon, before its name, on the closed line", async () => {
   const { el } = await mount({ value: addons });
   const section = disclosure(el);
   await section.updateComplete;
@@ -1035,9 +1035,8 @@ it("draws each language's code in bold with a colon, before its name, on the clo
   );
   const codes = [...line.querySelectorAll(".summary-label")];
   expect(codes.map((code) => code.textContent)).toEqual(["EN:", "ES:"]);
-  const bold = Number(getComputedStyle(codes[0]!).fontWeight);
-  expect(bold).toBeGreaterThan(Number(getComputedStyle(line).fontWeight));
-  expect(Number(getComputedStyle(codes[1]!).fontWeight)).toBe(bold);
+  const weight = getComputedStyle(line).fontWeight;
+  expect(codes.map((code) => getComputedStyle(code).fontWeight)).toEqual([weight, weight]);
 });
 
 /** The closed line beside what each blank field hints: the two must name the same fallback. */

@@ -1853,10 +1853,10 @@ describe("menu-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     await editor(el).updateComplete;
     // …and the section holding that field is no longer folded over it.
-    const kitchen = editor(el).shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-      '[data-section="kitchen"]',
+    const details = editor(el).shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      '[data-section="details"]',
     )!;
-    expect(kitchen.open).toBe(true);
+    expect(details.open).toBe(true);
     emit(editor(el), "wt-cancel", {});
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
@@ -2205,12 +2205,12 @@ describe("menu-screen", () => {
         value: "Unsaved croquettes",
       });
       await editor(el).updateComplete;
-      const kitchen = editor(el).shadowRoot!.querySelector<LitElement & { open: boolean }>(
-        '[data-section="kitchen"]',
+      const details = editor(el).shadowRoot!.querySelector<LitElement & { open: boolean }>(
+        '[data-section="details"]',
       )!;
-      await kitchen.updateComplete;
-      if (!kitchen.open)
-        await userEvent.click(kitchen.shadowRoot!.querySelector<HTMLElement>("button.header")!);
+      await details.updateComplete;
+      if (!details.open)
+        await userEvent.click(details.shadowRoot!.querySelector<HTMLElement>("button.header")!);
       const box = courseBox(el) as unknown as LitElement;
       await box.updateComplete;
       await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
