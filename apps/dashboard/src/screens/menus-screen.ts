@@ -3668,8 +3668,8 @@ export class MenusScreen extends LitElement {
           : html`<a
               class="clashes"
               data-test="status-clashes"
-              href=${tabAddress(menuId, "prices")}
-              @click=${(event: MouseEvent) => this.#openTab(event, menuId, "prices")}
+              href=${`${tabAddress(menuId, "prices")}/filter/clashes`}
+              @click=${(event: MouseEvent) => this.#openTab(event, menuId, "prices", "clashes")}
               >${waits}</a
             >`
       }

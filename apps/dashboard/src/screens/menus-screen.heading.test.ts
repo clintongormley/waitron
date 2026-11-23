@@ -449,7 +449,7 @@ describe("the menu editor's heading", () => {
     ["Structure", LUNCH_PATH],
     ["Preview", PREVIEW_PATH],
   ])(
-    "makes the clash words a link to the Prices tab on the %s tab, underlined in red",
+    "makes the clash words a link to the Prices tab filtered to the clashes on the %s tab, underlined in red",
     async (_tab, path) => {
       const el = await mount(
         api(async () => ({ ...CHANGED, clashes: 2 })),
@@ -458,7 +458,7 @@ describe("the menu editor's heading", () => {
       await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
       const link = clashWords(el)!;
       expect(link.tagName).toBe("A");
-      expect(link.getAttribute("href")).toBe(PRICES_PATH);
+      expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
       expect(text(link)).toBe("Publishing waits on 2 clashes");
       const style = getComputedStyle(link);
       expect(style.textDecorationLine).toContain("underline");
@@ -477,15 +477,21 @@ describe("the menu editor's heading", () => {
     expect(clashWords(el)!.querySelector("a")).toBeNull();
   });
 
-  it("opens the Prices tab on a plain click on the clash words", async () => {
+  it("opens the Prices tab filtered to the clashes on a plain click on the clash words, as the list's clash link does", async () => {
     const seen = watchClicks();
     const el = await mount(api(async () => ({ ...CHANGED, clashes: 2 })));
     await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
     clashWords(el)!.click();
     await el.updateComplete;
     expect(seen).toEqual([true]);
-    expect(location.pathname).toBe(PRICES_PATH);
+    expect(location.pathname).toBe(`${PRICES_PATH}/filter/clashes`);
     expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
+    await vi.waitFor(() =>
+      expect(
+        q<HTMLElementTagNameMap["dashboard-menu-prices-table"]>(el, "dashboard-menu-prices-table")!
+          .clashesFor,
+      ).toBe("menu-lunch"),
+    );
   });
 
   it.each(MODIFIERS)(

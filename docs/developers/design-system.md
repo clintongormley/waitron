@@ -5871,8 +5871,8 @@ adding a link to it: while a menu has unpublished changes, or has never been pub
 Preview tab reads "Preview*", drawn
 in `--wt-color-primary-text` whether it is selected or not, and is named "Preview, unpublished
 changes" for a screen reader (`marked` on the `wt-tabs` item). A menu whose publishing waits on
-clashes says so on a line under the heading, as a link to its own Price overrides tab in
-`--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
+clashes says so on a line under the heading, as a link to its own Price overrides tab filtered to
+the clashes, in `--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
 beside it; the patch button and its badge: "patching the live menu" in `menus-screen.test.ts`.
 
