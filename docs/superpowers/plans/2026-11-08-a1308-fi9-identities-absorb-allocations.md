@@ -167,9 +167,9 @@ with the no-delete trigger, `instalacion_uq` does that job. The builder drops it
   (`docs/compliance/verifactu-findings.md`:276-280, "No puede repetirse nunca"). The A805 decision
   for `registro_sif`: refuse every delete (the record foreign key already refused deleting an
   identity that signed a record).
-- `activate` (`allocation.ts:437-479`): revoke the live identity (`:437-440`, unchanged), reset the
-  chain head and retire and create the series as today (`:448-463`), then insert the one identity
-  row with all fourteen columns and `result` (moved from `:441-447` and `:465-478`).
+- In `activate` (`allocation.ts:440–479`), keep the live identity's revocation and the retirement
+  and creation of its series. Insert the one identity row with all fourteen columns and `result`
+  once the series exist. Fi2 derives the chain head from records.
 - **One reader helper**, `allocationOf(row)` in `packages/fiscal-verifactu/src/identity-allocation.ts`:
   returns the seven fields typed non-null, or `undefined` when `event_key` is null. Every product
   reader below goes through it, so "an empty group is no allocation" is decided in one place.

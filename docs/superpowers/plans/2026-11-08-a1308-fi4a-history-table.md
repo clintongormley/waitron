@@ -18,10 +18,19 @@ view” and the watcher cleared that combined slice (Lane E's `questions.md`, 20
 13:59 CET). Land these revised plans on the docs branch before building.
 
 **Base** is Fi3 at `f971e5506c`, including A1420 #3003 (`6e88c96309`). Follow the
-[slice rules](2026-11-08-a1308-slice-rules.md). Estimate 400–600 hand-written lines including tests.
-Stop for the watcher if the change grows past about 900 lines. **Landed by the owner.** Open the
-one PR with “Every venue is reset: fiscal-verifactu; backups and exports from before this cannot be
-restored or imported.”
+[slice rules](2026-11-08-a1308-slice-rules.md). **Landed by the owner.** Open the one PR with
+“Every venue is reset: fiscal-verifactu; backups and exports from before this cannot be restored or
+imported.”
+
+| Hand-written additions                | Estimated lines |
+| ------------------------------------- | --------------: |
+| Schema, writer, backup links and docs |         120–180 |
+| Tests and fixtures                    |         280–420 |
+| Total                                 |         400–600 |
+
+Stop for the watcher past about 900 counted lines. Generated paths are
+`packages/fiscal-verifactu/drizzle/0000_baseline.sql`, `drizzle/meta/{0000_snapshot,_journal}.json`
+in the same package, and `scripts/migration-baseline-epoch.json`.
 
 ## Global constraints
 
@@ -30,8 +39,9 @@ restored or imported.”
   `kind <> '<kind>' OR coalesce(condition, 0)` so a missing JSON key fails.
 - Keep invoice numbering, hashes, chain and record writes, and all clock admission, start
   confirmation and payment decisions as they are.
-- The owner's 2026-11-09 guard was for a confirmation carrying a clock-check ID (see the original
-  Fi4a plan, “A confirmation names a clock check”). A1420 removed the relationship. Fi4 uses
+- The owner's 2026-11-09 guard was for
+  [a confirmation carrying a clock-check ID](https://github.com/clintongormley/waitron/blob/f971e5506c4758bbc4c4b1fb406d5363fb3abc9c/docs/superpowers/plans/2026-11-08-a1308-fi4a-history-table.md#L120-L132).
+  A1420 removed the relationship. Fi4 uses
   the normal append-only triggers, and [Fi6](2026-11-08-a1308-fi6-cases-into-submissions.md)
   creates the module's first hand-written trigger file for its submission guards.
 
@@ -123,7 +133,9 @@ restored or imported.”
 - [ ] Search the tracked tree for the three table names and their TypeScript exports. Account for
       the demo capture and its retirement list and dated historical receipts. Remove the finished
       backlog entries in `docs/backlog/{architecture,box}.md` and update the live step paragraph in
-      `docs/developers/conventions-data.md`, preserving the historical receipts.
+      `docs/developers/conventions-data.md`. Add dated pointers here from §3 and §5 of
+      [the fiscal design](../specs/2026-11-02-rationalisation/tables-fiscal.md) for the retired clock
+      readers, kinds, fields and guard. Preserve the historical receipts.
 
 ## Finish line
 
