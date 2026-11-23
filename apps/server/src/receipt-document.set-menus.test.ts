@@ -12,7 +12,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readOrderRevision } from "./working-order.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
+import { COMP_BILL_REASON, GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -314,8 +314,8 @@ it("a reprint prints what the first print did", async () => {
   expect(bySaleId).toEqual(original);
 });
 
-/** Comps the bill's line `lineId` whole, under the give-away reason. */
-function compLine(billId: string, lineId: string) {
+/** Comps the bill's line `lineId` whole, under the give-away reason, or takes `percentBp` off it. */
+function compLine(billId: string, lineId: string, percentBp?: number) {
   return inTx(venue, async (tx) =>
     applyAdjustment(
       tx,
@@ -327,9 +327,14 @@ function compLine(billId: string, lineId: string) {
         submissionId: crypto.randomUUID(),
         expectedRevision: await readOrderRevision(tx, billId),
         lineId,
-        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
-        action: "comp",
         note: null,
+        ...(percentBp === undefined
+          ? { reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON), action: "comp" as const }
+          : {
+              reasonId: await reasonIdOf(tx, COMP_BILL_REASON),
+              action: "discount_percent" as const,
+              percentBp,
+            }),
         operatorId: venue.operator.personId,
       },
       venue.cfg.locale,
@@ -385,26 +390,32 @@ it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async 
   expect(credit.lines.filter((line) => line.adjustments !== undefined)).toEqual([]);
 });
 
-it("after a set menu leaves the bill, a reprint by sale id prints each comp under its own row", async () => {
+it("after a set menu leaves the bill, a reprint by sale id prints each discount under its own row", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   await setSpecCount(spec, bill.tabId, spec.daily, 3);
   const [firstSpecial] = (await setSpecCount(spec, bill.tabId, spec.special, 2)).setMenus.slice(3);
   await setSpecCount(spec, bill.tabId, spec.daily, 2);
   const numbers = (await specRows(spec, bill.tabId)).map(({ lineNo }) => lineNo);
   expect(numbers).not.toEqual(numbers.map((_, i) => i + 1));
-  await compLine(bill.tabId, firstSpecial!.lineId);
+  await compLine(bill.tabId, firstSpecial!.lineId, 1000);
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const [sale] = await venue.db
     .select({ id: sales.id })
     .from(sales)
     .where(eq(sales.workingOrderId, bill.tabId));
-  const settledRows = items(await settled(bill.tabId));
+  const settledTicket = await settled(bill.tabId);
+  const settledRows = items(settledTicket);
   expect(settledRows.slice(1, 3)).toEqual([
     ["1  Special menu", "20,00"],
-    [expect.stringMatching(/^ {2}\S/u), "-20,00"],
+    [expect.stringMatching(/^ {2}\S/u), "-2,00"],
   ]);
   const bySaleId = await inTx(venue, (tx) =>
     readTransactionReceipt(venue.backend, tx, venue.cfg, sale!.id),
   );
   expect(items(bySaleId)).toEqual(settledRows);
+  const adjustmentsOf = (result: Result) => result.lines.map((line) => line.adjustments ?? null);
+  expect(adjustmentsOf(settledTicket)).toContainEqual([
+    { kind: "discount", percentBp: 1000, amount: "2.00" },
+  ]);
+  expect(adjustmentsOf(bySaleId)).toEqual(adjustmentsOf(settledTicket));
 });

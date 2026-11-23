@@ -32,7 +32,12 @@ import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptPayments } from "./receipt-payments.js";
 import { readTenderBlock, receiptQr, type TillSaleResult } from "./till-sale.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
-import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
+import {
+  hasStoredLines,
+  readStoredOrder,
+  type GrossOrder,
+  type OrderLineIdentity,
+} from "./working-order.js";
 import "./errors.js";
 
 function receiptGrosses(
@@ -66,21 +71,26 @@ function receiptGrosses(
 }
 
 /**
- * The bill line each filed row was priced from, as the settled-bill read pairs them: by position in
- * the stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
- * none. Null when the bill no longer prices to the filed rows, quantity and total, ignoring sign so
- * a whole credit pairs too.
+ * The sale's bill as stored, null when it has none or the bill has no stored lines; and the bill
+ * line each filed row was priced from, as the settled-bill read pairs them: by position in the
+ * stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
+ * none. `identities` is null when there is no stored bill or it no longer prices to the filed rows;
+ * the receipt then prints one entry per dish, without a percentage.
  */
 async function billLinesFiled(
   tx: Transaction,
   workingOrderId: string | null,
   dishes: readonly (typeof saleLines.$inferSelect)[],
   grosses: ReadonlyMap<string, Decimal>,
-): Promise<Pick<OrderLineIdentity, "id" | "lineIds">[] | null> {
-  if (workingOrderId === null || !(await hasStoredLines(tx, workingOrderId))) return null;
+): Promise<{
+  stored: GrossOrder | null;
+  identities: Pick<OrderLineIdentity, "id" | "lineIds">[] | null;
+}> {
+  if (workingOrderId === null || !(await hasStoredLines(tx, workingOrderId))) {
+    return { stored: null, identities: null };
+  }
   const stored = await readStoredOrder(tx, workingOrderId);
-  const size = (amount: string) => decimal(amount.replace(/^-/, ""));
-  const same = (a: string, b: string) => compareDecimal(size(a), size(b)) === 0;
+  const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
   const paired =
     stored.gross.lines.length === dishes.length &&
     stored.gross.lines.every(
@@ -88,12 +98,15 @@ async function billLinesFiled(
         same(line.quantity, thousandthsToDecimal(dishes[i]!.quantity)) &&
         same(line.lineGross, grosses.get(dishes[i]!.id)!),
     );
-  return paired
-    ? stored.identities.map(({ id, lineIds }) => ({
-        id,
-        ...(lineIds === undefined ? {} : { lineIds }),
-      }))
-    : null;
+  return {
+    stored,
+    identities: paired
+      ? stored.identities.map(({ id, lineIds }) => ({
+          id,
+          ...(lineIds === undefined ? {} : { lineIds }),
+        }))
+      : null,
+  };
 }
 
 export async function readTransactionReceipt(
@@ -120,7 +133,7 @@ export async function readTransactionReceipt(
   const grosses = receiptGrosses(rows, sale.vatBreakdown);
   // `receiptLines` adds the lines that take an advance off, naming each advance.
   const dishes = rows.filter((row) => row.advanceRole !== "deduction");
-  const orderIdentities = await billLinesFiled(tx, sale.workingOrderId, dishes, grosses);
+  const bill = await billLinesFiled(tx, sale.workingOrderId, dishes, grosses);
   const { lines: receiptRows, ...billAdjustments } = await receiptLines(
     tx,
     sale.workingOrderId,
@@ -141,7 +154,7 @@ export async function readTransactionReceipt(
       })),
     },
     dishes.map((row, i) => ({
-      ...(orderIdentities?.[i] ?? { id: row.id }),
+      ...(bill.identities?.[i] ?? { id: row.id }),
       // A correction's lines take none: the bill's comps and discounts were made on the original's.
       listUnitGross:
         sale.correctsSaleId !== null || row.listGross === null || row.listUnitPriceGross === null
@@ -149,6 +162,7 @@ export async function readTransactionReceipt(
           : centsToDecimal(row.listUnitPriceGross),
     })),
     saleId,
+    bill.stored,
   );
   // `receiptLines` answers one row per entry of `dishes`, in order, then the advances.
   const lines = {
