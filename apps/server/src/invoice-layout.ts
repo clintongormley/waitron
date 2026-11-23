@@ -540,12 +540,42 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
 
   const left = MARGIN + TEXT_WIDTH / 2;
   const width = TEXT_WIDTH / 2;
-  const column = width / 4;
-  const cellRight = (index: number): number => left + (index + 1) * column - CELL_PADDING;
-  const inner = column - 2 * CELL_PADDING;
+  const headings = [
+    labels.taxRateColumn,
+    labels.vatSummaryBaseColumn,
+    labels.vatSummaryAmountColumn,
+    labels.taxTotalColumn,
+  ];
+  const letters = simplified ? rateLetters(facts.vat) : null;
+  const rows = facts.vat.map(({ rate, base, tax }) => {
+    const shown = formatVatRate(rate, locale);
+    const letter = letters?.get(rate);
+    return [
+      letter === undefined ? shown : `${letter} ${shown}`,
+      money(base),
+      money(tax),
+      money(addDecimal(base, tax)),
+    ];
+  });
+  // Each column takes what its widest word needs and the room left is shared out, so a heading
+  // wraps only when the four cannot fit side by side at all.
+  const needs = headings.map(
+    (heading, index) =>
+      Math.max(
+        invoiceTextWidth(heading, LABEL_SIZE, "regular"),
+        ...rows.map((row) => invoiceTextWidth(row[index]!, BODY_SIZE, "regular")),
+      ) +
+      2 * CELL_PADDING,
+  );
+  const spare = width - needs.reduce((sum, need) => sum + need, 0);
+  const columns = spare >= 0 ? needs.map((need) => need + spare / 4) : needs.map(() => width / 4);
+  const cellRight = (index: number): number =>
+    left + columns.slice(0, index + 1).reduce((sum, column) => sum + column, 0) - CELL_PADDING;
   let y = 0;
   const cells = (values: string[], size: number, tone: "ink" | "muted"): void => {
-    const wrapped = values.map((value) => wrapInvoiceText(value, inner, size));
+    const wrapped = values.map((value, index) =>
+      wrapInvoiceText(value, columns[index]! - 2 * CELL_PADDING, size),
+    );
     wrapped.forEach((lines, index) =>
       lines.forEach((line, at) =>
         rightAt(line, cellRight(index), y + at * lineHeight(size), size, "regular", tone),
@@ -553,31 +583,8 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
     );
     y += Math.max(...wrapped.map((lines) => lines.length)) * lineHeight(size);
   };
-  cells(
-    [
-      labels.taxRateColumn,
-      labels.vatSummaryBaseColumn,
-      labels.vatSummaryAmountColumn,
-      labels.taxTotalColumn,
-    ],
-    LABEL_SIZE,
-    "muted",
-  );
-  const letters = simplified ? rateLetters(facts.vat) : null;
-  for (const { rate, base, tax } of facts.vat) {
-    const shown = formatVatRate(rate, locale);
-    const letter = letters?.get(rate);
-    cells(
-      [
-        letter === undefined ? shown : `${letter} ${shown}`,
-        money(base),
-        money(tax),
-        money(addDecimal(base, tax)),
-      ],
-      BODY_SIZE,
-      "ink",
-    );
-  }
+  cells(headings, LABEL_SIZE, "muted");
+  for (const row of rows) cells(row, BODY_SIZE, "ink");
   y += GAP / 2;
   elements.push({ kind: "rule", x: left, y, width, thickness: HEAVY_RULE });
   y += HEAVY_RULE + GAP / 2;
