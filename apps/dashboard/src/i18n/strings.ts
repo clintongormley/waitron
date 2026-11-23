@@ -2397,10 +2397,10 @@ export const en = {
     "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
   "servers.not_primary":
-    "Only the primary box can remove machines or clear them from the list. Open this screen on the primary.",
+    "Only the main box can remove machines or clear them from the list. Open this screen on the main box.",
   "servers.this_server": "This box",
-  "servers.standing.primary": "Primary",
-  "servers.standing.standby": "Standby",
+  "servers.standing.primary": "Main box",
+  "servers.standing.standby": "Spare box",
   "servers.standing.sell_only": "Replaced; not selling",
   "servers.replaced_note": "Keep it switched on while it returns its invoice records.",
   "servers.standing.removed": "Removed",
@@ -2440,7 +2440,7 @@ export const en = {
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
-    "Clearing frees the place it takes on the list of boxes. If it tries to come back under its old identity, this primary refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
+    "Clearing frees the place it takes on the list of boxes. If it tries to come back under its old identity, this main box refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
   "backup.title": "Backups",
   "backup.guide": "Backups guide",
   "node_pack.create": "Create pack",
@@ -7185,10 +7185,10 @@ export const es: Record<StringKey, string> = {
     "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
   "servers.not_primary":
-    "Solo el servidor principal puede retirar máquinas o quitarlas de la lista. Abre esta pantalla en el principal.",
+    "Solo el servidor principal puede retirar máquinas o quitarlas de la lista. Abre esta pantalla en el servidor principal.",
   "servers.this_server": "Este servidor",
-  "servers.standing.primary": "Principal",
-  "servers.standing.standby": "En espera",
+  "servers.standing.primary": "Servidor principal",
+  "servers.standing.standby": "Servidor de reserva",
   "servers.standing.sell_only": "Sustituido; no vende",
   "servers.replaced_note": "Mantenlo encendido mientras devuelve sus registros de facturación.",
   "servers.standing.removed": "Retirado",
@@ -7197,8 +7197,8 @@ export const es: Record<StringKey, string> = {
   "servers.remove_explanation":
     "Retira este servidor del local. No cambia nada en el propio servidor.",
   "servers.declare_explanation":
-    "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
-  "servers.declare_switched_off": "Este servidor en espera está apagado",
+    "Confirma que este servidor de reserva está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
+  "servers.declare_switched_off": "Este servidor de reserva está apagado",
   "servers.declare_no_recovery":
     "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
   "servers.remove_former_title": "¿Retirar este servidor del local?",
@@ -7232,7 +7232,7 @@ export const es: Record<StringKey, string> = {
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":
-    "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. No se puede deshacer.",
+    "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "backup.guide": "Guía de copias de seguridad",
   "node_pack.create": "Crear kit",

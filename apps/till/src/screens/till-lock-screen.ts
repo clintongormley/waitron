@@ -254,6 +254,7 @@ export class TillLockScreen extends LitElement {
   @property({ attribute: false }) mainLastAnsweredAt: number | null = null;
   @property({ type: Boolean }) spareAnswering = false;
   @property({ type: Boolean }) mainServerRefused = false;
+  @property({ type: Boolean }) spareSwitchBusy = false;
   @property({ type: Boolean }) showCloudEmergency = false;
   @property({ type: Boolean }) cloudEmergencyBusy = false;
   @property({ type: Boolean }) cloudEmergencyRefused = false;
@@ -581,6 +582,7 @@ export class TillLockScreen extends LitElement {
       .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
       .refused=${this.mainServerRefused}
+      .switchBusy=${this.spareSwitchBusy}
       .showCloud=${this.showCloudEmergency}
       .cloudBusy=${this.cloudEmergencyBusy}
       .cloudRefused=${this.cloudEmergencyRefused}

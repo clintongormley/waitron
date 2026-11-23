@@ -34,6 +34,10 @@ const STATES: [string, Partial<TillMainServerStrip>][] = [
     { spareAnswering: true, showSwitch: true, panel: true, silentSince: Date.now() - 22_000 },
   ],
   [
+    "it fills the signed-in till while the switch is checking",
+    { spareAnswering: true, showSwitch: true, switchBusy: true, panel: true, modal: true },
+  ],
+  [
     "it fills the sign-in screen and no box answers",
     { spareAnswering: false, showSwitch: true, panel: true, silentSince: Date.now() - 22_000 },
   ],

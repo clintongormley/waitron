@@ -47,6 +47,7 @@ import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillMainServerStrip } from "./widgets/main-server-strip.js";
+import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
@@ -17987,6 +17988,15 @@ describe("the main-server strip", () => {
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".banner[role='status']")].find((banner) =>
       banner.textContent!.includes(t("server.waiting_sales")),
     );
+  async function switchControl(strip: Strip): Promise<HTMLButtonElement> {
+    await strip.updateComplete;
+    const button =
+      strip.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-switch-to-spare]",
+      )!;
+    await button.updateComplete;
+    return button.shadowRoot!.querySelector("button")!;
+  }
   const press = (strip: Strip) =>
     strip.dispatchEvent(new CustomEvent("switch-to-spare", { bubbles: true, composed: true }));
 
@@ -18003,14 +18013,40 @@ describe("the main-server strip", () => {
     expect(waitingLine(el)).toBeUndefined();
   });
 
-  it("hands both the strip and the sign-in panel the time the silence began, and only the sign-in draws it as a panel", async () => {
+  it("hands both the strip and the sign-in panel the time the silence began, and both draw it as a panel", async () => {
     const { el, router } = await mount();
     await silentFor(el, router, 20_000);
     expect(lockStrip(el)!.panel).toBe(true);
     expect(lockStrip(el)!.silentSince).toBe(T0);
     await signIn(el, ["node.manage"]);
-    expect(shellStrip(el)!.panel).toBe(false);
+    expect(shellStrip(el)!.panel).toBe(true);
     expect(shellStrip(el)!.silentSince).toBe(T0);
+  });
+
+  it("blocks the signed-in till during silence and returns to the same unsent basket", async () => {
+    const { el, router } = await mount();
+    await signIn(el, ["node.manage"]);
+    const sale = counter(el)!;
+    sale.store.addProduct(coffee, "2");
+    await settle(el);
+
+    await silentFor(el, router, 20_000);
+    const panel = shellStrip(el)!;
+    await panel.updateComplete;
+    const overlay = panel.shadowRoot!.querySelector("dialog");
+    expect(overlay?.matches(":modal")).toBe(true);
+    expect(dialogOpenUnder(el)).toBe(true);
+    const cancel = new Event("cancel", { cancelable: true });
+    overlay!.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+
+    answering.main = true;
+    await router.probeNow();
+    await settle(el);
+    expect(shellStrip(el)).toBeNull();
+    expect(dialogOpenUnder(el)).toBe(false);
+    expect(counter(el)).toBe(sale);
+    expect(counter(el)!.store.lines.map(({ quantity }) => quantity.toString())).toEqual(["2"]);
   });
 
   it("counts the last contact on the strip and the sign-in panel from the main box's last answer", async () => {
@@ -18078,7 +18114,7 @@ describe("the main-server strip", () => {
     expect(lockStrip(el)).not.toBeNull();
   });
 
-  it("offers the switch on a locked till and to a node.manage holder, not to other signed-in staff", async () => {
+  it("offers the spare’s sign-in page from the locked till and to signed-in staff", async () => {
     const locked = await mount();
     await silentFor(locked.el, locked.router, 20_000);
     expect(lockStrip(locked.el)!.showSwitch).toBe(true);
@@ -18093,8 +18129,15 @@ describe("the main-server strip", () => {
     const waiter = await mount();
     await signIn(waiter.el, ["payment.take"]);
     await silentFor(waiter.el, waiter.router, 20_000);
-    expect(shellStrip(waiter.el)).not.toBeNull();
-    expect(shellStrip(waiter.el)!.showSwitch).toBe(false);
+    const navigate = vi.fn();
+    waiter.el.navigate = navigate;
+    const outage = shellStrip(waiter.el)!;
+    await outage.updateComplete;
+    expect(outage.shadowRoot!.querySelector("[data-switch-to-spare]")).not.toBeNull();
+    (await switchControl(outage)).click();
+    await settle(waiter.el);
+    const opened = new URL(navigate.mock.calls[0]![0] as string);
+    expect(`${opened.origin}${opened.pathname}`).toBe(`${SPARE}/handover/emergency`);
   });
 
   it("a kitchen display shows the strip without the switch", async () => {
@@ -18118,6 +18161,7 @@ describe("the main-server strip", () => {
     expect(shellStrip(el)).not.toBeNull();
     expect(shellStrip(el)!.showSwitch).toBe(false);
     expect(shellStrip(el)!.showCloud).toBe(true);
+    expect(shellStrip(el)!.panel).toBe(false);
   });
 
   it("a press while the main server is silent opens the spare's switch page with the way back", async () => {
@@ -18133,6 +18177,76 @@ describe("the main-server strip", () => {
     expect(`${opened.origin}${opened.pathname}`).toBe(`${SPARE}/handover/emergency`);
     expect(opened.searchParams.get("back")).toBe(location.href);
     expect(shellStrip(el)!.refused).toBe(false);
+  });
+
+  it.each(["locked", "signed in"])(
+    "disables the %s switch button while checking the main box",
+    async (entry) => {
+      const { el, router, fetchImpl } = await mount();
+      const navigate = vi.fn();
+      el.navigate = navigate;
+      if (entry === "signed in") await signIn(el, ["node.manage"]);
+      await silentFor(el, router, 20_000);
+      const strip = (entry === "locked" ? lockStrip(el) : shellStrip(el))!;
+      const button = await switchControl(strip);
+      const failProbe = holdNextFetch(fetchImpl);
+      button.click();
+      await settle(el);
+
+      expect((await switchControl(strip)).getAttribute("aria-disabled")).toBe("true");
+      expect(button.getAttribute("aria-busy")).toBe("true");
+      expect(button.querySelector("wt-spinner")).not.toBeNull();
+      button.click();
+      failProbe();
+      await settle(el);
+      expect(navigate).toHaveBeenCalledOnce();
+      expect((await switchControl(strip)).hasAttribute("aria-disabled")).toBe(false);
+    },
+  );
+
+  it("a waiter who stays with an unsent basket can press Switch again", async () => {
+    const { el, router } = await mount();
+    await signIn(el, ["payment.take"]);
+    const sale = counter(el)!;
+    sale.store.addProduct(coffee, "2");
+    const leave = new Event("beforeunload", { cancelable: true });
+    const navigate = vi.fn(() => window.dispatchEvent(leave));
+    el.navigate = navigate;
+
+    await silentFor(el, router, 20_000);
+    const strip = shellStrip(el)!;
+    (await switchControl(strip)).click();
+    await settle(el);
+
+    expect(leave.defaultPrevented).toBe(true);
+    expect(sale.store.lines[0]!.quantity).toBe("2");
+    expect((await switchControl(strip)).hasAttribute("aria-disabled")).toBe(false);
+    (await switchControl(strip)).click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows switching during a new outage if the first switch left the till open", async () => {
+    const { el, router } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    (await switchControl(lockStrip(el)!)).click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledOnce();
+
+    answering.main = true;
+    await router.probeNow();
+    await settle(el);
+    expect(lockStrip(el)).toBeNull();
+
+    answering.main = false;
+    await silentFor(el, router, 20_000);
+    const button = await switchControl(lockStrip(el)!);
+    expect(button.hasAttribute("aria-disabled")).toBe(false);
+    button.click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledTimes(2);
   });
 
   it("a press does not navigate when the spare stops answering during the final probe", async () => {
@@ -18177,6 +18291,7 @@ describe("the main-server strip", () => {
     failProbe();
     await settle(el);
     expect(navigate).not.toHaveBeenCalled();
+    expect((await switchControl(lockStrip(el)!)).hasAttribute("aria-disabled")).toBe(false);
   });
 
   it("a till whose router is replaced during the final probe does not navigate", async () => {
@@ -18266,7 +18381,7 @@ describe("the main-server strip", () => {
     await signIn(el, permissions);
     await silentFor(el, router, 20_000);
     expect(shellStrip(el)!.showCloud).toBe(true);
-    expect(shellStrip(el)!.showSwitch).toBe(permissions.includes("node.manage"));
+    expect(shellStrip(el)!.showSwitch).toBe(true);
   });
 
   it("shows a neutral refusal when the main returns during the Cloud precheck", async () => {
@@ -18333,6 +18448,7 @@ describe("the main-server strip", () => {
     press(lockStrip(el)!);
     await settle(el);
     expect(lockStrip(el)!.refused).toBe(true);
+    expect((await switchControl(lockStrip(el)!)).hasAttribute("aria-disabled")).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
     await router.probeNow();
     await settle(el);

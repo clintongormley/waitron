@@ -91,10 +91,11 @@ import {
 } from "./handover-copy-selection.js";
 import { readUpload } from "./setup-recovery-preparation-api.js";
 import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface Declaration {
   binding: HandoverBinding;
-  wordingVersion: "a1018-emergency-v2";
+  wordingVersion: "a1018-emergency-v3";
   locale: "en" | "es";
   statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
   reason: string;
@@ -368,6 +369,7 @@ export function mountHandoverEmergencyApi(
       sourceNodeId,
       destinationNodeId: deps.nodeId,
       sourceServersUrl: new URL("/servers", originOf(source.contactUrl)).href,
+      timeZone: await venueTimeZoneIn(deps.db).catch(() => "UTC"),
       copy,
       joinedAtMs:
         link?.role === "serves" && link.state === "copied" ? link.updatedAt.getTime() : null,
@@ -604,7 +606,7 @@ export function mountHandoverEmergencyApi(
     const lastCopy = await compareCopy(request.expectedCopy, c.req.raw.signal);
     const body: Declaration = {
       binding,
-      wordingVersion: "a1018-emergency-v2",
+      wordingVersion: "a1018-emergency-v3",
       locale: request.locale,
       statements: request.statements,
       reason: request.reason,

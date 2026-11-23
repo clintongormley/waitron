@@ -2740,7 +2740,7 @@ export class TillApp extends LitElement {
   };
   readonly #resumeLive = () => this.#live?.start();
   readonly #onPageHide = () => {
-    this.#switchGeneration++;
+    this.#invalidateSpareSwitch();
     this.#closeCloudEmergency();
     this.#pauseLive();
   };
@@ -2942,7 +2942,7 @@ export class TillApp extends LitElement {
     const { from, to } = (event as CustomEvent<{ from: string; to: string }>).detail;
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
-    this.#switchGeneration++;
+    this.#invalidateSpareSwitch();
     this.cloudEmergency = undefined;
     this.#closeCloudEmergency();
     this.operatorPersonId = "";
@@ -2964,6 +2964,7 @@ export class TillApp extends LitElement {
     this.#watchMainSilence();
     if (this.#mainServerStrip() === undefined) {
       this.mainServerRefused = false;
+      if (this.spareSwitchBusy) this.#invalidateSpareSwitch();
       this.#closeCloudEmergency();
     }
     this.requestUpdate();
@@ -2974,13 +2975,18 @@ export class TillApp extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) => location.assign(url);
 
   @state() private mainServerRefused = false;
+  @state() private spareSwitchBusy = false;
   @state() private cloudEmergencyBusy = false;
   @state() private cloudEmergencyRefused = false;
   @state() private cloudEmergencyOpen = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Moves on at `pagehide`, when the till is detached from the page or its router, and when its
-   * server changes; voids a pending switch. */
+  /** A switch attempt belongs to this page, router and outage. */
   #switchGeneration = 0;
+
+  #invalidateSpareSwitch(): void {
+    this.#switchGeneration++;
+    this.spareSwitchBusy = false;
+  }
 
   #mainServerStrip(): { spareAnswering: boolean } | undefined {
     const since = this.router?.mainSilentSince ?? null;
@@ -3012,16 +3018,17 @@ export class TillApp extends LitElement {
   /** The spare's page takes over only while the main server stays silent to one more probe. */
   async #onSwitchToSpare(): Promise<void> {
     const router = this.router;
-    if (router === undefined) return;
+    if (router === undefined || this.spareSwitchBusy) return;
     const generation = this.#switchGeneration;
+    this.spareSwitchBusy = true;
     const mainAnswered = await router.probeMain();
     if (generation !== this.#switchGeneration) return;
-    if (mainAnswered) {
-      this.mainServerRefused = true;
+    this.spareSwitchBusy = false;
+    const spare = router.spare;
+    if (mainAnswered || spare?.answering !== true) {
+      this.mainServerRefused = mainAnswered;
       return;
     }
-    const spare = router.spare;
-    if (spare?.answering !== true) return;
     const url = new URL("/handover/emergency", spare.url);
     url.searchParams.set("back", location.href);
     this.navigate(url.href);
@@ -3062,7 +3069,7 @@ export class TillApp extends LitElement {
   }
 
   #detach(): void {
-    this.#switchGeneration++;
+    this.#invalidateSpareSwitch();
     this.#closeCloudEmergency();
     clearTimeout(this.#mainSilentTimer);
     this.#mainSilentTimer = undefined;
@@ -24170,13 +24177,16 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
-  /** The lock screen draws its own; the strip takes the waiting line's place while it shows. */
+  /** The lock screen draws its own outage panel. */
   #renderServerNotice() {
     const strip = this.#mainServerStrip();
     if (strip !== undefined)
       return html`<till-main-server-strip
+        .panel=${!this.deviceMode}
+        .modal=${!this.deviceMode}
+        .switchBusy=${this.spareSwitchBusy}
         .spareAnswering=${strip.spareAnswering}
-        .showSwitch=${!this.deviceMode && this.permissions.includes("node.manage")}
+        .showSwitch=${!this.deviceMode}
         .refused=${this.mainServerRefused}
         .showCloud=${this.cloudEmergency !== undefined}
         .cloudBusy=${this.cloudEmergencyBusy}
@@ -26023,6 +26033,7 @@ export class TillApp extends LitElement {
                           .mainSilentSince=${this.router?.mainSilentSince ?? null}
                           .mainLastAnsweredAt=${this.router?.mainLastAnsweredAt ?? null}
                           .mainServerRefused=${this.mainServerRefused}
+                          .spareSwitchBusy=${this.spareSwitchBusy}
                           .showCloudEmergency=${this.cloudEmergency !== undefined}
                           .cloudEmergencyBusy=${this.cloudEmergencyBusy}
                           .cloudEmergencyRefused=${this.cloudEmergencyRefused}

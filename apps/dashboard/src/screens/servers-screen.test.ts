@@ -163,6 +163,19 @@ afterEach(() => {
 });
 
 describe("servers screen list", () => {
+  it.each([
+    ["en-GB", "Main box", "Spare box"],
+    ["es-ES", "Servidor principal", "Servidor de reserva"],
+  ] as const)(
+    "names the main and spare boxes on their Servers rows in %s",
+    async (locale, main, spare) => {
+      setLocale(locale);
+      const el = await mount();
+      expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(main);
+      expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(spare);
+    },
+  );
+
   it("names each machine's role in words and marks which one is this box", async () => {
     const el = await mount();
     expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(t("servers.standing.primary"));
@@ -373,7 +386,7 @@ describe("servers screen list", () => {
     expect(body).not.toContain("55555555");
   });
 
-  it("says why nothing can be removed when this box is not the primary", async () => {
+  it("directs staff to the main box to remove a box", async () => {
     const onStandby: ServerListing = {
       term: 3,
       nodes: listing.nodes.map((n) => ({
@@ -386,7 +399,7 @@ describe("servers screen list", () => {
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }));
     expect(el.shadowRoot!.querySelector("[data-test=not-primary]")!.textContent!.trim()).toBe(
-      t("servers.not_primary"),
+      "Only the main box can remove machines or clear them from the list. Open this screen on the main box.",
     );
   });
 
@@ -722,9 +735,9 @@ describe("servers screen retiring a joined spare", () => {
         "servers.declare_explanation",
       ].map((key) => es[key as keyof typeof es]),
     ).toEqual([
-      "Este servidor en espera está apagado",
+      "Este servidor de reserva está apagado",
       "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
-      "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
+      "Confirma que este servidor de reserva está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
     ]);
     expect(codeMessage("membership.standby_joined", "es")).toBe(es["servers.declare_explanation"]);
     expect(codeMessage("membership.standby_joined", "en")).toBe(en["servers.declare_explanation"]);
@@ -825,15 +838,15 @@ describe("servers screen clearing", () => {
     expect(inTable(el, `role-${REMOVED}`)).toBeNull();
   });
 
-  it("says in both languages that clearing frees the place and this primary refuses the machine's return", () => {
+  it("says in both languages that clearing frees the place and this main box refuses the machine's return", () => {
     expect(en["servers.clear_explanation"]).toContain("frees the place");
     expect(en["servers.clear_explanation"]).toContain(
-      "If it tries to come back under its old identity, this primary refuses it",
+      "If it tries to come back under its old identity, this main box refuses it",
     );
     for (const key of ["servers.clear_explanation"] as const) {
       expect(en[key]).toContain("To use that machine again, reset it and add it as a new spare.");
       expect(es[key]).toContain(
-        "Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
+        "Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva.",
       );
       expect(en[key]).not.toContain("join from scratch");
       expect(es[key]).not.toContain("unirse de nuevo desde el principio");

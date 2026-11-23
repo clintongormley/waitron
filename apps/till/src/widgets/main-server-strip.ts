@@ -3,9 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { countText, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { trackDialog } from "./track-dialog.js";
 
-/** The red strip a till shows while the venue's main box has been silent too long; with `panel`, it
- * fills the screen instead. */
 @customElement("till-main-server-strip")
 export class TillMainServerStrip extends LitElement {
   constructor() {
@@ -18,6 +17,25 @@ export class TillMainServerStrip extends LitElement {
     css`
       :host {
         display: block;
+      }
+      dialog {
+        inset: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        background: var(--wt-color-danger);
+      }
+      dialog:modal,
+      dialog .strip {
+        overscroll-behavior: contain;
+      }
+      dialog::backdrop {
+        overflow: hidden;
+        overscroll-behavior: contain;
       }
       .strip {
         display: flex;
@@ -88,6 +106,7 @@ export class TillMainServerStrip extends LitElement {
 
   @property({ type: Boolean }) spareAnswering = false;
   @property({ type: Boolean }) showSwitch = false;
+  @property({ type: Boolean }) switchBusy = false;
   @property({ type: Boolean }) refused = false;
   @property({ type: Boolean }) showCloud = false;
   @property({ type: Boolean }) cloudBusy = false;
@@ -97,6 +116,7 @@ export class TillMainServerStrip extends LitElement {
   /** When the main box last answered; the last contact counts up from it once a second. */
   @property({ attribute: false }) lastAnsweredAt: number | null = null;
   @property({ type: Boolean, reflect: true }) panel = false;
+  @property({ type: Boolean }) modal = false;
 
   #tick: ReturnType<typeof setInterval> | undefined;
 
@@ -112,6 +132,12 @@ export class TillMainServerStrip extends LitElement {
 
   override updated(): void {
     this.#syncTick();
+    this.#showModal();
+  }
+
+  #showModal(): void {
+    const dialog = this.renderRoot.querySelector("dialog");
+    if (dialog?.isConnected && !dialog.open) dialog.showModal();
   }
 
   #syncTick(): void {
@@ -139,9 +165,13 @@ export class TillMainServerStrip extends LitElement {
   override render() {
     const switchable = this.spareAnswering && this.showSwitch;
     const answering = (this.showCloud && this.cloudRefused) || (switchable && this.refused);
-    return html`<div class="strip" role="alert" data-main-server-strip>
+    const content = html`<div
+      class="strip"
+      role=${this.modal ? nothing : "alert"}
+      data-main-server-strip
+    >
       <div class="words">
-        <p class="heading">
+        <p class="heading" id="outage-heading">
           ${t(
             this.showCloud && this.cloudRefused
               ? "cloud_emergency.main_answering"
@@ -166,6 +196,7 @@ export class TillMainServerStrip extends LitElement {
               variant="secondary"
               size=${this.panel ? "lg" : "md"}
               data-switch-to-spare
+              .loading=${this.switchBusy}
               @click=${() =>
                 this.dispatchEvent(
                   new CustomEvent("switch-to-spare", { bubbles: true, composed: true }),
@@ -189,6 +220,17 @@ export class TillMainServerStrip extends LitElement {
       ${answering ? nothing : html`<p class="carries-on" data-carries-on>${t("server.carries_on")}</p>`}
       <slot></slot>
     </div>`;
+    return this.modal
+      ? html`<dialog
+          ${trackDialog()}
+          aria-labelledby="outage-heading"
+          closedby="none"
+          @cancel=${(event: Event) => event.preventDefault()}
+          @close=${this.#showModal}
+        >
+          ${content}
+        </dialog>`
+      : content;
   }
 }
 

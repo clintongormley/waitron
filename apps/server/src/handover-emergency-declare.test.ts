@@ -191,6 +191,7 @@ function service(
         declaration?: {
           body: {
             binding: unknown;
+            wordingVersion: string;
             lastCopy: { identifier: string; lastChangeAtMs: number | null };
           };
         };
@@ -394,11 +395,19 @@ it("previews the checked spare copy without recording a declaration", async () =
       identifier: expect.stringMatching(/^[a-f0-9]{64}$/),
       lastChangeAtMs: null,
     },
+    timeZone: "Europe/Madrid",
     joinedAtMs: null,
     operation: null,
   });
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
   expect(placed.node.all(sql`select * from node_handover_events`)).toEqual(before);
+});
+
+it("still previews the copy in UTC when the venue’s time settings cannot be read", async () => {
+  await placed.venue.run(sql`update settings set version = 2 where module = 'business_day'`);
+  const answer = await service().post({ signIn: request.signIn }, true, "preview");
+  expect(answer.status).toBe(200);
+  expect(answer.body).toMatchObject({ timeZone: "UTC", copy: { source: "mirror-copy" } });
 });
 
 it("previews when this spare's held copy arrived, from its pair link's copied state", async () => {
@@ -477,6 +486,7 @@ it("records a signed declaration before answering, then replays without asking t
   const s = service();
   const first = await s.post();
   expect(first.status).toBe(200);
+  expect(first.body.declaration?.body.wordingVersion).toBe("a1018-emergency-v3");
   expect(
     verifyEnvelope(first.body.declaration, "declaration", () => nodeSigningPublicKey(spareKey))
       .valid,

@@ -54,7 +54,7 @@ Leave the new box's join page open. The new box then takes its first copy over t
 and restarts as the spare. Its page asks you to save the box key, then to print its own
 [switch label](servers.md#switch-label) and stick it on the box.
 
-On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
+On the main box, open **System → Servers** and find the **Main box** and **Spare box** rows. On the spare's row, check its delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
 check that the spare is connected to the restaurant's network. **Rebuilding the copy** means you should leave both boxes on while the copy is restored.
 
@@ -82,10 +82,9 @@ Use a spare that has finished joining this venue. Switch off the old main box an
 because two running main boxes could take payments and file separately. A switch cannot
 be undone.
 
-On a till or handheld, **The main box is not answering.** fills the sign-in screen in red, in place
-of the PIN pad while the main box stays silent, and shows as a red strip on other screens. It offers **Switch to
-the spare box** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
-spare. Once the main box has been silent for about half a minute, a
+If your till or handheld turns red, keep it open. When the main box answers again, you can
+carry on with your basket. If the spare is answering, choose **Switch to the spare box**.
+Sign in on the spare with **Manage boxes** to take over. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
 box that restarts for longer than about 20 seconds, during an update for example, brings a
 reloading device here too; if you did not mean to switch, do not switch, and reload the
@@ -114,10 +113,10 @@ again.
 checks the copy. The spare may restart; keep the page open. If that takes more than a minute or
 cannot be done, **Use the copy this spare holds** offers the copy already on it, usually the one
 from when it joined, with nothing newer. When the copy is checked, read **Latest sale or order in
-this copy**: anything newer may be missing. Then choose **Proceed**.
+this copy** in the venue’s time zone. Anything newer may be missing. Then choose **Proceed**.
 
-To use an encrypted backup instead, choose **Upload a backup file instead** on **Preparing the
-venue**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup
+If automatic preparation fails, you can use an encrypted backup. On **Preparing the venue**,
+choose **Upload a backup file instead**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup
 encryption key**. The box keeps its saved key. Keep this page open while the spare restarts, then
 check **Selected backup** and its latest sale or order before you choose **Proceed**. Choose a
 backup made after this spare joined its current main box.
@@ -150,7 +149,7 @@ may hold data this box does not have. When it is switched on again, it sends its
 here by itself and stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
 box's Servers page in the dashboard.
 
-If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
+If emergency hosting is available for your venue, the red screen also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 
 ## Keep the failed box’s data {#old-box-returns}
 
@@ -423,7 +422,7 @@ screen does too. The address beside the revealed code belongs to that code.
 The card also lists people with permission and an authenticator, and people who need to set
 one up in their profile. The card does not start the venue.
 
-If the main box stops answering, keep the till open. When the red strip or panel offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
+If the main box stops answering, keep the till open. When the red screen offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
 
 Have the emergency code, your Waitron password and an authenticator or recovery code ready. The dialog lists the roles allowed to start the venue; Cloud checks availability before continuing. The option stays hidden until Cloud has made emergency hosting available for your venue.
 

@@ -92,8 +92,9 @@ export const handoverEn = {
   "handover.emergency.no_date": "This copy holds no sale or order with a date.",
   "handover.emergency.servers": "Open the Servers page on the old main box",
   "handover.emergency.sourceSwitchedOff": "The old main box is switched off.",
-  "handover.emergency.noParallelRecovery": "Nobody is switching the venue anywhere else.",
-  "handover.emergency.missingTailAccepted": "I accept that the latest activity may be missing.",
+  "handover.emergency.noParallelRecovery":
+    "Nobody else is trying to switch the venue to a new main box at the moment.",
+  "handover.emergency.missingTailAccepted": "I accept that the latest activity might be missing.",
   "handover.emergency.reason": "Why are you switching?",
   "handover.emergency.reason_long": "Use no more than 500 characters.",
   "handover.emergency.continue": "Continue",
@@ -279,8 +280,9 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.no_date": "Esta copia no tiene ninguna venta ni pedido con fecha.",
   "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
   "handover.emergency.sourceSwitchedOff": "El servidor principal anterior está apagado.",
-  "handover.emergency.noParallelRecovery": "Nadie está cambiando el local a otro sitio.",
-  "handover.emergency.missingTailAccepted": "Acepto que puede faltar la actividad más reciente.",
+  "handover.emergency.noParallelRecovery":
+    "Nadie más está intentando pasar el local a un nuevo servidor principal en este momento.",
+  "handover.emergency.missingTailAccepted": "Acepto que podría faltar la actividad más reciente.",
   "handover.emergency.reason": "¿Por qué haces el cambio?",
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
   "handover.emergency.continue": "Continuar",
