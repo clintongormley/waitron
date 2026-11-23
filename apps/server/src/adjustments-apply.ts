@@ -871,7 +871,8 @@ export async function planAdjustment(
     line = rows.find((row) => row.id === ask.lineId) ?? null;
     if (line === null)
       throw new AppError("tab.line_not_found", { tabId: orderId, lineId: ask.lineId });
-    if (line.setMenuRole === "set_menu") throw new AppError("set_menu.remove_from_summary", {});
+    if (ask.action === "cancel" && line.setMenuRole === "set_menu")
+      throw new AppError("set_menu.remove_from_summary", {});
     if (ask.lineIds !== undefined) {
       row = await standInRow(tx, orderId, ask, rows);
       ({ line, view } = row);
