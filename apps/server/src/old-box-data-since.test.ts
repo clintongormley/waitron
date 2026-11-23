@@ -11,6 +11,7 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -311,6 +312,19 @@ describe("the old box's Activity tab", () => {
       "2026-10-25 02:59:59.999+02:00",
       "2026-10-25 02:00:00.000+01:00",
       "2026-10-25 02:14:59.999+01:00",
+    ]);
+  });
+
+  it("gives each instant its own offset when a quarter hour of UTC holds a change off the quarter", async () => {
+    // St. John's set its clocks back at 00:01 local on 7 November 2010, at 02:31 UTC: the quarter
+    // hour from 02:30 UTC starts at -02:30 and ends at -03:30.
+    await seedBusinessDay(suite.db, { timeZone: "America/St_Johns" });
+    for (const at of ["2010-11-07T02:30:59.999Z", "2010-11-07T02:31:00.000Z"])
+      await signedIn(null, Date.parse(at));
+    const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
+    expect([3, 4].map((n) => row(xml, n)[0])).toEqual([
+      "2010-11-07 00:00:59.999-02:30",
+      "2010-11-06 23:01:00.000-03:30",
     ]);
   });
 

@@ -64,7 +64,8 @@ const pad = (value: number) => String(value).padStart(2, "0");
 
 /**
  * `at` on a clock `offset` minutes east of UTC, as `YYYY-MM-DD HH:MM:SS.mmm+HH:MM`, or to the
- * minute: the offset tells apart the two hours a clock change repeats.
+ * minute: the offset tells apart the two hours a clock change repeats. Not workforce's
+ * `localWallClock`, which drops the milliseconds this file's cutoffs are compared to.
  */
 function wallClock(at: Date, offset: number, to: "ms" | "minute" = "ms"): string {
   const local = new Date(at.getTime() + offset * 60_000)

@@ -199,7 +199,8 @@ cursor: not-allowed;
 }`;
 
 /** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw. It styles the
- * form alone, so the page around it keeps its own look. */
+ * form alone, apart from the colour scheme its light-dark() tokens need, so the page around it keeps
+ * its own look. */
 export const BOX_FORM_HEAD = `<style>:root {
 color-scheme: light dark;
 ${tokenDeclarations()}

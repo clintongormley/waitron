@@ -162,7 +162,7 @@ describe("POST /old-box-data on the old box", () => {
     );
   });
 
-  it("dates the file on the venue's calendar, the day its first line names", async () => {
+  it("dates the file on the venue's calendar at the moment of download", async () => {
     await admin();
     await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-23T23:30:00.000Z") });

@@ -513,6 +513,15 @@ describe("the box pages' form style", () => {
     expect(() => fixedFontValue("--wt-x", "0.3rem")).toThrow("not a whole-pixel rem size: --wt-x");
   });
 
+  it("turns a signed rem length into signed pixels, and refuses a rem length it cannot read", () => {
+    expect(fixedFontValue("--wt-x", "-0.5rem")).toBe("-8px");
+    expect(fixedFontValue("--wt-x", "calc(100% - -1.5rem) +2REM")).toBe("calc(100% - -24px) +32px");
+    for (const value of ["1e1rem", "var(--wt-gap-1rem)"])
+      expect(() => fixedFontValue("--wt-x", value), value).toThrow(
+        "a rem length left unconverted: --wt-x",
+      );
+  });
+
   it("keeps the form's typed text and width fixed with a larger browser default", async () => {
     const browser = await chromium.launch({ args: ["--blink-settings=defaultFontSize=32"] });
     try {
