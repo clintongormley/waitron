@@ -151,7 +151,6 @@ async function soldForCash(
     zoneId: venue.zoneId,
     operatorId: venue.operatorId,
   });
-  // The counter department sells eaten in; the way is switched before the invoice is issued.
   if (dining === "takeaway") {
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, id)),

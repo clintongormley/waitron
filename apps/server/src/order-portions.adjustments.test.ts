@@ -3,7 +3,7 @@ import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   adjustmentLines,
   adjustmentRefunds,
@@ -28,12 +28,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  createExtraList,
-  createProduct,
-  setTakeawayVatRate,
-  writeProductModifiers,
-} from "@waitron/menu";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import {
   centsToDecimal,
   decimal,
@@ -65,6 +60,7 @@ import {
   inTx,
   PINS,
   provisionAdjustmentVenue,
+  takeawayRates,
   REASONS,
   rowsOf,
   type AdjustmentVenue,
@@ -409,18 +405,10 @@ function expectSameMoney(
 
 const bread: RoundLine = { name: "Bread" };
 
-async function takeawayRate(name: string, rate: string) {
-  const [product] = await inTx(venue, (tx) =>
-    tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
-  );
-  await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
-  onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
-}
-
 describe("A803 portions: a discount or comp on a whole row of identical portions", () => {
   it("A803 portions: 10% off a row of three €3.33 croquettes files 2 × €3.00 and 1 × €2.99 and prints one 10% line under the row, as one line of three does", async () => {
     // Taken away, so the Croquettes' 21% and the Bread's 10% print two rate letters.
-    await takeawayRate("Croquettes", "21.00");
+    await takeawayRates(venue, { Croquettes: "21.00" });
     const {
       grouped,
       portions,

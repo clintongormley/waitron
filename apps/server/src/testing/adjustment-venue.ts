@@ -5,6 +5,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { onTestFinished } from "vitest";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   assignMenuToVenue,
@@ -13,6 +14,7 @@ import {
   createExtraList,
   createProduct,
   setProductVariants,
+  setTakeawayVatRate,
   writeProductModifiers,
 } from "@waitron/menu";
 import {
@@ -23,6 +25,7 @@ import {
 import {
   kitchenStations,
   orderEvents,
+  products,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -511,6 +514,20 @@ export function inTx<T>(venue: Pick<AdjustmentVenue, "db">, fn: (tx: Transaction
 
 /** One round line: a product by name, a quantity, the variant it is sold as, and extras picks for
  * the Pizza. */
+/** Sets each named product's takeaway rate for this test, putting the venue default 10.00 back after. */
+export async function takeawayRates(
+  venue: Pick<AdjustmentVenue, "db">,
+  rates: Record<string, string>,
+) {
+  for (const [name, rate] of Object.entries(rates)) {
+    const [product] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
+    );
+    await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
+    onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
+  }
+}
+
 export interface RoundLine {
   name: string;
   quantity?: string;

@@ -3,12 +3,11 @@ import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
-  products,
   sales,
   saleLines,
   taxpayer,
@@ -20,7 +19,6 @@ import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal, decimalToCents, sumDecimals, workingOrderId } from "@waitron/shared";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
-import { setTakeawayVatRate } from "@waitron/menu";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -34,6 +32,7 @@ import {
   lineIdOf,
   todayLine,
   provisionAdjustmentVenue,
+  takeawayRates,
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
@@ -124,16 +123,6 @@ async function payCash(billId: string, amount: string) {
 
 const bill = async (lines: RoundLine[], opts: { dining?: "takeaway" } = {}) =>
   (await billWith(venue, lines, opts)).billId;
-
-async function takeawayRates(rates: Record<string, string>) {
-  for (const [name, rate] of Object.entries(rates)) {
-    const [product] = await inTx(venue, (tx) =>
-      tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
-    );
-    await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
-    onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
-  }
-}
 
 /** The receipt's lines for the bill as it stands, with what each prints beneath it. */
 function receiptOf(billId: string) {
@@ -651,7 +640,7 @@ describe("receiptLines", () => {
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {
     // Taken away, so the 21% Burger and Bottle and the 10% Bread print two rate letters.
-    await takeawayRates({ Burger: "21.00", Bottle: "21.00" });
+    await takeawayRates(venue, { Burger: "21.00", Bottle: "21.00" });
     const billId = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }], {
       dining: "takeaway",
     });
@@ -859,7 +848,7 @@ describe("receiptLines", () => {
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
     // Taken away, so the 21% Croquettes and the 10% Bread print two rate letters.
-    await takeawayRates({ Croquettes: "21.00" });
+    await takeawayRates(venue, { Croquettes: "21.00" });
     const billId = await bill([{ name: "Croquettes", quantity: "3" }, { name: "Bread" }], {
       dining: "takeaway",
     });

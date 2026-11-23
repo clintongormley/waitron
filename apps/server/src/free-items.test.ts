@@ -28,6 +28,7 @@ import {
   inTx,
   lineIdOf,
   provisionAdjustmentVenue,
+  takeawayRates,
   rowsOf,
   todayLine,
   type AdjustmentVenue,
@@ -190,16 +191,6 @@ function reprice(billId: string, lineNo: number, price: number, vatClass: string
 }
 
 /** Gives each named product this takeaway rate until the case ends, then the venue's default 10%. */
-async function takeawayRates(rates: Record<string, string>) {
-  for (const [name, rate] of Object.entries(rates)) {
-    const [product] = await inTx(venue, (tx) =>
-      tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
-    );
-    await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
-    onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
-  }
-}
-
 function row(overrides: Partial<FreeItem>): Omit<FreeItem, "adjustmentId"> {
   return {
     date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) as unknown as string,
@@ -643,7 +634,7 @@ describe("the estimated cost", () => {
   it("takes each dish's own rate, and for a whole bill the sum over its lines", async () => {
     await setMargin(departmentId, 3000);
     // These products' takeaway rates decide; no rate reads the labels reprice writes.
-    await takeawayRates({ Bread: "10.00", Salad: "21.00" });
+    await takeawayRates(venue, { Bread: "10.00", Salad: "21.00" });
     const dish = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
     await reprice(dish.billId, 1, 1100, "reduced");
     await adjust(dish.billId, { lineId: await lineIdOf(venue, dish.billId, 1), action: "comp" });
@@ -674,7 +665,7 @@ describe("the estimated cost", () => {
   it("takes a dish's extra at the extra's own rate", async () => {
     await setMargin(departmentId, 3000);
     // These products' takeaway rates decide; no rate reads the labels reprice writes.
-    await takeawayRates({ Pizza: "10.00", Olives: "21.00" });
+    await takeawayRates(venue, { Pizza: "10.00", Olives: "21.00" });
     const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }], {
       dining: "takeaway",
     });
