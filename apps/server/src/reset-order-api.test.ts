@@ -28,7 +28,6 @@ import { verifyEnvelope } from "@waitron/handover";
 import { beginHandoverOperationTx, nodeHandoverEvents } from "@waitron/node-db";
 import type { WaitronModule } from "@waitron/module";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
-import { fiscalHoldings } from "@waitron/fiscal-verifactu/src/handover-holdings.js";
 import type { BackupStatus } from "./backup-status.js";
 import type { Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -822,9 +821,9 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
       reuseExistingParents: true,
     });
     await insertFiscalRegistro(suite.db, ids, { entorno: "preproduction" });
-    const held = await fiscalHoldings(liveBackupQuery(suite.db));
+    const held = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
     expect(held).toHaveLength(1);
-    return held as unknown as CanonicalValue;
+    return held;
   }
 
   async function field(seats: WaitronModule[] = modules) {
@@ -836,13 +835,13 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
   }
 
   it("is true after a planned handover for a summary naming a chain this box lacks", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     expect(await field()).toBe(true);
   });
 
   it("is false for a summary whose every chain this box holds, or that names none", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: await heldChain() } }));
     expect(await field()).toBe(false);
     await ask(await queryBody({ holdings: { fiscal: [] } }));
@@ -850,13 +849,13 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
   });
 
   it("is true for a summary the fiscal seat cannot read, which no order stood to refuse", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: "not a list" } }));
     expect(await field()).toBe(true);
   });
 
   it("fails the listing on a seat fault that is not an unreadable summary", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     const faulty: WaitronModule[] = [
       {
@@ -873,13 +872,13 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
   });
 
   it("counts nothing for a module the listing finds no lacking seat for", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     expect(await field([{ ...modules[0]!, handover: undefined }])).toBe(false);
   });
 
   it("is null before the old box's first question since this box started", async () => {
-    await replaced("controlled");
+    await completedReturn("controlled");
     expect(await field()).toBeNull();
     expect(
       (await listServers(suite.db, suite.node, main)).nodes.find((n) => n.nodeId === oldBox)
@@ -895,6 +894,17 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     expect(await field(watched)).toBeNull();
     await replaced("emergency");
+    expect(await field(watched)).toBeNull();
+    expect(lacking).not.toHaveBeenCalled();
+  });
+
+  it("is not worked out after a planned handover whose return is not complete, when no wipe can be ordered", async () => {
+    await replaced("controlled");
+    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
+    const watched: WaitronModule[] = [
+      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
+    ];
+    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     expect(await field(watched)).toBeNull();
     expect(lacking).not.toHaveBeenCalled();
   });

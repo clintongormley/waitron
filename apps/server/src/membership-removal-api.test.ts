@@ -48,6 +48,9 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { createOldBoxHoldings } from "./old-box-holdings.js";
+import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
+import { earlierBoxChain } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
 
@@ -92,7 +95,10 @@ interface Primary {
 }
 
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
-async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promise<Primary> {
+async function primary(
+  readSpare?: MembershipRemovalApiDeps["readSpare"],
+  oldBoxes?: MembershipRemovalApiDeps["oldBoxes"],
+): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
@@ -113,7 +119,7 @@ async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promi
   const reloadStream = vi.fn(async () => {});
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare },
+    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare, oldBoxes },
     log,
   );
   return {
@@ -1355,6 +1361,26 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
 });
 
 describe("GET /management-api/servers", () => {
+  it("compares an old main box's kept summary after a planned handover whose return completed", async () => {
+    const holdings = createOldBoxHoldings();
+    const fiscal = { name: "fiscal", version: "1.0.0", tier: "mandatory" as const };
+    const p = await primary(undefined, {
+      holdings,
+      modules: [{ ...fiscal, handover: VERIFACTU_HANDOVER }],
+    });
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", randomUUID(), {
+      scenario: "controlled",
+    });
+    holdings.record(oldMain.nodeId, { fiscal: [earlierBoxChain()] });
+
+    const body = (await (await list(p, p.adminCookie)).json()) as {
+      nodes: { nodeId: string; oldBoxHoldsMore: boolean | null }[];
+    };
+    expect(body.nodes.find((n) => n.nodeId === oldMain.nodeId)?.oldBoxHoldsMore).toBe(true);
+  });
+
   it("serves cached spare progress only after permission, and recovers without changing rows", async () => {
     let cached: import("./spare-follow.js").SpareFollowView | null = {
       peerNodeId: "spare",

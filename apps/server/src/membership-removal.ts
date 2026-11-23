@@ -182,8 +182,9 @@ export interface ServerListing {
     /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
     readonly recoveredRecordsBackup: RecoveredRecordsBackup | null;
     /**
-     * After a planned handover from the box, with no order standing, whether its latest summary
-     * names a chain this box lacks; null otherwise, or before it has asked since this box started.
+     * After a planned handover from the box whose return completed, with no order standing,
+     * whether its latest summary names a chain this box lacks; null otherwise, or before it has
+     * asked since this box started.
      */
     readonly oldBoxHoldsMore: boolean | null;
   }[];
@@ -248,6 +249,7 @@ export async function listServers(
       if (
         summary !== undefined &&
         activations.get(nodeId)?.scenario === "controlled" &&
+        activations.get(nodeId)?.returnCompleted === true &&
         !orders.has(nodeId)
       )
         holdsMoreBy.set(nodeId, await holdsMore(db, oldBoxes.modules, summary));

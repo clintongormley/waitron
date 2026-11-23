@@ -3423,7 +3423,6 @@ async function bootServer(
       wake: wakeFiscalDrain,
     },
   };
-  // One store: the Servers list compares what the reset-order route last verified.
   const oldBoxHoldings = createOldBoxHoldings();
   mountReturnRecordsApi(
     app,
