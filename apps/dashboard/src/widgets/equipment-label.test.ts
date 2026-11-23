@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { decodeQrImage } from "../testing/decode-qr.js";
-import { printEquipmentLabel, type EquipmentLabel } from "./equipment-label.js";
+import { printEquipmentLabel } from "@waitron/ui";
+import "./equipment-label.js";
+import type { EquipmentLabel } from "./equipment-label.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
