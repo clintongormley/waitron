@@ -1,15 +1,15 @@
 export function remedyRequestBody(request: {
   kind: string;
-  caseId: string;
+  caseRecordId: string;
   recordId: string;
   actionKey: string;
   reason: string;
   facts?: Record<string, unknown>;
 }) {
-  const { kind, caseId, recordId, actionKey, reason, facts } = request;
+  const { kind, caseRecordId, recordId, actionKey, reason, facts } = request;
   return {
     kind,
-    caseRegistroId: caseId,
+    caseRegistroId: caseRecordId,
     registroId: recordId,
     actionKey,
     reason,

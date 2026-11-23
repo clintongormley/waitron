@@ -494,7 +494,7 @@ describe("the start clock gate as boot wires it", () => {
         body: JSON.stringify(
           remedyRequestBody({
             kind: "record-correction",
-            caseId: randomUUID(),
+            caseRecordId: randomUUID(),
             recordId: randomUUID(),
             actionKey: "correct-facts",
             reason: "Correct the stored record facts",

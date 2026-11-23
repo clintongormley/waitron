@@ -302,7 +302,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     body: JSON.stringify(
       remedyRequestBody({
         kind: "record-correction",
-        caseId: String(originals.records[0]!.id),
+        caseRecordId: String(originals.records[0]!.id),
         recordId: String(originals.records[0]!.id),
         actionKey: "return-correction",
         reason: "Correct the description",

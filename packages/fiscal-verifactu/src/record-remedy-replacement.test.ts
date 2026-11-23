@@ -557,7 +557,7 @@ it("refuses a full invoice when this node has no live full-invoice corrective se
     .set({ retiredAt: TODAY })
     .where(eq(invoiceSeries.id, fullCorrectiveId));
   await refuses(
-    { ...body, caseId: original.caseId, registroId: original.registroId },
+    { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "series.no_full_corrective_for_node",
     409,
   );
