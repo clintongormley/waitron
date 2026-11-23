@@ -5246,6 +5246,13 @@ See the [steady-clock plan and changed checks](https://github.com/clintongormley
 **2026-11-17, jr8:** backup scheduling now runs through `createBackupSchedule` and
 `backupsJob`; the table retains the earlier loop name from the clock-step experiment.
 
+**2026-11-23:** giving up an unsent page report (`resendPageReports` in
+`packages/print-agent/src/agent.ts`) now measures its give-up time (`PAGE_REPORT_GIVE_UP_MS`, twice
+the 60-second lease) on the steady clock, so a wall-clock step no longer changes when an unsent report
+is given up (test: `agent.test.ts`, "resends an unsent report across wall-clock jumps either way and
+gives it up by an injected steady clock", and its twin for the default steady clock). The print agent row below keeps its earlier `host.now`
+wording for that check.
+
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
 | Dashboard sessions (`packages/identity/src/management-session.ts:79`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |

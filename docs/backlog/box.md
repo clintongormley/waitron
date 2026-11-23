@@ -11,10 +11,29 @@ that measures elapsed time on a steady clock. Start by listing every site
 (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
 applies today; behaviour is kept site by site. Raised by #2331's review.
 
-**Still open:** apply the shared elapsed-time source to the remaining sites below, after deciding
-which rules measure an elapsed wait and which compare persisted dates, ordering or calendar time.
-The sign-in/account limiter families are outside this open inventory; the persisted PIN helper
-exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
+**Still open:** these waits measured inside one process still guard by hand against a backward
+wall-clock step:
+
+- The print agent's `passed()` deadlines in `packages/print-agent/src/agent.ts`: the discovery
+  window, how long an address the server asked to have checked stays checkable, the spacing between
+  discovery scans and between address checks, how long a device an address check found stays
+  listed, the self-enrol retry spacing and the network-reset window. Each
+  counts a deadline further ahead than its own length as passed. Two of them leave `agent.ts` as
+  wall-clock times, so moving them changes what their readers receive: the setup page shows
+  `resetAt` as a countdown, and `host.scan` receives the discovery window's end as the network
+  sweep's deadline.
+- The network sweep in `apps/print-agent/src/sweep.ts` (`sweepPort`), which starts no further dial
+  once its deadline lies further ahead than it did at the sweep's start. The search below finds
+  neither this nor the print agent's `passed()` (its comment splits "stepped back" across two
+  lines), so neither has a row.
+- The backup schedule's interval fire in `apps/server/src/backup-sweep.ts` (`createBackupSchedule`),
+  held in memory as one interval after the time it was worked out (on a first pass with Cloud,
+  after the last saved Cloud copy); its row is in the table below.
+
+The other rows below are saved dates, a heartbeat shared between processes, orderings, calendar time
+or declared limits, sorted on 2026-11-23 from each row's rule as the table states it, not by running
+anything. The sign-in/account limiter families are outside this open inventory; the persisted PIN
+helper exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ### Inventory scope
 
@@ -46,9 +65,8 @@ the table retains the earlier loop name and its clock rule.
 **2026-11-21, os13:** the card refund resend check below now lives in
 `resolve` in `apps/server/src/tender-refund-sends.ts`, for both bill and receipt refunds.
 
-These files from the source snapshot remain open. A persisted date, ordering invariant or calendar
-rule is not made process-relative by replacing its clock read. Later slices must choose their
-scope and preserve the rules shown here before proposing any conversion.
+These rows keep the wall clock. A persisted date, ordering invariant or calendar rule is not made
+process-relative by replacing its clock read.
 
 | Source and function/site | Rule read in the current code |
 | --- | --- |
@@ -74,7 +92,6 @@ scope and preserve the rules shown here before proposing any conversion.
 | `packages/payments/src/reconciliation-schedule/derive.ts:104–166` (`derive`, `claimLapsed`, `retryDue`) | Reclaim a running ledger row strictly outside ±lease; retry at/before now or beyond `longestWaitMs`. Both feed the due-work list; stored dates remain shared inputs. |
 | `packages/payments/src/reconciliation-schedule/duty.ts:36–42` (`PeriodDuty` bounds) | Declares parked retry and maximum re-sweep intervals used to judge a stored successor due time. Contract prose tied to `run.ts`/`derive.ts`, not another clock reader. |
 | `packages/payments/src/reconciliation-schedule/run.ts:174–184,235–240` (`runOne`, `longestWait`) | Clamp a successful duty's requested re-sweep to the maximum of last backoff, parked retry and declared re-sweep. Without that clamp, the reader would treat it as a backward-step retry at every tick. |
-| `packages/print-agent/src/agent.ts:40,523–531` (`resendPageReports`) | Abandon an unsent page report only when absolute distance from its last alive stamp exceeds 120 seconds; otherwise resend. Host supplies the clock. |
 | `packages/printing/src/runtime.ts` (`dueNow`, drawer expiry, invoice selection) | A document claim strictly older than its 60-second lease or strictly more than 60 seconds ahead is reclaimable. Stale drawer jobs end without replay. An ordinary document whose next retry lies more than 60 seconds ahead is due. Receipt invoice selection also accepts the caller's upper retry bound for queued persisted deliveries. |
 | `packages/store/src/venue-holder.ts:37,79–87` (`isVenueHolderFresh`) | Heartbeat is fresh only strictly within ±30 seconds; either endpoint is stale. Heartbeat is a cross-process file rewritten by the holder, not process-local state. |
 | `packages/venue-service/src/hours-occurrences.ts:28–44` (`localTimeOccurrences`) | Return every UTC occurrence of a local minute: zero in a spring-forward gap, two in a backward zone-offset change. Calendar calculation, not a duration guard. |

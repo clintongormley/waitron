@@ -1143,7 +1143,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **One steady-clock helper instead of hand-written clock-step-back guards** (owner, 2026-11-01,
   answering #2331). Move elapsed timers onto one shared helper, keeping each site's policy.
-  The remaining-site inventory separates elapsed waits from persisted dates, ordering and calendar rules.
+  The print agent's deadlines and network sweep, and the backup schedule's interval fire, still
+  guard in-process waits by hand; the other inventory rows are saved dates, a heartbeat, orderings,
+  calendar rules or declared limits.
   [Detail and remaining-site inventory](backlog/box.md#one-steady-clock-helper-instead-of-hand-written-clock-step-back-guards).
 
 - **Closing a pay period trusts the box's clock.**
