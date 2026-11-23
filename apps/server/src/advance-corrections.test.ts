@@ -816,6 +816,14 @@ describe("an advance once the rest's invoice has taken it off", () => {
         .where(eq(billAdvances.workingOrderId, billId)),
     );
     const { correctionId, refusal } = await openedBeforeTheRest(billId, row!.advanceId);
+    expect(
+      await send(
+        venue().app,
+        venue().cookie,
+        "GET",
+        `/api/transactions/${row!.advanceId}/refundable-tenders`,
+      ),
+    ).toMatchObject({ status: 200, json: [{ manual: true, correctionOpen: true }] });
 
     const refused = await send(
       venue().app,

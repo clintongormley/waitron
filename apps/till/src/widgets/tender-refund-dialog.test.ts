@@ -448,8 +448,37 @@ it("asks for a hand-keyed payment's tip alone on the terminal whatever its limit
   expect(asks).toMatchObject([{ appliedAmount: "0.00", tipAmount: "5.00", manualConfirmed: true }]);
 });
 
+it.each([
+  ["en", "A correction of this invoice is under way"],
+  ["es", "Hay una rectificación de esta factura en curso"],
+] as const)(
+  "in %s, while a correction is open, asks for nothing on the terminal, a tip alone included",
+  async (locale, words) => {
+    setLocale(locale);
+    const el = await mount({
+      tenders: [{ ...keyed("0.00"), tipRemaining: "5.00", correctionOpen: true }],
+    });
+    const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+    await choose(el, "return");
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
+    await fill(el, "appliedAmount", "0");
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
+    expect(bottom(el)).toContain(words);
+    expect(bottom(el)).not.toContain(codeMessage("tender.refund_needs_correction"));
+    expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
+    expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
+    expect(button(el).disabled).toBe(true);
+    expect(button(el).variant).toBe("secondary");
+    await pressEnter(el);
+    expect(asks).toEqual([]);
+  },
+);
+
 it("does not limit a correction's card refund of a hand-keyed payment", async () => {
-  const el = await mount({ tenders: [keyed("0.00")], correcting: true });
+  const el = await mount({
+    tenders: [{ ...keyed("0.00"), correctionOpen: true }],
+    correcting: true,
+  });
   const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
   await choose(el, "return");
   expect(bottom(el)).toBe("");

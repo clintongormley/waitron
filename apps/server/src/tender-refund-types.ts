@@ -26,8 +26,11 @@ export interface RefundableTender {
   pendingRefundId: string | null;
   manual: boolean;
   /** On a hand-keyed card payment, the payment money Refund a payment may give back now without a
-   * corrective; absent on other payments and on a part payment. */
+   * corrective; absent on other payments and on a part payment with no correction open. */
   plainRefundLimit?: string;
+  /** On a hand-keyed card payment, set while the sale has an open correction, which refuses every
+   * refund outside it. */
+  correctionOpen?: true;
 }
 
 export interface TenderRefundView {

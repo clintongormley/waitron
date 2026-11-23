@@ -171,16 +171,25 @@ export function correctionLeft(
   return correction.gross - money.completed - money.pending;
 }
 
-/** Refuses `invoice_correction.already_open` while the sale has an open correction. */
-export async function refuseWhileCorrectionOpen(tx: Transaction, saleId: string): Promise<void> {
+/** The id of the sale's open correction, if it has one. */
+export async function openCorrectionOf(
+  tx: Transaction,
+  saleId: string,
+): Promise<string | undefined> {
   const [open] = await tx
     .select({ id: invoiceCorrections.id })
     .from(invoiceCorrections)
     .where(
       and(eq(invoiceCorrections.originalSaleId, saleId), eq(invoiceCorrections.state, "open")),
     );
-  if (open !== undefined)
-    throw new AppError("invoice_correction.already_open", { saleId, correctionId: open.id });
+  return open?.id;
+}
+
+/** Refuses `invoice_correction.already_open` while the sale has an open correction. */
+export async function refuseWhileCorrectionOpen(tx: Transaction, saleId: string): Promise<void> {
+  const correctionId = await openCorrectionOf(tx, saleId);
+  if (correctionId !== undefined)
+    throw new AppError("invoice_correction.already_open", { saleId, correctionId });
 }
 
 export async function linkRefundToCorrection(

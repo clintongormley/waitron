@@ -936,6 +936,23 @@ describe("Refund a payment naming no cancels", () => {
     );
   }
 
+  /** Opens a correction of `gross` on the sale, previewed first as Correct invoice does. */
+  async function openCorrection(saleId: string, gross: string) {
+    const manager = (path: string, body: unknown) =>
+      send(venue.app, venue.cookie.manager, "POST", path, body);
+    const split = await manager(`/api/transactions/${saleId}/corrections/preview`, { gross });
+    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    const opened = await manager(`/api/transactions/${saleId}/corrections`, {
+      submissionId: randomUUID(),
+      gross,
+      reasonId: venue.reasonId.houseVoid,
+      note: "Cold",
+      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    return opened;
+  }
+
   it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
     const paid = await handKeyedOwingTwelve();
     expect(await refundableTenders(paid.saleId)).toMatchObject({
@@ -950,23 +967,17 @@ describe("Refund a payment naming no cancels", () => {
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       json: [{ plainRefundLimit: "12.00" }],
     });
-    const manager = (path: string, body: unknown) =>
-      send(venue.app, venue.cookie.manager, "POST", path, body);
-    const split = await manager(`/api/transactions/${paid.saleId}/corrections/preview`, {
-      gross: "5.00",
-    });
-    expect(split.status, JSON.stringify(split.json)).toBe(200);
-    const opened = await manager(`/api/transactions/${paid.saleId}/corrections`, {
-      submissionId: randomUUID(),
-      gross: "5.00",
-      reasonId: venue.reasonId.houseVoid,
-      note: "Cold",
-      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
-    });
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    await openCorrection(paid.saleId, "5.00");
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       status: 200,
-      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "0.00" }],
+      json: [
+        {
+          manual: true,
+          appliedRemaining: "37.00",
+          plainRefundLimit: "0.00",
+          correctionOpen: true,
+        },
+      ],
     });
     const before = await written();
     expect(
@@ -1021,25 +1032,15 @@ describe("Refund a payment naming no cancels", () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await pay(b, "37.00");
     const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
-    const manager = (method: "POST", path: string, body: unknown) =>
-      send(venue.app, venue.cookie.manager, method, path, body);
-    const split = await manager("POST", `/api/transactions/${paid.saleId}/corrections/preview`, {
-      gross: "5.00",
-    });
-    expect(split.status, JSON.stringify(split.json)).toBe(200);
-    const opened = await manager("POST", `/api/transactions/${paid.saleId}/corrections`, {
-      submissionId: randomUUID(),
-      gross: "5.00",
-      reasonId: venue.reasonId.houseVoid,
-      note: "Cold",
-      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
-    });
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const opened = await openCorrection(paid.saleId, "5.00");
     const correctionId = (opened.json as { correction: { id: string } }).correction.id;
-    const given = await manager("POST", `/api/invoice-corrections/${correctionId}/cash`, {
-      submissionId: randomUUID(),
-      amount: "5.00",
-    });
+    const given = await send(
+      venue.app,
+      venue.cookie.manager,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "5.00" },
+    );
     expect(given).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
 
     await refusedNeedsCorrection(paid, refundBody(paid, "12.01"));

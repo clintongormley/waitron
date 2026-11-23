@@ -30,6 +30,7 @@ import { resolveTransactionScope } from "./find-bill-transactions.js";
 import {
   checkCorrectionLeg,
   linkRefundToCorrection,
+  openCorrectionOf,
   refuseWhileCorrectionOpen,
   type CorrectionRead,
 } from "./invoice-correction-legs.js";
@@ -189,7 +190,13 @@ export async function readRefundableTendersWithLimits(
   saleId: string,
 ): Promise<RefundableTender[]> {
   const rows = await readRefundableTenders(tx, saleId);
-  if (!rows.some((row) => row.manual) || (await isPartPayment(tx, saleId))) return rows;
+  if (!rows.some((row) => row.manual)) return rows;
+  // The write refuses every refund outside an open correction, a tip alone included.
+  if ((await openCorrectionOf(tx, saleId)) !== undefined)
+    return rows.map((row) =>
+      row.manual ? { ...row, plainRefundLimit: "0.00", correctionOpen: true } : row,
+    );
+  if (await isPartPayment(tx, saleId)) return rows;
   const remaining = (row: RefundableTender) => decimalToCents(decimal(row.appliedRemaining));
   const upTo = Math.max(...rows.filter((row) => row.manual).map(remaining));
   const owedIds = await cancelsStillOwedBy(tx, saleId);
@@ -197,13 +204,11 @@ export async function readRefundableTendersWithLimits(
     owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
   let limit: number;
   try {
-    await refuseWhileCorrectionOpen(tx, saleId);
     limit = await plainRefundLimit(tx, nodeId, fiscal, saleId, upTo, owed);
   } catch (error) {
+    // A refusal that passes by waiting refuses the refund above `owed` for now.
     if (!(error instanceof AppError)) throw error;
-    // An open correction refuses every plain refund; any other refusal passes by waiting, and
-    // refuses the refund above `owed` for now.
-    limit = error.code === "invoice_correction.already_open" ? 0 : Math.min(upTo, owed);
+    limit = Math.min(upTo, owed);
   }
   return rows.map((row) =>
     row.manual
