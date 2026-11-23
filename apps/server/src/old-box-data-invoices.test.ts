@@ -306,8 +306,9 @@ describe("the old box's Invoices tab", () => {
       expect(row(xml, 1)).toEqual([
         words.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
       ]);
-      expect([row(xml, 3)[0], row(xml, 3)[20], row(xml, 3).at(-1)]).toEqual([
+      expect([row(xml, 3)[0], row(xml, 3)[2], row(xml, 3)[20], row(xml, 3).at(-1)]).toEqual([
         sale,
+        "A/1",
         expect.stringMatching(
           new RegExp(
             `^${box}: ${venue.nodeId}; ${record}: [^;]+; ${system}: WAITRON01; ${installation}: \\d+$`,
