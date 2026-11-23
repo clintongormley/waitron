@@ -1394,6 +1394,21 @@ export const en = {
     "The registered-address change was not confirmed. Check the registered address in Venue settings before trying again.",
   "venue_details.taxpayer_domicile_changed":
     "The registered address changed in another session. Close and try again.",
+  "venue_details.bank_account": "Bank account",
+  "venue_details.change_bank_account": "Change bank account",
+  "venue_details.iban": "IBAN",
+  "venue_details.bank_name": "Bank (optional)",
+  "venue_details.bank_account_note":
+    "Printed on invoices for bills closed as a deferred payment. Administrators with an email address are told about every change.",
+  "venue_details.iban_format": "Enter a whole IBAN, starting with its country code, such as ES.",
+  "venue_details.iban_checksum":
+    "This IBAN's check digits do not match. Check it for a typing mistake.",
+  "venue_details.bank_iban_required": "Enter the IBAN, or clear the bank too.",
+  "venue_details.bank_account_unchanged": "This is already the bank account.",
+  "venue_details.bank_account_not_saved":
+    "The bank-account change was not confirmed. Check the bank account in Venue settings before trying again.",
+  "venue_details.bank_account_changed":
+    "The bank account changed in another session. Close and try again.",
   "venue_details.unset": "Not set",
   "venue_details.loading": "Loading venue details…",
   "venue_details.required": "Enter a value.",
@@ -6104,6 +6119,22 @@ export const es: Record<StringKey, string> = {
     "No se ha confirmado el cambio de domicilio fiscal. Comprueba el domicilio fiscal en Ajustes del local antes de volver a intentarlo.",
   "venue_details.taxpayer_domicile_changed":
     "El domicilio fiscal ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
+  "venue_details.bank_account": "Cuenta bancaria",
+  "venue_details.change_bank_account": "Cambiar cuenta bancaria",
+  "venue_details.iban": "IBAN",
+  "venue_details.bank_name": "Banco (opcional)",
+  "venue_details.bank_account_note":
+    "Se imprime en las facturas de las cuentas cerradas como pago aplazado. Los administradores con correo electrónico reciben un aviso de cada cambio.",
+  "venue_details.iban_format":
+    "Introduce el IBAN completo, empezando por el código del país, como ES.",
+  "venue_details.iban_checksum":
+    "Los dígitos de control de este IBAN no coinciden. Comprueba que no haya un error al escribirlo.",
+  "venue_details.bank_iban_required": "Introduce el IBAN o borra también el banco.",
+  "venue_details.bank_account_unchanged": "Ya es la cuenta bancaria.",
+  "venue_details.bank_account_not_saved":
+    "No se ha confirmado el cambio de cuenta bancaria. Comprueba la cuenta bancaria en Ajustes del local antes de volver a intentarlo.",
+  "venue_details.bank_account_changed":
+    "La cuenta bancaria ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
   "venue_details.unset": "Sin definir",
   "venue_details.loading": "Cargando los datos del local…",
   "venue_details.required": "Introduce un valor.",

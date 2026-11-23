@@ -1878,6 +1878,19 @@ it("changes the registered address with the new address and the one the page sho
   ]);
 });
 
+it("saves the bank account with the new values and the ones the page showed", async () => {
+  const answer = { model: venueDetailsFixture() };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+  const api = new DashboardApi("", fetchImpl);
+  const body = {
+    iban: "ES9121000418450200051332",
+    bankName: "CaixaBank",
+    expected: { iban: "", bankName: "" },
+  };
+  await expect(api.saveBankAccount(body)).resolves.toEqual(answer);
+  expect(callsOf(fetchImpl)).toEqual([["/management-api/venue-details/bank-account", "PUT", body]]);
+});
+
 it("previews a dated business-day start passively and writes with the loaded revision", async () => {
   const input = {
     effectiveBusinessDay: "2026-11-05",

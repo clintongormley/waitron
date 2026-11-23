@@ -4218,6 +4218,14 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details/registered-address", "PUT", input);
   }
 
+  saveBankAccount(input: {
+    iban: string;
+    bankName: string;
+    expected: { iban: string; bankName: string };
+  }): Promise<{ model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/bank-account", "PUT", input);
+  }
+
   previewBusinessDayStart(input: {
     dayCutover: string;
     expectedClockRevision: number;

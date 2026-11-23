@@ -105,6 +105,7 @@ it("shows the saved issuer and venue values as text without a second page h1", a
     "Tax ID: B12345678",
     "Registered business address: Calle Fiscal 8, 28013 Madrid",
     "Country: Spain",
+    "Bank account: Not set",
   ]);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Venue");
   expect(q(el, "h1")).toBeNull();
@@ -657,6 +658,7 @@ it("shows the legal name, tax ID and country name as labelled rows outside the f
     "Tax ID: B12345678",
     "Registered business address: Calle Fiscal 8, 28013 Madrid",
     "Country: Spain",
+    "Bank account: Not set",
   ];
   expect(rows(q(el, "[data-test=issuer]"))).toEqual(expected);
   await click(el, "[data-test=edit]");
@@ -673,7 +675,23 @@ it("names the country in the screen's language", async () => {
     "NIF: B12345678",
     "Domicilio fiscal del negocio: Calle Fiscal 8, 28013 Madrid",
     "País: España",
+    `${t("venue_details.bank_account")}: ${t("venue_details.unset")}`,
   ]);
+});
+
+it("shows the bank account's IBAN in groups of four and its bank, or the bank alone left out", async () => {
+  setLocale("en-GB");
+  const model = venueDetailsFixture();
+  model.bankAccount = { iban: "ES9121000418450200051332", bankName: "CaixaBank" };
+  const el = await mount(rig(model).api);
+  expect(text(q(el, "[data-test=saved-bankAccount]"))).toBe(
+    "ES91 2100 0418 4502 0005 1332 CaixaBank",
+  );
+  const unnamed = venueDetailsFixture();
+  unnamed.bankAccount = { iban: "GB82WEST12345698765432", bankName: null };
+  cleanupWidgets();
+  const other = await mount(rig(unnamed).api);
+  expect(text(q(other, "[data-test=saved-bankAccount]"))).toBe("GB82 WEST 1234 5698 7654 32");
 });
 
 it("shows an unknown country code as the code itself in this browser", async () => {

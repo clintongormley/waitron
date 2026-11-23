@@ -19,7 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
 import { getCountryPack } from "@waitron/country-packs";
-import { classifySavedTimeZone, foldForSearch } from "@waitron/shared";
+import { classifySavedTimeZone, foldForSearch, ibanGroups } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -39,6 +39,7 @@ import {
   venueDetailPatch,
   venueDetailProblems,
 } from "./venue-details-form.js";
+import "./bank-account-dialog.js";
 import "./legal-name-dialog.js";
 import "./registered-address-dialog.js";
 import type { TaxpayerField, VenueIdentityChanged } from "./taxpayer-field-dialog.js";
@@ -48,9 +49,14 @@ function withTaxpayerField(
   source: VenueDetailsModel,
   field: TaxpayerField,
 ): VenueDetailsModel {
-  return field === "legalName"
-    ? { ...target, issuer: { ...target.issuer, legalName: source.issuer.legalName } }
-    : { ...target, taxpayerDomicile: source.taxpayerDomicile };
+  switch (field) {
+    case "legalName":
+      return { ...target, issuer: { ...target.issuer, legalName: source.issuer.legalName } };
+    case "taxpayerDomicile":
+      return { ...target, taxpayerDomicile: source.taxpayerDomicile };
+    case "bankAccount":
+      return { ...target, bankAccount: source.bankAccount };
+  }
 }
 
 const LABELS: Record<VenueDetailField, StringKey> = {
@@ -106,7 +112,8 @@ export class VenueDetailsPanel extends LitElement {
       }
       /* Its dialog opens in the top layer; out of the grid's flow it adds no second gap between cards. */
       dashboard-legal-name-dialog,
-      dashboard-registered-address-dialog {
+      dashboard-registered-address-dialog,
+      dashboard-bank-account-dialog {
         display: block;
         position: absolute;
       }
@@ -224,6 +231,7 @@ export class VenueDetailsPanel extends LitElement {
     this.addEventListener("venue-settings-hidden", () => {
       this.renderRoot.querySelector("dashboard-legal-name-dialog")?.dismiss();
       this.renderRoot.querySelector("dashboard-registered-address-dialog")?.dismiss();
+      this.renderRoot.querySelector("dashboard-bank-account-dialog")?.dismiss();
       if (this.#scope && saveActionState(this.#scope).unchanged) this.#cancel();
     });
   }
@@ -757,15 +765,13 @@ export class VenueDetailsPanel extends LitElement {
   #changeButton(
     dataTest: string,
     label: StringKey,
-    dialog: "dashboard-legal-name-dialog" | "dashboard-registered-address-dialog",
-    stored: (model: VenueDetailsModel) => string,
+    open: (model: VenueDetailsModel) => void,
     current: () => boolean,
   ): TemplateResult {
     return html`<wt-button
       data-test=${dataTest}
       @click=${() => {
-        if (current() && this.model)
-          this.renderRoot.querySelector(dialog)?.show(stored(this.model));
+        if (current() && this.model) open(this.model);
       }}
       >${t(label)}</wt-button
     >`;
@@ -821,14 +827,27 @@ export class VenueDetailsPanel extends LitElement {
                     >${this.#changeButton(
                       "change-legal-name",
                       "venue_details.change_legal_name",
-                      "dashboard-legal-name-dialog",
-                      (shown) => shown.issuer.legalName,
+                      (shown) =>
+                        this.renderRoot
+                          .querySelector("dashboard-legal-name-dialog")
+                          ?.show(shown.issuer.legalName),
                       current,
                     )}${this.#changeButton(
                       "change-taxpayer-domicile",
                       "venue_details.change_taxpayer_domicile",
-                      "dashboard-registered-address-dialog",
-                      (shown) => shown.taxpayerDomicile ?? "",
+                      (shown) =>
+                        this.renderRoot
+                          .querySelector("dashboard-registered-address-dialog")
+                          ?.show(shown.taxpayerDomicile ?? ""),
+                      current,
+                    )}${this.#changeButton(
+                      "change-bank-account",
+                      "venue_details.change_bank_account",
+                      (shown) =>
+                        this.renderRoot.querySelector("dashboard-bank-account-dialog")?.show({
+                          iban: shown.bankAccount?.iban ?? "",
+                          bankName: shown.bankAccount?.bankName ?? "",
+                        }),
                       current,
                     )}</span
                   >`,
@@ -855,6 +874,18 @@ export class VenueDetailsPanel extends LitElement {
                   )!,
                   dataTest: "saved-country",
                 },
+                {
+                  label: t("venue_details.bank_account"),
+                  value: model.bankAccount
+                    ? html`<div>${ibanGroups(model.bankAccount.iban).join(" ")}</div>
+                        ${
+                          model.bankAccount.bankName
+                            ? html`<div>${model.bankAccount.bankName}</div>`
+                            : nothing
+                        }`
+                    : t("venue_details.unset"),
+                  dataTest: "saved-bankAccount",
+                },
               ]),
             })}
             <dashboard-legal-name-dialog
@@ -872,6 +903,12 @@ export class VenueDetailsPanel extends LitElement {
               @venue-identity-changed=${identityChanged("taxpayerDomicile")}
               @venue-identity-stale=${identityStale}
             ></dashboard-registered-address-dialog>
+            <dashboard-bank-account-dialog
+              .api=${this.api}
+              .lateRefusalFor=${this.lateRefusalFor}
+              @venue-identity-changed=${identityChanged("bankAccount")}
+              @venue-identity-stale=${identityStale}
+            ></dashboard-bank-account-dialog>
             ${settingsCard({
               id: "venue-card",
               heading: t("venue_settings.card.venue"),
