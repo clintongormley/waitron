@@ -506,7 +506,7 @@ describe("Wipe and remove when the return cannot complete", () => {
     const el = await mount(stubApi(losing));
     await openAction(el, "reset");
     expect(lineIn(el, "reset-loss-warning")).toBe(
-      "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; any it still cannot send are set aside on it and are no longer used.",
+      "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
     );
     expect(lineIn(el, "reset-download")).toBe(
       "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",

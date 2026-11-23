@@ -2428,7 +2428,7 @@ export const en = {
   "servers.reset_download_no_address":
     "The old main box may hold data that this box does not have. You should download that data from the old main box's own page before wiping and reusing it.",
   "servers.reset_loss_warning":
-    "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; any it still cannot send are set aside on it and are no longer used.",
+    "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
   "servers.reset_loss_confirm":
     "I have downloaded the old main box's data, or I accept that what it has not returned stays set aside on it and is no longer used.",
   "servers.reset_caution_label": "CAUTION:",
@@ -7217,7 +7217,7 @@ export const es: Record<StringKey, string> = {
   "servers.reset_download_no_address":
     "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde la propia página del servidor principal anterior antes de borrarlo y volver a usarlo.",
   "servers.reset_loss_warning":
-    "El servidor principal anterior no ha devuelto todos sus registros de facturación. Antes de borrarse, intenta enviarlos una vez más; los que siga sin poder enviar se apartan en él y dejan de usarse.",
+    "El servidor principal anterior no ha devuelto todos sus registros de facturación. Antes de borrarse, intenta enviarlos una vez más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse.",
   "servers.reset_loss_confirm":
     "He descargado los datos del servidor principal anterior, o acepto que lo que no ha devuelto se quede apartado en él y deje de usarse.",
   "servers.reset_caution_label": "ATENCIÓN:",
