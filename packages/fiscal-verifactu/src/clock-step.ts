@@ -153,7 +153,7 @@ export async function confirmClockStep(
 
 /** The latest step the box made to its clock, from the `clock.corrected` that every step over a
  * second records in its own transaction, verified or not (only a verified one writes a row). By
- * `rowid`, the order they were written, as `listFilingCases` orders: the clock is what is in doubt,
+ * `rowid`, the order they were written: the clock is what is in doubt,
  * so no date can order them. */
 export async function latestClockStep(tx: Transaction): Promise<ClockStep | null> {
   const [row] = await tx

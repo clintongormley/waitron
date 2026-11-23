@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
@@ -113,12 +114,12 @@ async function seedOverview() {
     "fiscal.registro_rechazado",
     "2026-07-21T06:00:00.000Z",
   );
-  await inTx((tx) =>
+  await inTx(async (tx) =>
     recordCaseEvent(tx, {
-      caseId: resolvedCase.id,
+      caseRegistroId: resolvedCase.registroId,
       actionKey: "resolve-1",
       kind: "resolved",
-      personId: PERSON,
+      personId: await seedPerson(tx, { id: PERSON }),
       action: "Resolved for the test",
       now: new Date("2026-07-21T10:00:00.000Z"),
     }),

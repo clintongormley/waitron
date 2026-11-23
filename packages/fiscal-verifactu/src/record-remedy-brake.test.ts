@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -89,7 +90,7 @@ beforeEach(async () => {
   body = {
     kind: KIND,
     registroId: ids[3],
-    caseId: cases[2]!.id,
+    caseRegistroId: cases[2]!.registroId,
     actionKey: "manual-brake-1",
     reason: "Retry the first held record after explicit review",
   };
@@ -127,7 +128,7 @@ async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     deliveries: await suite.db
-      .select()
+      .select(deliveryColumns)
       .from(verifactuSubmissions)
       .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
@@ -144,13 +145,13 @@ async function snapshot() {
 it("makes only the first brake-held record due now and audits a note without resolving the refusal", async () => {
   const before = await snapshot();
   expect(before.held).toEqual([
-    { registroId: ids[3], caseId: body.caseId },
-    { registroId: ids[4], caseId: body.caseId },
+    { registroId: ids[3], caseRegistroId: body.caseRegistroId },
+    { registroId: ids[4], caseRegistroId: body.caseRegistroId },
   ]);
   const response = await send();
   expect(response.status).toBe(200);
-  const result = (await response.json()) as { registroId: string; eventId: string };
-  expect(result.registroId).toBe(ids[3]);
+  const result = (await response.json()) as { registroId: string; actionKey: string };
+  expect(result).toEqual({ registroId: ids[3], actionKey: body.actionKey });
   const after = await snapshot();
   expect(after.records).toEqual(before.records);
   expect(after.head).toEqual(before.head);
@@ -173,8 +174,8 @@ it("makes only the first brake-held record due now and audits a note without res
     status: "open",
     events: [
       {
-        id: result.eventId,
-        caseId: body.caseId,
+        id: expect.any(String),
+        registroId: body.caseRegistroId,
         actionKey: body.actionKey,
         kind: "note",
         personId,
@@ -211,14 +212,17 @@ it("keeps the successor held when the manually released record is refused with t
   );
 });
 
-it.each(["registroId", "caseId", "reason"])("refuses a changed %s on replay", async (key) => {
-  expect((await send()).status).toBe(200);
-  const before = await snapshot();
-  const changed = { ...body, [key]: "different" };
-  const response = await send(changed);
-  expect(response.status).toBe(key === "registroId" ? 400 : 409);
-  expect(await snapshot()).toEqual(before);
-});
+it.each(["registroId", "caseRegistroId", "reason"])(
+  "refuses a changed %s on replay",
+  async (key) => {
+    expect((await send()).status).toBe(200);
+    const before = await snapshot();
+    const changed = { ...body, [key]: "different" };
+    const response = await send(changed);
+    expect(response.status).toBe(key === "registroId" ? 400 : 409);
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it("replays reordered simultaneous requests and later submissions without another delivery change", async () => {
   const replies = await Promise.all([
@@ -277,7 +281,7 @@ it.each([
     );
   if (scenario === "later held record") body.registroId = ids[4];
   if (scenario === "wrong case")
-    body.caseId = (await withTransaction(suite.db, listFilingCases))[0]!.id;
+    body.caseRegistroId = (await withTransaction(suite.db, listFilingCases))[0]!.registroId;
   if (scenario === "broken run")
     await suite.db
       .update(verifactuSubmissions)
@@ -302,7 +306,7 @@ it.each(["blank reason", "missing case", "extra field", "numeric key"])(
   "refuses %s as malformed input",
   async (scenario) => {
     if (scenario === "blank reason") body.reason = " ";
-    if (scenario === "missing case") delete body.caseId;
+    if (scenario === "missing case") delete body.caseRegistroId;
     if (scenario === "extra field") body.enabledRemedies = [KIND];
     if (scenario === "numeric key") body.actionKey = 1;
     const before = await snapshot();
@@ -339,7 +343,7 @@ it.each([false, true])(
 it("does not turn a retry note into a second resolution when the holding case already has a legal decision", async () => {
   await withTransaction(suite.db, (tx) =>
     recordCaseEvent(tx, {
-      caseId: body.caseId as string,
+      caseRegistroId: body.caseRegistroId as string,
       actionKey: "prior-resolution",
       kind: "resolved",
       personId,
@@ -380,7 +384,7 @@ it.each(["pendiente", "enviando", "detenido"])(
       .update(verifactuSubmissions)
       .set({ estado })
       .where(eq(verifactuSubmissions.registroId, ids[0]!));
-    body = { ...body, registroId: ids[4], caseId: holdingCase.id };
+    body = { ...body, registroId: ids[4], caseRegistroId: holdingCase.registroId };
     const before = await snapshot();
     const response = await send();
     expect(response.status).toBe(400);
@@ -391,7 +395,7 @@ it.each(["pendiente", "enviando", "detenido"])(
 
 it("refuses to attach a brake decision to a different kind of case on its predecessor", async () => {
   const holdingCase = await refuseFourth("fiscal.huella_divergente");
-  body = { ...body, registroId: ids[4], caseId: holdingCase.id };
+  body = { ...body, registroId: ids[4], caseRegistroId: holdingCase.registroId };
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);
@@ -435,7 +439,7 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
         proximoIntentoEn: NOW,
       });
       await writeAck(tx, record.id, NOW);
-      body = { ...body, registroId: record.id, caseId: holdingCase.id };
+      body = { ...body, registroId: record.id, caseRegistroId: holdingCase.registroId };
     });
     const before = await snapshot();
     const response = await send();
@@ -468,7 +472,7 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
 
 it("rolls delivery and acknowledgement changes back when the audit event cannot be stored", async () => {
   await suite.db.execute(
-    sql`create trigger refuse_brake_event before insert on filing_case_events begin select raise(abort, 'synthetic audit failure'); end`,
+    sql`create trigger refuse_brake_event before insert on verifactu_history when new.kind = 'case.note' begin select raise(abort, 'synthetic audit failure'); end`,
   );
   try {
     const before = await snapshot();

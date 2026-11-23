@@ -4,6 +4,7 @@ import type { SQLInputValue } from "node:sqlite";
 import { sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import { openVenueDatabase, withTransaction, type Transaction } from "@waitron/db";
+import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { checkFiscalChains } from "@waitron/fiscal-verifactu/src/handover-chain-check.js";
 import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { quoteIdent } from "@waitron/provisioning";
@@ -62,7 +63,12 @@ function totals(tx: Transaction) {
   return `verifactu_records ${records}, sales ${sales}, verifactu_submissions ${submissions}`;
 }
 
-export async function growFiscal(dir: string, target: number, print: (line: string) => void) {
+export async function growFiscal(
+  dir: string,
+  target: number,
+  print: (line: string) => void,
+  cases = 0,
+) {
   if (!Number.isSafeInteger(target) || target < 1)
     throw new Error("bench: --records must be a positive safe integer");
   const store = await openVenueDatabase(dir);
@@ -81,6 +87,8 @@ export async function growFiscal(dir: string, target: number, print: (line: stri
       sql`select count(*) as count from verifactu_records where node_id = ${node.id}`,
     );
     let remaining = target - count;
+    if (!Number.isSafeInteger(cases) || cases < 0 || cases > Math.max(remaining, 0))
+      throw new Error("bench: --cases must fit in the records being added");
     if (remaining > 0) {
       const [template] = db.all<Head & { invoice_series_id: string; invoice_series_code: string }>(
         sql`select r.*, i.id as invoice_series_id, i.code as invoice_series_code
@@ -112,9 +120,12 @@ export async function growFiscal(dir: string, target: number, print: (line: stri
         sql`select csv from verifactu_submissions where registro_id = ${record.id}`,
       );
 
+      const start = head.secuencia;
+      const grownCount = remaining;
+      let openedCases = 0;
       while (remaining > 0) {
         const batch = Math.min(remaining, BATCH_SIZE);
-        await withTransaction(db, (tx) => {
+        await withTransaction(db, async (tx) => {
           for (let index = 0; index < batch; index++) {
             const saleId = randomUUID();
             number++;
@@ -147,6 +158,18 @@ export async function growFiscal(dir: string, target: number, print: (line: stri
               (registro_id, estado, csv, proximo_intento_en)
               values (${next.id}, 'aceptado', ${submission?.csv ?? null},
                 ${next.fecha_hora_huso_gen_registro})`);
+            if (
+              openedCases < cases &&
+              next.secuencia - start === Math.ceil(((openedCases + 1) * grownCount) / cases)
+            ) {
+              await openFilingCase(tx, {
+                registroId: next.id,
+                cause: "fiscal.registro_rechazado",
+                evidence: { codigo: null, mensaje: null, csv: null },
+                now: new Date(String(next.fecha_hora_huso_gen_registro)),
+              });
+              openedCases++;
+            }
             head = next;
           }
           if (hasStoredHead)

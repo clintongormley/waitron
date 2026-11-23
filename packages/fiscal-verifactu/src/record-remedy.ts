@@ -6,12 +6,11 @@ import { authorizeManager } from "@waitron/identity";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, type NodeId } from "@waitron/shared";
 import { appendToChain, type PendingRegistro } from "./chain.js";
-import { recordCaseEvent } from "./filing-cases.js";
+import { caseEventByActionKey, findFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import type { Entorno } from "./registro-row.js";
 import { queueSubmission } from "./queue-submission.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifyChain } from "./verify.js";
 import type { CorrectedRecordFacts } from "./record-remedy-facts.js";
@@ -57,18 +56,8 @@ export async function isInHistory(
   return (await readHistoryNodes(tx, nodeId)).some((id) => id === recordNodeId);
 }
 
-/** A record has at most one case (`filing_cases_registro_uq`), so its id names the case. */
-export async function caseIdForRecord(tx: Transaction, registroId: string): Promise<string> {
-  const [filingCase] = await tx
-    .select({ id: filingCases.id })
-    .from(filingCases)
-    .where(eq(filingCases.registroId, registroId));
-  if (filingCase === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
-  return filingCase.id;
-}
-
 export interface RecordCorrectionRequest {
-  caseId: string;
+  caseRegistroId: string;
   registroId: string;
   actionKey: string;
   reason: string;
@@ -90,7 +79,7 @@ export async function applyRecordCorrection(
     /** `readHistoryNodes` of `nodeId`, when the caller has already read it in this transaction. */
     history?: readonly NodeId[];
   },
-): Promise<{ registroId: string; eventId: string }> {
+): Promise<{ registroId: string; actionKey: string }> {
   const personId = await admitRecordRemedy(
     tx,
     input.managementSessionId,
@@ -136,7 +125,7 @@ export async function applyRecordCorrection(
         input.correctionDecision === undefined
           ? request
           : {
-              caseId: request.caseId,
+              caseRegistroId: request.caseRegistroId,
               registroId: request.registroId,
               actionKey: request.actionKey,
               reason: request.reason,
@@ -145,31 +134,25 @@ export async function applyRecordCorrection(
       ),
     ) as unknown,
   );
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, request.actionKey));
+  const stored = await caseEventByActionKey(tx, request.actionKey);
   if (stored !== undefined) {
     if (
-      stored.caseId !== request.caseId ||
+      stored.registroId !== request.caseRegistroId ||
       stored.personId !== personId ||
       stored.kind !== "resolved" ||
       stored.action !== action ||
       stored.remedyRegistroId === null
     ) {
       throw new AppError("filing_case.action_mismatch", {
-        caseId: request.caseId,
+        caseRegistroId: request.caseRegistroId,
         actionKey: request.actionKey,
       });
     }
-    return { registroId: stored.remedyRegistroId, eventId: stored.id };
+    return { registroId: stored.remedyRegistroId, actionKey: stored.actionKey };
   }
-  const [filingCase] = await tx
-    .select()
-    .from(filingCases)
-    .where(eq(filingCases.id, request.caseId));
+  const filingCase = await findFilingCase(tx, request.caseRegistroId);
   if (filingCase === undefined)
-    throw new AppError("filing_case.not_found", { caseId: request.caseId });
+    throw new AppError("filing_case.not_found", { caseRegistroId: request.caseRegistroId });
   const [cancellation] = await tx
     .select({
       sinRegistroPrevio: verifactuRecords.sinRegistroPrevio,
@@ -227,7 +210,7 @@ export async function applyRecordCorrection(
   const appended = await appendToChain(tx, input.nodeId, request.pending, { history });
   await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: input.now });
   const event = await recordCaseEvent(tx, {
-    caseId: request.caseId,
+    caseRegistroId: request.caseRegistroId,
     actionKey: request.actionKey,
     kind: "resolved",
     personId,
@@ -235,7 +218,7 @@ export async function applyRecordCorrection(
     remedyRegistroId: appended.id,
     now: input.now,
   });
-  return { registroId: appended.id, eventId: event.id };
+  return { registroId: appended.id, actionKey: event.actionKey };
 }
 
 export { applyCorrectiveInvoice } from "./record-remedy-corrective.js";

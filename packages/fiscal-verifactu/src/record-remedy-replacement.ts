@@ -5,7 +5,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, isCalendarDate, jobOrigin, localCalendarDate, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
 import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
-import { only, requestCaseId, text } from "./record-remedy-request.js";
+import { only, requestCaseRegistroId, text } from "./record-remedy-request.js";
 import { FISCAL_SLOT, makeVerifactuBackend } from "./slot.js";
 
 function operationDateInvalid(): never {
@@ -31,13 +31,13 @@ export async function applyReplacementInvoiceRequest(
   enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ) {
-  only(raw, ["kind", "caseId", "registroId", "actionKey", "reason", "operationDate"]);
+  only(raw, ["kind", "caseRegistroId", "registroId", "actionKey", "reason", "operationDate"]);
   const registroId = text(raw.registroId);
   const actionKey = text(raw.actionKey);
   const reason = text(raw.reason);
   const operationDate = operationDateOf(raw.operationDate);
   const request = {
-    caseId: await requestCaseId(tx, raw.caseId, registroId),
+    caseRegistroId: await requestCaseRegistroId(tx, raw.caseRegistroId, registroId),
     registroId,
     actionKey,
     reason,
@@ -55,9 +55,9 @@ export async function applyReplacementInvoiceRequest(
     remedy: {
       kind: "replacement-invoice",
       action: { operationDate },
-      admits: ({ filingCase, delivery, target }) =>
+      admits: ({ filingCase, target }) =>
         filingCase.cause === "fiscal.registro_rechazado" &&
-        delivery.codigoError === "1112" &&
+        filingCase.codigoError === "1112" &&
         (target.tipoFactura === "F2" ||
           (target.tipoFactura === "F1" && enabledRemedies.has(FULL_INVOICE_REPLACEMENT))),
       async issue(tx, { correctsSaleId, target, clock }) {

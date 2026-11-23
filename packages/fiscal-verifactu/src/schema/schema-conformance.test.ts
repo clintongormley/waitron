@@ -12,7 +12,7 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS],
   subject: FISCAL_MIGRATIONS,
   declarations: barrel,
-  // `verifactu_records.source` and `filing_case_events.kind` are the closed vocabularies; every
+  // `verifactu_records.source` is the closed vocabulary; every
   // other closed list here is a plain `check(...)` constraint.
   declaresClosedVocabularies: true,
 });

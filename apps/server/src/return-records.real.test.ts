@@ -7,6 +7,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { FISCAL_PERMISSIONS } from "@waitron/fiscal-verifactu/src/permissions.js";
 import { listFilingCases } from "@waitron/fiscal-verifactu/src/filing-cases.js";
+import { remedyRequestBody } from "@waitron/fiscal-verifactu/test/remedy-request.js";
 import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy-routes.js";
 import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { Hono } from "hono";
@@ -253,7 +254,11 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(filed.recordsHalted).toBe(1);
 
   const [filingCase] = await withTransaction(current.db, listFilingCases);
-  expect(filingCase).toMatchObject({ cause: "fiscal.registro_rechazado", status: "open" });
+  expect(filingCase).toMatchObject({
+    registroId: originals.records[0]!.id,
+    cause: "fiscal.registro_rechazado",
+    status: "open",
+  });
   await current.db.insert(tenders).values({
     id: "later-main-tip",
     saleId,
@@ -294,22 +299,25 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   const correction = await remedies.request("/management-api/fiscal-records/remedy", {
     method: "POST",
     headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      kind: "record-correction",
-      caseId: filingCase!.id,
-      registroId: originals.records[0]!.id,
-      actionKey: "return-correction",
-      reason: "Correct the description",
-      facts: { description: "Corrected restaurant service" },
-    }),
+    body: JSON.stringify(
+      remedyRequestBody({
+        kind: "record-correction",
+        caseRecordId: String(originals.records[0]!.id),
+        recordId: String(originals.records[0]!.id),
+        actionKey: "return-correction",
+        reason: "Correct the description",
+        facts: { description: "Corrected restaurant service" },
+      }),
+    ),
   });
   expect(correction.status, await correction.clone().text()).toBe(200);
   const corrected = (await correction.json()) as { registroId: string };
   const settled = await withTransaction(current.db, listFilingCases);
   expect(settled).toEqual([
     expect.objectContaining({
-      id: filingCase!.id,
-      cause: "fiscal.registro_rechazado",
+      ...filingCase,
+      registroId: originals.records[0]!.id,
+      events: expect.any(Array),
       status: "resolved",
     }),
   ]);

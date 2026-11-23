@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -23,11 +24,10 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
-import { openFilingCase } from "./filing-cases.js";
+import { openFilingCase, listFilingCases } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
@@ -165,7 +165,7 @@ beforeEach(async () => {
     };
     body = {
       kind: "corrective-invoice",
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.fiscal.recordId,
       actionKey: "http-corrective-1",
       reason: "Explicit synthetic factual correction",
@@ -194,8 +194,10 @@ async function snapshot() {
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    events: await suite.db.select().from(filingCaseEvents),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    events: await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     tenders: await suite.db.select().from(tenders),
     refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
@@ -215,7 +217,7 @@ it("creates one R5 through HTTP with host generation and operator origin, keepin
   const res = await send();
   expect(res.status).toBe(200);
   expect(res.headers.get("cache-control")).toBe("no-store");
-  const result = (await res.json()) as { saleId: string; registroId: string; eventId: string };
+  const result = (await res.json()) as { saleId: string; registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records).toHaveLength(2);
   expect(after.records[0]).toEqual(before.records[0]);
@@ -268,9 +270,9 @@ it("creates one R5 through HTTP with host generation and operator origin, keepin
   });
   expect(after.events).toMatchObject([
     {
-      id: result.eventId,
+      actionKey: result.actionKey,
       personId,
-      caseId: body.caseId,
+      registroId: body.caseRegistroId,
       kind: "resolved",
       remedyRegistroId: result.registroId,
     },
@@ -291,36 +293,44 @@ it("creates one R5 through HTTP with host generation and operator origin, keepin
   );
 });
 
-it("names the case by its record when the body sends no caseId", async () => {
-  const { caseId, ...withoutCase } = body;
+it("names the case by its record when the body sends no caseRegistroId", async () => {
+  const { caseRegistroId, ...withoutCase } = body;
   await anotherOriginal("preproduction");
-  const other = { registroId: body.registroId, caseId: body.caseId };
+  const other = { registroId: body.registroId, caseRegistroId: body.caseRegistroId };
   // Both records have an open case, so a lookup that ignored the record names the wrong one for one of them.
   const first = await send(withoutCase);
   expect(first.status).toBe(200);
-  const firstResult = (await first.json()) as { registroId: string; eventId: string };
+  const firstResult = (await first.json()) as { registroId: string; actionKey: string };
   const second = await send({
     ...withoutCase,
     registroId: other.registroId,
     actionKey: "http-corrective-other-record",
   });
   expect(second.status).toBe(200);
-  const secondResult = (await second.json()) as { registroId: string; eventId: string };
-  expect(await suite.db.select().from(filingCaseEvents)).toEqual(
+  const secondResult = (await second.json()) as { registroId: string; actionKey: string };
+  expect(
+    await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+  ).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        id: firstResult.eventId,
-        caseId,
+        actionKey: firstResult.actionKey,
+        registroId: caseRegistroId,
         remedyRegistroId: firstResult.registroId,
       }),
       expect.objectContaining({
-        id: secondResult.eventId,
-        caseId: other.caseId,
+        actionKey: secondResult.actionKey,
+        registroId: other.caseRegistroId,
         remedyRegistroId: secondResult.registroId,
       }),
     ]),
   );
-  expect(await suite.db.select().from(filingCaseEvents)).toHaveLength(2);
+  expect(
+    await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+  ).toHaveLength(2);
 });
 
 it("replays the saved HTTP decision after clock, outcome and JSON key order change", async () => {
@@ -489,9 +499,12 @@ it.each(["nodeId", "correctsSaleId", "clock", "authz", "origin", "unknown"])(
     await refuses({ ...body, correction: { ...correction, [key]: "claimed" } });
   },
 );
-it.each(["caseId", "registroId", "actionKey", "reason"])("requires nonblank %s", async (key) => {
-  await refuses({ ...body, [key]: " " });
-});
+it.each(["caseRegistroId", "registroId", "actionKey", "reason"])(
+  "requires nonblank %s",
+  async (key) => {
+    await refuses({ ...body, [key]: " " });
+  },
+);
 it.each([null, [], "correction", {}])("refuses malformed correction %j", async (value) => {
   await refuses({ ...body, correction: value });
 });
@@ -612,7 +625,7 @@ async function anotherOriginal(environment: "production" | "preproduction") {
       now: NOW,
     });
     body.registroId = original.fiscal.recordId;
-    body.caseId = filingCase.id;
+    body.caseRegistroId = filingCase.registroId;
   });
 }
 

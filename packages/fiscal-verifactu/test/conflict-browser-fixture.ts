@@ -4,7 +4,6 @@ import type {
 } from "../src/conflict-recovery-contract.js";
 export const active = {
   registroId: "record-1",
-  caseId: "case-1",
   sifId: "sif-1",
   installationIdentity: "0CNQA",
   invoiceIdentity: "A-0CNQA/19",
@@ -30,7 +29,7 @@ export const input: ConflictAllocationInput = {
     version: 1,
     eventId: "event-1",
     operatorId: { kind: "recovery-key", nodeId: "node-1", eventId: "event-1" },
-    sourceId: '["conflict","sif-1","record-1","case-1"]',
+    sourceId: '["conflict","sif-1","record-1"]',
     targetNodeId: "node-1",
     oldMachineOffline: true,
     oldMachineAbsent: false,

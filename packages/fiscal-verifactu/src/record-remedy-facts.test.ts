@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -77,7 +78,7 @@ beforeEach(async () => {
     });
     body = {
       kind: "record-correction",
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.id,
       actionKey: "correct-facts",
       reason: "Correct the stored record facts",
@@ -112,7 +113,7 @@ function send(facts: unknown, enabled = true) {
 async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
@@ -123,7 +124,7 @@ it("corrects stored invoice facts without changing the issued sale, original rec
   const before = await snapshot();
   const res = await send({ description: "Corrected restaurant service" });
   expect(res.status).toBe(200);
-  const result = (await res.json()) as { registroId: string; eventId: string };
+  const result = (await res.json()) as { registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records).toHaveLength(2);
   expect(after.records[0]).toEqual(before.records[0]);
@@ -149,7 +150,7 @@ it("corrects stored invoice facts without changing the issued sale, original rec
   expect(after.sales).toEqual(before.sales);
   expect(after.cases[0]).toMatchObject({
     status: "resolved",
-    events: [{ id: result.eventId, remedyRegistroId: result.registroId }],
+    events: [{ actionKey: result.actionKey, remedyRegistroId: result.registroId }],
   });
   expect(after.head.ultimoRegistroId).toBe(result.registroId);
 });
@@ -297,7 +298,7 @@ async function targetRefusedOfType(invoiceType: "R5" | "F3") {
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    body = { ...body, caseId: filingCase.id, registroId: original.id };
+    body = { ...body, caseRegistroId: filingCase.registroId, registroId: original.id };
   });
 }
 
@@ -457,7 +458,7 @@ async function targetAcceptedWithErrors() {
     body = {
       ...body,
       registroId: accepted.id,
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       priorOutcome: "accepted-with-errors",
     };
   });
@@ -477,10 +478,12 @@ it("applies complete facts under an explicit accepted-with-errors decision while
     descripcionOperacion: "Corrected restaurant service",
     destinatarios: null,
   });
-  expect(after.cases.find((item) => item.id !== body.caseId)).toEqual(
-    before.cases.find((item) => item.id !== body.caseId),
+  expect(after.cases.find((item) => item.registroId !== body.caseRegistroId)).toEqual(
+    before.cases.find((item) => item.registroId !== body.caseRegistroId),
   );
-  expect(after.cases.find((item) => item.id === body.caseId)).toMatchObject({ status: "resolved" });
+  expect(after.cases.find((item) => item.registroId === body.caseRegistroId)).toMatchObject({
+    status: "resolved",
+  });
   expect(after.deliveries.slice(0, 2)).toEqual(before.deliveries);
   expect(after.sales).toEqual(before.sales);
 });
@@ -722,7 +725,12 @@ describe("a fix never changes the invoice's amounts or what a line is", () => {
         evidence: { codigo: 1161, mensaje: null, csv: null },
         now: NOW,
       });
-      body = { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "twelve-ten" };
+      body = {
+        ...body,
+        caseRegistroId: filingCase.registroId,
+        registroId: original.id,
+        actionKey: "twelve-ten",
+      };
     });
   }
 
@@ -796,7 +804,12 @@ describe("a fix never changes the invoice's amounts or what a line is", () => {
         evidence: { codigo: 1161, mensaje: null, csv: null },
         now: NOW,
       });
-      body = { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "corrective" };
+      body = {
+        ...body,
+        caseRegistroId: filingCase.registroId,
+        registroId: original.id,
+        actionKey: "corrective",
+      };
     });
   }
 

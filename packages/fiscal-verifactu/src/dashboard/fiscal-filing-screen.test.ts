@@ -927,7 +927,7 @@ describe("putting a case right", () => {
       reason: expect.stringContaining("1100"),
       facts: { description: "Servicio de restauración" },
     });
-    expect(body).not.toHaveProperty("caseId");
+    expect(body).not.toHaveProperty("caseRegistroId");
     await vi.waitFor(() => expect(details).toHaveProperty("open", false));
     await vi.waitFor(() => expect(request.mock.calls.length).toBe(3));
   });

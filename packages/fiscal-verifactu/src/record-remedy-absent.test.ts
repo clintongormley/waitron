@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -15,13 +16,17 @@ import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import {
+  listFilingCases,
+  openFilingCase,
+  recordCaseEvent,
+  type FilingCaseCause,
+} from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import type { RemedyKind } from "./record-remedy.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
@@ -38,7 +43,13 @@ let instant: Date;
 let writable: boolean;
 let runtimeNode: SeededNode["nodeId"];
 let environment: "production" | "preproduction";
-let body: { kind: string; caseId: string; registroId: string; actionKey: string; reason: string };
+let body: {
+  kind: string;
+  caseRegistroId: string;
+  registroId: string;
+  actionKey: string;
+  reason: string;
+};
 
 beforeEach(async () => {
   registerModulePermissions(FISCAL_PERMISSIONS);
@@ -73,7 +84,7 @@ beforeEach(async () => {
     });
     body = {
       kind: "absent-original-cancellation",
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.id,
       actionKey: "absent-1",
       reason: "Explicit synthetic absent-original decision",
@@ -119,7 +130,7 @@ function send(
 async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     sales: await suite.db.select().from(sales),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
@@ -136,7 +147,7 @@ it("appends the explicit absent-original cancellation at the current head withou
   const response = await send();
   expect(response.status).toBe(200);
   expect(changes).toEqual(["fiscal_submission_queued"]);
-  const result = (await response.json()) as { registroId: string; eventId: string };
+  const result = (await response.json()) as { registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records.slice(0, 2)).toEqual(before.records);
   expect(after.records).toHaveLength(3);
@@ -169,7 +180,12 @@ it("appends the explicit absent-original cancellation at the current head withou
   expect(after.cases[0]).toMatchObject({
     status: "resolved",
     events: [
-      { id: result.eventId, personId, kind: "resolved", remedyRegistroId: result.registroId },
+      {
+        actionKey: result.actionKey,
+        personId,
+        kind: "resolved",
+        remedyRegistroId: result.registroId,
+      },
     ],
   });
   expect(after.head.ultimoRegistroId).toBe(result.registroId);
@@ -246,7 +262,7 @@ it("refuses code 3000 even when a synthetic rejected case carries that same code
       evidence: { codigo: 3000, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, registroId: record.id, caseId: filingCase.id };
+    return { ...body, registroId: record.id, caseRegistroId: filingCase.registroId };
   });
   const before = await snapshot();
   const response = await send(selected);
@@ -310,7 +326,7 @@ it("uses the issued sale origin when cancelling a rejected current correction", 
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, registroId: current.id, caseId: filingCase.id };
+    return { ...body, registroId: current.id, caseRegistroId: filingCase.registroId };
   });
   const before = await snapshot();
   const response = await send(decision);
@@ -329,7 +345,7 @@ it("uses the issued sale origin when cancelling a rejected current correction", 
   expect(after.cases[1]!.status).toBe("resolved");
 });
 
-it.each(["reason", "caseId", "registroId"] as const)(
+it.each(["reason", "caseRegistroId", "registroId"] as const)(
   "refuses changed %s on replay",
   async (field) => {
     expect((await send()).status).toBe(200);
@@ -391,14 +407,16 @@ it.each([false, true])("binds node and deployment on %s replay", async (replay) 
 });
 
 it("refuses a second resolution and rolls its candidate append back", async () => {
-  await suite.db.insert(filingCaseEvents).values({
-    caseId: body.caseId,
-    actionKey: "earlier",
-    kind: "resolved",
-    personId,
-    action: "A different earlier resolution",
-    recordedAt: NOW,
-  });
+  await withTransaction(suite.db, (tx) =>
+    recordCaseEvent(tx, {
+      caseRegistroId: body.caseRegistroId,
+      actionKey: "earlier",
+      kind: "resolved",
+      personId,
+      action: "A different earlier resolution",
+      now: NOW,
+    }),
+  );
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(409);
@@ -414,6 +432,7 @@ it("requires the case to belong to the selected record even when totals match", 
       node.nodeId,
       altaFor(node, otherSale, 2, 2, "preproduction"),
     );
+    await tx.insert(verifactuSubmissions).values({ registroId: record.id });
     return openFilingCase(tx, {
       registroId: record.id,
       cause: "fiscal.registro_rechazado",
@@ -422,7 +441,7 @@ it("requires the case to belong to the selected record even when totals match", 
     });
   });
   const before = await snapshot();
-  const response = await send({ ...body, caseId: other.id });
+  const response = await send({ ...body, caseRegistroId: other.registroId });
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
   expect(await snapshot()).toEqual(before);
@@ -450,7 +469,7 @@ it.each([
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, registroId: record.id, caseId: filingCase.id };
+    return { ...body, registroId: record.id, caseRegistroId: filingCase.registroId };
   });
   const before = await snapshot();
   const response = await send(selected);
@@ -513,7 +532,7 @@ it("refuses a malformed synthetic correction with no issued original for its sal
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, registroId: malformed!.id, caseId: filingCase.id };
+    return { ...body, registroId: malformed!.id, caseRegistroId: filingCase.registroId };
   });
   const before = await snapshot();
   const response = await send(selected);
@@ -538,13 +557,18 @@ it.each([
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["reason", "actionKey", "registroId", "caseId"])("refuses an empty %s", async (field) => {
-  const before = await snapshot();
-  const response = await send({ ...body, [field]: "  " });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
-  expect(await snapshot()).toEqual(before);
-});
+it.each(["reason", "actionKey", "registroId", "caseRegistroId"])(
+  "refuses an empty %s",
+  async (field) => {
+    const before = await snapshot();
+    const response = await send({ ...body, [field]: "  " });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "fiscal.remedy_request_invalid" },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it("submits the explicitly chosen absent-original operation instead of setting it aside as an ordinary cancellation", async () => {
   const response = await send();
@@ -658,7 +682,12 @@ it("refuses a production cancellation while no producer is set, writing nothing"
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "absent-prod" };
+    return {
+      ...body,
+      caseRegistroId: filingCase.registroId,
+      registroId: original.id,
+      actionKey: "absent-prod",
+    };
   });
   environment = "production";
   const before = await snapshot();

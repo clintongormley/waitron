@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -286,8 +287,8 @@ describe("drain — a run of refusals with one code stops its chain", () => {
     const held = await withTransaction(suite.db, (tx) => heldRecords(tx));
 
     expect(held).toEqual([
-      { registroId: fourth.registroId, caseId: lastRefusal!.id },
-      { registroId: fifth.registroId, caseId: lastRefusal!.id },
+      { registroId: fourth.registroId, caseRegistroId: lastRefusal!.registroId },
+      { registroId: fifth.registroId, caseRegistroId: lastRefusal!.registroId },
     ]);
   });
 
@@ -1026,7 +1027,7 @@ describe("drain — a cancellation on another chain", () => {
 describe("heldRecords — a cancellation held by a run of refusals", () => {
   const THIRD = new Date("2026-07-21T00:02:00Z");
   const caseOf = async (registroId: string) =>
-    (await cases()).find((c) => c.registroId === registroId)!.id;
+    (await cases()).find((c) => c.registroId === registroId)!.registroId;
 
   it("a halted cancellation on another chain names the run that holds it", async () => {
     // An absent-original cancellation (SinRegistroPrevio=S) is never set aside, so it is claimed
@@ -1056,7 +1057,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
 
     expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
     expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: cancellation, caseId: await caseOf(other.registroIds[2]!) },
+      { registroId: cancellation, caseRegistroId: await caseOf(other.registroIds[2]!) },
     ]);
   });
 
@@ -1075,7 +1076,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
 
     expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
     expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: cancellation, caseId: await caseOf(lastRefusal) },
+      { registroId: cancellation, caseRegistroId: await caseOf(lastRefusal) },
     ]);
   });
 
@@ -1104,7 +1105,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
 
     expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
     expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: cancellation, caseId: await caseOf(refusals[2]!) },
+      { registroId: cancellation, caseRegistroId: await caseOf(refusals[2]!) },
     ]);
   });
 });
@@ -1444,12 +1445,12 @@ describe("drain — resolving a case releases nothing", () => {
     await drain(deps(aeat.client()), FIRST);
     const [opened] = await cases();
     expect(opened?.registroId).toBe(original);
-    await withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, async (tx) =>
       recordCaseEvent(tx, {
-        caseId: opened!.id,
+        caseRegistroId: opened!.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
-        personId: PERSON,
+        personId: await seedPerson(tx, { id: PERSON }),
         action: "Checked with the adviser",
         now: SECOND,
       }),

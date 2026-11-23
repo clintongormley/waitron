@@ -1,7 +1,8 @@
 import { sql, type Query } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
-import { captureError, triggerRaised, withTransaction } from "@waitron/db";
+import { captureError, triggerRaised, withTransaction, type Transaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createClient, type RespuestaLinea, type VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -9,7 +10,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { collideAtAeat, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
-import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
+import { openFilingCase, openFilingCasesSummary, recordCaseEvent } from "./filing-cases.js";
 import { readFilingOverview } from "./filing-overview.js";
 import * as conflicts from "./conflict-evidence.js";
 import type { ConflictEvidence } from "./conflict-evidence.js";
@@ -32,17 +33,17 @@ const run = (client: VerifactuClient, now = FIRST) =>
   );
 
 const observationRows = `
-  select h.id, h.registro_id, c.id as case_id, json_extract(h.data, '$.attempt') as attempt,
+  select h.id, h.registro_id, c.registro_id as case_registro_id, json_extract(h.data, '$.attempt') as attempt,
     json_extract(h.data, '$.cause') as cause, json_extract(h.data, '$.evidence') as evidence,
     h.at as recorded_at
-  from verifactu_history h join filing_cases c on c.registro_id = h.registro_id
-  where h.kind = 'conflict.observed' order by h.at, h.id`;
+  from verifactu_history h join verifactu_submissions c on c.registro_id = h.registro_id
+  where h.kind = 'conflict.observed' and c.case_opened_at is not null order by h.at, h.id`;
 
 async function observations() {
   const { rows } = await suite.db.execute<{
     id: string;
     registro_id: string;
-    case_id: string;
+    case_registro_id: string;
     attempt: number;
     cause: string;
     evidence: string;
@@ -54,35 +55,52 @@ async function observations() {
 const active = (nodeId: string) =>
   withTransaction(suite.db, (tx) => conflicts.readActiveConflicts(tx, nodeId));
 
-it("looks up observed and lookup evidence through the history record index", async () => {
+async function caseQueryPlan(tx: Transaction, read: () => Promise<unknown>) {
+  type Session = { prepareQuery(query: Query, ...rest: unknown[]): { all(): unknown } };
+  const session = (tx as unknown as { session: Session }).session;
+  const prepare = vi.spyOn(session, "prepareQuery");
+  const query = await read()
+    .then(() =>
+      prepare.mock.calls.map(([query]) => query).find(({ sql }) => sql.includes("case_opened_at")),
+    )
+    .finally(() => prepare.mockRestore());
+  expect(query).toBeDefined();
+  const rows = session
+    .prepareQuery(
+      { sql: `explain query plan ${query!.sql}`, params: query!.params },
+      undefined,
+      "all",
+      false,
+    )
+    .all() as { detail: string }[];
+  return rows.map(({ detail }) => detail);
+}
+
+it("reads active conflicts through the case, record and both history indexes", async () => {
   const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-  await withTransaction(suite.db, async (tx) => {
-    type Session = { prepareQuery(query: Query, ...rest: unknown[]): { all(): unknown } };
-    const session = (tx as unknown as { session: Session }).session;
-    const prepare = vi.spyOn(session, "prepareQuery");
-    const query = await conflicts
-      .readActiveConflicts(tx, seeded.nodeId)
-      .then(() =>
-        prepare.mock.calls.map(([query]) => query).find(({ sql }) => sql.includes("filing_cases")),
-      )
-      .finally(() => prepare.mockRestore());
-    expect(query).toBeDefined();
-    const rows = session
-      .prepareQuery(
-        { sql: `explain query plan ${query!.sql}`, params: query!.params },
-        undefined,
-        "all",
-        false,
-      )
-      .all() as { detail: string }[];
-    for (const alias of ["observed", "lookup"]) {
-      expect(rows.map(({ detail }) => detail)).toContainEqual(
-        expect.stringContaining(
-          `SEARCH ${alias} USING INDEX verifactu_history_registro_kind_seq_idx (registro_id=? AND kind=?)`,
-        ),
-      );
-    }
-  });
+  const plan = await withTransaction(suite.db, (tx) =>
+    caseQueryPlan(tx, () => conflicts.readActiveConflicts(tx, seeded.nodeId)),
+  );
+  expect(plan).toContainEqual(
+    expect.stringContaining("USING INDEX verifactu_submissions_case_idx"),
+  );
+  expect(plan).toContainEqual(expect.stringMatching(/SEARCH verifactu_records .*\(id=\?\)/));
+  for (const alias of ["observed", "lookup"]) {
+    expect(plan).toContainEqual(
+      expect.stringContaining(
+        `SEARCH ${alias} USING INDEX verifactu_history_registro_kind_seq_idx (registro_id=? AND kind=?)`,
+      ),
+    );
+  }
+});
+
+it("counts open cases through the case index", async () => {
+  const plan = await withTransaction(suite.db, (tx) =>
+    caseQueryPlan(tx, () => openFilingCasesSummary(tx)),
+  );
+  expect(plan).toContainEqual(
+    expect.stringContaining("USING INDEX verifactu_submissions_case_idx"),
+  );
 });
 
 async function retry(registroId: string) {
@@ -100,7 +118,9 @@ describe("durable conflict observations", () => {
     rejected.reject(seeded.facturaKeys[0]!, 1100, "Missing required field");
     await run(clientFor(rejected));
     const original = await suite.db.execute(sql`select * from verifactu_records`);
-    const oldCase = await suite.db.execute<{ id: string }>(sql`select * from filing_cases`);
+    const oldCase = await suite.db.execute<{ registro_id: string }>(
+      sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+    );
     expect(oldCase.rows).toHaveLength(1);
     expect(await observations()).toEqual([]);
 
@@ -121,14 +141,18 @@ describe("durable conflict observations", () => {
 
     expect(outcome.recordsHalted).toBe(1);
     expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(original);
-    expect(await suite.db.execute(sql`select * from filing_cases`)).toEqual(oldCase);
+    expect(
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+      ),
+    ).toEqual(oldCase);
     expect((await suite.db.execute(sql`select state from acks`)).rows).toEqual([
       { state: "rejected" },
     ]);
     expect(await observations()).toEqual([
       expect.objectContaining({
         registro_id: registroId,
-        case_id: oldCase.rows[0]!.id,
+        case_registro_id: oldCase.rows[0]!.registro_id,
         attempt: 2,
         cause: "fiscal.huella_divergente",
         recorded_at: SECOND.toISOString(),
@@ -146,7 +170,6 @@ describe("durable conflict observations", () => {
     expect(await active(seeded.nodeId)).toEqual([
       {
         registroId,
-        caseId: oldCase.rows[0]!.id,
         sifId: seeded.sifId,
         installationIdentity: "1",
         invoiceIdentity: "S1/1",
@@ -422,12 +445,12 @@ describe("durable conflict observations", () => {
           now: FIRST,
         }),
       );
-      await withTransaction(suite.db, (tx) =>
+      await withTransaction(suite.db, async (tx) =>
         recordCaseEvent(tx, {
-          caseId: opened.id,
+          caseRegistroId: opened.registroId,
           actionKey: "resolved-without-switch",
           kind: "resolved",
-          personId: "33333333-3333-4333-8333-333333333333",
+          personId: await seedPerson(tx),
           action: "note",
           now: SECOND,
         }),
@@ -435,7 +458,6 @@ describe("durable conflict observations", () => {
       expect(await active(seeded.nodeId)).toEqual([
         {
           registroId,
-          caseId: opened.id,
           sifId: seeded.sifId,
           installationIdentity: "1",
           invoiceIdentity: "S1/1",
@@ -477,7 +499,13 @@ describe("durable conflict observations", () => {
       const result = await run(clientFor(aeat));
       expect(result.recordsHalted).toBe(0);
       expect(await observations()).toEqual([]);
-      expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+          )
+        ).rows,
+      ).toEqual([]);
       expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
       expect(
         (await suite.db.execute(sql`select estado, csv from verifactu_submissions`)).rows,

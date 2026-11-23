@@ -5,9 +5,8 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
 import { releaseBrakeHold } from "./drain.js";
-import { recordCaseEvent } from "./filing-cases.js";
+import { caseEventByActionKey, recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export async function releaseRecordBrake(
@@ -16,16 +15,16 @@ export async function releaseRecordBrake(
   token: string,
   enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
-): Promise<{ registroId: string; eventId: string }> {
+): Promise<{ registroId: string; actionKey: string }> {
   const personId = await admitRecordRemedy(tx, token, "release-brake", enabledRemedies);
-  const keys = ["kind", "caseId", "registroId", "actionKey", "reason"];
+  const keys = ["kind", "caseRegistroId", "registroId", "actionKey", "reason"];
   if (
     Object.keys(raw).some((key) => !keys.includes(key)) ||
     keys.some((key) => typeof raw[key] !== "string" || (raw[key] as string).trim() === "")
   )
     throw new AppError("fiscal.remedy_request_invalid", {});
-  const { caseId, registroId, actionKey } = raw as {
-    caseId: string;
+  const { caseRegistroId, registroId, actionKey } = raw as {
+    caseRegistroId: string;
     registroId: string;
     actionKey: string;
   };
@@ -41,31 +40,28 @@ export async function releaseRecordBrake(
   )
     throw new AppError("fiscal.remedy_invalid", { registroId });
   const action = canonicalJson(raw);
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, actionKey));
+  const stored = await caseEventByActionKey(tx, actionKey);
   if (stored !== undefined) {
     if (
-      stored.caseId !== caseId ||
+      stored.registroId !== caseRegistroId ||
       stored.personId !== personId ||
       stored.kind !== "note" ||
       stored.action !== action ||
       stored.remedyRegistroId !== null
     )
-      throw new AppError("filing_case.action_mismatch", { caseId, actionKey });
-    return { registroId, eventId: stored.id };
+      throw new AppError("filing_case.action_mismatch", { caseRegistroId, actionKey });
+    return { registroId, actionKey: stored.actionKey };
   }
   const now = generation.clock.now().instant;
-  if (!(await releaseBrakeHold(tx, registroId, caseId, generation.environment, now)))
+  if (!(await releaseBrakeHold(tx, registroId, caseRegistroId, generation.environment, now)))
     throw new AppError("fiscal.remedy_invalid", { registroId });
   const event = await recordCaseEvent(tx, {
-    caseId,
+    caseRegistroId,
     actionKey,
     kind: "note",
     personId,
     action,
     now,
   });
-  return { registroId, eventId: event.id };
+  return { registroId, actionKey: event.actionKey };
 }

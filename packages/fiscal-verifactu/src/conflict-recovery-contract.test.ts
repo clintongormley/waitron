@@ -55,7 +55,7 @@ const input = {
     incidentEvidence: "hour/event-1",
   },
 };
-const ref = { registroId: "record-1", caseId: "case-1", sifId: "sif-1" };
+const ref = { registroId: "record-1", sifId: "sif-1" };
 const active = {
   ...ref,
   installationIdentity: "0CNNW",

@@ -9,8 +9,6 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "first receipt of an original returned from another box, retained with that original",
   ),
-  appendOnly("filing_cases", "ledger", LEDGER),
-  appendOnly("filing_case_events", "ledger", LEDGER),
   appendOnly("verifactu_series_conflicts", "ledger", LEDGER),
   appendOnly("fiscal_allocations", "ledger", LEDGER),
   appendOnly("fiscal_reservations", "ledger", LEDGER),

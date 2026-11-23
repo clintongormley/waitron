@@ -27,34 +27,6 @@ CREATE TABLE `declaraciones_responsables` (
           )))
 );
 --> statement-breakpoint
-CREATE TABLE `filing_case_events` (
-	`id` text PRIMARY KEY NOT NULL,
-	`case_id` text NOT NULL,
-	`action_key` text NOT NULL,
-	`kind` text NOT NULL,
-	`person_id` text NOT NULL,
-	`action` text NOT NULL,
-	`remedy_registro_id` text,
-	`recorded_at` text NOT NULL,
-	FOREIGN KEY (`case_id`) REFERENCES `filing_cases`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`remedy_registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "filing_case_events_kind_ck" CHECK("filing_case_events"."kind" in ('note', 'resolved'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `filing_case_events_action_key_uq` ON `filing_case_events` (`action_key`);--> statement-breakpoint
-CREATE UNIQUE INDEX `filing_case_events_one_resolution_uq` ON `filing_case_events` (`case_id`) WHERE "filing_case_events"."kind" = 'resolved';--> statement-breakpoint
-CREATE INDEX `filing_case_events_case_idx` ON `filing_case_events` (`case_id`);--> statement-breakpoint
-CREATE TABLE `filing_cases` (
-	`id` text PRIMARY KEY NOT NULL,
-	`registro_id` text NOT NULL,
-	`cause` text NOT NULL,
-	`evidence` text NOT NULL,
-	`opened_at` text NOT NULL,
-	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "filing_cases_cause_ck" CHECK("filing_cases"."cause" <> '')
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `filing_cases_registro_uq` ON `filing_cases` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `fiscal_allocations` (
 	`event_key` text PRIMARY KEY NOT NULL,
 	`allocation_key` text NOT NULL,
@@ -149,7 +121,7 @@ CREATE TABLE `verifactu_history` (
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "verifactu_history_data_ck" CHECK(case when json_valid("verifactu_history"."data") then json_type("verifactu_history"."data") = 'object' else 0 end),
-	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')),
+	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')),
 	CONSTRAINT "verifactu_history_confirmed_source_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.source') in ('admin', 'staff'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_reason_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.reason') in ('start', 'unusable'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_person_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(length("verifactu_history"."person_id") > 0, 0)),
@@ -177,6 +149,12 @@ CREATE TABLE `verifactu_history` (
         and json_type("verifactu_history"."data", '$.evidence') is not null
         and "verifactu_history"."person_id" is null
         and "verifactu_history"."event_key" = 'lookup:' || "verifactu_history"."registro_id",
+        0
+      )),
+	CONSTRAINT "verifactu_history_note_ck" CHECK("verifactu_history"."kind" <> 'case.note' or coalesce(
+        "verifactu_history"."registro_id" is not null and "verifactu_history"."person_id" is not null
+        and substr("verifactu_history"."event_key", 1, 10) = 'case.note:' and length("verifactu_history"."event_key") > 10
+        and json_type("verifactu_history"."data", '$.action') = 'text',
         0
       ))
 );
@@ -303,9 +281,47 @@ CREATE TABLE `verifactu_submissions` (
 	`enviado_en` text,
 	`confirmado_en` text,
 	`reconciled_resubmit_at` text,
+	`case_cause` text,
+	`case_evidence` text,
+	`case_opened_at` text,
+	`case_open_seq` integer,
+	`case_resolved_at` text,
+	`case_resolved_by` text,
+	`case_resolution_action` text,
+	`case_resolution_key` text,
+	`case_remedy_registro_id` text,
 	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "verifactu_submissions_estado_ck" CHECK("verifactu_submissions"."estado" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido'))
+	FOREIGN KEY (`case_resolved_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`case_remedy_registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "verifactu_submissions_estado_ck" CHECK("verifactu_submissions"."estado" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')),
+	CONSTRAINT "verifactu_submissions_case_ck" CHECK(("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_evidence" is null)
+        and ("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_opened_at" is null)
+        and ("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_open_seq" is null)
+        and ("verifactu_submissions"."case_cause" is null or "verifactu_submissions"."case_cause" <> '')),
+	CONSTRAINT "verifactu_submissions_resolution_ck" CHECK(("verifactu_submissions"."case_resolved_at" is null) = ("verifactu_submissions"."case_resolved_by" is null)
+        and ("verifactu_submissions"."case_resolved_at" is null) = ("verifactu_submissions"."case_resolution_action" is null)
+        and ("verifactu_submissions"."case_resolved_at" is null) = ("verifactu_submissions"."case_resolution_key" is null)
+        and ("verifactu_submissions"."case_resolved_at" is null or "verifactu_submissions"."case_opened_at" is not null)
+        and ("verifactu_submissions"."case_remedy_registro_id" is null or
+          ("verifactu_submissions"."case_resolved_at" is not null and "verifactu_submissions"."case_remedy_registro_id" <> "verifactu_submissions"."registro_id")))
 );
 --> statement-breakpoint
 CREATE INDEX `verifactu_submissions_drenaje_idx` ON `verifactu_submissions` (`estado`,`proximo_intento_en`);--> statement-breakpoint
-CREATE INDEX `verifactu_submissions_confirmado_idx` ON `verifactu_submissions` (`confirmado_en`);
+CREATE INDEX `verifactu_submissions_confirmado_idx` ON `verifactu_submissions` (`confirmado_en`);--> statement-breakpoint
+CREATE UNIQUE INDEX `verifactu_submissions_resolution_key_uq` ON `verifactu_submissions` (`case_resolution_key`);--> statement-breakpoint
+CREATE INDEX `verifactu_submissions_case_idx` ON `verifactu_submissions` (`case_opened_at`) WHERE "verifactu_submissions"."case_opened_at" is not null;
+--> statement-breakpoint
+CREATE TRIGGER verifactu_submissions_guard_update BEFORE UPDATE ON verifactu_submissions
+WHEN new.registro_id IS NOT old.registro_id
+  OR (old.case_opened_at IS NOT NULL AND (new.case_cause IS NOT old.case_cause
+      OR new.case_evidence IS NOT old.case_evidence OR new.case_opened_at IS NOT old.case_opened_at
+      OR new.case_open_seq IS NOT old.case_open_seq))
+  OR (old.case_resolved_at IS NOT NULL AND (new.case_resolved_at IS NOT old.case_resolved_at
+      OR new.case_resolved_by IS NOT old.case_resolved_by
+      OR new.case_resolution_action IS NOT old.case_resolution_action
+      OR new.case_resolution_key IS NOT old.case_resolution_key
+      OR new.case_remedy_registro_id IS NOT old.case_remedy_registro_id))
+BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a filing case and its resolution are set once'); END
+--> statement-breakpoint
+CREATE TRIGGER verifactu_submissions_no_delete BEFORE DELETE ON verifactu_submissions
+BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never deleted'); END

@@ -1101,7 +1101,7 @@ describe("reconcile — a conflict on a record of the box this one took over fro
       (await incidentsFor()).map(({ code, params }) => ({ code, registroId: params.registroId })),
     ).toEqual([{ code: "fiscal.huella_divergente", registroId: inherited.id }]);
     const { rows: cases } = await suite.db.execute<{ registro_id: string; cause: string }>(
-      sql`select registro_id, cause from filing_cases`,
+      sql`select registro_id, case_cause as cause from verifactu_submissions where case_opened_at is not null`,
     );
     expect(cases).toEqual([{ registro_id: inherited.id, cause: "fiscal.huella_divergente" }]);
     const backend = new VerifactuBackend({

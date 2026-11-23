@@ -146,7 +146,13 @@ it.each(["aceptado", "aceptado_con_errores"])(
     expect((await state(first)).estado).toBe("rechazado");
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
-    expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+        )
+      ).rows,
+    ).toEqual([]);
     expect(await immutableRows()).toEqual(before);
   },
 );
@@ -166,9 +172,13 @@ it("sets aside a cancellation of the rejected current version despite two older 
   expect((await state(cancel)).estado).toBe("retenido");
   expect((await state(latest)).estado).toBe("rechazado");
   expect(result.recordsHalted).toBe(1);
-  expect((await suite.db.execute(sql`select registro_id, cause from filing_cases`)).rows).toEqual([
-    { registro_id: cancel, cause: "fiscal.anulacion_retenida" },
-  ]);
+  expect(
+    (
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause from verifactu_submissions where case_opened_at is not null`,
+      )
+    ).rows,
+  ).toEqual([{ registro_id: cancel, cause: "fiscal.anulacion_retenida" }]);
   expect(await immutableRows()).toEqual(before);
 });
 
@@ -191,7 +201,13 @@ it.each(["aceptado", "rechazado"])(
     expect((await state(cancel)).intentos).toBe(0);
     expect((await state(later)).estado).toBe("pendiente");
     expect((await state(later)).intentos).toBe(0);
-    expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+        )
+      ).rows,
+    ).toEqual([]);
 
     await drain(wire.deps, NEXT);
 
@@ -222,6 +238,12 @@ it("keeps a brake-held cancellation held when the current version is unknown and
   expect((await state(cancel)).estado).toBe("detenido");
   expect((await state(later)).estado).toBe("pendiente");
   expect((await state(later)).intentos).toBe(0);
-  expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+  expect(
+    (
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+      )
+    ).rows,
+  ).toEqual([]);
   expect(await immutableRows()).toEqual(before);
 });

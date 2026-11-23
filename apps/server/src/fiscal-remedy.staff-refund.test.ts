@@ -232,7 +232,7 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
     {
       kind: "record-correction",
       registroId: originalId,
-      caseId: originalCase.id,
+      caseRegistroId: originalCase.registroId,
       actionKey: "correct-rejected-staff-sale",
       reason: "Synthetic correction before held cancellation",
       facts: { description: "Corrected restaurant service" },
@@ -249,7 +249,7 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
   const request = {
     kind: "release-held-cancellation",
     registroId: cancellationId,
-    caseId: heldCase.id,
+    caseRegistroId: heldCase.registroId,
     acceptedRegistroId: corrected.json.registroId,
     actionKey: "release-staff-cancellation",
     reason: "Accepted current original",
@@ -276,7 +276,7 @@ it("resolves a real staff void and cash refund by filing the same held cancellat
     head,
   );
   const resolved = await withTransaction(store.db, (tx) => listFilingCases(tx));
-  expect(resolved.find((row) => row.id === heldCase.id)).toMatchObject({
+  expect(resolved.find((row) => row.registroId === heldCase.registroId)).toMatchObject({
     status: "resolved",
     events: [{ kind: "resolved", remedyRegistroId: null }],
   });
@@ -305,7 +305,7 @@ it("preserves an unsuitable existing ordinary cancellation instead of generating
   const refused = await remedy(
     {
       kind: "absent-original-cancellation",
-      caseId: originalCase.id,
+      caseRegistroId: originalCase.registroId,
       registroId: originalId,
       actionKey: "unsuitable-existing-cancellation",
       reason: "Must not rewrite the held ordinary record",
@@ -335,7 +335,7 @@ it.each(["pendiente", "enviando", "detenido"])(
       const refused = await remedy(
         {
           kind,
-          caseId: originalCase.id,
+          caseRegistroId: originalCase.registroId,
           registroId: originalId,
           actionKey: `unknown-${kind}`,
           reason: "No known original outcome",
@@ -380,7 +380,7 @@ it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
       const refused = await remedy(
         {
           kind,
-          caseId: filingCase.id,
+          caseRegistroId: filingCase.registroId,
           registroId: originalId,
           actionKey: `conflict-${kind}`,
           reason: "Ambiguous original identity",
@@ -422,7 +422,7 @@ it("releases the old chain's cancellation once a correction issued on another ch
   const corrected = await remedy(
     {
       kind: "record-correction",
-      caseId: originalCase.id,
+      caseRegistroId: originalCase.registroId,
       registroId: originalId,
       actionKey: "other-chain-correction",
       reason: "Synthetic new issuing chain",
@@ -444,7 +444,7 @@ it("releases the old chain's cancellation once a correction issued on another ch
   const released = await remedy(
     {
       kind: "release-held-cancellation",
-      caseId: heldCase.id,
+      caseRegistroId: heldCase.registroId,
       registroId: cancellationId,
       acceptedRegistroId: correction.id,
       actionKey: "other-chain-release",
@@ -461,7 +461,7 @@ it("releases the old chain's cancellation once a correction issued on another ch
   expect(after.deliveries.find((row) => row.registroId === cancellationId)).toMatchObject({
     estado: "aceptado",
   });
-  expect(after.cases.find((row) => row.id === heldCase.id)).toMatchObject({
+  expect(after.cases.find((row) => row.registroId === heldCase.registroId)).toMatchObject({
     status: "resolved",
     events: [{ kind: "resolved", remedyRegistroId: null }],
   });
@@ -482,7 +482,7 @@ it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado
     const response = await remedy(
       {
         kind: "record-correction",
-        caseId: originalCase.id,
+        caseRegistroId: originalCase.registroId,
         registroId: originalId,
         actionKey: "cancellation-not-held",
         reason: "Do not create a filing dependency cycle",
@@ -501,7 +501,7 @@ it("allows the same correction decision after the filing queue has actually held
   const { cancellationId, facts } = await cancelAndRefund();
   const request = {
     kind: "record-correction",
-    caseId: originalCase.id,
+    caseRegistroId: originalCase.registroId,
     registroId: originalId,
     actionKey: "wait-for-real-hold",
     reason: "Explicit correction of the rejected invoice",
@@ -527,7 +527,7 @@ it("allows the same correction decision after the filing queue has actually held
       {
         kind: "release-held-cancellation",
         registroId: cancellationId,
-        caseId: heldCase.id,
+        caseRegistroId: heldCase.registroId,
         acceptedRegistroId: accepted.json.registroId,
         actionKey: "release-after-real-hold",
         reason: "Accepted current original",
@@ -551,7 +551,7 @@ it.each([3000, 1100, null])(
     const response = await remedy(
       {
         kind: "record-correction",
-        caseId: originalCase.id,
+        caseRegistroId: originalCase.registroId,
         registroId: originalId,
         actionKey: "unproven-rejection",
         reason: "Do not infer an absent original from a duplicate or stale case",
@@ -573,7 +573,7 @@ it.each(["production", "preproduction"] as const)(
         {
           kind,
           registroId: originalId,
-          caseId: "unneeded",
+          caseRegistroId: "unneeded",
           actionKey: "closed-policy",
           reason: "A request cannot grant authority",
           enabledRemedies: [kind],
@@ -597,7 +597,7 @@ it("writes a correction record under the default policy for a refused invoice wh
   const response = await remedy({
     kind: "record-correction",
     registroId: originalId,
-    caseId: originalCase.id,
+    caseRegistroId: originalCase.registroId,
     actionKey: "default-policy-correction",
     reason: "Correct the description AEAT refused",
     facts: { description: "Corrected restaurant service" },
@@ -616,7 +616,7 @@ it("writes a correction record under the default policy for a refused invoice wh
     subsanacion: "S",
     rechazoPrevio: "X",
   });
-  expect(after.cases.find((row) => row.id === originalCase.id)).toMatchObject({
+  expect(after.cases.find((row) => row.registroId === originalCase.registroId)).toMatchObject({
     status: "resolved",
   });
 });

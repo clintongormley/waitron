@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, jobOrigin, saleId as brandSaleId } from "@waitron/shared";
@@ -38,10 +39,10 @@ async function conflict(cause: FilingCaseCause, resolved = false) {
     });
     if (resolved)
       await recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: randomUUID(),
         kind: "resolved",
-        personId: randomUUID(),
+        personId: await seedPerson(tx),
         action: "Recorded an administrator note",
         now: steadyClock.now().instant,
       });
@@ -128,7 +129,13 @@ describe("final fiscal builder conflict check", () => {
     await expect(
       withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput(venue))),
     ).resolves.toMatchObject({ fiscal: { backend: "verifactu", state: "pending" } });
-    expect((await suite.db.execute(sql`select id from filing_cases`)).rows).toHaveLength(1);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select registro_id from verifactu_submissions where case_opened_at is not null`,
+        )
+      ).rows,
+    ).toHaveLength(1);
   });
 
   for (const kind of builders) {

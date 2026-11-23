@@ -205,16 +205,16 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     role: "admin",
     pinHash: hashPin("2468"),
   });
-  const { token, caseId } = await withTransaction(suite.db, async (tx) => ({
+  const { token, caseRegistroId } = await withTransaction(suite.db, async (tx) => ({
     token: (await startManagementSession(tx, { method: "password", personId: admin!.id })).token,
-    caseId: (
+    caseRegistroId: (
       await openFilingCase(tx, {
         registroId: before.registro.id,
         cause: "fiscal.registro_rechazado",
         evidence: { codigo: 1161, mensaje: null, csv: null },
         now: steadyClock.now().instant,
       })
-    ).id,
+    ).registroId,
   }));
   const app = new Hono();
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
@@ -238,7 +238,7 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
     body: JSON.stringify({
       kind: "record-correction",
-      caseId,
+      caseRegistroId,
       registroId: before.registro.id,
       actionKey: "fix-at-10",
       reason: "Filed at the wrong VAT rate",

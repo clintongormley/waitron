@@ -106,7 +106,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
     run_length: number;
   }>(sql`
     with detenidos as (
-      select r.id, r.node_id, r.sif_id, r.secuencia,
+      select r.id, r.node_id, r.sif_id, r.secuencia, e.case_opened_at,
         row_number() over (partition by r.sif_id order by r.secuencia) as position
       from verifactu_submissions e
       join verifactu_records r on r.id = e.registro_id
@@ -120,7 +120,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
       ) as last_id
       from detenidos h
       where h.position = 1
-        and not exists (select 1 from filing_cases own where own.registro_id = h.id)
+        and h.case_opened_at is null
     ),
     runs as materialized (
       select held.node_id, held.sif_id, held.secuencia, last_envio.codigo_error as codigo,
@@ -133,16 +133,13 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
         ) as break_secuencia
       from held
       join verifactu_submissions last_envio on last_envio.registro_id = held.last_id
-      join filing_cases last_case on last_case.registro_id = held.last_id
       where last_envio.estado = 'rechazado' and last_envio.codigo_error is not null
+        and last_envio.case_opened_at is not null
     )
     select sif_id, codigo, (
-      select (
-        select stop_case.opened_at from filing_cases stop_case
-        where stop_case.registro_id = preceding.id
-      ) ${recordsBefore("runs")}
+      select preceding_envio.case_opened_at ${recordsBefore("runs")}
         and preceding.secuencia > coalesce(runs.break_secuencia, 0)
-        and preceding.id in (select registro_id from filing_cases)
+        and preceding_envio.case_opened_at is not null
       order by preceding.secuencia
       limit 1 offset ${SAME_CODE_REFUSAL_LIMIT - 1}
     ) as opened_at, (

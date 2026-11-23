@@ -19,7 +19,6 @@ function status(value: unknown) {
     active: [
       {
         registroId: "record",
-        caseId: "case",
         sifId: "sif",
         installationIdentity: "1",
         invoiceIdentity: "A/1",
@@ -62,9 +61,7 @@ it("retains explicit missing lookup fields as unknown facts", () => {
 
 it("accepts a lookup-only conflict reference without made-up record or case ids", () => {
   const rest = Object.fromEntries(
-    Object.entries(status(evidence).active[0]!).filter(
-      ([key]) => key !== "registroId" && key !== "caseId",
-    ),
+    Object.entries(status(evidence).active[0]!).filter(([key]) => key !== "registroId"),
   );
   const active = { ...rest, lookupId: "outside-observation" };
   const input = { kind: "status", active: [active], event: { kind: "none" } };
@@ -81,13 +78,13 @@ it("accepts a lookup-only conflict reference without made-up record or case ids"
   expect(
     parseConflictRequest({
       ...request,
-      conflict: { ...request.conflict, registroId: "record", caseId: "case" },
+      conflict: { ...request.conflict, registroId: "record" },
     }),
   ).toBeNull();
   expect(
     parseConflictResult({
       ...input,
-      active: [{ ...active, registroId: "record", caseId: "case" }],
+      active: [{ ...active, registroId: "record" }],
     }),
   ).toBeNull();
 });

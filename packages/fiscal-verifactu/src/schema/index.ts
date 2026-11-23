@@ -8,7 +8,6 @@ export { verifactuCertificates } from "./verifactu-certificates.js";
 export { fiscalCertificateReminders } from "./certificate-reminders.js";
 export { verifactuSendingState } from "./verifactu-sending-state.js";
 export { verifactuSubmissions } from "./verifactu-submissions.js";
-export { filingCaseEvents, filingCases } from "./filing-cases.js";
 export { verifactuRecords } from "./verifactu-records.js";
 export { verifactuIdentities } from "./verifactu-identities.js";
 

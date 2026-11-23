@@ -6,13 +6,11 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
-import { recordCaseEvent } from "./filing-cases.js";
+import { caseEventByActionKey, findFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import type { RegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { queueSubmission } from "./queue-submission.js";
-import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import {
   producerFields,
@@ -27,22 +25,22 @@ export async function applyAbsentOriginalCancellation(
   token: string,
   enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
-): Promise<{ registroId: string; eventId: string }> {
+): Promise<{ registroId: string; actionKey: string }> {
   const personId = await admitRecordRemedy(
     tx,
     token,
     "absent-original-cancellation",
     enabledRemedies,
   );
-  const keys = ["kind", "caseId", "registroId", "actionKey", "reason"];
+  const keys = ["kind", "caseRegistroId", "registroId", "actionKey", "reason"];
   if (
     Object.keys(raw).some((key) => !keys.includes(key)) ||
     keys.some((key) => typeof raw[key] !== "string" || (raw[key] as string).trim() === "")
   ) {
     throw new AppError("fiscal.remedy_request_invalid", {});
   }
-  const { caseId, registroId, actionKey, reason } = raw as {
-    caseId: string;
+  const { caseRegistroId, registroId, actionKey, reason } = raw as {
+    caseRegistroId: string;
     registroId: string;
     actionKey: string;
     reason: string;
@@ -62,32 +60,25 @@ export async function applyAbsentOriginalCancellation(
   }
   const action = canonicalJson({
     kind: "absent-original-cancellation",
-    caseId,
+    caseRegistroId,
     registroId,
     actionKey,
     reason,
   });
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, actionKey));
+  const stored = await caseEventByActionKey(tx, actionKey);
   if (stored !== undefined) {
     if (
-      stored.caseId !== caseId ||
+      stored.registroId !== caseRegistroId ||
       stored.personId !== personId ||
       stored.kind !== "resolved" ||
       stored.action !== action ||
       stored.remedyRegistroId === null
     ) {
-      throw new AppError("filing_case.action_mismatch", { caseId, actionKey });
+      throw new AppError("filing_case.action_mismatch", { caseRegistroId, actionKey });
     }
-    return { registroId: stored.remedyRegistroId, eventId: stored.id };
+    return { registroId: stored.remedyRegistroId, actionKey: stored.actionKey };
   }
-  const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx
-    .select()
-    .from(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, registroId));
+  const filingCase = await findFilingCase(tx, caseRegistroId);
   const [replacement] = await tx
     .select({ id: verifactuRecords.id })
     .from(verifactuRecords)
@@ -106,11 +97,11 @@ export async function applyAbsentOriginalCancellation(
   if (
     filingCase?.registroId !== registroId ||
     filingCase?.cause !== "fiscal.registro_rechazado" ||
-    delivery?.estado !== "rechazado" ||
-    delivery.codigoError === null ||
-    delivery.codigoError === "3000" ||
+    filingCase.estado !== "rechazado" ||
+    filingCase.codigoError === null ||
+    filingCase.codigoError === "3000" ||
     filingCase.evidence.codigo === null ||
-    String(filingCase.evidence.codigo) !== delivery.codigoError ||
+    String(filingCase.evidence.codigo) !== filingCase.codigoError ||
     replacement !== undefined ||
     cancellation !== undefined
   ) {
@@ -167,7 +158,7 @@ export async function applyAbsentOriginalCancellation(
   );
   await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: reading.instant });
   const event = await recordCaseEvent(tx, {
-    caseId,
+    caseRegistroId,
     actionKey,
     kind: "resolved",
     personId,
@@ -175,5 +166,5 @@ export async function applyAbsentOriginalCancellation(
     remedyRegistroId: appended.id,
     now: reading.instant,
   });
-  return { registroId: appended.id, eventId: event.id };
+  return { registroId: appended.id, actionKey: event.actionKey };
 }

@@ -1406,6 +1406,7 @@ type Row = Record<string, Value>;
  * trigger refuses every generic value. Keyed `table.column`.
  */
 const CANDIDATES: Record<string, readonly Value[]> = {
+  "verifactu_submissions.case_resolution_key": ["decision-1", "decision-2"],
   "settings.module": ["venue", "another"],
   "settings.doc": ['{"invoiceLocales":["es"]}'],
   "verifactu_history.data": [

@@ -435,14 +435,15 @@ it("cannot omit retained filing refusals from the aggregate", async () => {
   both((db) =>
     db
       .prepare(
-        "insert into filing_cases (id,registro_id,cause,evidence,opened_at) values (?,?,?,?,?)",
+        "insert into verifactu_submissions (registro_id,proximo_intento_en,case_cause,case_evidence,case_opened_at,case_open_seq) values (?,?,?,?,?,?)",
       )
       .run(
-        "10000000-0000-4000-8000-000000000010",
         "10000000-0000-4000-8000-000000000011",
+        time,
         "fiscal.registro_rechazado",
         "{}",
         time,
+        1,
       ),
   );
   expectCheck(await verify(), "history", "invalid");

@@ -40,8 +40,15 @@ async function snapshot() {
     ).rows,
     acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
-    cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
-    events: (await suite.db.execute(sql`select * from filing_case_events order by id`)).rows,
+    cases: (
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null order by case_open_seq`,
+      )
+    ).rows,
+    events: (
+      await suite.db.execute(sql`select registro_id from verifactu_history where kind = 'case.note'
+      union all select registro_id from verifactu_submissions where case_resolved_at is not null order by registro_id`)
+    ).rows,
     records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
   };
 }

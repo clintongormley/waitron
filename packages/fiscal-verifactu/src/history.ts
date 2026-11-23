@@ -35,7 +35,17 @@ type ConflictHistoryEntry = { nodeId: NodeId; at: Date; registroId: string } & (
   | { kind: "conflict.lookup"; data: LookupConflictData }
 );
 
-export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry;
+interface CaseNoteHistoryEntry {
+  kind: "case.note";
+  nodeId: NodeId;
+  at: Date;
+  registroId: string;
+  personId: string;
+  actionKey: string;
+  data: { action: string };
+}
+
+export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry | CaseNoteHistoryEntry;
 
 interface StoredHistoryEntry {
   id: string;
@@ -66,6 +76,8 @@ export async function appendHistory(
   return row === undefined ? null : { id: row.id, seq };
 }
 
+export const CASE_NOTE_PREFIX = "case.note:";
+
 function keyFor(entry: HistoryEntry): string | null {
   switch (entry.kind) {
     case "clock.confirmed":
@@ -74,6 +86,8 @@ function keyFor(entry: HistoryEntry): string | null {
       return `conflict:${entry.registroId}:${entry.data.attempt}:${entry.data.cause}`;
     case "conflict.lookup":
       return `lookup:${entry.registroId}`;
+    case "case.note":
+      return CASE_NOTE_PREFIX + entry.actionKey;
   }
 }
 

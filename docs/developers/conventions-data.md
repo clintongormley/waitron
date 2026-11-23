@@ -6346,12 +6346,19 @@ path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` 
 `provisioning.database_ahead`. Every other migrating path runs
 without the check; the full list is in [conventions-data.md](conventions-data.md).
 
+### Filing cases live on the submission row
+
+The submission row keeps the opening facts and the one resolution. Its guard refuses a
+second change to either and refuses deletion of the row. The filing list uses the case's
+opening sequence, so clock changes cannot reorder it. Case notes live in
+`verifactu_history` as `case.note`.
+
 ### `registros_facturacion` is immutable
 
 2026-11-14: the current trigger rule above also includes existing optional-module tables; the following root excerpt records the earlier table-selection limit.
 
 **`registros_facturacion` is immutable**: it is declared `appendOnly()`
-(`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
+(`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
 trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
 wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
 `DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a dropped

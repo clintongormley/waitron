@@ -16,6 +16,7 @@ import { seedNode, seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPendingEnvios } from "../../test/drain-fixtures.js";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
+import { appendHistory, historyNodeForRecord } from "../history.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const at = "2026-10-19T21:40:00.000Z";
@@ -132,13 +133,14 @@ function insertWithLinks(row: {
   registroId: string | null;
   eventKey: string | null;
   personId?: string;
-  data: Record<string, unknown>;
+  data: Record<string, unknown> | string;
 }) {
   return withTransaction(suite.db, (tx) =>
     tx.execute(sql`insert into verifactu_history
         (id, seq, kind, node_id, person_id, at, data, event_key, registro_id)
       values (${newId()}, ${row.seq ?? 1}, ${row.kind}, ${nodeId}, ${row.personId ?? null},
-        ${at}, ${JSON.stringify(row.data)}, ${row.eventKey}, ${row.registroId})`),
+        ${at}, ${typeof row.data === "string" ? row.data : JSON.stringify(row.data)},
+        ${row.eventKey}, ${row.registroId})`),
   );
 }
 
@@ -165,6 +167,76 @@ async function recordForConflict() {
   const fixture = await seedPendingEnvios(suite.db, { count: 1 });
   return fixture.registroIds[0]!;
 }
+
+it.each([
+  ["missing action", { data: {} }, "note"],
+  ["non-text action", { data: { action: 1 } }, "note"],
+  ["missing record", { registroId: null }, "note"],
+  ["missing person", { personId: undefined }, "note"],
+  ["missing key", { eventKey: null }, "note"],
+  ["unprefixed key", { eventKey: "action" }, "note"],
+  ["bare prefix", { eventKey: "case.note:" }, "note"],
+  ["malformed JSON", { data: "{" }, "data"],
+])("refuses a case note with %s", async (_label, overrides, check) => {
+  const row = {
+    kind: "case.note",
+    registroId: await recordForConflict(),
+    personId,
+    eventKey: "case.note:action",
+    data: { action: "reviewed" },
+    ...overrides,
+  };
+  expect(
+    checkFailed(await captureError(() => insertWithLinks(row)), `verifactu_history_${check}_ck`),
+  ).toBe(true);
+});
+
+it("keeps a case note whose action key matches later lookup evidence", async () => {
+  const registroId = await recordForConflict();
+  const actionKey = `lookup:${registroId}`;
+  await withTransaction(suite.db, async (tx) => {
+    const nodeId = await historyNodeForRecord(tx, registroId);
+    await appendHistory(tx, {
+      kind: "case.note",
+      nodeId,
+      registroId,
+      personId,
+      at: new Date(at),
+      actionKey,
+      data: { action: "reviewed" },
+    });
+    await appendHistory(
+      tx,
+      {
+        kind: "conflict.lookup",
+        nodeId,
+        registroId,
+        at: new Date(at),
+        data: {
+          evidence: {
+            source: "consulta",
+            invoice: {
+              IDEmisorFactura: "89890001K",
+              NumSerieFactura: "T/1",
+              FechaExpedicionFactura: "19-10-2026",
+            },
+            reference: null,
+            state: "Correcto",
+            fingerprint: null,
+            system: null,
+          },
+        },
+      },
+      { ifAbsent: true },
+    );
+  });
+  expect(
+    (await suite.db.execute(sql`select event_key, kind from verifactu_history order by seq`)).rows,
+  ).toEqual([
+    { event_key: `case.note:${actionKey}`, kind: "case.note" },
+    { event_key: actionKey, kind: "conflict.lookup" },
+  ]);
+});
 
 it.each([
   ["text attempt", { data: { attempt: "1", cause, evidence: {} } }],

@@ -333,23 +333,23 @@ declare module "@waitron/shared" {
     /** Invalid identity with a non-ES postal country and neither document field supplied. */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
 
-    /** `recordCaseEvent` (./filing-cases.ts) was handed a case id no `filing_cases` row has. */
-    "filing_case.not_found": { caseId: string };
+    /** `recordCaseEvent` (./filing-cases.ts) was handed a record id with no filing case. */
+    "filing_case.not_found": { caseRegistroId: string };
 
     /**
      * `recordCaseEvent`: an event already stored under this `actionKey` says something different, so
      * the call is not a retry of it and cannot be recorded under that key.
      */
-    "filing_case.action_mismatch": { caseId: string; actionKey: string };
+    "filing_case.action_mismatch": { caseRegistroId: string; actionKey: string };
 
     /** `recordCaseEvent`: the case already has its one resolution, recorded under another key. */
-    "filing_case.already_resolved": { caseId: string };
+    "filing_case.already_resolved": { caseRegistroId: string };
 
     /**
      * `recordCaseEvent`: a note named a corrective record, or a resolution named the case's own
      * record as its corrective one.
      */
-    "filing_case.remedy_invalid": { caseId: string; remedyRegistroId: string };
+    "filing_case.remedy_invalid": { caseRegistroId: string; remedyRegistroId: string };
 
     /**
      * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records are still

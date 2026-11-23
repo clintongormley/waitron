@@ -265,7 +265,6 @@ describe("drain — flow control (verifactu_sending_state)", () => {
   });
 
   afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
     await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
@@ -359,7 +358,6 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
   });
 
   afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
     await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
@@ -586,10 +584,9 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
   };
 
   /** One due row, an already-elapsed gate so the pass claims it, and `tiempo_espera_seg` set to
-   * `seconds` so the tail fold lands at `now + seconds`. Cleans up both tables: the row stays
-   * `pendiente` after the backoff, and `verifactu_sending_state` holds ONE row for the whole database. */
+   * `seconds` so the tail fold lands at `now + seconds`. */
   async function passWithGate(seconds: number): Promise<Awaited<ReturnType<typeof drain>>> {
-    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await seedPendingEnvios(suite.db, { count: 1 });
     await suite.db.execute(sql`
       insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
       values (1, ${new Date(NOW.getTime() - 1000).toISOString()}, ${seconds})
@@ -597,7 +594,6 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
     try {
       return await drain(drainDeps(staticResolver(failing)), NOW);
     } finally {
-      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
       await suite.db.execute(sql`delete from verifactu_sending_state`);
     }
   }
@@ -1612,87 +1608,75 @@ describe("drain — the deployment-environment guard", () => {
   it("refuses to submit a registro generated for another environment, leaving it pendiente", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
-    try {
-      const deps = drainDeps(staticResolver(aeat.client()));
-      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      expect(result.recordsSubmitted).toBe(0);
-      expect(result.incidentsRaised).toBe(1);
+    expect(result.recordsSubmitted).toBe(0);
+    expect(result.incidentsRaised).toBe(1);
 
-      const envio = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ estado: string }>(
-          sql`select estado from verifactu_submissions where ${ownChain(seeded)}`,
+    const envio = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string }>(
+        sql`select estado from verifactu_submissions where ${ownChain(seeded)}`,
+      ),
+    );
+    // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
+    expect(envio.rows[0]!.estado).toBe("pendiente");
+
+    const inc = parseParams(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string; severity: string; params: string }>(
+          sql`select code, severity, params from incidents`,
         ),
-      );
-      // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
-      expect(envio.rows[0]!.estado).toBe("pendiente");
-
-      const inc = parseParams(
-        await withTransaction(suite.db, (tx) =>
-          tx.execute<{ code: string; severity: string; params: string }>(
-            sql`select code, severity, params from incidents`,
-          ),
-        ),
-      );
-      expect(inc.rows).toHaveLength(1);
-      expect(inc.rows[0]?.code).toBe("fiscal.environment_mismatch");
-      expect(inc.rows[0]?.severity).toBe("error");
-      // Pinned exactly: `registroId` is the incident's only traceback to the record.
-      expect(inc.rows[0]?.params).toEqual({
-        registroId: seeded.registroIds[0],
-        recordEnvironment: "preproduction",
-        hostEnvironment: "production",
-      });
-    } finally {
-      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
-    }
+      ),
+    );
+    expect(inc.rows).toHaveLength(1);
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_mismatch");
+    expect(inc.rows[0]?.severity).toBe("error");
+    // Pinned exactly: `registroId` is the incident's only traceback to the record.
+    expect(inc.rows[0]?.params).toEqual({
+      registroId: seeded.registroIds[0],
+      recordEnvironment: "preproduction",
+      hostEnvironment: "production",
+    });
   });
 
   it("refuses a registro with no recorded environment, distinctly from a mismatch", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: null });
-    try {
-      const deps = drainDeps(staticResolver(aeat.client()));
-      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      expect(result.recordsSubmitted).toBe(0);
+    expect(result.recordsSubmitted).toBe(0);
 
-      const envio = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ estado: string }>(
-          sql`select estado from verifactu_submissions where ${ownChain(seeded)}`,
-        ),
-      );
-      expect(envio.rows[0]!.estado).toBe("pendiente");
+    const envio = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string }>(
+        sql`select estado from verifactu_submissions where ${ownChain(seeded)}`,
+      ),
+    );
+    expect(envio.rows[0]!.estado).toBe("pendiente");
 
-      const inc = parseParams(
-        await withTransaction(suite.db, (tx) =>
-          tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
-        ),
-      );
-      expect(inc.rows).toHaveLength(1);
-      // A NULL entorno is refused under its own code, never treated as agreeing with the host.
-      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
-      expect(inc.rows[0]?.params).toEqual({
-        registroId: seeded.registroIds[0],
-        hostEnvironment: "production",
-      });
-    } finally {
-      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
-    }
+    const inc = parseParams(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
+      ),
+    );
+    expect(inc.rows).toHaveLength(1);
+    // A NULL entorno is refused under its own code, never treated as agreeing with the host.
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+    expect(inc.rows[0]?.params).toEqual({
+      registroId: seeded.registroIds[0],
+      hostEnvironment: "production",
+    });
   });
 
   it("submits normally when the environments agree", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: "production" });
-    try {
-      const deps = drainDeps(staticResolver(aeat.client()));
-      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    await seedPendingEnvios(suite.db, { count: 1, entorno: "production" });
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      expect(result.recordsSubmitted).toBeGreaterThan(0);
-      expect(result.recordsAccepted).toBeGreaterThan(0);
-    } finally {
-      await suite.db.execute(sql`delete from verifactu_submissions where ${ownChain(seeded)}`);
-    }
+    expect(result.recordsSubmitted).toBeGreaterThan(0);
+    expect(result.recordsAccepted).toBeGreaterThan(0);
   });
 
   /**
@@ -1703,52 +1687,42 @@ describe("drain — the deployment-environment guard", () => {
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    let cleanupNodeId: string | undefined;
-    try {
-      // secuencia 1 is refused (no entorno); 2 and 3, on the same chain, carry `"production"`.
-      const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: null });
-      cleanupNodeId = seeded.nodeId;
-      await appendPendingAlta(suite.db, seeded, 2);
-      await appendPendingAlta(suite.db, seeded, 3);
+    // secuencia 1 is refused (no entorno); 2 and 3, on the same chain, carry `"production"`.
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: null });
+    await appendPendingAlta(suite.db, seeded, 2);
+    await appendPendingAlta(suite.db, seeded, 3);
 
-      const deps = drainDeps(staticResolver(aeat.client()));
-      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    const deps = drainDeps(staticResolver(aeat.client()));
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      expect(result.recordsSubmitted).toBe(0);
-      // One incident for the whole chain, not one per row.
-      expect(result.incidentsRaised).toBe(1);
+    expect(result.recordsSubmitted).toBe(0);
+    // One incident for the whole chain, not one per row.
+    expect(result.incidentsRaised).toBe(1);
 
-      const rows = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
-          select r.secuencia, e.estado, e.intentos from verifactu_submissions e
-          join verifactu_records r on r.id = e.registro_id
-          where r.node_id = ${seeded.nodeId}
-          order by r.secuencia
-        `),
-      );
-      // All three stay pendiente and were never claimed (intentos still 0).
-      expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
-      expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
+    const rows = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
+        select r.secuencia, e.estado, e.intentos from verifactu_submissions e
+        join verifactu_records r on r.id = e.registro_id
+        where r.node_id = ${seeded.nodeId}
+        order by r.secuencia
+      `),
+    );
+    // All three stay pendiente and were never claimed (intentos still 0).
+    expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
+    expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 
-      const inc = parseParams(
-        await withTransaction(suite.db, (tx) =>
-          tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
-        ),
-      );
-      expect(inc.rows).toHaveLength(1);
-      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
-      // The incident names the refused row, not a blocked successor.
-      expect(inc.rows[0]?.params).toMatchObject({ registroId: seeded.registroIds[0] });
+    const inc = parseParams(
+      await withTransaction(suite.db, (tx) =>
+        tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
+      ),
+    );
+    expect(inc.rows).toHaveLength(1);
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+    // The incident names the refused row, not a blocked successor.
+    expect(inc.rows[0]?.params).toMatchObject({ registroId: seeded.registroIds[0] });
 
-      const stored = aeat.stored();
-      expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
-    } finally {
-      if (cleanupNodeId !== undefined) {
-        await suite.db.execute(
-          sql`delete from verifactu_submissions where ${ownChain({ nodeId: cleanupNodeId })}`,
-        );
-      }
-    }
+    const stored = aeat.stored();
+    expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
   }, 20_000);
 
   /**
@@ -1759,58 +1733,47 @@ describe("drain — the deployment-environment guard", () => {
    */
   it("does not starve a sendable row sorting behind a cap-filling backlog of refused rows on another chain", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    let cleanupNodeId: string | undefined;
-    try {
-      const seeded = await seedPendingEnvios(suite.db, { count: 3, entorno: null });
-      cleanupNodeId = seeded.nodeId;
-      const healthy = await seedIndependentChain(suite.db, {
-        sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
-        secuencia: 1,
-        entorno: "production",
-      });
+    const seeded = await seedPendingEnvios(suite.db, { count: 3, entorno: null });
+    const healthy = await seedIndependentChain(suite.db, {
+      sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      secuencia: 1,
+      entorno: "production",
+    });
 
-      const deps: DrainDeps = {
-        db: suite.db,
-        resolveClient: staticResolver(aeat.client()),
-        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
-        environment: "production",
-        maxRegistrosPorEnvio: 3,
-      };
-      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    const deps: DrainDeps = {
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production",
+      maxRegistrosPorEnvio: 3,
+    };
+    const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      expect(result.recordsSubmitted).toBe(1);
-      expect(result.recordsAccepted).toBe(1);
-      // One incident for the blocked chain, not re-raised by each retried claim.
-      expect(result.incidentsRaised).toBe(1);
+    expect(result.recordsSubmitted).toBe(1);
+    expect(result.recordsAccepted).toBe(1);
+    // One incident for the blocked chain, not re-raised by each retried claim.
+    expect(result.incidentsRaised).toBe(1);
 
-      const healthyRow = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ estado: string }>(
-          sql`select estado from verifactu_submissions where registro_id = ${healthy.registroId}`,
-        ),
-      );
-      expect(healthyRow.rows[0]?.estado).toBe("aceptado");
+    const healthyRow = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ estado: string }>(
+        sql`select estado from verifactu_submissions where registro_id = ${healthy.registroId}`,
+      ),
+    );
+    expect(healthyRow.rows[0]?.estado).toBe("aceptado");
 
-      const refused = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ count: number }>(sql`
-            select count(*) as count from verifactu_submissions
-            where ${ownChain(seeded)} and estado = 'pendiente'
-          `),
-      );
-      expect(refused.rows[0]!.count).toBe(3);
+    const refused = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ count: number }>(sql`
+          select count(*) as count from verifactu_submissions
+          where ${ownChain(seeded)} and estado = 'pendiente'
+        `),
+    );
+    expect(refused.rows[0]!.count).toBe(3);
 
-      const inc = await withTransaction(suite.db, (tx) =>
-        tx.execute<{ code: string }>(sql`select code from incidents`),
-      );
-      expect(inc.rows).toHaveLength(1);
-      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
-    } finally {
-      if (cleanupNodeId !== undefined) {
-        await suite.db.execute(
-          sql`delete from verifactu_submissions where ${ownChain({ nodeId: cleanupNodeId })}`,
-        );
-        await suite.db.execute(sql`delete from verifactu_submissions where estado = 'aceptado'`);
-      }
-    }
+    const inc = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ code: string }>(sql`select code from incidents`),
+    );
+    expect(inc.rows).toHaveLength(1);
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
   });
 });
 
@@ -1850,30 +1813,15 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
   );
 
   it("accepts a valid small cap (3) and the omitted default (→1000) without throwing", async () => {
-    let capNode: string | undefined;
-    let defaultNode: string | undefined;
-    try {
-      capNode = (await seedPendingEnvios(suite.db, { count: 1 })).nodeId;
-      const withCap = await drain(depsWith(3), NOW);
-      expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
+    await seedPendingEnvios(suite.db, { count: 1 });
+    const withCap = await drain(depsWith(3), NOW);
+    expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
-      // The first drain closed the flow-control gate; clear it so the second pass is ungated.
-      await suite.db.execute(sql`delete from verifactu_sending_state`);
-      defaultNode = (await seedPendingEnvios(suite.db, { count: 1 })).nodeId;
-      const omitted = await drain(depsWith(), NOW);
-      expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
-    } finally {
-      if (capNode !== undefined) {
-        await suite.db.execute(
-          sql`delete from verifactu_submissions where ${ownChain({ nodeId: capNode })}`,
-        );
-      }
-      if (defaultNode !== undefined) {
-        await suite.db.execute(
-          sql`delete from verifactu_submissions where ${ownChain({ nodeId: defaultNode })}`,
-        );
-      }
-    }
+    // The first drain closed the flow-control gate; clear it so the second pass is ungated.
+    await suite.db.execute(sql`delete from verifactu_sending_state`);
+    await seedPendingEnvios(suite.db, { count: 1 });
+    const omitted = await drain(depsWith(), NOW);
+    expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d7e32152-9548-496b-8d2c-349d3dc83638",
+  "id": "d349bfbc-1b9a-4e62-b569-8c54f99ef912",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -101,199 +101,6 @@
         "declaraciones_responsables_version_ck": {
           "name": "declaraciones_responsables_version_ck",
           "value": "instr(\"declaraciones_responsables\".\"version\", char(0)) = 0\n          and length(\"declaraciones_responsables\".\"version\") <= 50\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) glob '[0-9]*.[0-9]*.[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*[^0-9.]*'\n          and length(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1)) - length(replace(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1), '.', '')) = 2\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '0[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*.0[0-9]*'\n          and (instr(\"declaraciones_responsables\".\"version\", '-') = 0 or (\n            substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), 1, instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') - 1) in ('alpha', 'beta', 'rc')\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) glob '[0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '*[^0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '0[0-9]*'\n          ))"
-        }
-      }
-    },
-    "filing_case_events": {
-      "name": "filing_case_events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "case_id": {
-          "name": "case_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "action_key": {
-          "name": "action_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "remedy_registro_id": {
-          "name": "remedy_registro_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "filing_case_events_action_key_uq": {
-          "name": "filing_case_events_action_key_uq",
-          "columns": [
-            "action_key"
-          ],
-          "isUnique": true
-        },
-        "filing_case_events_one_resolution_uq": {
-          "name": "filing_case_events_one_resolution_uq",
-          "columns": [
-            "case_id"
-          ],
-          "isUnique": true,
-          "where": "\"filing_case_events\".\"kind\" = 'resolved'"
-        },
-        "filing_case_events_case_idx": {
-          "name": "filing_case_events_case_idx",
-          "columns": [
-            "case_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "filing_case_events_case_id_filing_cases_id_fk": {
-          "name": "filing_case_events_case_id_filing_cases_id_fk",
-          "tableFrom": "filing_case_events",
-          "tableTo": "filing_cases",
-          "columnsFrom": [
-            "case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "filing_case_events_remedy_registro_id_verifactu_records_id_fk": {
-          "name": "filing_case_events_remedy_registro_id_verifactu_records_id_fk",
-          "tableFrom": "filing_case_events",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "remedy_registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "filing_case_events_kind_ck": {
-          "name": "filing_case_events_kind_ck",
-          "value": "\"filing_case_events\".\"kind\" in ('note', 'resolved')"
-        }
-      }
-    },
-    "filing_cases": {
-      "name": "filing_cases",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "registro_id": {
-          "name": "registro_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cause": {
-          "name": "cause",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "evidence": {
-          "name": "evidence",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "filing_cases_registro_uq": {
-          "name": "filing_cases_registro_uq",
-          "columns": [
-            "registro_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "filing_cases_registro_id_verifactu_records_id_fk": {
-          "name": "filing_cases_registro_id_verifactu_records_id_fk",
-          "tableFrom": "filing_cases",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "filing_cases_cause_ck": {
-          "name": "filing_cases_cause_ck",
-          "value": "\"filing_cases\".\"cause\" <> ''"
         }
       }
     },
@@ -984,7 +791,7 @@
         },
         "verifactu_history_kind_ck": {
           "name": "verifactu_history_kind_ck",
-          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')"
+          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')"
         },
         "verifactu_history_confirmed_source_ck": {
           "name": "verifactu_history_confirmed_source_ck",
@@ -1013,6 +820,10 @@
         "verifactu_history_lookup_ck": {
           "name": "verifactu_history_lookup_ck",
           "value": "\"verifactu_history\".\"kind\" <> 'conflict.lookup' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_type(\"verifactu_history\".\"data\", '$.evidence') is not null\n        and \"verifactu_history\".\"person_id\" is null\n        and \"verifactu_history\".\"event_key\" = 'lookup:' || \"verifactu_history\".\"registro_id\",\n        0\n      )"
+        },
+        "verifactu_history_note_ck": {
+          "name": "verifactu_history_note_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'case.note' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null and \"verifactu_history\".\"person_id\" is not null\n        and substr(\"verifactu_history\".\"event_key\", 1, 10) = 'case.note:' and length(\"verifactu_history\".\"event_key\") > 10\n        and json_type(\"verifactu_history\".\"data\", '$.action') = 'text',\n        0\n      )"
         }
       }
     },
@@ -1769,6 +1580,69 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "case_cause": {
+          "name": "case_cause",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_evidence": {
+          "name": "case_evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_opened_at": {
+          "name": "case_opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_open_seq": {
+          "name": "case_open_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolved_at": {
+          "name": "case_resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolved_by": {
+          "name": "case_resolved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolution_action": {
+          "name": "case_resolution_action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolution_key": {
+          "name": "case_resolution_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_remedy_registro_id": {
+          "name": "case_remedy_registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1786,6 +1660,21 @@
             "confirmado_en"
           ],
           "isUnique": false
+        },
+        "verifactu_submissions_resolution_key_uq": {
+          "name": "verifactu_submissions_resolution_key_uq",
+          "columns": [
+            "case_resolution_key"
+          ],
+          "isUnique": true
+        },
+        "verifactu_submissions_case_idx": {
+          "name": "verifactu_submissions_case_idx",
+          "columns": [
+            "case_opened_at"
+          ],
+          "isUnique": false,
+          "where": "\"verifactu_submissions\".\"case_opened_at\" is not null"
         }
       },
       "foreignKeys": {
@@ -1801,6 +1690,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "verifactu_submissions_case_resolved_by_persons_id_fk": {
+          "name": "verifactu_submissions_case_resolved_by_persons_id_fk",
+          "tableFrom": "verifactu_submissions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "case_resolved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "verifactu_submissions_case_remedy_registro_id_verifactu_records_id_fk": {
+          "name": "verifactu_submissions_case_remedy_registro_id_verifactu_records_id_fk",
+          "tableFrom": "verifactu_submissions",
+          "tableTo": "verifactu_records",
+          "columnsFrom": [
+            "case_remedy_registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1809,6 +1724,14 @@
         "verifactu_submissions_estado_ck": {
           "name": "verifactu_submissions_estado_ck",
           "value": "\"verifactu_submissions\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')"
+        },
+        "verifactu_submissions_case_ck": {
+          "name": "verifactu_submissions_case_ck",
+          "value": "(\"verifactu_submissions\".\"case_cause\" is null) = (\"verifactu_submissions\".\"case_evidence\" is null)\n        and (\"verifactu_submissions\".\"case_cause\" is null) = (\"verifactu_submissions\".\"case_opened_at\" is null)\n        and (\"verifactu_submissions\".\"case_cause\" is null) = (\"verifactu_submissions\".\"case_open_seq\" is null)\n        and (\"verifactu_submissions\".\"case_cause\" is null or \"verifactu_submissions\".\"case_cause\" <> '')"
+        },
+        "verifactu_submissions_resolution_ck": {
+          "name": "verifactu_submissions_resolution_ck",
+          "value": "(\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolved_by\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolution_action\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolution_key\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null or \"verifactu_submissions\".\"case_opened_at\" is not null)\n        and (\"verifactu_submissions\".\"case_remedy_registro_id\" is null or\n          (\"verifactu_submissions\".\"case_resolved_at\" is not null and \"verifactu_submissions\".\"case_remedy_registro_id\" <> \"verifactu_submissions\".\"registro_id\"))"
         }
       }
     }

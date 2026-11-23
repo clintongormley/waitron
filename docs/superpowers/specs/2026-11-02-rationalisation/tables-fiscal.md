@@ -857,6 +857,11 @@ for conflict evidence and requires both to be null on a clock row.
    - Measure: plan and time it with 500,000 submission rows and the partial index on
      `case_opened_at`.
    - Failing result: a scan of `verifactu_submissions`. That keeps cases as their own table.
+   - **2026-11-23, fiscal 6:** `EXPLAIN QUERY PLAN` on the box image's SQLite 3.54.1
+     used the partial case index for the emitted conflict query and open-case count. The
+     conflict query looked up each record by its primary key and each kind of evidence by
+     the history index. Dropping the partial case index made it scan submissions. The
+     sale and payment timing comparisons remain on the periodic bench schedule.
 3. **The clock stop's confirmation read moves into the history log.**
    - Measure: plan the query at `clock-behind.ts:116-126` against `verifactu_history` with the
      `(registro_id, kind, seq)` index.

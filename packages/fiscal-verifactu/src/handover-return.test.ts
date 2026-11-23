@@ -1,3 +1,5 @@
+import { seedPerson as seedResolutionAuthor } from "@waitron/db/testing/seed.js";
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import type { CanonicalValue } from "@waitron/membership";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,7 +26,7 @@ import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { inspectReturnedPayments } from "./handover-return.js";
-import { listFilingCases } from "./filing-cases.js";
+import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
@@ -568,9 +570,11 @@ it("receives original bytes and delivery evidence once, and advances only the so
     ultimoRegistroId: source.recordId,
     ultimaHuella: returned.records[0]!.huella,
   });
-  expect(receiver.db.all<ReturnRow>(sql`select * from verifactu_submissions`)).toEqual(
-    returned.deliveries,
-  );
+  expect(
+    receiver.db.all<ReturnRow>(
+      sql`select ${sql.join(Object.values(deliveryColumns), sql`, `)} from verifactu_submissions`,
+    ),
+  ).toEqual(returned.deliveries);
   await receiver.db.execute(
     sql`update verifactu_submissions set csv = 'receiver-csv' where registro_id = ${source.recordId}`,
   );
@@ -1038,12 +1042,28 @@ it("withholds confirmation when a held id has different immutable bytes", async 
 it.each([
   ["rechazado", "fiscal.registro_rechazado"],
   ["aceptado_con_errores", "fiscal.aceptado_con_errores"],
-])("recreates the case for a newly returned %s record", async (state, cause) => {
+] as const)("recreates the case for a newly returned %s record", async (state, cause) => {
   const source = await original("Source", 1, copyBase);
   await suite.db
     .execute(sql`insert into verifactu_submissions (registro_id, estado, codigo_error, mensaje_error,
     proximo_intento_en) values (${source.recordId}, ${state}, '1161', 'Wrong detail',
       '2026-07-20T17:21:00.000Z')`);
+  await withTransaction(suite.db, async (tx) => {
+    await openFilingCase(tx, {
+      registroId: source.recordId,
+      cause,
+      evidence: { codigo: 1161, mensaje: "Wrong detail", csv: null },
+      now: new Date("2026-07-20T17:21:00.000Z"),
+    });
+    await recordCaseEvent(tx, {
+      caseRegistroId: source.recordId,
+      actionKey: "source-decision",
+      kind: "resolved",
+      personId: await seedResolutionAuthor(tx),
+      action: "Recognised on source",
+      now: new Date("2026-07-20T17:21:30.000Z"),
+    });
+  });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -1057,6 +1077,7 @@ it.each([
       cause,
       evidence: { codigo: 1161, mensaje: "Wrong detail", csv: null },
       status: "open",
+      openedAt: new Date("2026-07-20T17:22:00.000Z"),
     }),
   ]);
 });

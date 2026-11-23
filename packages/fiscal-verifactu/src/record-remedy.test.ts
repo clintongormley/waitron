@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -7,7 +8,7 @@ import { hashPin, registerModulePermissions, startManagementSession } from "@wai
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { observeSubmissionChanges } from "../test/submission-changes.js";
 import { appendToChain, readChainHead } from "./chain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import {
   ACCEPTED_WITH_ERRORS_CORRECTION,
   applyRecordCorrection,
@@ -15,7 +16,6 @@ import {
 } from "./record-remedy.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -54,7 +54,7 @@ beforeEach(async () => {
     });
     const pending = altaFor(node, saleId, 1, 5, "preproduction");
     request = {
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.id,
       actionKey: "correction-1",
       reason: "Correct the internal record description",
@@ -92,7 +92,7 @@ function apply(enabled = true, value = request, acceptance = false) {
 async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
@@ -124,7 +124,12 @@ it("appends a correction and resolution together, preserving original delivery f
   expect(after.cases[0]).toMatchObject({
     status: "resolved",
     events: [
-      { id: result.eventId, kind: "resolved", personId, remedyRegistroId: result.registroId },
+      {
+        actionKey: result.actionKey,
+        kind: "resolved",
+        personId,
+        remedyRegistroId: result.registroId,
+      },
     ],
   });
   expect(after.head.ultimoRegistroId).toBe(result.registroId);
@@ -192,6 +197,7 @@ it("refuses a case belonging to a different existing record", async () => {
       node.nodeId,
       altaFor(node, otherSale, 2, 2, "preproduction"),
     );
+    await tx.insert(verifactuSubmissions).values({ registroId: other.id });
     return openFilingCase(tx, {
       registroId: other.id,
       cause: "fiscal.registro_rechazado",
@@ -200,21 +206,25 @@ it("refuses a case belonging to a different existing record", async () => {
     });
   });
   const before = await snapshot();
-  await expect(apply(true, { ...request, caseId: otherCase.id })).rejects.toMatchObject({
+  await expect(
+    apply(true, { ...request, caseRegistroId: otherCase.registroId }),
+  ).rejects.toMatchObject({
     code: "fiscal.remedy_invalid",
   });
   expect(await snapshot()).toEqual(before);
 });
 
 it("rolls back the appended correction when the case already has a resolution", async () => {
-  await suite.db.insert(filingCaseEvents).values({
-    caseId: request.caseId,
-    actionKey: "earlier-resolution",
-    kind: "resolved",
-    personId,
-    action: "Earlier decision",
-    recordedAt: NOW,
-  });
+  await withTransaction(suite.db, (tx) =>
+    recordCaseEvent(tx, {
+      caseRegistroId: request.caseRegistroId,
+      actionKey: "earlier-resolution",
+      kind: "resolved",
+      personId,
+      action: "Earlier decision",
+      now: NOW,
+    }),
+  );
   const before = await snapshot();
   await expect(apply()).rejects.toMatchObject({ code: "filing_case.already_resolved" });
   expect(await snapshot()).toEqual(before);
@@ -384,7 +394,7 @@ it("resolves successive version cases without rewriting the earlier case, events
   );
   const next = {
     ...request,
-    caseId: nextCase.id,
+    caseRegistroId: nextCase.registroId,
     registroId: first.registroId,
     actionKey: "correction-2",
     pending: {
@@ -409,7 +419,7 @@ it("resolves successive version cases without rewriting the earlier case, events
   expect(after.cases[0]).toEqual(before.cases[0]);
   expect(after.cases[1]).toMatchObject({
     status: "resolved",
-    events: [{ id: second.eventId, remedyRegistroId: second.registroId }],
+    events: [{ actionKey: second.actionKey, remedyRegistroId: second.registroId }],
   });
 });
 
@@ -451,7 +461,7 @@ it("refuses a record of a box outside this box's takeover history before reading
         nodeId: unrelated.nodeId,
         environment: "preproduction",
         enabledRemedies: new Set(["record-correction"]),
-        request: { ...request, caseId: "missing-case" },
+        request: { ...request, caseRegistroId: "missing-case" },
         now: NOW,
       }),
     ),
