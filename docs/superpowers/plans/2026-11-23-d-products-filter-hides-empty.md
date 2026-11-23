@@ -1,0 +1,17 @@
+# Products filters hide categories with no matches
+
+The owner reported in Lane D’s `queue.md` that “a filtered products view shows all of the categories even if they don't match and don't have any matching children”. Codex Lane D wrote this plan for Claude to review and the campaign watcher to clear.
+
+When you narrow Products, only categories with a matching product of their own or in a subcategory can appear. The **Has modifiers** view drops Coffee, Conserves and Desserts from the reported example. Clearing the search and column filters brings those categories back. Ranked search still finds products and populated categories by name. A category found by name can open to show the products that pass the chosen filters underneath it.
+
+- `apps/dashboard/src/widgets/product-list.ts` currently gives every category every column filter value. Keep the existing product and variant predicates. Use the resulting product rows to keep each row’s category and its parents, stopping at an already visited key. Keep the All products row and the in-progress inline category editor reachable. Use the current row keys, ordering and counts.
+- In `packages/ui/src/components/wt-data-table.ts`, add an optional `filterCandidates` callback taking and returning `readonly Row[]`. Pass it the rows that pass all active column filters, or all rows during search alone, before ranking. Use the same candidate rows for flat search roots and expanded branches. Keep the callback in the search memo’s inputs and skip it for an ordinary unfiltered view. Products is the sole caller. The table keeps ownership of filter choices, restore, ranking and expansion.
+- Update the category section in `apps/server/src/guide/{en,es}/products.md` with how to bring the full list back. Document the table callback in `docs/developers/design-system.md`. Menu Structure, the API and stored data are outside this change.
+
+## Checks
+
+- Write the browser tests first. In dashboard `widgets/product-list.test.ts`, “keeps only categories with matching products” chooses the real Modifiers filter, checks the three reported categories disappear, opens a retained parent and child with the only nested match, and clears the filter to restore the category rows. “limits category name results to categories with eligible products” covers search alone, a matching category with a matching nested product and one emptied by a column filter. Keep the existing name and variant checks.
+- In UI `components/wt-data-table.filters-sorting.test.ts`, “uses narrowed candidates for flat search roots and contents” checks the callback receives the intersection of column filters, is skipped when the search and filters are clear, and removes a row from both ranked results and expanded contents. Run the changed dashboard and UI test files with `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-list.test.ts` and `pnpm --filter @waitron/ui exec vitest run src/components/wt-data-table.filters-sorting.test.ts`. Confirm the new cases fail for the expected reason before implementing and pass after. Run the guide checks.
+- Keep comparable before and after captures of the reported filter in the fully booted dashboard, in `~/waitron-campaign-d/receipts/products-filter-hides-empty/`. Look at the result in English and Spanish, light and dark, phone and desktop. Send the captures through the watcher before landing.
+
+Expected additions are 35–60 production lines, 65–105 test lines and 5–12 guide and design-system lines. There is no remaining backlog item to close for this report.
