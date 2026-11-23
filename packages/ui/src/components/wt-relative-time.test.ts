@@ -777,3 +777,101 @@ describe("at the edges", () => {
     expect(tip.getBoundingClientRect().bottom).toBeCloseTo(button.getBoundingClientRect().top, 0);
   });
 });
+
+describe("as a calendar, for a moment more than a day gone", () => {
+  // AT is Monday 5 October 2026, 11:49 UTC.
+  const NEW_YEAR = Date.parse("2027-01-01T00:00:00.000Z") - Date.parse(AT);
+
+  test.each([
+    ["under a day ago", DAY - 1, "23 hours ago", "hace 23 horas"],
+    ["a day ago", DAY, "Monday, 11:49", "lunes, 11:49"],
+    ["a millisecond short of six days ago", 6 * DAY - 1, "Monday, 11:49", "lunes, 11:49"],
+    ["six days ago", 6 * DAY, "5 Oct", "5 oct"],
+    ["a millisecond before the new year", NEW_YEAR - 1, "5 Oct", "5 oct"],
+    ["in the new year", NEW_YEAR, "5 Oct 2026", "5 oct 2026"],
+    ["two days ahead", -2 * DAY, "in 2 days", "dentro de 2 días"],
+  ])("%s reads in English and Spanish", async (_, elapsed, english, spanish) => {
+    expect(words(await shown(elapsed, 'locale="en-GB" calendar'))).toBe(english);
+    expect(words(await shown(elapsed, 'locale="es-ES" calendar'))).toBe(spanish);
+  });
+
+  test("leaves the phrase counting days when it is not asked for a calendar", async () => {
+    expect(words(await shown(6 * DAY))).toBe("6 days ago");
+  });
+
+  test("says a deadline gone days ago is now, as without the calendar", async () => {
+    expect(words(await shown(2 * DAY, 'locale="en-GB" calendar future'))).toBe("now");
+  });
+
+  test("names the weekday, the date and the year in the zone it is given", async () => {
+    // 11:49 UTC on 5 October is 00:49 on Tuesday 6 October in Auckland (UTC+13).
+    const auckland = 'locale="en-GB" calendar time-zone="Pacific/Auckland"';
+    const at = async (elapsed: number, attributes: string) => {
+      const el = (await mount(
+        `<wt-relative-time datetime="${AT}" ${attributes}></wt-relative-time>`,
+      )) as WtRelativeTime;
+      el.now = () => new Date(Date.parse(AT) + elapsed);
+      await el.updateComplete;
+      return words(el);
+    };
+    expect(await at(2 * DAY, auckland)).toBe("Tuesday, 00:49");
+    // 12:00 UTC on 31 December is already 1 January 2027 in Auckland, and still 2026 in UTC.
+    const lateDecember = Date.parse("2026-12-31T12:00:00.000Z") - Date.parse(AT);
+    expect(await at(lateDecember, auckland)).toBe("6 Oct 2026");
+    expect(await at(lateDecember, 'locale="en-GB" calendar time-zone="UTC"')).toBe("5 Oct");
+  });
+
+  test("re-reads the phrase at the day and the six days, and not before", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(Date.parse(AT) + DAY - 30 * SECOND);
+    const el = (await mount(
+      `<wt-relative-time datetime="${AT}" locale="en-GB" time-zone="UTC" calendar></wt-relative-time>`,
+    )) as WtRelativeTime;
+    expect(words(el)).toBe("23 hours ago");
+    await vi.advanceTimersByTimeAsync(30 * SECOND - 1);
+    await el.updateComplete;
+    expect(words(el)).toBe("23 hours ago");
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    expect(words(el)).toBe("Monday, 11:49");
+    await vi.advanceTimersByTimeAsync(5 * DAY - 1);
+    await el.updateComplete;
+    expect(words(el)).toBe("Monday, 11:49");
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    expect(words(el)).toBe("5 Oct");
+  });
+
+  test("adds the year the moment the new year starts in its zone", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // New year in Auckland is 11:00 UTC on 31 December.
+    vi.setSystemTime(Date.parse("2026-12-31T10:59:30.000Z"));
+    const el = (await mount(
+      `<wt-relative-time datetime="${AT}" locale="en-GB" time-zone="Pacific/Auckland" calendar></wt-relative-time>`,
+    )) as WtRelativeTime;
+    expect(words(el)).toBe("6 Oct");
+    await vi.advanceTimersByTimeAsync(30 * SECOND - 1);
+    await el.updateComplete;
+    expect(words(el)).toBe("6 Oct");
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    expect(words(el)).toBe("6 Oct 2026");
+    // Nothing is left to change once the year is shown.
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("never asks for a longer wait than a timer can hold, and reads the same when it wakes early", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // Six days on is 11 October, months before the new year.
+    vi.setSystemTime(Date.parse(AT) + 6 * DAY);
+    const wakes = vi.spyOn(globalThis, "setTimeout");
+    const el = (await mount(
+      `<wt-relative-time datetime="${AT}" locale="en-GB" time-zone="UTC" calendar></wt-relative-time>`,
+    )) as WtRelativeTime;
+    expect(wakes).toHaveBeenLastCalledWith(expect.any(Function), 2 ** 31 - 1);
+    await vi.advanceTimersByTimeAsync(2 ** 31 - 1);
+    await el.updateComplete;
+    expect(words(el)).toBe("5 Oct");
+    expect(vi.getTimerCount()).toBe(1);
+  });
+});
