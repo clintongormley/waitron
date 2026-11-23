@@ -110,6 +110,9 @@ const browserProject = {
             ),
           ],
         },
+        ...(process.env.WAITRON_DASHBOARD_WEBKIT === "1"
+          ? [{ browser: "webkit", name: "webkit", include: ["src/widgets/color-field.test.ts"] }]
+          : []),
       ],
       commands: {
         followDevDeviceLink,

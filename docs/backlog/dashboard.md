@@ -73,15 +73,6 @@ Not observed in a real password manager — the tests replace the browser's meth
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
 - Find a bill retains its existing request state until its own adoption.
 
-## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
-
-Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
-  rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
-  no-colour state registers was not run. With a palette colour chosen, the Custom square shows that
-  colour too, beside the ringed swatch (pinned in `apps/dashboard/src/widgets/color-field.test.ts`,
-  "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
-  the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
-
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
 Left open by the completed A331 batches:
@@ -174,10 +165,11 @@ Retiring the summary once its last consumer moves away remains open.
 
 ## Bundle: Other browser check
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
-- **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
-  [Detail](dashboard.md#the-colour-fields-custom-square-appsdashboardsrcwidgetscolor-fieldts-left-by-c25)
+- **Choosing black in the colour field's browser picker from the no-colour state has not been
+  tried by hand** (`apps/dashboard/src/widgets/color-field.ts`). With no colour chosen the picker
+  holds `#000000`, so choosing black may report no change.
 - **That saved-password visual check remains unverified** — an isolated Chromium profile accepted
   a saved test password through `navigator.credentials.store`, but did not autofill it after a
   reload or restart under automation; that saved-password visual check remains unverified. Left

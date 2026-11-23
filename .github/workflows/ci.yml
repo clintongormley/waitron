@@ -2477,6 +2477,11 @@ jobs:
           WAITRON_STARTUP_ENGINES: webkit
         run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
 
+      - name: Check the dashboard colour field in WebKit
+        env:
+          WAITRON_DASHBOARD_WEBKIT: "1"
+        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/dashboard exec vitest run src/widgets/color-field.test.ts --project webkit --reporter=verbose
+
   # The coverage gate for @waitron/dashboard: merges the test-dashboard blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-dashboard-merge:
