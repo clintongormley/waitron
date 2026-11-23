@@ -1,8 +1,10 @@
 # Business-day start dashboard checks
 
-Source: Lane D queue, BDS-DASHBOARD, assigned by the watcher at 01:24 on 22 November 2026. See
-[Loose ends left by A788](../../backlog/service-periods.md#loose-ends-left-by-a788). The branch
-starts after #3990, which gives the preview its unlisted clash count.
+Source: Lane D queue, BDS-DASHBOARD, assigned by the watcher at 01:24 on 22 November 2026.
+The branch starts after #3990, which gives the preview its unlisted clash count.
+
+_2026-11-23: The backlog's A788 follow-up section closed. See A876 under
+[Decisions and deliberate limits](../../backlog/service-periods.md#decisions-and-deliberate-limits)._
 
 - **A863, find the clashing hours.** In `packages/venue-service/src/dashboard/clock-change-conflict.ts`,
   use the editor's order for the first range: department, zone, weekday or date, period, then hours.

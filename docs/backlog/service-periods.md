@@ -41,19 +41,6 @@ which reads years 0–99 as 1900–1999, so it refuses every date in those years
 and `weekdayOf`). Changing it would change which dates the server accepts from outside (menu
 publication dates, imports), so it needs a decision.
 
-## Loose ends left by A788
-
-Found while building A788 (the business-day start changes at the next changeover). Unless an entry
-says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
-code, not run again here.
-
-- **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
-  hours, a season range past the 24th hour is cut at it when any special day is painted on that
-  date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
-  caps the day at 1440 minutes for the paint layer, which works on one 1440-minute day. Found by
-  A788's finish review, which ran it. Next: teach the paint layer a day longer than 1440
-  minutes, or decide the cut is the intended drawing.
-
 ## Loose ends left by A720.
 
 - Try the Calendar's long press on a real phone. The long press that opens the special-day
@@ -67,14 +54,18 @@ code, not run again here.
 
 ## Bundle: Business-day start checks after A760
 
-2 entries, size L.
+1 entry, size L.
 
-- **Loose ends left by A788 (the business-day start changes at the next changeover).**
-  [Detail](service-periods.md#loose-ends-left-by-a788)
 - **Loose ends left by A506-4 (#1597).**
   [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
 
 ## Decisions and deliberate limits
+
+- **A876, watcher 2026-11-23.** When a later business-day start creates a day longer than 24 hours,
+  Calendar cuts the season's opening hours and zone closures at hour 24 if the date has a special
+  day (`cutSeason` in `packages/venue-service/src/day-resolver.ts`). A yearly closure saved under the
+  new start can cross the old start, so Calendar can skip that range on the past date
+  (`cutoversFor` in `special-days.ts` and `stepSpan` in `day-paint.ts`).
 
 - **A869, watcher 2026-11-22.** While a business-day start change waits (until the next
   changeover, at most two days: `planBusinessDayStart` sets it for tomorrow or the day after), a
