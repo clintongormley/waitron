@@ -44,6 +44,7 @@ export const verifactuSubmissions = table(
     caseCause: label("case_cause").$type<FilingCaseCause>(),
     caseEvidence: json<FilingCaseEvidence>("case_evidence"),
     caseOpenedAt: ts("case_opened_at"),
+    caseOpenSeq: count("case_open_seq"),
     caseResolvedAt: ts("case_resolved_at"),
     caseResolvedBy: id("case_resolved_by").references(() => persons.id, { onDelete: "restrict" }),
     caseResolutionAction: label("case_resolution_action"),
@@ -63,6 +64,7 @@ export const verifactuSubmissions = table(
       "verifactu_submissions_case_ck",
       sql`(${t.caseCause} is null) = (${t.caseEvidence} is null)
         and (${t.caseCause} is null) = (${t.caseOpenedAt} is null)
+        and (${t.caseCause} is null) = (${t.caseOpenSeq} is null)
         and (${t.caseCause} is null or ${t.caseCause} <> '')`,
     ),
     check(

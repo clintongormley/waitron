@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
+import { withTransaction } from "@waitron/db";
+import { listFilingCases } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { checkFiscalChains } from "@waitron/fiscal-verifactu/src/handover-chain-check.js";
 import { PERSON_HEADER } from "@waitron/shared";
 import { openBackupQuery } from "@waitron/store";
@@ -47,7 +49,15 @@ it("grows a bench chain with complete synthetic records and keeps the next count
 
     const output: string[] = [];
     await runCli(
-      ["grow-fiscal", "--venue", dir, "--records", String(before.verifactu_records! + 50)],
+      [
+        "grow-fiscal",
+        "--venue",
+        dir,
+        "--records",
+        String(before.verifactu_records! + 50),
+        "--cases",
+        "2",
+      ],
       (line) => output.push(line),
     );
     expect(output).toContain("chains ok");
@@ -57,13 +67,18 @@ it("grows a bench chain with complete synthetic records and keeps the next count
       const after = countRows(grown);
       for (const table of ["verifactu_records", "sales", "verifactu_submissions"])
         expect(after[table], table).toBe(before[table]! + 50);
-      const grownRecords = grown.db.all<{ orderId: string | null; huella: string }>(
-        sql`select s.working_order_id as orderId, r.huella
+      const grownRecords = grown.db.all<{ id: string; orderId: string | null; huella: string }>(
+        sql`select r.id, s.working_order_id as orderId, r.huella
               from verifactu_records r join sales s on s.id = r.sale_id
               where r.secuencia >= ${firstGrownPosition}
               order by r.secuencia`,
       );
       expect(grownRecords.map((record) => record.orderId)).toEqual(Array(50).fill(null));
+      const cases = await withTransaction(grown.db, listFilingCases);
+      expect(cases.map((entry) => [entry.registroId, entry.cause])).toEqual([
+        [grownRecords[24]!.id, "fiscal.registro_rechazado"],
+        [grownRecords[49]!.id, "fiscal.registro_rechazado"],
+      ]);
       expect(await chainIn(dir)).toBe("ok");
 
       clock.set(new Date("2025-11-05T09:00:00Z"));

@@ -13,7 +13,7 @@ const USAGE =
   "  A stopped build resumes from its last finished day when run again with the same --out.\n" +
   "       measure --venue <built dir> --out <absolute file> [--samples 200] [--rounds 3]\n" +
   "       compare --before <file> --after <file>\n" +
-  "       grow-fiscal --venue <copied single-box bench venue> --records <n>\n" +
+  "       grow-fiscal --venue <copied single-box bench venue> --records <n> [--cases <n>]\n" +
   "  Grown records keep the template record's timestamps.";
 
 const REPOSITORY = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
@@ -57,9 +57,14 @@ export async function runCli(argv: readonly string[], print: (text: string) => v
   if (command === "measure") return measure(rest, print);
   if (command === "compare") return compare(rest, print);
   if (command === "grow-fiscal") {
-    const found = flags(rest, ["--venue", "--records"]);
+    const found = flags(rest, ["--venue", "--records", "--cases"]);
     const venue = outsideRepository("--venue", found.get("--venue"), found.get("--venue") ?? "");
-    return growFiscal(venue, wholeNumber(found, "--records", 0), print);
+    return growFiscal(
+      venue,
+      wholeNumber(found, "--records", 0),
+      print,
+      wholeNumber(found, "--cases", 0),
+    );
   }
   if (command !== "build") throw new Error(USAGE);
   const found = flags(rest, ["--out", "--days", "--bills-per-day", "--seed"]);

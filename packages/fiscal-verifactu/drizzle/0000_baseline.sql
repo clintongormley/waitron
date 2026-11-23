@@ -312,6 +312,7 @@ CREATE TABLE `verifactu_submissions` (
 	`case_cause` text,
 	`case_evidence` text,
 	`case_opened_at` text,
+	`case_open_seq` integer,
 	`case_resolved_at` text,
 	`case_resolved_by` text,
 	`case_resolution_action` text,
@@ -323,6 +324,7 @@ CREATE TABLE `verifactu_submissions` (
 	CONSTRAINT "verifactu_submissions_estado_ck" CHECK("verifactu_submissions"."estado" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')),
 	CONSTRAINT "verifactu_submissions_case_ck" CHECK(("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_evidence" is null)
         and ("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_opened_at" is null)
+        and ("verifactu_submissions"."case_cause" is null) = ("verifactu_submissions"."case_open_seq" is null)
         and ("verifactu_submissions"."case_cause" is null or "verifactu_submissions"."case_cause" <> '')),
 	CONSTRAINT "verifactu_submissions_resolution_ck" CHECK(("verifactu_submissions"."case_resolved_at" is null) = ("verifactu_submissions"."case_resolved_by" is null)
         and ("verifactu_submissions"."case_resolved_at" is null) = ("verifactu_submissions"."case_resolution_action" is null)
@@ -340,7 +342,8 @@ CREATE INDEX `verifactu_submissions_case_idx` ON `verifactu_submissions` (`case_
 CREATE TRIGGER verifactu_submissions_guard_update BEFORE UPDATE ON verifactu_submissions
 WHEN new.registro_id IS NOT old.registro_id
   OR (old.case_opened_at IS NOT NULL AND (new.case_cause IS NOT old.case_cause
-      OR new.case_evidence IS NOT old.case_evidence OR new.case_opened_at IS NOT old.case_opened_at))
+      OR new.case_evidence IS NOT old.case_evidence OR new.case_opened_at IS NOT old.case_opened_at
+      OR new.case_open_seq IS NOT old.case_open_seq))
   OR (old.case_resolved_at IS NOT NULL AND (new.case_resolved_at IS NOT old.case_resolved_at
       OR new.case_resolved_by IS NOT old.case_resolved_by
       OR new.case_resolution_action IS NOT old.case_resolution_action

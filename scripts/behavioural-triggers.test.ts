@@ -558,12 +558,13 @@ describe("VeriFactu submission guards", () => {
     expect(change("registro_id = 'other'")).toBe(refusal);
     expect(
       change(
-        `case_cause = 'fiscal.registro_rechazado', case_evidence = '{}', case_opened_at = '${STAMP}'`,
+        `case_cause = 'fiscal.registro_rechazado', case_evidence = '{}', case_opened_at = '${STAMP}', case_open_seq = 1`,
       ),
     ).toBeUndefined();
     for (const column of ["case_cause", "case_evidence", "case_opened_at"]) {
       expect(change(`${column} = null`), column).toBe(refusal);
     }
+    expect(change("case_open_seq = 2")).toBe(refusal);
     expect(
       change(`case_resolved_at = '${STAMP}', case_resolved_by = 'person',
       case_resolution_action = 'corrected', case_resolution_key = 'action',

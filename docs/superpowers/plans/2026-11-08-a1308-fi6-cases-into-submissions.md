@@ -20,7 +20,7 @@ deleted. Measure first that the every-sale conflict check does not start scannin
 record's own transaction (`backend.ts:347`, `:487`, `:578`, `:706`; `record-remedy.ts:195`,
 `record-remedy-absent.ts:157`; every record is appended by the one insert at `chain.ts:264`), so "one case per record" (`filing_cases_registro_uq`) and "one
 resolution per case" (`filing_case_events_one_resolution_uq`) become the shape of that row. Opening a
-case sets three columns that were empty; resolving sets four more. A trigger refuses any later change
+case sets four columns that were empty, including its sequence. Resolving sets its own columns. A trigger refuses any later change
 to them, and any delete of the row. The case's own id goes; everything that named it names the record instead
 (the case is on the record whose submission row holds it). A partial index on `case_opened_at` keeps
 the sale-path conflict check reading only the rows that have a case.
@@ -76,14 +76,15 @@ before this cannot be restored or imported."
 | `case_cause` | `label`, typed `FilingCaseCause` | `filing_cases.cause` |
 | `case_evidence` | `json<FilingCaseEvidence>` | `filing_cases.evidence` |
 | `case_opened_at` | `ts` | `filing_cases.opened_at` |
+| `case_open_seq` | `count` | Case-opening order, previously `filing_cases.rowid` (watcher, 2026-11-23 17:58) |
 | `case_resolved_at` | `ts` | the resolution's `recorded_at` |
 | `case_resolved_by` | `id`, → `persons`, `onDelete("restrict")` | the resolution's `person_id` |
 | `case_resolution_action` | `label` | the resolution's `action` |
 | `case_resolution_key` | `label` | the resolution's `action_key` |
 | `case_remedy_registro_id` | `id`, → `verifactu_records` | the resolution's `remedy_registro_id` |
 
-- `verifactu_submissions_case_ck`: `(case_cause is null) = (case_evidence is null) and (case_cause is null) = (case_opened_at is null) and (case_cause is null or case_cause <> '')`
-  (was `filing_cases_cause_ck`, plus "the three case columns are all null or all set").
+- `verifactu_submissions_case_ck`: `(case_cause is null) = (case_evidence is null) and (case_cause is null) = (case_opened_at is null) and (case_cause is null) = (case_open_seq is null) and (case_cause is null or case_cause <> '')`
+  (was `filing_cases_cause_ck`, plus "the four case columns are all null or all set").
 - `verifactu_submissions_resolution_ck`: `(case_resolved_at is null) = (case_resolved_by is null) and (case_resolved_at is null) = (case_resolution_action is null) and (case_resolved_at is null) = (case_resolution_key is null) and (case_resolved_at is null or case_opened_at is not null) and (case_remedy_registro_id is null or (case_resolved_at is not null and case_remedy_registro_id <> registro_id))`.
 - Unique `verifactu_submissions_resolution_key_uq (case_resolution_key)`.
 - Partial index `verifactu_submissions_case_idx (case_opened_at) where case_opened_at is not null`.
@@ -97,7 +98,8 @@ before this cannot be restored or imported."
   CREATE TRIGGER verifactu_submissions_guard_update BEFORE UPDATE ON verifactu_submissions
   WHEN new.registro_id IS NOT old.registro_id
     OR (old.case_opened_at IS NOT NULL AND (new.case_cause IS NOT old.case_cause
-        OR new.case_evidence IS NOT old.case_evidence OR new.case_opened_at IS NOT old.case_opened_at))
+        OR new.case_evidence IS NOT old.case_evidence OR new.case_opened_at IS NOT old.case_opened_at
+        OR new.case_open_seq IS NOT old.case_open_seq))
     OR (old.case_resolved_at IS NOT NULL AND (new.case_resolved_at IS NOT old.case_resolved_at
         OR new.case_resolved_by IS NOT old.case_resolved_by
         OR new.case_resolution_action IS NOT old.case_resolution_action
@@ -205,7 +207,7 @@ refuses them):
 | --- | --- |
 | `acks`, `aeat.answer_cleared` | fi7 |
 | A decision route for filing-case alerts (A1089) | A1089, built on these columns |
-| Enabling any remedy in production | The owner's later decision (`record-remedy-routes.ts:20`) |
+| Adding a remedy | Preserve the existing route policy and the two live remedies (#3128, #3235) |
 
 ## Interfaces
 
@@ -252,7 +254,7 @@ inserts above).
   `dashboard/conflict-recovery.ts`, `dashboard/conflict-recovery-client.ts`, `drain.ts`,
   `submission-alerts.ts`, `reconcile-conflicts.ts`, `record-remedy.ts`, `record-remedy-held.ts`,
   `record-remedy-brake.ts`, `record-remedy-absent.ts`, `record-remedy-corrective.ts`,
-  `record-remedy-http.ts`, `record-remedy-corrective-http.ts`, `errors.ts:286-302`,
+  `record-remedy-request.ts`, `record-remedy-replacement.ts`, `record-remedy-http.ts`, `record-remedy-corrective-http.ts`, `errors.ts:286-302`,
   `schema/index.ts`, `classification.ts`, `backup-verification-history.ts:432-438`, the manifest's
   fiscal entry (`packages/migrations/migrations.manifest.json:68-69`).
 - `packages/fiscal-verifactu/src/clock-step.ts:181`: cut "as `listFilingCases` orders" from the
@@ -367,10 +369,11 @@ old: <Fi5's three kinds>
 new: <four kinds, including 'case.note'>
 changed table verifactu_submissions.columnOrder
 old: [<today's twelve columns>]
-new: [<the twelve, then case_cause, case_evidence, case_opened_at, case_resolved_at, case_resolved_by, case_resolution_action, case_resolution_key, case_remedy_registro_id>]
+new: [<the twelve, then case_cause, case_evidence, case_opened_at, case_open_seq, case_resolved_at, case_resolved_by, case_resolution_action, case_resolution_key, case_remedy_registro_id>]
 extra table verifactu_history.checks[verifactu_history_note_ck]
 extra table verifactu_submissions.columns[case_cause]
 extra table verifactu_submissions.columns[case_evidence]
+extra table verifactu_submissions.columns[case_open_seq]
 extra table verifactu_submissions.columns[case_opened_at]
 extra table verifactu_submissions.columns[case_remedy_registro_id]
 extra table verifactu_submissions.columns[case_resolution_action]
@@ -504,7 +507,8 @@ in `filing-cases.ts`. The Fiscal filing screen and its export name each case by 
   Interfaces (assertions unchanged except the decided renames: `caseId` → `caseRegistroId`,
   `eventId` → `actionKey`, `ConflictRef` without `caseId`; list each in the pull request). Run: FAIL.
 - [ ] **Step 2:** Implement:
-  - `openFilingCase`/`openAcceptedWithErrorsCase` as Interfaces.
+  - `openFilingCase`/`openAcceptedWithErrorsCase` as Interfaces. Set `case_open_seq` from the
+    highest open sequence plus one in the case-opening write. Both case lists use that sequence.
   - `recordCaseEvent`: the case is `case_opened_at is not null` on `caseRegistroId`'s row
     (`filing_case.not_found` otherwise). Replay: look up `actionKey` among the row's resolution key
     and among `case.note` history rows' `event_key`; same content returns the stored event,

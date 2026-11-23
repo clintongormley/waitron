@@ -17,7 +17,7 @@ import { TEST_MIGRATIONS } from "../../test/migrations.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const at = "2026-11-23T12:00:00.000Z";
 const openCase = sql`case_cause = 'fiscal.registro_rechazado',
-  case_evidence = '{}', case_opened_at = ${at}`;
+  case_evidence = '{}', case_opened_at = ${at}, case_open_seq = 1`;
 const resolution = (personId: string) => sql`case_resolved_at = ${at},
   case_resolved_by = ${personId}, case_resolution_action = 'corrected', case_resolution_key = 'key'`;
 
@@ -34,7 +34,8 @@ it("requires the case columns to be set together with a nonblank cause", async (
   for (const values of [
     sql`case_cause = 'fiscal.registro_rechazado'`,
     sql`case_cause = 'fiscal.registro_rechazado', case_evidence = '{}'`,
-    sql`case_cause = '', case_evidence = '{}', case_opened_at = ${at}`,
+    sql`case_cause = 'fiscal.registro_rechazado', case_evidence = '{}', case_opened_at = ${at}`,
+    sql`case_cause = '', case_evidence = '{}', case_opened_at = ${at}, case_open_seq = 1`,
   ]) {
     const error = await captureError(() => update(id!, values));
     expect(checkFailed(error, "verifactu_submissions_case_ck")).toBe(true);

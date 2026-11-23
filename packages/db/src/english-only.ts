@@ -72,11 +72,11 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
   "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
   "apps/server/scripts/bench/grow-fiscal.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 57,
+    findings: 65,
   },
   "apps/server/scripts/bench/grow-fiscal.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 14,
+    findings: 17,
   },
   "apps/server/scripts/bench/measure.ts": {
     reason: VERIFACTU_NAMES,
