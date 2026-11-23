@@ -523,6 +523,10 @@ Hardware and inbox checks to complete in the owner session.
     numbers on 58 mm paper (`18/08/2026 11:21`).
   - **A full invoice**, on every paper, prints «FACTURA» and its number on one row and «Fecha» and
     the date in words on the next, never merged.
+  - Since 2026-11-22 (A1566) these rows describe the till rolls only: the A4 page prints its title
+    beside a band in which the date and the order number carry captions, whether the invoice is
+    simplified or full
+    ([design](../superpowers/specs/2026-11-22-a4-invoice-layout-design.md)).
   - **A long invoice number on 58 mm paper (owner, 2026-10-19, left as built).** A number longer
     than 12 characters (a restored series such as `T-S123456/123`) puts the date on its own line
     under the number; an emergency-length number (31 characters) wraps inside itself with the date

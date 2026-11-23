@@ -132,6 +132,6 @@ export const BANK_ACCOUNT_CHANGED_EMAIL_WORDS = {
     current: "Ahora: {newAccount}",
     none: "ninguna",
     check:
-      "Si no reconoce este cambio, revíselo en Ajustes del local → Datos del local antes de emitir más facturas.",
+      "Si no reconoces este cambio, revísalo en Ajustes del local → Datos del local antes de emitir más facturas.",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
