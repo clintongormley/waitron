@@ -120,14 +120,9 @@ export interface RefundEvidence {
   }[];
 }
 
-interface ChargeAuditMatch {
-  paymentRef: string;
-  providerRefunded: boolean;
-}
-
 export interface PaymentReconcileResult {
   chargeAudit?: {
-    matches: ChargeAuditMatch[];
+    matches: { paymentRef: string; providerRefunded: boolean }[];
     missingLocal: {
       references: string[];
       amount: string;
@@ -181,7 +176,7 @@ export type ClassifiedRow =
 export interface Classification {
   checked: number;
   rows: ClassifiedRow[];
-  matches?: ChargeAuditMatch[];
+  matches?: NonNullable<PaymentReconcileResult["chargeAudit"]>["matches"];
   /** Settlements matched by no local row — CANDIDATE `missingLocal`s, pending the targeted
    * existence check the caller runs against the whole table. */
   unmatched: SettlementRecord[];
@@ -207,7 +202,7 @@ export function classify(
   }
   const matched = new Set<SettlementRecord>();
   const out: ClassifiedRow[] = [];
-  const matches: ChargeAuditMatch[] | undefined = collectChargeAudit ? [] : undefined;
+  const matches: Classification["matches"] = collectChargeAudit ? [] : undefined;
   const toleranceCutoff = now.getTime() - settlementLagMs;
 
   for (const row of rows) {
