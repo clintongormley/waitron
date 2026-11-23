@@ -23,7 +23,7 @@ import {
   withPreparedModuleOperations,
   type ModuleClockSetRequest,
 } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const database = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -566,6 +566,33 @@ it("rejects over-limit streaming bodies before any claim or import side effect",
   });
   expect(result.status).toBe(400);
   expect((await f.host.store.read())?.revision).toBe(1);
+});
+
+it("answers the staged master key as printed and its name beside the box key, on a repeat too", async () => {
+  const f = await fixture();
+  expect(f.claimed.status).toBe(200);
+  const { comparisonId, reconfirmation } = await f.settle();
+  const candidates = await f.post(
+    "/setup-api/first-setup/candidates",
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
+    f.headers(),
+  );
+  const { state } = await candidates.json();
+  const stageKey = async () => {
+    const token = await f.post(
+      "/setup-api/first-setup/reconfirm",
+      { password: PASSWORD, purpose: "block-use" },
+      f.headers(state),
+    );
+    return f.post("/setup-api/first-setup/node-key", await token.json(), f.headers(state));
+  };
+  const response = await stageKey();
+  expect(response.status).toBe(200);
+  const staged = await response.json();
+  expect(Object.keys(staged).sort()).toEqual(["key", "masterKey", "masterKeyName", "stage"]);
+  expect(staged.masterKey).toBe(encodeMasterKeyCode(decodeMasterKeyCode(staged.masterKey)));
+  expect(staged.masterKeyName).toMatch(/^\d{4}-\d\d-\d\d · [2-9A-HJKMNP-Z]{4}$/);
+  expect(await (await stageKey()).json()).toEqual(staged);
 });
 
 it("imports only the frozen hour and demands a freshly confirmed kept recovery document", async () => {

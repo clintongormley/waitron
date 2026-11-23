@@ -8,7 +8,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import { withTransaction, stampDeployment, readRecoveryPacks } from "@waitron/db";
+import {
+  withTransaction,
+  stampDeployment,
+  readCurrentMasterKey,
+  readRecoveryPacks,
+} from "@waitron/db";
 import { box } from "@waitron/node-db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareCommandPastWaits } from "../test/settle-wait.js";
@@ -705,6 +710,21 @@ it("publication records recovery pack 1, received, for the node it sets up", asy
       ],
     },
   ]);
+});
+
+it("publication records the staged master key as the venue's first, made at pack 1", async () => {
+  const f = await publicationFixture();
+  const stage = await f.runtime.keys.readStage(f.owner);
+  await f.publish(f.state, f.checked);
+  const [pack] = await readRecoveryPacks(venue.db, f.checked.venue.nodeId);
+  expect(await readCurrentMasterKey(venue.db)).toEqual({
+    number: 1,
+    name: stage.masterKeyName,
+    checkValue: stage.masterKeyCheckValue,
+    publicKey: new Uint8Array(Buffer.from(stage.masterKeyPublicKey, "base64")),
+    madeAt: pack!.madeAt,
+    madeBy: null,
+  });
 });
 
 it("a module without the recovery-document seat records no recovery pack", async () => {

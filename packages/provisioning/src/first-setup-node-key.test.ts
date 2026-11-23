@@ -8,6 +8,8 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   insertRecoveryPack,
+  masterKeys,
+  readCurrentMasterKey,
   readRecoveryPacks,
   stampDeployment,
   withNodeTransaction,
@@ -15,6 +17,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
+import {
+  makeMasterKey,
+  masterKeyCheckValue,
+  masterKeyName,
+  sealingPublicKey,
+} from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import {
   NODE_MIGRATIONS,
   box,
@@ -41,6 +50,8 @@ const database = useVenueDb({
 });
 const handles = () => ({ venue: database.db, node: database.node });
 const storedKeys = () => database.node.select().from(box);
+const storedMasterKeys = () => database.db.select().from(masterKeys);
+const otherPublicKey = () => sealingPublicKey(makeMasterKey()).toString("base64");
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -135,6 +146,17 @@ it.each([
   ["verifier algorithm", { verifier: "plaintext" }],
   ["verifier salt", { verifier: `scrypt$${"a".repeat(30)}$${"b".repeat(64)}` }],
   ["verifier digest", { verifier: `scrypt$${"a".repeat(32)}$${"b".repeat(62)}` }],
+  ["non-text master key name", { masterKeyName: 42 }],
+  ["master key name outside its alphabet", { masterKeyName: "2026-10-16 · 0OI1" }],
+  ["master key name day", { masterKeyName: "2026-13-45 · 2345" }],
+  ["non-text check value", { masterKeyCheckValue: 42 }],
+  ["check value length", { masterKeyCheckValue: "a".repeat(63) }],
+  ["upper-case check value", { masterKeyCheckValue: "A".repeat(64) }],
+  ["non-text public key", { masterKeyPublicKey: 42 }],
+  ["public key not base64", { masterKeyPublicKey: "!".repeat(60) }],
+  ["public key length", { masterKeyPublicKey: Buffer.alloc(43).toString("base64") }],
+  ["public key not X25519", { masterKeyPublicKey: Buffer.alloc(44).toString("base64") }],
+  ["public key another key's", { masterKeyPublicKey: otherPublicKey() }],
 ] as const)(
   "refuses a staged key with %s without changing the retained key",
   async (_label, mutation) => {
@@ -150,18 +172,26 @@ it.each([
   },
 );
 
-it.each(["version", "stageId", "attemptId", "nodeId", "frozenDigest", "name", "verifier"] as const)(
-  "refuses a staged key missing %s",
-  async (field) => {
-    const f = await fixture();
-    const invalid: Record<string, unknown> = { ...f.staged!.stage };
-    delete invalid[field];
-    const state = (await f.store.read())!;
-    expect(() => readFirstSetupStagedKey(invalid, state)).toThrowError(
-      expect.objectContaining({ code: "setup.attempt_invalid" }),
-    );
-  },
-);
+it.each([
+  "version",
+  "stageId",
+  "attemptId",
+  "nodeId",
+  "frozenDigest",
+  "name",
+  "verifier",
+  "masterKeyName",
+  "masterKeyCheckValue",
+  "masterKeyPublicKey",
+] as const)("refuses a staged key missing %s", async (field) => {
+  const f = await fixture();
+  const invalid: Record<string, unknown> = { ...f.staged!.stage };
+  delete invalid[field];
+  const state = (await f.store.read())!;
+  expect(() => readFirstSetupStagedKey(invalid, state)).toThrowError(
+    expect.objectContaining({ code: "setup.attempt_invalid" }),
+  );
+});
 
 it("refuses to read a key that has not been staged", async () => {
   const f = await fixture(false);
@@ -340,6 +370,61 @@ it("a first setup interrupted after pack 1 and before the key installs the key o
   expect(await readRecoveryKeyVerifier(database.node, stage.nodeId)).toBe(stage.verifier);
   expect(await readRecoveryKeyName(database.node, stage.nodeId)).toBe(stage.name);
   expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
+  expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: stage.masterKeyName }]);
+});
+
+it("Live setup installs the master_keys row with pack 1 in one venue transaction, once across a re-run", async () => {
+  const f = await fixture();
+  const state = await f.committed();
+  const stage = f.staged!.stage;
+  await stampDeployment(database.db, "preproduction");
+  database.db.run(
+    sql`create trigger interrupt_master_key before insert on master_keys begin select raise(abort, 'interrupted'); end`,
+  );
+  try {
+    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(
+      /interrupted/,
+    );
+  } finally {
+    database.db.run(sql`drop trigger interrupt_master_key`);
+  }
+  expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);
+  expect(await storedMasterKeys()).toEqual([]);
+  expect(await storedKeys()).toEqual([]);
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  const [pack] = await readRecoveryPacks(database.db, stage.nodeId);
+  expect(await readCurrentMasterKey(database.db)).toEqual({
+    number: 1,
+    name: stage.masterKeyName,
+    checkValue: stage.masterKeyCheckValue,
+    publicKey: new Uint8Array(Buffer.from(stage.masterKeyPublicKey, "base64")),
+    madeAt: pack!.madeAt,
+    madeBy: null,
+  });
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  expect(await storedMasterKeys()).toHaveLength(1);
+});
+
+it("stages a master key's public facts, its name worked out from its public key", async () => {
+  const f = await fixture();
+  const stage = f.staged!.stage;
+  const publicKey = Buffer.from(stage.masterKeyPublicKey, "base64");
+  expect(stage.masterKeyName).toBe(masterKeyName(publicKey, stage.masterKeyName.slice(0, 10)));
+  expect(stage.masterKeyCheckValue).toMatch(/^[0-9a-f]{64}$/);
+  expect(Object.keys(f.staged!.key).sort()).toEqual(["name", "nodeId", "secret"]);
+});
+
+it("answers the staged master key as printed, with its name, and never writes it to the stage", async () => {
+  const f = await fixture();
+  const { stage, masterKey, masterKeyName: name } = f.staged!;
+  const bytes = decodeMasterKeyCode(masterKey);
+  expect(masterKey).toBe(encodeMasterKeyCode(bytes));
+  expect(name).toBe(stage.masterKeyName);
+  expect(masterKeyCheckValue(bytes)).toBe(stage.masterKeyCheckValue);
+  expect(sealingPublicKey(bytes).toString("base64")).toBe(stage.masterKeyPublicKey);
+  const written = (await readFile(f.path)).toString();
+  expect(written).not.toContain(masterKey);
+  expect(written).not.toContain(masterKey.replaceAll(" ", ""));
 });
 
 it.each([
@@ -409,6 +494,8 @@ it("reissues a lost unfinished key only after a separate password confirmation, 
   expect(replacement.stage.name).not.toBe(original.stage.name);
   expect(replacement.stage.nodeId).toBe(original.stage.nodeId);
   expect(replacement.stage.frozenDigest).toBe(original.stage.frozenDigest);
+  expect(replacement.stage.masterKeyPublicKey).not.toBe(original.stage.masterKeyPublicKey);
+  expect(replacement.stage.masterKeyCheckValue).not.toBe(original.stage.masterKeyCheckValue);
   expect(await verifySecretAsync(replacement.key.secret, replacement.stage.verifier)).toBe(true);
   expect(await verifySecretAsync(original.key.secret, replacement.stage.verifier)).toBe(false);
   expect(await verifySecretAsync(replacement.key.secret, original.stage.verifier)).toBe(false);

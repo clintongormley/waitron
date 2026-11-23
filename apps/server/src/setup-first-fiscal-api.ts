@@ -323,11 +323,17 @@ export function mountSetupFirstFiscalApi(
       return host.coordinator.run(async (hold) => {
         const state = await host.owner.authorize(owner);
         host.assertSelection(state);
-        const { stage, key } = await host.keys.reissueInitialNodeKey(owner, reconfirmation, hold);
+        const { stage, key, masterKey, masterKeyName } = await host.keys.reissueInitialNodeKey(
+          owner,
+          reconfirmation,
+          hold,
+        );
         host.evidence.invalidate(owner.attemptId);
         return c.json({
           stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
           key,
+          masterKey,
+          masterKeyName,
         });
       });
     }),
@@ -350,7 +356,7 @@ export function mountSetupFirstFiscalApi(
           );
           if (action === "node-key") {
             exact(body, ["reconfirmation"]);
-            const { stage, key } = await host.keys.stageInitialNodeKey(
+            const { stage, key, masterKey, masterKeyName } = await host.keys.stageInitialNodeKey(
               owner,
               text(body.reconfirmation),
               hold,
@@ -358,6 +364,8 @@ export function mountSetupFirstFiscalApi(
             return c.json({
               stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
               key,
+              masterKey,
+              masterKeyName,
             });
           }
           if (action === "recovery-document" || action === "recovery-document-kept") {
