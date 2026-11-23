@@ -173,7 +173,7 @@ function main() {
     }
     if (text === input) continue;
     if (check) {
-      console.error(file + ": series counter references need rewriting");
+      console.error(file + ": supported series counter rewrites remain");
       process.exitCode = 1;
     } else if (!refused.length) {
       writeFileSync(path, text);
