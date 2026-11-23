@@ -195,7 +195,9 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
           await el.updateComplete;
           if (stage === "waiting")
             await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector('[role="status"]')).not.toBeNull(),
+              expect(
+                el.shadowRoot!.querySelector('[data-test=step-follow][data-state="working"]'),
+              ).not.toBeNull(),
             );
           if (stage === "held")
             await vi.waitFor(

@@ -65,6 +65,12 @@ const selectedInput = {
 };
 const q = <T extends HTMLElement>(el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector)!;
+/** The form's one message: drawn by the page itself on Preparing and Ready, else by its button row. */
+const actions = (el: SetupHandoverScreen) =>
+  (
+    el.shadowRoot!.querySelector(".form-message") ??
+    q(el, "wt-form-actions")?.shadowRoot!.querySelector("[data-error]")
+  )?.textContent ?? "";
 async function backupControlDisabled(el: SetupHandoverScreen): Promise<boolean> {
   await useDifferentCopy(el);
   const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
@@ -687,13 +693,9 @@ it.each(["en-GB", "es-ES"])(
     await edit(el, "handover-backup-key", "short");
     q(el, "[data-test=emergency-backup]").click();
     await vi.waitFor(() =>
-      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-        t("handover.emergency.backup_key_too_short"),
-      ),
+      expect(actions(el)).toContain(t("handover.emergency.backup_key_too_short")),
     );
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(
-      t("handover.emergency.backup_key_missing"),
-    );
+    expect(actions(el)).not.toContain(t("handover.emergency.backup_key_missing"));
     expect(q(el, '[name="handover-backup-key"]')).not.toBeNull();
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
@@ -723,9 +725,7 @@ it.each([
     chooseFiles(input, new File(["archive"], "venue.enc"));
     await el.updateComplete;
     q(el, "[data-test=emergency-backup]").click();
-    await vi.waitFor(() =>
-      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
-    );
+    await vi.waitFor(() => expect(actions(el)).toContain(t(key)));
     const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
     expect(picker.files[0]?.name).toBe("venue.enc");
     await picker.updateComplete;
@@ -746,9 +746,7 @@ it.each(["en-GB", "es-ES"])(
     expect(action.disabled).toBe(true);
     await edit(el, "emergency-reason", "x".repeat(501));
     expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-    await vi.waitFor(() =>
-      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t("handover.fix")),
-    );
+    await vi.waitFor(() => expect(actions(el)).toContain(t("handover.fix")));
     await edit(el, "emergency-reason", saved.reason);
     for (const field of el.shadowRoot!.querySelectorAll<HTMLInputElement>(
       'input[type="checkbox"]',
@@ -827,11 +825,7 @@ it("keeps the reason and statements when a code expires, and retries the same de
   await authenticate(el);
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.code_expired"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
   await edit(el, "handover-code", "654321");
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
@@ -867,9 +861,7 @@ it.each([
   await edit(el, "handover-email", signIn.email);
   await edit(el, "handover-password", signIn.password);
   q(el, "[data-test=emergency-preview]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t(key)));
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(requests);
   if (link)
     expect(el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${link}"]`)!.textContent).toBe(
@@ -914,11 +906,7 @@ it("stops activation when the post-restart comparison finds a changed copy", asy
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
   await continueOn(el);
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.copy_failed"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.copy_failed")));
   expect(q(el, "[data-test=retry-activation]")).toBeNull();
   expect(q(el, "[data-test=authenticate]").shadowRoot!.querySelector("button")!.disabled).toBe(
     true,
@@ -940,11 +928,7 @@ it("moves keyboard focus to the page heading when a changed copy leaves no actio
   button.focus();
   expect(button.shadowRoot!.activeElement).toBe(button.shadowRoot!.querySelector("button"));
   await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.copy_failed"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.copy_failed")));
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
 });
 
@@ -953,11 +937,7 @@ it("checks an uncertain declaration before retrying the same frozen request", as
   await authenticate(el);
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.failed"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.failed")));
   expect(q(el, '[name="emergency-reason"]').shadowRoot!.querySelector("textarea")!.disabled).toBe(
     true,
   );
@@ -995,14 +975,8 @@ it("asks for password and code checks on the first refused sign-in, without assu
   await edit(el, "handover-password", "mistyped");
   await edit(el, "handover-code", signIn.totp);
   q(el, "[data-test=emergency-preview]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.sign_in_failed"),
-    ),
-  );
-  expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(
-    t("handover.emergency.code_expired"),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.sign_in_failed")));
+  expect(actions(el)).not.toContain(t("handover.emergency.code_expired"));
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview", "followed"]);
   expect(posts[1]!.body).toEqual({ signIn: { ...signIn, password: "mistyped" } });
 });
@@ -1012,11 +986,7 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
   await authenticate(el);
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      "The copy changed while you were reading",
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain("The copy changed while you were reading"));
   expect(heading(el)).toBe(t("handover.emergency.preparing_heading"));
   expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
     new Date(1792152000000).toLocaleString("en-GB"),
@@ -1043,6 +1013,55 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
   ]);
 });
 
+it("a changed copy whose fresh check gets no answer drops the old copy and offers Try again", async () => {
+  const { el } = await mount({ changeBeforeDeclare: true, later: ["ok", "lost"] });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.failed")));
+  expect(heading(el)).toBe(t("handover.emergency.preparing_heading"));
+  expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+  expect(q(el, "[data-test=proceed]")).toBeNull();
+  const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]");
+  expect(again.textContent!.trim()).toBe(t("handover.try_again"));
+  expect(again.disabled).toBe(false);
+  again.click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=emergency-copy]")?.textContent).toContain(
+      new Date(1792152000000).toLocaleString("en-GB"),
+    ),
+  );
+  expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=proceed]").disabled).toBe(false);
+});
+
+it("a copy that fails its check at Switch goes back to Preparing the venue, offering a backup and Try again", async () => {
+  const { el } = await mount({
+    declareRefusal: { code: "handover.chain_broken", recorded: false },
+  });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.copy_unchecked")));
+  expect(heading(el)).toBe(t("handover.emergency.preparing_heading"));
+  expect(q(el, ".form-message").nextElementSibling).toBe(q(el, ".choices"));
+  expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+  expect(q(el, "[data-test=upload-backup]")).not.toBeNull();
+  const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]");
+  expect(again.textContent!.trim()).toBe(t("handover.try_again"));
+  expect(again.disabled).toBe(false);
+  again.click();
+  await vi.waitFor(() =>
+    expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=proceed]")?.disabled).toBe(false),
+  );
+  expect(actions(el)).toBe("");
+  await proceed(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
+      (input) => input.checked,
+    ),
+  ).toEqual([false, false, false]);
+});
+
 it("explains a second code expiry after replacing only the code and pressing Try again", async () => {
   const { el, posts } = await mount({ saved: true, activationExpired: true });
   await authenticate(el);
@@ -1050,21 +1069,13 @@ it("explains a second code expiry after replacing only the code and pressing Try
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
   await continueOn(el);
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.code_expired"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
   await edit(el, "handover-code", "654321");
   q(el, "[data-test=retry-activation]").click();
   await vi.waitFor(() =>
     expect(posts.filter(({ path }) => path.endsWith("/activate"))).toHaveLength(2),
   );
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.code_expired"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
   expect(posts.filter(({ path }) => path.endsWith("/preview"))).toHaveLength(1);
   expect(
     posts
@@ -1073,7 +1084,6 @@ it("explains a second code expiry after replacing only the code and pressing Try
   ).toEqual(["123456", "654321"]);
 });
 
-const actions = (el: SetupHandoverScreen) => q(el, "wt-form-actions").shadowRoot!.textContent!;
 const followedTakes = (posts: { path: string }[]) =>
   posts.filter(({ path }) => path.endsWith("/emergency/followed")).length;
 async function check(el: SetupHandoverScreen) {
@@ -1139,6 +1149,7 @@ it("while the spare catches up the page waits and says so, then offers the copy 
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(followedTakes(posts)).toBe(taken);
   expect(step(el, "follow")).not.toBe("working");
+  expect(Reflect.get(el, "following")).toBe(false);
 });
 
 it.each([
@@ -1416,6 +1427,7 @@ it("a lost take answer says the take failed and stops waiting for it", async () 
   await check(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.failed")));
   expect(step(el, "follow")).not.toBe("working");
+  expect(Reflect.get(el, "following")).toBe(false);
   expect(q(el, "[data-test=emergency-copy]")).toBeNull();
   expect(button(el, "emergency-preview").disabled).toBe(false);
   expect(followedTakes(posts)).toBe(1);
@@ -1488,6 +1500,10 @@ it("a controlled handover already under way is linked from the copy, without the
   expect(q(el, 'wt-file-input[name="handover-backup"]')).toBeNull();
   // No other copy can be chosen here, so nothing offers one.
   expect(q(el, "[data-test=upload-backup]")).toBeNull();
+  expect(heading(el)).toBe(t("handover.emergency.preparing_heading"));
+  expect(q(el, 'a[href="/handover/controlled%20one"]').textContent).toBe(
+    t("handover.emergency.controlled_link"),
+  );
   await proceed(el);
   const link = q<HTMLAnchorElement>(
     el,
@@ -1514,6 +1530,7 @@ it("a taken copy whose check is then refused says why and shows no copy", async 
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.throttled")));
   expect(q(el, "[data-test=emergency-copy]")).toBeNull();
   expect(step(el, "follow")).not.toBe("working");
+  expect(Reflect.get(el, "following")).toBe(false);
 });
 
 it("after a refused take, a declaration saved elsewhere meanwhile is resumed instead of offering the held copy", async () => {
@@ -1546,7 +1563,7 @@ it("after a refused take, a refused check once the box is back says why and stop
   expect(previews(posts)).toBe(asked);
 });
 
-it("the held copy needs the sign-in filled, and a refused check of it says why", async () => {
+it("the held copy is offered with no sign-in field left to empty, and a refused check of it says why", async () => {
   const { el, posts } = await mount({
     held: true,
     takes: ["handover.chain_broken"],
@@ -1556,15 +1573,11 @@ it("the held copy needs the sign-in filled, and a refused check of it says why",
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull(), {
     timeout: 10_000,
   });
-  // Preparing the venue draws no sign-in fields, so the page's own copy of the password is cleared.
-  Reflect.set(el, "password", "");
-  await el.updateComplete;
+  for (const name of ["handover-email", "handover-password", "handover-sign-in-method"])
+    expect(q(el, `[name="${name}"]`)).toBeNull();
   expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-held]").disabled).toBe(
-    true,
+    false,
   );
-  expect(q(el, "[data-test=emergency-held]").getAttribute("variant")).toBe("secondary");
-  Reflect.set(el, "password", signIn.password);
-  await el.updateComplete;
   expect(q(el, "[data-test=emergency-held]").getAttribute("variant")).toBe("primary");
   const asked = previews(posts);
   q(el, "[data-test=emergency-held]").click();
@@ -1590,6 +1603,7 @@ it("choosing a backup while the spare catches up stops the catching up", async (
   await vi.advanceTimersByTimeAsync(6000);
   expect(followedTakes(posts)).toBe(taken);
   expect(step(el, "follow")).not.toBe("working");
+  expect(Reflect.get(el, "following")).toBe(false);
 });
 
 async function chooseBackup(el: SetupHandoverScreen) {
@@ -1610,6 +1624,12 @@ it("after choosing a backup, the page keeps waiting until the box shows that bac
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.backup_restarting")),
   );
+  // The answer naming the copy still in place arrives, and the next check is 2 seconds away.
+  await vi.waitFor(() => expect(previews(posts)).toBe(3));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.backup_restarting"));
+  expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+  expect(q(el, "[data-test=proceed]")).toBeNull();
   await vi.waitFor(
     () =>
       expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
@@ -1653,7 +1673,7 @@ it.each([
     q(el, "[data-test=emergency-declare]").click();
     await vi.waitFor(() => expect(actions(el)).toContain(t(key)));
     expect(actions(el)).not.toContain(t("handover.emergency.copy_failed"));
-    if (controlledOperation) expect(q(el, "[data-test=different-copy]")).toBeNull();
+    if (controlledOperation) expect(q(el, "[data-test=upload-backup]")).toBeNull();
     else {
       await useDifferentCopy(el);
       expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
@@ -2233,11 +2253,7 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   proof.cookie = false;
   proof.refusals = ["passkey.verification_failed"];
   q(el, "[data-test=emergency-declare]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.passkey_failed"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
   expect(get).toHaveBeenCalledTimes(2);
   expect(q(el, '[name="handover-sign-in-method"]')).not.toBeNull();
   const declare = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
@@ -2342,11 +2358,7 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
     const { el, posts } = await mount({ proof, takes: ["restarting"] });
     await choosePasskey(el);
     q(el, "[data-test=emergency-preview]").click();
-    await vi.waitFor(() =>
-      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-        t("handover.emergency.passkey_failed"),
-      ),
-    );
+    await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
     expect(posts.filter(({ path }) => path.endsWith("/followed"))).toHaveLength(2);
   },
 );
@@ -2401,6 +2413,8 @@ it("a passkey take the held copy refused, then sent to the held copy, keeps the 
   expect(actions(el)).toContain(t("handover.emergency.followed_not_admitted"));
   expect(actions(el)).toContain(t("handover.emergency.held_passkey_refused"));
   expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
+  // The message names Use your password, so the sign-in with its method choice is back.
+  expect(q(el, '[name="handover-sign-in-method"]')).not.toBeNull();
 });
 
 it.each([
@@ -2414,7 +2428,7 @@ it.each([
   await edit(el, "handover-email", signIn.email);
   await edit(el, "handover-password", signIn.password);
   q(el, "[data-test=emergency-preview]").click();
-  await vi.waitFor(() => expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(words));
+  await vi.waitFor(() => expect(actions(el)).toContain(words));
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
 });
 
@@ -2467,11 +2481,7 @@ it("a refusal that needs the sign-in opens it again, before Declare", async () =
   await authenticate(el);
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.code_expired"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
   // Ready to switch draws the sign-in again; the backup choice stays on Preparing the venue.
   expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
   expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
@@ -2487,14 +2497,10 @@ it("an expired code at the clock check opens the sign-in again, without Use a di
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.code_expired"),
-    ),
-  );
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
   // After Declare the copy cannot change, so the backup choice stays away.
   expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
-  expect(q(el, "[data-test=different-copy]")).toBeNull();
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
 });
 
 it("a successful start whose progress cannot be read asks for nothing until the step is pressed again", async () => {
@@ -2803,5 +2809,37 @@ it.each(["en-GB", "es-ES"])(
     expect(q(el, "[data-test=emergency-preview]").textContent!.trim()).toBe(
       t("handover.emergency.continue"),
     );
+  },
+);
+
+it.each([
+  [spareSwitchPage(TILL), TILL, "handover.emergency.leave_till"],
+  [undefined, "/", "handover.emergency.leave"],
+] as const)(
+  "Preparing the venue always offers Go back as a full-width button (%s)",
+  async (pageUrl, href, label) => {
+    const { el } = await mount({
+      held: true,
+      takes: ["catching-up", "restarting"],
+      ...(pageUrl ? { pageUrl } : {}),
+    });
+    const goesBack = () => {
+      const back = q<HTMLAnchorElement>(el, ".choices > a.button[data-test=go-back]");
+      expect(back.getAttribute("href")).toBe(href);
+      expect(back.textContent!.trim()).toBe(t(label));
+    };
+    await check(el);
+    await vi.waitFor(() => catchingUp(el));
+    goesBack();
+    await vi.waitFor(
+      () =>
+        expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+      { timeout: 5000 },
+    );
+    goesBack();
+    await vi.waitFor(() => expect(q(el, "[data-test=proceed]")).not.toBeNull(), {
+      timeout: 10_000,
+    });
+    goesBack();
   },
 );

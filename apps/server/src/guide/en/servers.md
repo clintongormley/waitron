@@ -136,7 +136,9 @@ current replacement when asked and try the step again. With a passkey, the page 
 the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
 
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
-latest sale or order, choose **Proceed** and tick the three statements again.
+latest sale or order, choose **Proceed** and tick the three statements again. If the copy fails its
+check when you choose **Switch to this box**, the page goes back there too: choose **Try again** or
+**Upload a backup file instead**.
 
 Reloading or
 opening the address on another device finds the switch you started; sign in and continue with the

@@ -146,7 +146,9 @@ nuevo pasados 15 minutos. El
 motivo y las declaraciones se conservan.
 
 Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
-última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones.
+última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones. Si la copia no
+supera su comprobación al elegir **Cambiar a este servidor**, la página también vuelve allí: elige
+**Volver a intentarlo** o **Subir un archivo de copia de seguridad en su lugar**.
 
 Al recargar o abrir la dirección en otro dispositivo se encuentra el cambio
 empezado; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
