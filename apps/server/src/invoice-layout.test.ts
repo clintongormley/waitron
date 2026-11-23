@@ -16,7 +16,7 @@ import { renderInvoiceRaster } from "./invoice-raster.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptFacts } from "./receipt-facts.js";
-import { formatMoney } from "./receipt-money.js";
+import { formatMoney, formatVatRate } from "./receipt-money.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import * as receiptCases from "./testing/receipt-cases.js";
 import { sampleDocument } from "./sample-receipt.js";
@@ -1128,24 +1128,94 @@ describe("layoutA4Invoice, printed", () => {
     }
   });
 
-  it("word-wraps only an address too long for a line by itself, keeping the country whole and never breaking at a separator", () => {
+  it("word-wraps only an address too long for a line by itself, keeping a two-word country whole and never leaving a separator at a line's end", () => {
+    const words =
+      "Long Avenue of the original customer number 123 by the railway station third floor ";
+    const country = new Intl.DisplayNames(["es-ES"], { type: "region" }).of("GB")!;
+    expect(country).toContain(" ");
+    let countryAlone = 0;
+    for (let length = 20; length <= 220; length++) {
+      const address = words.repeat(3).slice(0, length).trim();
+      const input = fixture();
+      input.result.recipient!.address = address;
+      input.result.recipient!.countryCode = "GB";
+      const { elements } = header(input);
+      const panel = elements.find(
+        (element): element is Box => element.kind === "box" && element.fill === "panel",
+      )!;
+      const identifier = texts(elements).find((text) =>
+        text.text.endsWith(`: ${input.result.recipient!.taxId}`),
+      )!;
+      const lines = texts(elements)
+        .filter((text) => text.y > identifier.y && text.y < panel.y + panel.height)
+        .map((text) => text.text);
+      const shape = `${length}: ${JSON.stringify(lines)}`;
+      expect(lines.join(" ").replace(" · ", " "), shape).toBe(`${address} ${country}`);
+      expect(
+        lines.filter((line) => line.startsWith("·") || line.endsWith("·")),
+        shape,
+      ).toEqual([]);
+      expect(
+        lines.some((line) => line === country || line.endsWith(` · ${country}`)),
+        shape,
+      ).toBe(true);
+      if (lines.at(-1) === country) countryAlone++;
+    }
+    expect(countryAlone, "lengths that put the country on a line of its own").toBeGreaterThan(0);
+  });
+
+  it.each([false, true])(
+    "prints the no-real-charge line on a practice invoice only when its card payment was simulated (%s)",
+    (simulatedCardPayment) => {
+      const input = fixture();
+      input.simulated = true;
+      input.simulatedCardPayment = simulatedCardPayment;
+      const shown = texts(allElements(layoutA4Invoice(input))).map((text) => text.text);
+      expect(shown).toContain(labels.practice);
+      expect(shown.includes(labels.noRealCharge)).toBe(simulatedCardPayment);
+    },
+  );
+
+  it("prints no practice notice on a real invoice", () => {
+    const shown = texts(allElements(layoutA4Invoice(fixture()))).map((text) => text.text);
+    expect(shown).not.toContain(labels.practice);
+    expect(shown).not.toContain(labels.noRealCharge);
+  });
+
+  it("prints neither the QR's caption nor its legend when the record has no QR", () => {
     const input = fixture();
-    const address = `${FULL_INVOICE_DOCUMENT_FIXTURE.result.recipient!.address!}, ${FULL_INVOICE_DOCUMENT_FIXTURE.result.recipient!.address!}`;
-    input.result.recipient!.address = address;
-    const { elements } = header(input);
-    const panel = elements.find(
-      (element): element is Box => element.kind === "box" && element.fill === "panel",
-    )!;
-    const identifier = texts(elements).find((text) =>
-      text.text.endsWith(`: ${input.result.recipient!.taxId}`),
-    )!;
-    const lines = texts(elements)
-      .filter((text) => text.y > identifier.y && text.y < panel.y + panel.height)
-      .map((text) => text.text);
-    const country = getCountryPack("ES")!.countryNames!["es-ES"]!;
-    expect(lines.length).toBeGreaterThan(2);
-    expect(lines.join(" ")).toBe(`${address} · ${country}`);
-    expect(lines.filter((line) => line.startsWith("·") || line.endsWith("·"))).toEqual([]);
+    input.result.qr = "";
+    const { caption, legend } = FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText!;
+    expect([caption, legend].every((word) => word !== undefined)).toBe(true);
+    const elements = allElements(layoutA4Invoice(input));
+    expect(elements.some((element) => element.kind === "qr")).toBe(false);
+    const shown = texts(elements).map((text) => text.text);
+    expect(shown).not.toContain(caption);
+    expect(shown).not.toContain(legend);
+  });
+
+  it("sums each VAT rate's base and tax into its own row of the summary", () => {
+    const elements = layoutA4Invoice(fixture())[0]!.elements;
+    const heading = named(elements, labels.taxRateColumn);
+    const total = named(elements, labels.total);
+    const rows = new Map<number, Text[]>();
+    for (const text of texts(elements))
+      if (text.tone === "ink" && text.y > heading.y && text.y < total.y)
+        rows.set(text.y, [...(rows.get(text.y) ?? []), text]);
+    const shown = [...rows.entries()]
+      .sort(([one], [other]) => one - other)
+      .map(([, cells]) => cells.sort((one, other) => one.x - other.x).map((text) => text.text));
+    expect(shown).toEqual([
+      [formatVatRate("21", "es-ES"), money("9.00"), money("1.89"), money("10.89")],
+      [formatVatRate("10", "es-ES"), money("8.00"), money("0.80"), money("8.80")],
+    ]);
+  });
+
+  it("prints the guests and the amount each pays under TOTAL", () => {
+    const input = fixture();
+    input.guests = 4;
+    const shown = texts(lastPage(layoutA4Invoice(input))).map((text) => text.text);
+    expect(shown).toContain(`4 ${labels.guests} · ${labels.perPerson} ${money("4.92")}`);
   });
 
   it("prints the filed domicile and never the venue's current address, and no logo without a picture", () => {
@@ -1180,6 +1250,14 @@ describe("layoutA4Invoice, printed", () => {
       const rows = page.elements.filter(
         (element): element is Rule => element.kind === "rule" && element.thickness === 0.5,
       );
+      const headings = page.elements.filter(
+        (element): element is Box => element.kind === "box" && element.fill === "heading",
+      );
+      for (const shaded of headings)
+        expect(
+          rows.some((rule) => rule.y > shaded.y),
+          `page ${number + 1}: a heading with no row under it`,
+        ).toBe(true);
       if (rows.length === 0) continue;
       if (number > 0) continued++;
       const heading = headingBox(page.elements);
