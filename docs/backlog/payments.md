@@ -324,7 +324,7 @@ Remaining Stripe qualification and maintenance.
   Waitron.
 
 - **A deferred-payment invoice tells the customer how to pay by bank transfer; no other invoice
-  does** (owner, 2026-11-22; the email on a change, "with the email"). The A4 page and the till
+  does** (owner, 2026-11-22, approving the design; on the change email: "with the email"). The A4 page and the till
   receipt print the IBAN and bank from the Business card's bank account, only when the bill, or the
   sale it replaces, was closed as a deferred payment, never on a paid invoice or one that merely
   shows an amount owed. Changing or clearing the account needs a fresh sign-in and emails the venue's

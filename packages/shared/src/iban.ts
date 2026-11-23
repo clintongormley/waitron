@@ -21,7 +21,7 @@ export function ibanGroups(iban: string): string[] {
   return iban.match(/.{1,4}/g) ?? [];
 }
 
-/** The first four and last four characters, every other one `•`, in groups of four. */
+/** For an IBAN `ibanProblem` accepted: the first four and last four characters, every other one `•`, in groups of four. */
 export function maskIban(iban: string): string {
   const hidden = iban.slice(0, 4) + "•".repeat(iban.length - 8) + iban.slice(-4);
   return ibanGroups(hidden).join(" ");

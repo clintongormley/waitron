@@ -568,7 +568,7 @@ Hardware and inbox checks to complete in the owner session.
 
 - **The A4 invoice's title and the venue's name are printed larger than the VERI\*FACTU caption
   (owner, 2026-11-22, approving the A4 invoice layout).** It extends the TOTAL entry above to these
-  two lines. The venue's name is the trading name, or the legal name when no trading name prints.
+  two lines.
   [Design](../superpowers/specs/2026-11-22-a4-invoice-layout-design.md).
 
 - **A ruled line between TOTAL and the tax table on every simplified receipt (owner, 2026-11-05,
