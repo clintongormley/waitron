@@ -6,9 +6,9 @@ const browserNow = (): Date => new Date();
 
 /**
  * `sentence` with how long ago `at` was (or, for a deadline, how soon it comes) in place of its
- * `{time}`, in the session's language; the exact time shows on hover or tap in `timeZone`, or in the
- * browser's time zone when it is empty. With `calendar`, a moment a day or more gone reads as its
- * weekday and time, then as its date.
+ * `{time}`, in the session's language; the exact time shows on hover or tap, and it and (with
+ * `calendar`) the weekday and date are read in `timeZone`, or in the browser's time zone when it is
+ * empty. With `calendar`, a moment a day or more gone reads as its weekday and time, then as its date.
  */
 export function relativeTime(
   sentence: string,

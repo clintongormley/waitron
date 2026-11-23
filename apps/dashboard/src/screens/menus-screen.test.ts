@@ -1266,11 +1266,8 @@ describe("the menus list's heading row", () => {
 
   it("offers one Add menu while there are no menus, under the empty table's sentence", async () => {
     for (const [locale, sentence] of [
-      ["en-GB", "No menus yet. Add one, fill it with products, then publish it to the tills."],
-      [
-        "es-ES",
-        "Todavía no hay cartas. Añade una, llénala de productos y publícala para enviarla a las cajas.",
-      ],
+      ["en-GB", "No menus yet."],
+      ["es-ES", "Todavía no hay cartas."],
     ] as const)
       await at([1280, 900], locale, async () => {
         const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
@@ -1896,7 +1893,7 @@ describe("the menus list's Status column and its changes link", () => {
 
   it("says in a set menu's Status, in muted text, that it is published with the menus that offer it", async () => {
     for (const [locale, words] of [
-      ["en-GB", "Published with the menus that offer it"],
+      ["en-GB", "Goes live with the menus that offer it"],
       ["es-ES", "Se publica con las cartas que lo ofrecen"],
     ] as const)
       await at([1280, 900], locale, async () => {
@@ -1935,7 +1932,7 @@ describe("the menus list's Status column and its changes link", () => {
       const message = () => q(el, '[data-test="statuses-error"]');
       await vi.waitFor(() =>
         expect(text(message())).toBe(
-          `Couldn't check which menus are published. ${codeMessage("server.internal")}`,
+          `Could not check which menus are published. ${codeMessage("server.internal")}`,
         ),
       );
       expect(message()!.getAttribute("role")).toBe("alert");

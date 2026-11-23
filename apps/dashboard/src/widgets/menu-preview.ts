@@ -130,8 +130,7 @@ const SOURCES: Record<MenuChange["source"], StringKey> = {
   set_menu: "menu_preview.source_set_menu",
 };
 
-/** A menu's publication state in words, for the menus list and the editor: what it is, and the live
- * version and how long ago it was published beside it, read against `now`. */
+/** A menu's publication state in words, read against `now`: what it is, and the live version and how long ago it was published. The editor's heading shows both; the menus list shows only the time. */
 export function statusWords(
   status: MenuStatus,
   now: () => Date,
@@ -140,17 +139,13 @@ export function statusWords(
   live: { version: string; time: TemplateResult } | null;
 } {
   if (status.state === "unpublished") return { label: t("menu_status.unpublished"), live: null };
-  const number = { number: String(status.version) };
+  const version = fill("menu_status.changed_version", { number: String(status.version) });
+  // No time zone: the statuses read carries none, so this reads in the browser's zone, as the date it replaced did.
   const time = relativeTime("{time}", status.publishedAt, { calendar: true, now });
-  return status.state === "current"
-    ? {
-        label: t("menu_status.current"),
-        live: { version: fill("menu_status.current_version", number), time },
-      }
-    : {
-        label: t("menu_status.changed"),
-        live: { version: fill("menu_status.changed_version", number), time },
-      };
+  return {
+    label: t(status.state === "current" ? "menu_status.current" : "menu_status.changed"),
+    live: { version, time },
+  };
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
