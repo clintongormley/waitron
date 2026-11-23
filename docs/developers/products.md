@@ -815,7 +815,7 @@ froze (`TabLine.unitPrecision`), since a variant is not one of the till's produc
 
 ### In the product editor
 
-The **Selling** section holds Available and **Standalone ordering by**, with three visible choices:
+**Standalone ordering by**, in the Ordering group of the Details fold, offers three visible choices:
 Anyone, Staff only and Nobody. Their wire values remain `public`, `staff_only` and
 `not_sold_separately` (`products.ordering`). The chosen explanation appears below the choices. A variant's own page does not offer it, because the till and the
 server read the dish's setting and a variant is only ever ordered under its dish. The products list
@@ -829,15 +829,13 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   variant (`editor.add_variant_to`, `editor.edit_variant_of`). While that name is blank it reads
   plain "Add variant" or "Edit variant". A variant's own page reads the parent's saved staff name
   in its editor response and heads "Edit variant of: Coffee"; reloading reads that name again.
-- The Pricing section holds the price field, then the one eat-in rate (`editor.dine_in_vat`) and,
-  where the venue charges takeaway VAT, the takeaway VAT field. While at least one variant is Active the
-  price's label reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price"
-  alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows
-  the base price as its hint, in its window and in its table row, and the Pricing section is a fold
-  whose closed line names the base price and, where it is charged, the takeaway VAT
-  (`pricingSummary`). The fold opens on a takeaway VAT, unit or price error (`SECTION_FIELDS`). Pricing starts open without Active variants, and closed
-  with them. The separate Variants section starts open with Active variants and otherwise closed;
-  its empty summary reads None. Opening an empty section shows Add variant.
+- The price card holds the price field, then Variants and Modifiers, all always open; the one
+  eat-in rate (`editor.dine_in_vat`) and, where the venue charges takeaway VAT, the takeaway VAT
+  field are in Details' VAT group. While at least one variant is Active the price's label reads
+  "Base price per" and the unit (`editor.base_price_unit`), or "Base price" alone
+  (`editor.base_price`) for a product with no unit, and a variant with no price of its own shows the
+  base price as its hint, in its window and in its table row. Without variants, Variants shows only
+  Add variant.
 - An active saved row's menu offers **Open**, **Edit** and **Archive**; an unsaved row uses
   **Remove**. **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
@@ -896,22 +894,34 @@ photo that exists was accepted.
 
 ## The editor form
 
-`dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
-fields that change often are always visible; everything else is folded into a `wt-disclosure`
-section with a summary on its closed line. Prep station, Descriptors and Nutritional info name each
-field they hold, with "None specified" (`modifiers.none_specified`) for one left blank; the Pricing
-fold leaves a blank base price, and a takeaway VAT rate the form does not offer, off its line. The
-Descriptors rows are cut after one and two lines, which can hide a later language's value, so
-opening the section is what shows every value. Top to bottom: the category path, Name, with the
-photo beside it as a small button that opens the image library (absent when the editor is given no
-`api`), the colour chooser (absent on a variant's page), Available, Standalone ordering by (absent on
-a variant's page), ▸ Prep station, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
-variant is Active), Variants, Modifiers, then Cancel and Save. An archived product opens a plain-text details panel through View, not this editor. Opened on a
-variant, the same form is the variant's own page: it has no colour chooser and no Standalone
-ordering by, Modifiers or Variants section. The course and description show the parent's value as
-their placeholder while inherited. The course, description, allergens and dietary preferences
-also show inherited values in italic on their folded section's closed line.
-In Nutritional info you choose “Contains none of the 14” to record a reviewed empty allergen set.
+`dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one form on a grey
+dialog (`--wt-dialog-surface: var(--wt-color-bg)`) holding three raised cards, the pattern
+[the design system](design-system.md) describes under "Lay out a long form in a dialog as cards".
+Top to bottom:
+
+1. A `wt-card raised`: the category path; Name, with the photo beside it as a small button that
+   opens the image library (absent when the editor is given no `api`) and the colour chooser
+   (absent on a variant's page); and Available.
+2. Details, a `wt-disclosure card` and the only part that folds: open on a product never saved
+   (the editor has no `value`), closed otherwise. Its groups are Prep station (prep station name
+   and Course), On the menu (customer-facing names and descriptions), Allergens and diet, VAT
+   (absent when the venue has neither the eat-in line nor takeaway VAT) and Ordering (absent on a
+   variant's page).
+3. A `wt-card raised`: the price, with no group label above it, then Variants and Modifiers, always
+   open. A variant's page holds only the price here.
+
+Cancel and Save follow. An archived product opens a plain-text details panel through View, not this
+editor.
+
+Details' closed line shows only what is set: one row per group with something set, each cut after
+two lines with a hanging indent, which can hide a later value in that row, so opening the section
+is what shows every value. Allergens always has a row: its list, "None" once reviewed with none, or
+"Not yet reviewed" in the warning colour. On a variant's page, the course, description, allergens
+and diet labels the variant inherits show the parent's value there in italic, and the course and
+description show it as their field's placeholder too. The diet labels implied by a chosen one
+follow the chosen labels, not in italic.
+
+In Allergens and diet you choose “Contains none of the 14” to record a reviewed empty allergen set.
 A variant's “Same as {parent}” keeps its allergens inherited and shows its parent's choices as
 read-only italic chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
 Selecting a diet label starts the variant's own diet, replacing the inherited preview. Labels
@@ -920,14 +930,12 @@ your saved declarations. A label already stored explicitly stays there when you 
 implying label.
 Changing a diet label preserves the allergen review state, and changing allergens preserves the diet.
 
-The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
+The form's Modifiers group is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
 naming the list's plain STAFF name and which kind it is.
 
-Sections start collapsed, and open and closed state is not remembered. Pricing is the exception: it
-does not fold at all while no variant is Active, and its fold starts open on a product never saved.
-A section holding a validation error opens itself and cannot be collapsed until the error is fixed —
-that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
+Open and closed state is not remembered. Details holding a validation error opens itself and cannot
+be collapsed until the error is fixed — that is `wt-disclosure`'s `has-error`, described in [the design system](design-system.md).
 
 The main category is the form's first line: its path, the names joined with " › " (`categoryPathText`,
 `apps/dashboard/src/widgets/classification-fields.ts`), "No category" (`categories.none`) for none, or "Unavailable

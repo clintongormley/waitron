@@ -7,10 +7,13 @@ without copying its prep station name, dietary declarations or choices.
 You can add products before creating a menu. Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price.
 
-The editor keeps the fields you change often on screen and folds the rest away behind a heading that
-summarises what is inside it, so you can see at a glance which sections you have filled in. Open one
-by clicking its heading. If a section contains something you need to fix, it opens itself and stays
-open until you have fixed it.
+The editor holds three cards. The first holds the category, Name with its photo, and **Available**.
+The third holds the price, the variants and the modifiers. Between them, **Details** holds the rest:
+the prep station, how the product appears on the menu, allergens and diet, VAT, and ordering.
+Details is open when you add a product and closed when you edit one, because you set those once and
+then rarely change them. While it is closed, it shows a line for each of its groups that has
+something set, so you can see what is set without opening it. Click its heading to open or close it. If
+it contains something you need to fix, it opens itself and stays open until you have fixed it.
 
 ## How VAT is charged {#vat}
 
@@ -26,9 +29,10 @@ including orders already open; you do not need to publish the menu.
 
 ## Set how a product is sold {#selling}
 
-Open **Selling** to change Available or **Standalone ordering by**: Anyone, Staff only or Nobody.
-The explanation below the selected choice tells you what it allows. A variant has only Available
-here. Selling starts closed, with the current settings on its summary line. The Products list shows
+**Available**, under Name, says whether the product is on sale. **Standalone ordering by**, under
+**Ordering** in **Details**, says who can order it on its own: Anyone, Staff only or Nobody. The
+explanation below the selected choice tells you what it allows. A variant has no Ordering, because
+it is ordered as its product is. The Products list shows
 this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
 by it.
 
@@ -63,10 +67,9 @@ The name you just typed is the **staff** name. It is plain text, in no particula
 is what you and your staff see: the Products list, the till's buttons, the basket, an open table's
 line list, a retrieved order and your sales reports. Use whatever the venue actually calls the dish.
 
-Two optional names sit in sections of their own. **Descriptors** starts folded and **Prep station**
-starts open:
+Two optional names sit in **Details**:
 
-- A **customer-facing name**, under **Descriptors**, with one field per content language. This is
+- A **customer-facing name**, under **On the menu**, with one field per content language. This is
   what a diner reads: the receipt and the invoice. A receipt and an invoice show the default
   language's customer-facing name whatever language they print in, or the staff name when you leave
   that default name blank. A regional field such as **English (United States)** is optional:
@@ -80,7 +83,7 @@ The two fall back separately. Filling in a customer-facing name does not change 
 sees, and filling in a prep station name does not change what the diner reads. While either name is
 blank, its field shows the name that will be used instead.
 
-You can also add a customer-facing description, under **Descriptors**, and a photo, which sits
+You can also add a customer-facing description, under **On the menu**, and a photo, which sits
 beside the name, below the category path.
 
 ## Give the product a main category {#category}
@@ -125,7 +128,7 @@ New venues in Spain start with **Sharing plates**, **Starters**, **Mains** and *
 Their names follow the starter
 language. Assign these courses to your products, or edit the list to suit your service.
 
-Use the **Course** field under **Prep station** to choose the course for new dishes. It saves
+Use the **Course** field under **Prep station**, in **Details**, to choose the course for new dishes. It saves
 with the product. At a table, arrange dishes in **New order**: they can go in **Fire now**, a new
 held group or an existing held group. You can change an unsent dish's course before sending it.
 Use groups to choose which dishes you fire together, rather than treating each course as one
@@ -151,7 +154,7 @@ Use variants for forms of the same product that need distinct names and prices, 
 a double coffee. Each variant has its own availability. Reordering or editing the variants keeps
 their stable identities, so a menu's settings for a variant keep pointing at it.
 
-Variants have a section of their own, **Variants**, under **Pricing**. Choose **Add variant** to add
+Variants sit below the price, in their own group, **Variants**. Choose **Add variant** to add
 one. A small window opens where you give the variant its three names (staff, customer-facing and
 station), its price, image and availability; the customer-facing and prep station names fall back to the
 variant's staff name exactly as the product's do. Save the window to add that one variant, or cancel
@@ -159,14 +162,10 @@ it to add nothing. On the till's order lines, a receipt and a station ticket, a 
 after its product's name, in brackets, such as Coffee (Large), and the sales report lists each
 variant under its product. So name a variant by what sets it apart: Large, not Large coffee.
 
-The product keeps its own price field, above its VAT. Once the product has an Active variant, the
-field's label starts **Base price**, because a variant you leave without a price of its own sells at
-it. That variant's empty price shows the base price greyed out as a hint, in its window and in its
-row of the table. The **Pricing** section then folds to one line, such as **Base price:** €38.00
-per kg · **VAT when taken away:** 10%; choose the line to open it. It opens by itself when the base price or the VAT when taken
-away needs fixing. When you open a product without Active variants, Pricing starts open;
-with Active variants, Pricing starts closed and Variants starts open. You can close either section
-without losing the draft. The unit link in the variants' Price heading opens the same unit dialog
+The product keeps its own price field. Once the product has an Active variant, the field's label
+starts **Base price**, because a variant you leave without a price of its own sells at it. That
+variant's empty price shows the base price greyed out as a hint, in its window and in its row of the
+table. The unit link in the variants' Price heading opens the same unit dialog
 as the price field's unit button.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
@@ -184,7 +183,7 @@ be used, such as "Not yet reviewed" for allergens nobody has reviewed, and the v
 product's value. The description works as one value across all languages: to use the product's
 description, leave every language of the description blank. Once you write the description in one
 language, the variant uses only its own description, and the languages you left blank stay blank.
-The page has no Modifiers or Variants section, because a variant always uses its product's extras
+The page has no Variants or Modifiers, because a variant always uses its product's extras
 and options lists. **Open** appears once the variant has been saved, and it waits while the product
 has unsaved changes, because leaving the product would lose them: save the product first.
 
@@ -228,8 +227,8 @@ bottom. Choose **Cancel** to discard the edits.
 
 ## Declare allergens and dietary suitability directly {#allergens}
 
-**Nutritional info** starts folded, with a summary line such as "Allergens: Not yet reviewed ·
-Dietary: None". Open it to choose.
+Choose them under **Allergens and diet**, in **Details**. Until someone has reviewed a product's
+allergens, Details' closed line shows "Allergens: Not yet reviewed" in the warning colour.
 
 Under **Allergens**, choose each of the 14 allergens the dish contains, or
 **Contains none of the 14** once you have checked that it has none. Choosing

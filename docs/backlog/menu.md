@@ -457,7 +457,7 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   sidebar also left room for the side panel. See [Filters keeps a fixed breakpoint](#filters-keeps-a-fixed-breakpoint)
   for the sizing decision.
 
-- **Folded customer names** (owner, 2026-10-04, W77/#1197): show every language's name, with inherited ones in italic. The Product editor's Descriptors section has a Name row saying “None specified” for a blank language by A211's decision; left as it is (asked of the owner, 2026-10-04).
+- **Folded customer names** (owner, 2026-10-04, W77/#1197): show every language's name, with inherited ones in italic. The Product editor's Descriptors section has a Name row saying “None specified” for a blank language by A211's decision; left as it is (asked of the owner, 2026-10-04). 2026-11-23 (owner): superseded for the product editor, whose closed line now shows only what is set (`docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`, decision 5).
 
 
 - **Structure branch changes (watcher, 2026-11-16).** Keep the current-path redraw check: no production code needs a new expansion event, and the controller remains for fitting, focus and paint.
@@ -678,6 +678,11 @@ The numbered decision above records the approved design and describes the earlie
 it says “today”. The owner supplied Spanish wording the same day: Venta; Pedir por separado;
 Cualquiera / Solo el personal / Nadie.
 
+2026-11-23 (owner): superseded for the product editor by
+`docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`. Its decision 11 (three cards
+on a grey dialog, with the price, Variants and Modifiers always open) also supersedes A219's
+Pricing fold (2026-10-02, #1065).
+
 **Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last
 at every width. Header and row checkboxes share their leading alignment. Products and Structure
 start with their root open, have no Expand all button, and open only the chosen branch's own level.
@@ -787,6 +792,8 @@ From the product editor tidy-up (A209 to A219, owner 2026-10-02):
 - A216 (#1057) — **Decided (owner, 2026-10-02):** "Each" with no unit, "per <unit>" with one.
 - A217 (#1065) — The wording is "inactive", to match the rest of the dashboard (owner).
 - A219 (#1065) — **Decided (owner, 2026-10-02):** the price comes before VAT, everywhere.
+  2026-11-23 (owner): superseded for the product editor by
+  `docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`.
 
 From A332 (#1430, "All products" holds a venue default colour):
 

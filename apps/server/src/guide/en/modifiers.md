@@ -76,10 +76,8 @@ Finally, mark the old preference sold out again and save.
 
 ## Attach a list to a product {#attach}
 
-Open the product in **Products** and use its **Modifiers** section. It starts open when the product
-already has lists attached; while it is folded, it shows the names of the attached lists, or "None".
-One control adds either kind, and the section holds both kinds in a single ordered list; each row
-shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
+Open the product in **Products** and use its **Modifiers** group, below the variants. One control
+adds either kind, and the group holds both kinds in a single ordered list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
 or focus the handle and use the up and down arrow keys. That same control lists extras lists under
 an **Extras** heading and options lists under **Options**, and each group starts with its own choice
 to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without

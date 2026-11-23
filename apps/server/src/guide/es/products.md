@@ -7,10 +7,14 @@ copiar su nombre de estación de preparación, sus declaraciones dietéticas ni 
 Puedes añadir productos antes de crear una carta. Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
 introduce su precio.
 
-El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que
-resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abre una haciendo clic en su
-encabezado. Si una sección contiene algo que tienes que corregir, se abre sola y sigue abierta hasta
-que lo corriges.
+El editor tiene tres tarjetas. La primera reúne la categoría, el Nombre con su foto y **Disponible**.
+La tercera reúne el precio, las variantes y los modificadores. Entre las dos, **Detalles** reúne el
+resto: la estación de preparación, cómo aparece el producto en la carta, los alérgenos y la dieta, el
+IVA y los pedidos. Detalles está abierta cuando añades un producto y cerrada cuando editas uno, porque
+esos datos se configuran una vez y luego casi no cambian. Mientras está cerrada, muestra una línea por
+cada uno de sus grupos que tiene algo configurado, así ves lo que está configurado sin abrirla. Haz clic en su
+encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se abre sola y sigue
+abierta hasta que lo corriges.
 
 ## Cómo se cobra el IVA {#vat}
 
@@ -27,9 +31,10 @@ ya abiertos; no hace falta publicar la carta.
 
 ## Decide cómo se vende un producto {#selling}
 
-Abre **Venta** para cambiar Disponible o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
-La explicación bajo la opción elegida te dice qué permite. Una variante solo tiene aquí Disponible.
-Venta empieza cerrada, con los ajustes actuales en su línea de resumen. La lista de Productos
+**Disponible**, bajo Nombre, dice si el producto está a la venta. **Pedir por separado**, en
+**Pedidos** dentro de **Detalles**, dice quién puede pedirlo solo: Cualquiera, Solo el personal o
+Nadie. La explicación bajo la opción elegida te dice qué permite. Una variante no tiene Pedidos,
+porque se pide como su producto. La lista de Productos
 muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
 elige por él.
 
@@ -66,10 +71,9 @@ idioma concreto, y es lo que ves tú y lo que ve tu personal: la lista de Produc
 la caja, la cesta, las líneas de una mesa abierta, un pedido recuperado y tus informes de ventas.
 Usa el nombre con el que el local llama de verdad al plato.
 
-Dos nombres opcionales tienen su propia sección. **Descriptores** empieza plegada y **Estación de preparación** empieza
-abierta:
+Dos nombres opcionales están en **Detalles**:
 
-- Un **nombre para el cliente**, en **Descriptores**, con un campo por cada idioma de contenido. Es lo
+- Un **nombre para el cliente**, en **En la carta**, con un campo por cada idioma de contenido. Es lo
   que lee el comensal: el ticket y la factura. Un ticket y una factura muestran el nombre para el cliente
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
   dejas ese nombre predeterminado en blanco. Un campo regional como **Inglés (Estados Unidos)**
@@ -83,7 +87,7 @@ Cada uno recurre a su alternativa por separado. Rellenar un nombre para el clien
 la estación, y rellenar un nombre de estación de preparación no cambia lo que lee el comensal. Mientras uno de los dos
 esté en blanco, su campo muestra el nombre que se usará en su lugar.
 
-También puedes añadir una descripción para el cliente, en **Descriptores**, y una foto, que va junto al
+También puedes añadir una descripción para el cliente, en **En la carta**, y una foto, que va junto al
 nombre, bajo la ruta de la categoría.
 
 ## Da al producto una categoría principal {#category}
@@ -132,7 +136,7 @@ Los locales nuevos en España empiezan con **Pica pica**, **Entradas**, **Platos
 **Postres**. Los nombres siguen el idioma
 del contenido inicial. Asigna estos cursos a tus productos o adapta la lista a tu servicio.
 
-Usa el campo **Curso**, en **Estación de preparación**, para elegir el curso de los platos nuevos. Se
+Usa el campo **Curso**, en **Estación de preparación** dentro de **Detalles**, para elegir el curso de los platos nuevos. Se
 guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pueden ir en
 **Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está en espera. Puedes cambiar el
 curso de un plato sin enviar antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos,
@@ -158,7 +162,7 @@ Usa variantes para formas del mismo producto que necesitan nombres y precios dis
 solo y uno doble. Cada variante tiene su propia disponibilidad. Reordenar o editar las variantes
 conserva su identidad, así que los ajustes de una carta para una variante siguen apuntando a ella.
 
-Las variantes tienen su propia sección, **Variantes**, bajo **Precios**. Elige **Añadir variante** para
+Las variantes están bajo el precio, en su propio grupo, **Variantes**. Elige **Añadir variante** para
 añadir una. Se abre una ventana pequeña donde das a la variante sus tres nombres (del personal, para el
 cliente y de estación), su precio, su imagen y su disponibilidad; el nombre para el cliente y el de
 la estación recurren al nombre del personal de la variante igual que los del producto. Guarda la ventana
@@ -167,14 +171,10 @@ ticket y en una comanda de estación, una variante aparece tras el nombre de su 
 paréntesis, por ejemplo Café (Grande), y el informe de ventas muestra cada variante bajo su producto.
 Así que nombra una variante por lo que la distingue: Grande, no Café grande.
 
-El producto conserva su propio campo de precio, encima de su IVA. En cuanto el producto tiene una
+El producto conserva su propio campo de precio. En cuanto el producto tiene una
 variante activa, la etiqueta del campo empieza por **Precio base**, porque una variante que dejas sin
 precio propio se vende a ese precio. El precio vacío de esa variante muestra el precio base en gris
-como pista, en su ventana y en su fila de la tabla. La sección **Precios** se pliega entonces a una
-línea, por ejemplo **Precio base:** 38,00 € por kg · **IVA para llevar:** 10 %; elige la línea para abrirla. Se abre sola
-cuando hay que corregir el precio base o el IVA para llevar. Al abrir un producto sin
-variantes activas, Precios empieza abierta; con variantes activas, Precios empieza cerrada y Variantes
-empieza abierta. Puedes cerrar cualquiera de las dos sin perder el borrador. El enlace de la unidad en
+como pista, en su ventana y en su fila de la tabla. El enlace de la unidad en
 el encabezado Precio de las variantes abre la misma ventana de unidades que el botón de unidad del
 campo de precio.
 
@@ -195,8 +195,8 @@ tiene ninguno, lo que se usará, por ejemplo "Sin revisar todavía" para unos al
 revisado, y la variante usa el valor del producto. La descripción funciona como un único valor para
 todos los idiomas: para usar la descripción del producto, deja en blanco todos los idiomas de la
 descripción. En cuanto escribes la descripción en un idioma, la variante usa solo su propia
-descripción, y los idiomas que dejaste en blanco siguen en blanco. La página no tiene sección
-Modificadores ni Variantes, porque una variante siempre usa las listas de extras y de opciones de su
+descripción, y los idiomas que dejaste en blanco siguen en blanco. La página no tiene
+Variantes ni Modificadores, porque una variante siempre usa las listas de extras y de opciones de su
 producto. **Abrir** aparece cuando la variante se ha guardado, y espera mientras el producto tiene
 cambios sin guardar, porque salir del producto los perdería: guarda primero el producto.
 
@@ -242,8 +242,9 @@ los cambios.
 
 ## Declara los alérgenos y la aptitud dietética directamente {#allergens}
 
-**Información nutricional** empieza plegada, con una línea de resumen como "Alérgenos: Sin revisar
-todavía · Dietética: Ninguna". Ábrela para elegir.
+Elígelos en **Alérgenos y dieta**, dentro de **Detalles**. Hasta que alguien revisa los alérgenos de
+un producto, la línea de Detalles cerrada muestra "Alérgenos: Sin revisar todavía" en el color de
+aviso.
 
 En **Alérgenos**, elige cada uno de los 14 alérgenos que contiene el plato, o **No contiene ninguno de
 los 14** cuando hayas comprobado que no tiene ninguno. Al elegir **Cereales con gluten** o **Frutos de

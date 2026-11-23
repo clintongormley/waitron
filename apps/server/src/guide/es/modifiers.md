@@ -83,10 +83,8 @@ predeterminada y vuelve a guardar. Por último, marca la preferida anterior como
 
 ## Asigna una lista a un producto {#attach}
 
-Abre el producto en **Productos** y usa su sección **Modificadores**. Empieza abierta cuando el
-producto ya tiene listas asignadas; mientras está plegada, muestra los nombres de las listas
-asignadas, o "Ninguno". Un solo control añade los dos tipos, y la sección reúne los dos tipos en una
-única lista ordenada; cada fila muestra el nombre del personal de la lista y su tipo. Arrastra una
+Abre el producto en **Productos** y usa su grupo **Modificadores**, bajo las variantes. Un solo
+control añade los dos tipos, y el grupo reúne los dos tipos en una única lista ordenada; cada fila muestra el nombre del personal de la lista y su tipo. Arrastra una
 fila por el asa de su inicio para moverla, o enfoca el asa y usa las flechas arriba y abajo. Ese
 mismo control muestra las listas de extras bajo un encabezado **Extras** y las listas de opciones
 bajo **Opciones**, y cada grupo empieza con su propia entrada para crear una nueva, **Añadir lista
