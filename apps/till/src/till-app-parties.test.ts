@@ -13956,6 +13956,29 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(dialog!.refunds).toEqual({ "line-1": "0.00", "line-w": "1.67" });
   });
 
+  it.each([
+    ["the free item is listed first", ["line-w", "line-1"]],
+    ["the free item is listed last", ["line-1", "line-w"]],
+  ])("gives the money left to the paid dish a free item comes back with: %s", async (_, order) => {
+    const rows = order.map((lineId) => unserved(lineId));
+    const { el } = await mountFinish({
+      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+      getCancellation: vi.fn(async (_p: string, id: string) => {
+        const row = rows.find((candidate) => candidate.lineId === id)!;
+        return id === "line-w"
+          ? freeWater(row, ["line-1"])
+          : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
+      }),
+      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "1.00" }]),
+    });
+    const dialog = await openFinish(el);
+    const ticks = dialog!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="refund"]');
+    expect(
+      [...ticks].map((tick) => tick.closest("[data-dish]")!.getAttribute("data-dish")),
+    ).toEqual(["line-1"]);
+    expect(dialog!.refunds).toEqual({ "line-1": "1.00" });
+  });
+
   it("re-reads the dishes and says in Finish's own words why a free item's refund was refused", async () => {
     const rows = [unserved("line-1"), unserved("line-w")];
     const getCancellation = vi.fn(async (_p: string, id: string) => {
@@ -14085,6 +14108,34 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         }),
       ]);
       expect(sent()[0]).not.toHaveProperty("override");
+    });
+
+    it("names a free item listed first ahead of its paid dish in the refund", async () => {
+      const rows = [named("line-w", "Water", "1.000"), named("line-1", "Salad", "1.000")];
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(rows))
+          .mockResolvedValue({
+            state: "closed",
+            refundLinks: [
+              { lineId: "line-w", adjustmentId: "adj-w" },
+              { lineId: "line-1", adjustmentId: "adj-1" },
+            ],
+          }),
+        getCancellation: vi.fn(async (_p: string, id: string) => {
+          const row = rows.find((candidate) => candidate.lineId === id)!;
+          return id === "line-w"
+            ? freeWater(row, ["line-1"])
+            : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
+        }),
+        refundTransaction: refundTransaction(),
+      });
+      await openFinish(el);
+      await choose(el, true);
+      const form = await openedRefund(el);
+      expect(form.target).toBe("8.67");
+      expect(form.dishes).toBe("1 × Water, 1 × Salad");
     });
 
     it("sends a free item's Refund with its paid dish when the money left covers only the dish", async () => {

@@ -20542,6 +20542,7 @@ export class TillApp extends LitElement {
     let refundAtTill = false;
     const consents = new Map<string, CancellationRead>();
     const unvalued = new Map<string, FinishingTable["receipts"][number]>();
+    const valued: { dish: UnservedDish; consent: CancellationRead; saleId: string }[] = [];
     try {
       for (const dish of observation.dishes) {
         const consent = await asked.api.getCancellation(asked.partyId, dish.lineId, {
@@ -20579,15 +20580,22 @@ export class TillApp extends LitElement {
         }
         const value = consent.refundValue;
         if (compareDecimal(decimal(value.quantity), decimal("0")) <= 0) continue;
+        valued.push({ dish, consent, saleId: consent.saleId });
+      }
+      // A free item gives money back only with its paid dishes, so they take the money left first.
+      valued.sort(
+        (a, b) => Number(a.consent.givenFree === true) - Number(b.consent.givenFree === true),
+      );
+      for (const { dish, consent, saleId } of valued) {
         const gross = cancelRefundShare(
-          value,
+          consent.refundValue!,
           consent.context.components.find((row) => row.lineId === dish.lineId)!.cancelledQuantity,
           dish.quantity,
         );
-        const budget = budgets.get(consent.saleId)!;
+        const budget = budgets.get(saleId)!;
         const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
         const receipt = {
-          saleId: consent.saleId,
+          saleId,
           workingOrderId: dish.billId,
           lineId: dish.lineId,
           label: this.#paymentBillLabel(dish.billId) ?? dish.name,
@@ -20595,7 +20603,7 @@ export class TillApp extends LitElement {
         if (compareDecimal(gross, decimal("0")) === 0) unvalued.set(dish.lineId, receipt);
         if (compareDecimal(amount, decimal("0")) <= 0) continue;
         refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
-        budgets.set(consent.saleId, subtractDecimal(budget, amount));
+        budgets.set(saleId, subtractDecimal(budget, amount));
         receipts.push(receipt);
       }
       // A paid dish whose own share is €0.00 still brings back a free item that gives money back.
@@ -20608,6 +20616,9 @@ export class TillApp extends LitElement {
           receipts.push(receipt);
         }
       }
+      const row = (lineId: string) =>
+        observation.dishes.findIndex((dish) => dish.lineId === lineId);
+      receipts.sort((a, b) => row(a.lineId) - row(b.lineId));
       if (!current() || !this.#billCompositionUnchanged(asked)) return;
       this.finishingTable = {
         composition: asked,
