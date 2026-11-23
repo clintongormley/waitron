@@ -88,7 +88,7 @@ afterEach(() => {
 
 describe("dashboard-sales-screen — set menus", () => {
   it("the sales screen names the Set menus group", async () => {
-    expect(await rowLabels()).toEqual([["Menús", "set_menus", "null"]]);
+    expect(await rowLabels()).toEqual([["Cartas a precio fijo", "set_menus", "null"]]);
     cleanupWidgets();
     setLocale("en");
     expect(await rowLabels()).toEqual([["Set menus", "set_menus", "null"]]);
