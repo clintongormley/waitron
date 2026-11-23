@@ -75,8 +75,6 @@ Left for the slices that add the callers:
   taxpayer row with a code.
 - A restriction already recorded is never rewritten (`handover.restriction_conflict`), so Slice 3
   and Task 10.3 skip the write when one exists.
-- `@waitron/membership` checks the endorsement count twice (`src/verify.ts`); deleting either
-  check alone fails no test.
 
 Left by Slice 2:
 - `stepDown`'s replay check reads only this process's in-memory record of its first call, a
