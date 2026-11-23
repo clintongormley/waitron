@@ -93,6 +93,9 @@ and the owner's 15 November decision.** No law or ruling we hold says it.
    The setup fields' "Series code for correctives of simplified invoices" and "Series code for
    correctives of full invoices" are the finishing session's wording, after two reviews found the
    series names read wrongly inside the page's sentences, for the owner to confirm._
+   _2026-11-23 11:54: the owner renamed "Standard" to "Simplified invoices (tickets)", relayed by the
+   watcher; lane L chose "Facturas simplificadas (tickets)", and "Full invoices" / "Facturas
+   completas" for the full series (not owner-approved)._
 6. **What the one word covers** (my call). "Corrective" names the document. "Correction" stays where
    it names the act of correcting or the correction under way before a corrective exists: the
    `invoice_corrections` table, its routes and `invoice_correction.*` codes, `recordCorrection`. A
