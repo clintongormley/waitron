@@ -54,7 +54,8 @@ const ENDED_WORDS: Record<string, StringKey> = {
 };
 
 const FAILED_WORDS: Record<string, StringKey> = {
-  // Only an approved answer whose copy does not check out leaves a join failed this way.
+  // An approved answer whose copy does not check out, or one answering a poll sent before this
+  // box's Join, leaves a join failed this way.
   "mirror.join_invalid": "connect.failed.copy_invalid",
   "mirror.join_not_found": "connect.failed.not_found",
 };
