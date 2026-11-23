@@ -57,6 +57,9 @@ describe("the public surface", () => {
         "readMasterKey",
         "sealingPublicKey",
         "sealingPublicKeyFrom",
+        "openPacket",
+        "packetMasterKeyId",
+        "sealPacket",
       ].sort(),
     );
   });

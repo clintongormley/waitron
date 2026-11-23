@@ -82,3 +82,4 @@ export {
   sealingPublicKeyFrom,
 } from "./master-key.js";
 export type { SealingPublicKey } from "./master-key.js";
+export { openPacket, packetMasterKeyId, sealPacket } from "./sealed-packet.js";
