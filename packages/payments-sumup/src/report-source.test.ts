@@ -38,6 +38,7 @@ describe("SumUp gross charge report", () => {
       {
         references: ["app"],
         amount: decimal("10.00"),
+        providerRefunded: true,
         settledAt: new Date("2026-07-01T12:00:00Z"),
       },
     ]);
@@ -69,11 +70,13 @@ describe("SumUp gross charge report", () => {
       {
         references: ["recovered"],
         amount: decimal("10.00"),
+        providerRefunded: true,
         settledAt: new Date("2026-06-01T12:00:00Z"),
       },
       {
         references: ["lost-charge"],
         amount: decimal("10.00"),
+        providerRefunded: true,
         settledAt: new Date("2026-06-01T12:00:00Z"),
         hint: { workingOrderId: "order", paymentRef: "failed" },
       },

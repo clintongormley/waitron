@@ -9,6 +9,7 @@ import {
   PAYMENTS_MIGRATIONS,
   runDue,
   insertCapturedPayment,
+  listPaymentAuditRuns,
   listOpenHolds,
   recordHoldOutcome,
 } from "@waitron/payments";
@@ -127,6 +128,31 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       backupMatches: result.backupMatches,
       backupUnmatched: result.backupUnmatched,
     });
+  });
+
+  it("saves the charge evidence with the successful SumUp run", async () => {
+    const chargeAudit = {
+      matches: [{ paymentRef: "captured", providerRefunded: true }],
+      missingLocal: [
+        {
+          references: ["provider-charge"],
+          amount: "7.50",
+          settledAt: "2026-07-24T12:00:00.000Z",
+          hintedPaymentRef: "failed-attempt",
+        },
+      ],
+    };
+    const duty = reconcilerAsDuty({
+      ...reconcilerReturning({ ...emptyResult(PERIOD), chargeAudit }),
+      provider: "sumup",
+    });
+
+    const result = await runDue({ db: suite.db, duties: [duty], ...DEFAULTS }, NOW);
+    expect(result.ran).toMatchObject([{ duty: duty.name, outcome: "succeeded" }]);
+    const runs = await withTransaction(suite.db, (tx) =>
+      listPaymentAuditRuns(tx, "sumup", ["2026-07-24T00:00:00.000Z"]),
+    );
+    expect(runs[0]?.summary?.chargeAudit).toEqual(chargeAudit);
   });
 
   it("asks for a parked day to be tried again one day later", () => {

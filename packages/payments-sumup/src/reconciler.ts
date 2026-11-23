@@ -325,6 +325,7 @@ export class SumUpReconciler implements PaymentReconciler {
           return "unconfirmed";
         },
         settlementLagMs: 0,
+        collectChargeAudit: true,
       },
       period,
       now,

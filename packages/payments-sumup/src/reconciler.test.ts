@@ -90,6 +90,7 @@ describe("SumUp audit", () => {
     { status: "PENDING", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "FAILED", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "SUCCESSFUL", timestamp: "2026-06-30T12:00:00Z", unsettled: [] },
+    { status: "REFUNDED", timestamp: "2026-06-30T12:00:00Z", unsettled: [] },
   ])(
     "audits $status capture on the normal next-day run, including cross-day recovery",
     async ({ status, timestamp, unsettled }) => {
@@ -126,6 +127,11 @@ describe("SumUp audit", () => {
       }).reconcile(period, new Date("2026-07-02T00:05:00Z"));
       expect(result.unsettled.map((row) => row.paymentRef)).toEqual(unsettled);
       expect(result.missingLocal).toEqual([]);
+      expect(result.chargeAudit?.matches).toEqual(
+        status === "SUCCESSFUL" || status === "REFUNDED"
+          ? [{ paymentRef: "capture", providerRefunded: status === "REFUNDED" }]
+          : [],
+      );
       expect(lookup.mock.calls).toEqual([[{ id: "charge" }]]);
     },
   );
@@ -361,6 +367,9 @@ describe("backup-machine comparison", () => {
     ]);
     expect(result.unlinkedCharges).toBe(0);
     expect(result.missingLocal.map((row) => row.references)).toEqual(nextDay ? [] : [["hinted"]]);
+    expect(result.chargeAudit?.missingLocal.map((row) => row.references)).toEqual(
+      nextDay ? [] : [["hinted"]],
+    );
   });
 });
 
@@ -389,6 +398,14 @@ it("keeps an original failed attempt's recovered charge even when SumUp dates it
       localAmount: null,
       settledAmount: "10.00",
       workingOrderId: seeded.workingOrderId,
+    },
+  ]);
+  expect(result.chargeAudit?.missingLocal).toEqual([
+    {
+      references: ["earlier"],
+      amount: "10.00",
+      settledAt: "2026-06-30T12:00:00.000Z",
+      hintedPaymentRef: "lost-date",
     },
   ]);
   expect(result.backupMatches).toEqual([]);

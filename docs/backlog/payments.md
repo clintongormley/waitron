@@ -177,7 +177,10 @@ linked payments can retain provider-confirmed remaining money on the bill, bill-
 as a tip; failed-linked payments keep the full-refund route. Stripe durable reversal attempts
 remain open.
 
-- Show managers the daily match result for payments taken through paired SumUp readers. The SumUp comparison lists standalone payment matches and payments that need checking.
+- Show managers the daily match result for payments taken through paired SumUp readers. The nightly check
+  saves matched Waitron payment refs with SumUp's refund status, and the time and any Waitron payment link
+  for SumUp-only charges.
+  The paired-reader results still need to be added to the dashboard's SumUp comparison.
 
 The daily gross-charge audit and read-only refund comparison do not establish bank arrival.
 The original transaction can stay

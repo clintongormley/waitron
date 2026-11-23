@@ -35,6 +35,7 @@ export interface SettlementRecord {
   references: string[];
   amount: Decimal;
   settledAt: Date;
+  providerRefunded?: true;
   /** Our own identifiers, when the processor carried them back. Present = a settlement with no
    * local row can still be attributed to a till and raise an incident; absent = report-only. */
   hint?: { workingOrderId: string; paymentRef: string };
@@ -120,6 +121,15 @@ export interface RefundEvidence {
 }
 
 export interface PaymentReconcileResult {
+  chargeAudit?: {
+    matches: { paymentRef: string; providerRefunded: boolean }[];
+    missingLocal: {
+      references: string[];
+      amount: string;
+      settledAt: string;
+      hintedPaymentRef: string | null;
+    }[];
+  };
   refundEvidence?: RefundEvidence;
   period: ReconcilePeriod;
   /** LOCAL rows examined, not report entries. */
@@ -166,6 +176,7 @@ export type ClassifiedRow =
 export interface Classification {
   checked: number;
   rows: ClassifiedRow[];
+  matches?: NonNullable<PaymentReconcileResult["chargeAudit"]>["matches"];
   /** Settlements matched by no local row — CANDIDATE `missingLocal`s, pending the targeted
    * existence check the caller runs against the whole table. */
   unmatched: SettlementRecord[];
@@ -183,6 +194,7 @@ export function classify(
   records: SettlementRecord[],
   now: Date,
   settlementLagMs: number,
+  collectChargeAudit = false,
 ): Classification {
   const index = new Map<string, SettlementRecord>();
   for (const record of records) {
@@ -190,6 +202,7 @@ export function classify(
   }
   const matched = new Set<SettlementRecord>();
   const out: ClassifiedRow[] = [];
+  const matches: Classification["matches"] = collectChargeAudit ? [] : undefined;
   const toleranceCutoff = now.getTime() - settlementLagMs;
 
   for (const row of rows) {
@@ -205,11 +218,11 @@ export function classify(
       continue;
     }
 
-    if (
+    const orphan =
       row.saleId === null &&
       row.workingOrderStatus !== "open" &&
-      row.workingOrderStatus !== "placed"
-    ) {
+      row.workingOrderStatus !== "placed";
+    if (orphan) {
       out.push({ klass: "orphan", row, settled: settled ?? null });
     }
     if (settled === undefined) {
@@ -218,12 +231,18 @@ export function classify(
       }
     } else if (compareDecimal(decimal(row.amount), settled.amount) !== 0) {
       out.push({ klass: "drift", row, settled });
+    } else if (!orphan) {
+      matches?.push({
+        paymentRef: row.paymentRef,
+        providerRefunded: settled.providerRefunded === true,
+      });
     }
   }
 
   return {
     checked: rows.length,
     rows: out,
+    ...(matches === undefined ? {} : { matches }),
     unmatched: records.filter((record) => !matched.has(record)),
   };
 }
@@ -239,6 +258,7 @@ export type ReconcileDeps = {
   incidents: IncidentSink;
   heldAlerts: HeldAlertSink;
   settlementLagMs: number;
+  collectChargeAudit?: boolean;
   /** When supplied, this adapter owns every orphan claim, under T2's write lock. */
   prepareOrphans?: (tx: Transaction, records: SettlementRecord[]) => Promise<ReconcilableRow[]>;
 } & ({ mode: "audit-only"; reverse?: ReversalFn } | { mode?: "remediate"; reverse: ReversalFn });
@@ -294,7 +314,7 @@ export async function reconcilePayments(
     rows.flatMap((row) => (row.externalRef === null ? [] : [row.externalRef])),
   );
 
-  const classified = classify(rows, records, now, deps.settlementLagMs);
+  const classified = classify(rows, records, now, deps.settlementLagMs, deps.collectChargeAudit);
   const result: PaymentReconcileResult = {
     period,
     checked: classified.checked,
@@ -350,6 +370,18 @@ export async function reconcilePayments(
       if (record.references.some((reference) => existing.has(reference))) continue;
       missing.push(record);
       result.missingLocal.push(missingLocalMismatch(record));
+    }
+    if (classified.matches !== undefined) {
+      const preparedRefs = new Set(prepared.map((row) => row.paymentRef));
+      result.chargeAudit = {
+        matches: classified.matches.filter((match) => !preparedRefs.has(match.paymentRef)),
+        missingLocal: missing.map((record) => ({
+          references: record.references,
+          amount: record.amount,
+          settledAt: record.settledAt.toISOString(),
+          hintedPaymentRef: record.hint?.paymentRef ?? null,
+        })),
+      };
     }
 
     // Gate ORDER decides which reason a row tripping several gates reports.

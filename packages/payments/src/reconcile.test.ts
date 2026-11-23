@@ -477,6 +477,39 @@ async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): 
 }
 
 describe("orphan remediation", () => {
+  it("leaves a capture claimed as an orphan out of the saved matches", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "abandoned-during-report", "ext-1");
+    const result = await reconcilePayments(
+      {
+        ...deps(new FakeSettlementReport([])),
+        report: {
+          async fetch() {
+            await setOrderStatus(seeded, "abandoned");
+            return [settlement()];
+          },
+        },
+        collectChargeAudit: true,
+        prepareOrphans: async (tx) => {
+          const claimed = await claimAbandonedCapture(tx, {
+            provider: PROVIDER,
+            paymentRef: "abandoned-during-report",
+            externalRef: "ext-1",
+            amount: decimal("10.00"),
+            settledAt: OLD_SETTLED,
+            at: NOW,
+          });
+          return claimed ? [claimed] : [];
+        },
+      },
+      PERIOD,
+      NOW,
+    );
+
+    expect(result.orphan.map((row) => row.paymentRef)).toEqual(["abandoned-during-report"]);
+    expect(result.chargeAudit?.matches).toEqual([]);
+  });
+
   it("counts prepared payments once and reports their own settlement amounts", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "prepared-inside", "ext-inside", "10.00");

@@ -25,7 +25,12 @@ function recordOf(t: SumUpTransaction): SettlementRecord {
     !Number.isFinite(Date.parse(t.timestamp))
   )
     throw incomplete();
-  return { references: [t.id], amount: t.amount, settledAt: new Date(t.timestamp) };
+  return {
+    references: [t.id],
+    amount: t.amount,
+    settledAt: new Date(t.timestamp),
+    ...(t.status === "REFUNDED" ? { providerRefunded: true } : {}),
+  };
 }
 
 function historyRecord(t: SumUpHistoryItem): SettlementRecord {
