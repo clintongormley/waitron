@@ -31,9 +31,11 @@ function openPage(
   answer: (url: string, init: RequestInit) => Promise<Response>,
   destination = "/",
 ) {
-  const script = /<script>([\s\S]*)<\/script>/.exec(
-    renderWaitingPage("Spare", "en-GB", "", destination),
-  )?.[1];
+  const script = [
+    ...renderWaitingPage("Spare", "en-GB", "", destination).matchAll(
+      /<script>([\s\S]*?)<\/script>/g,
+    ),
+  ].at(-1)?.[1];
   if (script === undefined) throw new Error("the waiting page has no script");
   let now = 0;
   let nextId = 1;

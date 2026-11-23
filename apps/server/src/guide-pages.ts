@@ -198,20 +198,6 @@ cursor: not-allowed;
 .box-form button:disabled { color: GrayText; border-color: GrayText; }
 }`;
 
-/** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw; the page's
- * body takes the box pages' typeface, text colour and background. */
-export const BOX_FORM_HEAD = `<style>:root {
-color-scheme: light dark;
-${tokenDeclarations()}
-}
-body {
-background: var(--wt-color-bg);
-color: var(--wt-color-text);
-font-family: var(--wt-font-family);
-font-size: var(--wt-font-size-md);
-line-height: 1.5;
-}${BOX_FORM_STYLE}</style>\n`;
-
 /** The guides' page look, shared with the `/legal/*` pages. */
 export function renderBoxPage(
   lang: GuideLanguage,

@@ -10,8 +10,8 @@ import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml, renderDocument } from "./html-page.js";
-import { BOX_FORM_HEAD } from "./guide-pages.js";
+import { escapeHtml } from "./html-page.js";
+import { BOX_FORM_STYLE, renderLogoBoxPage } from "./guide-pages.js";
 
 /** A failure's log fields: an app error's log-only `reason` when it carries one, else its errno. */
 export function failureFields(error: unknown): Record<string, string | null> {
@@ -73,12 +73,14 @@ export function renderWaitingPage(
   destination = "/",
 ): string {
   const text = WAITING_PAGE_WORDS[locale];
-  return renderDocument(
+  const title = `${text.title[0]}${other}${text.title[1]}`;
+  return renderLogoBoxPage(
     locale,
-    `${text.title[0]}${other}${text.title[1]}`,
-    `<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
+    title,
+    `<h1>${escapeHtml(title)}</h1>
+<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
 ${section}${leaveWhenDone(pageReturnPath(destination))}`,
-    BOX_FORM_HEAD,
+    `${BOX_FORM_STYLE}\nh1, h2 { overflow-wrap: anywhere; }`,
   );
 }
 

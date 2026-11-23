@@ -1208,7 +1208,7 @@ describe("the waiting start", () => {
       });
       await holdChart();
       const english = await page();
-      expect(english).toContain("<title>This box is waiting for spare.example</title>");
+      expect(english).toContain("<title>This box is waiting for spare.example · Waitron</title>");
       expect(english).toContain("<strong>spare.example</strong>");
       expect(english).not.toContain("Bar Pepe");
       const spanish = await (

@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  BOX_FORM_HEAD,
   BOX_FORM_STYLE,
   GUIDE_PAGE_TOKENS,
   GUIDE_THEME_KEY,
@@ -443,7 +442,7 @@ describe("the box pages' form style", () => {
     }
   });
 
-  it("stays off the box pages that draw no form, and the head handed to a page drawn without one declares its tokens", async () => {
+  it("stays off the box pages that draw no form, and the waiting page carries it with the tokens it reads", async () => {
     expect(renderBoxPage("en", "Title", "<h1>Title</h1>")).not.toContain(".box-form");
     expect(renderLogoBoxPage("en-GB", "Title", "<h1>Title</h1>")).not.toContain(".box-form");
     expect(renderBoxPage("en", "Title", "<h1>Title</h1>", BOX_FORM_STYLE)).toContain(
@@ -459,9 +458,10 @@ describe("the box pages' form style", () => {
       expect(html, path).toContain("<main>");
       expect(html, path).not.toContain(".box-form");
     }
-    expect(BOX_FORM_HEAD.startsWith("<style>")).toBe(true);
-    expect(BOX_FORM_HEAD).toContain(BOX_FORM_STYLE);
-    for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(BOX_FORM_HEAD).toContain(`${name}:`);
+    const waiting = renderWaitingPage("the other box", "en-GB");
+    const head = /<style>([\s\S]*?)<\/style>/.exec(waiting)?.[1] ?? "";
+    expect(head).toContain(BOX_FORM_STYLE);
+    for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(head).toContain(`${name}:`);
   });
 
   it("draws a page drawn without the box look in the box pages' typeface and colours, form included", async () => {
@@ -492,14 +492,56 @@ describe("the box pages' form style", () => {
               .evaluate((el) => getComputedStyle(el).fontFamily),
             `${scheme} ${selector}`,
           ).toBe(boxPage[2]);
-        // The head alone, ahead of no other style, still follows the scheme.
-        await page.setContent(
-          `<!doctype html><html><head>${BOX_FORM_HEAD}</head><body>${form}</body></html>`,
-        );
         expect(
           await page.locator("#f-email").evaluate((el) => getComputedStyle(el).backgroundColor),
           scheme,
         ).toBe(scheme === "light" ? "rgb(240, 241, 244)" : "rgb(38, 42, 51)");
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("lays the waiting page out as the download page: the logo over a centred column, filling a phone's width", async () => {
+    const form = `<form class="box-form" method="post" action="/x">
+<p><label for="f-email">Email <span class="required">*</span></label></p>
+<p><input type="email" id="f-email" name="email"></p>
+</form>`;
+    // The download page's own call (restricted-page.ts `renderPage`).
+    const download = renderLogoBoxPage(
+      "en-GB",
+      "This box has handed over",
+      "<h1>This box has handed over</h1><p>Download.</p>",
+      BOX_FORM_STYLE,
+    );
+    const browser = await chromium.launch();
+    try {
+      for (const width of [1280, 390]) {
+        const page = await browser.newPage({ viewport: { width, height: 800 } });
+        const column = () =>
+          page.locator("main").evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            return {
+              left: box.left,
+              width: box.width,
+              paddingLeft: s.paddingLeft,
+              paddingRight: s.paddingRight,
+            };
+          });
+        await page.setContent(download);
+        const expected = await column();
+        await page.setContent(renderWaitingPage("the other box", "en-GB", form));
+        expect(await page.locator(".logo svg").isVisible(), `${width}`).toBe(true);
+        const shown = await column();
+        expect(shown, `${width}`).toEqual(expected);
+        if (width === 1280) expect(shown.left, `${width}`).toBeGreaterThan(0);
+        else expect(shown.width, `${width}`).toBe(width);
+        expect(
+          await page.locator("form").evaluate((el) => el.getBoundingClientRect().right),
+          `${width}`,
+        ).toBeLessThanOrEqual(shown.left + shown.width - parseFloat(shown.paddingRight));
         await page.close();
       }
     } finally {
@@ -535,7 +577,7 @@ describe("the box pages' form style", () => {
       const form = `<form class="box-form"><p><input type="email" id="f-email" name="email"></p></form>`;
       for (const html of [
         renderBoxPage("en", "Form", form, BOX_FORM_STYLE),
-        `<!doctype html><html><head>${BOX_FORM_HEAD}</head><body>${form}</body></html>`,
+        renderWaitingPage("the other box", "en-GB", form),
       ]) {
         await page.setContent(html);
         expect(await page.locator("#f-email").evaluate((el) => getComputedStyle(el).fontSize)).toBe(
