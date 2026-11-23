@@ -231,6 +231,10 @@ export class ProductEditor extends LitElement {
       .form {
         gap: var(--wt-space-4);
       }
+      /* Narrow enough that the unit link sits just after the amount rather than across the card. */
+      wt-price-input[name="unit-price"] {
+        max-inline-size: calc(var(--wt-tap-min) * 6);
+      }
       wt-modal {
         --wt-dialog-surface: var(--wt-color-bg);
       }

@@ -685,6 +685,35 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
   });
 });
 
+// A full-width price field left the amount at one edge and its unit link at the other.
+it("keeps the base price field six tap targets wide on a wide dialog, and the card's width on a phone", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  onTestFinished(() => page.viewport(width, height));
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+  });
+  el.style.setProperty("--wt-tap-min", "44px");
+  const field = () => el.shadowRoot!.querySelector<HTMLElement>("wt-price-input[name=unit-price]")!;
+  const containerWidth = () => {
+    const container = field().parentElement!;
+    const styles = getComputedStyle(container);
+    return container.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+  };
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+  await page.viewport(1280, 800);
+  await frame();
+  expect(containerWidth()).toBeGreaterThan(264);
+  expect(field().getBoundingClientRect().width).toBe(264);
+
+  await page.viewport(320, 800);
+  await frame();
+  expect(containerWidth()).toBeLessThan(264);
+  expect(field().getBoundingClientRect().width).toBeCloseTo(containerWidth(), 1);
+});
+
 // A phone hides the variants table's price column and the unit button in its heading; the price
 // field's own unit button opens the same chooser.
 it("changes a product's unit from the price field when the table's heading unit button is hidden", async () => {
