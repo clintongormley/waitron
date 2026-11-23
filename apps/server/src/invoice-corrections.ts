@@ -165,6 +165,69 @@ async function checkInvoiceCorrectable<T>(
   return result;
 }
 
+/** Correct invoice's refusals that do not pass by waiting: a refused or held filing, another
+ * refund pending and the clock are not among them. */
+const LASTING_REFUSALS: ReadonlySet<string> = new Set([
+  "invoice_correction.not_settled",
+  "advance.taken_off_final_invoice",
+  "invoice_correction.chain_unsound",
+  "sale.correction_history_unusable",
+  "sale.correction_unsupported",
+]);
+
+function refusesForGood(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (hasCode(error, "sale.correction_not_admitted"))
+    return error.params.reason !== "filing_refused";
+  return LASTING_REFUSALS.has(error.code);
+}
+
+/**
+ * The payment money still on invoice `saleId` (`refundable`, in cents) and how much of it Correct
+ * invoice could give back now (`correctable`): what is left of its lines, capped by that money, or
+ * 0 where Correct invoice refuses it for good. A refusal Correct invoice only waits out is thrown.
+ * Unlike {@link checkInvoiceCorrectable}, the lines are read before the pending-refund check, so a
+ * ticket Correct invoice can never take does not wait on another payment's refund; and the chain
+ * and clock checks run only when `stillRefused` says the caller would refuse without them.
+ */
+export async function correctableNow(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+  stillRefused: (amounts: { refundable: number; correctable: number }) => boolean,
+): Promise<{ refundable: number; correctable: number }> {
+  const tenders = await readRefundableTenders(tx, saleId);
+  const refundable = decimalToCents(appliedRemainingOf(tenders));
+  let lines: CorrectableLine[];
+  try {
+    const [settled] = await tx
+      .select({ id: saleSettlements.id })
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
+    await refuseTakenOffAdvance(tx, saleId);
+    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId);
+  } catch (error) {
+    if (refusesForGood(error)) return { refundable, correctable: 0 };
+    throw error;
+  }
+  const pending = tenders.find((row) => row.pendingRefundId !== null);
+  if (pending !== undefined)
+    throw new AppError("invoice_correction.refund_pending", {
+      saleId,
+      refundId: pending.pendingRefundId!,
+    });
+  const left = lines.reduce((total, line) => total + decimalToCents(line.left), 0);
+  const amounts = { refundable, correctable: Math.min(refundable, left) };
+  if (!stillRefused(amounts)) return amounts;
+  if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
+    return { refundable, correctable: 0 };
+  await backend.refuseUntilRecordable(tx, reading);
+  return amounts;
+}
+
 /** The invoice's lines with what is left to correct of each, and the money still refundable on
  * it; refused as the preview refuses the invoice, before any amount is asked. */
 export async function readInvoiceCorrectionLines(

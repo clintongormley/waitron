@@ -538,6 +538,28 @@ it.each([false, true])(
   },
 );
 
+it.each([
+  "tender.refund_needs_correction",
+  "tender.refund_of_advance",
+  "advance.taken_off_final_invoice",
+])("drops an earlier unknown request once the server refuses it with %s", async (code) => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("lost answer"))
+      .mockRejectedValueOnce({ code })
+      .mockResolvedValueOnce(reply({ appliedAmount: "1.00", state: "completed" })),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toThrow("lost answer");
+  await expect(session.resume("sale-1")).rejects.toMatchObject({ code });
+  expect(session.read("sale-1")).toBeNull();
+  await session.submit("sale-1", { ...ask, appliedAmount: "1.00" });
+  expect(api.refundTransaction).toHaveBeenCalledTimes(3);
+});
+
 it.each(["replacement", "pending"] as const)(
   "a late refusal never removes a %s record saved by another consumer",
   async (change) => {

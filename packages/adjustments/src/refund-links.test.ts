@@ -30,7 +30,7 @@ import {
 } from "@waitron/reporting/test/tender-refund-fixtures.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import { recordAdjustment } from "./record.js";
-import { linkRefundToCancels, readCancelsForRefund } from "./refund-links.js";
+import { linkRefundToCancels, readCancelsForRefund, readCancelsStillOwed } from "./refund-links.js";
 import { seedVoidReason, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -333,4 +333,35 @@ it("links every one of 12,000 dish cancellations to its refund", async () => {
   expect(stored).toHaveLength(12000);
   expect(new Set(stored.map((row) => row.adjustmentId))).toEqual(new Set(ids));
   expect(stored.every((row) => row.amount === 1)).toBe(true);
+});
+
+describe("the cancels an order still owes", () => {
+  it("lists the Refund-ticked cancels not yet paid back, oldest first, counting no failed refund", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const reason = await seedVoidReason(db);
+    const first = await cancel(order, reason, "3.00");
+    const unticked = await cancel(order, reason, null);
+    const second = await cancel(order, reason, "2.50");
+    await cancel(other, reason, "4.00");
+    const owed = () => withTransaction(db, (tx) => readCancelsStillOwed(tx, order));
+    const byAge = (await read([first, second])).map((row) => row.id);
+    expect(await owed()).toEqual(byAge);
+    expect(await owed()).not.toContain(unticked);
+
+    const failed = await refund("pending", 1);
+    await link(failed, [{ adjustmentId: first, amount: "3.00" }]);
+    expect(await owed()).toEqual([second]);
+    await db.execute(
+      sql`update refunds set state = 'failed', failed_at = ${AT} where id = ${failed}`,
+    );
+    expect(await owed()).toEqual(byAge);
+
+    const part = await refund("completed", 2);
+    await link(part, [{ adjustmentId: second, amount: "2.49" }]);
+    expect(await owed()).toEqual(byAge);
+    const rest = await refund("completed", 3);
+    await link(rest, [{ adjustmentId: second, amount: "0.01" }]);
+    expect(await owed()).toEqual([first]);
+  });
 });

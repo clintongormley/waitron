@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { adjustmentRefunds, adjustments } from "@waitron/adjustments";
 import {
   devices,
@@ -9,6 +9,7 @@ import {
   drawerOpens,
   printers,
   parties,
+  printJobs,
   saleLines,
   sales,
   refunds,
@@ -170,6 +171,63 @@ async function ledgers() {
   };
 }
 
+async function written() {
+  return {
+    ...(await ledgers()),
+    drawerJobs: (await venue.db.select().from(printJobs)).filter((row) => row.kind === "drawer"),
+  };
+}
+
+/** Sends `body` and expects `tender.refund_needs_correction`, with no refund, link or drawer job
+ * written. */
+async function refusedNeedsCorrection(
+  paid: { saleId: string; tenderId: string },
+  body: object,
+  sendIt: (paid: { saleId: string }, body: object) => ReturnType<typeof send> = refund,
+) {
+  const before = await written();
+  const answer = await sendIt(paid, body);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+  expect(answer.json).toEqual({
+    code: "tender.refund_needs_correction",
+    params: { tenderId: paid.tenderId },
+  });
+  expect(await written()).toEqual(before);
+}
+
+/** Has the unpaid bill's invoice name a customer: a full invoice, which Correct invoice refuses. */
+async function chooseCustomer(b: Bill) {
+  const [taxpayer] = venue.db.all<{ domicile: string | null }>(
+    sql`select taxpayer_domicile as domicile from taxpayer`,
+  );
+  venue.db.run(sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, Madrid'`);
+  onTestFinished(() => {
+    venue.db.run(sql`update taxpayer set taxpayer_domicile = ${taxpayer!.domicile}`);
+  });
+  const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+    readBillEditState(tx, b.billId),
+  );
+  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
+  const chosen = await send(
+    venue.app,
+    venue.cookie.manager,
+    "PUT",
+    `/api/working-orders/${b.billId}/invoice-choice`,
+    {
+      revision: order!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Harbour Foods",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      },
+      expectedEdit: { billId: b.billId, editorVersion, draftId, draftRevision },
+    },
+  );
+  expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
+}
+
 /** A paid table of a Burger (€12.00), a Ham (€24.00) and a Steak (€25.00); Burger then Ham are
  * cancelled with the Refund tick. */
 async function twoCancels() {
@@ -192,11 +250,12 @@ describe("a refund names the cancels it pays back", () => {
     ]);
   });
 
-  it("a second refund naming the same cancels links only what is left", async () => {
+  it("a second refund naming the same cancels takes only what they still owe", async () => {
     const { paid, burger, ham } = await twoCancels();
     const first = await refund(paid, refundBody(paid, "30.00", [ham, burger]));
     expect((first.json as { state: string }).state).toBe("completed");
-    const second = await refund(paid, refundBody(paid, "20.00", [ham, burger]));
+    await refusedNeedsCorrection(paid, refundBody(paid, "20.00", [ham, burger]));
+    const second = await refund(paid, refundBody(paid, "6.00", [ham, burger]));
     expect(second.status, JSON.stringify(second.json)).toBe(200);
     expect(await linksOf((second.json as { id: string }).id)).toEqual([
       { adjustmentId: burger, amount: 600 },
@@ -213,6 +272,7 @@ describe("a refund names the cancels it pays back", () => {
         { ...refundBody(paid, "30.00"), cancellationIds: [ham, burger] },
         { requestedBy: venue.managerId, authorizedBy: venue.managerId },
         new Date().toISOString(),
+        { backend: venue.backend, reading: venue.clock.now() },
       ),
     );
     expect(held.cancelsCanStillTake).toBe("36.00");
@@ -416,13 +476,13 @@ describe("a refund names the cancels it pays back", () => {
     expect(await ledgers()).toEqual(before);
   });
 
-  it("a refund naming no cancels links nothing and fingerprints as before", async () => {
-    const { paid } = await twoCancels();
+  it("a refund naming no cancels links to the cancels still owed and fingerprints as before", async () => {
+    const { paid, burger } = await twoCancels();
     const body = refundBody(paid, "10.00");
     const answer = await refund(paid, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const id = (answer.json as { id: string }).id;
-    expect(await linksOf(id)).toEqual([]);
+    expect(await linksOf(id)).toEqual([{ adjustmentId: burger, amount: 1000 }]);
     const [row] = await venue.db.select().from(refunds).where(eq(refunds.id, id));
     expect(row!.fingerprint).toBe(
       fingerprint({
@@ -437,24 +497,25 @@ describe("a refund names the cancels it pays back", () => {
   });
 });
 
+const managerPin = () => ({ personId: venue.managerId, pin: PINS.manager });
+
+function staffRefund(paid: { saleId: string }, body: object) {
+  return send(
+    venue.app,
+    venue.cookie.staff,
+    "POST",
+    `/api/transactions/${paid.saleId}/refunds`,
+    body,
+  );
+}
+
 describe("server-held cancellation approval bounds a linked refund", () => {
-  const managerPin = () => ({ personId: venue.managerId, pin: PINS.manager });
-
-  function staffRefund(paid: { saleId: string }, body: object) {
-    return send(
-      venue.app,
-      venue.cookie.staff,
-      "POST",
-      `/api/transactions/${paid.saleId}/refunds`,
-      body,
-    );
-  }
-
   /** A paid table of a Burger (€12.00) and a Steak (€25.00); the Burger is cancelled with the
    * Refund tick. With `tipped`, the table is the Burger alone and its cash tender carries a €1.00
-   * tip. */
-  async function oneCancel(tipped = false) {
+   * tip; with `customer`, its invoice names a customer, which Correct invoice cannot correct. */
+  async function oneCancel(tipped = false, customer = false) {
     const b = await bill(tipped ? [{ name: "Burger" }] : [{ name: "Burger" }, { name: "Steak" }]);
+    if (customer) await chooseCustomer(b);
     const paid = await pay(b, tipped ? "12.00" : "37.00");
     if (tipped)
       await inTx(venue, async (tx) => {
@@ -483,9 +544,28 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     return (answer.json as { params: { cancelled: string } }).params.cancelled;
   }
 
-  it("refuses a linked refund without new approval €0.01 above its cancels", async () => {
+  it("refuses a linked refund €0.01 above its cancels as Correct invoice's money, with or without approval", async () => {
     const { paid, burger } = await oneCancel();
-    expect(await refusedOver(paid, refundBody(paid, "12.01", [burger]))).toBe("12.00");
+    await refusedNeedsCorrection(paid, refundBody(paid, "12.01", [burger]), staffRefund);
+    await refusedNeedsCorrection(
+      paid,
+      { ...refundBody(paid, "12.01", [burger]), override: managerPin() },
+      staffRefund,
+    );
+  });
+
+  it("refuses a linked refund without new approval above what its cancels owe on an invoice naming a customer", async () => {
+    const { paid, burger } = await oneCancel(false, true);
+    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
+  });
+
+  it("refuses €8 naming a cancel that owes €6 as Correct invoice's money on a correctable invoice", async () => {
+    const { paid, burger } = await oneCancel();
+    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
   });
 
   it("requires fresh approval for a tip without claiming the applied amount exceeds its cancels", async () => {
@@ -516,7 +596,7 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     const { paid, burger } = await oneCancel();
     const first = await staffRefund(paid, refundBody(paid, "5.00", [burger]));
     expect(first.status, JSON.stringify(first.json)).toBe(200);
-    expect(await refusedOver(paid, refundBody(paid, "7.01", [burger]))).toBe("7.00");
+    await refusedNeedsCorrection(paid, refundBody(paid, "7.01", [burger]), staffRefund);
     const second = await staffRefund(paid, refundBody(paid, "7.00", [burger]));
     expect(second.status, JSON.stringify(second.json)).toBe(200);
     expect(await linksOf((second.json as { id: string }).id)).toEqual([
@@ -644,13 +724,22 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     expect(await ledgers()).toEqual(before);
   });
 
-  it.each([false, true])(
-    "fresh approval permits excess amount or tip, without granting saved replay authority (tip=%s)",
+  it("fresh approval permits no amount above the cancels Correct invoice could give back", async () => {
+    const { paid, burger } = await oneCancel();
+    await refusedNeedsCorrection(
+      paid,
+      { ...refundBody(paid, "13.00", [burger]), override: managerPin() },
+      staffRefund,
+    );
+  });
+
+  it.each([true])(
+    "fresh approval permits a tip, without granting saved replay authority (tip=%s)",
     async (tip) => {
       const { paid, burger } = await oneCancel(tip);
       const ask = {
-        ...refundBody(paid, tip ? "12.00" : "13.00", [burger]),
-        tipAmount: tip ? "1.00" : "0.00",
+        ...refundBody(paid, "12.00", [burger]),
+        tipAmount: "1.00",
       };
       const answer = await staffRefund(paid, { ...ask, override: managerPin() });
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -681,9 +770,10 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     expect(await ledgers()).toEqual(before);
   });
 
-  it("does not cap a person who holds the refund permission", async () => {
+  it("caps a person who holds the refund permission at what Correct invoice would not take", async () => {
     const { paid, burger } = await oneCancel();
-    const answer = await refund(paid, refundBody(paid, "13.00", [burger]));
+    await refusedNeedsCorrection(paid, refundBody(paid, "13.00", [burger]));
+    const answer = await refund(paid, refundBody(paid, "12.00", [burger]));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await linksOf((answer.json as { id: string }).id)).toEqual([
       { adjustmentId: burger, amount: 1200 },
@@ -784,6 +874,7 @@ describe("a correction's leg", () => {
           },
           { requestedBy: venue.managerId, authorizedBy: venue.managerId },
           new Date().toISOString(),
+          { backend: venue.backend, reading: venue.clock.now() },
         ),
       );
     const before = await ledgers();
@@ -794,5 +885,109 @@ describe("a correction's leg", () => {
     });
     expect(await ledgers()).toEqual(before);
     await expect(leg()).resolves.toMatchObject({ replayed: false });
+  });
+});
+
+describe("Refund a payment naming no cancels", () => {
+  /** A paid table of a Burger (€12.00) and a Steak (€25.00), the Burger cancelled with the Refund
+   * tick and €6.00 of it already given back: the cancel owes €6.00. */
+  async function owingSix() {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, "37.00");
+    const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    const first = await refund(paid, refundBody(paid, "6.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    return { b, paid, burger };
+  }
+
+  it("is refused on a sale with no cancels, writing nothing", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, "37.00");
+    await refusedNeedsCorrection(paid, refundBody(paid, "10.00"));
+  });
+
+  it("takes what the cancels still owe, linked to them, refuses more, and a paid-back cancel adds nothing", async () => {
+    const { paid, burger } = await owingSix();
+    await refusedNeedsCorrection(paid, refundBody(paid, "7.00"));
+    const answer = await refund(paid, refundBody(paid, "6.00"));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await linksOf((answer.json as { id: string }).id)).toEqual([
+      { adjustmentId: burger, amount: 600 },
+    ]);
+    await refusedNeedsCorrection(paid, refundBody(paid, "0.01"));
+  });
+
+  it("is taken on an invoice naming a customer", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    await chooseCustomer(b);
+    const paid = await pay(b, "37.00");
+    expect(
+      await send(
+        venue.app,
+        venue.cookie.manager,
+        "POST",
+        `/api/transactions/${paid.saleId}/corrections/preview`,
+        { gross: "1.00" },
+      ),
+    ).toMatchObject({
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "not_simplified" } },
+    });
+    const answer = await refund(paid, refundBody(paid, "10.00"));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({ state: "completed", appliedAmount: "10.00" });
+  });
+
+  it("after Correct invoice gave back part, still takes no more than the cancels owe", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, "37.00");
+    const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    const manager = (method: "POST", path: string, body: unknown) =>
+      send(venue.app, venue.cookie.manager, method, path, body);
+    const split = await manager("POST", `/api/transactions/${paid.saleId}/corrections/preview`, {
+      gross: "5.00",
+    });
+    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    const opened = await manager("POST", `/api/transactions/${paid.saleId}/corrections`, {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: venue.reasonId.houseVoid,
+      note: "Cold",
+      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const given = await manager("POST", `/api/invoice-corrections/${correctionId}/cash`, {
+      submissionId: randomUUID(),
+      amount: "5.00",
+    });
+    expect(given).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
+
+    await refusedNeedsCorrection(paid, refundBody(paid, "12.01"));
+    const answer = await refund(paid, refundBody(paid, "12.00"));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await linksOf((answer.json as { id: string }).id)).toEqual([
+      { adjustmentId: burger, amount: 1200 },
+    ]);
+  });
+
+  it("linked to a cancel, grants no saved authority to a replay or a retry", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, "37.00");
+    const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    const ask = refundBody(paid, "12.00");
+    const approved = await staffRefund(paid, { ...ask, override: managerPin() });
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    const id = (approved.json as { id: string }).id;
+    expect(await linksOf(id)).toEqual([{ adjustmentId: burger, amount: 1200 }]);
+    const before = await written();
+    expect((await staffRefund(paid, ask)).json).toMatchObject({
+      code: "authorization.not_permitted",
+    });
+    expect(
+      (await send(venue.app, venue.cookie.staff, "POST", `/api/tender-refunds/${id}/retry`, {}))
+        .json,
+    ).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await written()).toEqual(before);
   });
 });

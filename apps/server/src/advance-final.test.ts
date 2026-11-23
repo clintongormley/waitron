@@ -508,11 +508,44 @@ describe("the rest's invoice takes the advances off", () => {
     ).toEqual([]);
   });
 
-  it("example 1, the €90 given back from the rest's invoice, then the €30 advance back in cash by Refund a payment: the drawer records the €30 leaving it", async () => {
+  it("example 1, the €90 given back from the rest's invoice by Correct invoice, then the €30 advance back in cash by Refund a payment: the drawer records the €30 leaving it", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "30.00");
     expect((await cash(bill.billId, "90.00")).status).toBe(200);
     const rest = await restOf(bill.billId);
+    const override = { personId: venue.adminId, pin: "1234" };
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${rest!.id}/corrections/preview`,
+      { gross: "90.00" },
+    );
+    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${rest!.id}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "90.00",
+        reasonId: reason!.id,
+        note: "Paid too much",
+        expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
+        override,
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    expect(
+      await send(venue.app, venue.cookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, {
+        submissionId: randomUUID(),
+        amount: "90.00",
+        override,
+      }),
+    ).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
     const giveBack = async (saleId: string, amount: string) => {
       const [tender] = await inTx(venue, (tx) =>
         tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId)),
@@ -528,12 +561,11 @@ describe("the rest's invoice takes the advances off", () => {
           appliedAmount: amount,
           tipAmount: "0.00",
           reason: "Paid too much",
-          override: { personId: venue.adminId, pin: "1234" },
+          override,
         },
       );
       expect(given.status, JSON.stringify(given.json)).toBe(200);
     };
-    await giveBack(rest!.id, "90.00");
 
     await giveBack(advanceId, "30.00");
 

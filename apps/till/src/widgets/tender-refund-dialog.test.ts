@@ -304,7 +304,25 @@ it.each(["-1", "0.001", "abc", "", "1,000.00"])(
   },
 );
 
-it("returns tip only with all remaining applied money and refuses a zero total", async () => {
+it("returns a tip on its own or with all remaining applied money, and refuses a zero total", async () => {
+  const alone = await mount();
+  const tipOnly = collect(alone, "tender-refund-submit");
+  await choose(alone, "return");
+  await fill(alone, "appliedAmount", "0");
+  await fill(alone, "tipAmount", "1");
+  await click(alone);
+  expect(field(alone, "tipAmount").error).toBe("");
+  expect(tipOnly).toEqual([
+    {
+      tenderId: "card-1",
+      appliedAmount: "0.00",
+      tipAmount: "1.00",
+      reason: "Return",
+      manualConfirmed: false,
+    },
+  ]);
+  alone.remove();
+
   const el = await mount();
   const asks = collect(el, "tender-refund-submit");
   await choose(el, "return");

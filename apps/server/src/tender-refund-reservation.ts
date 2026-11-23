@@ -1,5 +1,9 @@
 import { and, eq, or } from "drizzle-orm";
-import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
+import {
+  linkRefundToCancels,
+  readCancelsForRefund,
+  readCancelsStillOwed,
+} from "@waitron/adjustments";
 import {
   adjustmentRefunds,
   billAdvances,
@@ -9,6 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { refusePlainRefundOfAdvance, refuseTakenOffAdvance } from "./advance-taken-off.js";
+import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -17,6 +22,7 @@ import {
   decimal,
   decimalToCents,
   isUuid,
+  saleId as brandSaleId,
   type Decimal,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -27,6 +33,7 @@ import {
   refuseWhileCorrectionOpen,
   type CorrectionRead,
 } from "./invoice-correction-legs.js";
+import { correctableNow } from "./invoice-corrections.js";
 import { fingerprint } from "./parties.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
@@ -104,6 +111,91 @@ async function allocateToCancels(
   };
 }
 
+/** What a refund request is checked against on a repeat of its submission id. */
+function refundPrint(fields: {
+  saleId: string;
+  tenderId: string;
+  appliedAmount: number;
+  tipAmount: number;
+  reason: string;
+  manualConfirmed: boolean;
+  cancellationIds?: readonly string[];
+  invoiceCorrectionId?: string;
+}): string {
+  return fingerprint({
+    saleId: fields.saleId,
+    tenderId: fields.tenderId,
+    appliedAmount: centsToDecimal(fields.appliedAmount),
+    tipAmount: centsToDecimal(fields.tipAmount),
+    reason: fields.reason,
+    manualConfirmed: fields.manualConfirmed,
+    ...(fields.cancellationIds === undefined
+      ? {}
+      : { cancellationIds: [...fields.cancellationIds].sort() }),
+    ...(fields.invoiceCorrectionId === undefined
+      ? {}
+      : { invoiceCorrectionId: fields.invoiceCorrectionId }),
+  });
+}
+
+/** Whether `refund` was asked for naming no cancels, whatever it was linked to. */
+function namedNoCancels(refund: typeof refunds.$inferSelect): boolean {
+  return [false, true].some(
+    (manualConfirmed) =>
+      refund.fingerprint ===
+      refundPrint({
+        saleId: refund.saleId!,
+        tenderId: refund.tenderId!,
+        appliedAmount: refund.appliedAmount,
+        tipAmount: refund.tipAmount,
+        reason: refund.reason,
+        manualConfirmed,
+      }),
+  );
+}
+
+/**
+ * Refuses `tender.refund_needs_correction` a refund, outside Correct invoice, of more payment
+ * money than the cancels it pays for still owe (`owed`) plus what Correct invoice could not give
+ * back on the sale now.
+ */
+async function refuseMoneyCorrectInvoiceTakes(
+  tx: Transaction,
+  nodeId: DeviceRequestConfig["nodeId"],
+  fiscal: RefundFiscal,
+  saleId: string,
+  tenderId: string,
+  appliedAmount: number,
+  owed: number,
+): Promise<void> {
+  if (appliedAmount <= owed) return;
+  const refused = (amounts: { refundable: number; correctable: number }) =>
+    appliedAmount > owed + amounts.refundable - amounts.correctable;
+  const amounts = await correctableNow(
+    tx,
+    fiscal.backend,
+    { nodeId },
+    fiscal.reading,
+    brandSaleId(saleId),
+    refused,
+  );
+  if (refused(amounts)) throw new AppError("tender.refund_needs_correction", { tenderId });
+}
+
+/** The fiscal backend and the clock reading a refund outside Correct invoice is checked with. */
+export interface RefundFiscal {
+  backend: FiscalBackend;
+  reading: TrustedReading;
+}
+
+async function cancelsStillOwedBy(tx: Transaction, saleId: string): Promise<string[]> {
+  const [sale] = await tx
+    .select({ workingOrderId: sales.workingOrderId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  return sale?.workingOrderId == null ? [] : readCancelsStillOwed(tx, sale.workingOrderId);
+}
+
 type RefundActor = { requestedBy: string } & (
   { authorizedBy: string } | { authorize: (cancelledBy?: string) => Promise<Authorization> }
 );
@@ -125,6 +217,7 @@ export async function authorizeStoredTenderRefund(
   const authorisers = new Set(cancels.map((row) => row.approvedBy ?? row.requestedBy));
   const covered =
     links.length > 0 &&
+    !namedNoCancels(refund) &&
     refund.tipAmount === 0 &&
     links.reduce((total, row) => total + row.amount, 0) === refund.appliedAmount &&
     authorisers.size === 1 &&
@@ -133,21 +226,33 @@ export async function authorizeStoredTenderRefund(
 }
 
 /** A payment on account's money comes back this way only as {@link refusePlainRefundOfAdvance}
- * allows; its tip alone always may. */
+ * allows; its tip alone always may. Answers whether `saleId` is one. */
 async function refuseRefundOfAdvance(
   tx: Transaction,
   saleId: string,
   tenderId: string,
-): Promise<void> {
+): Promise<boolean> {
   const [advance] = await tx
     .select({ saleId: billAdvances.advanceSaleId })
     .from(billAdvances)
     .where(eq(billAdvances.advanceSaleId, saleId));
   if (advance !== undefined) await refusePlainRefundOfAdvance(tx, saleId, { tenderId });
+  return advance !== undefined;
 }
 
 export function refundAmountsFit(applied: number, tip: number, left: number, tipLeft: number) {
   return applied <= left && (tip === 0 || (applied === left && tip === tipLeft));
+}
+
+/** A tip is not on the invoice, so a payment's tip may come back on its own, up to what is left of
+ * it; with payment money, as {@link refundAmountsFit}. */
+export function tenderRefundAmountsFit(
+  applied: number,
+  tip: number,
+  left: number,
+  tipLeft: number,
+) {
+  return applied === 0 ? tip <= tipLeft : refundAmountsFit(applied, tip, left, tipLeft);
 }
 
 export function assertRefundReplay(
@@ -178,6 +283,7 @@ export async function reserveTenderRefund(
   request: TenderRefundRequest,
   actor: RefundActor,
   createdAt: string,
+  fiscal: RefundFiscal,
   /** The correction `request.invoiceCorrection` names, as the caller read it in this transaction;
    * set only by server code, never from a request body. */
   correctionRead?: CorrectionRead,
@@ -214,14 +320,14 @@ export async function reserveTenderRefund(
           ...(request.invoiceCorrection.cashRoute === true ? { cashRoute: true as const } : {}),
         };
   const reason = request.reason.trim();
-  const print = fingerprint({
+  const print = refundPrint({
     saleId,
     tenderId,
-    appliedAmount: centsToDecimal(appliedAmount),
-    tipAmount: centsToDecimal(tipAmount),
+    appliedAmount,
+    tipAmount,
     reason,
     manualConfirmed: request.manualConfirmed === true,
-    ...(cancellationIds === undefined ? {} : { cancellationIds: [...cancellationIds].sort() }),
+    ...(cancellationIds === undefined ? {} : { cancellationIds }),
     ...(correctionLink === undefined ? {} : { invoiceCorrectionId: correctionLink.id }),
   });
   await resolveTransactionScope(tx, saleId);
@@ -238,8 +344,10 @@ export async function reserveTenderRefund(
   // invoice while an advance's correction is open (`advance.correction_open`): a guard for one missed.
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
   else await refuseTakenOffAdvance(tx, saleId);
-  if (correctionLink === undefined && appliedAmount > 0)
-    await refuseRefundOfAdvance(tx, saleId, tenderId);
+  const plain =
+    correctionLink === undefined &&
+    appliedAmount > 0 &&
+    !(await refuseRefundOfAdvance(tx, saleId, tenderId));
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,
@@ -249,7 +357,7 @@ export async function reserveTenderRefund(
     throw new AppError("tender.refund_in_progress", { tenderId });
   const appliedRemaining = decimalToCents(decimal(refundable.appliedRemaining));
   const tipRemaining = decimalToCents(decimal(refundable.tipRemaining));
-  if (!refundAmountsFit(appliedAmount, tipAmount, appliedRemaining, tipRemaining)) {
+  if (!tenderRefundAmountsFit(appliedAmount, tipAmount, appliedRemaining, tipRemaining)) {
     throw new AppError("tender.refund_exceeds_payment", {
       tenderId,
       applied: refundable.appliedRemaining,
@@ -328,6 +436,21 @@ export async function reserveTenderRefund(
     cancellationIds === undefined
       ? undefined
       : await allocateToCancels(tx, saleId, cancellationIds, appliedAmount);
+  // Unnamed cancels still owed are paid first and linked, but never cover the refund's authority.
+  const owedIds =
+    plain && cancellationIds === undefined ? await cancelsStillOwedBy(tx, saleId) : [];
+  const unnamed =
+    owedIds.length === 0 ? undefined : await allocateToCancels(tx, saleId, owedIds, appliedAmount);
+  if (plain)
+    await refuseMoneyCorrectInvoiceTakes(
+      tx,
+      cfg.nodeId,
+      fiscal,
+      saleId,
+      tenderId,
+      appliedAmount,
+      (allocation ?? unnamed)?.canStillTake ?? 0,
+    );
   const covered =
     allocation !== undefined && tipAmount === 0 && appliedAmount <= allocation.canStillTake;
   let authorizedBy: string;
@@ -366,8 +489,8 @@ export async function reserveTenderRefund(
     providerPaymentRef,
     createdAt,
   });
-  if (allocation !== undefined)
-    await linkRefundToCancels(tx, { tenderRefundId: refund.id, links: allocation.links });
+  const links = (allocation ?? unnamed)?.links;
+  if (links !== undefined) await linkRefundToCancels(tx, { tenderRefundId: refund.id, links });
   if (correctionLink !== undefined)
     await linkRefundToCorrection(tx, {
       invoiceCorrectionId: correctionLink.id,

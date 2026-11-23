@@ -127,6 +127,7 @@ export async function giveCorrectionCash(
         authorizedBy: actor.authorization.authorizedBy,
       },
       createdAt,
+      { backend: deps.backend, reading },
       { correction, left: unclaimed },
     );
     unclaimed -= leg;

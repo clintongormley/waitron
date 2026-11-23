@@ -159,7 +159,8 @@ export const en = {
   "tender_refund.tip": "Tip to return",
   "tender_refund.amount_invalid":
     "Enter an amount from zero to {amount}; the total returned must be above zero.",
-  "tender_refund.tip_requires_all": "Return a tip only with all the remaining payment amount.",
+  "tender_refund.tip_requires_all":
+    "Return a tip on its own, or with all the remaining payment amount.",
   "tender_refund.manual_confirm": "I have returned this money on the original card terminal",
   "tender_refund.confirm_required": "Confirm that the money has been returned.",
   "tender_refund.manual_instruction":
@@ -2497,7 +2498,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.amount_invalid":
     "Introduce un importe entre cero y {amount}; el total devuelto debe ser mayor que cero.",
   "tender_refund.tip_requires_all":
-    "Devuelve una propina solo junto con todo el importe restante del pago.",
+    "Devuelve una propina sola o junto con todo el importe restante del pago.",
   "tender_refund.manual_confirm": "He devuelto este dinero en el terminal de tarjeta original",
   "tender_refund.confirm_required": "Confirma que has devuelto el dinero.",
   "tender_refund.manual_instruction":

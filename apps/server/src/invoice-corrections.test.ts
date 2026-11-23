@@ -307,6 +307,7 @@ async function giveBack(
       },
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
+      { backend: venue.backend, reading },
     );
     if (!begun.replayed)
       await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, begun.refund);
@@ -760,10 +761,11 @@ describe("fileCorrectionIn", () => {
 
 describe("a correction's legs", () => {
   it("refuses an ordinary refund on a ticket with an unfinished correction, and allows it once the correction ends", async () => {
-    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const saleId = await soldForCash("Rib steak", ["12.10"], "3.00");
     const earlier = { submissionId: randomUUID(), amount: "1.00" };
+    // A tip alone: the ordinary refund Correct invoice never takes.
     const ordinary = (submissionId: string, amount: string) =>
-      giveBack(saleId, amount, undefined, { submissionId });
+      giveBack(saleId, "0.00", undefined, { submissionId, tipAmount: amount });
     const first = await ordinary(earlier.submissionId, earlier.amount);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
 
@@ -817,6 +819,7 @@ describe("a correction's legs", () => {
           },
           { requestedBy: managerId, authorizedBy: managerId },
           venue.clock.now().instant.toISOString(),
+          { backend: venue.backend, reading: venue.clock.now() },
         );
       });
     };
@@ -1004,7 +1007,13 @@ describe("openInvoiceCorrection refuses", () => {
 
   it("more than the money left, naming €7.00 after €3.00 of €10.00 went back, and opens €7.00", async () => {
     const saleId = await soldForCash("Rice platter", ["10.00"]);
-    await giveBack(saleId, "3.00");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "5.00" });
+    await cash(correction.id, "3.00");
+    await close(correction.id, {
+      backend: Object.create(venue.backend, {
+        correctionAdmissionFor: { value: async () => ({ eligible: false, reason: "wrong_node" }) },
+      }) as typeof venue.backend,
+    });
     await refusedWithNothingWritten(
       () => open(saleId, { submissionId: randomUUID(), gross: "10.00" }),
       {

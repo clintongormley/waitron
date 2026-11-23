@@ -26,6 +26,14 @@ export async function linkRefundToCancels(
   );
 }
 
+/** What refunds still pending or completed have paid back of cancel `a`; a failed refund counts
+ * nothing. */
+const linkedTo = sql`coalesce((
+  select sum(l.amount) from adjustment_refunds l
+  join refunds r on r.id = l.refund_id
+  where l.adjustment_id = a.id and r.state in ('pending', 'completed')
+), 0)`;
+
 /** A cancel as a refund sees it. */
 export interface CancelForRefund {
   id: string;
@@ -65,11 +73,7 @@ export async function readCancelsForRefund(
       a.action, a.charge_kept as chargeKept, a.refund_handoff as refundHandoff,
       cast(a.refund_value as text) as refundValue,
       a.requested_by as requestedBy, a.approved_by as approvedBy,
-      cast(coalesce((
-        select sum(l.amount) from adjustment_refunds l
-        join refunds r on r.id = l.refund_id
-        where l.adjustment_id = a.id and r.state in ('pending', 'completed')
-      ), 0) as text) as linked
+      cast(${linkedTo} as text) as linked
     from adjustments a
     where a.id in (select value from json_each(${JSON.stringify(adjustmentIds)}))
     order by a.created_at, a.id`);
@@ -81,4 +85,18 @@ export async function readCancelsForRefund(
     refundValue: row.refundValue === null ? null : rawCentsToDecimal(row.refundValue),
     linked: rawCentsToDecimal(row.linked),
   }));
+}
+
+/** The order's cancels with the Refund tick whose refund value is not yet all paid back, in
+ * {@link readCancelsForRefund}'s order. */
+export async function readCancelsStillOwed(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<string[]> {
+  const found = await tx.execute<{ id: string }>(sql`
+    select a.id from adjustments a
+    where a.working_order_id = ${workingOrderId} and a.action = 'cancel'
+      and a.refund_handoff = 1 and a.refund_value > ${linkedTo}
+    order by a.created_at, a.id`);
+  return found.rows.map((row) => row.id);
 }

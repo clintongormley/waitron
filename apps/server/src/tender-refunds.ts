@@ -89,6 +89,7 @@ export async function beginSettledTenderRefund(
           authorize,
         },
         createdAt,
+        { backend: deps.backend, reading },
       );
       if (begun.replayed) {
         if (begun.refund.state === "pending")

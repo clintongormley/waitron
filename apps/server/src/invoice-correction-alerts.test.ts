@@ -189,7 +189,7 @@ describe("the unfinished-correction alert", () => {
       v.deps,
       v.cfg,
       other,
-      await v.request(other, "card", "24.20"),
+      { ...(await v.request(other, "card", "24.20")), tip: "1.00", addedTip: "1.00" },
       v.operator,
     );
     const [sale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, other));
@@ -203,8 +203,8 @@ describe("the unfinished-correction alert", () => {
       {
         submissionId,
         tenderId: tender!.id,
-        appliedAmount: "5.00",
-        tipAmount: "0.00",
+        appliedAmount: "0.00",
+        tipAmount: "1.00",
         reason: "Goodwill",
       },
       v.operator,

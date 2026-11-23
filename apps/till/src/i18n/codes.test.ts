@@ -25,6 +25,15 @@ it.each([
   }
 });
 
+it("words a refund Correct invoice must make, saying what each choice does, in both languages", () => {
+  expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
+    "Correct invoice can give this money back, so Refund a payment cannot: it files nothing. Close this window and choose Correct invoice: it gives the money back and files a corrective invoice for it. Refund a payment still gives back a tip, or what is still owed for cancelled dishes.",
+  );
+  expect(codeMessage("tender.refund_needs_correction", "es")).toBe(
+    "Rectificar factura puede devolver este dinero, así que Devolver un pago no puede: no presenta nada. Cierra esta ventana y elige Rectificar factura: devuelve el dinero y presenta una factura rectificativa por él. Devolver un pago sigue devolviendo una propina o lo que falta por devolver de platos cancelados.",
+  );
+});
+
 it("words a refund above its cancelled dishes", () => {
   expect(codeMessage("tender.refund_exceeds_cancelled", "en")).toBe(
     "This refund is more than the cancelled dishes' value",

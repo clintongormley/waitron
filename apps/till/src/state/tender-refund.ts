@@ -250,9 +250,15 @@ export class TenderRefundSession {
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
       this.#refused.delete(id);
-      // The server refuses for a correction only after it looks for this submission id, so such a
-      // refusal proves no refund was made under it.
-      if (typeof code === "string" && code.startsWith("invoice_correction."))
+      // The server refuses these only after it looks for this submission id, so such a refusal
+      // proves no refund was made under it.
+      if (
+        typeof code === "string" &&
+        (code.startsWith("invoice_correction.") ||
+          code === "tender.refund_needs_correction" ||
+          code === "tender.refund_of_advance" ||
+          code === "advance.taken_off_final_invoice")
+      )
         this.attempts.refused(this.scope, sent);
       // A later refusal cannot establish what an earlier unknown call returned.
       else if (knownRefused) {

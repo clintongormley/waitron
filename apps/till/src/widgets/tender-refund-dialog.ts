@@ -271,6 +271,7 @@ export class TillTenderRefundDialog extends LitElement {
         errors.set("appliedAmount", invalid(row.appliedRemaining));
       if (
         compareDecimal(decimal(tip), decimal("0")) > 0 &&
+        compareDecimal(decimal(applied), decimal("0")) !== 0 &&
         compareDecimal(decimal(applied), decimal(row.appliedRemaining)) !== 0
       )
         errors.set("tipAmount", t("tender_refund.tip_requires_all"));
