@@ -46,7 +46,7 @@ export const handoverEn = {
   "handover.emergency.passkey_again_step":
     "Your passkey sign-in needs checking again. Choose the step again, or use your password.",
   "handover.emergency.passkey_again_try":
-    "Your passkey sign-in needs checking again. Press Try again, or use your password.",
+    "Your passkey sign-in needs checking again. Choose Try again, or use your password.",
   "handover.emergency.passkey_lapsed":
     "The spare took a while to catch up and your passkey sign-in expired. Choose Use your passkey to try again.",
   "handover.emergency.held_passkey_refused":
@@ -252,7 +252,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.passkey_again_step":
     "Hay que volver a comprobar tu passkey. Vuelve a elegir el paso o usa tu contraseña.",
   "handover.emergency.passkey_again_try":
-    "Hay que volver a comprobar tu passkey. Pulsa Volver a intentarlo o usa tu contraseña.",
+    "Hay que volver a comprobar tu passkey. Elige Volver a intentarlo o usa tu contraseña.",
   "handover.emergency.passkey_lapsed":
     "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Usar tu passkey para volver a intentarlo.",
   "handover.emergency.held_passkey_refused":

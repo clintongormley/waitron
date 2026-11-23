@@ -147,7 +147,8 @@ están mal**, corrige la hora de este dispositivo y elige **Volver a comprobar**
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
 passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
 normalmente una vez, y de nuevo pasados 15 minutos; si en su lugar dice que hay que volver a
-comprobar tu passkey, vuelve a elegir el paso. El motivo y las declaraciones se conservan.
+comprobar tu passkey, vuelve a elegir el paso (después de **Cambiar a este servidor**, elige
+**Volver a intentarlo** o usa tu contraseña). El motivo y las declaraciones se conservan.
 
 Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
 última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones. Si la copia no

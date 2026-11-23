@@ -134,7 +134,8 @@ the device you are using; after **The box is correct** or **Both are wrong**, co
 device's time and choose **Check again**. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
 you choose a step and the spare needs it, usually once, and again after 15 minutes; if instead it
-says your passkey sign-in needs checking again, choose the step again. Your reason and statements
+says your passkey sign-in needs checking again, choose the step again (after **Switch to this
+box**, choose **Try again**, or use your password). Your reason and statements
 stay in place.
 
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
