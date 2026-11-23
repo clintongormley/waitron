@@ -23,6 +23,8 @@ import {
 import { latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
 import type { HeardCopy } from "./old-box-holdings.js";
 
+// Text order is time order here only while every writer of these columns stores `toISOString()`'s spelling.
+
 /** Where the old box's "since" tabs start listing rows, and which rule chose it. */
 export type SinceRule =
   { kind: "copy"; fromMs: number } | { kind: "own"; fromMs: number } | { kind: "all" };
