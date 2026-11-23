@@ -1,42 +1,41 @@
 # A950. Rehearse a checked upgrade on an isolated Prepare box
 
-The watcher cleared planning this rehearsal in Lane F `questions.md` on 22 November at 21:58.
-At 21:56 the watcher relayed the owner’s “let's not do a real release yet.” ENV8 has landed.
-The rehearsal will show whether the installed command upgrades a running Prepare box and
-restores its previous app and data after a failed check.
+The watcher cleared planning this rehearsal on 22 November at 21:58 in Lane F `questions.md`.
+At 21:56 the watcher relayed the owner's “let's not do a real release yet.” ENV7 and ENV8
+are on main. The rehearsal should show that the installed command upgrades a running Prepare
+box and that Restore returns its app and data after a failed check.
 
-1. **Start with a trading fixture.** Use an existing disposable Debian/systemd guest with its own
-   Docker, disk and network, or a dedicated isolated Prepare box. Supply a synthetic Prepare
-   archive and adjacent settings JSON as described in [the bench instructions](../../../bench/box-installer/README.md#check-a-manual-upgrade-and-interrupted-recovery).
-   Confirm `/health`, clock sync, image IDs and fingerprints of one fiscal sale and one open order
-   with a line. Allow installer downloads
-   and time sync. Exclude venue integrations and paired boxes. Follow `test-box.md` on the shared
-   host. Take the helper lock, run well under an hour, reduce concurrency below ~2 GB available,
-   release promptly and try elsewhere on exit 75. Keep the host’s running Waitron and its resources
-   outside the guest. Use another machine if the rig’s ~8 GiB requirement cannot fit.
-2. **Enter through install.** Against the guest’s existing Compose and state volume, run
-   `sudo bash /opt/waitron-host/waitron.sh install <unnumbered-upstream-commit-SHA>` with a different
-   build from baseline. In `deploy/waitron.sh`, `cmd_install` calls `cmd_checked_install`, which
-   invokes `apply` with `__candidate`. Require the online trial, stopped-copy migration and fiscal
-   checks, TLS readiness, print-agent check and cash sale to pass. Verify `committed`/`candidate`,
-   candidate image IDs, healthy reopen and unchanged fiscal, sale and order rows. Replay from
-   baseline using the guest-only failure controls in `bench/box-installer/upgrade.mjs`
-   (`failedOnlineTrialProbe`, `upgradePayload`). Trial refusal must preserve the old container and
-   start time and leave the baseline rows intact. Use the port blocker to fail readiness after
-   copying. Read `waitron.sh status`
-   (`awaiting-choice`, `copied: true`), release the blocker and run `waitron.sh restore`. Verify
-   old images, Compose/settings, row fingerprints and healthy reopen. Keep the bench’s direct
-   `apply` results as comparison evidence. [Installer instructions](../../../deploy/README.md#checked-manual-upgrades)
-3. **Check fixtures and time the stages.** Run `pnpm exec vitest run scripts/box/{verify-release,release-list,upgrades/cli}.test.mjs`
-   for trusted and invalid signatures, selection, pause and replay. Exercise the 03:00–05:00
-   venue-local default and the 30-minute cutoff in `checkUpgradeWindow` and `recheckOfferedUpgrade`.
-   `deploy/waitron.sh`’s `verify_numbered_release` fetches the numbered asset
-   upstream. Keep fixture trust in the suites and leave scheduling opt-in. Save commands, refs,
-   image digests and outcomes. Time download/build, trial, drain, copy, final checks, Restore and
-   reopen from guest logs and phase timestamps. Use the half-hour timer cadence as a reference
-   for possible trigger delay. Keep scheduling opt-in through the real signed release-to-release
-   check, which will cover publication, actual timer and download timings, and automatic rollback.
+1. Add an `upgrade-install` case to `bench/box-installer/run.mjs` and `upgrade.mjs`. Use the
+   [existing Debian guest](../../../bench/box-installer/README.md#check-a-manual-upgrade-and-interrupted-recovery)
+   with its own disk and Docker. Stage a synthetic Prepare archive with one fiscal sale and
+   one open order with a line. Use box-managed TLS and the images' producer settings, since
+   the installer downloads new Compose and carries over `.env`. Before running, confirm
+   `/health`, clock sync, row fingerprints and enough space. Use a disposable guest under
+   the campaign's host booking rules. Allow installer downloads and clock sync and keep
+   venue integrations out of the guest.
+2. Reuse the bench's probes and comparisons with `bash /opt/waitron-host/waitron.sh install main`
+   as root. Check that published app and agent images match the same revision and differ
+   from the prepared baseline. Record image digests before each attempt and discard the
+   combined result if the publication changes. First, inject a trial refusal and verify
+   the running container, start time and rows. Then use the guest port blocker to fail
+   readiness after copying. Require exit 1 and “upgrade held”. Run `waitron.sh status` and
+   check the retained CLI's JSON for the held phase and a complete copy. Remove the blocker,
+   run `waitron.sh restore` and verify baseline images, Compose, image selections, row
+   fingerprints and healthy restart. Finally, require a successful trial, final checks,
+   disposable cash sale and healthy restart with the candidate images and unchanged rows.
+   Check that each install leaves the timer disabled. Record stage timings and image
+   digests for diagnosis. Measure the actual window on the test box.
+3. Keep fixture-key checks in `scripts/box/{verify-release,release-list,upgrades/cli}.test.mjs`.
+   They already check signature refusal, offer selection and the start-window cutoff. The
+   installed verifier fetches the numbered file from upstream (`deploy/waitron.sh`,
+   `verify_numbered_release`). Ask the watcher to confirm the existing fixture-key checks
+   cover that part of this slice. The live offer, signed download, automatic rollback and
+   final window measurement go with the first real release-to-release check. Scheduling
+   stays opt-in through that check.
 
-**Size.** This page is the only proposed repository change. The rehearsal uses existing
-production code and tests. If a guest cannot exercise an operation, take the missing operation
-and smallest proposed change to the watcher before writing code.
+**Size and checks.** This plan adds one page. The bench change is about 55 lines, including
+one case and its README instructions. The focused test in `scripts/box/upgrade-rehearsal.test.mjs`
+adds about 30 lines and checks that the new guest case enters through `install` and observes
+the held result. Run that test first and verify the outcomes in the Linux guest. Product code,
+release sources and deployed trust stay as shipped. After rehearsal, record the result and
+remaining A950 work in the backlog.
