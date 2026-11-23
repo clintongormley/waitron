@@ -95,8 +95,7 @@ async function billLinesFiled(
   const stored = await readStoredOrder(tx, workingOrderId);
   const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
   const filedAs = (amounts: readonly Decimal[] | null) =>
-    amounts !== null &&
-    amounts.every((amount, i) => same(amount, grosses.get(dishes[i]!.id)!));
+    amounts !== null && amounts.every((amount, i) => same(amount, grosses.get(dishes[i]!.id)!));
   const paired =
     stored.gross.lines.length === dishes.length &&
     stored.gross.lines.every((line, i) =>
