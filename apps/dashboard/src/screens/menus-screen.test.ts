@@ -1970,6 +1970,40 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
+  it("offers one Try again when neither the list nor the states could be read, and that one reads both", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const client = mixed({
+        listMenus: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
+        getMenuStatuses: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue(statuses()),
+      });
+      const el = await mount(client);
+      await vi.waitFor(() => {
+        expect(q(el, '[data-test="load-error"]')).not.toBeNull();
+        expect(client.getMenuStatuses).toHaveBeenCalledOnce();
+      });
+      await (client.getMenuStatuses.mock.results[0]!.value as Promise<unknown>).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      const retries = () =>
+        [...el.shadowRoot!.querySelectorAll("wt-button")].filter(
+          (button) => text(button) === "Try again",
+        );
+      expect(retries()).toHaveLength(1);
+      expect(q(el, '[data-test="statuses-error"]')).toBeNull();
+      retries()[0]!.click();
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(statusOf(el, "menu-lunch")).toBe("Published · 1 hour ago");
+      });
+      expect(q(el, '[data-test="load-error"]')).toBeNull();
+      expect(q(el, '[data-test="statuses-error"]')).toBeNull();
+      expect(client.getMenuStatuses).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("says every menu could not be checked, with no links, when a live refresh of the states fails, and brings them back on Try again", async () => {
     await at([1280, 900], "en-GB", async () => {
       const live = new LiveData();

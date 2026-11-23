@@ -2641,7 +2641,7 @@ export class MenusScreen extends LitElement {
         ${loaded && this.menus.length ? this.#renderAddMenu() : nothing}
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
-      ${this.statusesError ? this.#renderStatusesError() : nothing}
+      ${loaded && this.statusesError ? this.#renderStatusesError() : nothing}
       ${
         loaded
           ? html`<div class="list">
