@@ -1583,7 +1583,8 @@ registry entries and unreadable spreads. The test header defines its limits.
 - The guard judges names against a word list, so a generic key such as `to` passes. A documented
   exception for a code and key applies at every depth.
 - The guard reads static keys in registry entries and inline log fields, including quoted keys.
-  It reads inline log fields when the level is literal or the event is a quoted dotted name.
+  To find log calls it reads any call with a third argument written as an object and either a
+  literal log level first or a quoted dotted name second. Other calls with that shape are read too.
 - TypeScript supplies keys from spreads inside inline log fields and direct `AppError` details.
   It reads the keys of each union member. The four exceptions for opaque error-detail forwarding
   each name the file, code or event expression, and spread expression. The guard reviews a named

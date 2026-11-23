@@ -3,11 +3,11 @@
  * depth, and a named registry type is reviewed by name.
  *
  * It reads static keys in registry entries and inline log fields, and uses TypeScript to find
- * keys spread into inline log fields and direct AppError details. The scan covers literal
- * levels and calls with a quoted dotted event. Opaque spreads need a site-specific exception.
- * Its limits are computed property names,
- * whole objects passed by reference, AppError subclasses, free text and the watchdog's
- * direct writes to waitron.log.
+ * keys spread into inline log fields and direct AppError details. The scan uses a literal
+ * level or a quoted dotted event to select calls with inline fields. Opaque forwarding
+ * exceptions match the file, code or event expression, and spread expression.
+ * Its limits are computed property names, whole objects passed by reference, AppError
+ * subclasses, free text and the watchdog's direct writes to waitron.log.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -241,6 +241,9 @@ function scanSource(source: ts.SourceFile, file: string, checker?: ts.TypeChecke
         }
         if (ts.isTypeReferenceNode(node)) result.registryTypes.push(node.typeName.getText(source));
         if (ts.isTypeQueryNode(node)) result.registryTypes.push(node.exprName.getText(source));
+        if (ts.isImportTypeNode(node) && node.qualifier !== undefined) {
+          result.registryTypes.push(node.qualifier.getText(source));
+        }
         ts.forEachChild(node, visitType);
       }
       if (entry.type !== undefined) visitType(entry.type);
@@ -538,9 +541,8 @@ describe("error-code details that name a person are masked in the log", () => {
     const files = sources.map(({ file }) => file);
     expect(files).toContain("packages/shared/src/errors.ts");
     expect(files).toContain("packages/payments-sumup/src/errors.ts");
-    const keys = sources.flatMap((source) => registryKeys(source));
+    const keys = treeSources().flatMap(registryKeys);
     expect(refusedPairs(keys, NOT_PERSONAL)).toEqual([]);
-    expect(refusedPairs(treeSources().flatMap(registryKeys), NOT_PERSONAL)).toEqual([]);
     expect(
       treeSources().flatMap(({ unreadableSpreads }) => unreadableSpreads),
       "Unreadable spreads",
@@ -720,6 +722,14 @@ describe("named types in an error registry are reviewed", () => {
   it("refuses a type nobody has reviewed, naming it and its file", () => {
     const found = typesIn("x/errors.ts", registry(`"x.v": { party: PartySummary };`));
     expect(unreviewedTypes(found, new Map())).toEqual(["PartySummary (x/errors.ts)"]);
+  });
+
+  it("refuses an inline import type nobody has reviewed", () => {
+    const found = typesIn(
+      "x/errors.ts",
+      registry(`"x.i": { venue: import("./venue.js").RestoredVenue };`),
+    );
+    expect(unreviewedTypes(found, new Map())).toEqual(["RestoredVenue (x/errors.ts)"]);
   });
 
   it("refuses lowercase aliases and type queries in a registry", () => {
