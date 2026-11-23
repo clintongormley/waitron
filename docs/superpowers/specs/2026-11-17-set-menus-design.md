@@ -1,6 +1,6 @@
 # Set menus (A1515): design
 
-_2026-11-23: Piece 4 is built ([plan](../plans/2026-11-18-a1515-set-menu-bill.md)). Covered dishes are left off the ticket and the full invoice (owner, 21 November). A comped or discounted set-menu dish moves to another bill only with its set menu (owner, 23 November). A takeaway bill holding a set menu refuses new payments, comps and discounts until VAT-RATES piece B._
+_2026-11-23: Piece 4 is built ([plan](../plans/2026-11-18-a1515-set-menu-bill.md)). Covered dishes are left off the ticket and the full invoice unless an extra on them is charged (owner, 21 November). A comped or discounted set-menu dish moves to another bill only with its set menu (owner, 23 November). A takeaway bill holding a set menu refuses new payments, comps, discounts and Print the bill until VAT-RATES piece B; the table-service guide's takeaway set-menu steps return with it._
 
 _2026-11-21: Replaced for VAT by the [VAT rates design](2026-11-21-vat-rates-design.md): set menus have no VAT rates of their own. Eaten in, they are at the one dine-in rate; taken away, only when all their products share one takeaway rate (owner, 21 November)._
 

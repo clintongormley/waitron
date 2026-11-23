@@ -144,8 +144,9 @@ export interface TillSaleLine {
   advance?: { invoiceNumber: string; issuedOn: string };
   /** The filed line's set-menu role; absent on a line with none. */
   setMenuRole?: "set_menu" | "dish";
-  /** Presentation only. On a correction's set-menu dish with no list price of its own: the line
-   * it corrects had one, so the set menu did not cover it. */
+  /** Presentation only. On a correction's set-menu dish filed with a list price, which a
+   * whole-invoice credit copies from the line it corrects, though the receipt shows none: the set
+   * menu did not cover it. */
   correctsPricedDish?: true;
 }
 

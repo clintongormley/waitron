@@ -258,7 +258,7 @@ export async function readBillsSetMenus(
 }
 
 /** Which of the dishes `lineIds` carry a comp or discount, on the dish or on one of its extras:
- * such a dish moves only with its set menu (owner, 2026-11-23). */
+ * such a dish moves only with its set menu. */
 export async function adjustedDishIds(
   tx: Transaction,
   lineIds: readonly string[],

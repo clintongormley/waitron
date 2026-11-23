@@ -530,9 +530,8 @@ menu and the order sit side by side.
 
 Set the number of each set menu on the bill. Open its folder from the grid or type its name
 in **Search** and tap the result. Then choose the dishes.
-The folder shows which dishes are included and which cost extra. If the guests are taking
-their food away, choose **Takeaway** on the bill before adding a set menu. A takeaway bill holding a set menu
-cannot be paid yet.
+The folder shows which dishes are included and which cost extra. A takeaway bill holding a
+set menu cannot be paid or printed yet: for food to take away, ring up the dishes separately.
 
 Open the set-menu summary on **Order** to see where dishes go and which places are free.
 If a dish has no place, choose one of the options shown, or tap **Cancel** to keep the
@@ -543,10 +542,6 @@ the summary.
 To move a set menu to another bill, open **Move dishes…** and select the set menu. Its
 dishes move with it. If you choose a dish by itself, check its price on the other bill
 before confirming.
-
-At the **Counter**, choose **Take away**, set the number, then open the set-menu folder
-and choose the dishes. You can **Park** a takeaway before adding any dishes. To add
-dishes later, find the bill in **Parked orders** and choose **Retrieve**.
 
 ## Give a table a short name {#short-names}
 
