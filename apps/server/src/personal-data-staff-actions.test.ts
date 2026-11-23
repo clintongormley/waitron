@@ -22,11 +22,11 @@ const AT = "2026-11-21T19:00:00.000Z";
 const LATER = "2026-11-21T19:10:00.000Z";
 const FILE = "staff-actions.json";
 
-async function staffActions(personId: string) {
+function prepareStaffActions(personId: string) {
   const parts = personalDataServerParts([], suite.db).filter(({ part }) =>
     part.files.includes(FILE),
   );
-  const build = await suite.db.withWriteLock(() =>
+  return suite.db.withWriteLock(() =>
     preparePersonalData(suite.db, parts, {
       personId,
       language: "en",
@@ -34,13 +34,15 @@ async function staffActions(personId: string) {
       timeZone: "UTC",
     }),
   );
-  return build();
 }
 
-it("exports only the subject's remaining non-fiscal actions", async () => {
+it("exports only the subject's remaining non-fiscal actions after the initial write turn", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    for (const id of ["ana", "bea", "clara"]) await seedPerson(tx, { id, displayName: id });
+  });
+  const build = await prepareStaffActions("ana");
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx, { invoiceLocales: ["en"] });
-    for (const id of ["ana", "bea", "clara"]) await seedPerson(tx, { id, displayName: id });
     const order = await seedWorkingOrder(tx, {
       orderNumber: 42,
       editorId: "ana",
@@ -100,15 +102,15 @@ it("exports only the subject's remaining non-fiscal actions", async () => {
     await tx.insert(outgoingMail).values([
       {
         ...mail,
-        seq: 1,
+        seq: 2,
         dedupeKey: "subject",
         kind: "security_change",
         personId: "ana",
-        requestedBy: "bea",
+        requestedBy: null,
       },
       {
         ...mail,
-        seq: 2,
+        seq: 1,
         dedupeKey: "requester",
         kind: "account_action",
         personId: "bea",
@@ -151,12 +153,13 @@ it("exports only the subject's remaining non-fiscal actions", async () => {
     ]);
     const saved = { version: 1, revision: 1, updatedAt: AT, doc: { secret: "Private setting" } };
     await tx.insert(settings).values([
+      { ...saved, module: "fixture_later", updatedBy: "ana" },
       { ...saved, module: "fixture_ana", updatedBy: "ana" },
       { ...saved, module: "fixture_bea", updatedBy: "bea" },
     ]);
   });
 
-  const files = await staffActions("ana");
+  const files = await build();
   expect(files.map((file) => file.name)).toEqual([FILE]);
   expect(JSON.parse(files[0]!.content as string)).toEqual({
     billEdits: [{ orderNumber: 42 }],
@@ -165,8 +168,8 @@ it("exports only the subject's remaining non-fiscal actions", async () => {
     acknowledgedAlerts: [{ code: "printer.offline", at: LATER }],
     activity: [{ kind: "dashboard.signed_in", at: AT }],
     outgoingMail: [
-      { kind: "security_change", status: "pending", at: AT, yourPart: ["subject"] },
       { kind: "account_action", status: "pending", at: AT, yourPart: ["requester"] },
+      { kind: "security_change", status: "pending", at: AT, yourPart: ["subject"] },
       {
         kind: "email_changed",
         status: "sent",
@@ -175,7 +178,10 @@ it("exports only the subject's remaining non-fiscal actions", async () => {
       },
     ],
     receiptHandovers: [{ jobId: "job", at: AT }],
-    savedSettings: [{ module: "fixture_ana", at: AT }],
+    savedSettings: [
+      { module: "fixture_ana", at: AT },
+      { module: "fixture_later", at: AT },
+    ],
   });
-  await expect(staffActions("clara")).resolves.toEqual([]);
+  await expect((await prepareStaffActions("clara"))()).resolves.toEqual([]);
 });

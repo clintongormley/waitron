@@ -136,7 +136,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "staff-actions.json": {
         holds:
-          "the bills, drafts and lines that currently name you as editor, owner or the person credited, plus the alerts you acknowledged, your recorded activity by kind and time, the receipts you handed over and the settings that name you as the last person to save them. For recorded emails about you or requested by you, it gives the kind, status, time queued and your role. With working-time tracking enabled, your attendance reminders are in attendance.json.",
+          "the bills, drafts and lines that currently name you as editor, owner or the person credited, plus the alerts you acknowledged, your recorded activity by kind and time, the receipts you handed over and the settings that name you as the last person to save them. For recorded emails about you or requested by you, it gives the kind, status, time queued and your role. Look in attendance.json for your attendance reminders.",
         use: "Used to account for staff actions at the venue.",
         kept: ["The box prunes the activity log after 30 days."],
       },
@@ -301,7 +301,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "staff-actions.json": {
         holds:
-          "las cuentas, los borradores y las líneas en los que figuras como responsable de la edición, titular del borrador o la persona a la que se atribuye la línea. También incluye las alertas que atendiste, el tipo y la hora de tu actividad registrada, los recibos que entregaste y los ajustes que guardaste por última vez. Para los correos registrados sobre ti o que solicitaste, indica el tipo, el estado, cuándo se pusieron en cola y qué papel tuviste. Si el control horario está activado, tus recordatorios de asistencia están en attendance.json.",
+          "las cuentas, los borradores y las líneas en los que figuras como responsable de la edición, titular del borrador o la persona a la que se atribuye la línea. También incluye las alertas que atendiste, el tipo y la hora de tu actividad registrada, los recibos que entregaste y los ajustes que guardaste por última vez. Para los correos registrados sobre ti o que solicitaste, indica el tipo, el estado, cuándo se pusieron en cola y qué papel tuviste. Consulta attendance.json para ver tus recordatorios de asistencia.",
         use: "Sirve para dar cuenta de las acciones del personal del local.",
         kept: ["El servidor borra las entradas del registro de actividad al cabo de 30 días."],
       },

@@ -13,11 +13,11 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const AT = "2026-11-21T19:00:00.000Z";
 const FILE = "workforce-decisions.json";
 
-async function workforceDecisions(personId: string) {
+function prepareWorkforceDecisions(personId: string) {
   const parts = personalDataServerParts(ALL_MODULES, suite.db).filter(({ part }) =>
     part.files.includes(FILE),
   );
-  const build = await suite.db.withWriteLock(() =>
+  return suite.db.withWriteLock(() =>
     preparePersonalData(suite.db, parts, {
       personId,
       language: "en",
@@ -25,12 +25,14 @@ async function workforceDecisions(personId: string) {
       timeZone: "UTC",
     }),
   );
-  return build();
 }
 
-it("exports only decisions made for other staff", async () => {
+it("exports only decisions made for other staff after the initial write turn", async () => {
   await withTransaction(suite.db, async (tx) => {
     for (const id of ["ana", "bea", "clara", "dina"]) await seedPerson(tx, { id, displayName: id });
+  });
+  const build = await prepareWorkforceDecisions("ana");
+  await withTransaction(suite.db, async (tx) => {
     const absence = {
       kind: "sick_leave",
       startsOn: "2026-11-23",
@@ -48,16 +50,16 @@ it("exports only decisions made for other staff", async () => {
     await tx.insert(rosterVersions).values([
       {
         ...period,
-        id: "first-rota",
-        status: "superseded",
-        publishedAt: "2026-11-20T19:00:00.000Z",
+        id: "second-rota",
+        status: "published",
+        publishedAt: AT,
         publishedByPersonId: "ana",
       },
       {
         ...period,
-        id: "second-rota",
-        status: "published",
-        publishedAt: AT,
+        id: "first-rota",
+        status: "superseded",
+        publishedAt: "2026-11-20T19:00:00.000Z",
         publishedByPersonId: "ana",
       },
       { ...period, id: "draft-rota", publishedByPersonId: "ana" },
@@ -124,7 +126,7 @@ it("exports only decisions made for other staff", async () => {
     }
   });
 
-  const files = await workforceDecisions("ana");
+  const files = await build();
   expect(files.map((file) => file.name)).toEqual([FILE]);
   expect(JSON.parse(files[0]!.content as string)).toEqual({
     absences: [{ id: "absence", outcome: "approved", at: AT }],
@@ -140,5 +142,5 @@ it("exports only decisions made for other staff", async () => {
     ],
     attendance: [{ id: "answer", action: "approve", at: AT }],
   });
-  await expect(workforceDecisions("dina")).resolves.toEqual([]);
+  await expect((await prepareWorkforceDecisions("dina"))()).resolves.toEqual([]);
 });

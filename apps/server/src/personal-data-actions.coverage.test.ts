@@ -52,7 +52,7 @@ const READ = [
   "working_order_lines.late_confirmed_by",
   "working_orders.editor_id",
   "incidents.acknowledged_by",
-  // The workforce part reads attendance reminders when enabled.
+  // The workforce part reads attendance reminders.
   "outgoing_mail.person_id",
   "outgoing_mail.requested_by",
   "activity_log.person_id",
