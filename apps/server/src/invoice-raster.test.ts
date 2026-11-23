@@ -259,27 +259,30 @@ describe("A4 office raster weights, tones and shaded boxes", () => {
       name: "a muted label",
       before: (y: number): InvoicePageElement => text("HHH", 300, y, { tone: "muted" }),
     },
-  ])("draws a QR, a rule, a logo and ink text pure black after $name", async ({ before }) => {
-    const page = await rasterOf([
-      before(36),
-      { kind: "qr", modules: [[true]], x: 36, y: 36, moduleSize: 30 },
-      before(136),
-      { kind: "rule", x: 36, y: 136, width: 200, thickness: 6 },
-      before(236),
-      {
-        kind: "logo",
-        raster: { widthDots: 8, heightDots: 8, bits: new Uint8Array(8).fill(255) },
-        x: 36,
-        y: 236,
-        width: 30,
-        height: 30,
-      },
-      before(336),
-      text("HHH", 36, 336),
-    ]);
-    expect(page.at(51, 51)).toBe(0);
-    expect(page.at(136, 139)).toBe(0);
-    expect(page.at(51, 251)).toBe(0);
-    expect(page.darkest(36, 336, 200, 60)).toBe(0);
-  });
+  ])(
+    "still draws a QR, a rule, a logo and ink text black when each follows $name on the office image",
+    async ({ before }) => {
+      const page = await rasterOf([
+        before(36),
+        { kind: "qr", modules: [[true]], x: 36, y: 36, moduleSize: 30 },
+        before(136),
+        { kind: "rule", x: 36, y: 136, width: 200, thickness: 6 },
+        before(236),
+        {
+          kind: "logo",
+          raster: { widthDots: 8, heightDots: 8, bits: new Uint8Array(8).fill(255) },
+          x: 36,
+          y: 236,
+          width: 30,
+          height: 30,
+        },
+        before(336),
+        text("HHH", 36, 336),
+      ]);
+      expect(page.at(51, 51)).toBe(0);
+      expect(page.at(136, 139)).toBe(0);
+      expect(page.at(51, 251)).toBe(0);
+      expect(page.darkest(36, 336, 200, 60)).toBe(0);
+    },
+  );
 });
