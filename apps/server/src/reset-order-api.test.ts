@@ -546,7 +546,7 @@ describe("POST /api/node/reset-order's copy time", () => {
       {
         level: "warn",
         event: "reset-order.copy_unread",
-        fields: { nodeId: oldBox, errorCode: "handover.copy_check_failed" },
+        fields: { nodeId: oldBox, errorCode: "unknown" },
       },
     ]);
   });

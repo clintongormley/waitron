@@ -1,8 +1,6 @@
-import "./errors.js";
 import { desc, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { handoverActivations, nodes, type Database, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
 import { readCompletedReturns } from "./return-completion.js";
 import type { Declaration } from "./handover-emergency-api.js";
 
@@ -56,7 +54,8 @@ export async function emergencyCopyFrom(
   const body: unknown = row.evidence.body;
   const lastCopy = isRecord(body) ? body.lastCopy : undefined;
   const at = isRecord(lastCopy) ? lastCopy.lastChangeAtMs : undefined;
+  // A fault in Waitron: the declared copy time comes from this box's own `checkEmergencyCopy`.
   if (at !== null && !Number.isSafeInteger(at))
-    throw new AppError("handover.copy_check_failed", { module: "core" });
+    throw new Error(`takeover from node ${sourceNodeId} declares no readable copy time`);
   return { lastChangeAtMs: at as number | null };
 }
