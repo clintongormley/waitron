@@ -87,7 +87,7 @@ export class TillSetMenuSummary extends LitElement {
   @property({ attribute: false }) dishNames: ReadonlyMap<string, string> = new Map();
   @property({ attribute: false }) removeMenu?: (id: string) => Promise<string | undefined>;
   @property({ attribute: false }) moveDish?: (move: DishMove) => Promise<string | undefined>;
-  @property({ attribute: false }) compMenu?: (lineId: string) => void;
+  @property({ attribute: false }) compMenu?: (lineId: string, name: string) => void;
   @property({ type: Boolean }) busy = false;
   @state() private moving: string | null = null;
   @state() private pending = false;
@@ -246,7 +246,7 @@ export class TillSetMenuSummary extends LitElement {
                     data-comp-menu
                     aria-label=${`${t("comp.title")} · ${row.name} ${row.number}`}
                     ?disabled=${disabled}
-                    @click=${() => this.compMenu!(row.id)}
+                    @click=${() => this.compMenu!(row.id, `${row.name} ${row.number}`)}
                     >${t("comp.title")}</wt-button
                   >`
             }

@@ -1927,10 +1927,9 @@ export class TillTableOrderScreen extends LitElement {
       ></till-set-menu-summary>`;
   }
 
-  #compMenu = (lineId: string) => {
+  #compMenu = (lineId: string, name: string) => {
     const line = this.lines.find(({ id }) => id === lineId);
-    if (line !== undefined)
-      this.#adjust("comp", lineAdjustTarget(line, this.lines, this.#adjustName(line)));
+    if (line !== undefined) this.#adjust("comp", lineAdjustTarget(line, this.lines, name));
   };
 
   #addSetMenu = (menuId: string) => {

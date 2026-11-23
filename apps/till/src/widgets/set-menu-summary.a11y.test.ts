@@ -17,6 +17,7 @@ it.each(["light", "dark"] as const)(
         dishNames: new Map([["sent-sirloin", "Sirloin"]]),
         removeMenu: async () => undefined,
         moveDish: async () => undefined,
+        compMenu: () => undefined,
       },
       theme,
     );
@@ -25,6 +26,7 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
     await userEvent.click(details.querySelector("summary")!);
     expect(details.open).toBe(true);
+    expect(details.querySelector("[data-comp-menu]")).toBeTruthy();
     const move = Array.from(details.querySelectorAll("wt-button")).find((button) =>
       button.textContent?.includes("Move"),
     );

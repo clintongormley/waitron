@@ -86,8 +86,8 @@ it("comps one set menu through the same window a dish's Comp opens", async () =>
   await userEvent.click(summary.shadowRoot!.querySelector("summary")!);
   const comps = summary.shadowRoot!.querySelectorAll<HTMLElement>("[data-comp-menu]");
   await userEvent.click(comps[1]!);
-  expect(seen.map(({ kind, target }) => [kind, target.lineId, target.total])).toEqual([
-    ["comp", "daily-2", "14.00"],
+  expect(seen.map(({ kind, target }) => [kind, target.lineId, target.name, target.total])).toEqual([
+    ["comp", "daily-2", "Daily menu 2", "14.00"],
   ]);
 });
 

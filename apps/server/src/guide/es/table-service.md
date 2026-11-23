@@ -579,12 +579,8 @@ pulsa **Descuento…** en él dentro del resumen.
 
 Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. Sus
 platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
-cuenta antes de confirmar.
-
-Un menú que los clientes han pagado eligiendo artículos se queda en la cuenta: para
-quitarlo, devuelve antes su pago. Un plato con invitación o descuento solo pasa a otra
-cuenta junto con su menú. El ticket muestra los menús y lo que cuesta aparte, como
-un suplemento, pero no los platos incluidos en el precio.
+cuenta antes de confirmar. El ticket muestra los menús y lo que cuesta aparte, pero no
+los platos incluidos en el precio.
 
 En el **Mostrador**, elige **Para llevar**, indica cuántos menús quieres y abre la
 carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los

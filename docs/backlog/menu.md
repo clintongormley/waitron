@@ -905,10 +905,7 @@ or not. A comped or discounted set-menu dish moves to another bill only with its
 (`set_menu.move_adjusted`). The ticket and the full invoice list set menus and supplements, not the
 dishes a set menu covers; the till's pay-by-items list leaves those out too, and category sales
 show set menus as a group of their own. The table-service guide covers this in both languages.
-It rests on the owner's answers of 21 November 2026 (decisions 2, 5, 6 and 7 at 15:15; a full
-invoice may leave covered dishes out, 15:25), the owner's answer of 23 November 2026 to decision 3
-(refuse the move), and lane L's answer of 18 November that the ticket may leave covered dishes
-off (RD 1619/2012 art. 7.1). A takeaway bill holding a set menu still refuses money
+The owner's answers it rests on are recorded in the plan. A takeaway bill holding a set menu still refuses money
 (`set_menu.payment_not_ready`) until VAT-RATES piece B replaces that check.
 Selecting copy-only dishes in the live correction dialog remains open. Piece 5, the demo and
 courses, remains. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).

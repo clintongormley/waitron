@@ -158,7 +158,7 @@ it("offers Comp on each set menu only when comping is allowed, and names that me
   ]);
   expect(comps[1]!.getAttribute("aria-label")).toBe(`${t("comp.title")} · Daily menu 2`);
   await userEvent.click(comps[1]!);
-  expect(compMenu).toHaveBeenCalledExactlyOnceWith("daily-2");
+  expect(compMenu).toHaveBeenCalledExactlyOnceWith("daily-2", "Daily menu 2");
 
   el.busy = true;
   await el.updateComplete;

@@ -541,12 +541,8 @@ the summary.
 
 To move a set menu to another bill, open **Move dishes** and select the set menu. Its
 dishes move with it. If you choose a dish by itself, check its price on the other bill
-before confirming.
-
-A set menu the guests have paid for by choosing items stays on the bill: to remove it,
-refund its payment first. A dish with a comp or discount moves to another bill only with
-its set menu. The receipt lists the set menus and what costs extra, such as a
-supplement, but not the dishes included in the price.
+before confirming. The receipt lists the set menus and what costs extra, but not the
+dishes included in the price.
 
 At the **Counter**, choose **Take away**, set the number, then open the set-menu folder
 and choose the dishes. You can **Park** a takeaway before adding any dishes. To add

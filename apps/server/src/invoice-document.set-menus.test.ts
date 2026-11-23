@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { expect, it } from "vitest";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { readLiveSeriesIdTx, taxpayer, workingOrders } from "@waitron/db";
 import { recordReplacement } from "@waitron/core";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
@@ -55,7 +56,7 @@ async function asFullInvoice(billId: string) {
     invoiceType: "F1",
     recipient: {
       taxId: "B12345674",
-      legalName: "Cliente SL",
+      legalName: "Client Ltd",
       address: "2 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES",
     },
@@ -264,11 +265,12 @@ it("a full invoice without filed figures follows the same rule", () => {
     element.kind === "amount" ? [[element.caption.trim(), element.amount]] : [],
   );
   const from = amounts.findIndex(([caption]) => caption.includes("Daily menu"));
+  const included = receiptLabelsFor(FULL_INVOICE_DOCUMENT_FIXTURE.result.locale).vatIncluded;
   expect(amounts.slice(from, from + 4)).toEqual([
-    ["1  Daily menu (IVA incluido)", "14,00 €"],
-    ["1  Soup (IVA incluido)", ""],
+    [`1  Daily menu (${included})`, "14,00 €"],
+    [`1  Soup (${included})`, ""],
     ["Bread 1", "1,50 €"],
-    ["1  Sirloin (IVA incluido)", "5,00 €"],
+    [`1  Sirloin (${included})`, "5,00 €"],
   ]);
   expect(JSON.stringify(elements)).not.toContain("Hake");
 });
