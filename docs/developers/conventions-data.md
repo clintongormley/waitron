@@ -6721,7 +6721,7 @@ Run `pnpm --filter @waitron/provisioning exec vitest run
 src/first-setup-resolution-inspection.test.ts` for damaged/missing/symlink refusal checks, inspection
 fingerprints and snapshot limits. A large valid database is classified from its SQLite rows even
 when its repair snapshot is over the limit. The
-[setup backlog](../backlog/setup.md#stream-recovery-archive-uploads-and-configuration-imports)
+[setup backlog](../backlog/setup.md#stream-the-remaining-recovery-archive-uploads)
 tracks the remaining transfer buffers.
 
 ## An open FileHandle ends the process when it is collected
@@ -7208,7 +7208,8 @@ format 38 is refused as outdated. The raster cache stays with the department unt
 ## Archive keys and certificate opening
 
 Runtime artifact decryption uses `decryptArtifactAsync`; synchronous cipher and configuration
-helpers remain for fixtures. Configuration staging snapshots ciphertext before its first wait.
+helpers remain for fixtures. The setup route passes a private upload file to configuration staging
+and the byte-taking fixture helper snapshots its input before the first wait.
 `configuration-import.test.ts` changes the caller's buffer during derivation and checks both the
 saved bytes and the decoded bundle.
 

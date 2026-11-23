@@ -400,10 +400,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **Stream recovery archive uploads and configuration imports.**
+- **Stream the remaining recovery archive uploads.**
   The unused archive-preparation route and emergency handover buffer uploads within 256 MiB.
-  Configuration imports have their own buffer.
-  [Detail](backlog/setup.md#stream-recovery-archive-uploads-and-configuration-imports).
+  [Detail](backlog/setup.md#stream-the-remaining-recovery-archive-uploads).
 
 - **Qualify year-sized Cloud backups and revisit incremental copies with venue measurements.**
   Pair the box and Cloud release candidates on a year-sized backup and near-cap publication.

@@ -1,3 +1,4 @@
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import { stageConfigurationImport } from "./configuration-import.js";
+import { stageConfigurationImportFile } from "./configuration-import.js";
 import {
   decodeConfigurationBundle,
   validateConfigurationBundle,
@@ -20,6 +21,7 @@ import { mountSetup } from "./setup-api.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const dirs: string[] = [];
+const receiveArchive = useSetupArchiveUpload();
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -65,8 +67,9 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
     app,
     {
       environment: "preproduction",
-      stageConfiguration: (bytes, passphrase) =>
-        stageConfigurationImport(stateDir, ring, bytes, passphrase, async (candidate) => {
+      receiveArchive,
+      stageConfiguration: (path, passphrase) =>
+        stageConfigurationImportFile(stateDir, ring, path, passphrase, async (candidate) => {
           validateConfigurationBundle(candidate, ALL_MODULES, versions);
           return ALL_MODULES;
         }),

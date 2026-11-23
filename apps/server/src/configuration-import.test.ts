@@ -1,3 +1,4 @@
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -34,9 +35,11 @@ import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
   stageConfigurationImport,
+  stageConfigurationImportFile,
 } from "./configuration-import.js";
 
 const dirs: string[] = [];
+const receiveArchive = useSetupArchiveUpload();
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64"),
 });
@@ -218,8 +221,9 @@ describe("staged configuration import", () => {
       app,
       {
         environment: "preproduction",
-        stageConfiguration: (artifact, passphrase) =>
-          stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+        receiveArchive,
+        stageConfiguration: (path, passphrase) =>
+          stageConfigurationImportFile(stateDir, ring, path, passphrase, validate),
       },
       () => {},
     );
@@ -263,8 +267,9 @@ describe("staged configuration import", () => {
       app,
       {
         environment: "preproduction",
-        stageConfiguration: (artifact, passphrase) =>
-          stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+        receiveArchive,
+        stageConfiguration: (path, passphrase) =>
+          stageConfigurationImportFile(stateDir, ring, path, passphrase, validate),
       },
       () => {},
     );
@@ -330,8 +335,9 @@ describe("staged configuration import", () => {
       app,
       {
         environment: "preproduction",
-        stageConfiguration: (artifact, passphrase) =>
-          stageConfigurationImport(stateDir, ring, artifact, passphrase, async (decoded) => {
+        receiveArchive,
+        stageConfiguration: (path, passphrase) =>
+          stageConfigurationImportFile(stateDir, ring, path, passphrase, async (decoded) => {
             validateConfigurationBundle(decoded, [serviceModule], { "venue-service": 1 });
             return [serviceModule];
           }),
@@ -385,8 +391,9 @@ describe("staged configuration import", () => {
         app,
         {
           environment: "preproduction",
-          stageConfiguration: (artifact, passphrase) =>
-            stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+          receiveArchive,
+          stageConfiguration: (path, passphrase) =>
+            stageConfigurationImportFile(stateDir, ring, path, passphrase, validate),
         },
         () => {},
       );

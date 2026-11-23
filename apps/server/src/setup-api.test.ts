@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
@@ -2274,6 +2275,19 @@ async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response>
   });
 }
 
+function configurationStream(body: ReadableStream<Uint8Array>, signal?: AbortSignal): Request {
+  return new Request("http://localhost/setup-api/configuration", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-export-passphrase": "a strong passphrase",
+    },
+    body,
+    signal,
+    duplex: "half",
+  } as RequestInit);
+}
+
 describe("POST /setup-api/configuration", () => {
   it("labels an unexpected configuration staging fault as configuration, not restore", async () => {
     const log = vi.fn();
@@ -2299,22 +2313,105 @@ describe("POST /setup-api/configuration", () => {
     );
   });
 
-  it("stages and previews a bounded preparation export", async () => {
+  it("writes the encrypted upload as it arrives and previews the completed file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "configuration-upload-"));
+    const { readable, writable } = new TransformStream<Uint8Array>();
+    const uploadRequest = configurationStream(readable);
     const preview = {
       venue: { taxId: "B12345678" },
       modules: ["core"],
       reconnectModules: ["core"],
     } as never;
-    const stageConfiguration = vi.fn(async () => preview);
+    const stageConfiguration = vi.fn<NonNullable<SetupDeps["stageConfiguration"]>>(
+      async (path, passphrase) => {
+        expect(await readFile(path)).toEqual(Buffer.from([1, 2, 3]));
+        expect(passphrase).toBe("a strong passphrase");
+        return preview;
+      },
+    );
     const app = new Hono();
-    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
-    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        receiveArchive: (request, options) => receiveSetupArchive(request, root, options),
+        stageConfiguration,
+      },
+      noopLog,
+    );
+    const writer = writable.getWriter();
+    const request = app.request(uploadRequest);
+    try {
+      await writer.write(Uint8Array.from([1, 2]));
+      await vi.waitFor(async () => {
+        const [upload] = await readdir(root);
+        expect(upload).toBeDefined();
+        expect(await readFile(join(root, upload!, "artifact"))).toEqual(Buffer.from([1, 2]));
+      });
+      expect(stageConfiguration).not.toHaveBeenCalled();
+      await writer.write(Uint8Array.from([3]));
+    } finally {
+      await writer.close();
+      await request;
+      rmSync(root, { recursive: true, force: true });
+    }
+    const response = await request;
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(preview);
-    expect(stageConfiguration).toHaveBeenCalledWith(
-      Uint8Array.from([1, 2, 3]),
-      "a strong passphrase",
+    expect(stageConfiguration.mock.calls[0]?.[2]).toBe(uploadRequest.signal);
+  });
+
+  it("refuses a chunked configuration upload over 64 MiB", async () => {
+    const app = new Hono();
+    const stageConfiguration = vi.fn();
+    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+    // Cross the route's real limit without allocating a matching test buffer.
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const response = await app.request(
+      configurationStream(
+        new ReadableStream({
+          pull(controller) {
+            if (sent++ < 65) controller.enqueue(chunk);
+            else controller.close();
+          },
+        }),
+      ),
     );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "artifact" } },
+    });
+    expect(stageConfiguration).not.toHaveBeenCalled();
+  });
+
+  it("releases the setup latch when a configuration upload disconnects", async () => {
+    const app = new Hono();
+    const stageConfiguration = vi.fn(async () => ({
+      venue: {} as never,
+      modules: [],
+      reconnectModules: [],
+    }));
+    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+    const abort = new AbortController();
+    const upload = app.request(
+      configurationStream(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(Uint8Array.from([1]));
+            abort.signal.addEventListener("abort", () => controller.error(abort.signal.reason));
+          },
+        }),
+        abort.signal,
+      ),
+    );
+    try {
+      expect((await postConfiguration(app, Uint8Array.from([2]))).status).toBe(409);
+    } finally {
+      abort.abort();
+      await upload;
+    }
+    expect((await postConfiguration(app, Uint8Array.from([3]))).status).toBe(200);
   });
 
   it.each(["category.name_taken", "product.name_taken"] as const)(

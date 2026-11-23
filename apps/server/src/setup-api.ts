@@ -224,7 +224,11 @@ export interface SetupDeps {
     "replacementIdentity" | "replacementApproval" | "preview"
   >;
   /** Validates and stages a configuration export before live provisioning. */
-  stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
+  stageConfiguration?: (
+    artifactPath: string,
+    passphrase: string,
+    signal: AbortSignal,
+  ) => Promise<ConfigurationPreview>;
   /** Removes any staged archive after the selected venue and its configuration are durable. */
   clearConfiguration?: () => Promise<void>;
   /** Runs one explicit preproduction submission for the intended live fiscal inputs. */
@@ -1803,7 +1807,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.post("/setup-api/configuration", async (c) => {
     const stage = deps.stageConfiguration;
-    if (stage === undefined) return directError(c, log, "setup.not_ready", 503);
+    const receive = deps.receiveArchive;
+    if (stage === undefined || receive === undefined)
+      return directError(c, log, "setup.not_ready", 503);
     if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
       return directError(c, log, "setup.already_provisioning", 409);
     }
@@ -1814,15 +1820,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("artifact");
         }
         const passphrase = asString(c.req.header("x-waitron-export-passphrase"), "passphrase");
-        const declaredLength = Number(c.req.header("content-length"));
-        if (Number.isFinite(declaredLength) && declaredLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
-          invalidRequest("artifact");
+        const upload = await receive(c.req.raw, {
+          maxBytes: MAX_CONFIGURATION_UPLOAD_BYTES,
+          oversizeIsInvalid: true,
+          reserveBytes: 0,
+        });
+        try {
+          return c.json(await stage(upload.artifactPath, passphrase, c.req.raw.signal), 200);
+        } finally {
+          await upload.dispose();
         }
-        const artifact = new Uint8Array(await c.req.arrayBuffer());
-        if (artifact.byteLength === 0 || artifact.byteLength > MAX_CONFIGURATION_UPLOAD_BYTES) {
-          invalidRequest("artifact");
-        }
-        return c.json(await stage(artifact, passphrase), 200);
       } finally {
         configurationStaging = false;
       }

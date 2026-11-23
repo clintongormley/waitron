@@ -11,6 +11,7 @@ import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
   stageConfigurationImport,
+  stageConfigurationImportFile,
 } from "./configuration-import.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -221,6 +222,94 @@ it("disarms an import whose publication failed at folder sync", async () => {
   await expect(
     stageConfigurationImport(root, ring, artifact, passphrase, async () => []),
   ).rejects.toMatchObject({ code: "EIO" });
+  expect(await readStagedConfigurationImport(root, ring)).toBeNull();
+});
+
+it("publishes the validated ciphertext from a completed upload", async () => {
+  const root = await directory();
+  const uploaded = join(root, "uploaded");
+  const bundle = configurationBundle();
+  const artifact = encodeConfigurationBundle(bundle, passphrase);
+  await writeFile(uploaded, artifact, { mode: 0o600 });
+
+  await expect(
+    stageConfigurationImportFile(root, ring, uploaded, passphrase, validated),
+  ).resolves.toEqual({ venue: bundle.venue, modules: [], reconnectModules: [] });
+  expect(await readStagedConfigurationImport(root, ring)).toEqual({ bundle, artifact, passphrase });
+  expect(existsSync(uploaded)).toBe(false);
+});
+
+it.each(["validation", "disconnect"])(
+  "keeps the earlier import when replacement stops during %s",
+  async (reason) => {
+    const { root, bundle, artifact } = await staged();
+    const uploaded = join(root, "uploaded");
+    const replacement = configurationBundle();
+    replacement.venue.legalName = "Replacement venue";
+    await writeFile(uploaded, encodeConfigurationBundle(replacement, passphrase));
+    const abort = new AbortController();
+    const stopped = new Error("replacement stopped");
+
+    await expect(
+      stageConfigurationImportFile(
+        root,
+        ring,
+        uploaded,
+        passphrase,
+        async () => {
+          if (reason === "validation") throw stopped;
+          abort.abort(stopped);
+          return [];
+        },
+        abort.signal,
+      ),
+    ).rejects.toBe(stopped);
+    expect(await readStagedConfigurationImport(root, ring)).toEqual({
+      bundle,
+      artifact,
+      passphrase,
+    });
+  },
+);
+
+it("disarms the old import before replacing its ciphertext and leaves an incomplete replacement unreadable", async () => {
+  const { root } = await staged();
+  const uploaded = join(root, "uploaded");
+  const destination = join(root, "flows/setup/import");
+  const marker = join(destination, "marker.json");
+  const replacement = configurationBundle();
+  replacement.venue.legalName = "Replacement venue";
+  const artifact = encodeConfigurationBundle(replacement, passphrase);
+  await writeFile(uploaded, artifact);
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  const stopped = new Error("could not write key");
+  let markerRemovalSynced = false;
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    const path = String(args[0]);
+    if (path === uploaded) {
+      expect(existsSync(marker)).toBe(false);
+      expect(markerRemovalSynced).toBe(true);
+    }
+    if (path === join(destination, "key.tmp")) {
+      expect(await readFile(join(destination, "artifact"))).toEqual(artifact);
+      expect(await readStagedConfigurationImport(root, ring)).toBeNull();
+      throw stopped;
+    }
+    const handle = await actual.open(...args);
+    if (path === destination && !existsSync(marker)) {
+      const sync = handle.sync.bind(handle);
+      vi.spyOn(handle, "sync").mockImplementation(async () => {
+        await sync();
+        markerRemovalSynced = true;
+      });
+    }
+    return handle;
+  });
+
+  await expect(
+    stageConfigurationImportFile(root, ring, uploaded, passphrase, validated),
+  ).rejects.toBe(stopped);
+  expect(vi.mocked(fs.open).mock.calls.some(([path]) => path === uploaded)).toBe(true);
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
 

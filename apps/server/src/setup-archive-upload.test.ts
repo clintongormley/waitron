@@ -197,3 +197,24 @@ it("refuses a multipart artifact larger than its file limit", async () => {
   });
   expect(await readdir(dir)).toEqual([]);
 });
+
+it.each(["declared length", "raw byte count", "multipart artifact count"])(
+  "can report an invalid artifact when the %s exceeds the upload limit",
+  async (limit) => {
+    const form = new FormData();
+    form.set("artifact", new Blob(["123456789"]));
+    const upload =
+      limit === "multipart artifact count"
+        ? request(form)
+        : request(limit === "declared length" ? "1" : "123456789", {
+            "content-type": "application/octet-stream",
+            ...(limit === "declared length" ? { "content-length": "9" } : {}),
+          });
+    await expect(
+      receiveSetupArchive(upload, await root(), {
+        maxBytes: 8,
+        oversizeIsInvalid: true,
+      }),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "artifact" } });
+  },
+);
