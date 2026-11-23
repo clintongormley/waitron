@@ -936,3 +936,11 @@ address to download its data first (the download itself is PR 10b's); and a CAUT
 the listing's `recoveredRecordsBackup`, which compares when a destination's newest backup started
 with when the return completed. The "will be lost" emergency paragraph and the machine number are
 gone.
+
+**Since PR 10b's first part (23 November 2026).** The main box also compares an old box's latest
+chain summary with no order standing, while Wipe and remove is offered after a planned handover,
+and the dialog's download line shows then only when that comparison finds something; after an
+emergency switch it always shows. The download lives on the old box's own page, not on the main
+box's Servers row: an administrator or a **Manage boxes** holder signs in there with the old box's
+copy of the accounts. Revision 6 above is superseded on those points; PR 10b's own plans
+(revisions 7 and 8) were kept in the campaign's working folder, not here.

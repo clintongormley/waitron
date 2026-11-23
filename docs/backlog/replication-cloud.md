@@ -605,6 +605,9 @@ Slice 3.
   its return completes, the download's tabs of what changed after the copy an emergency switch
   started from, and a Download button on the new main box. As its own pull request: the old box
   also returning other boxes' invoice records it holds.
+  An old main box that cannot reach the new main box, so never learns it was replaced, starts on
+  the waiting page rather than its own page, and so offers no download; whether the waiting page
+  should offer one is open (PR 10b first part's finish review, 23 November 2026).
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 

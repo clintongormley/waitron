@@ -156,7 +156,7 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
         "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
       totpRequired: "Enter your password again and the code from your authenticator app.",
       notPermitted:
-        "This account cannot download this box's data. Sign in here with an administrator's account, or one allowed to manage boxes. Nothing was changed.",
+        "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
     },
     "es-ES": {
       email: "Correo electrónico",
@@ -185,6 +185,6 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
       notPermitted:
-        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que pueda gestionar servidores. No se ha cambiado nada.",
+        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que tenga Gestionar servidores. No se ha cambiado nada.",
     },
   };

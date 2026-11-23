@@ -236,7 +236,7 @@ runs the venue**, that box has stepped down. It takes no sales and sends nothing
 Use **Open the dashboard on the new main box.**, when the page shows it, to go to the box that runs
 the venue.
 
-The page shows one more line only while something needs you, and says what to do. While a
+While something needs you, the page also shows a line that says what to do. While a
 [handover](servers.md#hand-over) is unfinished it can also offer **Progress**: use it to finish the
 handover on the spare.
 
@@ -245,7 +245,7 @@ agency continues on the main box.
 
 If the main box's **Wipe and remove** dialog says this box may hold data it does not have, download
 that data under **Download this box's data** before the box is wiped. Enter the email and password
-of an administrator, or of an account allowed to manage boxes, as they were when this box stopped
+of an administrator, or of an account with **Manage boxes**, as they were when this box stopped
 running the venue, and the authenticator code if the account uses one; passkeys and Google sign-in
 do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice records; its
 first line says whether they are only those the main box did not have or every one this box holds.

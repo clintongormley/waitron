@@ -932,7 +932,7 @@ describe("the restricted page's download section", () => {
       signInRefused:
         "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
       notPermitted:
-        "This account cannot download this box's data. Sign in here with an administrator's account, or one allowed to manage boxes. Nothing was changed.",
+        "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
       busy: "This box is already making the file. Try again in a minute.",
       otherPage: "The download must be asked for on this page. Nothing was changed.",
       totpRequired: "Enter your password again and the code from your authenticator app.",
@@ -959,7 +959,7 @@ describe("the restricted page's download section", () => {
       signInRefused:
         "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban cuando dejó de llevar el local. No se ha cambiado nada.",
       notPermitted:
-        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que pueda gestionar servidores. No se ha cambiado nada.",
+        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que tenga Gestionar servidores. No se ha cambiado nada.",
       busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
       otherPage: "La descarga debe pedirse en esta página. No se ha cambiado nada.",
       totpRequired:

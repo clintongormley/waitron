@@ -260,7 +260,7 @@ Si abres la dirección de un servidor, o su caja o su panel de gestión, y ves u
 nada a Hacienda. Usa **Abrir el panel en el nuevo servidor principal.**, si la página lo muestra,
 para ir al servidor que lleva el local.
 
-La página muestra una línea más solo mientras algo te necesita, y dice qué hacer. Mientras un
+Mientras algo te necesita, la página muestra también una línea que dice qué hacer. Mientras un
 [traspaso](servers.md#hand-over) no ha terminado, puede ofrecer también **Progreso**: úsalo para terminar
 el traspaso en el servidor de reserva.
 
@@ -269,8 +269,8 @@ El envío a Hacienda continúa en el principal.
 
 Si el diálogo **Borrar y retirar** del servidor principal dice que puede que este servidor tenga
 datos que él no tiene, descárgalos en **Descargar los datos de este servidor** antes de que se
-borre. Introduce el correo electrónico y la contraseña de un administrador, o de una cuenta que
-pueda gestionar servidores, tal como estaban cuando este servidor dejó de llevar el local, y el
+borre. Introduce el correo electrónico y la contraseña de un administrador, o de una cuenta con
+**Gestionar servidores**, tal como estaban cuando este servidor dejó de llevar el local, y el
 código del autenticador si la cuenta lo usa; las llaves de acceso y el inicio de sesión con Google
 no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los registros de
 facturación; su primera línea dice si son solo los que el principal no tenía o todos los que tiene
