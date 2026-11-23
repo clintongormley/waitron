@@ -6,15 +6,18 @@ status filter opens on problems. A SumUp charge with no recorded charge in Waitr
 
 Claude reviewed the plan on 23 November. The watcher cleared it at 20:52 that day and split it
 into two pull requests so the nightly check can start collecting evidence while the screen is built.
+The watcher clarified at 21:06 how to handle refunds recorded only at SumUp.
 
 ## PR 1 — Save the nightly evidence
 
 - In `packages/payments/src/reconcile.ts`, record payment refs for captured rows with an equal
-  SumUp charge and no finding. For provider charges without a recorded local charge, retain the
+  SumUp charge and no finding. Keep whether SumUp reports each matched charge as refunded.
+  For provider charges without a recorded local charge, retain the
   reference, amount, charge time and any linked Waitron payment ref. Keep the existing findings
   and their wire shapes.
 - Request this evidence in `packages/payments-sumup/src/reconciler.ts` and save it in the existing
-  summary in `apps/server/src/reconcile-duty.ts`. Reuse the same provider reads and reconciliation
+  summary in `apps/server/src/reconcile-duty.ts`. Preserve the refund status in
+  `packages/payments-sumup/src/report-source.ts` without adding provider reads. Keep reconciliation
   decisions. Leave the manager's backlog entry open.
 - In `classify.test.ts`, distinguish an exact capture from drift, orphans, unpaid attempts and
   resolved holds. In the SumUp `reconciler.test.ts`, check that the adapter supplies the evidence,
@@ -32,7 +35,8 @@ into two pull requests so the nightly check can start collecting evidence while 
   row. A SumUp-only charge linked to a Waitron payment on a paired reader counts in Paired readers.
   The standalone panel shows the remaining unlinked charges, outside the paired totals.
 - A refund recorded after a match keeps that result. **Refunded before the check** is filtered
-  with matched payments by default and adds nothing to **To check**. Show resolved holds as
+  with matched payments by default and adds nothing to **To check**. When SumUp reports a refund
+  but Waitron has no matching refund, show it as a problem. Show resolved holds as
   **Resolved**. Attach all open findings to a single row and count the row once. Show **Not
   checked** for a capture with no evidence. Leave unpaid attempts out unless a finding shows
   that SumUp took money. Show the incomplete notice for a missing day, old summaries without

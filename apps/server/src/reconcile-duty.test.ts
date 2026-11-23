@@ -132,7 +132,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
 
   it("saves the charge evidence with the successful SumUp run", async () => {
     const chargeAudit = {
-      matchedPaymentRefs: ["captured"],
+      matches: [{ paymentRef: "captured", providerRefunded: true }],
       missingLocal: [
         {
           references: ["provider-charge"],

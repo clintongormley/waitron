@@ -507,7 +507,7 @@ describe("orphan remediation", () => {
     );
 
     expect(result.orphan.map((row) => row.paymentRef)).toEqual(["abandoned-during-report"]);
-    expect(result.chargeAudit?.matchedPaymentRefs).toEqual([]);
+    expect(result.chargeAudit?.matches).toEqual([]);
   });
 
   it("counts prepared payments once and reports their own settlement amounts", async () => {

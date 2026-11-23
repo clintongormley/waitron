@@ -35,6 +35,7 @@ export interface SettlementRecord {
   references: string[];
   amount: Decimal;
   settledAt: Date;
+  providerRefunded?: true;
   /** Our own identifiers, when the processor carried them back. Present = a settlement with no
    * local row can still be attributed to a till and raise an incident; absent = report-only. */
   hint?: { workingOrderId: string; paymentRef: string };
@@ -119,9 +120,14 @@ export interface RefundEvidence {
   }[];
 }
 
+interface ChargeAuditMatch {
+  paymentRef: string;
+  providerRefunded: boolean;
+}
+
 export interface PaymentReconcileResult {
   chargeAudit?: {
-    matchedPaymentRefs: string[];
+    matches: ChargeAuditMatch[];
     missingLocal: {
       references: string[];
       amount: string;
@@ -175,7 +181,7 @@ export type ClassifiedRow =
 export interface Classification {
   checked: number;
   rows: ClassifiedRow[];
-  matchedPaymentRefs?: string[];
+  matches?: ChargeAuditMatch[];
   /** Settlements matched by no local row — CANDIDATE `missingLocal`s, pending the targeted
    * existence check the caller runs against the whole table. */
   unmatched: SettlementRecord[];
@@ -201,7 +207,7 @@ export function classify(
   }
   const matched = new Set<SettlementRecord>();
   const out: ClassifiedRow[] = [];
-  const matchedPaymentRefs: string[] | undefined = collectChargeAudit ? [] : undefined;
+  const matches: ChargeAuditMatch[] | undefined = collectChargeAudit ? [] : undefined;
   const toleranceCutoff = now.getTime() - settlementLagMs;
 
   for (const row of rows) {
@@ -231,14 +237,17 @@ export function classify(
     } else if (compareDecimal(decimal(row.amount), settled.amount) !== 0) {
       out.push({ klass: "drift", row, settled });
     } else if (!orphan) {
-      matchedPaymentRefs?.push(row.paymentRef);
+      matches?.push({
+        paymentRef: row.paymentRef,
+        providerRefunded: settled.providerRefunded === true,
+      });
     }
   }
 
   return {
     checked: rows.length,
     rows: out,
-    ...(matchedPaymentRefs === undefined ? {} : { matchedPaymentRefs }),
+    ...(matches === undefined ? {} : { matches }),
     unmatched: records.filter((record) => !matched.has(record)),
   };
 }
@@ -367,10 +376,10 @@ export async function reconcilePayments(
       missing.push(record);
       result.missingLocal.push(missingLocalMismatch(record));
     }
-    if (classified.matchedPaymentRefs !== undefined) {
+    if (classified.matches !== undefined) {
       const preparedRefs = new Set(prepared.map((row) => row.paymentRef));
       result.chargeAudit = {
-        matchedPaymentRefs: classified.matchedPaymentRefs.filter((ref) => !preparedRefs.has(ref)),
+        matches: classified.matches.filter((match) => !preparedRefs.has(match.paymentRef)),
         missingLocal: missing.map((record) => ({
           references: record.references,
           amount: record.amount,

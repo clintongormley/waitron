@@ -90,6 +90,7 @@ describe("SumUp audit", () => {
     { status: "PENDING", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "FAILED", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "SUCCESSFUL", timestamp: "2026-06-30T12:00:00Z", unsettled: [] },
+    { status: "REFUNDED", timestamp: "2026-06-30T12:00:00Z", unsettled: [] },
   ])(
     "audits $status capture on the normal next-day run, including cross-day recovery",
     async ({ status, timestamp, unsettled }) => {
@@ -126,8 +127,10 @@ describe("SumUp audit", () => {
       }).reconcile(period, new Date("2026-07-02T00:05:00Z"));
       expect(result.unsettled.map((row) => row.paymentRef)).toEqual(unsettled);
       expect(result.missingLocal).toEqual([]);
-      expect(result.chargeAudit?.matchedPaymentRefs).toEqual(
-        status === "SUCCESSFUL" ? ["capture"] : [],
+      expect(result.chargeAudit?.matches).toEqual(
+        status === "SUCCESSFUL" || status === "REFUNDED"
+          ? [{ paymentRef: "capture", providerRefunded: status === "REFUNDED" }]
+          : [],
       );
       expect(lookup.mock.calls).toEqual([[{ id: "charge" }]]);
     },

@@ -61,7 +61,9 @@ describe("classify", () => {
       record({ references: ["resolved"] }),
     ];
 
-    expect(classify(rows, records, NOW, LAG, true).matchedPaymentRefs).toEqual(["clean"]);
+    expect(classify(rows, records, NOW, LAG, true).matches).toEqual([
+      { paymentRef: "clean", providerRefunded: false },
+    ]);
   });
 
   it("classifies an unreported payment past the tolerance as unsettled", () => {
