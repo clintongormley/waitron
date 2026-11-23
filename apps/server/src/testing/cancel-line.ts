@@ -6,7 +6,6 @@ import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   adjustmentReasons,
-  adjustments,
   createAdjustmentReason,
   type AdjustmentReasonInput,
 } from "@waitron/adjustments";
@@ -239,6 +238,7 @@ export async function cancelItemForTest(
   quantity?: string,
   operatorId?: string,
   attendance?: OrderAttendance,
+  overrides: Partial<Omit<CancelItemAsk, "approver">> = {},
 ) {
   const { target, lineId, body } = await observedCancelItem(tx, orderId, lineNo, quantity);
   return cancelItem(
@@ -246,7 +246,12 @@ export async function cancelItemForTest(
     cfg,
     target,
     lineId,
-    { ...body, reasonId: await cancelReasonId(tx), admission: testTradingAdmission() },
+    {
+      ...body,
+      reasonId: await cancelReasonId(tx),
+      admission: testTradingAdmission(),
+      ...overrides,
+    },
     await ensureOperator(tx, operatorId ?? OPERATOR),
     attendance,
   );
@@ -303,27 +308,21 @@ export async function refundableCancel(
   operatorId?: string,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { target, lineId, body } = await observedCancelItem(tx, orderId, lineNo);
-    const answer = await cancelItem(
+    const answer = await cancelItemForTest(
       tx,
       cfg,
-      target,
-      lineId,
+      orderId,
+      lineNo,
+      undefined,
+      operatorId,
+      undefined,
       {
-        ...body,
         outcome: "keep_charge",
         refundHandoff: true,
-        reasonId: await cancelReasonId(tx),
-        admission: testTradingAdmission(),
       },
-      await ensureOperator(tx, operatorId ?? OPERATOR),
     );
     const linked = answer.refundLinks?.[0]?.adjustmentId;
-    if (linked !== undefined) return linked;
-    const [cancel] = await tx
-      .select({ id: adjustments.id })
-      .from(adjustments)
-      .where(and(eq(adjustments.lineId, lineId), eq(adjustments.action, "cancel")));
-    return cancel!.id;
+    if (linked === undefined) throw new Error(`cancel of line ${lineNo} named no refund link`);
+    return linked;
   });
 }
