@@ -243,12 +243,12 @@ handover on the spare.
 Keep this box running while it returns its invoice records to the main box. Filing with the tax
 agency continues on the main box.
 
-Under **Download this box's data**, download what this box holds that the main box does not, before
-the box is wiped. Open the page at its https:// address. Enter the email and password of an
-administrator, or of an account allowed to manage boxes, as they were when this box stopped running
-the venue, and the authenticator code if the account uses one; passkeys and Google sign-in do not
-work here. Choose **Download**. The file's **Invoices** tab lists the invoice records; its first
-line says whether they are only those the main box did not have or every one this box holds.
+If the main box's **Wipe and remove** dialog says this box may hold data it does not have, download
+that data under **Download this box's data** before the box is wiped. Enter the email and password
+of an administrator, or of an account allowed to manage boxes, as they were when this box stopped
+running the venue, and the authenticator code if the account uses one; passkeys and Google sign-in
+do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice records; its
+first line says whether they are only those the main box did not have or every one this box holds.
 
 Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
