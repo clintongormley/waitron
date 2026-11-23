@@ -552,7 +552,11 @@ describe("the main box's box-to-box join routes", () => {
       requestId,
       seq,
       at,
-      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [Buffer.from(String(at))]),
+      confirmed: false,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [
+        Buffer.from(String(at)),
+        Buffer.from("false"),
+      ]),
     });
     const notATime = await post("poll", pollBody(2, "soon"), box.address);
     expect(notATime.status).toBe(400);

@@ -595,7 +595,7 @@ describe("refusals for a request it cannot act on", () => {
   it("refuses to approve a request it does not list", () => {
     const { store, hello } = setup();
     hello("10.0.0.1");
-    expect(store.approve.begin("req-1", "123456")).toEqual({ refused: "not_found" });
-    expect(store.approve.begin("req-unknown", "123456")).toEqual({ refused: "not_found" });
+    expect(store.approve.begin("req-1")).toEqual({ refused: "not_found" });
+    expect(store.approve.begin("req-unknown")).toEqual({ refused: "not_found" });
   });
 });
