@@ -321,8 +321,6 @@ const ADDED_TABLES = [
   "document_delivery_sequences",
   "document_page_reprints",
   "drawer_entries",
-  "fiscal_conflict_evidence",
-  "fiscal_lookup_conflicts",
   "verifactu_series_conflicts",
   "handover_activations",
   "handover_return_batches",

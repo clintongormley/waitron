@@ -750,6 +750,10 @@ for clock evidence. The history row links to the node and person. A1420 retired 
 link, its planned trigger, and the record pairing. Fi5 introduces the event key and record link
 for conflict evidence and requires both to be null on a clock row.
 
+**2026-11-23, Fi5.** `conflict.observed` and `conflict.lookup` share the append-only history.
+Each links to its fiscal record. The event key keeps one observation per record, attempt and cause,
+and one lookup conflict per record. The filing case is still found through its record.
+
 - **`seq` and "one confirmation per check":** the shared unique `seq`, and
   `event_key = clock.confirmed:<check>`.
 - **The `registro_id` index** becomes `(registro_id, kind, seq)`.

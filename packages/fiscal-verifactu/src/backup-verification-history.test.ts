@@ -155,7 +155,6 @@ async function capture(populate = true) {
     await withTransaction(suite.db, (tx) =>
       recordConflictEvidence(tx, {
         registroId: original.id,
-        caseId: "10000000-0000-4000-8000-000000000001",
         attempt: 1,
         cause: "fiscal.huella_divergente",
         now: new Date(time),
@@ -948,7 +947,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','fiscal_lookup_conflicts','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);
@@ -956,18 +955,23 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   expect(await verify()).toEqual(result("passed"));
 });
 
-it.each(["registro_id", "case_id"])(
-  "rejects a dangling conflict observation %s",
-  async (column) => {
-    await capture();
-    both((db) => db.exec(`update fiscal_conflict_evidence set "${column}"='missing'`));
-    expect(await verify()).toEqual(result("invalid"));
-  },
-);
+it("rejects a dangling record link on a conflict observation", async () => {
+  await capture();
+  both((db) =>
+    db.exec(`
+    update verifactu_history set registro_id='missing', event_key='conflict:missing:1:fiscal.huella_divergente'
+    where kind='conflict.observed'`),
+  );
+  expect(await verify()).toEqual(result("invalid"));
+});
 
 it("retains captured conflict observations", async () => {
   await capture();
-  edit("after", (db) => db.exec("delete from fiscal_conflict_evidence"));
+  edit("after", (db) =>
+    db.exec(`
+    delete from verifactu_history where id =
+      (select id from verifactu_history where kind='conflict.observed')`),
+  );
   expect(await verify()).toEqual(result("invalid"));
 });
 

@@ -113,7 +113,13 @@ describe("runtime lookup conflicts use the administrator stop without changing f
       expect(
         await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
       ).toEqual([]);
-      expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select * from verifactu_history where kind = 'conflict.lookup'`,
+          )
+        ).rows,
+      ).toEqual([]);
     },
   );
   it.each(["IDEmisorFactura", "NumSerieFactura"] as const)(
@@ -177,18 +183,22 @@ describe("runtime lookup conflicts use the administrator stop without changing f
           NOW,
         ),
       );
-      const before = await suite.db.execute(sql`select * from fiscal_lookup_conflicts`);
+      const before = await suite.db.execute(
+        sql`select * from verifactu_history where kind = 'conflict.lookup'`,
+      );
       const error = await captureError(() =>
         suite.db.execute(
           operation === "update"
-            ? sql`update fiscal_lookup_conflicts set evidence = '{}'`
+            ? sql`update verifactu_history set data = json_set(data, '$.evidence', json('{}')) where kind = 'conflict.lookup'`
             : operation === "delete"
-              ? sql`delete from fiscal_lookup_conflicts`
-              : sql`insert or replace into fiscal_lookup_conflicts select * from fiscal_lookup_conflicts`,
+              ? sql`delete from verifactu_history where kind = 'conflict.lookup'`
+              : sql`insert or replace into verifactu_history select * from verifactu_history where kind = 'conflict.lookup'`,
         ),
       );
-      expect(triggerRaised(error, "fiscal_lookup_conflicts is append-only")).toBe(true);
-      expect(await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).toEqual(before);
+      expect(triggerRaised(error, "verifactu_history is append-only")).toBe(true);
+      expect(
+        await suite.db.execute(sql`select * from verifactu_history where kind = 'conflict.lookup'`),
+      ).toEqual(before);
     },
   );
 
@@ -215,7 +225,11 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     };
     await run(f, client);
     expect(
-      (await suite.db.execute(sql`select registro_id from fiscal_lookup_conflicts`)).rows,
+      (
+        await suite.db.execute(
+          sql`select registro_id from verifactu_history where kind = 'conflict.lookup'`,
+        )
+      ).rows,
     ).toEqual([{ registro_id: f.seeded.registroIds[0] }]);
     expect(
       await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
@@ -238,12 +252,18 @@ describe("runtime lookup conflicts use the administrator stop without changing f
       }),
     };
     await suite.db.execute(
-      sql`create trigger refuse_lookup_evidence before insert on fiscal_lookup_conflicts begin select raise(abort, 'lookup evidence refused'); end`,
+      sql`create trigger refuse_lookup_evidence before insert on verifactu_history when new.kind = 'conflict.lookup' begin select raise(abort, 'lookup evidence refused'); end`,
     );
     try {
       await expect(run(f, client)).rejects.toThrow("lookup evidence refused");
       expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
-      expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select * from verifactu_history where kind = 'conflict.lookup'`,
+          )
+        ).rows,
+      ).toEqual([]);
       expect((await suite.db.execute(sql`select * from incidents`)).rows).toEqual([]);
       expect(await immutableSnapshot()).toEqual(before);
     } finally {
@@ -321,7 +341,13 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     expect((await suite.db.execute(sql`select intentos from verifactu_submissions`)).rows).toEqual([
       { intentos: 0 },
     ]);
-    expect((await suite.db.execute(sql`select * from fiscal_conflict_evidence`)).rows).toEqual([]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select * from verifactu_history where kind = 'conflict.observed'`,
+        )
+      ).rows,
+    ).toEqual([]);
   });
 
   it("accepts the exact stored contents under another reference without changing confirmed filing facts", async () => {
@@ -376,7 +402,10 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     };
     await expect(run(f, client)).rejects.toThrow("later page unavailable");
     expect(await immutableSnapshot()).toEqual(before);
-    expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+    expect(
+      (await suite.db.execute(sql`select * from verifactu_history where kind = 'conflict.lookup'`))
+        .rows,
+    ).toEqual([]);
     expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
     expect((await suite.db.execute(sql`select * from incidents`)).rows).toEqual([]);
   });
@@ -531,7 +560,10 @@ it.each(["original", "cancellation"] as const)(
       await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
     ).toEqual([]);
     expect(await immutableSnapshot()).toEqual(before);
-    expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+    expect(
+      (await suite.db.execute(sql`select * from verifactu_history where kind = 'conflict.lookup'`))
+        .rows,
+    ).toEqual([]);
   },
 );
 

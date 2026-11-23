@@ -1,4 +1,4 @@
-import { and, asc, count, eq, exists, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, count, eq, exists, isNotNull, or, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, readTaxpayer, type Transaction } from "@waitron/db";
 import { readActiveConflicts } from "./conflict-evidence.js";
 import type {
@@ -8,6 +8,7 @@ import type {
   LookupConflictEvidence,
 } from "./conflict-types.js";
 import { heldRecords, openFilingCases } from "./filing-cases.js";
+import { lookupConflicts, observedConflicts } from "./history.js";
 import type {
   ComparisonView,
   FilingOverview,
@@ -20,9 +21,7 @@ import type {
 } from "./filing-overview-types.js";
 import { ENVIO_STATES, type EnvioState } from "./handover-summary.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalConflictEvidence } from "./schema/conflict-evidence.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
@@ -41,26 +40,8 @@ export async function readFilingOverview(
   const readAt = new Date().toISOString();
   const progress = await readProgress(tx);
   const { cases, total, recordIds: listed } = await openFilingCases(tx, scope.limit);
-  const conflictRows = await tx
-    .select({
-      registroId: fiscalConflictEvidence.registroId,
-      attempt: fiscalConflictEvidence.attempt,
-      cause: fiscalConflictEvidence.cause,
-      recordedAt: fiscalConflictEvidence.recordedAt,
-      evidence: fiscalConflictEvidence.evidence,
-    })
-    .from(fiscalConflictEvidence)
-    .where(inArray(fiscalConflictEvidence.registroId, listed))
-    .orderBy(asc(fiscalConflictEvidence.attempt), sql`${fiscalConflictEvidence}.rowid`);
-  const lookupRows = await tx
-    .select({
-      registroId: fiscalLookupConflicts.registroId,
-      recordedAt: fiscalLookupConflicts.recordedAt,
-      evidence: fiscalLookupConflicts.evidence,
-    })
-    .from(fiscalLookupConflicts)
-    .where(inArray(fiscalLookupConflicts.registroId, listed))
-    .orderBy(sql`${fiscalLookupConflicts}.rowid`);
+  const conflictRows = await observedConflicts(tx, listed);
+  const lookupRows = await lookupConflicts(tx, listed);
   const held = await heldRecords(tx);
   const active = scope.nodeId === null ? [] : await readActiveConflicts(tx, scope.nodeId);
   const missingHistory = await readMissingHistory(tx);

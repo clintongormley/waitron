@@ -4,8 +4,6 @@
 export { acks } from "./acks.js";
 export { verifactuHistory } from "./verifactu-history.js";
 export { declaracionesResponsables } from "./declarations.js";
-export { fiscalConflictEvidence } from "./conflict-evidence.js";
-export { fiscalLookupConflicts } from "./lookup-conflicts.js";
 export { verifactuCertificates } from "./verifactu-certificates.js";
 export { fiscalCertificateReminders } from "./certificate-reminders.js";
 export { verifactuSendingState } from "./verifactu-sending-state.js";

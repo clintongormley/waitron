@@ -18,8 +18,6 @@ const OWNED = [
   "fiscal_allocations",
   "verifactu_certificates",
   "fiscal_certificate_reminders",
-  "fiscal_conflict_evidence",
-  "fiscal_lookup_conflicts",
   "verifactu_series_conflicts",
   "fiscal_reservations",
   "verifactu_identities",

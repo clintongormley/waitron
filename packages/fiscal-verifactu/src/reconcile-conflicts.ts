@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { openFilingCase } from "./filing-cases.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
-import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
+import { appendHistory, historyNodeForRecord } from "./history.js";
 
 export async function retainLookupConflict(
   tx: Transaction,
@@ -9,14 +9,21 @@ export async function retainLookupConflict(
   evidence: LookupConflictEvidence,
   now: Date,
 ): Promise<void> {
-  const opened = await openFilingCase(tx, {
+  await openFilingCase(tx, {
     registroId,
     cause: "fiscal.huella_divergente",
     evidence: { codigo: null, mensaje: null, csv: null },
     now,
   });
-  await tx
-    .insert(fiscalLookupConflicts)
-    .values({ registroId, caseId: opened.id, evidence, recordedAt: now })
-    .onConflictDoNothing({ target: fiscalLookupConflicts.registroId });
+  await appendHistory(
+    tx,
+    {
+      kind: "conflict.lookup",
+      nodeId: await historyNodeForRecord(tx, registroId),
+      registroId,
+      at: now,
+      data: { evidence },
+    },
+    { ifAbsent: true },
+  );
 }

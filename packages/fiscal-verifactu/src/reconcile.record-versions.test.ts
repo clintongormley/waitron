@@ -227,5 +227,8 @@ it("keeps a pending correction waiting when the lookup still holds its own earli
   expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual([]);
   expect(await delivery([original, latest])).toEqual(before);
   expect(await immutableRows()).toEqual(recordsBefore);
-  expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+  expect(
+    (await suite.db.execute(sql`select * from verifactu_history where kind = 'conflict.lookup'`))
+      .rows,
+  ).toEqual([]);
 });

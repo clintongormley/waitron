@@ -15,7 +15,7 @@ import { retainLookupConflict } from "./reconcile-conflicts.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
 
-it.each(["valid", "registro_id", "case_id", "changed-evidence"] as const)(
+it.each(["valid", "registro_id", "changed-evidence"] as const)(
   "checks lookup evidence and its retained links in real backup files (%s)",
   async (fault) => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
@@ -55,14 +55,17 @@ it.each(["valid", "registro_id", "case_id", "changed-evidence"] as const)(
             copy.exec("pragma foreign_keys=off");
             const triggers = copy
               .prepare(
-                "select name,sql from sqlite_schema where type='trigger' and tbl_name='fiscal_lookup_conflicts'",
+                "select name,sql from sqlite_schema where type='trigger' and tbl_name='verifactu_history'",
               )
               .all();
             for (const trigger of triggers)
               copy.exec(`drop trigger "${String(trigger.name).replaceAll('"', '""')}"`);
             if (fault === "changed-evidence")
-              copy.exec("update fiscal_lookup_conflicts set evidence='{}'");
-            else copy.exec(`update fiscal_lookup_conflicts set "${fault}"='missing-parent'`);
+              copy.exec(`update verifactu_history set data=json_set(data, '$.evidence', json('{}'))
+                where kind='conflict.lookup'`);
+            else
+              copy.exec(`update verifactu_history set registro_id='missing-parent', event_key='lookup:missing-parent'
+              where kind='conflict.lookup'`);
             for (const trigger of triggers) copy.exec(String(trigger.sql));
           } finally {
             copy.close();

@@ -433,10 +433,6 @@ const LINKS = [
   ["filing_cases", "registro_id", "verifactu_records", "id"],
   ["filing_case_events", "case_id", "filing_cases", "id"],
   ["filing_case_events", "remedy_registro_id", "verifactu_records", "id"],
-  ["fiscal_conflict_evidence", "registro_id", "verifactu_records", "id"],
-  ["fiscal_conflict_evidence", "case_id", "filing_cases", "id"],
-  ["fiscal_lookup_conflicts", "registro_id", "verifactu_records", "id"],
-  ["fiscal_lookup_conflicts", "case_id", "filing_cases", "id"],
   ["verifactu_series_conflicts", "sif_id", "verifactu_identities", "id"],
   ["verifactu_series_conflicts", "series_id", "invoice_series", "id"],
   ["verifactu_submissions", "registro_id", "verifactu_records", "id"],
@@ -444,6 +440,7 @@ const LINKS = [
   ["fiscal_certificate_reminders", "install_id", "verifactu_certificates", "id"],
   ["verifactu_history", "node_id", "nodes", "id"],
   ["verifactu_history", "person_id", "persons", "id"],
+  ["verifactu_history", "registro_id", "verifactu_records", "id"],
 ] as const;
 async function walk(
   query: BackupQuery,

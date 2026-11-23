@@ -1,10 +1,12 @@
-import { max } from "drizzle-orm";
+import { and, asc, eq, inArray, max, sql, type SQLWrapper } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { ClockStepRequest } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
+import type { ConflictCause, ConflictEvidence, LookupConflictEvidence } from "./conflict-types.js";
 import { verifactuHistory } from "./schema/verifactu-history.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
-export interface HistoryEntry {
+interface ClockHistoryEntry {
   kind: "clock.confirmed";
   nodeId: NodeId;
   at: Date;
@@ -18,15 +20,135 @@ export interface HistoryEntry {
   };
 }
 
+interface ObservedConflictData {
+  attempt: number;
+  cause: ConflictCause;
+  evidence: ConflictEvidence;
+}
+
+interface LookupConflictData {
+  evidence: LookupConflictEvidence;
+}
+
+type ConflictHistoryEntry = { nodeId: NodeId; at: Date; registroId: string } & (
+  | { kind: "conflict.observed"; data: ObservedConflictData }
+  | { kind: "conflict.lookup"; data: LookupConflictData }
+);
+
+export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry;
+
+interface StoredHistoryEntry {
+  id: string;
+  seq: number;
+}
+
+export function appendHistory(tx: Transaction, entry: HistoryEntry): Promise<StoredHistoryEntry>;
+export function appendHistory(
+  tx: Transaction,
+  entry: HistoryEntry,
+  options: { ifAbsent: true },
+): Promise<StoredHistoryEntry | null>;
 export async function appendHistory(
   tx: Transaction,
   entry: HistoryEntry,
-): Promise<{ id: string; seq: number }> {
+  options?: { ifAbsent: true },
+): Promise<StoredHistoryEntry | null> {
+  const eventKey = keyFor(entry);
+  if (options?.ifAbsent && eventKey === null) throw new Error("History entry has no event key");
   const [latest] = await tx.select({ seq: max(verifactuHistory.seq) }).from(verifactuHistory);
   const seq = (latest?.seq ?? 0) + 1;
-  const [row] = await tx
+  const insert = tx
     .insert(verifactuHistory)
-    .values({ ...entry, seq })
-    .returning({ id: verifactuHistory.id });
-  return { id: row!.id, seq };
+    .values({ ...entry, data: { ...entry.data }, seq, eventKey });
+  const [row] = await (
+    options?.ifAbsent ? insert.onConflictDoNothing({ target: verifactuHistory.eventKey }) : insert
+  ).returning({ id: verifactuHistory.id });
+  return row === undefined ? null : { id: row.id, seq };
+}
+
+function keyFor(entry: HistoryEntry): string | null {
+  switch (entry.kind) {
+    case "clock.confirmed":
+      return null;
+    case "conflict.observed":
+      return `conflict:${entry.registroId}:${entry.data.attempt}:${entry.data.cause}`;
+    case "conflict.lookup":
+      return `lookup:${entry.registroId}`;
+  }
+}
+
+export async function historyNodeForRecord(tx: Transaction, registroId: string): Promise<NodeId> {
+  const [record] = await tx
+    .select({ nodeId: verifactuRecords.nodeId })
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.id, registroId));
+  return record!.nodeId as NodeId;
+}
+
+const retainedConflict = {
+  id: verifactuHistory.id,
+  registroId: verifactuHistory.registroId,
+  recordedAt: verifactuHistory.at,
+  data: verifactuHistory.data,
+};
+
+interface RetainedConflict {
+  id: string;
+  registroId: string;
+  recordedAt: Date;
+}
+
+export async function observedConflicts(
+  tx: Transaction,
+  registroIds: SQLWrapper,
+): Promise<(RetainedConflict & ObservedConflictData)[]> {
+  const rows = await tx
+    .select(retainedConflict)
+    .from(verifactuHistory)
+    .where(
+      and(
+        inArray(verifactuHistory.registroId, registroIds),
+        eq(verifactuHistory.kind, "conflict.observed"),
+      ),
+    )
+    .orderBy(
+      asc(sql`json_extract(${verifactuHistory.data}, '$.attempt')`),
+      asc(verifactuHistory.seq),
+    );
+  return rows.map(({ data, registroId, ...row }) => ({
+    ...row,
+    registroId: registroId!,
+    attempt: data.attempt as number,
+    cause: data.cause as ConflictCause,
+    evidence: data.evidence as ConflictEvidence,
+  }));
+}
+
+export async function lookupConflicts(
+  tx: Transaction,
+  registroIds: SQLWrapper | readonly string[],
+): Promise<(RetainedConflict & LookupConflictData)[]> {
+  const rows = await tx
+    .select(retainedConflict)
+    .from(verifactuHistory)
+    .where(
+      and(
+        inArray(verifactuHistory.registroId, registroIds),
+        eq(verifactuHistory.kind, "conflict.lookup"),
+      ),
+    )
+    .orderBy(asc(verifactuHistory.seq));
+  return rows.map(({ data, registroId, ...row }) => ({
+    ...row,
+    registroId: registroId!,
+    evidence: data.evidence as LookupConflictEvidence,
+  }));
+}
+
+export async function lookupConflict(
+  tx: Transaction,
+  registroId: string,
+): Promise<(RetainedConflict & LookupConflictData) | null> {
+  const [row] = await lookupConflicts(tx, [registroId]);
+  return row ?? null;
 }

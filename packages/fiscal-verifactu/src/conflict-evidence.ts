@@ -1,26 +1,27 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { invoiceSeries, type Transaction } from "@waitron/db";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import "./errors.js";
-import {
-  fiscalConflictEvidence,
-  type ConflictCause,
-  type ConflictEvidence,
-} from "./schema/conflict-evidence.js";
+import { appendHistory, historyNodeForRecord } from "./history.js";
 import { filingCases } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
+import { verifactuHistory } from "./schema/verifactu-history.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 
-export type {
-  ConflictComparison,
-  ConflictCause,
-  ConflictEvidence,
-} from "./schema/conflict-evidence.js";
+export type { ConflictComparison, ConflictCause, ConflictEvidence } from "./conflict-types.js";
 
 export type { ConflictRef, ActiveConflict } from "./conflict-types.js";
-import type { ActiveConflict } from "./conflict-types.js";
+import type {
+  ActiveConflict,
+  ConflictCause,
+  ConflictEvidence,
+  LookupConflictEvidence,
+} from "./conflict-types.js";
+
+const observed = alias(verifactuHistory, "observed");
+const lookup = alias(verifactuHistory, "lookup");
 
 export async function assertNoActiveConflict(tx: Transaction, nodeId: string): Promise<void> {
   if ((await readActiveConflicts(tx, nodeId)).length !== 0) {
@@ -46,8 +47,8 @@ export async function readActiveConflicts(
       invoiceIdentity: verifactuRecords.numSerieFactura,
       caseCause: filingCases.cause,
       openedAt: filingCases.openedAt,
-      observation: fiscalConflictEvidence,
-      lookup: fiscalLookupConflicts,
+      observation: { id: observed.id, at: observed.at, data: observed.data },
+      lookup: { id: lookup.id, at: lookup.at, data: lookup.data },
     })
     .from(verifactuRecords)
     .innerJoin(
@@ -59,31 +60,35 @@ export async function readActiveConflicts(
     )
     .innerJoin(filingCases, eq(filingCases.registroId, verifactuRecords.id))
     .leftJoin(
-      fiscalConflictEvidence,
-      and(
-        eq(fiscalConflictEvidence.registroId, verifactuRecords.id),
-        eq(fiscalConflictEvidence.caseId, filingCases.id),
-      ),
+      observed,
+      and(eq(observed.registroId, verifactuRecords.id), eq(observed.kind, "conflict.observed")),
     )
-    .leftJoin(fiscalLookupConflicts, eq(fiscalLookupConflicts.registroId, verifactuRecords.id))
+    .leftJoin(
+      lookup,
+      and(eq(lookup.registroId, verifactuRecords.id), eq(lookup.kind, "conflict.lookup")),
+    )
     .where(
       and(
         eq(verifactuIdentities.nodeId, nodeId),
         isNull(verifactuIdentities.revocadoEn),
         or(
-          isNotNull(fiscalConflictEvidence.id),
-          isNotNull(fiscalLookupConflicts.id),
+          isNotNull(observed.id),
+          isNotNull(lookup.id),
           inArray(filingCases.cause, ["fiscal.huella_divergente", "fiscal.duplicado_anulado"]),
         ),
       ),
     )
-    .orderBy(asc(verifactuRecords.secuencia), asc(fiscalConflictEvidence.attempt));
+    .orderBy(
+      asc(verifactuRecords.secuencia),
+      asc(sql`json_extract(${observed.data}, '$.attempt')`),
+    );
   const found = new Set<string>();
   const active: ActiveConflict[] = [];
   for (const row of rows) {
     if (found.has(row.registroId)) continue;
     const cause =
-      row.observation?.cause ?? (row.lookup === null ? row.caseCause : "fiscal.huella_divergente");
+      row.observation?.data.cause ??
+      (row.lookup === null ? row.caseCause : "fiscal.huella_divergente");
     if (cause !== "fiscal.huella_divergente" && cause !== "fiscal.duplicado_anulado") continue;
     found.add(row.registroId);
     active.push({
@@ -92,12 +97,11 @@ export async function readActiveConflicts(
       sifId: row.sifId,
       installationIdentity: row.installationIdentity,
       invoiceIdentity: row.invoiceIdentity,
-      observedAt: (
-        row.observation?.recordedAt ??
-        row.lookup?.recordedAt ??
-        row.openedAt
-      ).toISOString(),
-      evidence: row.observation?.evidence ?? row.lookup?.evidence ?? null,
+      observedAt: (row.observation?.at ?? row.lookup?.at ?? row.openedAt).toISOString(),
+      evidence:
+        (row.observation?.data.evidence as ConflictEvidence | undefined) ??
+        (row.lookup?.data.evidence as LookupConflictEvidence | undefined) ??
+        null,
       cause,
       evidenceId: row.observation?.id ?? row.lookup?.id ?? null,
     });
@@ -142,28 +146,21 @@ export async function recordConflictEvidence(
   tx: Transaction,
   input: {
     registroId: string;
-    caseId: string;
     attempt: number;
     cause: ConflictCause;
     evidence: ConflictEvidence;
     now: Date;
   },
 ): Promise<void> {
-  await tx
-    .insert(fiscalConflictEvidence)
-    .values({
+  await appendHistory(
+    tx,
+    {
+      kind: "conflict.observed",
+      nodeId: await historyNodeForRecord(tx, input.registroId),
       registroId: input.registroId,
-      caseId: input.caseId,
-      attempt: input.attempt,
-      cause: input.cause,
-      evidence: input.evidence,
-      recordedAt: input.now,
-    })
-    .onConflictDoNothing({
-      target: [
-        fiscalConflictEvidence.registroId,
-        fiscalConflictEvidence.attempt,
-        fiscalConflictEvidence.cause,
-      ],
-    });
+      at: input.now,
+      data: { attempt: input.attempt, cause: input.cause, evidence: input.evidence },
+    },
+    { ifAbsent: true },
+  );
 }
