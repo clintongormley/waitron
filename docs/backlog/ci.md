@@ -140,21 +140,6 @@ the service-status browser suite failed with Playwright's "Frame was detached" d
 whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
 again on the next sighting rather than re-running to green.
 
-A fourth, first seen on PR #2979 (2026-11-12, run 43259195658, attempt 1, `test-till` shard 3):
-`apps/till/src/till-app.test.ts` "a completed refund keeps the Transactions query, filters, sorting
-and page while leaving the basket intact" gave up waiting with the last list request still sending
-`q: ''` after "0091 " was typed in the Transactions search. The branch changed only a comment in the
-till; the case passed locally and on the shard's re-run. Of the 40 most recent failed CI runs, two
-had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 43137922853); none
-was this case. Earlier sightings were not searched further. The log is kept at
-`~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
-
-The same case failed on PR #4104 (2026-11-23, [run 45083073547](https://github.com/clintongormley/waitron/actions/runs/45083073547),
-`test-till (3)`, job 137395736631). Again the request still held `q: ''` after searching for `0091 `.
-The focused case passed locally. Lane K kept the failed log under
-`receipts/a1047-slice2/ci-till3-failed.log`. The test still needs a root-cause fix.
-
-
 **Native Chromium startup exceeded its test budget once (PR #3686, 2026-11-17).**
 Run [44177182245](https://github.com/clintongormley/waitron/actions/runs/44177182245),
 `test-dashboard (6)`, job `134372042174`: the native reload case at
