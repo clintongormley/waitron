@@ -650,8 +650,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
   "tender.refund_exceeds_payment": {
-    en: "That is more than can be refunded from this payment. A tip is refunded only with all the remaining payment",
-    es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con todo lo que queda del pago",
+    en: "That is more than can be refunded from this payment. A tip is refunded on its own, or with all the remaining payment",
+    es: "Es más de lo que se puede devolver de este pago. La propina se devuelve sola o con todo lo que queda del pago",
   },
   "tender.refund_exceeds_cancelled": {
     en: "This refund is more than the cancelled dishes' value",

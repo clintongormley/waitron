@@ -176,7 +176,7 @@ export const en = {
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Before starting another refund, open the receipt on another device that takes payments and choose Refund a payment: it lists what is left to refund and any refund still waiting.",
   "invoice_correction.title": "Correct invoice",
-  "invoice_correction.explain": "Correct an overcharge and return the difference.",
+  "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
   "invoice_correction.loading": "Reading the invoice…",
   "invoice_correction.read_failed": "The invoice could not be read. Nothing has changed.",
   "invoice_correction.dishes": "Dishes to correct (optional)",
@@ -2515,7 +2515,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Antes de iniciar otra devolución, abre el recibo en otro dispositivo que cobre y elige Devolver un pago: muestra lo que queda por devolver y cualquier devolución pendiente.",
   "invoice_correction.title": "Rectificar factura",
-  "invoice_correction.explain": "Corrige un cobro de más y devuelve la diferencia.",
+  "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
   "invoice_correction.loading": "Consultando la factura…",
   "invoice_correction.read_failed": "No se ha podido leer la factura. No ha cambiado nada.",
   "invoice_correction.dishes": "Platos que se rectifican (opcional)",

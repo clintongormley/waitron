@@ -2613,7 +2613,8 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
    "Void" half never decides anything, because a Comp reason cannot carry cancel.
 4. **The rest refunded later from a second payment is an ordinary refund**: that window is
    not filled in with the cancelled dishes, so staff enter its amount and reason and get fresh
-   approval if needed; it is not linked to the cancel (Decision 16).
+   approval if needed (Decision 16). Since 2026-11-23 it counts against, and is linked to, the
+   cancels still owed ([decision](fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23)).
 5. **New words, ours:** "Refund pending €x" («Devolución pendiente …») and "This refund is more
    than the cancelled dishes' value" («Esta devolución supera el valor de los platos
    cancelados»), which names no amount where the plan's wording did.

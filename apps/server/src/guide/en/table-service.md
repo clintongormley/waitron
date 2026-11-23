@@ -358,7 +358,7 @@ own, with the VAT that stays declared because no corrective invoice is filed.
 Refund a payment gives money back without correcting the invoice, so it refuses money **Correct
 invoice** can give back, such as for a complaint: use Correct invoice for that. It still gives back
 a tip, what is still owed for dishes cancelled with **Cancel and refund** or **Finish table**, a part
-payment as below, and money on an invoice Correct invoice cannot correct.
+payment as below, and money on an invoice Correct invoice can never correct.
 
 To give back a part payment that the table's receipt already took off, first use **Correct
 invoice** on the table's receipt. Once that has given back everything paid on it, choose **Refund a
@@ -371,7 +371,7 @@ under it.
 
 You do not need another PIN to refund up to the cancelled dishes' remaining value, with no tip.
 To give back more than the cancelled dishes' remaining value, use **Correct invoice**. Where it
-cannot correct the receipt, raising the amount needs refund permission or a fresh approval PIN, and
+can never correct the receipt, raising the amount needs refund permission or a fresh approval PIN, and
 adding a tip always does. The refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
 terminal always asks for a fresh PIN to confirm that the terminal refund was done.
 

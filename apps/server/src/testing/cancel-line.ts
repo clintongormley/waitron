@@ -297,8 +297,7 @@ export async function cancelItemHttp(
 
 /**
  * Cancels all of line `lineNo` of a settled bill keeping its charge, with the Refund tick, through
- * {@link cancelItem}, as Cancel and refund does; answers the cancel's id for a refund to name. A
- * plain refund of a correctable ticket must name such a cancel and stay within what it owes.
+ * {@link cancelItem}, as Cancel and refund does; answers the cancel's id for a refund to name.
  */
 export async function refundableCancel(
   db: Database,

@@ -403,8 +403,10 @@ cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancel
 (`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
 held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:181-183`). The
 ordinary cancellation it handles is written only by core's `recordVoid`
-(`packages/core/src/record-void.ts`), which no till screen or server route calls. The code is kept,
-not deleted.
+(`packages/core/src/record-void.ts`), which no till screen or server route calls
+(`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
+2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the payments
+package's `recordVoid` is another function). The code is kept, not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an
 ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
@@ -1158,7 +1160,7 @@ and built on the owner's word of 21 November 18:17; shown to the owner as replac
 approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
 A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
-filing record, cancelled, not fully paid, a full invoice naming a customer, records that need
+filing record, a full invoice naming a customer, records that need
 checking), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still

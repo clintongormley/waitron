@@ -7,7 +7,11 @@
 > what Correct invoice would give back, the watcher's rule shown to the owner on 23 November without
 > objection
 > ([decision](../../backlog/fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23);
-> [plan](../plans/2026-11-19-adviser-goodwill-corrective.md)).
+> [plan](../plans/2026-11-19-adviser-goodwill-corrective.md)). The same work retired three more
+> statements below: Correct invoice no longer needs dishes picked at mixed rates, shares an amount by
+> menu price with each dish capped at what is left of it, and offers every reason, not only Void ones
+> ([sharing](../../backlog/fiscal.md#money-given-back-is-shared-by-menu-price-owner-and-watcher-2026-11-23);
+> [reasons](../../backlog/fiscal.md#correct-invoice-offers-every-reason-complaint-included-owner-2026-11-23)).
 >
 > **2026-11-12:** the owner replaced "file when opened" with "When all money is back"
 > ([decision](../../backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12));

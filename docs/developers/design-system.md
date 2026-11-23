@@ -3391,7 +3391,9 @@ and the staffing grid's block editor in the A761 entry):
   Give back a payment: drawn `secondary` while no reason is chosen or the reasons are loading (and,
   on a receipt's refund, while no payment is picked), `primary` once a reason is chosen, keeping
   `primary` while their own refund is being sent. They stay enabled and explain a missing reason on
-  press.
+  press. On a hand-keyed card payment, a receipt's Refund a payment is also drawn `secondary` and
+  disabled, with `tender.refund_needs_correction`'s sentence as the bottom message from the start,
+  while the payment amount is above the payment's `plainRefundLimit` (the watcher, 2026-11-23 22:51).
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks and the sign-in screens. Nothing guards it across screens.
 

@@ -377,8 +377,8 @@ factura rectificativa.
 Devolver un pago devuelve dinero sin rectificar la factura, así que rechaza el dinero que
 **Rectificar factura** puede devolver, como por una queja: usa Rectificar factura para eso. Sigue
 devolviendo una propina, lo que falta por devolver de platos cancelados con **Cancelar y devolver** o
-**Cerrar mesa**, un pago parcial como el de abajo y el dinero de una factura que Rectificar factura no
-puede rectificar.
+**Cerrar mesa**, un pago parcial como el de abajo y el dinero de una factura que Rectificar factura nunca
+podrá rectificar.
 
 Para devolver un pago parcial que el ticket de la mesa ya descontó, usa primero **Rectificar
 factura** en el ticket de la mesa. Cuando haya devuelto todo lo pagado en él, elige **Devolver un
@@ -391,7 +391,7 @@ platos aparecen debajo.
 
 No necesitas otro PIN para devolver hasta el valor pendiente de los platos cancelados, sin
 propina. Para devolver más que el valor pendiente de los platos cancelados, usa **Rectificar
-factura**. Si no puede rectificar el recibo, subir el importe necesita permiso para devolver o una
+factura**. Si nunca podrá rectificar el recibo, subir el importe necesita permiso para devolver o una
 nueva aprobación con PIN, y añadir propina siempre lo necesita. La devolución sigue contando para los platos cancelados, hasta su valor.
 Una tarjeta registrada desde un datáfono aparte siempre pide un PIN nuevo para confirmar que la
 devolución en el datáfono se ha hecho.
