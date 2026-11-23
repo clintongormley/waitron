@@ -4203,51 +4203,70 @@ describe("createAgent — A4 page jobs", () => {
     expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
   });
 
-  it("resends an unsent report across wall-clock jumps either way and gives it up by the steady clock", async () => {
-    let wall = 1_000;
-    let steady = 1_000;
-    const printing = deferred<PagePrintOutcome>();
-    const { host, renewals } = pageHost(() => printing.promise, { now: () => wall });
-    const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
-    const c = client({
-      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
-      reportPageJob,
-    });
-    const agent = createAgent({ host, client: c, steady: () => steady });
-    await agent.runOnce();
-    await settle();
-    wall = 50_000;
-    steady = 50_000;
-    renewals[0]!.resolve();
-    await settle();
-    printing.resolve(SENT);
-    await settle();
-    expect(reportPageJob).toHaveBeenCalledTimes(1);
+  it.each([
+    ["an injected", true],
+    ["the default", false],
+  ])(
+    "resends an unsent report across wall-clock jumps either way and gives it up by %s steady clock",
+    async (_clock, inject) => {
+      let wall = 1_000;
+      let steady = 1_000;
+      const steadyClock = inject
+        ? undefined
+        : vi.spyOn(performance, "now").mockImplementation(() => steady);
+      try {
+        const printing = deferred<PagePrintOutcome>();
+        const { host, renewals } = pageHost(() => printing.promise, { now: () => wall });
+        const reportPageJob = vi.fn(async () =>
+          failR({ kind: "unreachable", detail: "status 503" }),
+        );
+        const c = client({
+          claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+          reportPageJob,
+        });
+        const agent = createAgent({
+          host,
+          client: c,
+          ...(inject ? { steady: () => steady } : {}),
+        });
+        await agent.runOnce();
+        await settle();
+        wall = 50_000;
+        steady = 50_000;
+        renewals[0]!.resolve();
+        await settle();
+        printing.resolve(SENT);
+        await settle();
+        expect(reportPageJob).toHaveBeenCalledTimes(1);
 
-    wall = 50_000 - 400 * 86_400_000;
-    steady = 50_001;
-    await agent.runOnce();
-    await settle();
-    expect(reportPageJob).toHaveBeenCalledTimes(2);
+        wall = 50_000 - 400 * 86_400_000;
+        steady = 50_001;
+        await agent.runOnce();
+        await settle();
+        expect(reportPageJob).toHaveBeenCalledTimes(2);
 
-    wall = 50_000 + 400 * 86_400_000;
-    steady = 50_002;
-    await agent.runOnce();
-    await settle();
-    expect(reportPageJob).toHaveBeenCalledTimes(3);
-    expect(host.logs.filter((line) => line.includes("abandoned"))).toEqual([]);
+        wall = 50_000 + 400 * 86_400_000;
+        steady = 50_002;
+        await agent.runOnce();
+        await settle();
+        expect(reportPageJob).toHaveBeenCalledTimes(3);
+        expect(host.logs.filter((line) => line.includes("abandoned"))).toEqual([]);
 
-    steady = 50_000 + PAGE_REPORT_GIVE_UP_MS;
-    await agent.runOnce();
-    await settle();
-    expect(reportPageJob).toHaveBeenCalledTimes(4);
+        steady = 50_000 + PAGE_REPORT_GIVE_UP_MS;
+        await agent.runOnce();
+        await settle();
+        expect(reportPageJob).toHaveBeenCalledTimes(4);
 
-    steady += 1;
-    await agent.runOnce();
-    await settle();
-    expect(reportPageJob).toHaveBeenCalledTimes(4);
-    expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
-  });
+        steady += 1;
+        await agent.runOnce();
+        await settle();
+        expect(reportPageJob).toHaveBeenCalledTimes(4);
+        expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
+      } finally {
+        steadyClock?.mockRestore();
+      }
+    },
+  );
 
   it("logs a runner that throws and claims again on the next pull", async () => {
     const { host } = pageHost(vi.fn(async () => SENT));

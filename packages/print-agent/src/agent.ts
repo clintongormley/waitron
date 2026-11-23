@@ -52,8 +52,8 @@ const UNCERTAIN: PageJobOutcome = { status: "unknown", failureCode: "timeout" };
 /** Failures in which the report may never have reached the server. */
 const REPORT_RETRIED = new Set<Failure["kind"]>(["unreachable", "rate_limited", "pairing_closed"]);
 
-/** `aliveAt`: when the claim was taken or last renewed. `hold`: the printer's last reported hold,
- * sent with the next renewal. */
+/** `aliveAt`: the steady-clock reading when the claim was taken or last renewed. `hold`: the
+ * printer's last reported hold, sent with the next renewal. */
 interface HeldClaim {
   job: PageJob;
   aliveAt: number;
