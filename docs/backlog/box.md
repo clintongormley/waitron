@@ -11,16 +11,29 @@ that measures elapsed time on a steady clock. Start by listing every site
 (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
 applies today; behaviour is kept site by site. Raised by #2331's review.
 
-**Still open:** one wait measured inside one process is left: the print agent's `passed()`
-deadlines in `packages/print-agent/src/agent.ts` (the discovery and probe windows, the self-enrol
-retry spacing and the network-reset window). Each counts a deadline further ahead than its own
-length as passed. The reset window's `resetAt` is also handed to the agent's setup page, which shows
-it as a countdown, so moving it changes what that page receives. Every row in the table below is a
-saved date, a heartbeat shared between processes, an ordering, or calendar time — sorted on
-2026-11-23 from each row's rule as the table states it, not by running anything — so none is a
-process-local wait for this entry to convert. The sign-in/account limiter families are outside this
-open inventory; the persisted PIN helper exception is recorded under
-[Decisions and deliberate limits](#decisions-and-deliberate-limits).
+**Still open:** these waits measured inside one process still guard by hand against a backward
+wall-clock step:
+
+- The print agent's `passed()` deadlines in `packages/print-agent/src/agent.ts`: the discovery
+  window, how long an address the server asked to have checked stays checkable, the spacing between
+  discovery scans and between address checks, how long a device an address check found stays
+  listed, the self-enrol retry spacing and the network-reset window. Each
+  counts a deadline further ahead than its own length as passed. Two of them leave `agent.ts` as
+  wall-clock times, so moving them changes what their readers receive: the setup page shows
+  `resetAt` as a countdown, and `host.scan` receives the discovery window's end as the network
+  sweep's deadline.
+- The network sweep in `apps/print-agent/src/sweep.ts` (`sweepPort`), which starts no further dial
+  once its deadline lies further ahead than it did at the sweep's start. The search below finds
+  neither this nor the print agent's `passed()` (its comment splits "stepped back" across two
+  lines), so neither has a row.
+- The backup schedule's interval fire in `apps/server/src/backup-sweep.ts` (`createBackupSchedule`),
+  held in memory as one interval after the time it was worked out (on a first pass with Cloud,
+  after the last saved Cloud copy); its row is in the table below.
+
+The other rows below are saved dates, a heartbeat shared between processes, orderings, calendar time
+or declared limits, sorted on 2026-11-23 from each row's rule as the table states it, not by running
+anything. The sign-in/account limiter families are outside this open inventory; the persisted PIN
+helper exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ### Inventory scope
 
@@ -51,9 +64,6 @@ the table retains the earlier loop name and its clock rule.
 
 **2026-11-21, os13:** the card refund resend check below now lives in
 `resolve` in `apps/server/src/tender-refund-sends.ts`, for both bill and receipt refunds.
-
-**2026-11-23:** the print agent's page-report give-up check now measures on the steady clock
-(`resendPageReports`), so its row is gone.
 
 These rows keep the wall clock. A persisted date, ordering invariant or calendar rule is not made
 process-relative by replacing its clock read.
