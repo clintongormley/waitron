@@ -610,7 +610,7 @@ export async function withInvoiceNumberCollision<T>(db: Database, issue: () => P
 /** Lets a corruption fixture supply a series state the write path would refuse. */
 export async function withInvoiceSeriesGuardDropped(
   db: Database | Transaction,
-  change: () => PromiseLike<unknown>,
+  change: () => unknown,
 ): Promise<void> {
   const [trigger] = db.all<{ sql: string }>(sql`
     select sql from sqlite_schema where type = 'trigger' and name = 'invoice_series_guard_update'
