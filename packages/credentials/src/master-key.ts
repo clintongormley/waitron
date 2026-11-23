@@ -80,7 +80,7 @@ export function sealingPublicKey(masterKey: Uint8Array): SealingPublicKey {
   }) as SealingPublicKey;
 }
 
-/** Reads a stored sealing public key back, refusing bytes that are not an X25519 SPKI. */
+/** Checks the length itself: `createPublicKey` accepts an X25519 SPKI with a byte after it. */
 export function sealingPublicKeyFrom(spki: Uint8Array): SealingPublicKey {
   let key: KeyObject;
   try {
@@ -94,7 +94,6 @@ export function sealingPublicKeyFrom(spki: Uint8Array): SealingPublicKey {
   return Buffer.from(spki) as SealingPublicKey;
 }
 
-/** The first 8 bytes of SHA-256 of the sealing public key's SPKI DER. */
 export function masterKeyId(publicKey: SealingPublicKey): Buffer {
   return createHash("sha256").update(publicKey).digest().subarray(0, 8);
 }
@@ -106,7 +105,6 @@ export function backupKey(masterKey: Uint8Array, n: number): Buffer {
   return derive(masterKey, `backup-key.${String(n)}`);
 }
 
-/** The disk key's 32 bytes, named by the box id's lower-case UUID text. */
 export function diskKey(masterKey: Uint8Array, boxId: string): Buffer {
   if (!isUuid(boxId)) {
     throw new AppError("master_key.derivation_input_invalid", { input: "box_id" });

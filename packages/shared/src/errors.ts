@@ -16,7 +16,8 @@
  * because every code doubles as a translation key.
  *
  * `shared.*` is not an exception: it names the value types this package defines (ids, exact
- * decimals and the stored counts they convert to), common to every package that parses one.
+ * decimals and the stored counts they convert to, and the printed code of a 24-byte key), common
+ * to every package that parses one.
  *
  * An augmenting `errors.ts` must be transitively reachable from its package's own `index.ts`.
  * Declaration merging only covers the files a program loads, so an unimported `errors.ts` can pass

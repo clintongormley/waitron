@@ -3,10 +3,11 @@ import { AppError } from "@waitron/shared";
 import { deriveKey, deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
 
-const MAGIC = Buffer.from("WBK1"); // Waitron BacKup, format 1
+const MAGIC = Buffer.from("WBK1"); // Waitron BacKup
 export const VERSION = 1;
-/** The version byte selects the KDF cost params, so an artifact stays decryptable after a future
- * SCRYPT_PARAMS hardening: bump VERSION for new writes and keep the old params here.
+/** Version 1 is opened by a passphrase through scrypt with these params; version 2 by a backup key,
+ * with no scrypt. A future SCRYPT_PARAMS hardening takes an unused version number and keeps v1's
+ * params here.
  *
  * v1's entry is a FROZEN LITERAL, deliberately NOT an alias of `SCRYPT_PARAMS`: an in-place hardening
  * of that constant would otherwise re-cost every v1 artifact and make it undecryptable. */
@@ -16,7 +17,7 @@ export const KDF_BY_VERSION: Record<number, ScryptParams> = {
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;
-/** The authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
+/** Version 1's authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
  * bound into the GCM tag as AAD, so a flipped header byte fails authentication. */
 const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33
 const BACKUP_KEY_VERSION = 2;
@@ -171,7 +172,6 @@ export function backupKeyFrameHeader(
   return Buffer.concat([MAGIC, Buffer.from([BACKUP_KEY_VERSION]), masterKeyId, n, salt, iv]);
 }
 
-/** The AES-256-GCM key of a version 2 frame: HKDF-SHA256 over backup key N, salted by the frame. */
 export function backupKeyFrameKey(backupKey: Uint8Array, salt: Uint8Array): Buffer {
   if (backupKey.length !== 32) {
     throw new AppError("backup.archive_key_invalid", { input: "backup_key" });

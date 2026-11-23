@@ -186,7 +186,8 @@ key stops working as today. The first pack, made at setup, always carries the ke
 
 This changes the fiscal module's seat: today it takes a new key's secret and returns a whole PDF
 (`module.ts:1546-1555`), and its drawing refuses anything not shaped as a 32-character key
-(`packages/fiscal-verifactu/src/recovery-key-code.ts:13`). It would gain a variant that draws page 6
+(`packages/fiscal-verifactu/src/recovery-key-code.ts:13`; since A1323 PR 1, 2026-11-23, that refusal is in
+`packages/shared/src/master-key-code.ts`). It would gain a variant that draws page 6
 without a new key, and return its page for the host to put into the pack. That is a change to a
 contract between packages, so the build takes the full review.
 
