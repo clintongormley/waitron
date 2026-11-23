@@ -428,10 +428,13 @@ export async function cancelItem(
           .from(persons)
           .where(eq(persons.id, operatorId));
         if (actor === undefined) throw new AppError("person.not_found", { personId: operatorId });
-        const rows = await tx
-          .select()
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, bill!.id));
+        // Nothing has been written since the filing read the bill's lines.
+        const rows =
+          filing?.stored ??
+          (await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, bill!.id)));
         const freeIds = comingBack.map((free) => free.line.id);
         const work = await dishKitchenItems(tx, [...dishIds, ...freeIds]);
         const families = serviceCancellationFamilies(rows, taken, priors);
