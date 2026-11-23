@@ -1378,7 +1378,7 @@ it("has a sentence in both languages for each refusal of a box asking to join", 
   for (const code of [
     "membership.held_untrusted",
     "mirror.join_not_found",
-    "mirror.join_wrong_code",
+    "mirror.join_not_confirmed",
     "mirror.join_in_progress",
     "mirror.join_other_approved",
     "mirror.join_stopped_after_listing",
@@ -1397,11 +1397,20 @@ it("has a sentence in both languages for each refusal of a box asking to join", 
   }
 });
 
-it("words a tap refused while another box is being or was just approved as a next step", () => {
+it("words an Add as spare refused while another box is being or was just added as a next step", () => {
   expect(codeMessage("mirror.join_other_approved", "en")).toBe(
-    "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+    "Another box is being added as a spare, or was added a moment ago. Wait for it to finish joining, then try this one again in a few minutes.",
   );
   expect(codeMessage("mirror.join_other_approved", "es")).toBe(
-    "Se está aprobando la unión de otro servidor, o se aprobó hace un momento. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+    "Se está añadiendo otro servidor como reserva, o se añadió hace un momento. Espera a que termine de unirse y vuelve a intentarlo con este dentro de unos minutos.",
+  );
+});
+
+it("words an Add as spare sent before the new box chose Join as a next step", () => {
+  expect(codeMessage("mirror.join_not_confirmed", "en")).toBe(
+    "The new box has not chosen Join yet. Choose Join on the new box, then Add as spare here.",
+  );
+  expect(codeMessage("mirror.join_not_confirmed", "es")).toBe(
+    "El servidor nuevo aún no ha elegido Unirse. Elige Unirse en el servidor nuevo y después Añadir como reserva aquí.",
   );
 });

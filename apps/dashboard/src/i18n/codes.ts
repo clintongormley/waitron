@@ -1645,17 +1645,17 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This box is no longer asking to join: it ran out of time, or someone chose Start again on it.",
     es: "Este servidor ya no está pidiendo unirse: se agotó el tiempo o alguien eligió Empezar de nuevo en él.",
   },
-  "mirror.join_wrong_code": {
-    en: "That is not the code the new box shows, so this request has ended and nothing was sent. If you are adding a box now, choose Start again on it and check its new code.",
-    es: "Ese no es el código que muestra el servidor nuevo, así que esta solicitud ha terminado y no se ha enviado nada. Si estás añadiendo un servidor ahora, elige Empezar de nuevo en él y comprueba su código nuevo.",
+  "mirror.join_not_confirmed": {
+    en: "The new box has not chosen Join yet. Choose Join on the new box, then Add as spare here.",
+    es: "El servidor nuevo aún no ha elegido Unirse. Elige Unirse en el servidor nuevo y después Añadir como reserva aquí.",
   },
   "mirror.join_in_progress": {
     en: "This box's copy is already being prepared. Wait a moment.",
     es: "Ya se está preparando la copia para este servidor. Espera un momento.",
   },
   "mirror.join_other_approved": {
-    en: "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
-    es: "Se está aprobando la unión de otro servidor, o se aprobó hace un momento. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+    en: "Another box is being added as a spare, or was added a moment ago. Wait for it to finish joining, then try this one again in a few minutes.",
+    es: "Se está añadiendo otro servidor como reserva, o se añadió hace un momento. Espera a que termine de unirse y vuelve a intentarlo con este dentro de unos minutos.",
   },
   "mirror.join_stopped_after_listing": {
     en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
