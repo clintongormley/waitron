@@ -3,11 +3,12 @@ import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
+  products,
   sales,
   saleLines,
   taxpayer,
@@ -19,6 +20,7 @@ import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal, decimalToCents, sumDecimals, workingOrderId } from "@waitron/shared";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -120,7 +122,18 @@ async function payCash(billId: string, amount: string) {
   return invoice;
 }
 
-const bill = async (lines: RoundLine[]) => (await billWith(venue, lines)).billId;
+const bill = async (lines: RoundLine[], opts: { dining?: "takeaway" } = {}) =>
+  (await billWith(venue, lines, opts)).billId;
+
+async function takeawayRates(rates: Record<string, string>) {
+  for (const [name, rate] of Object.entries(rates)) {
+    const [product] = await inTx(venue, (tx) =>
+      tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
+    );
+    await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
+    onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
+  }
+}
 
 /** The receipt's lines for the bill as it stands, with what each prints beneath it. */
 function receiptOf(billId: string) {
@@ -270,7 +283,7 @@ describe("receiptLines", () => {
           gross: "10.80",
           listGross: "12.00",
           listUnitPriceGross: "12.00",
-          net: { unitPrice: "8.93", priceQuantity: "1.000", base: "8.93", rate: "21.00" },
+          net: { unitPrice: "9.82", priceQuantity: "1.000", base: "9.82", rate: "10.00" },
           adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
         },
         {
@@ -283,10 +296,7 @@ describe("receiptLines", () => {
       expect(replay.lines).toMatchObject(expected);
       expect(receipt.lines[1]).not.toHaveProperty("listUnitPriceGross");
       expect(replay.lines[1]).not.toHaveProperty("listUnitPriceGross");
-      expect(replay.vatBreakdown).toEqual([
-        { rate: "21.00", base: "8.93", tax: "1.87" },
-        { rate: "10.00", base: "5.45", tax: "0.55" },
-      ]);
+      expect(replay.vatBreakdown).toEqual([{ rate: "10.00", base: "15.27", tax: "1.53" }]);
       expect(replay.total).toBe("16.80");
       const reordered = await inTx(venue, async (tx) => {
         const stored = await readStoredOrder(tx, billId);
@@ -300,8 +310,8 @@ describe("receiptLines", () => {
         );
       });
       expect(reordered.lines).toMatchObject([...expected].reverse());
-      expect(receipt.lines).toMatchObject([{ net: { tax: "1.87" } }, { net: { tax: "0.55" } }]);
-      expect(replay.lines).toMatchObject([{ net: { tax: "1.87" } }, { net: { tax: "0.55" } }]);
+      expect(receipt.lines).toMatchObject([{ net: { tax: "0.98" } }, { net: { tax: "0.55" } }]);
+      expect(replay.lines).toMatchObject([{ net: { tax: "0.98" } }, { net: { tax: "0.55" } }]);
       const changedDisplay = await inTx(venue, async (tx) => {
         const stored = await readStoredOrder(tx, billId);
         const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
@@ -316,7 +326,7 @@ describe("receiptLines", () => {
         );
       });
       expect(changedDisplay.lines).toMatchObject([
-        { gross: "99.99", net: { base: "8.93", tax: "1.87" } },
+        { gross: "99.99", net: { base: "9.82", tax: "0.98" } },
         { gross: "99.99", net: { base: "5.45", tax: "0.55" } },
       ]);
     } finally {
@@ -435,7 +445,7 @@ describe("receiptLines", () => {
         expect(receipt.lines[0]).toMatchObject({
           listGross: "12.00",
           adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
-          net: { base: "8.93", tax: "1.87" },
+          net: { base: "9.82", tax: "0.98" },
         });
         expect(receipt.lines[1]).not.toHaveProperty("listGross");
         expect(receipt.lines[1]).not.toHaveProperty("adjustments");
@@ -640,7 +650,11 @@ describe("receiptLines", () => {
   });
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {
-    const billId = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
+    // Taken away, so the 21% Burger and Bottle and the 10% Bread print two rate letters.
+    await takeawayRates({ Burger: "21.00", Bottle: "21.00" });
+    const billId = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }], {
+      dining: "takeaway",
+    });
     await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await adjust(billId, {
       ...(await todayLine(venue, billId, 2)),
@@ -844,7 +858,11 @@ describe("receiptLines", () => {
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
-    const billId = await bill([{ name: "Croquettes", quantity: "3" }, { name: "Bread" }]);
+    // Taken away, so the 21% Croquettes and the 10% Bread print two rate letters.
+    await takeawayRates({ Croquettes: "21.00" });
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }, { name: "Bread" }], {
+      dining: "takeaway",
+    });
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_amount",

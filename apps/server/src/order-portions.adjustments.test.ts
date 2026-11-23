@@ -3,7 +3,7 @@ import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   adjustmentLines,
   adjustmentRefunds,
@@ -28,7 +28,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
+import {
+  createExtraList,
+  createProduct,
+  setTakeawayVatRate,
+  writeProductModifiers,
+} from "@waitron/menu";
 import {
   centsToDecimal,
   decimal,
@@ -137,7 +142,10 @@ async function splitCut(
   return splitPartyBill(tx, venue.cfg, billId, await cutParts(tx, venue.cfg, billId, transfers));
 }
 
-async function seated(tx: Transaction): Promise<{ billId: string; partyId: string }> {
+async function seated(
+  tx: Transaction,
+  dining?: "takeaway",
+): Promise<{ billId: string; partyId: string }> {
   const table = await createTable(tx, venue.cfg, {
     label: `R-${randomUUID().slice(0, 8)}`,
     zoneId: venue.tables.zoneId,
@@ -148,6 +156,9 @@ async function seated(tx: Transaction): Promise<{ billId: string; partyId: strin
     operatorId: venue.staffId,
   });
   await writePartyAllergy(tx, party.partyId, { answer: "none", guests: [] }, venue.staffId);
+  if (dining !== undefined) {
+    await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, party.tabId));
+  }
   return { billId: party.tabId, partyId: party.partyId };
 }
 
@@ -157,9 +168,9 @@ interface Bill {
 }
 
 /** Today's shape: each request line one stored line of its count, fired. */
-function groupedBill(lines: RoundLine[]): Promise<Bill> {
+function groupedBill(lines: RoundLine[], dining?: "takeaway"): Promise<Bill> {
   return inTx(venue, async (tx) => {
-    const bill = await seated(tx);
+    const bill = await seated(tx, dining);
     const round = await priceTabRound(tx, venue.cfg, bill.billId, roundOf(lines), "checked");
     await insertTabRound(tx, venue.cfg, round, round.rows);
     const stored = await tx
@@ -174,9 +185,9 @@ function groupedBill(lines: RoundLine[]): Promise<Bill> {
 }
 
 /** The same lines as bound portions, one dish per line, fired. */
-function portionsBill(lines: RoundLine[]): Promise<Bill> {
+function portionsBill(lines: RoundLine[], dining?: "takeaway"): Promise<Bill> {
   return inTx(venue, async (tx) => {
-    const bill = await seated(tx);
+    const bill = await seated(tx, dining);
     await addPortionRound(tx, venue.cfg, bill.billId, roundOf(lines), { fire: true });
     return bill;
   });
@@ -369,9 +380,9 @@ async function outcomeOf(billId: string) {
  * Applies `ask` to the dishes named `target` on both shapes — today's one line, and every portion
  * of the row named in `lineIds` — and answers both outcomes.
  */
-async function bothShapes(lines: RoundLine[], target: string, ask: Ask) {
-  const grouped = await groupedBill(lines);
-  const portions = await portionsBill(lines);
+async function bothShapes(lines: RoundLine[], target: string, ask: Ask, dining?: "takeaway") {
+  const grouped = await groupedBill(lines, dining);
+  const portions = await portionsBill(lines, dining);
   const [line] = await dishesNamed(grouped.billId, target);
   const members = await dishesNamed(portions.billId, target);
   await adjust(grouped.billId, { ...ask, lineId: line! });
@@ -398,16 +409,28 @@ function expectSameMoney(
 
 const bread: RoundLine = { name: "Bread" };
 
+async function takeawayRate(name: string, rate: string) {
+  const [product] = await inTx(venue, (tx) =>
+    tx.select({ id: products.id }).from(products).where(eq(products.name, name)),
+  );
+  await inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, rate));
+  onTestFinished(() => inTx(venue, (tx) => setTakeawayVatRate(tx, product!.id, "10.00")));
+}
+
 describe("A803 portions: a discount or comp on a whole row of identical portions", () => {
   it("A803 portions: 10% off a row of three €3.33 croquettes files 2 × €3.00 and 1 × €2.99 and prints one 10% line under the row, as one line of three does", async () => {
+    // Taken away, so the Croquettes' 21% and the Bread's 10% print two rate letters.
+    await takeawayRate("Croquettes", "21.00");
     const {
       grouped,
       portions,
       portionsBill: bill,
-    } = await bothShapes([{ name: "Croquettes", quantity: "3" }, bread], "Croquettes", {
-      action: "discount_percent",
-      percentBp: 1000,
-    });
+    } = await bothShapes(
+      [{ name: "Croquettes", quantity: "3" }, bread],
+      "Croquettes",
+      { action: "discount_percent", percentBp: 1000 },
+      "takeaway",
+    );
 
     expect(grouped.record.reduction).toBe(100);
     expect(grouped.due).toBe("11.49");

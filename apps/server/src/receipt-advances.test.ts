@@ -39,9 +39,8 @@ useVenueDb({
   },
 });
 
-const { seated, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
-  () => advanceVenue,
-);
+const { seated, seatedTakeaway, advance, payRest, restId, advanceFacts, caption, readTicket } =
+  advanceBills(() => advanceVenue);
 
 function recordBreakdown(saleId: string): string[][] {
   const records = filedInvoicesOf(advanceVenue.venue.db, saleId, new Date());
@@ -118,7 +117,7 @@ describe("the rest's ticket prints each advance it takes off", () => {
   });
 
   it("example 2: the advance at 10% prints with its rate letter, and the VAT table's 10% row is negative", async () => {
-    const billId = await seated("Salad bowl", "Wine case");
+    const billId = await seatedTakeaway("Salad bowl", "Wine case");
     const advanceId = await advance(billId, "50.00");
 
     const invoice = await payRest(billId, "50.00");

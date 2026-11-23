@@ -13,6 +13,7 @@ import {
   saleLines,
   sales,
   refunds as refundRows,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -96,6 +97,7 @@ useVenueDb({
           pricingUnit: "each",
           unitPrice: price,
           vatClass: "general",
+          takeawayVatRate: name === "Rib steak" ? "21.00" : undefined,
         });
         ids.set(name, product.id);
       }
@@ -131,6 +133,7 @@ async function soldForCash(
   dish: string | readonly string[],
   parts: readonly (string | { card: string })[],
   tip = "0.00",
+  dining: "eat_in" | "takeaway" = "eat_in",
 ) {
   const id = randomUUID();
   const deps = {
@@ -148,6 +151,12 @@ async function soldForCash(
     zoneId: venue.zoneId,
     operatorId: venue.operatorId,
   });
+  // The counter department sells eaten in; the way is switched before the invoice is issued.
+  if (dining === "takeaway") {
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, id)),
+    );
+  }
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   await payFor(id, parts, tip);
   const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
@@ -310,7 +319,7 @@ async function refusedWithNothingWritten(attempt: () => Promise<unknown>, error:
   expect(counts()).toEqual(before);
 }
 
-const STEAK_HALF = [{ rate: "21.00", base: "5.00", tax: "1.05" }];
+const STEAK_HALF = [{ rate: "10.00", base: "5.50", tax: "0.55" }];
 
 const MINUTE = 60_000;
 
@@ -468,7 +477,7 @@ describe("openInvoiceCorrection", () => {
   });
 
   it("accepts the split the till showed in any rate order", async () => {
-    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"]);
+    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"], "0.00", "takeaway");
     const lineIds = (await lineIdsOfSale(saleId)).sort();
     const preview = await inTx(venue, (tx) =>
       previewInvoiceCorrection(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, {
@@ -569,7 +578,7 @@ describe("openInvoiceCorrection", () => {
       pending: "0.00",
       left: "2.05",
       legs: [{ state: "completed", appliedAmount: "4.00" }],
-      fileNow: { gross: "4.00", vatBreakdown: [{ rate: "21.00", base: "3.31", tax: "0.69" }] },
+      fileNow: { gross: "4.00", vatBreakdown: [{ rate: "10.00", base: "3.64", tax: "0.36" }] },
     });
     expect(
       await venue.db
@@ -657,7 +666,7 @@ describe("fileCorrectionIn", () => {
     expect(corrective).toMatchObject({
       correctsSaleId: saleId,
       total: -605,
-      vatBreakdown: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
+      vatBreakdown: [{ rate: "10.00", base: "-5.50", tax: "-0.55" }],
     });
     expect(await correctionRow(correction.id)).toMatchObject({
       state: "filed",
@@ -968,7 +977,7 @@ describe("openInvoiceCorrection refuses", () => {
         open(saleId, {
           submissionId: randomUUID(),
           gross: "6.05",
-          split: [{ rate: "21.00", base: "4.99", tax: "1.06" }],
+          split: [{ rate: "10.00", base: "5.49", tax: "0.56" }],
         }),
       {
         code: "invoice_correction.split_changed",
@@ -979,7 +988,7 @@ describe("openInvoiceCorrection refuses", () => {
       open(saleId, {
         submissionId: randomUUID(),
         gross: "6.05",
-        split: [{ rate: "21", base: "5.0", tax: "1.05" }],
+        split: [{ rate: "10", base: "5.5", tax: "0.55" }],
       }),
     ).resolves.toMatchObject({ correction: { gross: "6.05" } });
   });
@@ -1052,7 +1061,7 @@ describe("a correction's cash", () => {
     expect(counts()).toEqual({ ...was, refunds: was.refunds + 1, drawers: was.drawers + 1 });
   });
 
-  it("files −5.00 base and −1.05 VAT off a €12.10 cash steak once its €6.05 is back, opening the drawer once", async () => {
+  it("files −5.50 base and −0.55 VAT off a €12.10 cash steak once its €6.05 is back, opening the drawer once", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const before = await original(saleId);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
@@ -1066,7 +1075,7 @@ describe("a correction's cash", () => {
     expect(corrective).toMatchObject({
       correctsSaleId: saleId,
       total: -605,
-      vatBreakdown: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
+      vatBreakdown: [{ rate: "10.00", base: "-5.50", tax: "-0.55" }],
     });
     expect(
       await venue.db.select().from(refundRows).where(eq(refundRows.saleId, saleId)),
@@ -1382,7 +1391,7 @@ async function close(correctionId: string, { backend = venue.backend, personId =
   );
 }
 
-const MENU_FIFTEEN = [{ rate: "21.00", base: "12.40", tax: "2.60" }];
+const MENU_FIFTEEN = [{ rate: "10.00", base: "13.64", tax: "1.36" }];
 
 describe("File now and Close", () => {
   it("finishes a €25 correction for the €15 of cash that went back", async () => {
@@ -1409,7 +1418,7 @@ describe("File now and Close", () => {
     expect(corrective).toMatchObject({
       correctsSaleId: saleId,
       total: -1500,
-      vatBreakdown: [{ rate: "21.00", base: "-12.40", tax: "-2.60" }],
+      vatBreakdown: [{ rate: "10.00", base: "-13.64", tax: "-1.36" }],
     });
     expect(counts()).toEqual({ ...was, invoices: was.invoices + 1 });
     expect(await correctionRow(correction.id)).toMatchObject({
@@ -1612,7 +1621,7 @@ describe("a correction's hand-keyed card legs", () => {
     expect(corrective).toMatchObject({
       correctsSaleId: saleId,
       total: -2500,
-      vatBreakdown: [{ rate: "21.00", base: "-20.66", tax: "-4.34" }],
+      vatBreakdown: [{ rate: "10.00", base: "-22.73", tax: "-2.27" }],
       authorizedBy: approver!.id,
     });
     expect(
