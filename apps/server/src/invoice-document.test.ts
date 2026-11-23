@@ -55,7 +55,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import { CONTACT_SEPARATOR } from "./receipt-facts.js";
+import { adjustmentLabel, CONTACT_SEPARATOR } from "./receipt-facts.js";
 import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -1539,6 +1539,15 @@ describe("a free item holding its share of the price paid", () => {
       readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId),
     );
     expect(shown(document.result.lines)).toEqual(SOLD);
+    // Fails if the page prints the filed shares (8,33 and 1,67) rather than the dishes as sold.
+    const comp = adjustmentLabel({ kind: "comp" }, "es-ES", receiptLabelsFor("es-ES"));
+    expect(pageRows(document).map((cells) => cells.map((cell) => cell.replace(/ €/u, "")))).toEqual(
+      [
+        ["House salad", "1", "", "10,00 A"],
+        ["Mineral water", "1", "", "2,00 B"],
+        [comp, "", "", "-2,00 B"],
+      ],
+    );
   });
 
   it("a comped ticket eaten here reprints with its comp", async () => {
