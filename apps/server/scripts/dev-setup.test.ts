@@ -50,6 +50,21 @@ const sampleEnv: DevEnv = {
   WAITRON_NODE_ID: "33333333-3333-3333-3333-333333333333",
 };
 
+const keySave = vi.hoisted(() => ({ failNext: false }));
+vi.mock("../src/master-key-record.js", async (original) => {
+  const actual = await original<typeof import("../src/master-key-record.js")>();
+  return {
+    ...actual,
+    saveNewMasterKey: (...args: Parameters<typeof actual.saveNewMasterKey>) => {
+      if (keySave.failNext) {
+        keySave.failNext = false;
+        return Promise.reject(new Error("key save refused"));
+      }
+      return actual.saveNewMasterKey(...args);
+    },
+  };
+});
+
 describe("renderEnvFile", () => {
   it("emits every key=value line in the server's env-contract order", () => {
     const lines = renderEnvFile(sampleEnv)
@@ -631,6 +646,38 @@ describe("devSetup under WAITRON_ENV=production", () => {
       hasAny: true,
     });
   });
+});
+
+describe("devSetup after a failed master key save", () => {
+  let workDir: string;
+  afterEach(async () => {
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("a re-run after a failed key save makes one key", async () => {
+    vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-key-"));
+    const opts = {
+      venueDir: join(workDir, "venue"),
+      envPath: join(workDir, ".env"),
+      stateDir: workDir,
+      log: () => {},
+    };
+    keySave.failNext = true;
+    await expect(devSetup(opts)).rejects.toThrow("key save refused");
+    const rerun = await devSetup(opts);
+    expect(rerun.reused).toBe(true);
+    const store = await openVenueDatabase(opts.venueDir);
+    try {
+      const { rows } = await store.venue.execute<{ name: string }>(
+        sql`select name from master_keys`,
+      );
+      expect(rows.map((row) => row.name)).toEqual([rerun.masterKey!.masterKeyName]);
+    } finally {
+      await store.close();
+    }
+    expect((await devSetup(opts)).masterKey).toBeUndefined();
+  }, 180_000);
 });
 
 describe("resetVenueDir", () => {
