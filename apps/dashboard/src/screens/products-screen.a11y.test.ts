@@ -123,7 +123,11 @@ const sections: SectionDetails[] = [
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
     listMenus: vi.fn().mockResolvedValue(menus),
-    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+      dineInVatRate: "10.00",
+    }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),

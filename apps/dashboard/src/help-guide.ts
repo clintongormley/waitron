@@ -13,7 +13,6 @@ export const GUIDE_LINKS = {
   "venue.time-zone": { page: "time-zone", section: "confirm" },
   "opening-hours.business-day-start": { page: "opening-hours", section: "business-day-start" },
   "products.selling-unit": { page: "products", section: "selling-unit" },
-  "products.vat": { page: "products", section: "vat" },
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },
   "products.set-menus": { page: "products", section: "set-menus" },

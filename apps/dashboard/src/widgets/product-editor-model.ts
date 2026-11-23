@@ -6,10 +6,10 @@ import type {
   DietaryLabel,
   InheritedValues,
   ProductEditorBody,
-  ProductEditorSaveBody,
   ProductModifierRef,
   ProductVariantInput,
 } from "@waitron/shared";
+import type { ProductSaveBody } from "../api/client.js";
 export type { DietaryLabel };
 
 /** A new variant omits `id`; an edited one carries it. */
@@ -24,11 +24,18 @@ export type ProductEditorDraft = ProductEditorBody & {
   courseId: string | null;
   inherited?: InheritedValues | null;
 };
+/** The editor's read without the `vatClass` its save refuses. */
+export function withoutVatClass<T extends { vatClass: unknown }>(value: T): Omit<T, "vatClass"> {
+  const { vatClass, ...body } = value;
+  void vatClass;
+  return body;
+}
+
 export function productEditorSaveBody(
   value: ProductEditorDraft,
   baseline?: ProductEditorDraft,
-): ProductEditorSaveBody {
-  const { available, variants, ...body } = value;
+): ProductSaveBody {
+  const { available, variants, ...body } = withoutVatClass(value);
   const byId = new Map(baseline?.variants.map((variant) => [variant.id, variant]));
   return {
     ...body,

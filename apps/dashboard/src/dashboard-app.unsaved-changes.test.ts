@@ -76,7 +76,11 @@ async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardA
       }),
       getProfile: async () => profile,
       getGoogleConfig: async () => ({ configured: false }),
-      getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+      getMenuSettings: async () => ({
+        defaultProductVatClass: "general",
+        defaultColor: null,
+        dineInVatRate: "10.00",
+      }),
       getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
       getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),

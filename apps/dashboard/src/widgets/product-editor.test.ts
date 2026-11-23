@@ -23,7 +23,7 @@ import { EACH_CHOICE, ProductEditor, productEditorField } from "./product-editor
 import type { EditorVariant, ProductEditorDraft, UnitChoice } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/shared";
-import { localToday, vatRateOn, formatMoney } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import { es } from "../i18n/strings.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
@@ -197,7 +197,6 @@ const categories: CategorySummary[] = [
   // A category with no colour of its own: the reporting mark has to survive this one being chosen.
   { id: "plates", name: "Plates", parentId: null, color: null },
 ];
-const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 
 it.each([false, true])("A647 starts consistent sections with variants=%s", async (hasVariants) => {
   const el = await mountPricing({ ...saved, variants: hasVariants ? [small] : [] });
@@ -417,7 +416,6 @@ it('renders a short unit as "per unit" on the price control', async () => {
         abbreviation: { en: "l" },
       },
     ],
-    taxChoices: reduced,
   });
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
     t("editor.per_unit").replace("{unit}", "l"),
@@ -462,7 +460,6 @@ it.each([
         value: { ...product, unitId, variants },
         locales: ["en"],
         units: [kg],
-        taxChoices: reduced,
       });
       const price = control<{ label: string; unit: string }>(el, "unit-price");
       expect(price.label).toBe(label);
@@ -481,7 +478,6 @@ it("hands the variant window no unit when the product has none, so its price rea
       value: { ...product, unitId: null },
       locales: ["en"],
       units: [kg],
-      taxChoices: reduced,
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
     await el.updateComplete;
@@ -508,7 +504,6 @@ it.each([
       value: product,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
     });
     const price = el.shadowRoot!.querySelector<HTMLElement & { locale: string }>(
       "[name=unit-price]",
@@ -575,7 +570,6 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
           abbreviation: { en: "l" },
         },
       ],
-      taxChoices: reduced,
     });
     const table = variantTable(el)!;
     await table.updateComplete;
@@ -600,7 +594,6 @@ it("changes a product's unit from the price field when the table's heading unit 
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit, litre],
-    taxChoices: reduced,
   });
   const table = variantTable(el)!;
   table.style.width = "20rem";
@@ -631,7 +624,6 @@ it("opens the unit chooser from the variant table's heading, choosing there and 
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit, litre],
-    taxChoices: reduced,
   });
   const table = variantTable(el)!;
   const create = vi.fn();
@@ -656,7 +648,6 @@ it("opens the unit chooser from the price field's unit button as a titled dialog
     value: { ...product, unitId: kg.id },
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   expect(unitChooser(el).open).toBe(false);
   expect(combobox(el, "unit")).toBeNull();
@@ -681,7 +672,6 @@ it("changes the unit on a choice, shuts the chooser and puts focus back on the p
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   await openUnits(el);
   await chooseOption(combobox(el, "unit")!, kg.id);
@@ -701,7 +691,6 @@ it("shuts the chooser from its Close button without changing the unit, putting f
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   const reachedScreen = vi.fn();
   el.addEventListener("wt-close", reachedScreen);
@@ -729,7 +718,6 @@ it("shuts only the chooser on Escape, leaving the unit and the editor as they we
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   const reachedScreen = vi.fn();
   el.addEventListener("wt-close", reachedScreen);
@@ -788,7 +776,6 @@ it("keeps the chooser open under the unit form, so a cancelled Add unit returns 
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", "Dirty coffee");
   await input(el, "unit-price", "4.50");
@@ -818,7 +805,6 @@ it("chooses a unit Add unit made, shuts the chooser, and keeps the unsaved draft
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", "Dirty coffee");
   await input(el, "unit-price", "4.50");
@@ -849,7 +835,6 @@ it("opens the chooser showing a refused unit, and keeps the refusal on the price
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   el.fieldErrors = { unit: "That unit is gone" };
   await el.updateComplete;
@@ -876,7 +861,6 @@ it("shows a refused unit beside the price's own error on the price field once th
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   await edit(el);
   save(el);
@@ -906,7 +890,6 @@ it("says the price field's unit button opens a dialog, as the variant table head
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const price = priceInput(el);
   await price.updateComplete;
@@ -921,7 +904,6 @@ it("locks the chooser's unit dropdown while the editor is saving, so a choice th
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   await openUnits(el);
   expect(sharedField(el, "wt-combobox", "unit").disabled).toBe(false);
@@ -944,7 +926,6 @@ it("never leaves the unit chooser over a page whose editor the screen has closed
     value: product,
     locales: ["en"],
     units: [unit, kg],
-    taxChoices: reduced,
   });
   await openUnits(el);
   expect(unitChooser(el).open).toBe(true);
@@ -968,7 +949,7 @@ it("renders the sections in the designed order, with the price above the VAT rat
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
+    dineInVatRate: "10.00",
   });
   expect(
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".form > [data-section]")].map(
@@ -985,7 +966,7 @@ it("renders the sections in the designed order, with the price above the VAT rat
     "variants",
     "modifiers",
   ]);
-  const tax = el.shadowRoot!.querySelector("[name=tax]")!;
+  const tax = el.shadowRoot!.querySelector("[data-test=dine-in-vat]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
   expect(price.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const pricing = section(el, "price");
@@ -999,7 +980,6 @@ it("opens Kitchen while Descriptors and Nutritional info start collapsed", async
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(section(el, "kitchen").open).toBe(true);
   for (const name of ["descriptors", "nutrition"]) expect(section(el, name).open, name).toBe(false);
@@ -1011,7 +991,6 @@ it("keeps the staff name, customer name, description and kitchen name independen
     value: product,
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -1038,7 +1017,6 @@ it("drops a customer name left blank in every language rather than submitting em
     value: { ...product, customerName: { en: "House coffee" } },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -1054,7 +1032,6 @@ it("retains a dirty draft through child open, lookup refresh and cancellation", 
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", "Dirty coffee");
   const create = vi.fn();
@@ -1118,7 +1095,6 @@ it("says nothing about errors before the first submission, and Save works", asyn
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", "");
   await input(el, "unit-price", "-1");
@@ -1135,7 +1111,6 @@ it("on an invalid submission focuses the first invalid field and disables Save",
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "unit-price", "-1");
   save(el);
@@ -1154,7 +1129,6 @@ it("re-checks every change after a failed submission, and Save works again once 
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", " ");
   await input(el, "unit-price", "-1");
@@ -1186,7 +1160,6 @@ it("re-checks a variant row after a failed submission, and frees Save once the v
     value: { ...product, variants: [small, { ...large, unitPrice: "-1" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   save(el);
@@ -1221,7 +1194,6 @@ it("puts a refusal for a folded field under it, opening its section, until that 
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   el.fieldErrors = { "description-en": t("editor.field_rejected") };
@@ -1263,7 +1235,6 @@ it("submits past a refusal beside a field or on a variant's row, which then go",
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   el.fieldErrors = {
@@ -1293,7 +1264,6 @@ it.each([["product-course", "courseId"]])(
       value: product,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       courses: [{ id: "course-1", name: "Starters" }],
     });
     await edit(el);
@@ -1327,7 +1297,6 @@ it("keeps a refusal that names no field of the form in the bottom message, leavi
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   el.fieldErrors = { active: "Those extras lists still offer it" };
@@ -1349,7 +1318,6 @@ it("keeps a refused translation for a language the form does not show in the bot
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   el.fieldErrors = { "customer-name-fr": "Add the French name" };
@@ -1364,7 +1332,6 @@ it("shows the refusal and the generic sentence together when both apply", async 
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   el.fieldErrors = { active: "Those extras lists still offer it", "kitchen-name": "Too long" };
   await el.updateComplete;
@@ -1376,7 +1343,6 @@ it("starts again when reopened: no messages and Save quiet", async () => {
     open: true,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   save(el);
@@ -1404,7 +1370,6 @@ it("opens the section holding a reported error, puts focus in the field and leav
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(section(el, "descriptors").open).toBe(false);
   el.fieldErrors = { "customer-name-en": "That language is no longer enabled" };
@@ -1431,7 +1396,6 @@ it("retains a compact-picker allergen selection across an unrelated edit", async
     value: { ...product, allergens: {} },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "nutrition");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
@@ -1454,7 +1418,6 @@ it("restores explicit kinds when they are removed then re-added", async () => {
     value: { ...product, allergens: { gluten: { kinds: [...gluten.kinds] } } },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "nutrition");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
@@ -1478,7 +1441,6 @@ it("keeps stored kinds when another allergen is added", async () => {
     value: { ...product, allergens: { gluten: { kinds: [...gluten.kinds] } } },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "nutrition");
   el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
@@ -1562,7 +1524,6 @@ it("lists both kinds of attached modifier list in one order, by staff name and k
     },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -1595,7 +1556,6 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -1667,7 +1627,6 @@ it("still offers a kind's make-new choice under its heading once every list of t
     },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists: [],
   });
@@ -1693,7 +1652,6 @@ it("reorders and removes across kinds, telling two lists with the same id apart"
     },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -1720,7 +1678,6 @@ it("asks the screen to create a list of either kind, and to edit an attached one
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -1770,7 +1727,6 @@ async function mountTwoAttached() {
     value: twoAttached,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -1892,7 +1848,6 @@ it.each(["light", "dark"] as const)(
         value: twoAttached,
         locales: ["en"],
         units: [unit],
-        taxChoices: reduced,
         extraLists,
         optionLists,
         childOpen: true,
@@ -1963,7 +1918,6 @@ it.each([
       value: twoAttached,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       extraLists,
       optionLists,
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
@@ -2068,7 +2022,6 @@ it.each(["light", "dark"] as const)(
         value: twoAttached,
         locales: ["en"],
         units: [unit],
-        taxChoices: reduced,
         extraLists,
         optionLists,
       },
@@ -2252,7 +2205,6 @@ it("returns the add-a-list control to its placeholder after a choice, keeping fo
     value: { ...product, modifiers: [] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -2282,7 +2234,6 @@ it("draws each make-new row first under its kind's heading, and clicking it asks
     value: { ...product, modifiers: [] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -2328,7 +2279,6 @@ it.each([1280, 390])(
         value: { ...product, modifiers: [] },
         locales: ["en"],
         units: [unit],
-        taxChoices: reduced,
         extraLists,
         optionLists,
       });
@@ -2360,7 +2310,6 @@ it("shows a refusal naming an attached list beside the Modifiers control", async
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -2383,7 +2332,6 @@ it("returns focus to the Modifiers control after every nested form it can open",
     value: { ...product, modifiers: [] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -2415,7 +2363,6 @@ it("chooses the main category in the editor itself, and saves no categoryIds or 
     value: { ...product, primaryCategoryId: "drinks" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     categories,
   });
   expect(combobox(el, "primary")!.value).toBe("drinks");
@@ -2437,7 +2384,6 @@ it("offers No category as the main category, and saves it as none", async () => 
     value: { ...product, primaryCategoryId: "drinks" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     categories,
   });
   expect(combobox(el, "primary")!.options[0]).toEqual({
@@ -2474,7 +2420,6 @@ async function mountColoured(value: Partial<ProductEditorDraft> = {}) {
       value: { ...product, primaryCategoryId: "wine", ...value },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       categories: colouredCategories,
     })
   ).el;
@@ -2571,7 +2516,6 @@ it("describes the inherited choice by the venue default when the product has no 
     value: { ...product, primaryCategoryId: null },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     categories: colouredCategories,
     defaultColor: "#b12525",
   });
@@ -2600,7 +2544,6 @@ it.each([
           value: { ...product, primaryCategoryId },
           locales: ["en"],
           units: [unit],
-          taxChoices: reduced,
           categories: colouredCategories,
           defaultColor: "#b12525",
         });
@@ -2728,7 +2671,6 @@ async function mountCategorised(value: Partial<ProductEditorDraft> = {}) {
       value: { ...product, primaryCategoryId: "cocktails", ...value },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       categories: tree,
     })
   ).el;
@@ -2872,7 +2814,6 @@ it("shows a variant's product's path as plain text, with no Change, and saves no
     },
     locales: ["en"],
     units: [unit, litre],
-    taxChoices: taxes,
     categories: tree,
   });
   expect(el.shadowRoot!.querySelector('wt-combobox[name="primary"]')).toBeNull();
@@ -2984,12 +2925,12 @@ it("associates a server refusal with its dropdown until the next save", async ()
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    fieldErrors: { tax: "Tax is no longer available" },
+    fieldErrors: { "product-course": "Tax is no longer available" },
   });
   // The dropdown's own button carries the marking, and the sentence it names is inside it.
   const box = el.shadowRoot!.querySelector<
     HTMLElement & { error: string; updateComplete: Promise<unknown> }
-  >("wt-combobox[name=tax]")!;
+  >("wt-combobox[name=product-course]")!;
   await box.updateComplete;
   const select = box.shadowRoot!.querySelector(".trigger")!;
   expect(select.getAttribute("aria-invalid")).toBe("true");
@@ -3013,7 +2954,6 @@ it("saves a variant with no price of its own, which sells at the product's", asy
     value: { ...product, variants: [{ ...small, unitPrice: null }, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   const submit = vi.fn();
@@ -3029,7 +2969,6 @@ it("applies a reorder, an availability toggle and an edit from the variants tabl
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const table = variantTable(el)!;
   table.dispatchEvent(
@@ -3073,7 +3012,6 @@ it("opens a variant's edit window when its row is clicked", async () => {
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const table = variantTable(el)! as HTMLElement & { updateComplete: Promise<unknown> };
   await table.updateComplete;
@@ -3090,7 +3028,6 @@ it("names the product's unit in the variants table's price column", async () => 
       value: { ...product, variants: [small, large] },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
     });
     const table = variantTable(el)!;
     await table.updateComplete;
@@ -3109,7 +3046,6 @@ it("saves course with a new product, without a separate routing event", async ()
     open: true,
     locales: ["en"],
     units: [unit],
-    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
     defaultTakeawayVatRate: "21.00",
     courses: [
       { id: "course-1", name: "Starters" },
@@ -3137,7 +3073,7 @@ it("saves course with a new product, without a separate routing event", async ()
     active: true,
     available: true,
     ordering: "public",
-    vatClass: "general",
+    vatClass: null,
     takeawayVatRate: "21.00",
     variants: [],
     primaryCategoryId: null,
@@ -3155,7 +3091,6 @@ it("preselects the saved course", async () => {
     value: { ...product, id: "product-1", courseId: "course-1" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     courses: [
       { id: "course-1", name: "Starters" },
       { id: "course-2", name: "Mains" },
@@ -3173,7 +3108,6 @@ it("saves only once and refuses a second press", async () => {
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   const submit = vi.fn();
@@ -3192,7 +3126,6 @@ it("sends the Available switch as available and leaves active as it was", async 
     value: { ...product, id: "p1" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -3235,7 +3168,6 @@ it("offers who may order the product on its own as three choices, the saved one 
     value: { ...product, id: "p1", ordering: "not_sold_separately" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const field = sharedField(el, "wt-combobox", "ordering");
   expect(section(el, "selling").contains(field)).toBe(true);
@@ -3263,7 +3195,6 @@ it("shows only the chosen ordering's explanation underneath the choices", async 
     value: { ...product, ordering: "staff_only" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "selling");
   const field = sharedField(el, "wt-combobox", "ordering");
@@ -3280,7 +3211,6 @@ it("starts a new product with Anyone ordering", async () => {
     open: true,
     locales: ["en"],
     units: [unit],
-    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
   expect(sharedField(el, "wt-combobox", "ordering").value).toBe("public");
   expect(await shownIn(el, "ordering")).toBe(t("product.ordering_public"));
@@ -3299,7 +3229,6 @@ it("describes Staff only ordering briefly in English and Spanish", async () => {
       value: product,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
     });
   setLocale("en-GB");
   try {
@@ -3330,7 +3259,6 @@ it("locks the ordering choices while a save is in flight", async () => {
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     busy: true,
   });
   expect(sharedField(el, "wt-combobox", "ordering").disabled).toBe(true);
@@ -3346,7 +3274,6 @@ it("puts a refusal of the ordering under its choice group, focusing it, until an
     value: { ...product, ordering: "staff_only" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   el.fieldErrors = { ordering: t("editor.field_rejected") };
   await el.updateComplete;
@@ -3373,7 +3300,6 @@ it("creates a new product Active", async () => {
     open: true,
     locales: ["en"],
     units: [unit],
-    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -3389,7 +3315,6 @@ it.each([true, false])("offers no Enable or inactive notice for active=%s", asyn
     value: { ...product, id: "p1", active, available: false },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")).toBeNull();
@@ -3402,7 +3327,6 @@ it("saves a disabled product's other edits without enabling it", async () => {
     value: { ...product, id: "p1", active: false },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   const submit = vi.fn();
@@ -3424,7 +3348,6 @@ it("summarises each collapsed section from its filled-in values", async () => {
     },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
     courses: [{ id: "course-1", name: "Starters" }],
   });
   expect(folded(el, "kitchen").summaryFields).toEqual([
@@ -3460,7 +3383,6 @@ it("keeps stored regional names and descriptions separate when editing main-lang
     },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(folded(el, "descriptors").summaryRows).toEqual([
     { label: t("editor.name"), value: t("modifiers.none_specified"), lines: 1 },
@@ -3490,7 +3412,6 @@ it("reports a Cancel when its window is dismissed, never when the screen shuts i
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const cancelled = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
@@ -3516,7 +3437,6 @@ it("suspends Save and Cancel while a nested window is open", async () => {
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   const cancelled = vi.fn();
@@ -3548,7 +3468,6 @@ it("marks the variant row a reported problem belongs to", async () => {
     value: { ...product, variants: [small, { ...large, unitPrice: "-1" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   const submit = vi.fn();
@@ -3579,7 +3498,6 @@ it("puts a server refusal of variants.2 on the third variant's row, past a hidde
     value: { ...product, variants: [small, { ...large, active: false }, medium] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const message = t("editor.field_rejected");
   el.fieldErrors = { [productEditorField("variants.2.unitPrice", "en")!]: message };
@@ -3602,7 +3520,6 @@ it("keeps a variant's mark on that variant when the rows are reordered", async (
     value: { ...product, variants: [small, { ...large, unitPrice: "-1" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await edit(el);
   save(el);
@@ -3625,7 +3542,6 @@ it("locks the plain price field while a save is in flight, like every other fiel
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     busy: true,
   });
   const price = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
@@ -3653,7 +3569,7 @@ it("maps a rejected product body's field onto the editor field that holds it", (
   expect(productEditorField("kitchenName", "es")).toBe("kitchen-name");
   expect(productEditorField("unitId", "es")).toBe("unit");
   expect(productEditorField("unitPrice", "es")).toBe("unit-price");
-  expect(productEditorField("vatClass", "es")).toBe("tax");
+  expect(productEditorField("vatClass", "es")).toBeNull();
   expect(productEditorField("primaryCategoryId", "es")).toBe("primary");
   expect(productEditorField("variants.2.unitPrice", "es")).toBe("variant-2-price");
   expect(productEditorField("variants.0.name", "es")).toBe("variant-0-name");
@@ -3708,7 +3624,6 @@ it("submits unitId null when Each stays selected", async () => {
         abbreviation: { en: "kg" },
       },
     ],
-    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -3732,7 +3647,6 @@ it("draws Each as a chosen unit on a product, not as the grey prompt for nothing
     value: { ...product, unitId: null },
     locales: ["en"],
     units: [kg],
-    taxChoices: reduced,
   });
   await openUnits(el);
   const box = sharedField(el, "wt-combobox", "unit");
@@ -3768,7 +3682,6 @@ it("submits the chosen real unit and marks it selected after load", async () => 
     value: { ...product, unitId: kg.id },
     locales: ["en"],
     units: [kg],
-    taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
   });
   await openUnits(el);
   const select = combobox(el, "unit")!;
@@ -3781,24 +3694,6 @@ it("submits the chosen real unit and marks it selected after load", async () => 
   expect(submit.mock.calls[0]![0].detail.value.unitId).toBe(kg.id);
 });
 
-it("shows each class's rate in force today, and a fractional rate supplied by a controlled fixture", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    locales: ["en"],
-  });
-  const options = () => combobox(el, "tax")!.options.filter((option) => option.value !== "");
-  expect(options()).toHaveLength(4);
-  for (const option of options()) {
-    expect(option.label).toContain(
-      `(${Number(vatRateOn(option.value as NonNullable<ProductEditorDraft["vatClass"]>, localToday()))}%)`,
-    );
-  }
-  expect(options().find((option) => option.value === "zero")!.label).toBe("Sin impuestos (0%)");
-  el.taxChoices = [{ id: "reduced", rate: "2.50", label: "Fixture rate" }];
-  await el.updateComplete;
-  expect(options()[0]!.label).toBe("Fixture rate (2.5%)");
-});
-
 // A one-line row only reads as a row when its text and its 44px controls share one middle. Geometry
 // is the only thing that can catch it; every attribute assertion passes either way.
 it("keeps an attached row's name, type, grip and row menu on one line", async () => {
@@ -3807,7 +3702,6 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -3849,7 +3743,6 @@ it.each([
           value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
           locales: ["en"],
           units: [unit],
-          taxChoices: reduced,
           extraLists: [
             {
               ...extraLists[0]!,
@@ -3912,7 +3805,6 @@ it.each([
         },
         locales: ["en"],
         units: [unit],
-        taxChoices: reduced,
         extraLists: [
           {
             ...extraLists[0]!,
@@ -3962,7 +3854,6 @@ it("adds the first variant as one row of its own, with no Regular variant made f
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
   await el.updateComplete;
@@ -3990,7 +3881,6 @@ it("names the product in the variant window as its form holds the name now, unsa
       value: product,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
     });
     await input(el, "name", "Flat white");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
@@ -4011,7 +3901,6 @@ it("adds nothing when the first Add variant is cancelled", async () => {
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
   await el.updateComplete;
@@ -4031,7 +3920,6 @@ it("puts a unit holding a replacement pattern into the price labels as written",
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [odd],
-    taxChoices: reduced,
   });
   const price = el.shadowRoot!.querySelector<HTMLElement & { label: string; unit: string }>(
     "[name=unit-price]",
@@ -4046,7 +3934,6 @@ it("keeps the price field beside the variants, labelled as the base price", asyn
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const price = el.shadowRoot!.querySelector<
     HTMLElement & { value: string; label: string; required: boolean }
@@ -4060,7 +3947,6 @@ it("keeps the price field beside the variants, labelled as the base price", asyn
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(
     plain.shadowRoot!.querySelector<HTMLElement & { label: string }>("[name=unit-price]")!.label,
@@ -4073,7 +3959,6 @@ it("still requires a valid base price while the product has variants", async () 
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -4092,7 +3977,6 @@ it("makes a removed variant Inactive rather than dropping it, and saves it so", 
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await tableEvent(el, "wt-remove", { index: 1 });
   expect(el.currentValue.variants).toEqual([small, { ...large, active: false }]);
@@ -4114,7 +3998,6 @@ it("drops a removed variant that was never saved, since there is nothing to make
     value: { ...product, variants: [small, fresh] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await tableEvent(el, "wt-remove", { index: 1 });
   expect(el.currentValue.variants).toEqual([small]);
@@ -4126,7 +4009,6 @@ it("puts focus on Add variant when Remove drops the only variant and the table g
     value: product,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "variants");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
@@ -4160,7 +4042,6 @@ it("keeps a variant archived in this draft from the variants section", async () 
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await tableEvent(el, "wt-remove", { index: 1 });
   await tableEvent(el, "wt-restore", { index: 1 });
@@ -4173,7 +4054,6 @@ it("never reactivates an Inactive variant on a save that did not restore it", as
     value: { ...product, variants: [small, { ...large, active: false }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -4191,7 +4071,6 @@ it("asks the screen to open a saved variant's own page", async () => {
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const opened = vi.fn();
   el.addEventListener("wt-open-product", opened);
@@ -4207,7 +4086,6 @@ it("hands the variants section and window the base price and photo a blank one f
     value: { ...product, image: mediaTestReference("coffee.png"), variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "unit-price", "9.50");
   const table = variantTable(el) as unknown as { basePrice: string };
@@ -4264,10 +4142,6 @@ const courses = [
   { id: "mains", name: "Mains" },
   { id: "desserts", name: "Desserts" },
 ];
-const taxes = [
-  { id: "reduced" as const, rate: "10.00", label: "Reduced" },
-  { id: "general" as const, rate: "21.00", label: "General" },
-];
 
 async function mountVariant(value: ProductEditorDraft = glass) {
   return (
@@ -4276,9 +4150,9 @@ async function mountVariant(value: ProductEditorDraft = glass) {
       value,
       locales: ["en"],
       units: [unit, litre],
-      taxChoices: taxes,
       categories,
       courses,
+      dineInVatRate: "10.00",
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
     })
   ).el;
@@ -4377,7 +4251,6 @@ async function mountBilingualVariant(description: ProductEditorDraft["descriptio
     },
     locales: ["en", "es"],
     units: [unit, litre],
-    taxChoices: taxes,
     categories,
   });
   return el;
@@ -4405,7 +4278,6 @@ it("hints a product's blank description in another language with the default-lan
     value: product,
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(placeholders(el)).toEqual(["", "Freshly roasted"]);
   await input(el, "description-en", "Dark roast");
@@ -4420,7 +4292,6 @@ it("leaves a product's default-language description unhinted when only another l
     value: { ...product, description: { es: "Recién tostado" } },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(control<HTMLTextAreaElement>(el, "description-en").placeholder).toBe("");
 });
@@ -4431,7 +4302,6 @@ it("hints a variant's description in a language its parent left blank with the p
     value: { ...glass, inherited: { ...parentValues, description: { en: "Roasted in house" } } },
     locales: ["en", "es"],
     units: [unit, litre],
-    taxChoices: taxes,
     categories,
   });
   expect(placeholders(el)).toEqual(["Roasted in house", "Roasted in house"]);
@@ -4447,7 +4317,6 @@ it("hints a variant's blank language with its own default-language description, 
     },
     locales: ["es", "ca"],
     units: [unit, litre],
-    taxChoices: taxes,
     categories,
   });
   expect(placeholders(el, ["es", "ca"])).toEqual(["", "Servido en vaso"]);
@@ -4476,7 +4345,6 @@ it("hints a product's blank names with what they fall back to, following the fie
     value: { ...product, customerName: null, kitchenName: null },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   expect(nameHints(el, ["en", "es"])).toEqual(["Coffee", "Coffee", "Coffee"]);
   await input(el, "customer-name-en", "House coffee");
@@ -4493,7 +4361,6 @@ it("never hints a product's customer-facing names with its kitchen name, which k
     value: { ...product, customerName: null },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   const kitchenName = () => control<{ value: string }>(el, "kitchen-name").value;
   expect(kitchenName()).toBe("BAR");
@@ -4526,7 +4393,6 @@ it("never hints a variant's names from the parent's", async () => {
 it("offers each inherited choice first as the parent's value, with an empty value", async () => {
   const el = await mountVariant();
   const expected = {
-    tax: "Reduced (10%)",
     "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {
@@ -4563,12 +4429,9 @@ it.each([
 it("marks a variant's own choice selected over the parent's value", async () => {
   const el = await mountVariant({
     ...glass,
-    vatClass: "general",
     courseId: "desserts",
   });
-  expect(combobox(el, "tax")!.value).toBe("general");
   expect(combobox(el, "product-course")!.value).toBe("desserts");
-  expect(await shownIn(el, "tax")).toBe("General (21%)");
   expect(await shownIn(el, "product-course")).toBe("Desserts");
 });
 
@@ -4591,7 +4454,6 @@ it("hints what a variant will actually use where its parent names nothing there"
     ...glass,
     inherited: {
       ...parentValues,
-      vatClass: "retired" as never,
       primaryCategoryId: null,
       courseId: null,
       allergens: {},
@@ -4605,7 +4467,6 @@ it("hints what a variant will actually use where its parent names nothing there"
       .shadowRoot!.querySelector(".trigger .value")!
       .classList.contains("placeholder"),
   ).toBe(true);
-  expect(combobox(el, "tax")!.placeholder).toBe("retired");
   expect(inheritedNutrition(el, "allergens")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.nutrition.allergens_none")}`,
   );
@@ -4792,15 +4653,15 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
 it("saves a value typed into a variant's field, and null once it is cleared again", async () => {
   const el = await mountVariant();
   await input(el, "unit-price", "4.50");
-  const tax = combobox(el, "tax")!;
-  await chooseOption(tax, "general");
+  const course = combobox(el, "product-course")!;
+  await chooseOption(course, "desserts");
   await el.updateComplete;
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
   expect(submit.mock.calls[0]![0].detail.value).toMatchObject({
     unitPrice: "4.50",
-    vatClass: "general",
+    courseId: "desserts",
   });
   // A second save needs the first one settled.
   el.busy = true;
@@ -4808,11 +4669,11 @@ it("saves a value typed into a variant's field, and null once it is cleared agai
   el.busy = false;
   await el.updateComplete;
   await input(el, "unit-price", "");
-  await chooseOption(tax, "");
+  await chooseOption(course, "");
   await el.updateComplete;
   await edit(el);
   save(el);
-  expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, vatClass: null });
+  expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, courseId: null });
 });
 
 it("saves explicit allergen None and an emptied dietary choice independently on a variant", async () => {
@@ -4922,7 +4783,6 @@ it.each(
         },
         locales: ["en"],
         units: [unit],
-        taxChoices: reduced,
       });
       host.style.setProperty("--wt-duration-disclosure", "1ms");
       if (scaled) {
@@ -4994,7 +4854,6 @@ it("holds Open, saying why, while the product has changes not yet saved, and fre
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const table = () => variantTable(el) as unknown as { openBlocked: boolean };
   const opened = vi.fn();
@@ -5017,7 +4876,6 @@ it("counts a variant edit that ends where it started as no change, whatever orde
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await tableEvent(el, "wt-remove", { index: 1 });
   expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
@@ -5038,7 +4896,6 @@ it("frees Open once a save hands the editor the saved product back", async () =>
     value: { ...product, variants: [small, large] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   await input(el, "name", "Coffee to go");
   expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
@@ -5102,7 +4959,6 @@ it("picks the course from a shared dropdown, with none as a chosen value and a r
       value: { ...product, courseId: "course-2" },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       courses: [
         { id: "course-1", name: "Starters" },
         { id: "course-2", name: "Mains" },
@@ -5144,7 +5000,6 @@ async function mountCourses(value: ProductEditorDraft = { ...product, courseId: 
     value,
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     courses: [
       { id: "course-1", name: "Starters" },
       { id: "course-2", name: "Mains" },
@@ -5234,7 +5089,6 @@ it("describes the product in a shared text area per language, the language in it
     value: product,
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   await openSection(el, "descriptors");
   const english = sharedField(el, "wt-textarea", "description-en");
@@ -5259,38 +5113,6 @@ it("describes the product in a shared text area per language, the language in it
   expect(english.error).toBe("");
 });
 
-it("picks a product's VAT class from a required shared dropdown, Choose being its prompt alone", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: product,
-    locales: ["en"],
-    units: [unit],
-    taxChoices: [
-      { id: "reduced", rate: "10.00", label: "Reduced" },
-      { id: "general", rate: "21.00", label: "General" },
-    ],
-  });
-  const tax = sharedField(el, "wt-combobox", "tax");
-  expect(tax).not.toBeNull();
-  expect(tax.label).toBe(t("product.vat"));
-  expect(tax.required).toBe(true);
-  expect(tax.search).toBe("auto");
-  expect(tax.placeholder).toBe(t("editor.choose"));
-  expect(tax.options).toEqual([
-    { value: "reduced", label: "Reduced (10%)" },
-    { value: "general", label: "General (21%)" },
-  ]);
-  expect(tax.value).toBe("reduced");
-  expect(await shownIn(el, "tax")).toBe("Reduced (10%)");
-  await chooseOption(tax, "general");
-  await el.updateComplete;
-  expect(el.currentValue.vatClass).toBe("general");
-  expect(await shownIn(el, "tax")).toBe("General (21%)");
-  el.fieldErrors = { tax: "Tax is no longer available" };
-  await el.updateComplete;
-  expect(tax.error).toBe("Tax is no longer available");
-});
-
 // --- The VAT rate when taken away ---
 
 // The menu-settings answer's `vatRates` for a Spanish venue (D18(a)): the rates a person may pick.
@@ -5300,10 +5122,6 @@ const rateOptions = [
   { value: "4.00", label: "4%" },
   { value: "10.00", label: "10%" },
   { value: "21.00", label: "21%" },
-];
-const twoTaxes = [
-  { id: "reduced" as const, rate: "10.00", label: "Reduced" },
-  { id: "general" as const, rate: "21.00", label: "General" },
 ];
 const same = (product: string, rate: string) => fill("editor.takeaway_vat_same", { product, rate });
 /** Writes the case's labels in one locale, whatever an earlier case left set. */
@@ -5323,7 +5141,6 @@ async function mountTakeaway(
       value,
       locales: ["en"],
       units: [unit, litre],
-      taxChoices: twoTaxes,
       categories,
       courses,
       takeawayVat,
@@ -5341,32 +5158,23 @@ it("words the takeaway field as staff read it, in English and Spanish", () => {
     expect(t("editor.takeaway_vat")).toBe("VAT when taken away");
     expect(same("Coffee", "10")).toBe("Same as Coffee — 10%");
     expect(t("editor.takeaway_vat_required")).toBe("Choose the VAT when taken away.");
-    expect(t("help.products.vat")).toBe(
-      "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
-    );
     setLocale("es-ES");
     expect(t("editor.takeaway_vat")).toBe("IVA para llevar");
     expect(same("Café", "10")).toBe("Igual que Café — 10 %");
     expect(t("editor.takeaway_vat_required")).toBe("Elige el IVA para llevar.");
-    expect(t("help.products.vat")).toBe(
-      "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
-    );
   } finally {
     setLocale(before);
   }
 });
 
-it("locks the VAT and takeaway VAT dropdowns while a save is in flight, like the form's other fields", async () => {
+it("locks the takeaway VAT dropdown while a save is in flight, like the form's other fields", async () => {
   const el = await mountTakeaway(saved);
-  expect(combobox(el, "tax")!.disabled).toBe(false);
   expect(combobox(el, "takeaway-tax")!.disabled).toBe(false);
   el.busy = true;
   await el.updateComplete;
-  expect(combobox(el, "tax")!.disabled).toBe(true);
   expect(combobox(el, "takeaway-tax")!.disabled).toBe(true);
   el.busy = false;
   await el.updateComplete;
-  expect(combobox(el, "tax")!.disabled).toBe(false);
   expect(combobox(el, "takeaway-tax")!.disabled).toBe(false);
 });
 
@@ -5376,7 +5184,6 @@ it("locks the course dropdown and every description while a save is in flight", 
     value: product,
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
     courses,
   });
   const locked = () => [
@@ -5509,7 +5316,6 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
     value: product,
     locales: ["en"],
     units: [unit, litre],
-    taxChoices: reduced,
   });
   await openUnits(el);
   const box = sharedField(el, "wt-combobox", "unit");
@@ -5537,7 +5343,6 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
 it("keeps a variant's inherited choice as each inherited dropdown's prompt and first row", async () => {
   const el = await mountVariant();
   const expected = {
-    tax: "Reduced (10%)",
     "product-course": "Mains",
   };
   for (const [name, text] of Object.entries(expected)) {
@@ -5564,7 +5369,7 @@ async function mountPricing(value: ProductEditorDraft, props: Partial<ProductEdi
       value,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
+      dineInVatRate: "10.00",
       ...props,
     })
   ).el;
@@ -5700,7 +5505,7 @@ it("draws Pricing with no box, headed like the editor's other open sections, the
       getComputedStyle(modifiers)[property],
     );
   const price = section.querySelector("[name=unit-price]")!;
-  const tax = section.querySelector("[name=tax]")!;
+  const tax = section.querySelector("[data-test=dine-in-vat]")!;
   expect(followsInDocument(price, tax)).toBe(true);
 });
 
@@ -5715,10 +5520,9 @@ it("folds Pricing once the product has an active variant, its closed line the ba
       label: t("editor.base_price"),
       value: `${formatMoney("9.00", currentLocale())} ${t("editor.per_unit").replace("{unit}", "ea")}`,
     },
-    { label: t("product.vat"), value: "Reduced (10%)" },
   ]);
   const price = fold.querySelector("[name=unit-price]")!;
-  expect(followsInDocument(price, fold.querySelector("[name=tax]")!)).toBe(true);
+  expect(followsInDocument(price, fold.querySelector("[data-test=dine-in-vat]")!)).toBe(true);
 });
 
 it("adds a takeaway VAT rate of its own to the closed Pricing line, and leaves an empty one out", async () => {
@@ -5728,14 +5532,11 @@ it("adds a takeaway VAT rate of its own to the closed Pricing line, and leaves a
     { takeawayVat: true, vatRates: pickableRates },
   );
   expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("product.vat"), value: "Reduced (10%)" },
     { label: t("editor.takeaway_vat"), value: "4%" },
   ]);
   el.value = { ...saved, id: "tea", variants: [small], takeawayVatRate: "" };
   await el.updateComplete;
-  expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("product.vat"), value: "Reduced (10%)" },
-  ]);
+  expect(pricing(el).summaryFields.slice(1)).toEqual([]);
 });
 
 it("leaves a takeaway VAT rate the form does not offer off the closed Pricing line", async () => {
@@ -5745,19 +5546,16 @@ it("leaves a takeaway VAT rate the form does not offer off the closed Pricing li
     { takeawayVat: true, vatRates: pickableRates },
   );
   expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("product.vat"), value: "Reduced (10%)" },
     { label: t("editor.takeaway_vat"), value: "21%" },
   ]);
   el.value = { ...saved, id: "tea", variants: [small], takeawayVatRate: "5.00" };
   await el.updateComplete;
-  expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("product.vat"), value: "Reduced (10%)" },
-  ]);
+  expect(pricing(el).summaryFields.slice(1)).toEqual([]);
 });
 
 it.each([
-  { locale: "en-GB", line: "Base price: €9.00 each · VAT: Reduced (10%)" },
-  { locale: "es-ES", line: "Precio base: 9,00 € la unidad · IVA: Reduced (10%)" },
+  { locale: "en-GB", line: "Base price: €9.00 each" },
+  { locale: "es-ES", line: "Precio base: 9,00 € la unidad" },
 ])("writes the folded Pricing line in $locale, with no unit as each", async ({ locale, line }) => {
   setLocale(locale as "en-GB" | "es-ES");
   try {
@@ -5781,11 +5579,10 @@ it("writes a typed price holding a replacement pattern into the folded Pricing l
   });
 });
 
-it("leaves a blank base price, and a VAT class the form does not offer, off the folded line", async () => {
+it("leaves a blank base price off the folded line", async () => {
   const el = await mountPricing({
     ...saved,
     unitPrice: "",
-    vatClass: "general",
     variants: [small],
   });
   expect(pricing(el).summaryFields).toEqual([]);
@@ -5829,10 +5626,13 @@ it("starts Pricing closed on an unsaved product with variants and honours a late
   expect(pricing(el).open).toBe(true);
 });
 
-it.each(["unit-price", "tax", "unit"])(
+it.each(["unit-price", "takeaway-tax", "unit"])(
   "opens the folded Pricing section when the server refuses %s",
   async (name) => {
-    const el = await mountPricing({ ...saved, variants: [small] });
+    const el = await mountPricing(
+      { ...saved, variants: [small] },
+      { takeawayVat: true, vatRates: pickableRates },
+    );
     expect(pricing(el).open).toBe(false);
     el.fieldErrors = { [name]: "Refused" };
     await el.updateComplete;
@@ -5947,7 +5747,7 @@ it("draws a variant's page with Pricing open, the price above VAT, and no Varian
   expect(
     followsInDocument(
       section.querySelector("[name=unit-price]")!,
-      section.querySelector("[name=tax]")!,
+      section.querySelector("[data-test=dine-in-vat]")!,
     ),
   ).toBe(true);
   expect(el.shadowRoot!.querySelector('[data-section="variants"]')).toBeNull();
@@ -5962,7 +5762,6 @@ async function mountWithPhoto(props: Partial<ProductEditor> = {}) {
       value: saved,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
       ...props,
     })
@@ -6199,7 +5998,6 @@ it.each([
       value: { ...product, ...value },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       courses: [{ id: "course-1", name: "Starters" }],
     });
     const none = t("modifiers.none_specified");
@@ -6221,7 +6019,6 @@ it.each([
       value: { ...product, courseId: "course-1" },
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
       courses: [{ id: "course-1", name: "Starters" }],
     });
     const kitchen = folded(el, "kitchen");
@@ -6243,7 +6040,6 @@ it("rows each language's customer-facing name and description in the languages' 
         value: { ...product, ...value },
         locales: ["es", "en"],
         units: [unit],
-        taxChoices: reduced,
       })
     ).el;
   let el = await mountWith({
@@ -6278,7 +6074,6 @@ it("cuts the Descriptors Name row after one line and the Description row after t
     },
     locales: ["en", "es"],
     units: [unit],
-    taxChoices: reduced,
   });
   const descriptors = folded(el, "descriptors");
   await descriptors.updateComplete;
@@ -6370,7 +6165,6 @@ it.each([
         value: bare,
         locales: ["en", "es"],
         units: [unit],
-        taxChoices: reduced,
         courses: [{ id: "course-1", name: "Starters" }],
       });
       expect(await foldedLines(el)).toEqual(expected);
@@ -6534,7 +6328,6 @@ it("names a product's course missing from the course list as unavailable on the 
     value: { ...bare, courseId: "gone" },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     courses: [{ id: "course-1", name: "Starters" }],
   });
   expect(folded(el, "kitchen").summaryFields[1]).toEqual({
@@ -6589,7 +6382,6 @@ it("opens the unit chooser at the compact modal width on a desktop", async () =>
       value: product,
       locales: ["en"],
       units: [unit],
-      taxChoices: reduced,
     });
     await openUnits(el);
     const dialog = unitChooser(el);
@@ -6639,7 +6431,6 @@ it("reopens manually closed Variants for a refused row and focuses its action", 
     value: { ...product, variants: [small] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
   });
   const fold = section(el, "variants");
   fold.open = false;
@@ -6660,7 +6451,6 @@ it("reopens manually closed Modifiers for a refused attachment and focuses its c
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
     locales: ["en"],
     units: [unit],
-    taxChoices: reduced,
     extraLists,
     optionLists,
   });
@@ -6796,7 +6586,6 @@ it("opens Nutrition for a refused allergen kind, marks the picker and allows ret
 describe("help mode", () => {
   const HELPED = [
     { name: "unit-price", key: "help.products.price" },
-    { name: "tax", key: "help.products.vat" },
     { name: "product-course", key: "help.products.course" },
   ] as const;
 
@@ -6859,25 +6648,24 @@ describe("help mode", () => {
     try {
       const el = await mountOpen();
       setHelpMode(true);
-      const badge = await badgeOf(field(el, "tax"));
+      const badge = await badgeOf(field(el, "product-course"));
       await expect
         .element(badge.shadowRoot!.querySelector("button")!)
-        .toHaveAccessibleName("Ayuda: IVA");
-      expect(badge.textContent!.trim()).toBe(t("help.products.vat"));
-      expect(badge.textContent!.trim()).toMatch(/^La clase de IVA/);
+        .toHaveAccessibleName("Ayuda: Curso");
+      expect(badge.textContent!.trim()).toBe(t("help.products.course"));
+      expect(badge.textContent!.trim()).toMatch(/^El curso en que sale/);
     } finally {
       setLocale(before);
     }
   });
 
-  it("links the price, VAT, course and Variants badges to their guide sections", async () => {
+  it("links the price, course and Variants badges to their guide sections", async () => {
     const before = currentLocale();
     setLocale("en-GB");
     try {
       const el = await mountOpen();
       const linked = [
         { host: field(el, "unit-price"), href: "/help/en/products#selling-unit" },
-        { host: field(el, "tax"), href: "/help/en/products#vat" },
         { host: field(el, "product-course"), href: "/help/en/products#course" },
         { host: folded(el, "variants"), href: "/help/en/products#variants" },
       ];

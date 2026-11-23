@@ -1,5 +1,4 @@
-import type { ProductEditorSaveBody } from "@waitron/shared";
-import type { MenuSettingsAnswer } from "../api/client.js";
+import type { MenuSettingsAnswer, ProductSaveBody } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -32,7 +31,7 @@ import type {
   Unit,
   UnitInput,
 } from "../api/client.js";
-import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
+import { withoutVatClass, type ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf, allergenRefusalText } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
@@ -407,7 +406,7 @@ export class ProductsScreen extends LitElement {
     this.deleteErrorKey = null;
     this.deleteErrorParams = null;
     try {
-      const value = await this.api.getProductEditor(product.id);
+      const value = withoutVatClass(await this.api.getProductEditor(product.id));
       await this.api.updateProductEditor(product.id, { ...value, active: false });
     } catch (error) {
       this.deleteErrorKey = codeOf(error);
@@ -438,7 +437,7 @@ export class ProductsScreen extends LitElement {
   }
 
   async #save(
-    event: CustomEvent<{ value: ProductEditorDraft; body: ProductEditorSaveBody }>,
+    event: CustomEvent<{ value: ProductEditorDraft; body: ProductSaveBody }>,
   ): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
@@ -749,10 +748,10 @@ export class ProductsScreen extends LitElement {
         .locales=${locales}
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
-        .defaultVatClass=${this.menuSettings?.defaultProductVatClass ?? "general"}
         .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         .vatRates=${this.menuSettings?.vatRates ?? []}
         .defaultTakeawayVatRate=${this.menuSettings?.defaultTakeawayVatRate ?? ""}
+        .dineInVatRate=${this.menuSettings?.dineInVatRate ?? ""}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
@@ -762,7 +761,7 @@ export class ProductsScreen extends LitElement {
         .optionLists=${this.optionLists}
         .courses=${this.courses}
         .api=${this.api}
-        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft; body: ProductEditorSaveBody }>) => void this.#save(event)}
+        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft; body: ProductSaveBody }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();

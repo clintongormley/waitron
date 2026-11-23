@@ -1234,8 +1234,6 @@ export const en = {
     "Cancels archiving this variant. Archiving happens only when you save the product.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
-  "help.products.vat":
-    "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
   "help.products.course":
     "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
   "help.products.variants":
@@ -2832,7 +2830,7 @@ export const en = {
   "editor.name": "Name",
   "editor.name_required": "Enter a name.",
   "editor.price_invalid": "Enter a nonnegative price with at most two decimal places.",
-  "editor.tax_required": "Choose a tax treatment.",
+  "editor.dine_in_vat": "Eaten here: {rate}% (all food and drink)",
   "editor.takeaway_vat": "VAT when taken away",
   "editor.takeaway_vat_same": "Same as {product} — {rate}%",
   "editor.takeaway_vat_required": "Choose the VAT when taken away.",
@@ -5982,8 +5980,6 @@ export const es: Record<StringKey, string> = {
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
-  "help.products.vat":
-    "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
@@ -7624,7 +7620,7 @@ export const es: Record<StringKey, string> = {
   "editor.name": "Nombre",
   "editor.name_required": "Introduce un nombre.",
   "editor.price_invalid": "Introduce un precio no negativo con un máximo de dos decimales.",
-  "editor.tax_required": "Elige un tratamiento fiscal.",
+  "editor.dine_in_vat": "Para comer aquí: {rate} % (toda la comida y bebida)",
   "editor.takeaway_vat": "IVA para llevar",
   "editor.takeaway_vat_same": "Igual que {product} — {rate} %",
   "editor.takeaway_vat_required": "Elige el IVA para llevar.",

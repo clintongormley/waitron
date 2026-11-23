@@ -67,7 +67,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
     listMenus: vi.fn().mockResolvedValue([]),
-    getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: async () => ({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+      dineInVatRate: "10.00",
+    }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),

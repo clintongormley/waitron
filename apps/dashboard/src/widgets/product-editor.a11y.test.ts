@@ -176,7 +176,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
             abbreviation: { en: "ea" },
           },
         ],
-        taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
         value:
           state === "empty" || state === "errors"
             ? null
@@ -430,7 +429,6 @@ describe.each(["light", "dark"] as const)(
               abbreviation: { en: "ea" },
             },
           ],
-          taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
           value: coffee,
           fieldErrors: state === "refused" ? { unit: "The server rejected this value." } : {},
         },
@@ -475,9 +473,9 @@ describe.each(["light", "dark"] as const)("product editor with help on (%s)", (t
             abbreviation: { en: "ea" },
           },
         ],
-        taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
         courses: [{ id: "starters", name: "Starters" }],
         value: variants,
+        dineInVatRate: "10.00",
       },
       theme,
     );
@@ -496,7 +494,7 @@ describe.each(["light", "dark"] as const)("product editor with help on (%s)", (t
       ),
     ];
     await Promise.all(badges.map((badge) => badge.updateComplete));
-    expect(badges.filter((badge) => badge.checkVisibility())).toHaveLength(4);
+    expect(badges.filter((badge) => badge.checkVisibility())).toHaveLength(3);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

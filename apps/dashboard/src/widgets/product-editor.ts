@@ -18,14 +18,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
-import {
-  VAT_CLASSES,
-  localToday,
-  vatRateOn,
-  type VatClass,
-  PRODUCT_ORDERINGS,
-  categoryColor,
-} from "@waitron/shared";
+import { PRODUCT_ORDERINGS, categoryColor } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -91,7 +84,7 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { guideHref, type GuideLink } from "../help-guide.js";
-import { allergenLabel, vatClassName, vatRateNumber, vatRateText } from "../i18n/domain.js";
+import { allergenLabel, vatRateNumber, vatRateText } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
 
@@ -121,7 +114,7 @@ const SECTION_FIELDS = {
   kitchen: ["kitchen-name", "product-course"],
   nutrition: ["allergens"],
   descriptors: ["customer-name-", "description-"],
-  price: ["tax", "unit", "unit-price"],
+  price: ["takeaway-tax", "unit", "unit-price"],
   selling: ["ordering", "available"],
   modifiers: ["modifier"],
 } as const;
@@ -142,7 +135,6 @@ const SERVER_FIELDS: Record<string, string> = {
   image: "image",
   unitId: "unit",
   unitPrice: "unit-price",
-  vatClass: "tax",
   takeawayVatRate: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
@@ -179,7 +171,6 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   image: "image",
   unitId: "unit",
   unitPrice: "unit-price",
-  vatClass: "tax",
   takeawayVatRate: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
@@ -188,10 +179,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   courseId: "product-course",
 };
 
-function emptyDraft(
-  defaultVatClass: VatClass = "general",
-  defaultTakeawayVatRate = "",
-): ProductEditorDraft {
+function emptyDraft(defaultTakeawayVatRate = ""): ProductEditorDraft {
   return {
     name: "",
     customerName: null,
@@ -203,7 +191,7 @@ function emptyDraft(
     active: true,
     available: true,
     ordering: "public",
-    vatClass: defaultVatClass,
+    vatClass: null,
     takeawayVatRate: defaultTakeawayVatRate,
     variants: [],
     primaryCategoryId: null,
@@ -393,7 +381,6 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
-  @property({ attribute: false }) defaultVatClass: VatClass = "general";
   /** Whether the venue's region charges takeaway VAT. Off, the field is not drawn and a save sends
    * the stored rate as it was read. */
   @property({ attribute: false }) takeawayVat = false;
@@ -401,6 +388,8 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) vatRates: readonly string[] = [];
   /** The rate a new product's takeaway VAT starts at: the answer's `defaultTakeawayVatRate`. */
   @property({ attribute: false }) defaultTakeawayVatRate = "";
+  /** The menu-settings answer's `dineInVatRate`, the one rate everything eaten here is charged. */
+  @property({ attribute: false }) dineInVatRate = "";
   @property({ attribute: false }) newCategoryId: string | null = null;
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
@@ -409,11 +398,6 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
-  @property({ attribute: false }) taxChoices?: {
-    id: ProductEditorDraft["vatClass"];
-    rate: string;
-    label: string;
-  }[];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @property({ attribute: false }) api?: DashboardApi;
   @state() private draft: ProductEditorDraft = emptyDraft();
@@ -503,7 +487,7 @@ export class ProductEditor extends LitElement {
       this.draft = this.value
         ? structuredClone(this.value)
         : {
-            ...emptyDraft(this.defaultVatClass, this.defaultTakeawayVatRate),
+            ...emptyDraft(this.defaultTakeawayVatRate),
             primaryCategoryId: this.newCategoryId,
           };
       this.generation++;
@@ -640,7 +624,7 @@ export class ProductEditor extends LitElement {
     const keys = [
       "name",
       "kitchen-name",
-      "tax",
+      "takeaway-tax",
       "unit-price",
       "product-course",
       "allergens",
@@ -714,25 +698,12 @@ export class ProductEditor extends LitElement {
     });
     return rows;
   }
-  private get taxes() {
-    return (
-      this.taxChoices ??
-      VAT_CLASSES.map((id) => ({
-        id,
-        rate: vatRateOn(id, localToday()),
-        label: vatClassName(id),
-      }))
-    );
-  }
   private get language() {
     return this.locales[0] ?? "en";
   }
   /** The parent's values, on a variant's own page; null on a product of its own. */
   private get inherited() {
     return this.value?.inherited ?? null;
-  }
-  private taxLabel(tax: { label: string; rate: string }) {
-    return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
   }
   private unitText(unit: UnitChoice) {
     return unitPresentation(unit, currentLocale(), currentContentLanguages());
@@ -963,13 +934,8 @@ export class ProductEditor extends LitElement {
     const errors: Record<string, string> = {};
     if (!this.draft.name.trim()) errors.name = t("editor.name_required");
     const variantPage = this.inherited !== null;
-    // On a variant a blank VAT class and a blank price read the parent's; set, they must be valid.
+    // On a variant a blank price reads the parent's; set, it must be valid.
     const blankPrice = !(this.draft.unitPrice ?? "").trim();
-    if (
-      !(variantPage && this.draft.vatClass === null) &&
-      !this.taxes.some((tax) => tax.id === this.draft.vatClass)
-    )
-      errors.tax = t("editor.tax_required");
     const takeaway = this.draft.takeawayVatRate;
     // On a variant a blank takeaway rate reads the parent's; set, it must be one on offer.
     if (
@@ -1474,32 +1440,13 @@ export class ProductEditor extends LitElement {
   }
 
   private renderTax() {
-    const parent = this.inherited;
-    const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
-    const inheritedTax = parent ? (parentTax ? this.taxLabel(parentTax) : parent.vatClass) : null;
-    const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
-    return html`<wt-combobox
-        name="tax"
-        label=${t("product.vat")}
-        ?required=${!parent}
-        search="auto"
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        placeholder=${inheritedTax ?? t("editor.choose")}
-        .options=${inheritedTax === null ? taxes : [{ value: "", label: inheritedTax }, ...taxes]}
-        ?disabled=${this.suspended}
-        .value=${this.draft.vatClass ?? ""}
-        error=${this.error("tax")}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          const value = event.detail.value;
-          this.change(
-            "vatClass",
-            parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
-          );
-        }}
-        >${this.help(t("product.vat"), "help.products.vat", "products.vat")}</wt-combobox
-      >${this.takeawayVat ? this.renderTakeawayTax() : nothing}`;
+    return html`${
+      this.dineInVatRate
+        ? html`<p data-test="dine-in-vat">
+            ${fill("editor.dine_in_vat", { rate: vatRateNumber(this.dineInVatRate) })}
+          </p>`
+        : nothing
+    }${this.takeawayVat ? this.renderTakeawayTax() : nothing}`;
   }
 
   /** The unit dropdown and Add unit, drawn only while the chooser is open. */
@@ -1579,7 +1526,6 @@ export class ProductEditor extends LitElement {
 
   private pricingSummary(amount: string, unitLabel: string) {
     const price = amount.trim();
-    const tax = this.taxes.find((tax) => tax.id === this.draft.vatClass);
     const ownRate = this.draft.takeawayVatRate;
     const takeaway =
       this.takeawayVat && ownRate !== null && this.vatRates.includes(ownRate) ? ownRate : null;
@@ -1594,7 +1540,6 @@ export class ProductEditor extends LitElement {
             },
           ]
         : []),
-      ...(tax ? [{ label: t("product.vat"), value: this.taxLabel(tax) }] : []),
       ...(takeaway === null
         ? []
         : [{ label: t("editor.takeaway_vat"), value: vatRateText(takeaway) }]),
