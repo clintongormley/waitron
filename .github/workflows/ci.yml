@@ -2383,7 +2383,8 @@ jobs:
         run: |
           . /etc/os-release
           echo "release=$VERSION_ID" >> "$GITHUB_OUTPUT"
-          echo "version=$(pnpm --filter @waitron/till exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          version=$(pnpm --fail-if-no-match --filter @waitron/till exec playwright --version)
+          echo "version=${version#Version }" >> "$GITHUB_OUTPUT"
 
       - name: Restore cached Chromium for the Vitest driver
         uses: actions/cache/restore@v6
@@ -2401,7 +2402,7 @@ jobs:
 
       - name: Install Chromium's headless shell
         timeout-minutes: 3
-        run: timeout 120 pnpm --filter @waitron/till exec playwright install chromium --only-shell
+        run: timeout 120 pnpm --fail-if-no-match --filter @waitron/till exec playwright install chromium --only-shell
 
       - name: Cache Playwright WebKit
         uses: actions/cache@v6
@@ -2424,34 +2425,35 @@ jobs:
           gnu_timeout=$(command -v gnutimeout || command -v timeout)
           [[ $("$gnu_timeout" --version) == *'GNU coreutils'* ]]
           node=$(command -v node)
-          playwright_cli=$(pnpm --filter @waitron/till exec node -p 'require.resolve("playwright/package.json").replace(/package\.json$/, "cli.js")')
+          playwright_cli=$(pnpm --fail-if-no-match --filter @waitron/till exec node -p 'require.resolve("playwright/package.json").replace(/package\.json$/, "cli.js")')
           apt_config="$RUNNER_TEMP/webkit-apt.conf"
           # Keep dpkg in the process group that the root-owned timeout can stop.
           printf 'Dpkg::Use-Pty "false";\n' > "$apt_config"
+          # The CLI can exit on TERM before timeout would send a second signal to its children.
           for attempt in 1 2; do
-            if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -k 5 90 "$node" "$playwright_cli" install-deps webkit; then
+            if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -s KILL 90 "$node" "$playwright_cli" install-deps webkit; then
               exit 0
             fi
             echo "WebKit dependency install attempt $attempt failed or stalled" >&2
             if [ "$attempt" = 1 ]; then
-              sudo -n "$gnu_timeout" -k 5 60 dpkg --configure -a
+              sudo -n "$gnu_timeout" -s KILL 60 dpkg --configure -a
             fi
           done
           exit 1
 
       - name: Install Playwright WebKit
         timeout-minutes: 3
-        run: timeout 120 pnpm --filter @waitron/till exec playwright install webkit
+        run: timeout 120 pnpm --fail-if-no-match --filter @waitron/till exec playwright install webkit
 
       - name: Check dashboard theme start-up in WebKit
         env:
           WAITRON_STARTUP_ENGINES: webkit
-        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
+        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
 
       - name: Check till theme start-up in WebKit
         env:
           WAITRON_STARTUP_ENGINES: webkit
-        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
+        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
 
   # The coverage gate for @waitron/dashboard: merges the test-dashboard blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.

@@ -2,8 +2,9 @@
 
 Lane I item `WEBKIT-STARTUP-CI` in `queue.md` and both “WebKit in CI” backlog entries.
 The watcher requested one shared job at 20:02 on 2026-11-23 in Lane I's `questions.md`.
+The 20:47 note in the same file records “plan CLEARED by the watcher WITH CHANGES”.
 A change that selects the dashboard or till gets eight WebKit start-up checks per app in
-required CI. The entire hosted job fits 240 seconds in qualified cold and warm runs.
+required CI. Qualify the entire hosted job against 240 seconds in both a cold and a warm run.
 
 1. **Start from current main.** Carry this plan forward and drop the retired two-shard
    implementation from the candidate. Verify the base-to-tip diff leaves the Chromium shard jobs
@@ -24,14 +25,14 @@ required CI. The entire hosted job fits 240 seconds in qualified cold and warm r
 4. **Retry APT under a root-owned deadline.** Hosted probe [45241092879](https://github.com/clintongormley/waitron/actions/runs/45241092879)
    installed 185 packages in 24.8 s. Resolve and verify a GNU timeout executable before sudo.
    Under `sudo -n`, bound the pinned Playwright CLI's `install-deps webkit` to 90 seconds
-   with a short forced-kill grace. Pass a step-local `APT_CONFIG` setting `Dpkg::Use-Pty=false` on sudo's command line so
-   dpkg stays in the signalled group. The GNU version check replaces the 19:09 plain-timeout
+   and send KILL at the deadline. Pass step-local `APT_CONFIG` with `Dpkg::Use-Pty=false`
+   on sudo's command line so dpkg stays in the signalled group. The GNU version check replaces the 19:09 plain-timeout
    wording because uutils can leave a child alive after forced kill
    ([CI and gates](../../developers/ci-and-gates.md#every-pnpm-setup-is-bounded)). The existing
    `withDepsWaits` check accepts this resolved timeout only inside sudo. After a failed attempt, run bounded `dpkg --configure -a`
    before retrying once. Fail the job if recovery or the second attempt fails. Bound the step.
    In a disposable hosted run, force a stall inside dpkg. Capture the PIDs, process groups and
-   both dpkg locks before the timeout. Require exit 124 or 137, the apt and dpkg processes no
+   both dpkg locks before the timeout. Require exit 137, the apt and dpkg processes no
    longer running, and both locks free before recovery and a successful retry. Keep the probe out
    of the shipped workflow.
 5. **Run and measure.** With `WAITRON_STARTUP_ENGINES=webkit`, run

@@ -4091,10 +4091,15 @@ describe("the WebKit start-up job", () => {
         ),
       );
       expect(suite?.env.WAITRON_STARTUP_ENGINES, app).toBe("webkit");
+      expect(suite?.if, app).toBeUndefined();
       expect(suite?.continueOnError, app).toBeUndefined();
-      expect(suite?.command, app).toContain("scripts/run-with-deadline.mjs 120 --diagnostics --");
+      expect(suite?.command.trim(), app).toBe(
+        `node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/${app} exec vitest run src/venue-theme-startup.test.ts --reporter=verbose`,
+      );
     }
     expect(needsOf(job("ci").body)).toContain("test-webkit-startup");
+    const apt = steps.find((step) => step.command.includes("install-deps webkit"));
+    expect(apt?.command).toContain('Dpkg::Use-Pty "false"');
   });
 
   it("restores Chromium and saves only WebKit under a separate cache key", () => {
@@ -4908,26 +4913,24 @@ function aptWaits(text) {
 
 /**
  * Every Playwright `--with-deps` or `install-deps` in a step's `run:` command and whether it
- * runs under a deadline on the same line. The resolved GNU timeout must run inside sudo
- * (`if`, `!` and `sudo` before a plain timeout are also
- * allowed before `timeout`; a `;`, `&&`, `|`, `(` or a `&` that is not part of `&&`, `>&`, `<&`
- * or `&>` between them starts another command).
+ * runs under a deadline on the same line. The resolved GNU timeout must send KILL from inside
+ * sudo. For plain timeouts the guard accepts `if`, `!` and `sudo` prefixes. Shell command
+ * separators start a new command. The guard reads text and never checks process groups.
  */
 function withDepsWaits(text) {
   const limited = /^\s*(?:if\s+|!\s*)?(?:sudo\s+)?(?:gnu)?timeout\s+\d+\s/;
   const rootLimited =
-    /^\s*(?:if\s+|!\s*)?sudo -n APT_CONFIG="\$apt_config" "\$gnu_timeout" -k [1-9]\d* [1-9]\d*\s/;
+    /^\s*(?:if\s+|!\s*)?sudo -n APT_CONFIG="\$apt_config" "\$gnu_timeout" -s KILL [1-9]\d*\s/;
   return workflowSteps(text).flatMap(({ step, command }) =>
     command.split("\n").flatMap((line) =>
-      [...line.matchAll(/--with-deps\b|(?:\bplaywright|"\$playwright_cli")\s+install-deps\b/g)].map(
-        (found) => {
-          const command = line
-            .slice(0, found.index)
-            .split(/;|&&|\|\||\||(?<![<>&])&(?![&>])|\(/)
-            .at(-1);
-          return { step, bounded: limited.test(command) || rootLimited.test(command) };
-        },
-      ),
+      [...line.matchAll(/--with-deps\b|\binstall-deps\b/g)].map((found) => {
+        const command = line
+          .slice(0, found.index)
+          .split(/;|&&|\|\||\||(?<![<>&])&(?![&>])|\(/)
+          .at(-1);
+        const deadline = found[0] === "install-deps" ? rootLimited : limited;
+        return { step, bounded: deadline.test(command) };
+      }),
     ),
   );
 }
@@ -5473,9 +5476,15 @@ describe("the workflows' Playwright dependency waits", () => {
     ["if sudo timeout 600 npx playwright install --with-deps chromium; then :; fi", true],
     ["pnpm exec playwright install --with-deps chromium", false],
     ["pnpm exec playwright install-deps webkit", false],
-    ['"$gnu_timeout" -k 5 90 "$node" "$playwright_cli" install-deps webkit', false],
+    ['sudo timeout 90 "$node" "$playwright_cli" install-deps webkit', false],
+    ['sudo -n "$node" "$cli" install-deps webkit', false],
+    ['"$gnu_timeout" -s KILL 90 "$node" "$playwright_cli" install-deps webkit', false],
     [
       'if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -k 5 90 "$node" "$playwright_cli" install-deps webkit; then :; fi',
+      false,
+    ],
+    [
+      'if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -s KILL 90 "$node" "$playwright_cli" install-deps webkit; then :; fi',
       true,
     ],
     ["timeout 60 true && pnpm exec playwright install --with-deps chromium", false],
