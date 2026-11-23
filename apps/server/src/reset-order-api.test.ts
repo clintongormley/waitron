@@ -39,7 +39,11 @@ import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
 import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
-import { earlierBoxChain, lackingChainOf } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
+import {
+  earlierBoxChain,
+  lackingChainOf,
+  oneRecordChainOf,
+} from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -569,18 +573,9 @@ describe("an acknowledgement", () => {
     await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
     const ids = await seedFiscalParents(suite.db, {
       ids: { nodeId: main, seriesId },
-      numeroInstalacion: 23,
       reuseExistingParents: true,
     });
-    const chain = {
-      nodeId: main,
-      sifId: ids.sifId,
-      idSistemaInformatico: "WAITRON01",
-      numeroInstalacion: "23",
-      count: 1,
-      secuencia: 1,
-      huella: "F".repeat(64),
-    };
+    const chain = await oneRecordChainOf(suite.db, ids.sifId);
     const compared = deferred();
     const holdingLock = deferred();
     const lacking = vi.fn(

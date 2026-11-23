@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm";
+import type { Database } from "@waitron/db";
 import type { ChainHolding, LackingChain, LackingReason } from "../handover-holdings.js";
+import { verifactuIdentities } from "../schema/verifactu-identities.js";
 
 /** A three-record chain of an earlier box, as an old main box lists it in its holdings. */
 export function earlierBoxChain(): ChainHolding {
@@ -21,5 +24,23 @@ export function lackingChainOf(chain: ChainHolding, reason: LackingReason): Lack
     idSistemaInformatico: chain.idSistemaInformatico,
     numeroInstalacion: chain.numeroInstalacion,
     reason,
+  };
+}
+
+/** A one-record chain of identity `sifId`, as a box holding that record lists it. */
+export async function oneRecordChainOf(db: Database, sifId: string): Promise<ChainHolding> {
+  const [identity] = await db
+    .select()
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.id, sifId));
+  if (identity === undefined) throw new Error(`no identity ${sifId}`);
+  return {
+    nodeId: identity.nodeId,
+    sifId,
+    idSistemaInformatico: identity.idSistemaInformatico,
+    numeroInstalacion: identity.numeroInstalacion,
+    count: 1,
+    secuencia: 1,
+    huella: "F".repeat(64),
   };
 }
