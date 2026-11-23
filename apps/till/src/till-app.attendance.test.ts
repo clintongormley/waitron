@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { en } from "./i18n/strings.js";
 import {
   clockApp,
   clockPage,
@@ -79,6 +80,72 @@ describe("till attendance sign-in flow", () => {
       ).toContain("Tell a manager"),
     );
     expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
+  });
+
+  it("shows other notices while attendance questions are open, with no buttons", async () => {
+    const openDrawer = vi.fn().mockResolvedValue(undefined);
+    const f = await clockApp({
+      api: {
+        openDrawer,
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [],
+          opensDrawer: true,
+          notices: [
+            {
+              owner: "box-clock",
+              key: "clock.check_time",
+              code: "clock.check_time",
+              severity: "notice",
+              params: {},
+            },
+            {
+              owner: "box",
+              key: "clock.unusable",
+              code: "clock.unusable",
+              severity: "error",
+              params: {},
+            },
+            {
+              owner: "drawers",
+              key: "drawer",
+              code: "print_job.drawer_expired",
+              severity: "warning",
+              params: {},
+            },
+          ],
+        }),
+      },
+    });
+    f.api.getAttendanceInbox.mockResolvedValue(inbox());
+    await signIn(f.el);
+    await vi.waitFor(() => expect(questions(f.el)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        f.el.shadowRoot!.querySelector("till-notice-strip")?.shadowRoot?.textContent,
+      ).toContain(en["staff_notice.clock.unusable"]),
+    );
+    const seen = f.el as unknown as {
+      checkTimeOffered: boolean;
+      deviceEquipment: { opensDrawer?: boolean } | null;
+    };
+    expect(seen.checkTimeOffered).toBe(true);
+    expect(seen.deviceEquipment?.opensDrawer).toBe(true);
+    const strip = f.el.shadowRoot!.querySelector("till-notice-strip")!.shadowRoot!;
+    strip.querySelector<HTMLButtonElement>('[aria-controls="notice-list"]')!.click();
+    await vi.waitFor(() =>
+      expect(strip.textContent).toContain(en["staff_notice.print_job.drawer_expired"]),
+    );
+    expect(strip.querySelector("[data-check-time]")).toBeNull();
+    expect(strip.querySelector("[data-open-drawer]")).toBeNull();
+    expect(strip.querySelector("wt-button")).toBeNull();
+    expect(strip.textContent).not.toContain(en["staff_notice.see_box_status"]);
+    const host = f.el.shadowRoot!.querySelector("till-notice-strip")!;
+    for (const name of ["till-check-time", "till-open-drawer"]) {
+      host.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
+    }
+    await f.el.updateComplete;
+    expect(f.el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
+    expect(openDrawer).not.toHaveBeenCalled();
   });
 
   it("shows questions before Clock in and confirmation appends once before the clock page", async () => {

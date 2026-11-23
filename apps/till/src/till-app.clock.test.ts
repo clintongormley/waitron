@@ -4,6 +4,7 @@ import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { SessionActivity } from "./session-activity.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { en } from "./i18n/strings.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillClockState } from "./api/client.js";
 import {
@@ -24,11 +25,14 @@ afterEach(() => {
 });
 
 describe("till clocking integration", () => {
-  it("keeps the full-disk strip on the clock-in page", async () => {
+  it("shows every notice on the clock-in page, words only, with no Open drawer", async () => {
+    const openDrawer = vi.fn().mockResolvedValue(undefined);
     const f = await clockApp({
       api: {
+        openDrawer,
         getDeviceEquipment: vi.fn().mockResolvedValue({
           roles: [],
+          opensDrawer: true,
           notices: [
             {
               owner: "box",
@@ -57,10 +61,63 @@ describe("till clocking integration", () => {
     );
     expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
     expect(
-      f.el
-        .shadowRoot!.querySelector("till-notice-strip")!
-        .shadowRoot!.querySelector("[data-notice-more]"),
-    ).toBeNull();
+      (f.el as unknown as { deviceEquipment: { opensDrawer?: boolean } | null }).deviceEquipment
+        ?.opensDrawer,
+    ).toBe(true);
+    const strip = f.el.shadowRoot!.querySelector("till-notice-strip")!.shadowRoot!;
+    strip.querySelector<HTMLButtonElement>('[aria-controls="notice-list"]')!.click();
+    await vi.waitFor(() =>
+      expect(strip.textContent).toContain(en["staff_notice.print_job.drawer_expired"]),
+    );
+    expect(strip.querySelector("[data-open-drawer]")).toBeNull();
+    expect(strip.querySelector("wt-button")).toBeNull();
+    f.el
+      .shadowRoot!.querySelector("till-notice-strip")!
+      .dispatchEvent(new CustomEvent("till-open-drawer", { bubbles: true, composed: true }));
+    await f.el.updateComplete;
+    expect(openDrawer).not.toHaveBeenCalled();
+  });
+
+  it("shows a clock notice on the clock-in page with no Check time, though the box offers it", async () => {
+    const f = await clockApp({
+      api: {
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [],
+          notices: [
+            {
+              owner: "box-clock",
+              key: "clock.check_time",
+              code: "clock.check_time",
+              severity: "notice",
+              params: {},
+            },
+            {
+              owner: "box",
+              key: "clock.unusable",
+              code: "clock.unusable",
+              severity: "error",
+              params: {},
+            },
+          ],
+        }),
+      },
+    });
+    await signIn(f.el);
+    await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        f.el.shadowRoot!.querySelector("till-notice-strip")?.shadowRoot?.textContent,
+      ).toContain(en["staff_notice.clock.unusable"]),
+    );
+    expect((f.el as unknown as { checkTimeOffered: boolean }).checkTimeOffered).toBe(true);
+    const host = f.el.shadowRoot!.querySelector("till-notice-strip")!;
+    const strip = host.shadowRoot!;
+    expect(strip.querySelector("[data-check-time]")).toBeNull();
+    expect(strip.querySelector("wt-button")).toBeNull();
+    expect(strip.textContent).not.toContain(en["staff_notice.see_box_status"]);
+    host.dispatchEvent(new CustomEvent("till-check-time", { bubbles: true, composed: true }));
+    await f.el.updateComplete;
+    expect(f.el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
   });
 
   it("the initial clock page's idle deadline is not reset when work data finally loads", async () => {

@@ -3,7 +3,7 @@
 Some problems with the box stop staff from working, and the person at the till is often the first
 to notice. So once someone has signed in, every till and handheld shows a line under its top bar
 when the box needs attention. The sign-in page also warns when the box is running out of disk space or cannot save anything,
-and when payments wait for the box's time. After sign-in, storage notices also stay above the clock-in and attendance pages.
+and when payments wait for the box's time. After sign-in, the clock-in and attendance pages show every notice too, without **Open drawer** or **Check the time**: move past those pages to use them.
 The line says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
@@ -43,8 +43,8 @@ on the [Box status page](box-status.md#clock-own-device). Just after the box sta
 far) · Check the time** is red. When the box starts without the internet's time, payments wait.
 They start again by themselves once two tills or handhelds are switched on and connected, even at
 the sign-in screen, and agree with the box's time. Otherwise, use **Check the time**: keep the
-box's time if it is right, or use this device's time if that is. The sign-in page shows the same
-words, without **Check the time**: sign in to use it.
+box's time if it is right, or use this device's time if that is. The sign-in, clock-in and attendance
+pages show the same words, without **Check the time**: move past them to use it.
 
 **Payments wait: the box's clock jumped and it cannot check the time over the internet. Waiting
 for devices to agree with its time (0 of 2 so far) · Check the time** is red. The box's clock
@@ -62,7 +62,7 @@ time** there when it shows, or **Close** it and pay once the red line has gone.
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the box's
 clock is in doubt and the box could not confirm it by itself. It ends any of the red
 clock lines above. Tap **Check the time** to open its dialog; when another notice shows first, open the
-list and tap it there. Anyone signed in on the till can use it.
+list and tap it there. Anyone signed in on the till can use it once past the clock-in and attendance pages.
 
 The dialog shows the box's time and this till's time. Nobody types a time: the till's own time is
 what is sent.
