@@ -999,8 +999,10 @@ it("labels the frozen series inputs as bases on the owner-bound review", async (
   const review = await screen(app, "review");
   expect(review.shadowRoot!.textContent).toContain("Invoice series base");
   expect(review.shadowRoot!.textContent).toContain("Full invoice series base");
-  expect(review.shadowRoot!.textContent).toContain("Corrective of simplified invoices series base");
-  expect(review.shadowRoot!.textContent).toContain("Corrective of full invoices series base");
+  expect(review.shadowRoot!.textContent).toContain(
+    "Series base for correctives of simplified invoices",
+  );
+  expect(review.shadowRoot!.textContent).toContain("Series base for correctives of full invoices");
   expect(review.shadowRoot!.querySelector("[data-test=summary-seriesCode]")!.textContent).toBe("A");
 });
 

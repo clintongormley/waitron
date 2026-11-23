@@ -391,8 +391,8 @@ describe("setup-review-screen", () => {
     expect(rows).toEqual([
       ["summary-seriesCode", "Invoice series", "FA"],
       ["summary-fullSeriesCode", "Full invoice series", "FF"],
-      ["summary-correctiveSeriesCode", "Corrective of simplified invoices series", "RF"],
-      ["summary-fullCorrectiveSeriesCode", "Corrective of full invoices series", "FX"],
+      ["summary-correctiveSeriesCode", "Series for correctives of simplified invoices", "RF"],
+      ["summary-fullCorrectiveSeriesCode", "Series for correctives of full invoices", "FX"],
     ]);
   });
 

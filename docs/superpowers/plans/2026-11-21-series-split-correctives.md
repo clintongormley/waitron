@@ -90,8 +90,8 @@ and the owner's 15 November decision.** No law or ruling we hold says it.
    code" and "Full invoice corrective series code".
    _2026-11-23 09:44: the owner kept the Spanish and asked for English to match it, relayed by the
    watcher; the series are now "Corrective of simplified invoices" and "Corrective of full invoices",
-   and the setup fields "Corrective of simplified invoices series code" and "Corrective of full
-   invoices series code"._
+   and the setup fields "Series code for correctives of simplified invoices" and "Series code for
+   correctives of full invoices"._
 6. **What the one word covers** (my call). "Corrective" names the document. "Correction" stays where
    it names the act of correcting or the correction under way before a corrective exists: the
    `invoice_corrections` table, its routes and `invoice_correction.*` codes, `recordCorrection`. A
