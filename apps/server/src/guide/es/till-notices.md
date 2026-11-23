@@ -5,8 +5,8 @@ el primero en notarlo. Por eso, cuando alguien ha iniciado sesión, cada caja re
 terminal de camarero muestran una línea bajo su barra superior si el servidor necesita atención. La
 pantalla de inicio de sesión también avisa si queda poco espacio en el disco del servidor o no se
 puede guardar nada, y si los cobros esperan a la hora del servidor.
-Después de iniciar sesión, los avisos de espacio también aparecen sobre las páginas de fichaje y de preguntas
-de asistencia. La línea dice qué ocurre y qué hacer. Nunca
+Después de iniciar sesión, las páginas de fichaje y de preguntas de asistencia también muestran todos
+los avisos, sin sus botones: **Abrir cajón** y **Comprobar la hora** aparecen al pasar de esas páginas. La línea dice qué ocurre y qué hacer. Nunca
 tapa tu trabajo y nunca tienes que cerrarla.
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.

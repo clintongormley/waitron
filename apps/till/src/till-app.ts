@@ -25037,12 +25037,13 @@ export class TillApp extends LitElement {
     ></till-payments-paused-dialog>`;
   }
 
-  #renderNoticeStrip(notices: readonly StaffNotice[] = this.staffNotices) {
+  /** With `wordsOnly`, every notice shows its words and no action. */
+  #renderNoticeStrip(wordsOnly = false) {
     return html`<till-notice-strip
         slot="notices"
-        .notices=${notices}
-        .checkTimeOffered=${this.checkTimeOffered}
-        .canOpenDrawer=${this.#mayOpenDrawer}
+        .notices=${this.staffNotices}
+        .checkTimeOffered=${!wordsOnly && this.checkTimeOffered}
+        .canOpenDrawer=${!wordsOnly && this.#mayOpenDrawer}
         .drawerBusy=${this.drawerOpening}
         @till-open-drawer=${() => void this.#onOpenDrawer()}
         @till-check-time=${() => (this.boxTimeOpen = true)}
@@ -25768,12 +25769,7 @@ export class TillApp extends LitElement {
         ></till-problem-report>
         ${
           this.frontDoor === undefined && (this.attendancePage || this.clockPage)
-            ? this.#renderNoticeStrip(
-                this.staffNotices.filter(
-                  (notice) =>
-                    notice.code === "storage.disk_full" || notice.code === "storage.space_low",
-                ),
-              )
+            ? this.#renderNoticeStrip(true)
             : nothing
         }
         ${

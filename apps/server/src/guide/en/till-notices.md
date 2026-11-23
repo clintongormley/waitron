@@ -3,7 +3,7 @@
 Some problems with the box stop staff from working, and the person at the till is often the first
 to notice. So once someone has signed in, every till and handheld shows a line under its top bar
 when the box needs attention. The sign-in page also warns when the box is running out of disk space or cannot save anything,
-and when payments wait for the box's time. After sign-in, storage notices also stay above the clock-in and attendance pages.
+and when payments wait for the box's time. After sign-in, the clock-in and attendance pages show every notice too, without its buttons: **Open drawer** and **Check the time** appear once you move past those pages.
 The line says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.

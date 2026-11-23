@@ -1262,7 +1262,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
-- **Clock-in and attendance:** storage notices show; other notices still do not.
 - **The full-disk bar waits for the owner's answers.**
   The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
   [Detail](box.md#the-full-disk-bar-waits-for-the-owners-answers).
