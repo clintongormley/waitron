@@ -909,6 +909,38 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     expect(lacking).not.toHaveBeenCalled();
   });
 
+  it("is not worked out while an open handover names the box, when no wipe can be ordered", async () => {
+    await completedReturn("controlled");
+    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
+    await withNodeTransaction(suite.node, (tx) =>
+      beginHandoverOperationTx(tx, {
+        nodeId: main,
+        operationId: randomUUID(),
+        role: "destination",
+        scenario: "controlled",
+        sourceNodeId: oldBox,
+        destinationNodeId: main,
+        binding: {},
+        fingerprint: "f",
+        state: "copy_accepted",
+        waitingReason: null,
+      }),
+    );
+    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
+    const watched: WaitronModule[] = [
+      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
+    ];
+    const listing = await listServers(suite.db, suite.node, main, undefined, {
+      holdings: oldBoxHoldings,
+      modules: watched,
+    });
+    expect(listing.nodes.find((n) => n.nodeId === oldBox)).toMatchObject({
+      canReset: false,
+      oldBoxHoldsMore: null,
+    });
+    expect(lacking).not.toHaveBeenCalled();
+  });
+
   it("is not worked out while an order stands, which the question already compares", async () => {
     await completedReturn("controlled");
     await orderReset(

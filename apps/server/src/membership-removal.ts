@@ -242,6 +242,11 @@ export async function listServers(
       backup = null;
     }
   }
+  // orderReset's test without the loss: a standing order is answered as it stands, else
+  // holdsCompletedReturnFrom, which reads this same activationsBySource field.
+  const canResetOf = (nodeId: string) =>
+    resetRefusal(held, selfNodeId, nodeId, open, pinned) === null &&
+    (orders.has(nodeId) || activations.get(nodeId)?.returnCompleted === true);
   const holdsMoreBy = new Map<string, boolean>();
   if (oldBoxes !== undefined)
     for (const { nodeId } of held.body.nodes) {
@@ -249,8 +254,8 @@ export async function listServers(
       if (
         summary !== undefined &&
         activations.get(nodeId)?.scenario === "controlled" &&
-        activations.get(nodeId)?.returnCompleted === true &&
-        !orders.has(nodeId)
+        !orders.has(nodeId) &&
+        canResetOf(nodeId)
       )
         holdsMoreBy.set(nodeId, await holdsMore(db, oldBoxes.modules, summary));
     }
@@ -280,11 +285,7 @@ export async function listServers(
         returnOutstanding: facts.returnOutstanding,
         needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
         reset: order === null ? null : "ordered",
-        // orderReset's test without the loss: a standing order is answered as it stands, else
-        // holdsCompletedReturnFrom, which reads this same activationsBySource field.
-        canReset:
-          resetRefusal(held, selfNodeId, n.nodeId, open, pinned) === null &&
-          (order !== null || facts.returnCompleted),
+        canReset: canResetOf(n.nodeId),
         returnScenario: activation?.scenario ?? null,
         recoveredRecordsBackup: facts.returnCompleted
           ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)

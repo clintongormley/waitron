@@ -1370,15 +1370,19 @@ describe("GET /management-api/servers", () => {
     });
     const oldMain = former(await seedNode(p.db));
     await holdChart(p, [self(p), oldMain]);
+    await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
     await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", randomUUID(), {
       scenario: "controlled",
     });
     holdings.record(oldMain.nodeId, { fiscal: [earlierBoxChain()] });
 
     const body = (await (await list(p, p.adminCookie)).json()) as {
-      nodes: { nodeId: string; oldBoxHoldsMore: boolean | null }[];
+      nodes: { nodeId: string; canReset: boolean; oldBoxHoldsMore: boolean | null }[];
     };
-    expect(body.nodes.find((n) => n.nodeId === oldMain.nodeId)?.oldBoxHoldsMore).toBe(true);
+    expect(body.nodes.find((n) => n.nodeId === oldMain.nodeId)).toMatchObject({
+      canReset: true,
+      oldBoxHoldsMore: true,
+    });
   });
 
   it("serves cached spare progress only after permission, and recovers without changing rows", async () => {
