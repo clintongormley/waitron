@@ -5,9 +5,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
+import { appendPendingAlta, openSendingGate, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-import { writeAck } from "./acks.js";
 import { BRAKE_PROBE_INTERVAL_MS, DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
@@ -30,7 +29,7 @@ function deps(client: VerifactuClient) {
 
 /** Drains at `now` with AEAT's sending wait cleared, so each pass may send. */
 async function drainAt(client: VerifactuClient, now: Date) {
-  await suite.db.execute(sql`delete from verifactu_sending_state`);
+  await openSendingGate(suite.db);
   return drain(deps(client), now);
 }
 
@@ -131,7 +130,6 @@ describe("drain — a run of future-date refusals (1112)", () => {
           enviado_en = ${at(10_000).toISOString()}
         where registro_id = ${fourth}
       `);
-      await writeAck(tx, fourth, at(10_000));
     });
     const fifth = (await appendPendingAlta(suite.db, seeded, 5)).registroId;
 

@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
+import { openSendingGate, seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { latestFutureDateRefusal } from "./clock-future-refusal.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, FUTURE_DATE_REFUSAL } from "./drain.js";
@@ -15,7 +15,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const SEND_AT = new Date("2026-07-21T00:00:10Z");
 
 async function drainOnce(client: VerifactuClient) {
-  await suite.db.execute(sql`delete from verifactu_sending_state`);
+  await openSendingGate(suite.db);
   return drain(
     {
       db: suite.db,

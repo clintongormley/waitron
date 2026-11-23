@@ -1868,6 +1868,9 @@ beside `fiscal`, `:1686`); create `packages/module/src/handover.ts`. Test
 
 #### Task 4.2: The Veri*Factu chain summary
 
+**2026-11-23:** [A1308 Fi7](2026-11-08-a1308-fi7-acks-and-cleared-answers.md) replaces
+`acksSha256` with `submissionsSha256`, which hashes the stored submission answers.
+
 **Files:** Create `packages/fiscal-verifactu/src/handover-summary.ts`; register it on the
 module's descriptor. Test `packages/fiscal-verifactu/src/handover-summary.test.ts`.
 

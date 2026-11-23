@@ -38,7 +38,6 @@ async function snapshot() {
     deliveries: (
       await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
     ).rows,
-    acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (
       await suite.db.execute(
@@ -77,7 +76,6 @@ async function requeue() {
     await tx.execute(
       sql`update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}`,
     );
-    await tx.execute(sql`delete from acks`);
   });
 }
 
@@ -99,7 +97,6 @@ describe("reconciliation alongside filing", () => {
     );
 
     expect(accepted).toBe(3);
-    expect(newer!.acknowledgements).toHaveLength(3);
     expect(result.deferred?.sort()).toEqual([...seeded.registroIds].sort());
     expect(await snapshot()).toEqual(newer);
     expect(result.noTrace).toEqual([]);
@@ -124,7 +121,6 @@ describe("reconciliation alongside filing", () => {
     );
 
     expect(sent).toMatchObject({ recordsSubmitted: 3, recordsAccepted: 3, skipped: [] });
-    expect(newer!.acknowledgements).toHaveLength(3);
     expect(newer!.deliveries.every((row) => row.estado === "aceptado")).toBe(true);
     expect(newer!.deliveries.every((row) => row.intentos === 2)).toBe(true);
     expect(result.deferred?.sort()).toEqual([...seeded.registroIds].sort());
@@ -164,8 +160,12 @@ describe("reconciliation alongside filing", () => {
       mensaje_error: "New filing refusal",
       intentos: 2,
     });
-    expect(after.acknowledgements).toHaveLength(2);
-    expect(after.acknowledgements.some((row) => row.registro_id === refused)).toBe(false);
+    expect(
+      after.deliveries
+        .filter((row) => row.estado === "aceptado")
+        .map((row) => row.registro_id)
+        .sort(),
+    ).toEqual(seeded.registroIds.slice(1).sort());
     expect(after.records).toEqual(before.records);
     expect(after.incidents).toEqual([]);
     expect(after.cases).toEqual([]);
@@ -195,7 +195,6 @@ describe("reconciliation alongside filing", () => {
     expect(submits).toBe(1);
     expect(newer!.deliveries.every((row) => row.estado === "pendiente")).toBe(true);
     expect(newer!.deliveries.every((row) => row.intentos === 2)).toBe(true);
-    expect(newer!.acknowledgements).toEqual([]);
     expect(result.deferred?.sort()).toEqual([...seeded.registroIds].sort());
     expect(await snapshot()).toEqual(newer);
     expect(result.lostAck).toEqual([]);
@@ -241,7 +240,6 @@ describe("reconciliation alongside filing", () => {
     }
 
     expect(before!.deliveries.every((row) => row.estado === "enviando")).toBe(true);
-    expect(before!.acknowledgements).toEqual([]);
     expect(during).toEqual(before);
     expect(result!.deferred?.sort()).toEqual([...seeded.registroIds].sort());
     expect(result!.lostAck).toEqual([]);
@@ -251,7 +249,6 @@ describe("reconciliation alongside filing", () => {
     expect(sent).toMatchObject({ recordsAccepted: 3, skipped: [] });
     const finished = await snapshot();
     expect(finished.deliveries.every((row) => row.estado === "aceptado")).toBe(true);
-    expect(finished.acknowledgements).toHaveLength(3);
     expect(finished.records).toEqual(before!.records);
   });
 
@@ -277,7 +274,6 @@ describe("reconciliation alongside filing", () => {
     );
 
     expect(newer!.deliveries).toEqual([]);
-    expect(newer!.acknowledgements).toEqual([]);
     expect(result.deferred?.sort()).toEqual([...seeded.registroIds].sort());
     expect(result.lostAck).toEqual([]);
     expect(result.noTrace).toEqual([]);

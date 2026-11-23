@@ -26,7 +26,6 @@ async function snapshot() {
     deliveries: (
       await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
     ).rows,
-    acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (
       await suite.db.execute(
@@ -149,7 +148,6 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
     );
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
-      await tx.execute(sql`delete from acks`);
     });
     const before = await snapshot();
     const deps = {
@@ -173,7 +171,6 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
     const after = await snapshot();
-    expect(after.acknowledgements).toHaveLength(3);
     expect(after.deliveries.map((row) => row.estado)).toEqual(["aceptado", "aceptado", "aceptado"]);
     expect(after.records).toEqual(before.records);
   });

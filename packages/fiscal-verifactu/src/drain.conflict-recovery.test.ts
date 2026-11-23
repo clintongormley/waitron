@@ -146,9 +146,6 @@ describe("durable conflict observations", () => {
         sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
       ),
     ).toEqual(oldCase);
-    expect((await suite.db.execute(sql`select state from acks`)).rows).toEqual([
-      { state: "rejected" },
-    ]);
     expect(await observations()).toEqual([
       expect.objectContaining({
         registro_id: registroId,
@@ -489,7 +486,7 @@ describe("durable conflict observations", () => {
     expect(await observations()).toEqual(before);
   });
 
-  it("backs out the reply, case, acknowledgement and evidence when an after-insert write fails", async () => {
+  it("backs out the reply, case and evidence when an after-insert write fails", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const aeat = fake();
     await collideAtAeat(suite.db, aeat, seeded, seeded.registroIds[0]!);
@@ -506,7 +503,6 @@ describe("durable conflict observations", () => {
           )
         ).rows,
       ).toEqual([]);
-      expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
       expect(
         (await suite.db.execute(sql`select estado, csv from verifactu_submissions`)).rows,
       ).toEqual([{ estado: "pendiente", csv: null }]);

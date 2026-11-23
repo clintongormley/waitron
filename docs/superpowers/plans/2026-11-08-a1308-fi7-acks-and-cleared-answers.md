@@ -129,9 +129,16 @@ updates. Only three of the updates write any of the four values:
 The other thirteen updates write only `estado`, `incidencia`, `technical_incidence`, `enviado_en`,
 `intentos`, `proximo_intento_en` or `reconciled_resubmit_at` (`drain.ts:320`, `:570`, `:730`, `:873`,
 `:1039`, `:1121`, `:1164`, `:1201`, `:1222`, `:1669`; `outbox.ts:42`; `record-remedy-held.ts:94`;
-`reconcile.ts:572`). Outside `packages/fiscal-verifactu/src` nothing writes the table (the first
-search has no hit elsewhere; the only other code naming the answer columns reads them:
-`certificate-card.ts:42-53`, `slot.ts:71`).
+`reconcile.ts:572`).
+
+**2026-11-23, watcher clearance (21:11 CET, Lane E `questions.md`):** The preflight found two
+insert paths outside the earlier trace.
+`handover-return.ts:440–454` skips records the receiving box already holds. For a missing record it
+inserts the record and its submission in the same transaction. The returned answer goes into that new
+submission. For a record the receiver already holds, the return keeps the receiver's existing
+submission and skips the returned delivery. `apps/server/scripts/bench/grow-fiscal.ts:157–160`
+inserts a new synthetic submission with a copied CSV. The history helper stays at the three update
+sites.
 
 `keepAnswerBeforeClearing` therefore takes the values about to be written and compares each with the
 row; the design's "hold" (`setAside`) is covered by the `setEstado` call, and is not a separate call
@@ -168,7 +175,7 @@ export interface AnswerValues { csv: string | null; codigoError: number | null; 
 
 /** Writes `aeat.answer_cleared` with the row's four values as they are now, when one of them is not
  * null and differs from `next`, the values the caller is about to write. */
-export function keepAnswerBeforeClearing(tx: Transaction, registroId: string, by: "drain" | "reconcile", next: AnswerValues, now: Date): Promise<void>;
+export function keepAnswerBeforeClearing(tx: Transaction, registroId: string, by: "drain" | "reconcile", next: Partial<AnswerValues>, now: Date): Promise<void>;
 
 // packages/fiscal-verifactu/src/handover-summary.ts
 export type ChainSummary = { /* as today */ submissionsSha256: string /* replaces acksSha256 */ };

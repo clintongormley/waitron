@@ -4,7 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
+import { appendPendingAlta, openSendingGate, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import {
   BACKOFF_MAX_MS,
@@ -220,11 +220,11 @@ describe("drain after the clock steps back — a held chain's hourly probe", () 
     for (const key of seeded.facturaKeys) fake.reject(key, 1100, "Rechazo");
     await drain(deps(fake.client()), new Date("2026-07-21T00:00:10Z"));
     const held = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
+    await openSendingGate(suite.db);
     await drain(deps(fake.client()), new Date("2026-07-21T00:00:20Z"));
     expect(await states([held])).toEqual(["detenido"]);
     await suite.db.execute(sql`update verifactu_submissions set enviado_en = ${at}`);
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
+    await openSendingGate(suite.db);
     return { fake, held };
   }
 

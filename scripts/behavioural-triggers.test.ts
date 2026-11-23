@@ -12,6 +12,7 @@ import { applyMigrations } from "../packages/migrations/src/apply.js";
 import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
 import {
+  SENDING_STATE_DELETE_REFUSAL,
   SUBMISSION_CHANGE_REFUSAL,
   SUBMISSION_DELETE_REFUSAL,
 } from "../packages/fiscal-verifactu/src/trigger-refusals.js";
@@ -148,6 +149,7 @@ const EXPECTED_TRIGGERS = [
   "refunds_no_delete",
   "invoice_corrections_guard_update",
   "invoice_corrections_no_delete",
+  "verifactu_sending_state_no_delete",
   "verifactu_submissions_guard_update",
   "verifactu_submissions_no_delete",
 ];
@@ -597,6 +599,25 @@ describe("VeriFactu submission guards", () => {
       case_resolution_action: "corrected",
     });
   });
+});
+
+it("keeps the sending gate while the drainer can update its wait and clear an incident", () => {
+  connection.exec(`insert into verifactu_sending_state
+    (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
+    values (1, '${STAMP}', 60, 'incident')`);
+  const next = "2026-09-22T11:00:00.000Z";
+  connection.exec(`insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg)
+    values (1, '${next}', 90)
+    on conflict (id) do update set
+      proximo_envio_en = excluded.proximo_envio_en, tiempo_espera_seg = excluded.tiempo_espera_seg`);
+  connection.exec(`update verifactu_sending_state set technical_incident_token = null
+    where id = 1 and technical_incident_token = 'incident'`);
+  expect(refusalFor(connection, "delete from verifactu_sending_state where id = 1")).toBe(
+    SENDING_STATE_DELETE_REFUSAL,
+  );
+  expect(connection.prepare("select * from verifactu_sending_state").all()).toEqual([
+    { id: 1, proximo_envio_en: next, tiempo_espera_seg: 90, technical_incident_token: null },
+  ]);
 });
 
 describe("media_blobs_no_update", () => {

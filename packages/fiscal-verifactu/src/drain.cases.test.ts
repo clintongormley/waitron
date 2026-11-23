@@ -108,13 +108,6 @@ async function envioOf(registroId: string): Promise<EnvioState> {
   return { ...row, incidencia: row.incidencia === 1 };
 }
 
-async function ackOf(registroId: string): Promise<string | undefined> {
-  const { rows } = await suite.db.execute<{ state: string }>(
-    sql`select state from acks where registro_id = ${registroId}`,
-  );
-  return rows[0]?.state;
-}
-
 async function incidentCodes(): Promise<string[]> {
   const { rows } = await suite.db.execute<{ code: string }>(
     sql`select code from incidents order by code`,
@@ -147,11 +140,6 @@ describe("drain — a lone rejection is kept and does not hold its chain", () =>
     expect(await envioOf(rejected!)).toMatchObject({ estado: "rechazado", csv, incidencia: true });
     expect(await envioOf(second!)).toMatchObject({ estado: "aceptado", csv });
     expect(await envioOf(third!)).toMatchObject({ estado: "aceptado", csv });
-    expect([await ackOf(rejected!), await ackOf(second!), await ackOf(third!)]).toEqual([
-      "rejected",
-      "accepted",
-      "accepted",
-    ]);
     expect(result.recordsAccepted).toBe(2);
     expect(result.recordsHalted).toBe(1);
 
@@ -228,7 +216,6 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       csv: null,
       incidencia: true,
     });
-    expect(await ackOf(next.registroId)).toBe("halted");
     expect(result.recordsHalted).toBe(1);
     expect(result.recordsSubmitted).toBe(0);
     expect(await cases()).toHaveLength(3);
@@ -271,7 +258,6 @@ describe("drain — a run of refusals with one code stops its chain", () => {
 
     expect(wire.sent).toEqual([]);
     expect(await estados([fourth.registroId, fifth.registroId])).toEqual(["detenido", "detenido"]);
-    expect(await ackOf(fifth.registroId)).toBe("halted");
     expect(result.recordsHalted).toBe(2);
     expect(await cases()).toHaveLength(3);
   });
@@ -689,7 +675,6 @@ describe("drain — a re-sent record whose stored copy AEAT accepted with errors
     const result = await drain(deps(consultaNames(aeat.client(), 2005)), SECOND);
 
     expect(await envioOf(record)).toMatchObject({ estado: "aceptado_con_errores" });
-    expect(await ackOf(record)).toBe("accepted_with_errors");
     expect(result.recordsAccepted).toBe(1);
     const opened = await cases();
     expect(opened.map((c) => [c.registroId, c.cause, c.evidence])).toEqual([
@@ -756,7 +741,6 @@ describe("drain — a conflict holds nothing behind it", () => {
     expect(await envioOf(conflicting!)).toMatchObject({ estado: "rechazado", incidencia: true });
     expect(await codigoOf(conflicting!)).toBe("3000");
     expect(await mensajeOf(conflicting!)).toBe("Registro duplicado");
-    expect(await ackOf(conflicting!)).toBe("rejected");
     expect(first.recordsHalted).toBe(1);
 
     const later = await appendPendingAlta(suite.db, seeded, 2);
@@ -817,7 +801,6 @@ describe("drain — the records around a conflict", () => {
     expect(await envioOf(conflicting!)).toMatchObject({ estado: "rechazado", incidencia: true });
     expect(await envioOf(sameReply!)).toMatchObject({ estado: "aceptado", csv });
     expect(await envioOf(unsent!)).toMatchObject({ estado: "pendiente", csv: null });
-    expect(await ackOf(unsent!)).toBeUndefined();
     expect(first.recordsAccepted).toBe(1);
     expect(first.recordsHalted).toBe(1);
 
@@ -895,7 +878,6 @@ describe("drain — the records around a conflict", () => {
 
     expect((await envioOf(conflicting!)).estado).toBe("rechazado");
     expect(await envioOf(unanswered!)).toMatchObject({ estado: "pendiente", incidencia: true });
-    expect(await ackOf(unanswered!)).toBeUndefined();
   });
 
   it("sends an unanswered record of the conflict's envío again once its retry is due", async () => {
@@ -1126,7 +1108,6 @@ describe("drain — a cancellation whose original was not accepted", () => {
     expect(wire.sent).toEqual([[later.registroId]]);
     expect(aeat.stored().some((s) => s.refExterna === cancellation)).toBe(false);
     expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido", incidencia: true });
-    expect(await ackOf(cancellation)).toBe("halted");
     expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
     expect(result.recordsHalted).toBe(1);
     expect((await cases()).map((c) => [c.registroId, c.cause])).toEqual([
@@ -1390,7 +1371,6 @@ describe("drain — a case commits with the outcome that opened it", () => {
     expect(await incidentCodes()).toEqual([]);
     expect((await envioOf(rejected!)).estado).toBe("pendiente");
     expect((await envioOf(accepted!)).estado).toBe("pendiente");
-    expect(await ackOf(rejected!)).toBeUndefined();
     // The envío did reach AEAT, so it is counted as sent; the outcomes the failed transaction
     // wrote were never kept, so nothing is counted as accepted, held or raised.
     expect(result).toMatchObject({
@@ -1585,13 +1565,11 @@ describe("drain — reply lines are paired with the records sent by position", (
 
     const csv = expect.any(String);
     expect(await envioOf(rejected!)).toMatchObject({ estado: "rechazado", incidencia: true });
-    expect(await ackOf(rejected!)).toBe("rejected");
     expect(await envioOf(accepted!)).toMatchObject({
       estado: "pendiente",
       incidencia: true,
       proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
     });
-    expect(await ackOf(accepted!)).toBeUndefined();
     expect(result.recordsAccepted).toBe(0);
     expect(result.recordsHalted).toBe(1);
     expect(await unknownParamsOf(accepted!)).toEqual([
@@ -1638,7 +1616,6 @@ describe("drain — reply lines are paired with the records sent by position", (
       [second!, firstLine!],
     ] as const) {
       expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
-      expect(await ackOf(id)).toBeUndefined();
       expect(await unknownParamsOf(id)).toEqual([
         expect.objectContaining({ lineaRespuesta: lineParams(other) }),
       ]);
@@ -1665,13 +1642,11 @@ describe("drain — reply lines are paired with the records sent by position", (
       [second!, firstLine!],
     ] as const) {
       expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
-      expect(await ackOf(id)).toBeUndefined();
       expect(await unknownParamsOf(id)).toEqual([
         expect.objectContaining({ lineaRespuesta: lineParams(other) }),
       ]);
     }
     expect(await envioOf(third!)).toMatchObject({ estado: "aceptado", incidencia: false });
-    expect(await ackOf(third!)).toBe("accepted");
     expect(result.recordsAccepted).toBe(1);
     expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([]);
     const wire = recording(real);
@@ -1713,7 +1688,6 @@ describe("drain — reply lines are paired with the records sent by position", (
           incidencia: true,
           proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
         });
-        expect(await ackOf(id)).toBeUndefined();
         expect(await unknownParamsOf(id)).toEqual([
           {
             registroId: id,
@@ -1786,9 +1760,7 @@ describe("drain — reply lines are paired with the records sent by position", (
       const result = await drain(deps(client), FIRST);
 
       expect(await envioOf(mismatched!)).toMatchObject({ estado: "pendiente", incidencia: true });
-      expect(await ackOf(mismatched!)).toBeUndefined();
       expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado", incidencia: false });
-      expect(await ackOf(matched!)).toBe("accepted");
       expect(result.recordsAccepted).toBe(1);
       expect(await unknownParamsOf(mismatched!)).toEqual([
         {
@@ -1826,7 +1798,6 @@ describe("drain — reply lines are paired with the records sent by position", (
       const result = await drain(deps(client), FIRST);
 
       expect(await envioOf(unreferenced!)).toMatchObject({ estado: "pendiente", incidencia: true });
-      expect(await ackOf(unreferenced!)).toBeUndefined();
       expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado" });
       expect(result.recordsAccepted).toBe(1);
       expect(await unknownParamsOf(unreferenced!)).toEqual([
@@ -1953,7 +1924,6 @@ describe("drain — reply lines are paired with the records sent by position", (
         incidencia: true,
         proximo_intento_en: new Date(now.getTime() + backoffMs(1)).toISOString(),
       });
-      expect(await ackOf(id)).toBeUndefined();
       expect(result.recordsAccepted).toBe(0);
       expect(await unknownParamsOf(id)).toEqual([
         {

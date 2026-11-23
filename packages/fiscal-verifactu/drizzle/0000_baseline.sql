@@ -1,13 +1,3 @@
-CREATE TABLE `acks` (
-	`registro_id` text PRIMARY KEY NOT NULL,
-	`submitted_at` text NOT NULL,
-	`csv` text,
-	`state` text NOT NULL,
-	`delivered_at` text,
-	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "acks_state_ck" CHECK("acks"."state" in ('accepted', 'accepted_with_errors', 'rejected', 'halted'))
-);
---> statement-breakpoint
 CREATE TABLE `declaraciones_responsables` (
 	`version` text PRIMARY KEY NOT NULL,
 	`text` text NOT NULL,
@@ -121,7 +111,7 @@ CREATE TABLE `verifactu_history` (
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "verifactu_history_data_ck" CHECK(case when json_valid("verifactu_history"."data") then json_type("verifactu_history"."data") = 'object' else 0 end),
-	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')),
+	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note', 'aeat.answer_cleared')),
 	CONSTRAINT "verifactu_history_confirmed_source_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.source') in ('admin', 'staff'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_reason_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.reason') in ('start', 'unusable'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_person_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(length("verifactu_history"."person_id") > 0, 0)),
@@ -155,6 +145,16 @@ CREATE TABLE `verifactu_history` (
         "verifactu_history"."registro_id" is not null and "verifactu_history"."person_id" is not null
         and substr("verifactu_history"."event_key", 1, 10) = 'case.note:' and length("verifactu_history"."event_key") > 10
         and json_type("verifactu_history"."data", '$.action') = 'text',
+        0
+      )),
+	CONSTRAINT "verifactu_history_cleared_ck" CHECK("verifactu_history"."kind" <> 'aeat.answer_cleared' or coalesce(
+        "verifactu_history"."registro_id" is not null
+        and json_extract("verifactu_history"."data", '$.by') in ('drain', 'reconcile')
+        and json_type("verifactu_history"."data", '$.csv') is not null
+        and json_type("verifactu_history"."data", '$.codigoError') is not null
+        and json_type("verifactu_history"."data", '$.mensajeError') is not null
+        and json_type("verifactu_history"."data", '$.confirmadoEn') is not null
+        and "verifactu_history"."person_id" is null and "verifactu_history"."event_key" is null,
         0
       ))
 );
@@ -325,3 +325,6 @@ BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a filing case and its resoluti
 --> statement-breakpoint
 CREATE TRIGGER verifactu_submissions_no_delete BEFORE DELETE ON verifactu_submissions
 BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never deleted'); END
+--> statement-breakpoint
+CREATE TRIGGER verifactu_sending_state_no_delete BEFORE DELETE ON verifactu_sending_state
+BEGIN SELECT RAISE(ABORT, 'verifactu_sending_state: the sending gate is never deleted'); END

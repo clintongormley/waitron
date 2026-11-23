@@ -7,7 +7,6 @@ import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
-import { writeAck } from "./acks.js";
 import { readActiveConflicts } from "./conflict-evidence.js";
 import { appendToChain } from "./chain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
@@ -45,7 +44,6 @@ async function version(position: number, estado: string, correctsRegistroId?: st
       csv: estado === "aceptado" ? `CSV-${position}` : null,
       proximoIntentoEn: NOW,
     });
-    await writeAck(tx, record.id, NOW);
     return record.id;
   });
 }
@@ -84,10 +82,6 @@ async function delivery(ids: string[]) {
     .orderBy(verifactuSubmissions.registroId);
 }
 
-async function acknowledgements() {
-  return (await suite.db.execute(sql`select * from acks order by registro_id`)).rows;
-}
-
 async function immutableRows() {
   return suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia);
 }
@@ -98,13 +92,11 @@ it("does not resubmit earlier versions when consulta holds only the second corre
   const latest = await version(3, "aceptado", first);
   const { client } = await authorityHolding([original, first, latest]);
   const before = await delivery([original, first, latest]);
-  const acksBefore = await acknowledgements();
   const recordsBefore = await immutableRows();
 
   const result = await reconcile(deps(client), PERIOD);
 
   expect(await delivery([original, first, latest])).toEqual(before);
-  expect(await acknowledgements()).toEqual(acksBefore);
   expect(result).toEqual({
     ...PERIOD,
     checked: 1,
@@ -122,13 +114,11 @@ it("recovers only the latest correction's lost acknowledgement and leaves older 
   const latest = await version(3, "pendiente", first);
   const { client } = await authorityHolding([original, first, latest]);
   const older = await delivery([original, first]);
-  const oldAcks = await acknowledgements();
   const recordsBefore = await immutableRows();
 
   const result = await reconcile(deps(client), PERIOD);
 
   expect(await delivery([original, first])).toEqual(older);
-  expect(await acknowledgements()).toEqual(expect.arrayContaining(oldAcks));
   expect((await delivery([latest]))[0]).toMatchObject({ estado: "aceptado", csv: null });
   expect(result).toEqual({
     ...PERIOD,
@@ -148,7 +138,6 @@ it("still requeues the current correction when consulta has no trace of that ver
   const { aeat, client } = await authorityHolding([original, first, latest]);
   aeat.forget(aeat.stored()[0]!.key);
   const older = await delivery([original, first]);
-  const oldAcks = await acknowledgements();
   const recordsBefore = await immutableRows();
 
   const result = await reconcile(deps(client), PERIOD);
@@ -159,7 +148,6 @@ it("still requeues the current correction when consulta has no trace of that ver
     csv: null,
     reconciledResubmitAt: NOW,
   });
-  expect(await acknowledgements()).toEqual(oldAcks.filter((ack) => ack.registro_id !== latest));
   expect(result).toEqual({
     ...PERIOD,
     checked: 1,
@@ -176,7 +164,6 @@ it("does not requeue a version superseded while the consulta request is in fligh
   const first = await version(2, "aceptado", original);
   const { client } = await authorityHolding([original, first]);
   const older = await delivery([original, first]);
-  const acksBefore = await acknowledgements();
   let latest = "";
   const delayed: VerifactuClient = {
     submit: (...args) => client.submit(...args),
@@ -197,7 +184,6 @@ it("does not requeue a version superseded while the consulta request is in fligh
 
   expect(latest).not.toBe("");
   expect(await delivery([original, first])).toEqual(older);
-  expect(await acknowledgements()).toEqual(acksBefore);
   expect((await delivery([latest]))[0]).toMatchObject({ estado: "pendiente", intentos: 0 });
   expect(result.noTrace).toEqual([]);
   expect(result.lostAck).toEqual([]);

@@ -5,6 +5,7 @@ import type { NodeId } from "@waitron/shared";
 import type { ConflictCause, ConflictEvidence, LookupConflictEvidence } from "./conflict-types.js";
 import { verifactuHistory } from "./schema/verifactu-history.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 
 interface ClockHistoryEntry {
   kind: "clock.confirmed";
@@ -45,7 +46,23 @@ interface CaseNoteHistoryEntry {
   data: { action: string };
 }
 
-export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry | CaseNoteHistoryEntry;
+export interface AnswerValues {
+  csv: string | null;
+  codigoError: number | null;
+  mensajeError: string | null;
+  confirmadoEn: Date | null;
+}
+
+type ClearedAnswerHistoryEntry = {
+  kind: "aeat.answer_cleared";
+  nodeId: NodeId;
+  at: Date;
+  registroId: string;
+  data: AnswerValues & { by: "drain" | "reconcile" };
+};
+
+export type HistoryEntry =
+  ClockHistoryEntry | ConflictHistoryEntry | CaseNoteHistoryEntry | ClearedAnswerHistoryEntry;
 
 interface StoredHistoryEntry {
   id: string;
@@ -81,6 +98,7 @@ export const CASE_NOTE_PREFIX = "case.note:";
 function keyFor(entry: HistoryEntry): string | null {
   switch (entry.kind) {
     case "clock.confirmed":
+    case "aeat.answer_cleared":
       return null;
     case "conflict.observed":
       return `conflict:${entry.registroId}:${entry.data.attempt}:${entry.data.cause}`;
@@ -89,6 +107,58 @@ function keyFor(entry: HistoryEntry): string | null {
     case "case.note":
       return CASE_NOTE_PREFIX + entry.actionKey;
   }
+}
+
+export async function keepAnswerBeforeClearing(
+  tx: Transaction,
+  registroId: string,
+  by: ClearedAnswerHistoryEntry["data"]["by"],
+  next: Partial<AnswerValues>,
+  now: Date,
+): Promise<void> {
+  const [row] = await tx
+    .select({
+      nodeId: verifactuRecords.nodeId,
+      csv: verifactuSubmissions.csv,
+      codigoError: verifactuSubmissions.codigoError,
+      mensajeError: verifactuSubmissions.mensajeError,
+      confirmadoEn: verifactuSubmissions.confirmadoEn,
+    })
+    .from(verifactuSubmissions)
+    .innerJoin(verifactuRecords, eq(verifactuRecords.id, verifactuSubmissions.registroId))
+    .where(eq(verifactuSubmissions.registroId, registroId));
+  if (row === undefined) return;
+
+  // An omitted field stays on the submission. Null explicitly clears it.
+  const changes = [
+    [row.csv, next.csv],
+    [
+      row.codigoError,
+      typeof next.codigoError === "number" ? String(next.codigoError) : next.codigoError,
+    ],
+    [row.mensajeError, next.mensajeError],
+    [row.confirmadoEn?.getTime() ?? null, next.confirmadoEn?.getTime() ?? next.confirmadoEn],
+  ];
+  if (
+    !changes.some(
+      ([held, replacement]) => held !== null && replacement !== undefined && held !== replacement,
+    )
+  )
+    return;
+
+  await appendHistory(tx, {
+    kind: "aeat.answer_cleared",
+    nodeId: row.nodeId as NodeId,
+    at: now,
+    registroId,
+    data: {
+      by,
+      csv: row.csv,
+      codigoError: row.codigoError === null ? null : Number(row.codigoError),
+      mensajeError: row.mensajeError,
+      confirmadoEn: row.confirmadoEn,
+    },
+  });
 }
 
 export async function historyNodeForRecord(tx: Transaction, registroId: string): Promise<NodeId> {

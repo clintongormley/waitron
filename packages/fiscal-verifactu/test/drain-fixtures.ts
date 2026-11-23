@@ -1,4 +1,4 @@
-import { readSettings, VENUE_SETTINGS } from "@waitron/db";
+import { readSettings, VENUE_SETTINGS, withTransaction } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { invoiceSeries, newId, nodes, sales, type Database } from "@waitron/db";
@@ -17,6 +17,21 @@ import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTaxpayerWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+
+/** Restore the never-sent state for tests that run another pass without a stored wait. */
+export async function openSendingGate(db: Database): Promise<void> {
+  await withTransaction(db, async (tx) => {
+    const {
+      rows: [trigger],
+    } = await tx.execute<{ sql: string }>(sql`
+      select sql from sqlite_schema where type = 'trigger'
+        and name = 'verifactu_sending_state_no_delete'
+    `);
+    await tx.execute(sql`drop trigger verifactu_sending_state_no_delete`);
+    await tx.execute(sql`delete from verifactu_sending_state`);
+    await tx.execute(sql.raw(trigger!.sql));
+  });
+}
 
 const submissions = verifactuSubmissions;
 export const deliveryColumns = {

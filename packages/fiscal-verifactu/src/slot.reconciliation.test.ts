@@ -41,7 +41,6 @@ async function fixture() {
   );
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
-    await tx.execute(sql`delete from acks`);
   });
   await sealAeatSecret(
     { db: suite.db, ring, nodeId: seeded.nodeId },
@@ -77,7 +76,6 @@ describe("the module-owned runtime reconciliation seat", () => {
     const run = FISCAL_SLOT.createReconciliation!(deps);
     const result = await run(NOW);
     expect(await states()).toEqual([{ estado: "aceptado" }]);
-    expect((await suite.db.execute(sql`select count(*) as n from acks`)).rows).toEqual([{ n: 1 }]);
     expect(result.nextDueAt).toEqual(new Date("2026-07-22T00:00:00Z"));
     expect(close).toHaveBeenCalledTimes(1);
     await run(new Date("2026-07-21T00:01:00Z"));
@@ -308,7 +306,6 @@ it("cancels the lookup transport on stepdown without acknowledging the invoice",
     await pending;
   }
   expect(await states()).toEqual([{ estado: "pendiente" }]);
-  expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
   expect(close).toHaveBeenCalledTimes(1);
 });
 

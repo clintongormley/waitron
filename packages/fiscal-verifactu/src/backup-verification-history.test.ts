@@ -181,9 +181,6 @@ async function capture(populate = true) {
         '{"codigo":1,"mensaje":"retained","csv":null}', ${time}, 1 from verifactu_records`,
     );
     await suite.db.execute(
-      sql`insert into acks (registro_id, submitted_at, csv, state) select id, ${time}, 'retained-csv', 'accepted' from verifactu_records`,
-    );
-    await suite.db.execute(
       sql`insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg) values (1,${time},60)`,
     );
     await suite.db.execute(
@@ -341,7 +338,6 @@ it.each([
   ["filing remedy parent", "update verifactu_submissions set case_remedy_registro_id='missing'"],
   ["filing resolution person", "update verifactu_submissions set case_resolved_by='missing'"],
   ["send parent", "update verifactu_submissions set registro_id='missing'"],
-  ["ack parent", "update acks set registro_id='missing'"],
   ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
   ["clock history node parent", "update verifactu_history set node_id='missing'"],
   ["clock history person parent", "update verifactu_history set person_id='missing'"],
@@ -399,7 +395,6 @@ it.each([
   "fiscal_allocations",
   "verifactu_submissions",
   "verifactu_sending_state",
-  "acks",
   "verifactu_certificates",
   "fiscal_certificate_reminders",
 ])("retains every captured %s row", async (table) => {
@@ -967,7 +962,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);

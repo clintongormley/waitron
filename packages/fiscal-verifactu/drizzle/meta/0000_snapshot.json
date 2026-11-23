@@ -1,73 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d349bfbc-1b9a-4e62-b569-8c54f99ef912",
+  "id": "b0d86869-33bb-4987-ab7e-558c461627dc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "acks": {
-      "name": "acks",
-      "columns": {
-        "registro_id": {
-          "name": "registro_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "submitted_at": {
-          "name": "submitted_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "csv": {
-          "name": "csv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "delivered_at": {
-          "name": "delivered_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "acks_registro_id_verifactu_records_id_fk": {
-          "name": "acks_registro_id_verifactu_records_id_fk",
-          "tableFrom": "acks",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "acks_state_ck": {
-          "name": "acks_state_ck",
-          "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
-        }
-      }
-    },
     "declaraciones_responsables": {
       "name": "declaraciones_responsables",
       "columns": {
@@ -791,7 +727,7 @@
         },
         "verifactu_history_kind_ck": {
           "name": "verifactu_history_kind_ck",
-          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')"
+          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note', 'aeat.answer_cleared')"
         },
         "verifactu_history_confirmed_source_ck": {
           "name": "verifactu_history_confirmed_source_ck",
@@ -824,6 +760,10 @@
         "verifactu_history_note_ck": {
           "name": "verifactu_history_note_ck",
           "value": "\"verifactu_history\".\"kind\" <> 'case.note' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null and \"verifactu_history\".\"person_id\" is not null\n        and substr(\"verifactu_history\".\"event_key\", 1, 10) = 'case.note:' and length(\"verifactu_history\".\"event_key\") > 10\n        and json_type(\"verifactu_history\".\"data\", '$.action') = 'text',\n        0\n      )"
+        },
+        "verifactu_history_cleared_ck": {
+          "name": "verifactu_history_cleared_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'aeat.answer_cleared' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_extract(\"verifactu_history\".\"data\", '$.by') in ('drain', 'reconcile')\n        and json_type(\"verifactu_history\".\"data\", '$.csv') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.codigoError') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.mensajeError') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.confirmadoEn') is not null\n        and \"verifactu_history\".\"person_id\" is null and \"verifactu_history\".\"event_key\" is null,\n        0\n      )"
         }
       }
     },

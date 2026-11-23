@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -19,9 +19,9 @@ import {
   resetInFlightClaims,
   type DrainDeps,
 } from "./drain.js";
-import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
+  openSendingGate,
   seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
@@ -264,10 +264,6 @@ describe("drain — flow control (verifactu_sending_state)", () => {
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
-  afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
-  });
-
   it("persists the server's TiempoEsperaEnvio into verifactu_sending_state and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
@@ -355,10 +351,6 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
       environment: "production",
       maxRegistrosPorEnvio: 3,
     };
-  });
-
-  afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
   async function flujo() {
@@ -594,7 +586,7 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
     try {
       return await drain(drainDeps(staticResolver(failing)), NOW);
     } finally {
-      await suite.db.execute(sql`delete from verifactu_sending_state`);
+      await openSendingGate(suite.db);
     }
   }
 
@@ -639,6 +631,13 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.recordsHalted).toBe(1); // the rechazado record only
     expect(result.recordsAccepted).toBe(2); // secuencia 1 and 3
     expect(result.incidentsRaised).toBeGreaterThanOrEqual(1);
+    expect(
+      (
+        await suite.db.execute(sql`
+      select registro_id from verifactu_history where kind = 'aeat.answer_cleared'
+    `)
+      ).rows,
+    ).toEqual([]);
 
     const inc = parseParams(
       await withTransaction(suite.db, (tx) =>
@@ -791,8 +790,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
 
-    // Resubmit our own already-accepted record, as a lost response would: the fake answers error
-    // 3000 with `EstadoRegistroDuplicado` "Correcta", which must read as an accept.
+    // Requeue with the first CSV still present to check the history write before a second reply.
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
@@ -809,6 +807,17 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(rows.rows[0]?.estado).toBe("aceptado"); // despite the outer Incorrecto on the 3000 line
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
+    expect(
+      (
+        await suite.db.execute(sql`
+        select registro_id, json_extract(data, '$.by') as writer,
+          json_extract(data, '$.csv') as previous_csv
+        from verifactu_history where kind = 'aeat.answer_cleared'
+      `)
+      ).rows,
+    ).toEqual([
+      { registro_id: seeded.registroIds[0], writer: "drain", previous_csv: "CSV-00000001" },
+    ]);
 
     const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string }>(sql`select code from incidents`),
@@ -1140,10 +1149,6 @@ describe("drain — Route B's lookup and the write transaction", () => {
         proximo_intento_en: new Date("2026-07-21T00:00:00Z").toISOString(),
       },
     ]);
-    const acks = await suite.db.execute<{ registro_id: string; state: string }>(
-      sql`select registro_id, state from acks where registro_id = ${other.registroId}`,
-    );
-    expect(acks.rows).toEqual([{ registro_id: other.registroId, state: "accepted" }]);
   });
 });
 
@@ -1492,13 +1497,6 @@ describe("drain — a reply line with no recognisable status", () => {
     expect(result.recordsHalted).toBe(0);
     expect(result.nextDueAt?.toISOString()).toBe(retryAt);
 
-    const acks = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ registro_id: string }>(
-        sql`select registro_id from acks where ${ownChain(seeded)}`,
-      ),
-    );
-    expect(acks.rows).toEqual([]);
-
     const inc = parseParams(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ code: string; severity: string; params: string }>(
@@ -1547,12 +1545,8 @@ describe("drain — a reply line with no recognisable status", () => {
   });
 });
 
-/**
- * A halted record stays counted AND flagged, and the flag rides its `acks` row. The bulk
- * chain-halt path bypasses `setEstado`'s `writeAck`, so it must write its own `halted` acks.
- */
-describe("drain — halted records get a halted ack (the bulk chain-halt path)", () => {
-  it("writes a rejected ack for a rejection and a halted ack for a record the same-code brake holds", async () => {
+describe("drain — the same-code brake", () => {
+  it("holds the record following three same-code refusals", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
@@ -1576,26 +1570,6 @@ describe("drain — halted records get a halted ack (the bulk chain-halt path)",
       "rechazado",
       "detenido",
     ]);
-
-    const acks = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ registro_id: string; state: string }>(
-        sql`select registro_id, state from acks where ${ownChain(seeded)}`,
-      ),
-    );
-    const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
-
-    const rejected = envios.rows.find((r) => r.secuencia === 1)!;
-    expect(ackState.get(rejected.registro_id)).toBe("rejected");
-
-    const halted = envios.rows.find((r) => r.secuencia === 4)!;
-    expect(ackState.get(halted.registro_id)).toBe("halted");
-
-    // Every terminal row is acked, and every ack agrees with its committed estado.
-    for (const env of envios.rows) {
-      const state = ackState.get(env.registro_id);
-      expect(state).toBeDefined();
-      expect(state).toBe(ackStateOf(env.estado));
-    }
   });
 });
 
@@ -1818,7 +1792,7 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
     expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
     // The first drain closed the flow-control gate; clear it so the second pass is ungated.
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
+    await openSendingGate(suite.db);
     await seedPendingEnvios(suite.db, { count: 1 });
     const omitted = await drain(depsWith(), NOW);
     expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);

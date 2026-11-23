@@ -21,7 +21,6 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("verifactu_identities", "ledger", LEDGER),
   classify("verifactu_submissions", "ledger", LEDGER),
   classify("verifactu_sending_state", "ledger", LEDGER),
-  classify("acks", "ledger", LEDGER),
   appendOnly(
     "verifactu_certificates",
     "local",

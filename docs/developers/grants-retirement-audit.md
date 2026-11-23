@@ -153,6 +153,10 @@ changing enforcement, keeping each legitimate mutation path.
 | `workforce_chains`       | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
 | `working_order_counters` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 
+**2026-11-23:** A1308 Fi7 settled `envio_flujo`, now `verifactu_sending_state`. The
+`verifactu_sending_state_no_delete` trigger keeps the wait row after the drainer first creates it.
+The drainer can still update the wait after a reply.
+
 **2026-11-23:** A1308 Fi6 settled `envios`, now `verifactu_submissions`. The
 `verifactu_submissions_no_delete` trigger refuses deletion of a submission row.
 

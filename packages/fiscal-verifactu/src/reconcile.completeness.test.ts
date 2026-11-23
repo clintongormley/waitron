@@ -38,7 +38,6 @@ async function snapshot() {
     deliveries: (
       await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
     ).rows,
-    acknowledgements: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (
       await suite.db.execute(
@@ -56,7 +55,6 @@ async function snapshot() {
 async function loseAcknowledgements() {
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
-    await tx.execute(sql`delete from acks`);
   });
 }
 
@@ -124,7 +122,6 @@ describe("reconciliation requires a complete paged lookup", () => {
           PERIOD,
         ),
       ).rejects.toBe(unavailable);
-      expect(before.acknowledgements).toHaveLength(state === "accepted" ? 3 : 0);
       expect(await snapshot()).toEqual(before);
     },
   );
@@ -206,7 +203,6 @@ describe("reconciliation requires a complete paged lookup", () => {
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
     const after = await snapshot();
-    expect(after.acknowledgements).toHaveLength(3);
     expect(after.deliveries.map((row) => row.estado)).toEqual(["aceptado", "aceptado", "aceptado"]);
     expect(after.records).toEqual(before.records);
     expect(after.incidents).toEqual([]);

@@ -112,21 +112,6 @@ describe("verifactu_sending_state migration", () => {
       `),
     );
     expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // verifactu_sending_state_singleton_ck
-    await db.execute(sql`delete from verifactu_sending_state`);
-  });
-});
-
-describe("acks migration", () => {
-  it("creates acks with the required state and delivery columns", async () => {
-    const db = suite.db;
-    const by = await nullabilityOf(db, "acks");
-    expect(by).toMatchObject({
-      registro_id: "NO",
-      submitted_at: "NO",
-      state: "NO",
-      delivered_at: "YES",
-      csv: "YES",
-    });
   });
 });
 

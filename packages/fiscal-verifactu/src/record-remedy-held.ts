@@ -4,7 +4,6 @@ import type { Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
-import { deleteAck } from "./acks.js";
 import { caseEventByActionKey, findFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
@@ -101,7 +100,6 @@ export async function releaseHeldCancellation(
         eq(verifactuSubmissions.estado, "retenido"),
       ),
     );
-  await deleteAck(tx, registroId);
   const event = await recordCaseEvent(tx, {
     caseRegistroId,
     actionKey,

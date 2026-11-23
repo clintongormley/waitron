@@ -86,13 +86,6 @@ async function estadosFor(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.registro_id, r.estado]));
 }
 
-async function ackStatesFor(): Promise<Map<string, string>> {
-  const { rows } = await withTransaction(suite.db, (tx) =>
-    tx.execute<{ registro_id: string; state: string }>(sql`select registro_id, state from acks`),
-  );
-  return new Map(rows.map((r) => [r.registro_id, r.state]));
-}
-
 async function reconciledResubmitAtFor(registroId: string): Promise<string | null> {
   const { rows } = await withTransaction(suite.db, (tx) =>
     tx.execute<{ reconciled_resubmit_at: string | null }>(
@@ -266,13 +259,20 @@ describe("reconcile — the three audit cases", () => {
     expect([...estados.values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
   });
 
-  it("noTrace first detection: resets to pendiente, deletes the ack, sets the marker, no incident", async () => {
+  it("noTrace first detection: resets to pendiente, sets the marker, no incident", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
+    const registroId = seeded.registroIds[0]!;
+    const {
+      rows: [before],
+    } = await suite.db.execute<{ csv: string | null }>(
+      sql`select csv from verifactu_submissions where registro_id = ${registroId}`,
+    );
+    expect(before?.csv).toEqual(expect.any(String));
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
@@ -294,10 +294,15 @@ describe("reconcile — the three audit cases", () => {
     expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
     const marker = await reconciledResubmitAtFor(seeded.registroIds[0]!);
     expect(marker).not.toBeNull();
-
-    // The acks invariant: a `pendiente` row carries NO ack.
-    const acks = await ackStatesFor();
-    expect(acks.has(seeded.registroIds[0]!)).toBe(false);
+    expect(
+      (
+        await suite.db.execute(sql`
+      select e.csv, json_extract(h.data, '$.csv') as kept_csv
+      from verifactu_submissions e join verifactu_history h on h.registro_id = e.registro_id
+      where e.registro_id = ${registroId} and h.kind = 'aeat.answer_cleared'
+    `)
+      ).rows,
+    ).toEqual([{ csv: null, kept_csv: before!.csv }]);
   });
 
   it("noTrace already remediated (marker set) and still missing: raises one idempotent error incident, no re-reset", async () => {
@@ -345,24 +350,6 @@ describe("reconcile — the three audit cases", () => {
 
     const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
-  });
-
-  it("ack↔estado invariant holds across a noTrace reset: no accepted ack for a now-pendiente row", async () => {
-    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    const resolveClient = staticResolver(aeat.client());
-    await storeAllAtAeat(resolveClient); // aceptado at us, with an `accepted` ack, stored at AEAT
-    aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
-
-    expect((await ackStatesFor()).size).toBe(1); // the pre-reset accepted ack
-
-    await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD); // first detection — remediates silently
-
-    const estados = await estadosFor();
-    expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
-
-    const acks = await ackStatesFor();
-    expect(acks.has(seeded.registroIds[0]!)).toBe(false); // no ack at all for the pendiente row
   });
 
   it("a record AEAT has a trace of clears a set marker", async () => {
@@ -417,6 +404,15 @@ describe("reconcile — the three audit cases", () => {
 
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
+    expect(
+      (
+        await suite.db.execute(sql`
+      select json_extract(data, '$.confirmadoEn') as previous_confirmation
+      from verifactu_history where registro_id = ${seeded.registroIds[0]!}
+        and kind = 'aeat.answer_cleared'
+    `)
+      ).rows,
+    ).toEqual([{ previous_confirmation: DRAIN_AT.toISOString() }]);
   });
 
   it("drift: we believe aceptado, AEAT holds Anulado → drift + error incident", async () => {
@@ -579,10 +575,6 @@ describe("reconcile — the three audit cases", () => {
     // (b) estado converged to aceptado_con_errores and stays there.
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
-
-    // (c) the acks row still satisfies the ack↔estado invariant for the converged state.
-    const ackStates = await ackStatesFor();
-    expect(ackStates.get(seeded.registroIds[0]!)).toBe("accepted_with_errors");
   });
 
   it("clean match: a drainer-set aceptado_con_errores agrees with AEAT's AceptadoConErrores — not drift", async () => {
