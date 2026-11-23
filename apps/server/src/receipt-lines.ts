@@ -148,6 +148,11 @@ export function isCoveredDish(line: TillSaleLine): boolean {
   return line.setMenuRole === "dish" && !isPriced(line);
 }
 
+/** A dish placed in a set menu that costs more than the set menu covers prints its amount with a plus. */
+export function isSurcharge(line: TillSaleLine, amount: Decimal): boolean {
+  return line.setMenuRole === "dish" && compareDecimal(amount, decimal("0")) > 0;
+}
+
 function isPriced(line: TillSaleLine): boolean {
   return (
     !isZeroDecimal(decimal(line.gross)) ||

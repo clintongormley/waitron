@@ -140,7 +140,9 @@ A set menu has one price. The dishes it covers go to the kitchen at €0.00. A d
 - What the ticket lists: "It is fine to just list the "menu del dia" and any supplements. We don't need to list every dish that it includes."
 - Splitting the price between VAT rates: "Actually things are both more and less complicated. The VAT rate of the major purchase item is applied. So if the customer buys food that is accompanied by a drink (either dine-in or as a bundle to take-away) then the VAT rate of the food applies. So if the customer buys a bundle consisting of a hamburger, a salad, and a small bottle of wine to take away, then that is 10%. However if the customer orders 1 x hamburger, 1 x salad, 1  x small bottle of wine separately to take away, then each item gets its own VAT rate. Also, in the restaurant, if a customer orders just alcohol without food then they should pay 21% instead of 10% (this is a grey area, but certainly if the restaurant no longer serves food, just drinks, then those drinks attract the 21%). This is definitely not something handled by Square today. I'm not quite sure how we should handle it. The adviser is going to come back to us with more info"
 
-Open: whether covered dishes may also be left off a full invoice; drinks served without food, which the adviser will come back on.
+Open: drinks served without food, which the adviser will come back on.
+
+Whether covered dishes may also be left off a full invoice: "it can, confirmed" (the owner, 21 November 2026 15:25, lane L `questions.md`, "OWNER 2026-11-21 15:25", relayed by the watcher).
 
 **5. VAT rates per product, and a wrong rate found later** (following your answers 1.4 and 1.13)
 

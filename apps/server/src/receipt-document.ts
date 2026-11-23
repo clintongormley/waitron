@@ -47,6 +47,7 @@ import { printsAsFullInvoice } from "./invoice-typing.js";
 import {
   groupByParent,
   isCoveredDish,
+  isSurcharge,
   mergeIdenticalGroups,
   printsOnTicket,
   type LineGroup,
@@ -386,14 +387,18 @@ export function buildReceiptDocument({
   const filedRow = (
     { line, figures: { price, amount } }: FiguredLine,
     indent: number,
-  ): ReceiptTableRow => ({
-    units: quantityText(line, namesLocale, locale),
-    item: itemName(line),
-    ...(indent > 0 ? { itemIndent: indent } : {}),
-    price: formatAmount(price, locale),
-    amount: formatAmount(amount, locale),
-    ...rateCell(line.net.rate),
-  });
+  ): ReceiptTableRow => {
+    const covered = isCoveredDish(line);
+    const plus = isSurcharge(line, amount) ? "+" : "";
+    return {
+      units: quantityText(line, namesLocale, locale),
+      item: itemName(line),
+      ...(indent > 0 ? { itemIndent: indent } : {}),
+      price: covered ? "" : `${plus}${formatAmount(price, locale)}`,
+      amount: covered ? "" : `${plus}${formatAmount(amount, locale)}`,
+      ...rateCell(line.net.rate),
+    };
+  };
   const discountRow = (discount: GroupDiscount, indent: number): ReceiptTableRow => ({
     units: "",
     item:
@@ -441,12 +446,10 @@ export function buildReceiptDocument({
     const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const amount = decimal(dish.listGross ?? dish.gross);
-    const surcharge =
-      simplified && dish.setMenuRole === "dish" && compareDecimal(amount, decimal("0")) > 0;
-    const printedAmount =
-      simplified && isCoveredDish(dish)
-        ? ""
-        : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;
+    const surcharge = isSurcharge(dish, amount);
+    const printedAmount = isCoveredDish(dish)
+      ? ""
+      : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;
     row(`${quantity}${itemName(dish)}${included}`, printedAmount, { after: quantity });
     const sold = decimal(count);
     const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
@@ -500,6 +503,8 @@ export function buildReceiptDocument({
   const advances: (() => void)[] = [];
   printed.forEach((group, at) => {
     const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
+    // Left out only after the filed rows are paired by position, so later rows keep their figures.
+    if (!printsOnTicket(group) && !discounts.under.has(at)) return;
     const print = (): void => {
       if (filed !== undefined) {
         tableGroup(filed);
