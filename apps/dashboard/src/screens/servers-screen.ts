@@ -899,8 +899,17 @@ export class ServersScreen extends LitElement {
     return action === "remove" && (row.needsResetStatement || this.askResetStatement);
   }
 
+  #wipingWithLoss(action: Action, row: ServerRow): boolean {
+    return action === "reset" && !row.canReset && row.canWipeWithLoss;
+  }
+
   #unticked(action: Action, row: ServerRow): boolean {
-    return (action === "abandon" || this.#statingReset(action, row)) && !this.ticked;
+    return (
+      (action === "abandon" ||
+        this.#statingReset(action, row) ||
+        this.#wipingWithLoss(action, row)) &&
+      !this.ticked
+    );
   }
 
   #declaring(action: Action, row: ServerRow): boolean {
@@ -936,6 +945,8 @@ export class ServersScreen extends LitElement {
     try {
       if (target.action === "clear") await this.api.clearServer(target.row.nodeId);
       else if (target.action === "abandon") await this.api.abandonServerReturn(target.row.nodeId);
+      else if (this.#wipingWithLoss(target.action, target.row))
+        await this.api.orderServerReset(target.row.nodeId, true);
       else if (target.action === "reset") await this.api.orderServerReset(target.row.nodeId);
       else if (this.#statingReset(target.action, target.row))
         await this.api.removeServer(target.row.nodeId, { resetStatement: true });
@@ -1079,7 +1090,7 @@ export class ServersScreen extends LitElement {
             action === "abandon"
               ? row.returnOutstanding
               : action === "reset"
-                ? row.canReset
+                ? row.canReset || row.canWipeWithLoss
                 : action === "remove"
                   ? row.removable
                   : row.canClear,
@@ -1159,6 +1170,13 @@ export class ServersScreen extends LitElement {
           ? nothing
           : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
               <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
+              ${
+                this.#wipingWithLoss(action, target)
+                  ? html`<p class="explanation follows" data-test="reset-loss-warning">
+                      ${t("servers.reset_loss_warning")}
+                    </p>`
+                  : nothing
+              }
               ${action === "reset" ? this.#renderDownload(target) : nothing}
               ${action === "reset" ? this.#renderCaution(target) : nothing}
               ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}
@@ -1174,7 +1192,13 @@ export class ServersScreen extends LitElement {
                           ${t("servers.reset_warning")}
                         </p>`,
                       )
-                    : nothing
+                    : this.#wipingWithLoss(action, target)
+                      ? this.#renderTick(
+                          "reset-loss-confirm",
+                          "lossAccepted",
+                          "servers.reset_loss_confirm",
+                        )
+                      : nothing
               }`
       }
       <wt-form-actions
