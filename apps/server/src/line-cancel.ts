@@ -30,6 +30,7 @@ import { staffPresentationName } from "@waitron/menu";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import {
+  freeItemRefusal,
   freeItemsLeft,
   isLastPaidDish,
   readBillFiling,
@@ -640,10 +641,6 @@ export async function cancelItem(
     },
     cfg.madeHereSink,
   );
-}
-
-function freeItemRefusal(reason: "not_listed" | "free_item" | "served") {
-  return new AppError("tab.free_item_with_dish", { reason });
 }
 
 /**

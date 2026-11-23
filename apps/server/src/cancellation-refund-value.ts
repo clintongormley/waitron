@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { saleLineDishes, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
 import {
   addDecimal,
+  AppError,
   centsToDecimal,
   decimal,
   isZeroDecimal,
@@ -10,6 +11,7 @@ import {
 } from "@waitron/shared";
 import { readPortionBindings } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
+import "./errors.js";
 
 type Filed = typeof saleLines.$inferSelect;
 type Stored = typeof workingOrderLines.$inferSelect;
@@ -148,6 +150,11 @@ export function lastPaidDishes(paid: readonly PaidDish[]): Map<string, number> {
     }),
   );
   return isLastPaidDish(paid, off) ? off : new Map();
+}
+
+/** Cancel and refund refused for how a free item holding a share comes back with its paid dishes. */
+export function freeItemRefusal(reason: "not_listed" | "free_item" | "served"): AppError {
+  return new AppError("tab.free_item_with_dish", { reason });
 }
 
 /** The free items still holding a portion that is not cancelled: those the last paid dish takes. */

@@ -23,7 +23,12 @@ import {
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
-import { freeItemsLeft, lastPaidDishes, readShareHolders } from "./cancellation-refund-value.js";
+import {
+  freeItemRefusal,
+  freeItemsLeft,
+  lastPaidDishes,
+  readShareHolders,
+} from "./cancellation-refund-value.js";
 import {
   cancelItem,
   type CancelItemAsk,
@@ -175,12 +180,9 @@ async function finish(
     )
       throw refused();
   }
-  const freeIds = await checkFreeItemPairing(tx, dishes, requested);
+  await checkFreeItemPairing(tx, dishes, requested);
   const refundLinks: RefundLink[] = [];
-  for (const dish of [
-    ...dishes.filter((dish) => !freeIds.has(dish.lineId)),
-    ...dishes.filter((dish) => freeIds.has(dish.lineId)),
-  ]) {
+  for (const dish of dishes) {
     const item = requested.find((item) => item.lineId === dish.lineId)!;
     if (
       dish.context.stage === "not_started" &&
@@ -222,17 +224,16 @@ async function finish(
 }
 
 /**
- * The free items holding a share among `dishes` (plan 2026-11-19 §4.3.1), once their Refund ticks
- * are checked over the whole request: a free item's tick stands only when the request lists and
- * ticks every one of its bill's {@link lastPaidDishes} (the cancellation read's `comesBackWith`), and
- * then every free item of that bill must be ticked and none may have a served portion.
+ * Checks the Refund ticks of the free items holding a share among `dishes` (plan 2026-11-19
+ * §4.3.1) over the whole request: a free item's tick stands only when the request lists and ticks
+ * every one of its bill's {@link lastPaidDishes} (the cancellation read's `comesBackWith`), and then
+ * every free item of that bill must be ticked and none may have a served portion.
  */
 async function checkFreeItemPairing(
   tx: Transaction,
   dishes: readonly UnservedDish[],
   requested: readonly FinishCancellation[],
-): Promise<Set<string>> {
-  const freeIds = new Set<string>();
+): Promise<void> {
   const ticked = (lineId: string) =>
     requested.find((item) => item.lineId === lineId)?.refundHandoff === true;
   for (const billId of new Set(dishes.map((dish) => dish.billId))) {
@@ -252,20 +253,15 @@ async function checkFreeItemPairing(
     const returned =
       back.size > 0 &&
       [...back].every(([lineId, quantity]) => listed.get(lineId) === quantity && ticked(lineId));
-    if (returned && freeItemsLeft(free).some(({ line }) => line.servedQuantity > 0))
+    const left = freeItemsLeft(free);
+    if (returned && left.some(({ line }) => line.servedQuantity > 0))
       throw freeItemRefusal("served");
-    for (const { line } of freeItemsLeft(free)) {
+    for (const { line } of left) {
       if (!listed.has(line.id)) continue;
-      freeIds.add(line.id);
       if (ticked(line.id) && !returned) throw freeItemRefusal("free_item");
       if (!ticked(line.id) && returned) throw freeItemRefusal("not_listed");
     }
   }
-  return freeIds;
-}
-
-function freeItemRefusal(reason: "not_listed" | "free_item" | "served") {
-  return new AppError("tab.free_item_with_dish", { reason });
 }
 
 /**

@@ -945,17 +945,22 @@ describe("whether a party's service can finish, read without writing", () => {
 
 describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () => {
   /** A paid takeaway table of a Salad (4%) and comped Waters (21%), held unless fired. */
-  async function freeWaterTable(waters = 1, release: "hold" | "fire" = "hold", paid = ["Salad"]) {
+  async function freeWaterTable(
+    waters = 1,
+    release: "hold" | "fire" = "hold",
+    paid = ["Salad"],
+    freeFirst = false,
+  ) {
     await takeawayRates(venue, { Salad: "4.00", Soup: "4.00", Water: "21.00" });
+    const paidLines = paid.map((name) => ({ name }));
+    const waterLines = Array.from({ length: waters }, () => ({ name: "Water" }));
     const p = await billWith(
       venue,
-      [
-        ...paid.map((name) => ({ name })),
-        ...Array.from({ length: waters }, () => ({ name: "Water" })),
-      ],
+      freeFirst ? [...waterLines, ...paidLines] : [...paidLines, ...waterLines],
       { release, dining: "takeaway" },
     );
-    for (const water of (await rowsOf(venue, p.billId)).slice(paid.length))
+    const rows = await rowsOf(venue, p.billId);
+    for (const water of freeFirst ? rows.slice(0, waters) : rows.slice(paid.length))
       await inTx(venue, async (tx) => {
         const [order] = await tx
           .select({ revision: workingOrders.revision })
@@ -1050,6 +1055,26 @@ describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () =
     });
     expect(cancelOf(p.lines[0]!.id).refundValue).toBe(833);
     expect(cancelOf(p.lines[1]!.id).refundValue).toBe(167);
+  });
+
+  it("cancels a free item listed before its paid dish in the order listed, each at its share", async () => {
+    const p = await freeWaterTable(1, "hold", ["Salad"], true);
+    const answer = await post(p, await ticked(p, [true, true]), venue.cookie.manager);
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    const cancelOf = (lineId: string) => rows.find((row) => row.lineId === lineId)!;
+    const [water, salad] = p.lines;
+    expect(answer.body).toEqual({
+      state: "closed",
+      refundLinks: [
+        { lineId: water!.id, adjustmentId: cancelOf(water!.id).id },
+        { lineId: salad!.id, adjustmentId: cancelOf(salad!.id).id },
+      ],
+    });
+    expect(cancelOf(salad!.id).refundValue).toBe(833);
+    expect(cancelOf(water!.id).refundValue).toBe(167);
   });
 
   it.each([
