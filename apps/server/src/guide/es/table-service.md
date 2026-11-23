@@ -179,7 +179,7 @@ Para las cuentas cerradas como [pago aplazado](table-service.md#deferred-payment
 **Cambiar cuenta bancaria** en la misma tarjeta **Negocio**: introduce el **IBAN** y, si quieres,
 el banco. Si [añades tu propio servidor de correo](email.md#set-up), Waitron envía un correo a cada
 administrador con correo electrónico por cada cambio; si
-recibes uno que nadie de tu equipo ha hecho, revisa la cuenta enseguida.
+recibes uno por un cambio que nadie de tu personal ha hecho, revisa la cuenta enseguida.
 
 ## Elegir un documento y una impresora {#invoice-printer}
 
