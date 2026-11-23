@@ -122,12 +122,12 @@ describe("till bill lookup", () => {
     const credited = await namedDebt("Credited debt");
     const partial = await namedDebt("Partial debt");
     await voidInvoice(venue, voided.tabId);
-    await credit(venue, credited.tabId, "24.79", "-30.00");
-    await credit(venue, partial.tabId, "2.00", "-2.42");
+    await credit(venue, credited.tabId, "27.27", "-30.00");
+    await credit(venue, partial.tabId, "2.00", "-2.20");
     expect((await lookUp("Voided debt")).json).toEqual({ bills: [] });
     expect((await lookUp("Credited debt")).json).toEqual({ bills: [] });
     expect((await lookUp("Partial debt")).json).toMatchObject({
-      bills: [expect.objectContaining({ stillOwed: "27.58" })],
+      bills: [expect.objectContaining({ stillOwed: "27.80" })],
     });
   });
 
@@ -262,7 +262,7 @@ describe("till bill lookup", () => {
     const ids: string[] = [];
     for (let index = 0; index < 21; index++)
       ids.push((await namedDebt(`Lookup batch ${index}`)).tabId);
-    await credit(venue, ids[20]!, "24.79", "-30.00");
+    await credit(venue, ids[20]!, "27.27", "-30.00");
     const answer = (await lookUp("Lookup batch")).json as { bills: { workingOrderId: string }[] };
     expect(answer.bills).toHaveLength(20);
     expect(answer.bills.map((bill) => bill.workingOrderId)).not.toContain(ids[20]);

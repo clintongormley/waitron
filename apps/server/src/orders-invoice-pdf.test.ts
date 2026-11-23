@@ -388,7 +388,7 @@ const kinds = {
   R5: async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const ticket = await saleOfBill(billId);
-    await credit(venue, billId, "1.00", "-1.21");
+    await credit(venue, billId, "1.00", "-1.10");
     const [corrective] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, ticket)),
     );

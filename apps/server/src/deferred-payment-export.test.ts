@@ -128,7 +128,7 @@ describe("listDeferredPaymentInvoices", () => {
   });
 
   it("names and totals a later credit without netting it off the invoice", async () => {
-    await credit(t.venue, laterBill, "1.00", "-1.21");
+    await credit(t.venue, laterBill, "1.00", "-1.10");
 
     expect(await list(days.closedLater!, days.closedLater!)).toEqual([
       expect.objectContaining({
@@ -137,7 +137,7 @@ describe("listDeferredPaymentInvoices", () => {
         vat: "1.64",
         total: "18.00",
         correctedBy: ["R/1"],
-        correctionsTotal: "-1.21",
+        correctionsTotal: "-1.10",
       }),
     ]);
   });
@@ -317,7 +317,7 @@ describe("POST /management-api/reports/deferred-payment-export", () => {
     expect(body).toEqual(renderDeferredPaymentCsv(await list(day, day), "es"));
     const lines = text(body).split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,21",""$/);
+    expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,10",""$/);
     expect(await downloads()).toEqual([
       {
         personId: manager.id,

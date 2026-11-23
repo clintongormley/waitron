@@ -199,7 +199,7 @@ describe("each status, from the product's own write paths", () => {
 
   it("refuses to cancel a bill whose correctives already bring its invoice to nothing, leaving its row as it was", async () => {
     const id = await placedIssuedBill(venue, "Caña");
-    await credit(venue, id, "2.48", "-3.00");
+    await credit(venue, id, "2.73", "-3.00");
     const before = await rowOf(id);
     expect(before).toMatchObject({ credited: "in_full", correctives: [expect.any(String)] });
     expect(await cancel(id)).toMatchObject({
@@ -288,19 +288,19 @@ describe("a bill closed as a deferred payment", () => {
 describe("correctives and what is still owed", () => {
   it("marks a part credit, and owes what the till's collect then charges, to the cent", async () => {
     const id = await placedIssuedBill(venue, "Red wine bottle");
-    await credit(venue, id, "2.00", "-2.42");
+    await credit(venue, id, "2.00", "-2.20");
     const row = await rowOf(id);
     expect(row).toMatchObject({
       credited: "in_part",
-      stillOwed: "27.58",
+      stillOwed: "27.80",
       correctives: [expect.stringMatching(/^R\/\d+$/)],
     });
 
-    expect(await collect(venue, id, "27.57")).toEqual({
+    expect(await collect(venue, id, "27.79")).toEqual({
       status: 400,
       json: { code: "management.request_invalid", params: { field: "tendered" } },
     });
-    expect(await rowOf(id)).toMatchObject({ stillOwed: "27.58" });
+    expect(await rowOf(id)).toMatchObject({ stillOwed: "27.80" });
     expect((await collect(venue, id, row.stillOwed as string)).status).toBe(200);
     const [tender] = await inTx(venue, (tx) =>
       tx
@@ -309,12 +309,12 @@ describe("correctives and what is still owed", () => {
         .innerJoin(sales, eq(sales.id, tenders.saleId))
         .where(eq(sales.workingOrderId, id)),
     );
-    expect(tender).toEqual({ amount: 2758 });
+    expect(tender).toEqual({ amount: 2780 });
   });
 
   it("a debt credited to nothing stays Left without paying, Credited in full, owing nothing", async () => {
     const party = await departed(venue, "Red wine bottle");
-    await credit(venue, party.tabId, "24.79", "-30.00");
+    await credit(venue, party.tabId, "27.27", "-30.00");
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "left_without_paying",
       credited: "in_full",
@@ -379,7 +379,7 @@ describe("filters and search", () => {
   it("limits a till lookup to bills that still owe money", async () => {
     const waiting = await placedIssuedBill(venue, "Caña");
     const fullyCredited = await departed(venue, "Red wine bottle");
-    await credit(venue, fullyCredited.tabId, "24.79", "-30.00");
+    await credit(venue, fullyCredited.tabId, "27.27", "-30.00");
     const sale = await billlessSale(venue);
     const rows = await withTransaction(venue.db, (tx) =>
       listOrders(tx, {
@@ -407,7 +407,7 @@ describe("filters and search", () => {
 
   it("finds an invoice by A/12, by its bare number, and by its corrective's number", async () => {
     const id = await placedIssuedBill(venue, "Croquettes");
-    await credit(venue, id, "2.00", "-2.42");
+    await credit(venue, id, "2.00", "-2.20");
     const row = await rowOf(id);
     const [, number] = (row.invoiceNumber as string).split("/");
     for (const q of [row.invoiceNumber as string, number!, (row.correctives as string[])[0]!]) {
@@ -445,7 +445,7 @@ describe("filters and search", () => {
 
   it("filters by who a line is credited to, and by having a corrective", async () => {
     const id = await placedIssuedBill(venue, "Octopus");
-    await credit(venue, id, "2.00", "-2.42");
+    await credit(venue, id, "2.00", "-2.20");
     expect(ids((await list(`anyDate=true&staff=${venue.operatorId}`)).rows)).toContain(id);
     expect(ids((await list(`anyDate=true&staff=${venue.supervisorId}`)).rows)).not.toContain(id);
     const credited = (await list("anyDate=true&credited=true")).rows;
