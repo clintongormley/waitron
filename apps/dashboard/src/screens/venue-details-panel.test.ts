@@ -679,7 +679,7 @@ it("names the country in the screen's language", async () => {
   ]);
 });
 
-it("shows the bank account's IBAN in groups of four and its bank, or the bank alone left out", async () => {
+it("shows the bank account's IBAN in groups of four and its bank, and only the IBAN when there is no bank name", async () => {
   setLocale("en-GB");
   const model = venueDetailsFixture();
   model.bankAccount = { iban: "ES9121000418450200051332", bankName: "CaixaBank" };

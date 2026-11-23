@@ -91,7 +91,7 @@ it("offers Change bank account in the Business card's header only when the panel
 it("opens prefilled with the stored account and the note, and keeps Save quiet until it changes", async () => {
   const panel = await mount(stubApi());
   await open(panel);
-  expect(field(panel, "iban").value).toBe(STORED.iban);
+  expect(field(panel, "iban").value).toBe("ES76 2077 0024 0031 0257 5766");
   expect(field(panel, "bankName").value).toBe(STORED.bankName);
   expect(field(panel, "iban").required).toBe(false);
   expect(dialog(panel).textContent).toContain(t("venue_details.bank_account_note"));
@@ -103,6 +103,21 @@ it("opens prefilled with the stored account and the note, and keeps Save quiet u
   expect(save(panel).disabled).toBe(true);
   await type(panel, "iban", "es76 2077 0024 0031 0257 5766");
   expect(save(panel).disabled).toBe(true);
+});
+
+it("a change of bank name alone sends the stored IBAN without spaces as both value and expected", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  await open(panel);
+  await type(panel, "bankName", "CaixaBank");
+  const closed = dialogClosed(dialog(panel));
+  await press(panel);
+  await closed;
+  expect(api.saveBankAccount).toHaveBeenCalledWith({
+    iban: STORED.iban,
+    bankName: "CaixaBank",
+    expected: STORED,
+  });
 });
 
 it("opens empty when no account is stored", async () => {

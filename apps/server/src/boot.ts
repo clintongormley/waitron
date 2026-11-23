@@ -3260,7 +3260,6 @@ async function bootServer(
       db,
       fiscal: enabledFiscal,
       readBackupDeadlines: () => ({ ...backupDeadlines }),
-      venueLanguage: venueLocale === "es-ES" ? "es" : "en",
     },
     log,
   );

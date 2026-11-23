@@ -3,15 +3,19 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import {
+  dashboardSessions,
   outgoingMail,
   readActivityForSubject,
   readSettings,
+  readVenue,
   VENUE_SETTINGS,
   withTransaction,
 } from "@waitron/db";
+import { hashSessionToken } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
+import { timeZoneOffsetMinutes } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -29,7 +33,6 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
     {
       db: suite.db,
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
-      venueLanguage: "en",
     },
     () => {},
   );
@@ -71,12 +74,25 @@ describe("saving the venue's bank account", () => {
     ).filter((entry) => entry.kind === "venue.bank_account_changed");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ personId: managerId(), data: {} });
+    const [mail] = await suite.db
+      .select({ params: outgoingMail.params })
+      .from(outgoingMail)
+      .where(eq(outgoingMail.kind, "box_alert"));
+    const wording = JSON.parse((mail!.params as { wording: string }).wording) as {
+      changedAt: string;
+      changedAtOffset: number;
+    };
+    const { timeZone } = await withTransaction(suite.db, (tx) => readVenue(tx));
+    const offset = timeZoneOffsetMinutes(timeZone, new Date(wording.changedAt));
+    expect(offset).not.toBe(0);
+    expect(wording.changedAtOffset).toBe(offset);
   });
 
-  it("requires a fresh sign-in", async () => {
-    await withTransaction(suite.db, (tx) =>
-      setFreshManagementSignIn(tx, venue.managerCookie, false),
-    );
+  it("requires a sign-in proved less than 15 minutes ago", async () => {
+    await suite.db
+      .update(dashboardSessions)
+      .set({ provedAt: new Date(Date.now() - 15 * 60_000).toISOString(), proofMethod: "password" })
+      .where(eq(dashboardSessions.tokenHash, hashSessionToken(venue.managerCookie.split("=")[1]!)));
     const response = await save(valid);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({

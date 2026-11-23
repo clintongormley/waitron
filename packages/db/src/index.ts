@@ -83,6 +83,7 @@ export {
   readVenueClock,
   readBusinessDayRevision,
   readVenueClockAndPlace,
+  readVenueAndBankAccount,
   readVenueInvoiceLocales,
 } from "./venue.js";
 export type { Venue, VenuePlace } from "./venue.js";

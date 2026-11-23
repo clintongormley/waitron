@@ -37,7 +37,8 @@ function parseBankAccount(input: unknown): BankAccount | null | undefined {
   if (typeof input !== "object" || Array.isArray(input)) return undefined;
   const { iban, bankName, ...rest } = input as Record<string, unknown>;
   if (Object.keys(rest).length > 0) return undefined;
-  if (typeof iban !== "string" || iban !== normalizeIban(iban) || ibanProblem(iban) !== undefined)
+  // The checksum is enforced at save only: a rule tightened later must not fail every venue read.
+  if (typeof iban !== "string" || iban !== normalizeIban(iban) || ibanProblem(iban) === "format")
     return undefined;
   if (bankName !== null && (typeof bankName !== "string" || bankName.trim() === ""))
     return undefined;

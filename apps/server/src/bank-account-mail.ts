@@ -5,6 +5,12 @@ import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
 /** Holds only masked accounts: the full IBAN never reaches the mail queue. The editor's name is
  * read when the mail is claimed. */
+function accountLine(account: BankAccount | null): string | null {
+  if (account === null) return null;
+  const masked = maskIban(account.iban);
+  return account.bankName === null ? masked : `${masked} (${account.bankName})`;
+}
+
 export async function queueBankAccountChangedMail(
   tx: Transaction,
   input: {
@@ -13,7 +19,6 @@ export async function queueBankAccountChangedMail(
     offsetMinutes: number;
     before: BankAccount | null;
     after: BankAccount | null;
-    venueLanguage: "en" | "es";
     activityId: string;
     now: Date;
   },
@@ -22,11 +27,12 @@ export async function queueBankAccountChangedMail(
     editorId: input.editorId,
     changedAt: input.at,
     changedAtOffset: input.offsetMinutes,
-    previousAccount: input.before === null ? null : maskIban(input.before.iban),
-    newAccount: input.after === null ? null : maskIban(input.after.iban),
+    previousAccount: accountLine(input.before),
+    newAccount: accountLine(input.after),
   });
   const notAfter = new Date(input.now.getTime() + MAIL_LIFETIME_MS.box_alert);
-  for (const recipient of await readManagerEmailRecipients(tx, input.venueLanguage))
+  // Only the person ids are kept: each mail's language is resolved when it is sent.
+  for (const recipient of await readManagerEmailRecipients(tx, "en"))
     await enqueueMail(tx, {
       kind: "box_alert",
       dedupeKey: `bank-account:${input.activityId}:${recipient.personId}`,

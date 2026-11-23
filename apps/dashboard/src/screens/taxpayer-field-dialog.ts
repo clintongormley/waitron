@@ -81,11 +81,14 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
     return draft as unknown as V;
   }
 
-  /** `value` as the server would store it, which is what is sent and compared. */
+  /** `value` as the server would store it, which is what is sent and compared. Assumes `V` is a
+   *  string: a subclass whose value is not one must override it. */
   protected storedForm(value: V): V {
     return normalizedText(value as unknown as string) as unknown as V;
   }
 
+  /** Assumes `V` is a string or other value `===` compares: a subclass whose value is not a
+   *  string must override it. */
   protected sameValue(a: V, b: V): boolean {
     return a === b;
   }

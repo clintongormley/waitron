@@ -227,8 +227,6 @@ export function mountVenueSettingsApi(
     fiscal: FiscalContribution;
     now?: () => Date;
     readBackupDeadlines?: () => VenueClockPreview["backupDeadlines"];
-    /** The administrators' email language when their own is unset; boot passes the venue's. */
-    venueLanguage?: "en" | "es";
   },
   log: Logger,
 ): void {
@@ -416,7 +414,6 @@ export function mountVenueSettingsApi(
           offsetMinutes: timeZoneOffsetMinutes((await readVenue(tx)).timeZone, now),
           before: change.before,
           after: change.after,
-          venueLanguage: deps.venueLanguage ?? "en",
           activityId: change.activityId!,
           now,
         });

@@ -1,7 +1,7 @@
 import { css, html, type TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { ibanProblem, normalizeIban } from "@waitron/shared";
+import { ibanGroups, ibanProblem, normalizeIban } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import {
   normalizedText,
@@ -47,6 +47,10 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
       }
     `,
   ];
+
+  protected override draftFor(stored: BankAccountValue): BankAccountValue {
+    return { iban: ibanGroups(stored.iban).join(" "), bankName: stored.bankName };
+  }
 
   protected override storedForm(value: BankAccountValue): BankAccountValue {
     return { iban: normalizeIban(value.iban), bankName: normalizedText(value.bankName) };

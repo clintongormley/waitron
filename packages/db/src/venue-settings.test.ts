@@ -86,7 +86,7 @@ describe("the venue document", () => {
       { iban, bankName: "Openbank", swift: "X" },
       { iban: "ES91 2100 0418 4502 0005 1332", bankName: null },
       { iban: "es9121000418450200051332", bankName: null },
-      { iban: "ES9121000418450200051333", bankName: null },
+      { iban: "ES91210004184502000513", bankName: null },
       { iban: 7, bankName: null },
       { iban, bankName: "  " },
       { iban, bankName: 7 },
@@ -96,6 +96,14 @@ describe("the venue document", () => {
         ok: false,
         field: "bankAccount",
       });
+  });
+
+  it("reads a stored IBAN whose format is valid but whose checksum is not, leaving the checksum to saving", () => {
+    const bankAccount = { iban: "ES9121000418450200051333", bankName: null };
+    expect(api.VENUE_SETTINGS.parse({ ...doc, bankAccount })).toEqual({
+      ok: true,
+      doc: { ...doc, bankAccount },
+    });
   });
 
   it("parses a trimmed name and refuses each malformed field", () => {

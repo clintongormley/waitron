@@ -41,7 +41,6 @@ async function queue(
       offsetMinutes: 60,
       before,
       after,
-      venueLanguage: "en",
       activityId: "activity-1",
       now,
     }),
@@ -94,7 +93,7 @@ it("queues one lasting box alert per administrator with an email, naming masked 
         editorId,
         changedAt: "2026-11-09T11:58:00.000Z",
         changedAtOffset: 60,
-        previousAccount: maskIban(OLD),
+        previousAccount: `${maskIban(OLD)} (Openbank)`,
         newAccount: maskIban(NEW),
       }),
     });
@@ -123,9 +122,11 @@ it("sends each administrator the change in their own language, never the full ac
     const message = sent.get(to)!;
     expect(message.subject).toBe(fillTemplate(words.subject, { venue: "Corner Bistro" }));
     expect(message.text).toContain("Ana Editor");
-    expect(message.text).toContain("09/11/2026");
+    expect(message.text).toContain("09/11/2026 12:58");
     expect(message.text).toContain(fillTemplate(words.previous, { previousAccount: words.none }));
-    expect(message.text).toContain(fillTemplate(words.current, { newAccount: maskIban(NEW) }));
+    expect(message.text).toContain(
+      fillTemplate(words.current, { newAccount: `${maskIban(NEW)} (Openbank)` }),
+    );
     expect(message.text).toContain(words.check);
     expect(message.text).not.toContain(NEW);
     expect(message.text).not.toMatch(/\{\w+\}/);
@@ -145,4 +146,21 @@ it("names a cleared account as none", async () => {
     texts.some((text) => text.includes(fillTemplate(words.current, { newAccount: words.none }))),
   ).toBe(true);
   for (const text of texts) expect(text).not.toContain(OLD);
+});
+
+it("writes a change of bank name alone as different Before and Now lines", async () => {
+  await queue({ iban: OLD, bankName: "Openbank" }, { iban: OLD, bankName: "Banco Ejemplo" });
+  const send = vi.fn(async () => ({ status: "sent" as const }));
+  await sendAll(send);
+  const words = BANK_ACCOUNT_CHANGED_EMAIL_WORDS.en;
+  const text = (send.mock.calls as unknown as [unknown, { to: string; text: string }][]).find(
+    ([, message]) => message.to === "other@example.test",
+  )![1].text;
+  expect(text).toContain(
+    fillTemplate(words.previous, { previousAccount: `${maskIban(OLD)} (Openbank)` }),
+  );
+  expect(text).toContain(
+    fillTemplate(words.current, { newAccount: `${maskIban(OLD)} (Banco Ejemplo)` }),
+  );
+  expect(text).not.toContain(OLD);
 });

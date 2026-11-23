@@ -2,14 +2,13 @@ import { eq, sql } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
   saveSettings,
-  readVenue,
+  readVenueAndBankAccount,
   saveVenueFields,
   taxpayer as taxpayerTable,
   type Transaction,
 } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import { getCountryPack, requireCountryTimeZone } from "@waitron/country-packs";
-import { readBankAccount } from "@waitron/provisioning";
 import { readBusinessDayClockModel } from "./business-day-start.js";
 import {
   AppError,
@@ -106,7 +105,7 @@ export async function readVenueDetails(
   at: Date = new Date(),
   clockModel?: BusinessDayClockModel,
 ): Promise<VenueDetailsModel> {
-  const venue = await readVenue(tx);
+  const { venue, bankAccount } = await readVenueAndBankAccount(tx);
   const [taxpayer] = await tx
     .select({
       country: taxpayerTable.country,
@@ -157,7 +156,7 @@ export async function readVenueDetails(
     },
     issuer,
     taxpayerDomicile: taxpayer.domicile,
-    bankAccount: await readBankAccount(tx),
+    bankAccount,
     hasSales: Boolean(history.sales),
     hasOrderHistory: Boolean(history.orders),
     policy: {
