@@ -1,5 +1,11 @@
 import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
-import { parties, statementChunks, workingOrders, type Transaction } from "@waitron/db";
+import {
+  diningTables,
+  parties,
+  statementChunks,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import {
   cardReaders,
   payments,
@@ -26,6 +32,7 @@ type Status =
   | "not_checked"
   | "resolved"
   | "refunded_before_check"
+  | "partly_refunded_before_check"
   | "refunded_at_sumup"
   | "missing_local";
 type StandaloneCharge = Extract<BackupPaymentUnmatched, { kind: "charge" }>;
@@ -77,11 +84,13 @@ export async function readPairedReaderAudit(
         partyId: workingOrders.partyId,
         tableNames: parties.tableNames,
         deliveryLabel: workingOrders.deliveryTableLabel,
+        liveDeliveryLabel: diningTables.label,
       })
       .from(payments)
       .innerJoin(cardReaders, eq(cardReaders.id, payments.readerId))
       .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-      .leftJoin(parties, eq(parties.id, workingOrders.partyId));
+      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
+      .leftJoin(diningTables, eq(diningTables.id, workingOrders.deliveryTableId));
   const { createdAt, settledAt } = payments;
   const local = [
     ...(await readPayments().where(and(sumup, gte(settledAt, startAt), lt(settledAt, endAt)))),
@@ -113,7 +122,7 @@ export async function readPairedReaderAudit(
     orderNumber: row.orderNumber,
     tableName:
       row.partyId === null
-        ? row.deliveryLabel
+        ? (row.liveDeliveryLabel ?? row.deliveryLabel)
         : partyTablesName(row.tableNames ?? liveTables.get(row.partyId) ?? []) || null,
   });
 
@@ -142,7 +151,14 @@ export async function readPairedReaderAudit(
       ),
     );
   const matches = matchesIn(runs);
-  const priorMatches = matchesIn(candidates.toSorted((a, b) => a.generation - b.generation));
+  const byGeneration = candidates.toSorted((a, b) => a.generation - b.generation);
+  const priorMatches = matchesIn(byGeneration);
+  const firstCheckAt = new Map<string, string>();
+  for (const run of byGeneration) {
+    const checkedAt = run.startedAt ?? run.finishedAt;
+    if (checkedAt !== null && !firstCheckAt.has(run.periodFrom))
+      firstCheckAt.set(run.periodFrom, checkedAt);
+  }
   const problems = new Map<string, Set<Finding>>();
   for (const { summary } of runs) {
     for (const kind of Object.keys(findings) as (keyof typeof findings)[]) {
@@ -183,9 +199,15 @@ export async function readPairedReaderAudit(
       const providerRefunded =
         matches.get(row.paymentRef) ?? (beforeCheck ? priorMatches.get(row.paymentRef) : undefined);
       let status: Status = "matched";
-      if (providerRefunded === undefined)
-        status = beforeCheck ? "refunded_before_check" : "not_checked";
-      else if (providerRefunded && !refunded) status = "refunded_at_sumup";
+      if (providerRefunded === undefined) {
+        const firstCheckedAt = window && firstCheckAt.get(window.periodFrom);
+        const refundedBeforeFirstCheck = localRefunds
+          .filter(({ createdAt }) => firstCheckedAt !== undefined && createdAt <= firstCheckedAt)
+          .reduce((total, refund) => total + refund.amount, 0);
+        status = "not_checked";
+        if (refundedBeforeFirstCheck >= row.amount) status = "refunded_before_check";
+        else if (refundedBeforeFirstCheck > 0) status = "partly_refunded_before_check";
+      } else if (providerRefunded && !refunded) status = "refunded_at_sumup";
       statuses = [status];
     }
     rows.push({

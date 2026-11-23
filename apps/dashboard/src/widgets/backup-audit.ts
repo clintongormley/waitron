@@ -37,6 +37,7 @@ export class BackupAudit extends LitElement {
         color: var(--wt-color-danger);
       }
       wt-combobox {
+        margin-block: var(--wt-space-2);
         width: max-content;
       }
       wt-data-table {

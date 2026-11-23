@@ -2601,6 +2601,7 @@ export interface BackupAuditView {
         | "matched"
         | "resolved"
         | "refunded_before_check"
+        | "partly_refunded_before_check"
         | "refunded_at_sumup"
         | "not_checked"
         | "missing_local"

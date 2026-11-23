@@ -20,20 +20,26 @@ const result = {
   pairedAudit: {
     complete: false,
     matched: 1,
-    toCheck: 1,
-    rows: (["refunded_at_sumup", "matched", "refunded_before_check", "resolved"] as const).map(
-      (status, index) => ({
-        paymentRef: `paired-${index}`,
-        references: [`charge-${index}`],
-        amount: "42.50",
-        settledAt: "2026-07-01T18:46:00.000Z",
-        readerName: index === 0 ? "Terrace reader" : "Counter reader",
-        billNumber: index === 0 ? 41 : null,
-        orderNumber: 41 + index,
-        tableName: index === 0 ? "Table 6" : null,
-        statuses: [status],
-      }),
-    ),
+    toCheck: 2,
+    rows: (
+      [
+        "refunded_at_sumup",
+        "matched",
+        "refunded_before_check",
+        "resolved",
+        "partly_refunded_before_check",
+      ] as const
+    ).map((status, index) => ({
+      paymentRef: `paired-${index}`,
+      references: [`charge-${index}`],
+      amount: status === "partly_refunded_before_check" ? "10.00" : "42.50",
+      settledAt: "2026-07-01T18:46:00.000Z",
+      readerName: index === 0 ? "Terrace reader" : "Counter reader",
+      billNumber: index === 0 ? 41 : null,
+      orderNumber: 41 + index,
+      tableName: index === 0 ? "Table 6" : null,
+      statuses: [status],
+    })),
   },
   backupMatches: [
     {
@@ -125,14 +131,16 @@ it("shows standalone matches and exceptions, filters paired readers and reads a 
     t("payments.backup.recorded_unmatched"),
   ])
     expect(el.shadowRoot!.textContent).toContain(text);
-  expect(el.shadowRoot!.textContent).toContain("1 matched · 1 to check");
+  expect(el.shadowRoot!.textContent).toContain("1 matched · 2 to check");
   expect(el.shadowRoot!.textContent).toContain("Check incomplete.");
   const pairedTable = () => el.shadowRoot!.querySelector("wt-data-table")?.shadowRoot;
   const pairedRows = () => [...(pairedTable()?.querySelectorAll("tbody tr") ?? [])];
-  await expect.poll(() => pairedRows().length).toBe(1);
+  await expect.poll(() => pairedRows().length).toBe(2);
   expect(pairedRows()[0]!.textContent).toContain("Terrace reader");
   expect(pairedRows()[0]!.textContent).toContain("Table 6 · bill 41");
   expect(pairedRows()[0]!.textContent).toContain("Refunded at SumUp only");
+  expect(pairedRows()[1]!.textContent).toContain("Partly refunded before the check");
+  expect(pairedRows()[1]!.querySelector("td[data-align=end]")!.textContent).toContain("10.00");
   const status = el.shadowRoot!.querySelector("wt-combobox")!;
   await chooseOption(status, "matched");
   await expect.poll(() => pairedRows().length).toBe(2);
@@ -141,7 +149,7 @@ it("shows standalone matches and exceptions, filters paired readers and reads a 
   await chooseOption(status, "resolved");
   await expect.poll(() => pairedRows()[0]?.textContent).toContain("Resolved");
   await chooseOption(status, "all");
-  await expect.poll(() => pairedRows().length).toBe(4);
+  await expect.poll(() => pairedRows().length).toBe(5);
   const day = el.shadowRoot!.querySelector<WtInput>("wt-input")!;
   day.dispatchEvent(
     new CustomEvent("wt-change", {

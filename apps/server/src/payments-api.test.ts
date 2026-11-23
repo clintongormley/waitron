@@ -3666,6 +3666,7 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
   await suite.db.insert(partyTables).values({ partyId: openParty!.id, tableId: table!.id });
   const order = await seedWorkingOrder(suite.db, { partyId: closedParty!.id, billNumber: 41 });
   const linkedOrder = await seedWorkingOrder(suite.db, { partyId: openParty!.id, orderNumber: 42 });
+  const delivered = await seedWorkingOrder(suite.db, { deliveryTableId: table!.id });
   const deviceId = await seedDevice();
   const readers = await suite.db
     .insert(cardReaders)
@@ -3692,7 +3693,12 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
   ] as const;
   await suite.db.insert(payments).values(
     entries.map(([paymentRef, settledAt]) => ({
-      workingOrderId: paymentRef === "linked" ? linkedOrder.id : order.id,
+      workingOrderId:
+        paymentRef === "linked"
+          ? linkedOrder.id
+          : paymentRef === "after-check-refund"
+            ? delivered.id
+            : order.id,
       source: "device" as const,
       deviceId,
       readerId: readers[paymentRef === "linked" ? 1 : 0]!.id,
@@ -3718,6 +3724,7 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
     for (const [paymentRef, at, amount] of [
       ["before-check-refund", start, "10"],
       ["before-check-partial-refund", start, "5"],
+      ["before-check-partial-refund", "2026-07-02T10:00:00.000Z", "5"],
       ["after-check-refund", "2026-07-02T10:00:00.000Z", "10"],
     ] as const)
       await recordRefund(tx, {
@@ -3789,14 +3796,14 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
   );
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   const { pairedAudit, backupUnmatched } = await response.json();
-  expect(pairedAudit).toMatchObject({ complete: false, matched: 2, toCheck: 4 });
+  expect(pairedAudit).toMatchObject({ complete: false, matched: 2, toCheck: 5 });
   const rows = pairedAudit.rows as { paymentRef: string; statuses: string[] }[];
   expect(
     Object.fromEntries(rows.map(({ paymentRef, statuses }) => [paymentRef, statuses])),
   ).toEqual({
     match: ["matched"],
     "before-check-refund": ["refunded_before_check"],
-    "before-check-partial-refund": ["refunded_before_check"],
+    "before-check-partial-refund": ["partly_refunded_before_check"],
     "after-check-refund": ["matched"],
     "sumup-refund": ["refunded_at_sumup"],
     "multiple-findings": ["drift", "orphan"],
@@ -3817,6 +3824,8 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
     orderNumber: 42,
     tableName: "Table 9",
   });
+  expect(byRef("after-check-refund")).toMatchObject({ tableName: "Table 9" });
+  expect(byRef("before-check-partial-refund")).toMatchObject({ amount: "10.00" });
   expect(backupUnmatched).toMatchObject([{ kind: "charge", references: ["standalone-charge"] }]);
 });
 
