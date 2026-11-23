@@ -3336,6 +3336,14 @@ held the frontend lock at its pre-invoke hook. The backend lock was free at that
 It exited 137 at the deadline with no running process in the group. Neither lock was held
 afterwards, and the retry installed the libraries.
 
+Before that retry, the job switches to an Ubuntu mirror whose hostname is absent from the runner's
+mirror list. If both alternate hosts are already listed or the runner uses a different source file
+layout, the retry uses the runner's sources. In the
+[download stall control](https://github.com/clintongormley/waitron/actions/runs/45270412606/job/138028415541),
+both attempts requested the same font package from a local mirror and failed when it held the
+response open. The [hosted comparison](https://github.com/clintongormley/waitron/actions/runs/45271153603)
+exercises the switch under the outer deadline and also runs the clean path.
+
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
 through `scripts/image-apt-cache.sh`, using saved signed indexes and debs, the runner's
