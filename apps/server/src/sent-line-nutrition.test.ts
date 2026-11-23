@@ -328,7 +328,7 @@ it("keeps captured declarations through quantity splitting and a bill move", asy
   await inTx(v, (tx) =>
     tx
       .update(workingOrderLines)
-      .set({ latePeriodName: "Lunch", lateConfirmedBy: OPERATOR })
+      .set({ latePeriodName: "Lunch", latePeriodId: "lunch-period", lateConfirmedBy: OPERATOR })
       .where(eq(workingOrderLines.workingOrderId, id)),
   );
   const factsOf = (bill: string) =>
@@ -337,6 +337,7 @@ it("keeps captured declarations through quantity splitting and a bill move", asy
         .select({
           menuVersionId: workingOrderLines.menuVersionId,
           latePeriodName: workingOrderLines.latePeriodName,
+          latePeriodId: workingOrderLines.latePeriodId,
           lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         })
         .from(workingOrderLines)
@@ -344,7 +345,12 @@ it("keeps captured declarations through quantity splitting and a bill move", asy
     );
   const facts = await factsOf(id);
   expect(facts).toEqual([
-    { menuVersionId: expect.any(String), latePeriodName: "Lunch", lateConfirmedBy: OPERATOR },
+    {
+      menuVersionId: expect.any(String),
+      latePeriodName: "Lunch",
+      latePeriodId: "lunch-period",
+      lateConfirmedBy: OPERATOR,
+    },
   ]);
   await inTx(v, (tx) => splitLinesWithinOrder(tx, v.cfg, id, [{ lineNo: 1, quantity: "1" }]));
   await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } }));

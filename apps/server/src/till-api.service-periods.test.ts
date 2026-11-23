@@ -2303,6 +2303,21 @@ describe("a dish whose period ended earlier today", () => {
       },
     );
 
+    it("records the agreed period from the dish's original department after its zone moves", async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const held = await park(v, v.terraceZone, v.toast.midday);
+      expect(held.status).toBe(200);
+      at(mondayAt("14:05"));
+      await withTransaction(suite.db, async (tx) => {
+        await configureZone(tx, { zoneId: v.terraceZone, departmentId: v.deli });
+        await lateUnsentDishes(tx, held.id, await unsentDishLines(tx, held.id), {
+          ask: { menuIds: new Set([v.menus["Midday menu"]]), confirm: async () => v.personId },
+        });
+      });
+      expect(await latePeriodIdsOf(held.id)).toMatchObject([{ latePeriodId: await lunchId(v) }]);
+    });
+
     it.each([
       ["before Tuesday's Lunch", [1, 2]],
       ["with no period on Tuesday", [1]],

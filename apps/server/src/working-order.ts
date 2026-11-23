@@ -740,8 +740,6 @@ export async function priceOrderLines(
         });
   };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
-  // New dishes, and extras added to sent ones, whose menu is not orderable but ended earlier today,
-  // each with its most recently ended period.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
   let alsoSold: ReadonlySet<string> = new Set();
   const marks = new Map<number, NonNullable<LineContextInput["late"]>>();

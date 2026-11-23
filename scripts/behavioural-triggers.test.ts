@@ -411,6 +411,9 @@ function seed(connection) {
     line("line-sent-stamped", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-late-period-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     `update working_order_lines set menu_item_id = 'offer' where id = 'line-late-period-settled'`,
+    line("line-late-id-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
+    `update working_order_lines set menu_item_id = 'offer', late_period_id = 'lunch-period'
+     where id = 'line-late-id-settled'`,
     line("line-late-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     `update working_order_lines set menu_item_id = 'offer' where id = 'line-late-settled'`,
     line("line-sent-abandoned", "wo-sent-abandoned", '{"es":"Plato","ca":"Plat"}'),
@@ -1473,6 +1476,13 @@ describe("working_order_lines_require_open_parent_update's sent-stamp exception"
     expect(mark("late_period_name = 'Lunch', late_period_id = 'lunch-period'")).toBeUndefined();
     expect(mark("late_period_id = 'dinner-period'")).toBe(OPEN_PARENT_REFUSAL);
     expect(mark("late_period_id = null")).toBe(OPEN_PARENT_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set late_period_name = 'Dinner', late_period_id = 'dinner-period'
+         where id = 'line-late-id-settled'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
   });
 
   // On a presented bill a line may change its group alone, so `group_id` matters most there.
