@@ -408,16 +408,17 @@ export function mountVenueSettingsApi(
         const change = await saveBankAccount(tx, { ...bankAccountRequest(body), personId });
         if (!change.saved) throw new AppError("venue.detail_changed", { field: "iban" });
         const now = (deps.now ?? (() => new Date()))();
+        const model = await readVenueDetails(tx, now);
         await queueBankAccountChangedMail(tx, {
           editorId: personId,
           at: now.toISOString(),
-          offsetMinutes: timeZoneOffsetMinutes((await readVenue(tx)).timeZone, now),
+          offsetMinutes: timeZoneOffsetMinutes(model.details.timeZone, now),
           before: change.before,
           after: change.after,
           activityId: change.activityId!,
           now,
         });
-        return { model: await readVenueDetails(tx, now) };
+        return { model };
       });
       return c.json(result);
     }),
