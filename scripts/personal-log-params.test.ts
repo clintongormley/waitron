@@ -1,31 +1,20 @@
 /**
- * An error code's detail whose name looks like a person's is masked in the log
- * (`apps/server/src/log-personal-data.ts`), or named harmless here with a reason.
+ * The guard judges field names by a word list. An allow-listed code and key applies at every
+ * depth, and a named registry type is reviewed by name.
  *
- * Weaker than its name: it reads TEXT; it judges a key by a word list, so a key whose name says
- * nothing about a person passes; it judges only keys written in a registry's text, so a throw site
- * that spreads an object can carry keys its registry type does not name (`{ ...prepared.venue }`,
- * `apps/server/src/restore-request.ts:280` and `apps/server/src/restore-stream.ts:378`: if
- * `RestoredVenue`, `apps/server/src/restore-stream.ts:41-45`, gained an `ownerEmail`, the answer
- * and the log line would carry it and this guard would stay green); it does not read a quoted key
- * inside an entry (`"guestName": string`); a `NOT_PERSONAL` entry `code.key` approves that key at
- * every depth of its code, not only where it was reviewed; it never reads free text; and it judges
- * a named type in a registry only by its name, against `REVIEWED_TYPES`, so a person-named key
- * added later inside a type already reviewed passes, and reads only capitalised names, so a type
- * referred to by a lowercase name (`(typeof personFields)[number]`, a lowercase alias) is never
- * checked. Of a log call's fields it reads only an object literal written as the third argument of
- * a call whose level is a literal, so it skips a call whose level is computed
- * (`apps/server/src/health.ts:119`, `apps/server/src/pass.ts:209`), sees no spread or variable
- * passed as the fields, and reads no quoted or computed key in them (`"guestName": g`,
- * `[GUEST_KEY]: g`); and it does not see `packages/store/src/venue-liveness.ts:174-179`, which
- * writes `waitron.log` without a `Logger`.
+ * It reads static keys in registry entries and inline log fields, and uses TypeScript to find
+ * keys spread into inline log fields and direct AppError details. The scan covers literal
+ * levels and calls with a quoted dotted event. Opaque spreads need a site-specific exception.
+ * Its limits are computed property names,
+ * whole objects passed by reference, AppError subclasses, free text and the watchdog's
+ * direct writes to waitron.log.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { PERSONAL_LOG_KEYS } from "../apps/server/src/log-personal-data.js";
-import { blankComments, blankCommentsAndLiterals } from "../packages/shared/src/source-comments.js";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -168,34 +157,51 @@ interface RegistryKey {
   key: string;
 }
 
-interface Blanked {
-  code: string;
-  literalsBlank: string;
+interface Scan {
+  isRegistry: boolean;
+  registryKeys: RegistryKey[];
+  registryTypes: string[];
+  unrecognisedEntries: string[];
+  logFields: LogField[];
+  needsTypes: boolean;
+  unreadableSpreads: string[];
 }
 
-type Source = string | Blanked;
-
-function blanked(source: Source): Blanked {
-  return typeof source === "string"
-    ? { code: blankComments(source), literalsBlank: blankCommentsAndLiterals(source) }
-    : source;
-}
+type Source = string | Scan;
 
 const PERSON_WORDS =
   /email|mail|name|nombre|surname|apellido|phone|tel|mobile|tax|nif|nie|dni|cif|vat|emisor|recipient|destinatario|person|guest|owner|holder|editor|contact|address|label|who|user|staff|operator|waiter|customer|client/i;
 const TAX_STEM = /tax|nif|nie|dni|cif|vat/i;
 const ID_ENDING = /^(.*?)(?:Id|Ids)$/;
-const REGISTRY_OPENING = /\binterface\s+ErrorParams\b[^{]*\{/g;
-const CODE_MARK = /"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"\s*:/g;
-const TYPE_NAME = /\b[A-Z][\w$]*/g;
-const LOG_LEVEL = '"(?:debug|info|warn|error)"';
-const LOG_CALL = new RegExp(
-  String.raw`\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\?\.)?\(\s*${LOG_LEVEL}\s*,`,
-  "g",
-);
-const MAY_LOG = new RegExp(LOG_LEVEL);
-const OBJECT_TOKEN = /[{}()[\]]|[A-Za-z_$][\w$]*/g;
-const KEY = /([A-Za-z_$][\w$]*)\??\s*:/g;
+const DOTTED_NAME = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
+const LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
+
+const OPAQUE_FORWARDERS = [
+  {
+    file: "apps/server/src/box-host-api.ts",
+    code: "err.code",
+    params: "err.params",
+    reason: "The box-host refusal forwards the registered details for the same error code.",
+  },
+  {
+    file: "packages/fiscal-verifactu/src/filing-overview-routes.ts",
+    code: '"fiscal.filing_day_unread"',
+    params: "error.params",
+    reason: "The filing overview forwards details from its selected AppError codes.",
+  },
+  {
+    file: "packages/server-kit/src/error-boundary.ts",
+    code: "cause.code",
+    params: "cause.params",
+    reason: "The error boundary forwards the registered details for the same error code.",
+  },
+  {
+    file: "packages/venue-service/src/season-weeks.ts",
+    code: "error.code",
+    params: "error.params",
+    reason: "The rethrow forwards the registered details and prefixes the field path.",
+  },
+];
 
 function isJudgedKey(key: string): boolean {
   const id = ID_ENDING.exec(key);
@@ -203,73 +209,197 @@ function isJudgedKey(key: string): boolean {
   return PERSON_WORDS.test(key) || key.endsWith("By");
 }
 
-function closingBrace(code: string, opening: number): number {
-  let depth = 0;
-  for (let at = opening; at < code.length; at++) {
-    if (code[at] === "{") depth++;
-    else if (code[at] === "}" && --depth === 0) return at;
-  }
-  return code.length;
-}
+function scanSource(source: ts.SourceFile, file: string, checker?: ts.TypeChecker): Scan {
+  const result: Scan = {
+    isRegistry: false,
+    registryKeys: [],
+    registryTypes: [],
+    unrecognisedEntries: [],
+    logFields: [],
+    needsTypes: false,
+    unreadableSpreads: [],
+  };
 
-function keysOfEntry(code: string, text: string): RegistryKey[] {
-  return [...text.matchAll(KEY)].map((match) => ({ code, key: match[1]! }));
-}
-
-interface RegistryBody extends Blanked {
-  bodyStart: number;
-  bodyEnd: number;
-}
-
-function registryBodies(source: Source): RegistryBody[] {
-  const { code, literalsBlank } = blanked(source);
-  return [...code.matchAll(REGISTRY_OPENING)].map((opening) => {
-    const bodyStart = opening.index + opening[0].length - 1;
-    return { code, literalsBlank, bodyStart, bodyEnd: closingBrace(literalsBlank, bodyStart) };
-  });
-}
-
-function topLevelSegments(text: string, from: number, to: number): [number, number][] {
-  const segments: [number, number][] = [];
-  let depth = 0;
-  let start = from;
-  for (let at = from; at < to; at++) {
-    const char = text[at];
-    if (char === "{" || char === "[" || char === "(" || char === "<") depth++;
-    else if (char === "}" || char === "]" || char === ")") depth--;
-    else if (char === ">" && text[at - 1] !== "=") depth--;
-    else if ((char === ";" || char === ",") && depth === 0) {
-      segments.push([start, at]);
-      start = at + 1;
+  function readRegistry(registry: ts.InterfaceDeclaration): void {
+    result.isRegistry = true;
+    for (const entry of registry.members) {
+      if (
+        !ts.isPropertySignature(entry) ||
+        !ts.isStringLiteral(entry.name) ||
+        !DOTTED_NAME.test(entry.name.text)
+      ) {
+        result.unrecognisedEntries.push(
+          entry.getText(source).replace(/[;,]$/, "").replace(/\s+/g, " "),
+        );
+        continue;
+      }
+      const code = entry.name.text;
+      function visitType(node: ts.Node): void {
+        if (ts.isPropertySignature(node)) {
+          const key = staticKey(node.name);
+          if (key !== undefined) result.registryKeys.push({ code, key });
+        }
+        if (ts.isTypeReferenceNode(node)) result.registryTypes.push(node.typeName.getText(source));
+        if (ts.isTypeQueryNode(node)) result.registryTypes.push(node.exprName.getText(source));
+        ts.forEachChild(node, visitType);
+      }
+      if (entry.type !== undefined) visitType(entry.type);
     }
   }
-  segments.push([start, to]);
-  return segments;
+
+  function readObject(
+    object: ts.ObjectLiteralExpression,
+    codeOrEvent: ts.Expression | undefined,
+    addKey: (name: string, key: string) => void,
+    includeDirectFields: boolean,
+  ): void {
+    const name = stringValue(codeOrEvent) ?? file;
+    function visitField(node: ts.Node): void {
+      if (ts.isSpreadAssignment(node)) {
+        result.needsTypes = true;
+        if (checker !== undefined) {
+          const type = checker.getTypeAtLocation(node.expression);
+          const keys = spreadKeys(checker, type);
+          if (keys === undefined) {
+            const code = codeOrEvent?.getText(source);
+            const params = node.expression.getText(source);
+            if (
+              OPAQUE_FORWARDERS.some(
+                (allowed) =>
+                  allowed.file === file && allowed.code === code && allowed.params === params,
+              )
+            )
+              return;
+
+            const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+            result.unreadableSpreads.push(
+              `${name} (${file}:${line}): ${checker.typeToString(type)}`,
+            );
+          } else {
+            for (const key of keys) addKey(name, key);
+          }
+        }
+        return;
+      }
+      if (
+        includeDirectFields &&
+        (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node))
+      ) {
+        const key = staticKey(node.name);
+        if (key !== undefined) addKey(name, key);
+      }
+      ts.forEachChild(node, visitField);
+    }
+    ts.forEachChild(object, visitField);
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isInterfaceDeclaration(node) && node.name.text === "ErrorParams") readRegistry(node);
+
+    if (ts.isCallExpression(node)) {
+      const [level, event, fields] = node.arguments;
+      const eventName = stringValue(event);
+      if (
+        fields !== undefined &&
+        ts.isObjectLiteralExpression(fields) &&
+        (LOG_LEVELS.has(stringValue(level) ?? "") || DOTTED_NAME.test(eventName ?? ""))
+      ) {
+        readObject(fields, event, (name, key) => result.logFields.push({ event: name, key }), true);
+      }
+    }
+
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "AppError"
+    ) {
+      const [code, details] = node.arguments ?? [];
+      if (details !== undefined && ts.isObjectLiteralExpression(details)) {
+        readObject(
+          details,
+          code,
+          (name, key) => result.registryKeys.push({ code: name, key }),
+          false,
+        );
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return result;
+}
+
+function stringValue(node: ts.Node | undefined): string | undefined {
+  return node !== undefined && ts.isStringLiteral(node) ? node.text : undefined;
+}
+
+function staticKey(node: ts.PropertyName): string | undefined {
+  return ts.isIdentifier(node) ? node.text : stringValue(node);
+}
+
+function spreadKeys(checker: ts.TypeChecker, type: ts.Type): string[] | undefined {
+  if (type.isUnion()) {
+    const keys = new Set<string>();
+    for (const member of type.types) {
+      const memberKeys = spreadKeys(checker, member);
+      if (memberKeys === undefined) return undefined;
+      for (const key of memberKeys) keys.add(key);
+    }
+    return [...keys];
+  }
+  if ((type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) !== 0) return [];
+  if (
+    ((type.flags & ts.TypeFlags.Object) === 0 && !type.isIntersection()) ||
+    checker.getIndexInfosOfType(type).length > 0
+  ) {
+    return undefined;
+  }
+  return checker.getPropertiesOfType(type).map((property) => property.getName());
+}
+
+function spreadProgram(files: string[], text?: string): ts.Program {
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    strict: true,
+    skipLibCheck: true,
+    noEmit: true,
+    types: [],
+  };
+  const host = ts.createCompilerHost(options);
+  if (text !== undefined) {
+    const getSourceFile = host.getSourceFile;
+    host.getSourceFile = (file, languageVersion, onError, shouldCreateNewSourceFile) =>
+      file === files[0]
+        ? ts.createSourceFile(file, text, languageVersion)
+        : getSourceFile(file, languageVersion, onError, shouldCreateNewSourceFile);
+  }
+  return ts.createProgram(files, options, host);
+}
+
+function scanText(file: string, text: string): Scan {
+  return scanSource(ts.createSourceFile(join(ROOT, file), text, ts.ScriptTarget.Latest), file);
+}
+
+function scanFixture(file: string, source: Source): Scan {
+  if (typeof source !== "string") return source;
+  const scan = scanText(file, source);
+  if (!scan.needsTypes) return scan;
+
+  const path = join(ROOT, file);
+  const program = spreadProgram([path], source);
+  return scanSource(program.getSourceFile(path)!, file, program.getTypeChecker());
 }
 
 function unrecognisedEntries(source: Source): string[] {
-  return registryBodies(source).flatMap(({ code, literalsBlank, bodyStart, bodyEnd }) => {
-    const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)].map(
-      (mark) => bodyStart + 1 + mark.index,
-    );
-    const firstMark = marks[0] ?? bodyEnd;
-    const outside = [
-      ...topLevelSegments(literalsBlank, bodyStart + 1, firstMark),
-      ...marks.flatMap((from, index) =>
-        topLevelSegments(literalsBlank, from, marks[index + 1] ?? bodyEnd).slice(1),
-      ),
-    ];
-    return outside
-      .map(([from, to]) => code.slice(from, to).trim().replace(/\s+/g, " "))
-      .filter((entry) => entry !== "");
-  });
+  return scanFixture("errors.ts", source).unrecognisedEntries;
 }
 
 function registryTypeNames(source: Source): string[] {
-  const names = registryBodies(source).flatMap(({ literalsBlank, bodyStart, bodyEnd }) =>
-    [...literalsBlank.slice(bodyStart + 1, bodyEnd).matchAll(TYPE_NAME)].map(([name]) => name),
-  );
-  return [...new Set(names)];
+  return [...new Set(scanFixture("errors.ts", source).registryTypes)];
 }
 
 function unreviewedTypes(
@@ -292,16 +422,7 @@ function staleEntries(used: Iterable<string>, allowed: ReadonlyMap<string, strin
 }
 
 function registryKeys(source: Source): RegistryKey[] {
-  const keys: RegistryKey[] = [];
-  for (const { code, literalsBlank, bodyStart, bodyEnd } of registryBodies(source)) {
-    const marks = [...code.slice(bodyStart + 1, bodyEnd).matchAll(CODE_MARK)];
-    marks.forEach((mark, index) => {
-      const from = bodyStart + 1 + mark.index + mark[0].length;
-      const to = bodyStart + 1 + (marks[index + 1]?.index ?? bodyEnd - bodyStart - 1);
-      keys.push(...keysOfEntry(mark[1] ?? "", literalsBlank.slice(from, to)));
-    });
-  }
-  return keys;
+  return scanFixture("errors.ts", source).registryKeys;
 }
 
 function judgedPairs(keys: readonly RegistryKey[]): RegistryKey[] {
@@ -334,54 +455,8 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-function argumentEnd(text: string, from: number): number {
-  let depth = 0;
-  for (let at = from; at < text.length; at++) {
-    const char = text[at];
-    if (char === "(" || char === "[" || char === "{") depth++;
-    else if (char === ")" || char === "]" || char === "}") {
-      if (depth === 0) return at;
-      depth--;
-    } else if (char === "," && depth === 0) return at;
-  }
-  return text.length;
-}
-
-function objectKeys(text: string): string[] {
-  const keys: string[] = [];
-  const open: string[] = [];
-  for (const match of text.matchAll(OBJECT_TOKEN)) {
-    const token = match[0];
-    if (token === "{" || token === "(" || token === "[") {
-      open.push(token === "{" && text[match.index - 1] === "$" ? "${" : token);
-    } else if (token === "}" || token === ")" || token === "]") {
-      open.pop();
-    } else if (
-      open.at(-1) === "{" &&
-      /[{,]\s*$/.test(text.slice(0, match.index)) &&
-      /^\s*[:,}]/.test(text.slice(match.index + token.length))
-    ) {
-      keys.push(token);
-    }
-  }
-  return keys;
-}
-
 function logFields(file: string, source: Source): LogField[] {
-  const { code, literalsBlank } = blanked(source);
-  const fields: LogField[] = [];
-  for (const call of code.matchAll(LOG_CALL)) {
-    const eventStart = call.index + call[0].length;
-    const eventEnd = argumentEnd(literalsBlank, eventStart);
-    if (literalsBlank[eventEnd] !== ",") continue;
-    const fieldsStart = literalsBlank.slice(eventEnd + 1).search(/\S/) + eventEnd + 1;
-    if (literalsBlank[fieldsStart] !== "{") continue;
-    const literal = /^"([^"\\]*)"$/.exec(code.slice(eventStart, eventEnd).trim());
-    const event = literal?.[1] ?? file;
-    const body = literalsBlank.slice(fieldsStart, closingBrace(literalsBlank, fieldsStart) + 1);
-    fields.push(...objectKeys(body).map((key) => ({ event, key })));
-  }
-  return fields;
+  return scanFixture(file, source).logFields;
 }
 
 function refusedLogFields(
@@ -416,20 +491,28 @@ function treeSourceFiles(): string[] {
     .sort();
 }
 
-interface TreeSource extends Blanked {
+interface TreeSource extends Scan {
   file: string;
-  isRegistry: boolean;
 }
 
 let tree: readonly TreeSource[] | undefined;
 
-/** Skips a file with no level literal: `LOG_CALL` cannot match in it. */
 function treeSources(): readonly TreeSource[] {
-  tree ??= treeSourceFiles().flatMap((file) => {
-    const text = readFileSync(join(ROOT, file), "utf8");
-    const isRegistry = text.includes("interface ErrorParams");
-    return isRegistry || MAY_LOG.test(text) ? [{ file, ...blanked(text), isRegistry }] : [];
-  });
+  if (tree !== undefined) return tree;
+  const scans = treeSourceFiles().map((file) => ({
+    file,
+    ...scanText(file, readFileSync(join(ROOT, file), "utf8")),
+  }));
+  const candidates = scans.filter(({ needsTypes }) => needsTypes);
+  if (candidates.length > 0) {
+    const program = spreadProgram(candidates.map(({ file }) => join(ROOT, file)));
+    const checker = program.getTypeChecker();
+    for (const candidate of candidates) {
+      const source = program.getSourceFile(join(ROOT, candidate.file))!;
+      Object.assign(candidate, scanSource(source, candidate.file, checker));
+    }
+  }
+  tree = scans;
   return tree;
 }
 
@@ -457,6 +540,11 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(files).toContain("packages/payments-sumup/src/errors.ts");
     const keys = sources.flatMap((source) => registryKeys(source));
     expect(refusedPairs(keys, NOT_PERSONAL)).toEqual([]);
+    expect(refusedPairs(treeSources().flatMap(registryKeys), NOT_PERSONAL)).toEqual([]);
+    expect(
+      treeSources().flatMap(({ unreadableSpreads }) => unreadableSpreads),
+      "Unreadable spreads",
+    ).toEqual([]);
     expect(staleEntries(judgedPairNames(keys), NOT_PERSONAL)).toEqual([]);
   });
 
@@ -536,6 +624,84 @@ describe("error-code details that name a person are masked in the log", () => {
     ).toEqual(["[X_CODE]: { guestName: string }", `"x.Bad": { ownerEmail: string }`]);
   });
 
+  it("refuses quoted detail and log keys", () => {
+    expect(refusedIn(registry(`"x.quoted": { "guestName": string };`))).toEqual([
+      "x.quoted.guestName",
+    ]);
+    const fields = logFields("x/quoted.ts", `log("warn", "x.logged", { "guestName": guest });`);
+    expect(refusedLogFields(fields, new Map())).toEqual(["x.logged.guestName"]);
+  });
+
+  it("reads typed spread keys in details and logs and reports unreadable spreads", () => {
+    const declaration = `declare const guest: { ownerEmail: string };`;
+    expect(refusedIn(`${declaration} new AppError("x.detail", { ...guest });`)).toEqual([
+      "x.detail.ownerEmail",
+    ]);
+    const fields = logFields(
+      "x/spread.ts",
+      `${declaration} log("warn", "x.logged", { ...guest });`,
+    );
+    expect(refusedLogFields(fields, new Map())).toEqual(["x.logged.ownerEmail"]);
+
+    const opaque = `declare const guest: Record<string, unknown>;
+      log("warn", "x.unreadable", { ...guest });`;
+    expect(scanFixture("x/spread.ts", opaque).unreadableSpreads).toEqual([
+      "x.unreadable (x/spread.ts:2): Record<string, unknown>",
+    ]);
+
+    const restore = treeSources().find(({ file }) => file === "apps/server/src/restore-stream.ts");
+    expect(restore).toBeDefined();
+    if (restore === undefined) return;
+    const restoreKeys = registryKeys(restore)
+      .filter(({ code }) => code === "restore.stream_venue_unconfirmed")
+      .map(({ key }) => key)
+      .sort();
+    expect(restoreKeys).toEqual(["legalName", "taxId", "venueName"]);
+  });
+
+  it("reads every enumerable spread alternative and reports a union with opaque keys", () => {
+    const scan = scanFixture(
+      "x/union.ts",
+      `declare const guest: { guestName: string } | { ownerEmail: string } | null | undefined;
+      declare const maybeGuest: { guestName: string } | Record<string, unknown>;
+      log("warn", "x.variants", { ...guest });
+      log("warn", "x.opaque", { ...maybeGuest });`,
+    );
+    expect(refusedLogFields(scan.logFields, new Map()).sort()).toEqual([
+      "x.variants.guestName",
+      "x.variants.ownerEmail",
+    ]);
+    expect(scan.unreadableSpreads.map((finding) => finding.split(": ")[0])).toEqual([
+      "x.opaque (x/union.ts:4)",
+    ]);
+  });
+
+  it("allows opaque forwarding at the recorded file, event and spread expression", () => {
+    const scan = scanFixture(
+      "apps/server/src/box-host-api.ts",
+      `declare const err: { code: string; params: Record<string, unknown> };
+      declare const other: typeof err;
+      log("warn", err.code, { ...err.params });
+      log("warn", other.code, { ...err.params });
+      log("warn", err.code, { ...other.params });`,
+    );
+    expect(scan.unreadableSpreads.map((finding) => finding.split(": ")[0])).toEqual([
+      "apps/server/src/box-host-api.ts (apps/server/src/box-host-api.ts:4)",
+      "apps/server/src/box-host-api.ts (apps/server/src/box-host-api.ts:5)",
+    ]);
+  });
+
+  it("reports opaque forwarding in a new file", () => {
+    const scan = scanFixture(
+      "x/new-forwarder.ts",
+      `declare const err: { code: string; params: Record<string, unknown> };
+      log("warn", err.code, { ...err.params });`,
+    );
+    expect(scan.unreadableSpreads).toEqual([
+      "x/new-forwarder.ts (x/new-forwarder.ts:2): Record<string, unknown>",
+    ]);
+  });
+
   it("ignores keys written in comments", () => {
     expect(
       refusedIn(registry(`"x.c": {\n  /** guestName: a comment */\n  tableId: string;\n};`)),
@@ -554,6 +720,17 @@ describe("named types in an error registry are reviewed", () => {
   it("refuses a type nobody has reviewed, naming it and its file", () => {
     const found = typesIn("x/errors.ts", registry(`"x.v": { party: PartySummary };`));
     expect(unreviewedTypes(found, new Map())).toEqual(["PartySummary (x/errors.ts)"]);
+  });
+
+  it("refuses lowercase aliases and type queries in a registry", () => {
+    const found = typesIn(
+      "x/errors.ts",
+      registry(`"x.types": { party: partySummary; people: (typeof personFields)[number] };`),
+    );
+    expect(unreviewedTypes(found, new Map())).toEqual([
+      "partySummary (x/errors.ts)",
+      "personFields (x/errors.ts)",
+    ]);
   });
 
   it("reports a reviewed type no registry names", () => {
@@ -618,6 +795,18 @@ describe("log calls' fields that name a person are masked", () => {
     const text = `log("warn", eventFor(code), { guestName: g });`;
     expect(refusedLogFields(logFields("x/mail.ts", text), new Map())).toEqual([
       "x/mail.ts.guestName",
+    ]);
+  });
+
+  it("reads log fields with a conditional or variable level and a dotted event", () => {
+    const text = [
+      `log(ready ? "info" : "warn", "x.conditional", { guestName });`,
+      `log(level, "x.variable", { guestName });`,
+      `format(level, "undotted", { guestName });`,
+    ].join("\n");
+    expect(refusedLogFields(logFields("x/mail.ts", text), new Map())).toEqual([
+      "x.conditional.guestName",
+      "x.variable.guestName",
     ]);
   });
 

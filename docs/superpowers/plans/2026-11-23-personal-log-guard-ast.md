@@ -24,20 +24,26 @@ stale-entry check. The backlog entry is A980, S10 follow-ups in `docs/backlog/da
 
 2. Parse the same source directories with `ts.createSourceFile`. Walk each registry entry's
    signatures and type references and each logger call's inline fields, including nested objects
-   and arrays. Keep existing literal-level matching and recognise conditional choices of log
-   levels directly. For spreads and other candidate level expressions, make a compiler program
-   rooted only in candidate files, using normal workspace import resolution. Use the same scan
+   and arrays. Keep literal-level matching. Also read calls with a quoted dotted second argument
+   and an inline object as their third argument. For spreads, make a compiler program rooted only
+   in candidate files. Use NodeNext resolution, strict mode, `skipLibCheck`, `noEmit` and
+   `types: []`. Keep the call shapes of `refusedIn`, `registryKeys` and `logFields` so every
+   existing assertion stays intact. Use the same scan
    for synthetic strings, supplying their contents through a compiler host when types are needed.
    Walk direct `new AppError` calls with inline details for spreads. A nonliteral code or event is
-   reported by source path. Apply the existing allow-lists to all found keys. An opaque spread is
-   a reported finding for review. Subclasses, whole objects passed by reference, computed property
-   names, free text, runtime value tracing and the watchdog's direct writes remain outside the
-   scan. Named registry types still require review by name.
+   reported by source path. Apply the existing allow-lists to all found keys. Under the watcher's
+   04:14 clearance, check every union member, with null and undefined contributing no keys. Report
+   opaque spreads except the four known `AppError.params` forwarders, matched by file, code or
+   event expression, and spread expression. Prove both rules by deletion and check that a fifth
+   forwarder is refused. Subclasses, whole objects passed by reference, computed property names,
+   free text, runtime value tracing and the watchdog's direct writes remain outside the scan.
+   Named registry types still require review by name.
 
 3. Run `pnpm exec vitest run scripts/personal-log-params.test.ts`. In a disposable checkout,
    delete each new recognition path separately and capture the expected failure, then run the
-   restored suite. Time the focused guard against the baseline, targeting under five seconds
-   locally. Fix any real exposure under the naming rule and run the affected focused tests.
+   restored suite. Record elapsed time and peak resident memory against the baseline. Aim for
+   under five seconds locally. Fix any real exposure under the naming rule and run the affected
+   focused tests.
    Run the unedited fiscal and menu checks required by the queue.
 
 4. Update the scan limits in the test header, `CLAUDE.md` and

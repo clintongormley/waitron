@@ -1576,26 +1576,20 @@ to `waitron.log` without a logger; its fields are ids, times and a stack of func
 positions, which is a reading of the code, not a run. `console.warn` diagnostics reach only the
 container's output. The command-line tools print an error's details on their own terminal.
 
-The guard `scripts/personal-log-params.test.ts` fails when an error registry or a log call gains a
-detail whose name looks like a person's and is neither on the list nor named harmless with a reason,
-when a registry names a type nobody has reviewed, or when a registry entry cannot be read. It is
-weaker than its name, and its header is the authority for these limits:
+The guard `scripts/personal-log-params.test.ts` fails when it finds a person-named field that has
+neither a mask nor a documented exception. It also reports unreviewed registry types, unreadable
+registry entries and unreadable spreads. The test header defines its limits.
 
-- it reads text, and judges a key by a word list, so a key whose name says nothing about a person
-  (`{ to: email }`) passes;
-- it judges only keys written in a registry's text, so a throw site that spreads an object can carry
-  keys its registry type does not name (`{ ...prepared.venue }` in
-  `apps/server/src/restore-request.ts` and `apps/server/src/restore-stream.ts`);
-- it reads no quoted or computed key, in a registry entry or a log call's fields;
-- an entry `code.key` in its `NOT_PERSONAL` map approves that key at every depth of its code, not
-  only where it was reviewed;
-- it judges a named type only by its name, so a person-named key added later inside a type already
-  reviewed passes, and it reads only capitalised type names, so a lowercase type reference is never
-  checked;
-- of a log call it reads only an object literal written as the third argument with a literal level,
-  so it skips a call whose level is computed (`apps/server/src/health.ts`, `apps/server/src/pass.ts`)
-  and sees no spread or variable passed as the fields;
-- it never reads free text, and does not see the watchdog's line.
+- The guard judges names against a word list, so a generic key such as `to` passes. A documented
+  exception for a code and key applies at every depth.
+- The guard reads static keys in registry entries and inline log fields, including quoted keys.
+  It reads inline log fields when the level is literal or the event is a quoted dotted name.
+- TypeScript supplies keys from spreads inside inline log fields and direct `AppError` details.
+  It reads the keys of each union member. The four exceptions for opaque error-detail forwarding
+  each name the file, code or event expression, and spread expression. The guard reviews a named
+  registry type by name, including lowercase references.
+- Computed property names, whole objects passed by reference, error subclasses and free text are
+  outside the scan. The watchdog writes directly to the log.
 
 ### Bookings recovery (A483, 14 November 2026)
 

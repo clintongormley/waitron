@@ -165,8 +165,6 @@ by the answers):
   §4.1.1). Receipt Email omits the existing full-invoice notice; the processing-guide entries also
   need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
 - **S10 follow-ups (from #2094's review, not taken there):**
-  - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
-    `scripts/personal-log-params.test.ts` (its header lists what text reading misses).
   - **Owner choices on the partial mask** are listed under the S10 plan's decision 14 and in lane
     B's questions file; one worth a look: the ending after an email's last dot is kept whole, so a
     mistyped `jordi@puig.ferrer` logs as `j***i@p***g.ferrer`.
