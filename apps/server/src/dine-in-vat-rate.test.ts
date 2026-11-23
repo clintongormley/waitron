@@ -60,7 +60,7 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
 });
 
 // Eaten here, every line files at the area's dine-in rate, whatever its product's label or takeaway
-// rate. Every product here is labelled `general` (21%) and taken away at 21%.
+// rate.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

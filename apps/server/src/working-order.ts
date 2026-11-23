@@ -1283,7 +1283,7 @@ async function readLockedLinesForIssuance(
     })),
   );
   // A grouped row carries the id of the first working line it stands for; the lines it stands for
-  // share the product and the set-menu role, all their rates depend on.
+  // share everything their rates depend on.
   const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
   return {
     lines: stored.map((line, i) => ({
