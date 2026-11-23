@@ -366,6 +366,9 @@ export interface EmergencyHandoverDeclaration {
   locale: "en" | "es";
 }
 
+/** What the box's watch for another box answering the venue's name last found. */
+export type VenueNameState = "other-box-answers" | "no-other-box" | "not-asked" | "ask-failed";
+
 export class SetupApi {
   readonly #baseUrl: string;
   /**
@@ -533,6 +536,7 @@ export class SetupApi {
     caDownloadAvailable: boolean;
     hostnameUrl?: string;
     ipUrls?: string[];
+    venueName?: VenueNameState;
   }> {
     return this.#request("/setup-api/discovery", "GET");
   }

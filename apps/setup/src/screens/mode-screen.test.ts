@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./mode-screen.js";
 import type { SetupModeScreen } from "./mode-screen.js";
 
@@ -38,7 +39,7 @@ afterEach(() => {
 });
 
 describe("setup-mode-screen", () => {
-  it("USB offers Prepare, Live and existing venue, with Prepare and Live sharing rounded edges", async () => {
+  it("USB offers Prepare, Start a new restaurant and Join or recover, sharing rounded edges", async () => {
     const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       installationOrigin: "usb",
       environment: "preproduction",
@@ -48,13 +49,16 @@ describe("setup-mode-screen", () => {
     expect(rows.map((row) => row.getAttribute("data-test"))).toEqual([
       "choose-prepare",
       "choose-live",
+      "choose-existing",
     ]);
-    const [prepare, live] = rows.map(rowBox);
+    const [prepare, live, existing] = rows.map(rowBox);
     expect(prepare!.top).not.toEqual(["0px", "0px"]);
     expect(prepare!.bottom).toEqual(["0px", "0px"]);
     expect(live!.top).toEqual(["0px", "0px"]);
-    expect(live!.bottom).toEqual(prepare!.top);
+    expect(live!.bottom).toEqual(["0px", "0px"]);
+    expect(existing!.bottom).toEqual(prepare!.top);
     expect(live!.rect.top).toBe(prepare!.rect.bottom);
+    expect(existing!.rect.top).toBe(live!.rect.bottom);
     const events = collect(host);
     q(el, "[data-test=choose-prepare]")!.click();
     expect(events).toEqual([
@@ -76,58 +80,159 @@ describe("setup-mode-screen", () => {
     expect(q(el, "[data-test=choose-live]")).not.toBeNull();
   });
 
-  it("offers Demo, Prepare and Live as three equal rows, each a whole-row choice", async () => {
+  it("offers Demo, Prepare, Start a new restaurant and Join or recover as four rows, each a whole-row choice", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    expect(text(q(el, "h1")!)).toBe("Set up this box");
     const rows = [...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];
     expect(rows.map((row) => row.getAttribute("data-test"))).toEqual([
       "choose-demo",
       "choose-prepare",
       "choose-live",
+      "choose-existing",
     ]);
     expect(rows.map((row) => row.getAttribute("heading"))).toEqual([
       "Demo",
       "Prepare your restaurant",
-      "Live",
+      "Start a new restaurant",
+      "Join or recover a restaurant",
     ]);
     expect(rows.map((row) => text(row))).toEqual([
-      "A practice server. Nothing is filed to AEAT — safe to explore and throw away.",
-      "Enter your real menus, staff and layouts, then practise with test payments. Nothing is filed to AEAT.",
-      "The real thing. Every sale is filed to AEAT. This choice is permanent.",
+      "A practice box. Nothing is sent to the tax agency, so it is safe to explore and throw away.",
+      "Enter your real menus, staff and layouts, then practise with test payments. Nothing is sent to the tax agency.",
+      "Every sale is sent to the tax agency (AEAT). You can't change this later.",
+      "Add this box as a spare for a restaurant that's already running, or bring one back from a backup.",
     ]);
   });
 
-  it("draws the three new-restaurant choices as one rounded box with a line between rows", async () => {
+  it("draws the four choices as one rounded box with a line between rows", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    const [demo, prepare, live] = [
+    const [demo, prepare, live, existing] = [
       ...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row"),
     ].map(rowBox);
     expect(prepare!.rect.top).toBe(demo!.rect.bottom);
     expect(live!.rect.top).toBe(prepare!.rect.bottom);
-    expect([prepare!.lineAbove, live!.lineAbove]).toEqual(["1px", "1px"]);
+    expect(existing!.rect.top).toBe(live!.rect.bottom);
+    expect([prepare!.lineAbove, live!.lineAbove, existing!.lineAbove]).toEqual([
+      "1px",
+      "1px",
+      "1px",
+    ]);
     expect(demo!.top).not.toEqual(["0px", "0px"]);
-    expect([demo!.bottom, prepare!.top, prepare!.bottom, live!.top]).toEqual(
-      Array(4).fill(["0px", "0px"]),
-    );
-    expect(live!.bottom).toEqual(demo!.top);
+    expect([
+      demo!.bottom,
+      prepare!.top,
+      prepare!.bottom,
+      live!.top,
+      live!.bottom,
+      existing!.top,
+    ]).toEqual(Array(6).fill(["0px", "0px"]));
+    expect(existing!.bottom).toEqual(demo!.top);
   });
 
-  it("draws Join or recover as a box of its own, rounded at every corner", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    const existing = rowBox(q(el, "[data-test=choose-existing]")!);
-    expect(existing.top).not.toEqual(["0px", "0px"]);
-    expect(existing.bottom).toEqual(existing.top);
+  it("draws no intro paragraph, no section heading and no other-box line when no other box was found", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "production",
+    });
+    expect(el.shadowRoot!.querySelectorAll("p")).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector("h2")).toBeNull();
+    expect(q(el, "[data-test=other-box]")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll(".choices")).toHaveLength(1);
   });
 
-  it("puts Join or recover under its own question, apart from the three new-restaurant choices", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    const existing = q(el, "[data-test=choose-existing]")!;
-    expect(existing.tagName).toBe("WT-CHOICE-ROW");
-    expect(existing.closest(".choices")).toBeNull();
-    expect(existing.getAttribute("heading")).toBe("Join or recover");
-    expect(text(existing)).toBe(
-      "Add this server as a mirror of a running restaurant, or recover a restaurant from a backup.",
-    );
-    expect(text(q(el, "h2")!)).toBe("Already have a restaurant?");
+  describe("when another box answers the venue's name", () => {
+    it("says so, leads with Join it as a spare, then the other choices under their own heading", async () => {
+      const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+        environment: "preproduction",
+        otherBoxFound: true,
+      });
+      expect(text(q(el, "h1")!)).toBe("Set up this box");
+      expect(text(q(el, "[data-test=other-box]")!)).toBe(
+        "Another Waitron box is already running a restaurant on this network.",
+      );
+      const lists = [...el.shadowRoot!.querySelectorAll(".choices")];
+      expect(lists).toHaveLength(2);
+      const rowsOf = (list: Element) =>
+        [...list.querySelectorAll(":scope > wt-choice-row")].map((row) => ({
+          test: row.getAttribute("data-test"),
+          heading: row.getAttribute("heading"),
+          copy: text(row),
+        }));
+      expect(rowsOf(lists[0]!)).toEqual([
+        {
+          test: "choose-join-spare",
+          heading: "Join it as a spare",
+          copy: "Add this box as a spare for the restaurant that's already running. It can take over if the main box fails.",
+        },
+      ]);
+      expect(rowsOf(lists[1]!).map((row) => row.test)).toEqual([
+        "choose-demo",
+        "choose-prepare",
+        "choose-live",
+        "choose-recover",
+      ]);
+      expect(rowsOf(lists[1]!)[3]).toEqual({
+        test: "choose-recover",
+        heading: "Recover a restaurant",
+        copy: "Bring a restaurant back from a backup.",
+      });
+      const heading = q(el, "h2")!;
+      expect(text(heading)).toBe("Other choices");
+      expect(
+        lists[0]!.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        heading.compareDocumentPosition(lists[1]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(q(el, "[data-test=choose-existing]")).toBeNull();
+    });
+
+    it("a production box offers Join it as a spare, Start a new restaurant and Recover a restaurant only", async () => {
+      const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+        environment: "production",
+        otherBoxFound: true,
+      });
+      const tests = [...el.shadowRoot!.querySelectorAll("wt-choice-row")].map((row) =>
+        row.getAttribute("data-test"),
+      );
+      expect(tests).toEqual(["choose-join-spare", "choose-live", "choose-recover"]);
+    });
+
+    it("Join it as a spare opens the join page directly, writing no mode", async () => {
+      const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+        otherBoxFound: true,
+      });
+      const events = collect(host);
+      q(el, "[data-test=choose-join-spare]")!.click();
+      expect(events).toEqual([{ kind: "goto", detail: { screen: "connect" } }]);
+    });
+
+    it("Recover a restaurant opens the join-or-recover choice page, writing no mode", async () => {
+      const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+        otherBoxFound: true,
+      });
+      const events = collect(host);
+      q(el, "[data-test=choose-recover]")!.click();
+      expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
+    });
+
+    it("asks beforeChoice first, as a mode-less choice, and goes nowhere until it proceeds", async () => {
+      const asked: { mode: unknown; proceed: () => void }[] = [];
+      const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+        otherBoxFound: true,
+        beforeChoice: (mode: unknown, proceed: () => void) => asked.push({ mode, proceed }),
+      });
+      const events = collect(host);
+      q(el, "[data-test=choose-join-spare]")!.click();
+      q(el, "[data-test=choose-recover]")!.click();
+      expect(asked.map((a) => a.mode)).toEqual([undefined, undefined]);
+      expect(events).toEqual([]);
+      asked[0]!.proceed();
+      asked[1]!.proceed();
+      expect(events).toEqual([
+        { kind: "goto", detail: { screen: "connect" } },
+        { kind: "goto", detail: { screen: "role" } },
+      ]);
+    });
   });
 
   it("draws no extra buttons beside the rows", async () => {
@@ -135,22 +240,9 @@ describe("setup-mode-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(0);
   });
 
-  it("says nothing about certificates unless asked to", async () => {
+  it("says nothing about certificates", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
-    expect(q(el, "[data-test=cert-note]")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("certificate");
-  });
-
-  it("links to certificate help when asked to show the certificate note", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      certificateNote: true,
-    });
-    const note = q(el, "[data-test=cert-note]")!;
-    expect(note.textContent).toContain("If your browser shows a certificate warning");
-    const link = note.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
-    expect(link.getAttribute("href")).toBe("/setup/trust");
-    expect(link.target).toBe("_blank");
-    expect(link.rel).toContain("noopener");
   });
 
   it("opens the Join or recover subchooser without selecting a provision mode", async () => {
@@ -234,21 +326,15 @@ describe("setup-mode-screen", () => {
     expect((el as unknown as { understood: boolean }).understood).toBe(false);
   });
 
-  it("calls out a production box loudly", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      environment: "production",
-    });
-    expect(q(el, "[data-test=production-warning]")).not.toBeNull();
-  });
+  it.each(["production", "preproduction"] as const)(
+    "draws no production line: the Start a new restaurant choice says sales go to AEAT (%s)",
+    async (environment) => {
+      const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", { environment });
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    },
+  );
 
-  it("shows no production warning for a preproduction box", async () => {
-    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      environment: "preproduction",
-    });
-    expect(q(el, "[data-test=production-warning]")).toBeNull();
-  });
-
-  it("a production box draws Live and Already have a restaurant only", async () => {
+  it("a production box draws Start a new restaurant and Join or recover a restaurant only", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "production",
     });
@@ -256,7 +342,6 @@ describe("setup-mode-screen", () => {
     expect(q(el, "[data-test=choose-prepare]")).toBeNull();
     expect(q(el, "[data-test=choose-live]")).not.toBeNull();
     expect(q(el, "[data-test=choose-existing]")).not.toBeNull();
-    expect(q(el, "[data-test=production-warning]")).not.toBeNull();
   });
 
   it.each([{ environment: "preproduction" as const }, {}])(
@@ -283,29 +368,40 @@ describe("setup-mode-screen in Spanish", () => {
   it("offers every choice and the live warning in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
-      certificateNote: true,
       environment: "production",
     });
-    expect(text(q(el, "h1")!)).toBe("Configura este servidor Waitron");
-    expect(text(q(el, "[data-test=trust-help]")!)).toBe("abre la ayuda sobre el certificado");
-    expect(text(q(el, "[data-test=production-warning]")!)).toBe(
-      "Este servidor está marcado para producción: al configurarlo se envían registros reales a la AEAT.",
-    );
+    expect(text(q(el, "h1")!)).toBe(es["mode.heading"]);
     const { el: practice } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
       environment: "preproduction",
     });
-    expect(q(practice, "[data-test=choose-demo]")!.getAttribute("heading")).toBe("Demostración");
-    expect(q(el, "[data-test=choose-existing]")!.getAttribute("heading")).toBe(
-      "Unirse o recuperar",
+    const rows = [...practice.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];
+    expect(rows.map((row) => [row.getAttribute("heading"), text(row)])).toEqual([
+      [es["mode.demo.heading"], es["mode.demo.copy"]],
+      [es["mode.prepare.heading"], es["mode.prepare.copy"]],
+      [es["mode.live.heading"], es["mode.live.copy"]],
+      [es["mode.existing.heading"], es["mode.existing.copy"]],
+    ]);
+    const { el: found } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "production",
+      otherBoxFound: true,
+    });
+    expect(text(q(found, "[data-test=other-box]")!)).toBe(es["mode.other_box"]);
+    expect(q(found, "[data-test=choose-join-spare]")!.getAttribute("heading")).toBe(
+      es["mode.join_spare.heading"],
     );
-    expect(text(q(el, "h2")!)).toBe("¿Ya tienes un restaurante?");
+    expect(text(q(found, "[data-test=choose-join-spare]")!)).toBe(es["mode.join_spare.copy"]);
+    expect(text(q(found, "h2")!)).toBe(es["mode.others.heading"]);
+    expect(q(found, "[data-test=choose-recover]")!.getAttribute("heading")).toBe(
+      es["mode.recover.heading"],
+    );
+    expect(text(q(found, "[data-test=choose-recover]")!)).toBe(es["mode.recover.copy"]);
     q(el, "[data-test=choose-live]")!.click();
     await el.updateComplete;
-    expect(text(q(el, "h2")!)).toBe("Esto es permanente");
+    expect(text(q(el, "h2")!)).toBe(es["mode.confirm.heading"]);
     expect(q(el, "[data-test=understand]")!.getAttribute("label")).toBe(
-      "Entiendo que no se puede deshacer",
+      es["mode.confirm.understand"],
     );
-    expect(text(q(el, "[data-test=confirm-live]")!)).toBe("Configurar este servidor en vivo");
+    expect(text(q(el, "[data-test=confirm-live]")!)).toBe(es["mode.confirm.button"]);
   });
 
   it("switches language while mounted and keeps the live confirm open", async () => {
@@ -314,7 +410,7 @@ describe("setup-mode-screen in Spanish", () => {
     await el.updateComplete;
     setLocale("es-ES");
     await el.updateComplete;
-    expect(text(q(el, "h1")!)).toBe("Configura este servidor Waitron");
-    expect(text(q(el, "[data-test=live-cancel]")!)).toBe("Volver");
+    expect(text(q(el, "h1")!)).toBe(es["mode.heading"]);
+    expect(text(q(el, "[data-test=live-cancel]")!)).toBe(es["mode.confirm.back"]);
   });
 });

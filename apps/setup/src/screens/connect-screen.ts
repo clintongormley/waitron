@@ -165,6 +165,8 @@ export class SetupConnectScreen extends LitElement {
   @property({ attribute: false }) api: Pick<SetupApi, "startJoin" | "joinState" | "cancelJoin"> =
     new SetupApi();
 
+  @property({ attribute: false }) backScreen: "mode" | "role" = "role";
+
   /** This tab's handle for the join, kept by the shell; without it no code is shown. */
   @property({ attribute: false }) handle?: string;
 
@@ -521,7 +523,7 @@ export class SetupConnectScreen extends LitElement {
           slot="cancel"
           data-test="back"
           ?disabled=${this.busy || this.finishing}
-          @click=${() => dispatchSetupGoto(this, "role")}
+          @click=${() => dispatchSetupGoto(this, this.backScreen)}
           >${t("connect.back")}</wt-button
         >
         ${this.#actions()}

@@ -92,6 +92,26 @@ describe("setup-connect-screen: the address", () => {
     expect(text(el, "[data-test=join]")).toBe("Join");
   });
 
+  it.each([
+    [
+      "en-GB",
+      "This box joins the main box as a spare. It keeps an up-to-date copy of the venue's data, so it can take over if the main box fails, or when you choose a planned handover.",
+    ],
+    ["es-ES", es["connect.intro"]],
+  ] as const)(
+    "says what joining does in one paragraph, with the address example as the field's placeholder (%s)",
+    async (locale, intro) => {
+      setLocale(locale);
+      const { el } = await mount();
+      expect(text(el, "[data-test=connect-intro]")).toBe(intro);
+      const field = q(el, "[data-test=primaryUrl]")!;
+      await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(input.getAttribute("placeholder")).toBe("https://waitron.local");
+      expect(input.matches(":placeholder-shown")).toBe(true);
+    },
+  );
+
   it("marks a blank address on Join and sends nothing", async () => {
     const { el, api } = await mount();
     await press(el, "join");
@@ -664,5 +684,13 @@ describe("setup-connect-screen: Back", () => {
     el.addEventListener("setup-goto", (e) => goto((e as CustomEvent).detail));
     await press(el, "back");
     expect(goto).toHaveBeenCalledWith({ screen: "role" });
+  });
+
+  it("steps back to the first page when the shell says the person came from there", async () => {
+    const { el } = await mount(stubApi(), { backScreen: "mode" } as Partial<SetupConnectScreen>);
+    const goto = vi.fn();
+    el.addEventListener("setup-goto", (e) => goto((e as CustomEvent).detail));
+    await press(el, "back");
+    expect(goto).toHaveBeenCalledWith({ screen: "mode" });
   });
 });

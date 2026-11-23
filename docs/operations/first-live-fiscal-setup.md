@@ -11,7 +11,7 @@ The box must run a Waitron release. None has been published yet. On any other bu
 after a Live setup stops on the recovery page with `server.unreleased_build` ("This box is running a
 test build.").
 
-Choose Live in the local setup wizard. Enter the business, venue and administrator details.
+Choose **Start a new restaurant** in the local setup wizard. Enter the business, venue and administrator details.
 If you imported a prepared configuration, review whether it belongs to this same taxpayer before
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.
 The readiness sample uses its own database and grants no production identity.
@@ -238,8 +238,8 @@ refused in the same cases, and runs the same deletion. Its confirmation says "Re
 first deletes what was entered in the setup that stopped part way. No invoice was sent to AEAT.
 Then you choose the backup." After the box restarts, **Reconnect** opens "Join or recover an
 existing restaurant", where the [ordinary restore](hour-recovery.md) takes an archive, bucket or
-supported Cloud copy, as on a new box. After Start again, **Reconnect** opens "Set up this Waitron
-server" instead. A reload before Reconnect forgets which was chosen and opens the page's first
+supported Cloud copy, as on a new box. After Start again, **Reconnect** opens "Set up this box"
+instead. A reload before Reconnect forgets which was chosen and opens the page's first
 screen; if that asks "Is this page secure?", choose **Join or recover** there.
 Secure-connection repair is available:
 choose **Set up secure connection** on the repair page and follow the

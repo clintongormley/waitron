@@ -38,6 +38,9 @@ Connect the new box to the venue's network and switch it on; it needs no interne
 Because `waitron.local` reaches the main box, open the address that the new box's screen lists
 after **Use this box's own address**. You do not need to install the new box's certificate: accept
 your browser's warning once, choose **Join or recover** on the first screen, then **Add a mirror node**.
+If you choose **Continue to setup** there instead, "Set up this box" says when it finds another
+Waitron box running a restaurant on the network and offers **Join it as a spare** first, which opens
+the same join page.
 
 Enter the main box's address by its name, `https://waitron.local`, and choose **Join**; its IP
 address, such as `https://192.168.1.10`, is refused. The new box shows a six-digit code and its own
@@ -305,7 +308,7 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 ## Connect a test box during setup {#setup-cloud-sign-in}
 
 On a test box prepared for Cloud sign-in, enter the administrator’s details first in **Prepare**
-or when starting empty in a development Live rehearsal. Then choose **Sign in to Waitron Cloud**
+or when starting empty in a development rehearsal of **Start a new restaurant**. Then choose **Sign in to Waitron Cloud**
 and sign in or create an account. Setup resumes at the venue form in the same tab. Waitron files
 the venue after you save it and the box restarts. Check **System → Cloud services** for the connection.
 

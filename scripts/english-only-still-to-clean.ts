@@ -594,7 +594,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/setup/src/screens/initial-owner-strings.ts",
   "apps/setup/src/screens/initial-setup-strings.ts",
   "apps/setup/src/screens/live-source-screen.test.ts",
-  "apps/setup/src/screens/mode-screen.test.ts",
   "apps/setup/src/screens/old-box-question.test.ts",
   "apps/setup/src/screens/provisioning-screen.test.ts",
   "apps/setup/src/screens/recovery-allocation.test.ts",

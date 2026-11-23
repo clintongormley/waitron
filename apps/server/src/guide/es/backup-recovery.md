@@ -54,8 +54,8 @@ copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo»
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
 restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el kit de recuperación
 (para tu bucket), y la clave del servidor de esa copia. Después de
-**Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
-configurar este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
+**Empezar de nuevo**, **Reconectar** abre «Configura este servidor», donde eliges cómo configurar
+este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», elige ahí
 **Unirse o recuperar** para restaurar.
 
@@ -250,8 +250,9 @@ Si sigue guardada una restauración anterior, se ejecutará cuando arranque el s
 
 Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste solo mientras sigue
 abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
-la primera pantalla de la página; desde ahí elige **Unirse o recuperar** y empieza de nuevo la
-restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
+la primera pantalla de la página; desde ahí elige **Unirse o recuperar**, o en «Configura este
+servidor» **Unirse a un restaurante o recuperarlo** (**Recuperar un restaurante** cuando esa página
+ha encontrado otro servidor Waitron), y empieza de nuevo la restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
 introducir de nuevo la clave del servidor.
 
 Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la

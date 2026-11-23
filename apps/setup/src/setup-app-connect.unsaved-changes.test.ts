@@ -32,6 +32,9 @@ async function mount() {
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect(screen(el)).toBe("mode"));
+  // Arriving from the join-or-recover choice page is what sends Back there.
+  Object.assign(el, { screen: "role" });
+  await el.updateComplete;
   Object.assign(el, { screen: "connect" });
   await el.updateComplete;
   const form = (await joinScreen(el)) as SetupConnectScreen;

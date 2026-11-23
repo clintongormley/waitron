@@ -40,7 +40,9 @@ Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexió
 `waitron.local` lleva al servidor principal, abre la dirección que la pantalla del servidor nuevo
 muestra después de **Use this box's own address**. No hace falta instalar el certificado del
 servidor nuevo: acepta una vez el aviso del navegador, elige **Unirse o recuperar** en la primera
-pantalla y después **Añadir un nodo réplica**.
+pantalla y después **Añadir un nodo réplica**. Si ahí eliges **Continuar con la configuración**,
+«Configura este servidor» dice cuándo encuentra otro servidor Waitron con un restaurante en marcha en
+la red y ofrece primero **Unirse como reserva**, que abre la misma página para unirse.
 
 Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige
 **Unirse**; su dirección IP, como `https://192.168.1.10`, se rechaza. El servidor nuevo muestra un
@@ -337,7 +339,7 @@ Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y compr
 ## Conectar un servidor de pruebas durante la configuración {#setup-cloud-sign-in}
 
 En un servidor de pruebas preparado para Cloud, introduce primero los datos del administrador
-en **Preparación** o al empezar de cero en un ensayo de Puesta en marcha en un servidor de
+en **Preparación** o al empezar de cero en un ensayo de **Empezar un restaurante nuevo** en un servidor de
 desarrollo. Luego elige **Iniciar sesión en Waitron Cloud** e inicia sesión o crea una cuenta.
 La configuración se reanuda en el formulario del local, en la misma pestaña. Waitron registra el
 local cuando lo guardas y se reinicia el servidor. Comprueba la conexión en **Sistema → Servicios

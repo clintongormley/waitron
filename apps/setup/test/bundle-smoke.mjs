@@ -36,7 +36,7 @@ try {
   await page.goto(server.resolvedUrls.local[0], { timeout: 15_000 });
   await page.getByRole("heading", { name: "Is this page secure?", exact: true }).waitFor();
   await page.getByRole("button", { name: "Continue to setup", exact: true }).click();
-  await page.getByRole("heading", { name: "Set up this Waitron server", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Set up this box", exact: true }).waitFor();
   assert.deepEqual(errors, []);
   log("Built setup bundle rendered and advanced to the setup choices.");
 } finally {

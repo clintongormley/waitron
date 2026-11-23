@@ -399,6 +399,31 @@ describe("setup mode leaves the root draft", () => {
     expect(api.provision).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["choose-join-spare", "connect"],
+    ["choose-recover", "role"],
+  ] as const)(
+    "with another box found, %s asks before abandoning a root draft, then opens %s",
+    async (choice, destination) => {
+      const { el, modeScreen, api } = await modeDraft();
+      Object.assign(el, { otherBoxFound: true });
+      await el.updateComplete;
+      await modeScreen.updateComplete;
+      modeChoice(modeScreen, choice);
+      await expect.poll(() => warning(el).open).toBe(true);
+      expect((el as unknown as State).screen).toBe("mode");
+      await choose(el, "keep");
+      expect((el as unknown as State).screen).toBe("mode");
+      expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+      modeChoice(modeScreen, choice);
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, "discard");
+      await expect.poll(() => (el as unknown as State).screen).toBe(destination);
+      expect(unload()).toBe(false);
+      expect(api.provision).not.toHaveBeenCalled();
+    },
+  );
+
   it("the connection screen's Join or recover asks before abandoning a root draft", async () => {
     const { el, api } = await modeDraft();
     goto(el, "connection");
@@ -1331,35 +1356,6 @@ it("discard after import restores the accepted file in the picker", async () => 
   expect(await sourceDrawn(source)).toBe("same.waitron-config");
   expect(stage).toHaveBeenCalledExactlyOnceWith(submitted, "submitted passphrase");
   expect(unload()).toBe(true);
-});
-
-it("the real setup trust-help link opens another tab without abandoning the accepted root draft", async () => {
-  const { el, api } = await nextEditedAdmin();
-  goto(el, "mode");
-  await expect.poll(() => (el as unknown as State).screen).toBe("mode");
-  const mode = el.shadowRoot!.querySelector("setup-mode-screen")!;
-  await mode.updateComplete;
-  const link = mode.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=trust-help]")!;
-  expect(link.pathname).toBe("/setup/trust");
-  expect(link.target).toBe("_blank");
-  let browserDefault = false;
-  const blockNavigation = (event: MouseEvent) => {
-    browserDefault = !event.defaultPrevented;
-    event.preventDefault();
-  };
-  document.addEventListener("click", blockNavigation, { once: true });
-  try {
-    link.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
-    );
-  } finally {
-    document.removeEventListener("click", blockNavigation);
-  }
-  expect(browserDefault).toBe(true);
-  expect(warning(el).open).toBe(false);
-  expect((el as unknown as State).draft.venue!.admin!.email).toBe("submitted@example.com");
-  expect(unload()).toBe(true);
-  expect(api.provision).not.toHaveBeenCalled();
 });
 
 it("the actual Done links leave a successfully provisioned root without another warning", async () => {
