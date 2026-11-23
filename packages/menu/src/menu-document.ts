@@ -566,10 +566,8 @@ function canonicalJson(value: unknown): string {
 }
 
 /** Preview's price origins do not change the published content or its hash. */
-export function menuDocumentHash({
-  priceOrigins: _priceOrigins,
-  ...content
-}: MenuDocument): string {
+export function menuDocumentHash(document: MenuDocument): string {
+  const content = without(document, ["priceOrigins"]);
   return createHash("sha256").update(canonicalJson(content)).digest("hex");
 }
 
