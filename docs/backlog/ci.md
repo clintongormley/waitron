@@ -1021,7 +1021,7 @@ No assertion failure was reported; whether this shares the earlier stall's cause
 A1305 owns that investigation in Lane B. Keep the failed run; a passing retry would not establish
 the cause or a repair.
 
-## Server test time levers left after A1297
+## A1297 follow-up: sharing a migrated test database
 
 [PR #2418](https://github.com/clintongormley/waitron/pull/2418) (A1297) remembered recovery-key checks
 within a test file, migrated `heldSetup`'s databases once per file, sealed the test helpers' backups

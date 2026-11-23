@@ -35,6 +35,7 @@ const passwords = {
   outside: 0,
 };
 
+// The cache reads the watch settings. Counts and callbacks belong to the crypto mock.
 const watchSlot = Symbol.for("waitron.watchScryptDerivations");
 type WatchState = { all: boolean; secret: string | null };
 const holder = globalThis as typeof globalThis & { [watchSlot]?: WatchState };
