@@ -1154,12 +1154,7 @@ export class ServersScreen extends LitElement {
           ? nothing
           : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
               <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
-              ${
-                action === "reset" &&
-                (target.returnScenario === "emergency" || target.oldBoxHoldsMore === true)
-                  ? this.#renderDownload(target)
-                  : nothing
-              }
+              ${action === "reset" ? this.#renderDownload(target) : nothing}
               ${action === "reset" ? this.#renderCaution(target) : nothing}
               ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}
               ${

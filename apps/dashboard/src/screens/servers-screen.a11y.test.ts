@@ -24,7 +24,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: STANDBY,
@@ -40,7 +39,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: "33333333-3333-4333-8333-333333333333",
@@ -56,7 +54,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: "44444444-4444-4444-8444-444444444444",
@@ -72,7 +69,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
   ],
 };
@@ -238,7 +234,6 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
       ],
     };
@@ -427,7 +422,6 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
               canReset: true,
               returnScenario: "emergency",
               recoveredRecordsBackup: "awaiting-backup",
-              oldBoxHoldsMore: null,
             }),
           ),
           orderServerReset: vi

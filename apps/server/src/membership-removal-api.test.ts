@@ -48,9 +48,6 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { createOldBoxHoldings } from "./old-box-holdings.js";
-import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
-import { earlierBoxChain } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
 
@@ -95,10 +92,7 @@ interface Primary {
 }
 
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
-async function primary(
-  readSpare?: MembershipRemovalApiDeps["readSpare"],
-  oldBoxes?: MembershipRemovalApiDeps["oldBoxes"],
-): Promise<Primary> {
+async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
@@ -119,7 +113,7 @@ async function primary(
   const reloadStream = vi.fn(async () => {});
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare, oldBoxes },
+    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare },
     log,
   );
   return {
@@ -1361,69 +1355,6 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
 });
 
 describe("GET /management-api/servers", () => {
-  it("compares an old main box's kept summary after a planned handover whose return completed", async () => {
-    const holdings = createOldBoxHoldings();
-    const fiscal = { name: "fiscal", version: "1.0.0", tier: "mandatory" as const };
-    const p = await primary(undefined, {
-      holdings,
-      modules: [{ ...fiscal, handover: VERIFACTU_HANDOVER }],
-    });
-    const oldMain = former(await seedNode(p.db));
-    await holdChart(p, [self(p), oldMain]);
-    await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
-    await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", randomUUID(), {
-      scenario: "controlled",
-    });
-    holdings.record(oldMain.nodeId, { fiscal: [earlierBoxChain()] });
-
-    const body = (await (await list(p, p.adminCookie)).json()) as {
-      nodes: { nodeId: string; canReset: boolean; oldBoxHoldsMore: boolean | null }[];
-    };
-    expect(body.nodes.find((n) => n.nodeId === oldMain.nodeId)).toMatchObject({
-      canReset: true,
-      oldBoxHoldsMore: true,
-    });
-  });
-
-  it("answers the listing with the box counted as holding more, and a warning, when the comparison fails", async () => {
-    const holdings = createOldBoxHoldings();
-    const fiscal = { name: "fiscal", version: "1.0.0", tier: "mandatory" as const };
-    const failing = {
-      ...VERIFACTU_HANDOVER,
-      lacking: async () => {
-        throw new Error("disk I/O error");
-      },
-    };
-    const p = await primary(undefined, {
-      holdings,
-      modules: [{ ...fiscal, handover: failing }],
-    });
-    const oldMain = former(await seedNode(p.db));
-    await holdChart(p, [self(p), oldMain]);
-    await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
-    await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", randomUUID(), {
-      scenario: "controlled",
-    });
-    holdings.record(oldMain.nodeId, { fiscal: [earlierBoxChain()] });
-
-    const res = await list(p, p.adminCookie);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      nodes: { nodeId: string; canReset: boolean; oldBoxHoldsMore: boolean | null }[];
-    };
-    expect(body.nodes.find((n) => n.nodeId === oldMain.nodeId)).toMatchObject({
-      canReset: true,
-      oldBoxHoldsMore: true,
-    });
-    expect(p.lines).toEqual([
-      {
-        level: "warn",
-        event: "membership.old_box_comparison_failed",
-        fields: { nodeId: oldMain.nodeId, errorCode: "unknown" },
-      },
-    ]);
-  });
-
   it("serves cached spare progress only after permission, and recovers without changing rows", async () => {
     let cached: import("./spare-follow.js").SpareFollowView | null = {
       peerNodeId: "spare",
@@ -1482,7 +1413,6 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
         {
           ...neverJoined,
@@ -1496,7 +1426,6 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
         {
           ...joined,
@@ -1510,7 +1439,6 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
         {
           ...former,
@@ -1524,7 +1452,6 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
         {
           ...evicted,
@@ -1538,7 +1465,6 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
       ],
     });

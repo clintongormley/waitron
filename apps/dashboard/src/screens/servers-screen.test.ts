@@ -33,7 +33,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: STANDBY,
@@ -49,7 +48,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: FORMER,
@@ -65,7 +63,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
     {
       nodeId: REMOVED,
@@ -81,7 +78,6 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
-      oldBoxHoldsMore: null,
     },
   ],
 };
@@ -363,7 +359,6 @@ describe("servers screen list", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
-          oldBoxHoldsMore: null,
         },
       ],
     };

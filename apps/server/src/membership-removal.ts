@@ -33,7 +33,6 @@ import {
 } from "./return-completion.js";
 import type { BackupStatus } from "./backup-status.js";
 import { readResetOrders, resetRefusal } from "./reset-order.js";
-import { holdsMore, type OldBoxComparison } from "./old-box-holdings.js";
 
 type ChartRefusal =
   | "membership.node_not_found"
@@ -181,12 +180,6 @@ export interface ServerListing {
     readonly returnScenario: "controlled" | "emergency" | null;
     /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
     readonly recoveredRecordsBackup: RecoveredRecordsBackup | null;
-    /**
-     * After a planned handover, while Wipe and remove is offered and no order stands, whether its
-     * latest summary names a chain this box lacks, a comparison that fails counting as true; null
-     * otherwise, or before it has asked since this box started.
-     */
-    readonly oldBoxHoldsMore: boolean | null;
   }[];
 }
 
@@ -217,7 +210,6 @@ export async function listServers(
   node: NodeDatabase,
   selfNodeId: string,
   readBackup?: () => Promise<BackupStatus>,
-  oldBoxes?: OldBoxComparison & { readonly log: Logger },
 ): Promise<ServerListing> {
   const held = await readNodeMembership(db);
   if (held === null) return { term: null, nodes: [] };
@@ -242,31 +234,6 @@ export async function listServers(
       backup = null;
     }
   }
-  // orderReset's test without the loss: a standing order is answered as it stands, else
-  // holdsCompletedReturnFrom, which reads this same activationsBySource field.
-  const canResetOf = (nodeId: string) =>
-    resetRefusal(held, selfNodeId, nodeId, open, pinned) === null &&
-    (orders.has(nodeId) || activations.get(nodeId)?.returnCompleted === true);
-  const holdsMoreBy = new Map<string, boolean>();
-  if (oldBoxes !== undefined)
-    for (const { nodeId } of held.body.nodes) {
-      const summary = oldBoxes.holdings.latest(nodeId);
-      if (
-        summary !== undefined &&
-        activations.get(nodeId)?.scenario === "controlled" &&
-        !orders.has(nodeId) &&
-        canResetOf(nodeId)
-      )
-        try {
-          holdsMoreBy.set(nodeId, await holdsMore(db, oldBoxes.modules, summary));
-        } catch (error) {
-          holdsMoreBy.set(nodeId, true);
-          oldBoxes.log("warn", "membership.old_box_comparison_failed", {
-            nodeId,
-            errorCode: codeOf(error),
-          });
-        }
-    }
   return {
     term: held.body.term,
     nodes: held.body.nodes.map((n) => {
@@ -293,12 +260,15 @@ export async function listServers(
         returnOutstanding: facts.returnOutstanding,
         needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
         reset: order === null ? null : "ordered",
-        canReset: canResetOf(n.nodeId),
+        // orderReset's test without the loss: a standing order is answered as it stands, else
+        // holdsCompletedReturnFrom, which reads this same activationsBySource field.
+        canReset:
+          resetRefusal(held, selfNodeId, n.nodeId, open, pinned) === null &&
+          (order !== null || facts.returnCompleted),
         returnScenario: activation?.scenario ?? null,
         recoveredRecordsBackup: facts.returnCompleted
           ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)
           : null,
-        oldBoxHoldsMore: holdsMoreBy.get(n.nodeId) ?? null,
       };
     }),
   };

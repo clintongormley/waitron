@@ -18,7 +18,6 @@ import { orderReset } from "./reset-order.js";
 import type { Logger } from "./logger.js";
 import { isRemoteStaffRequest } from "./request-from-box.js";
 import type { ListedJoinRequest } from "./box-join-requests.js";
-import type { OldBoxComparison } from "./old-box-holdings.js";
 
 export interface MembershipRemovalApiDeps {
   readSpare?: () => Promise<import("./spare-follow.js").SpareFollowView | null>;
@@ -31,8 +30,6 @@ export interface MembershipRemovalApiDeps {
   readBackup?: () => Promise<import("./backup-status.js").BackupStatus>;
   /** The boxes asking to join that the Servers page lists. */
   listJoinRequests?: () => ListedJoinRequest[];
-  /** The old main boxes' summaries the reset-order route keeps, for `oldBoxHoldsMore`. */
-  oldBoxes?: OldBoxComparison;
 }
 
 export const MEMBERSHIP_API_STATUS: Record<string, ContentfulStatusCode> = {
@@ -81,13 +78,7 @@ export function mountMembershipRemovalApi(
   app.get("/management-api/servers", (c) =>
     run(c, log, async () => {
       await authorize(requireManagementSession(c));
-      const listing = await listServers(
-        deps.db,
-        deps.node,
-        deps.nodeId,
-        deps.readBackup,
-        deps.oldBoxes === undefined ? undefined : { ...deps.oldBoxes, log },
-      );
+      const listing = await listServers(deps.db, deps.node, deps.nodeId, deps.readBackup);
       return c.json({
         term: listing.term,
         nodes: listing.nodes,

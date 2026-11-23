@@ -25,7 +25,6 @@ const row = (overrides: Partial<ServerRow>): ServerRow => ({
   canReset: false,
   returnScenario: null,
   recoveredRecordsBackup: null,
-  oldBoxHoldsMore: null,
   ...overrides,
 });
 
@@ -283,7 +282,7 @@ describe("Wipe and remove", () => {
     expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
   });
 
-  it("says wiping removes the box and it can come back as a spare, with no download line after a planned handover", async () => {
+  it("says wiping removes the box and it can come back as a spare, with the download line after a planned handover", async () => {
     const el = await mount(stubApi(resettable));
     await openAction(el, "reset");
     expect(dialog(el, "reset").heading).toBe("Wipe the old main box and remove it?");
@@ -291,7 +290,9 @@ describe("Wipe and remove", () => {
     expect(lineIn(el, "reset-warning")).toBe(
       "Wiping this box removes it from the venue, after which you can re-add it as a spare.",
     );
-    expect(lineIn(el, "reset-download")).toBeNull();
+    expect(lineIn(el, "reset-download")).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+    );
     expect(dialog(el, "reset").textContent).not.toMatch(/Machine|will be lost/);
   });
 
@@ -310,23 +311,18 @@ describe("Wipe and remove", () => {
   });
 
   it.each([
-    ["controlled", true, true],
-    ["controlled", false, false],
-    ["controlled", null, false],
-    ["emergency", true, true],
-    ["emergency", false, true],
-    ["emergency", null, true],
+    ["a planned handover", "controlled"],
+    ["an emergency switch", "emergency"],
+    ["no recorded handover", null],
   ] as const)(
-    "after a %s handover with oldBoxHoldsMore %s, the download line shows: %s",
-    async (returnScenario, oldBoxHoldsMore, shown) => {
+    "after %s, says the old box may hold data and to download it first",
+    async (_, returnScenario) => {
       const el = await mount(
-        stubApi(listingWith({ removable: true, canReset: true, returnScenario, oldBoxHoldsMore })),
+        stubApi(listingWith({ removable: true, canReset: true, returnScenario })),
       );
       await openAction(el, "reset");
       expect(lineIn(el, "reset-download")).toBe(
-        shown
-          ? "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it."
-          : null,
+        "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
       );
     },
   );

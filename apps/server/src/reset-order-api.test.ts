@@ -38,7 +38,6 @@ import { returnDigest, returnVenue } from "./return-records.js";
 import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
-import { createOldBoxHoldings, type OldBoxHoldings } from "./old-box-holdings.js";
 import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import { earlierBoxChain, lackingChainOf } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
@@ -64,7 +63,6 @@ let main: string;
 let oldBox: string;
 let personId: string;
 let lines: { level: string; event: string; fields: unknown }[];
-let oldBoxHoldings: OldBoxHoldings;
 
 async function holdChart(
   oldStanding: NodeStanding,
@@ -103,7 +101,6 @@ async function holdChart(
 
 beforeEach(async () => {
   lines = [];
-  oldBoxHoldings = createOldBoxHoldings();
   await seedVenue(suite.db, { name: "Reset venue" });
   await stampDeployment(suite.db, "preproduction");
   main = await seedNode(suite.db);
@@ -134,7 +131,6 @@ function app(seats: WaitronModule[] = modules) {
       nodeId: main,
       modules: seats,
       reloadStream: async () => {},
-      oldBoxHoldings,
     },
     log,
   );
@@ -818,202 +814,5 @@ describe("the Servers listing's recoveredRecordsBackup for the old box", () => {
     expect(
       await field({ configured: true, destinations: [destination("2026-11-12T13:00:01.000Z")] }),
     ).toBe("backed-up");
-  });
-});
-
-describe("the summary a question carries", () => {
-  it("is kept once the question is verified, the latest replacing the one before", async () => {
-    await ask(await queryBody({ holdings: { fiscal: [] } }));
-    const res = await ask(
-      await queryBody({ nonce: "later", holdings: { fiscal: [MISSING_CHAIN] } }),
-    );
-    expect(res.status).toBe(200);
-    expect(oldBoxHoldings.latest(oldBox)).toEqual({ fiscal: [MISSING_CHAIN] });
-  });
-
-  it("is not kept from a refused question", async () => {
-    const res = await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }), main);
-    expect(res.status).toBe(409);
-    expect(await refusalOf(await ask(await queryBody({ holdings: { other: [] } })))).toEqual({
-      code: "handover.reset_query_refused",
-      params: { reason: "module" },
-    });
-    expect(oldBoxHoldings.latest(oldBox)).toBeUndefined();
-    expect(oldBoxHoldings.latest(main)).toBeUndefined();
-  });
-});
-
-describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
-  /** The takeover from the old box, by `scenario`, with no return completed. */
-  async function replaced(scenario: "controlled" | "emergency") {
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(handoverActivations).values({
-        operationId: randomUUID(),
-        sourceNodeId: oldBox,
-        destinationNodeId: main,
-        scenario,
-        evidence: {
-          purpose: "waitron.handover.declaration.v1",
-          body: {},
-          signerNodeId: main,
-          signature: "signature",
-        },
-        personId,
-        activatedAt: "2026-11-12T10:00:00.000Z",
-      }),
-    );
-  }
-
-  /** A one-record chain this box holds, as its own summary names it. */
-  async function heldChain(): Promise<CanonicalValue> {
-    const seriesId = randomUUID();
-    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
-    const ids = await seedFiscalParents(suite.db, {
-      ids: { nodeId: main, seriesId },
-      reuseExistingParents: true,
-    });
-    await insertFiscalRecord(suite.db, ids);
-    const held = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
-    expect(held).toHaveLength(1);
-    return held;
-  }
-
-  async function field(seats: WaitronModule[] = modules) {
-    const listing = await listServers(suite.db, suite.node, main, undefined, {
-      holdings: oldBoxHoldings,
-      modules: seats,
-      log: (level, event, fields) => lines.push({ level, event, fields }),
-    });
-    return listing.nodes.find((n) => n.nodeId === oldBox)?.oldBoxHoldsMore;
-  }
-
-  it("is true after a planned handover for a summary naming a chain this box lacks", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field()).toBe(true);
-  });
-
-  it("is false for a summary whose every chain this box holds, or that names none", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: await heldChain() } }));
-    expect(await field()).toBe(false);
-    await ask(await queryBody({ holdings: { fiscal: [] } }));
-    expect(await field()).toBe(false);
-  });
-
-  it("is true for a summary the fiscal seat cannot read, which no order stood to refuse", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: "not a list" } }));
-    expect(await field()).toBe(true);
-  });
-
-  it("is true, with a warning, on a seat fault that is not an unreadable summary", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    const faulty: WaitronModule[] = [
-      {
-        ...modules[0]!,
-        handover: {
-          ...VERIFACTU_HANDOVER,
-          lacking: async () => {
-            throw new Error("disk I/O error");
-          },
-        },
-      },
-    ];
-    expect(await field(faulty)).toBe(true);
-    expect(lines).toEqual([
-      {
-        level: "warn",
-        event: "membership.old_box_comparison_failed",
-        fields: { nodeId: oldBox, errorCode: "unknown" },
-      },
-    ]);
-  });
-
-  it("counts nothing for a module the listing finds no lacking seat for", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field([{ ...modules[0]!, handover: undefined }])).toBe(false);
-  });
-
-  it("is null before the old box's first question since this box started", async () => {
-    await completedReturn("controlled");
-    expect(await field()).toBeNull();
-    expect(
-      (await listServers(suite.db, suite.node, main)).nodes.find((n) => n.nodeId === oldBox)
-        ?.oldBoxHoldsMore,
-    ).toBeNull();
-  });
-
-  it("is not worked out after an emergency switch, or with no takeover from the box", async () => {
-    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
-    const watched: WaitronModule[] = [
-      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
-    ];
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field(watched)).toBeNull();
-    await replaced("emergency");
-    expect(await field(watched)).toBeNull();
-    expect(lacking).not.toHaveBeenCalled();
-  });
-
-  it("is not worked out after a planned handover whose return is not complete, when no wipe can be ordered", async () => {
-    await replaced("controlled");
-    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
-    const watched: WaitronModule[] = [
-      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
-    ];
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field(watched)).toBeNull();
-    expect(lacking).not.toHaveBeenCalled();
-  });
-
-  it("is not worked out while an open handover names the box, when no wipe can be ordered", async () => {
-    await completedReturn("controlled");
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    await withNodeTransaction(suite.node, (tx) =>
-      beginHandoverOperationTx(tx, {
-        nodeId: main,
-        operationId: randomUUID(),
-        role: "destination",
-        scenario: "controlled",
-        sourceNodeId: oldBox,
-        destinationNodeId: main,
-        binding: {},
-        fingerprint: "f",
-        state: "copy_accepted",
-        waitingReason: null,
-      }),
-    );
-    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
-    const watched: WaitronModule[] = [
-      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
-    ];
-    const listing = await listServers(suite.db, suite.node, main, undefined, {
-      holdings: oldBoxHoldings,
-      modules: watched,
-      log: (level, event, fields) => lines.push({ level, event, fields }),
-    });
-    expect(listing.nodes.find((n) => n.nodeId === oldBox)).toMatchObject({
-      canReset: false,
-      oldBoxHoldsMore: null,
-    });
-    expect(lacking).not.toHaveBeenCalled();
-  });
-
-  it("is not worked out while an order stands, which the question already compares", async () => {
-    await completedReturn("controlled");
-    await orderReset(
-      { db: suite.db, node: suite.node, nodeId: main },
-      { targetNodeId: oldBox, personId, acceptLoss: false },
-    );
-    const lacking = vi.fn(VERIFACTU_HANDOVER.lacking!);
-    const watched: WaitronModule[] = [
-      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
-    ];
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field(watched)).toBeNull();
-    expect(lacking).not.toHaveBeenCalled();
   });
 });

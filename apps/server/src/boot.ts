@@ -400,7 +400,6 @@ import { mountMeApi } from "./me-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import { createBoxJoinRequests } from "./box-join-requests.js";
-import { createOldBoxHoldings } from "./old-box-holdings.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
@@ -3435,7 +3434,6 @@ async function bootServer(
       wake: wakeFiscalDrain,
     },
   };
-  const oldBoxHoldings = createOldBoxHoldings();
   mountReturnRecordsApi(
     app,
     {
@@ -3460,7 +3458,6 @@ async function bootServer(
       modules: enabledAtStart,
       now,
       reloadStream: () => backupTurns(() => streamHost.reload()),
-      oldBoxHoldings,
     },
     log,
   );
@@ -4141,7 +4138,6 @@ async function bootServer(
       readBackup: () =>
         backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
-      oldBoxes: { holdings: oldBoxHoldings, modules: enabledAtStart },
     },
     log,
   );
