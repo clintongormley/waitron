@@ -1150,13 +1150,20 @@ it("nests each category's subcategories, then its products, under it once it is 
   expect(el.shadowRoot!.querySelector("nav")).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="view-all"]')).toBeNull();
 });
-it("keeps every category through both product filters", async () => {
-  const el = await mountBrowser();
+it("keeps only matching categories as filters change and restores the open category on clear", async () => {
+  const el = await mountBrowser({
+    products: PRODUCTS.map((row) =>
+      row.id === "cola" ? { ...row, modifiers: [{ kind: "extras", id: "ex-1" }] } : row,
+    ),
+  });
   await toggleCategory(el, "d");
   await chooseFilter(el, "modifiers", "has");
-  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
   await chooseFilter(el, "ordering", ["staff_only"]);
-  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
+  expect(await rowKeys(el)).toEqual([]);
+  const table = await tableOf(el);
+  table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
 });
 it("sorts a numbered folder before products", async () => {
   expect(
@@ -1981,15 +1988,16 @@ it.each(["en-GB", "es"])(
     expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
   },
 );
-it("keeps the All products row and every category when a column filter hides every product", async () => {
+it("keeps the All products row when a column filter hides every product and category", async () => {
   setLocale("es");
   const el = await mountBrowser();
   await chooseFilter(el, "modifiers", "has");
-  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f"]);
+  expect(await rowKeys(el)).toEqual([]);
+  const root = (await tableOf(el)).shadowRoot!;
   expect(
-    (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${ROOT_KEY}"]`),
-  ).not.toBeNull();
-  expect((await tableOf(el)).shadowRoot!.querySelector(".empty")).toBeNull();
+    root.querySelector('tr[data-row-key="root"] [data-test="count-root"]')?.textContent?.trim(),
+  ).toBe("0 de 3 productos");
+  expect(root.querySelector(".empty")).toBeNull();
 });
 it.each(["search", "filter", "show archived"])(
   "A461 keeps ticks on %s and keeps selection mode on",

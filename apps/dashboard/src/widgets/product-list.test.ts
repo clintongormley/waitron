@@ -5996,6 +5996,30 @@ describe("product-list filters (A463)", () => {
       expect(count(root, "root")).toBe("0 of 2 products");
     });
 
+    it("keeps the name box for a category being renamed while a filter hides its branch", async () => {
+      const { el, table, root } = await mountTree({
+        categories: [
+          drinks,
+          beer,
+          food,
+          { ...beer, id: "desserts", name: "Desserts", parentId: "f" },
+        ],
+      });
+      el.nameDraft = { kind: "rename", categoryId: "desserts" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      await choose(el, "modifiers", "has");
+      expect(rowKeys(root)).toEqual(["folder:f", "folder:desserts"]);
+      const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        'tr[data-row-key="folder:desserts"] wt-input[name="category-name"]',
+      );
+      expect(box?.value).toBe("Desserts");
+      el.nameDraft = null;
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(rowKeys(root)).toEqual([]);
+    });
+
     it("searches empty categories by name until a column filter is applied", async () => {
       const { el, table, root } = await mountTree({
         products: treeProducts().map((row) =>

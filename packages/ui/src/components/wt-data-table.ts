@@ -1029,7 +1029,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @property({ type: Boolean }) flatTreeSearch = false;
 
-  /** Narrows a tree's column-filter matches before ranking names or expanding search results. */
+  /** Narrows the candidates used by a tree with `flatTreeSearch`. */
   @property({ attribute: false }) filterCandidates?: (
     rows: readonly Row[],
     hasFilters: boolean,
@@ -2212,7 +2212,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const search = this.#search();
     const filtered =
       active.length === 0 ? this.rows : this.rows.filter((row) => this.#passesFilters(row, active));
-    const narrow = this.rowParent === undefined ? undefined : this.filterCandidates;
+    const narrow = this.rowParent && this.flatTreeSearch ? this.filterCandidates : undefined;
     const filterMatches = narrow && active.length > 0 ? filtered : undefined;
     const candidates =
       narrow && (active.length > 0 || search !== undefined)
@@ -2345,7 +2345,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const searching = this.searchOpensPath && searchTyped;
     const below = new Set<string>();
     if (searching) {
-      const candidates = new Set(this.#searched().candidates);
+      const active = this.#activeFilters();
       let grew = true;
       while (grew) {
         grew = false;
@@ -2354,7 +2354,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           const parent = parentOf(row);
           if (matched.has(key) || below.has(key) || parent === null) return;
           if (!matched.has(parent) && !below.has(parent)) return;
-          if (!candidates.has(row)) return;
+          if (!this.#passesFilters(row, active)) return;
           below.add(key);
           grew = true;
         });

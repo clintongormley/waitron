@@ -14,7 +14,7 @@ open until you have fixed it.
 
 Use **Filters** to narrow the Products list. A category shows how many of its products match,
 including products in its subcategories. If an empty category disappears after you save it,
-choose **Clear all** in **Filters**, then search for the category by name.
+choose **Clear all** in **Filters**. Search by name to find it under a closed category.
 
 ## How VAT is charged {#vat}
 
