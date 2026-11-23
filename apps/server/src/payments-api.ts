@@ -625,8 +625,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const listed = await seat.readers.list(runtimeDeps());
         if (!listed.some((reader) => reader.providerRef === providerRef))
           throw new AppError("reader.not_listed", { providerId });
-        // Re-read after the network call; as in pairing below, the residual disconnect window remains.
-        // Adoption creates nothing at the provider to roll back.
         const row = await gated(sessionId, async (tx) => {
           await requireConnected(tx, seat);
           await requireEnabled(tx, seat);
@@ -1147,7 +1145,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return row;
       });
       if (inserted === undefined) {
-        await seat.readers.remove(runtimeDeps(), result.providerRef).catch(() => {});
+        // Leave the registration available to an Adopt that may already be in flight.
         await gated(sessionId, (tx) => requireEnabled(tx, seat));
         throw new AppError("reader.provider_disconnected", { providerId });
       }
