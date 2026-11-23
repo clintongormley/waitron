@@ -128,8 +128,7 @@ the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
-VAT is never resolved that way: an extra is sold as the picked PRODUCT, never the dish. Eaten
-here, it files at the dine-in rate, as every line does. Taken away, it
+Eaten here, an extra files at the dine-in rate, as every line does. Taken away, it
 files at that product's takeaway rate, or its parent's when a variant has none
 (`readLineVatRates`, `apps/server/src/line-vat-rates.ts`).
 
@@ -456,7 +455,7 @@ Six things it is worth knowing about that payload:
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
   `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
-- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
+- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them. Each is the product's own or, where a variant leaves it blank, its parent's —
   except the names, which are always the variant's own. Taken away, its line files at the

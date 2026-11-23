@@ -188,15 +188,10 @@ from `readLineVatRates`
 (`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts`); taken
 away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
 `product_takeaway_vat_rates`, or its parent's when a variant has none
-(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A variant with no class
-of its own was frozen at its parent's class, and an extras line takes the class frozen for its
-picked product. Raising the quantity of an unsent line in place keeps that row's class; a line an
-edit adds takes the class of the version live then. So a change to a product's eat-in VAT class
-reaches a till only when a menu including it is published again, and until then that menu shows
-Unpublished changes; a change to its takeaway rate reaches every takeaway line rated from then on,
-open orders included, with no publish. Patching a live menu (`patchLiveMenu`,
-`packages/menu/src/menu-publication.ts`) changes an eat-in class in that menu's live version alone;
-the product keeps its own, and a patch cannot change a takeaway rate.
+(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A change to a product's
+takeaway rate reaches every takeaway line rated from then on, open orders included, with no
+publish, and patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
+cannot change it.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
 `packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it
