@@ -852,12 +852,12 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       refused = true;
+      if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
       if (allocationReason === "event_mismatch") {
-        this.actionError = t("handover.operator_mismatch");
+        this.actionError = t("handover.preparation_mismatch");
         if (this.#isEmergency) this.#reopenSignIn();
-      } else {
-        if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
-        if (!this.#isEmergency || stale) this.actionError = entry.refusalMessage(cause);
+      } else if (!this.#isEmergency || stale) {
+        this.actionError = entry.refusalMessage(cause);
       }
       if (error?.code === "password.invalid" || cause instanceof PasskeyNeedsPress) {
         this.activationHeld = true;

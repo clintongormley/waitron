@@ -95,6 +95,7 @@ async function mount(
     expired?: boolean;
     refusal?: string;
     activationMismatch?: boolean;
+    activationFiscalMismatch?: boolean;
     activationExpired?: boolean;
     /** The first this many starts are refused for a clock reading that is too old. */
     activationStale?: number;
@@ -431,6 +432,13 @@ async function mount(
     if (path.endsWith("/activate")) {
       await options.activateGate;
       attemptedActivation = true;
+      if (options.activationFiscalMismatch)
+        return new Response(
+          JSON.stringify({
+            error: { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } },
+          }),
+          { status: 400 },
+        );
       if (options.activationExpired)
         return new Response(JSON.stringify({ error: { code: "password.invalid" } }), {
           status: 401,
@@ -1201,6 +1209,22 @@ it("stops activation when the post-restart comparison finds a changed copy", asy
   );
   expect(posts.filter(({ path }) => path.endsWith("/preview"))).toHaveLength(2);
   expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(0);
+});
+
+it("offers sign-in again after a refused emergency handover preparation", async () => {
+  const activation = gate();
+  const { el, posts } = await mount({
+    saved: true,
+    activationFiscalMismatch: true,
+    activateGate: activation.opened,
+  });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(activations(posts)).toBe(1));
+  const method = "[data-test=sign-in-passkey], [name=handover-sign-in-method]";
+  expect(q(el, method)).toBeNull();
+  activation.open();
+  await vi.waitFor(() => expect(q(el, method)).not.toBeNull());
 });
 
 it("moves keyboard focus to the page heading when a changed copy leaves no action to offer", async () => {

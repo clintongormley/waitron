@@ -561,11 +561,11 @@ it.each([
   [
     "en-GB",
     "Proceed",
-    "Your sign-in did not match the prepared handover. Sign in as the person who prepared this step and check the clocks again.",
+    "The prepared handover no longer matches your sign-in or the current details. Sign in as the person who prepared this step and check the clocks again.",
   ],
-  ["es-ES", "Continuar", handoverEs["handover.operator_mismatch"]],
+  ["es-ES", "Continuar", handoverEs["handover.preparation_mismatch"]],
 ] as const)(
-  "explains a handover operator mismatch and returns to sign-in (%s)",
+  "explains a handover preparation mismatch and returns to sign-in (%s)",
   async (locale, proceed, message) => {
     setLocale(locale);
     const { el } = await mount({

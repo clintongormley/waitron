@@ -222,8 +222,9 @@ the node recovery key authenticates the node operation. They remain separate cre
 
 ## Reserve an entry for a named standby
 
-> A1308 Fi8 removed this standby procedure. Use the clock check when starting the venue on a
-> spare. See [recovering a box](../operations/hour-recovery.md).
+> **2026-11-24, A1308 Fi8:** Waitron no longer uses these paper reservations when a spare joins
+> or takes over. The section below records the old procedure. To start the venue on a spare, use
+> the clock check. See [recovering a box](../operations/hour-recovery.md).
 
 A spare box needs its own reserved names while the primary is still selling. Record the named
 spare, primary, operator and join event in the current outside register. Keep the entry reserved;
