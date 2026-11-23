@@ -592,9 +592,9 @@ dos pasos. Waitron no permite **Restablecer acceso** para el único administrado
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
-**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración solo
-contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
-sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
+**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración contiene
+la clave maestra y la clave del servidor. Una recuperación necesita la clave del servidor junto con
+el acceso a una copia; para sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia en el bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de cifrado de copias, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los

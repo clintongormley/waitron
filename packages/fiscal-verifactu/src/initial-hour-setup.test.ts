@@ -162,7 +162,7 @@ it("the command recovery pack uses the frozen venue zone", async () => {
 });
 
 it.each(["en", "es"] as const)(
-  "the command path writes recovery pack 1 holding only the staged key, in %s",
+  "the command path writes recovery pack 1 holding the master key, then the staged box key, in %s",
   async (locale) => {
     const f = configured();
     const saved = fixture();

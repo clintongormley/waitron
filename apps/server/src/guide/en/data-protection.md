@@ -543,8 +543,8 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery pack.** The pack made during first setup holds only the box key, which a
-recovery needs alongside access to a copy; to replace it, see the end of this section. A pack made
+**A lost recovery pack.** The pack made during first setup holds the master key and the box key.
+A recovery needs the box key alongside access to a copy; to replace it, see the end of this section. A pack made
 on **Backups** after you set up the bucket copy holds your bucket's access
 key and secret and the backup encryption key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
