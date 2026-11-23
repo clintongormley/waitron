@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-spinner.js";
+import "./wt-icon.js";
 
 export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "link";
 export type WtButtonSize = "sm" | "md" | "lg";
@@ -27,18 +28,36 @@ export class WtButton extends LitElement {
         display: inline-flex;
         align-items: center;
         justify-content: var(--wt-button-justify, center);
-        gap: var(--wt-space-2);
+        gap: var(--wt-action-gap, var(--wt-space-2));
         width: 100%;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-button-padding-inline, var(--wt-space-4));
-        border: 1px solid transparent;
-        border-radius: var(--wt-radius-md);
+        padding: var(
+          --wt-action-padding,
+          var(--wt-space-2) var(--wt-button-padding-inline, var(--wt-space-4))
+        );
+        border: var(--wt-action-border, 1px solid transparent);
+        border-radius: var(--wt-action-radius, var(--wt-radius-md));
         font: inherit;
-        font-weight: var(--wt-font-weight-bold);
+        font-weight: var(--wt-action-weight, var(--wt-font-weight-bold));
+        font-size: var(--wt-action-font-size, inherit);
+        text-align: var(--wt-action-text-align, center);
         cursor: pointer;
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+        background: var(--wt-action-background, var(--wt-color-surface));
+        color: var(--wt-action-text, var(--wt-color-text));
+      }
+
+      button:is(:hover, :active):enabled:not([aria-disabled="true"]) {
+        --wt-action-background: var(--wt-action-hover);
+      }
+
+      wt-icon {
+        flex: none;
+        color: var(--wt-action-icon-color, currentColor);
+      }
+
+      :host([variant="danger"]) wt-icon {
+        color: var(--wt-action-danger-text, currentColor);
       }
 
       button:disabled,
@@ -48,7 +67,7 @@ export class WtButton extends LitElement {
 
       :host([variant="secondary"]) button:hover:enabled:not([aria-disabled="true"]),
       :host([variant="ghost"]) button:hover:enabled:not([aria-disabled="true"]) {
-        border-color: var(--wt-color-primary-text);
+        border-color: var(--wt-action-border-color, var(--wt-color-primary-text));
       }
 
       :host([size="sm"]) button {
@@ -64,40 +83,40 @@ export class WtButton extends LitElement {
       }
 
       :host([variant="primary"]) button {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
+        background: var(--wt-action-background, var(--wt-color-primary));
+        color: var(--wt-action-text, var(--wt-color-on-primary));
       }
 
       :host([variant="secondary"]) button {
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        border-color: var(--wt-color-border);
+        background: var(--wt-action-background, var(--wt-color-surface));
+        color: var(--wt-action-text, var(--wt-color-text));
+        border-color: var(--wt-action-border-color, var(--wt-color-border));
       }
 
       :host([variant="danger"]) button {
-        background: var(--wt-color-danger);
-        color: var(--wt-color-on-danger);
+        background: var(--wt-action-background, var(--wt-color-danger));
+        color: var(--wt-action-danger-text, var(--wt-color-on-danger));
       }
 
       :host([variant="primary"]) button:hover:enabled:not([aria-disabled="true"]) {
-        background: var(--wt-color-primary-hover);
+        background: var(--wt-action-hover, var(--wt-color-primary-hover));
         opacity: 1;
       }
 
       :host([variant="danger"]) button:hover:enabled:not([aria-disabled="true"]) {
-        background: var(--wt-color-danger-hover);
+        background: var(--wt-action-hover, var(--wt-color-danger-hover));
         opacity: 1;
       }
 
       :host([variant="ghost"]) button {
-        background: transparent;
-        color: var(--wt-color-text);
+        background: var(--wt-action-background, transparent);
+        color: var(--wt-action-text, var(--wt-color-text));
       }
 
       :host([variant="link"]) button {
         padding-inline: 0;
-        background: transparent;
-        color: var(--wt-color-primary-text);
+        background: var(--wt-action-background, transparent);
+        color: var(--wt-action-text, var(--wt-color-primary-text));
         font-weight: var(--wt-font-weight-normal);
         text-decoration: underline;
       }
@@ -114,15 +133,15 @@ export class WtButton extends LitElement {
 
       /* Final colours, so no fade on top; a loading button keeps its own colour, faded. */
       :host([variant="primary"][disabled]:not([loading])) button {
-        background: var(--wt-color-primary-disabled);
-        color: var(--wt-color-on-primary-disabled);
-        opacity: 1;
+        background: var(--wt-action-background, var(--wt-color-primary-disabled));
+        color: var(--wt-action-text, var(--wt-color-on-primary-disabled));
+        opacity: var(--wt-action-disabled-opacity, 1);
       }
 
       :host([variant="danger"][disabled]:not([loading])) button {
-        background: var(--wt-color-danger-disabled);
-        color: var(--wt-color-on-danger-disabled);
-        opacity: 1;
+        background: var(--wt-action-background, var(--wt-color-danger-disabled));
+        color: var(--wt-action-danger-text, var(--wt-color-on-danger-disabled));
+        opacity: var(--wt-action-disabled-opacity, 1);
       }
 
       :host([align="start"]) button {
@@ -139,6 +158,7 @@ export class WtButton extends LitElement {
     `,
   ];
 
+  @property() icon = "";
   @property({ reflect: true }) variant: WtButtonVariant = "secondary";
   @property({ reflect: true }) size: WtButtonSize = "md";
   @property({ reflect: true }) align: WtButtonAlign = "center";
@@ -188,7 +208,13 @@ export class WtButton extends LitElement {
         aria-invalid=${this.ariaInvalid ?? nothing}
         @click=${this.ignoreWhileLoading}
       >
-        ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
+        ${
+          this.loading
+            ? html`<wt-spinner size="sm" decorative></wt-spinner>`
+            : this.icon
+              ? html`<wt-icon name=${this.icon} size="lg"></wt-icon>`
+              : nothing
+        }
         <slot></slot>
       </button>
     `;

@@ -335,6 +335,7 @@ export class OrdersScreen extends LitElement {
             align="end"
             label=${`${t("orders.col.actions")}: ${row.invoiceNumber ?? row.label ?? row.id}`}
             ><wt-button
+              icon="menu-open"
               @click=${(event: Event) => {
                 event.stopPropagation();
                 this.openId = row.id;
@@ -343,11 +344,12 @@ export class OrdersScreen extends LitElement {
             >${
               this.#mayReprint(row) || this.#mayPrintInvoice(row)
                 ? html`<wt-button
+                    icon="menu-print"
                     @click=${(event: Event) => {
                       event.stopPropagation();
                       this.#openPrint(row);
                     }}
-                    >${t("orders.print_document.title")}</wt-button
+                    >${t("orders.print_document.title_dialog")}</wt-button
                   >`
                 : nothing
             }</wt-row-actions

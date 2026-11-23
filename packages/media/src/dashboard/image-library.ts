@@ -3,6 +3,7 @@ import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   bottomMessage,
@@ -1370,19 +1371,24 @@ export class ImageLibrary extends LitElement {
               <h2>${name}</h2>
               <wt-row-actions align="end" label=${`${t("image.actions")}: ${name}`}>
                 <wt-button
+                  icon="menu-edit"
                   data-test=${`edit-${image.id}`}
                   ?disabled=${this.batchRunning}
                   aria-label=${`${t("action.edit")}: ${name}`}
                   @click=${() => this.#edit(image)}
                   >${t("action.edit")}</wt-button
                 >
-                <wt-button
-                  data-test=${`delete-${image.id}`}
-                  ?disabled=${this.batchRunning}
-                  aria-label=${`${t("image.delete")}: ${name}`}
-                  @click=${() => void this.#inspectDeletion(image)}
-                  >${t("image.delete")}</wt-button
-                >
+                ${rowActionTail(true, [
+                  html`<wt-button
+                    icon="menu-delete"
+                    variant="danger"
+                    data-test=${`delete-${image.id}`}
+                    ?disabled=${this.batchRunning}
+                    aria-label=${`${t("image.delete_dialog")}: ${name}`}
+                    @click=${() => void this.#inspectDeletion(image)}
+                    >${t("image.delete_dialog")}</wt-button
+                  >`,
+                ])}
               </wt-row-actions>
             </div>
             <time datetime=${image.createdAt}

@@ -10,6 +10,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   leaveCoordinatorFor,
@@ -791,17 +792,22 @@ export class PrepStationsScreen extends LitElement {
       label=${format("prep.row_actions", { name: station.name })}
     >
       <wt-button
+        icon="menu-edit"
         data-test=${`edit-${station.id}`}
         ?disabled=${this.busy}
         @click=${() => this.#editStation(station)}
         >${t("venue.edit")}</wt-button
       >
-      <wt-button
-        data-test=${`delete-${station.id}`}
-        ?disabled=${this.busy}
-        @click=${() => void this.#openStationAction(station.id)}
-        >${t("prep.delete")}</wt-button
-      >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`delete-${station.id}`}
+          ?disabled=${this.busy}
+          @click=${() => void this.#openStationAction(station.id)}
+          >${t("prep.delete_dialog")}</wt-button
+        >`,
+      ])}
     </wt-row-actions>`;
   }
   #stationOutputs(view: PrepStationsView) {

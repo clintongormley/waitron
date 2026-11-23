@@ -1144,7 +1144,10 @@ export class FiscalFilingScreen extends LitElement {
           html`<wt-row-actions
             align="end"
             label=${`${t("fiscal_filing.column.actions")}: ${row.record.numSerieFactura}`}
-            ><wt-button data-test=${`view-${row.registroId}`} @click=${() => this.#open(row)}
+            ><wt-button
+              icon="menu-open"
+              data-test=${`view-${row.registroId}`}
+              @click=${() => this.#open(row)}
               >${t("fiscal_filing.view")}</wt-button
             ></wt-row-actions
           >`,

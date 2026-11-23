@@ -4,6 +4,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
+  rowActionTail,
   baseStyles,
   belongsToComposition,
   currentContentLanguages,
@@ -247,12 +248,6 @@ export class ProductList extends LitElement {
       }
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(menu-divider) {
-        align-self: stretch;
-        margin: var(--wt-space-1) 0;
-        border: 0;
-        border-block-start: 1px solid var(--wt-color-border);
       }
       wt-data-table::part(count),
       wt-data-table::part(variant-count) {
@@ -1201,16 +1196,19 @@ export class ProductList extends LitElement {
             >${
               rowActive(row)
                 ? html`<wt-button
+                      icon="menu-edit"
                       data-test=${`edit-${id}`}
                       @click=${() => this.#send("edit-product", { productId: id })}
                       >${t("action.edit")}</wt-button
                     ><wt-button
+                      icon="menu-archive"
                       variant="danger"
                       data-test=${`delete-${id}`}
                       @click=${() => this.#send("delete-product", { productId: id })}
                       >${t("product.archive")}</wt-button
                     >`
                 : html`<wt-button
+                    icon="menu-open"
                     data-test=${`view-${id}`}
                     @click=${() => this.#send("view-product", { productId: id })}
                     >${t("product.view")}</wt-button
@@ -1225,6 +1223,7 @@ export class ProductList extends LitElement {
   #addItems(categoryId: string | null) {
     const test = categoryId ?? ROOT_KEY;
     return html`<wt-button
+        icon="menu-add"
         data-test=${`add-product-${test}`}
         ?disabled=${!this.canAddProduct}
         @click=${() => {
@@ -1232,6 +1231,7 @@ export class ProductList extends LitElement {
         }}
         >${t("products.add_product")}</wt-button
       ><wt-button
+        icon="menu-add"
         data-test=${`add-category-${test}`}
         @click=${() => this.#send("add-category", { parentId: categoryId })}
         >${t("folders.add_category")}</wt-button
@@ -1376,21 +1376,25 @@ export class ProductList extends LitElement {
             label=${`${t("staff.actions")}: ${folder.name}`}
             data-test=${`actions-folder-${folder.id}`}
             >${this.#addItems(folder.id)}
-            <hr part="menu-divider" />
             <wt-button
+              icon="menu-rename"
               data-test=${`rename-${folder.id}`}
               @click=${() => this.#send("rename-folder", { folderId: folder.id })}
               >${t("folders.rename")}</wt-button
             ><wt-button
+              icon="menu-move"
               data-test=${`move-${folder.id}`}
               @click=${() => this.#send("move-folder", { folderId: folder.id })}
               >${t("folders.move")}</wt-button
-            ><wt-button
-              variant="danger"
-              data-test=${`delete-folder-${folder.id}`}
-              @click=${() => this.#send("delete-folder", { folderId: folder.id })}
-              >${t("action.delete")}</wt-button
-            ></wt-row-actions
+            >${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-folder-${folder.id}`}
+                @click=${() => this.#send("delete-folder", { folderId: folder.id })}
+                >${t("action.delete_dialog")}</wt-button
+              >`,
+            ])}</wt-row-actions
           >`;
         return nothing;
       },

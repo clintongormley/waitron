@@ -5,6 +5,7 @@ import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import {
+  rowActionTail,
   baseStyles,
   UrlStateController,
   pageTitleStyles,
@@ -1526,22 +1527,28 @@ export class DevicesScreen extends LitElement {
 
   #deviceActions(device: DeviceRow): TemplateResult {
     return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
-      <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
-        >${t("action.edit")}</wt-button
-      >
       <wt-button
-        variant="danger"
-        data-test=${`delete-device-${device.id}`}
-        @click=${(event: Event) => {
-          const button = event.currentTarget as HTMLElement;
-          this.#deleteDialog.open(
-            device.id,
-            this.#rowMenuButton(button) ?? button,
-            "getDeviceDeleteImpact",
-          );
-        }}
-        >${t("action.delete")}</wt-button
+        icon="menu-edit"
+        data-test=${`edit-device-${device.id}`}
+        @click=${() => this.#openEdit(device)}
+        >${t("action.edit_dialog")}</wt-button
       >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`delete-device-${device.id}`}
+          @click=${(event: Event) => {
+            const button = event.currentTarget as HTMLElement;
+            this.#deleteDialog.open(
+              device.id,
+              this.#rowMenuButton(button) ?? button,
+              "getDeviceDeleteImpact",
+            );
+          }}
+          >${t("action.delete_dialog")}</wt-button
+        >`,
+      ])}
     </dashboard-row-actions>`;
   }
 

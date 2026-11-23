@@ -256,7 +256,7 @@ describe("servers screen list", () => {
     const item = menu.querySelector("wt-button")!;
     await item.updateComplete;
     expect(getComputedStyle(item.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-      "center",
+      "start",
     );
   });
 

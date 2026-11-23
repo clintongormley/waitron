@@ -182,7 +182,7 @@ describe("row actions", () => {
       ],
     });
     // A narrow table leaves room on both sides so alignment is observed, not clamped to the viewport.
-    table.style.width = "320px";
+    table.style.width = "260px";
     table.style.marginTop = "150px";
     const actions = table.shadowRoot!.querySelector<WtRowActions>("wt-row-actions")!;
     await actions.updateComplete;
@@ -1138,7 +1138,7 @@ describe("a link entry", () => {
     "textDecorationLine",
   ] as const;
 
-  it("draws the same box as a secondary centred button beside it", async () => {
+  it("draws the same box as an action button beside it", async () => {
     const { link, button } = await mountLinkAndButton();
     const linkStyle = getComputedStyle(link);
     const buttonStyle = getComputedStyle(button);
@@ -1149,34 +1149,40 @@ describe("a link entry", () => {
     expect(link.getBoundingClientRect().height).toBe(button.getBoundingClientRect().height);
   });
 
-  it("paints its border, background, text, corners and size from the tokens", async () => {
-    const { link } = await mountLinkAndButton();
-    link.style.width = "200px";
-    host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
-    host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+  it("paints a plain link row and its icon from the list tokens", async () => {
+    const { el, link } = await mountLinkAndButton();
+    const icon = document.createElement("wt-icon");
+    icon.name = "menu-open";
+    icon.size = "lg";
+    link.prepend(icon);
+    await icon.updateComplete;
     host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
-    host.style.setProperty("--wt-radius-md", "7px");
+    host.style.setProperty("--wt-color-text-muted", "rgb(10, 11, 12)");
+    host.style.setProperty("--wt-radius-sm", "7px");
     host.style.setProperty("--wt-tap-min", "51px");
-    host.style.setProperty("--wt-space-2", "9px");
-    host.style.setProperty("--wt-space-4", "13px");
-    host.style.setProperty("--wt-font-weight-bold", "800");
+    host.style.setProperty("--wt-space-1", "5px");
+    host.style.setProperty("--wt-space-3", "13px");
+    host.style.setProperty("--wt-font-size-md", "15px");
+    host.style.setProperty("--wt-font-size-lg", "21px");
+    host.style.setProperty("--wt-font-weight-normal", "500");
     const style = getComputedStyle(link);
-    expect(style.borderTopColor).toBe("rgb(1, 2, 3)");
-    expect(style.borderTopWidth).toBe("1px");
-    expect(style.borderTopStyle).toBe("solid");
-    expect(style.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(style.borderTopWidth).toBe("0px");
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(style.color).toBe("rgb(7, 8, 9)");
     expect(style.borderTopLeftRadius).toBe("7px");
     expect(style.minHeight).toBe("51px");
-    expect(style.minWidth).toBe("51px");
-    expect([style.paddingTop, style.paddingLeft]).toEqual(["9px", "13px"]);
-    expect(style.fontWeight).toBe("800");
+    expect(style.columnGap).toBe("13px");
+    expect(style.fontSize).toBe("15px");
+    expect(style.fontWeight).toBe("500");
     expect(style.textDecorationLine).toBe("none");
-    const label = document.createRange();
-    label.selectNodeContents(link);
-    const labelBox = label.getBoundingClientRect();
-    const linkBox = link.getBoundingClientRect();
-    expect((labelBox.left + labelBox.right) / 2).toBeCloseTo((linkBox.left + linkBox.right) / 2, 0);
+    expect(style.justifyContent).toBe("start");
+    const iconStyle = getComputedStyle(icon);
+    expect([iconStyle.color, iconStyle.width, iconStyle.height]).toEqual([
+      "rgb(10, 11, 12)",
+      "21px",
+      "21px",
+    ]);
+    expect(getComputedStyle(el.shadowRoot!.querySelector("[popover]")!).paddingTop).toBe("5px");
   });
 
   it("shows the token focus ring when reached by keyboard, as the button does", async () => {
@@ -1199,28 +1205,26 @@ describe("a link entry", () => {
     expect(ring(getComputedStyle(button))).toEqual(linkRing);
   });
 
-  it("takes the button's hover border when the pointer is over it", async () => {
+  it("gives only the hovered enabled row the neutral fill", async () => {
     const { link, button } = await mountLinkAndButton();
-    host.style.setProperty("--wt-color-primary-text", "rgb(20, 21, 22)");
+    host.style.setProperty("--wt-color-field-fill", "rgb(20, 21, 22)");
     await userEvent.hover(link);
-    expect(getComputedStyle(link).borderTopColor).toBe("rgb(20, 21, 22)");
+    expect(getComputedStyle(link).backgroundColor).toBe("rgb(20, 21, 22)");
     await userEvent.hover(button);
-    expect(getComputedStyle(button).borderTopColor).toBe("rgb(20, 21, 22)");
-    expect(getComputedStyle(link).borderTopColor).not.toBe("rgb(20, 21, 22)");
+    expect(getComputedStyle(button).backgroundColor).toBe("rgb(20, 21, 22)");
+    expect(getComputedStyle(link).backgroundColor).toBe("rgba(0, 0, 0, 0)");
   });
 
-  it("takes a disabled button's look when marked aria-disabled, with no hover border", async () => {
+  it("takes a disabled button's look when marked aria-disabled, with no hover fill", async () => {
     const { link, button } = await mountLinkAndButton({ disabled: true });
     host.style.setProperty("--wt-opacity-disabled", "0.31");
-    host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
-    host.style.setProperty("--wt-color-primary-text", "rgb(20, 21, 22)");
     const faded = (style: CSSStyleDeclaration) => [style.opacity, style.cursor];
     expect(faded(getComputedStyle(link))).toEqual(["0.31", "not-allowed"]);
     expect(faded(getComputedStyle(link))).toEqual(faded(getComputedStyle(button)));
     await userEvent.hover(link);
-    expect(getComputedStyle(link).borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(link).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     await userEvent.hover(button);
-    expect(getComputedStyle(button).borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(button).backgroundColor).toBe("rgba(0, 0, 0, 0)");
   });
 
   it("is still a link: choosing it navigates and closes the menu", async () => {
@@ -1604,19 +1608,44 @@ it("an empty menu tolerates navigation and Escape still closes it", async () => 
   expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });
 
-it("centres action buttons through nested help rows", async () => {
+it("starts action buttons through nested help rows and paints their decorative icons", async () => {
   const el = (await mount(
-    '<wt-row-actions label="Actions"><div><wt-menu-row><wt-button align="start">Edit</wt-button></wt-menu-row></div></wt-row-actions>',
+    '<wt-row-actions label="Actions"><div><wt-menu-row><wt-button icon="menu-edit">Edit</wt-button></wt-menu-row></div></wt-row-actions>',
   )) as WtRowActions;
   const button = el.querySelector<WtButton>("wt-button")!;
   await button.updateComplete;
   el.show();
-  expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-    "center",
-  );
+  const native = button.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(native).justifyContent).toBe("start");
+  const icon = native.querySelector("wt-icon")!;
+  await icon.updateComplete;
+  expect(icon.shadowRoot!.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
 });
 
-it("centres each line of a wrapping link label", async () => {
+it("paints a direct menu divider and destructive row from their tokens", async () => {
+  const el =
+    (await mount(`<wt-row-actions label="Actions"><wt-button icon="menu-edit">Edit</wt-button>
+    <hr><wt-button icon="menu-delete" variant="danger">Delete</wt-button></wt-row-actions>`)) as WtRowActions;
+  host.style.setProperty("--wt-color-danger", "rgb(21, 31, 41)");
+  host.style.setProperty("--wt-color-border", "rgb(22, 32, 42)");
+  host.style.setProperty("--wt-space-1", "5px");
+  const action = el.querySelector<WtButton>('[variant="danger"]')!;
+  await action.updateComplete;
+  el.show();
+  const native = action.shadowRoot!.querySelector("button")!;
+  expect(getComputedStyle(native).color).toBe("rgb(21, 31, 41)");
+  expect(getComputedStyle(native.querySelector("wt-icon")!).color).toBe("rgb(21, 31, 41)");
+  const line = getComputedStyle(el.querySelector("hr")!);
+  expect([line.borderTopColor, line.borderTopWidth, line.marginTop, line.marginBottom]).toEqual([
+    "rgb(22, 32, 42)",
+    "1px",
+    "5px",
+    "5px",
+  ]);
+});
+
+it("start-aligns each line of a wrapping link label", async () => {
   const el = (await mount(
     '<wt-row-actions label="Actions"><a href="#details">Open the complete details of this order</a></wt-row-actions>',
   )) as WtRowActions;
@@ -1626,5 +1655,5 @@ it("centres each line of a wrapping link label", async () => {
   const label = document.createRange();
   label.selectNodeContents(link);
   expect(label.getClientRects().length).toBeGreaterThan(1);
-  expect(getComputedStyle(link).textAlign).toBe("center");
+  expect(getComputedStyle(link).textAlign).toBe("start");
 });

@@ -933,7 +933,7 @@ describe("reader discovery and status", () => {
 
     await flush(el);
     const unpair = t("payments.unpair").split("{provider}").join("Pay $&");
-    expect(qCell(el, "[data-test=unpair-r-1]")!.textContent!.trim()).toBe(unpair);
+    expect(qCell(el, "[data-test=unpair-r-1]")!.textContent!.trim()).toBe(`${unpair}…`);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
     expect(q(el, "[data-test=reader-editor]")!.getAttribute("heading")).toBe(

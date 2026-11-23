@@ -2201,7 +2201,7 @@ describe("printers-screen", () => {
         api: stubApi(),
       });
       await flush(el);
-      expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
+      expect(text(el, "[data-test=revoke-agent-a1]")).toBe(`${del}…`);
       q(el, "[data-test=revoke-agent-a1]")!.click();
       await flush(el);
       expect(
@@ -9496,7 +9496,7 @@ describe("printers-screen Bluetooth pairing", () => {
           ]),
       });
       await selectTab(el, "printers");
-      expect(text(el, sel("pair-again-p9"))).toBe(t("printers.pair_again"));
+      expect(text(el, sel("pair-again-p9"))).toBe(t("printers.pair_again_dialog"));
       expect(q(el, sel("pair-again-p8"))).toBeNull();
       expect(q(el, sel("pair-again-p5"))).toBeNull();
       await openPrinterDetails(el, "p9");
@@ -11217,8 +11217,8 @@ describe("Deleting a printer", () => {
     expect(menus.length).toBeGreaterThan(0);
     for (const menu of menus) {
       expect([...menu.querySelectorAll("wt-button")].map((b) => b.textContent?.trim())).toEqual([
-        t("action.edit"),
-        t("action.delete"),
+        t("action.edit_dialog"),
+        t("action.delete_dialog"),
       ]);
     }
   });
@@ -12525,9 +12525,9 @@ describe("one table for every printer", () => {
     });
     expect(menuIn(el, "pp1")!.label).toBe(t("printers.row_actions").split("{name}").join(name));
     expect(menuLabels(el, "pp1")).toEqual([
-      t("action.edit"),
+      t("action.edit_dialog"),
       t("printers.print_test_page"),
-      t("action.delete"),
+      t("action.delete_dialog"),
     ]);
   });
 
@@ -14136,7 +14136,7 @@ describe("Putting a printer on every station", () => {
     expect(
       [...menu.querySelectorAll<HTMLElement>("wt-button")].map((button) => button.dataset.test),
     ).toEqual(["edit-printer-p1", "print-test-page-p1", "every-station-p1", "delete-printer-p1"]);
-    expect(text(el, sel("every-station-p1"))).toBe(t("printers.every_station"));
+    expect(text(el, sel("every-station-p1"))).toBe(t("printers.every_station_dialog"));
   });
 
   it("is not offered without both permissions the Prep stations editor requires", async () => {

@@ -2014,7 +2014,7 @@ describe("deleting a reason", () => {
     const el = await mount(fakeApi());
     const menu = el.shadowRoot!.querySelector('tr[data-reason="c"] wt-row-actions')!;
     expect([...menu.querySelectorAll("wt-button")].map((item) => item.textContent!.trim())).toEqual(
-      ["Edit", "Delete"],
+      ["Edit…", "Delete…"],
     );
   });
 });

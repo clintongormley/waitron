@@ -638,6 +638,7 @@ export class TillSentOrders extends LitElement {
                   ${
                     index > 0
                       ? html`<wt-button
+                          icon="menu-up"
                           data-group-earlier
                           ?disabled=${this.busy}
                           @click=${() => this.#reorder(expected, entry.group.id, index - 1)}
@@ -648,6 +649,7 @@ export class TillSentOrders extends LitElement {
                   ${
                     index < expected.ids.length - 1
                       ? html`<wt-button
+                          icon="menu-down"
                           data-group-later
                           ?disabled=${this.busy}
                           @click=${() => this.#reorder(expected, entry.group.id, index + 1)}

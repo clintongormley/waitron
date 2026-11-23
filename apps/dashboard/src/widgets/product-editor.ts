@@ -1,6 +1,7 @@
 import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import {
+  rowActionTail,
   FormFeedback,
   bottomMessage,
   ReorderController,
@@ -1781,6 +1782,7 @@ export class ProductEditor extends LitElement {
           align="end"
           label=${`${t("editor.modifier_actions")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
           ><wt-button
+            icon="menu-edit"
             data-test=${`edit-modifier-${key}`}
             .disabled=${this.suspended}
             @click=${(event: Event) => {
@@ -1788,20 +1790,22 @@ export class ProductEditor extends LitElement {
               this.editRelated(ref, "menu");
             }}
             >${t("action.edit")}</wt-button
-          ><wt-button
-            variant=${this.busy || !this.windowOpen ? "danger" : "secondary"}
-            data-test=${`remove-modifier-${key}`}
-            .disabled=${this.suspended}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              if (this.suspended) return;
-              this.change(
-                "modifiers",
-                this.draft.modifiers.filter((entry) => modifierKey(entry) !== key),
-              );
-            }}
-            >${t("action.remove")}</wt-button
-          ></wt-row-actions
+          >${rowActionTail(true, [
+            html`<wt-button
+              icon="menu-remove"
+              data-test=${`remove-modifier-${key}`}
+              .disabled=${this.suspended}
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                if (this.suspended) return;
+                this.change(
+                  "modifiers",
+                  this.draft.modifiers.filter((entry) => modifierKey(entry) !== key),
+                );
+              }}
+              >${t("action.remove")}</wt-button
+            >`,
+          ])}</wt-row-actions
         >
       </td>
     </tr>`;

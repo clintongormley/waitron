@@ -46,7 +46,13 @@ class PartsHost extends LitElement {
           ${columnMenu(
             label,
             { copy: () => void this.chooser.open(key), clear: () => this.clear(key) },
-            [{ label: "Follow the season", select: () => this.follow(key) }],
+            [
+              {
+                icon: "menu-follow-season",
+                label: "Follow the season",
+                select: () => this.follow(key),
+              },
+            ],
           )}
         </div>`,
     )}${this.chooser.render()}`;

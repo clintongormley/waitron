@@ -10,8 +10,10 @@ vi.mock("typescript", async (importOriginal) => {
 import { decodeEscapes, sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 const helpers: Record<string, string[]> = {
+  "apps/dashboard/src/screens/printers-screen.ts": ["#pairAgainAction"],
   "apps/dashboard/src/widgets/product-list.ts": ["#addItems"],
   "apps/dashboard/src/widgets/staff-list.ts": ["#menuItem"],
+  "apps/dashboard/src/widgets/variant-table.ts": ["#action"],
   "apps/till/src/widgets/floor-zone-menu.ts": ["#planItems"],
   "packages/adjustments/src/dashboard/reasons-screen.ts": ["#rowMenu"],
   "apps/dashboard/src/screens/themes-card.ts": ["#item"],
@@ -27,6 +29,7 @@ const helpers: Record<string, string[]> = {
     "#operatorActions",
     "#menu",
     "#reportOption",
+    "#drawerItem",
     "#tillMenu",
     "#aboutOption",
   ],
@@ -83,6 +86,7 @@ function violations(path: string, source: string): string[] {
         for (const fragment of fragments)
           for (const match of fragment.matchAll(/<wt-button\b([^>]*)>/g)) {
             const attributes = match[1]!;
+            if (!/(?:^|\s)\.?icon\s*=/.test(attributes)) failures.add("menu icon");
             if (/\balign\s*=/.test(attributes)) failures.add("menu alignment");
             if (/\bsize\s*=/.test(attributes)) failures.add("menu size");
             if (/\bvariant\s*=\s*(["'])ghost\1/.test(attributes)) failures.add("menu variant");
@@ -104,23 +108,27 @@ function violations(path: string, source: string): string[] {
 
 it.each([
   [
-    'html`<wt-row-actions><wt-button size="sm">Edit</wt-button></wt-row-actions\n >`',
+    'html`<wt-row-actions><wt-button icon="menu-edit" size="sm">Edit</wt-button></wt-row-actions\n >`',
     ["menu size"],
   ],
-  ['html`<wt-row-actions><wt-button size="sm">Edit</wt-button></wt-row-actions>`', ["menu size"]],
   [
-    'html`<dashboard-row-actions><wt-button variant="ghost">Edit</wt-button></dashboard-row-actions>`',
+    'html`<wt-row-actions><wt-button icon="menu-edit" size="sm">Edit</wt-button></wt-row-actions>`',
+    ["menu size"],
+  ],
+  [
+    'html`<dashboard-row-actions><wt-button icon="menu-edit" variant="ghost">Edit</wt-button></dashboard-row-actions>`',
     ["menu variant"],
   ],
   [
-    'html`<wt-row-actions><wt-menu-row><wt-button align="start">Edit</wt-button></wt-menu-row></wt-row-actions>`',
+    'html`<wt-row-actions><wt-menu-row><wt-button icon="menu-edit" align="start">Edit</wt-button></wt-menu-row></wt-row-actions>`',
     ["menu alignment"],
   ],
   ["css`wt-row-actions wt-button::part(button) { padding: 0; }`", ["menu CSS"]],
   ["css`:host { --wt-button-justify: start; }`", ["reserved alignment"]],
+  ["html`<wt-row-actions><wt-button>Edit</wt-button></wt-row-actions>`", ["menu icon"]],
   ['html`<wt-button align="start" size="sm">Find a bill</wt-button>`', []],
   [
-    'html`<wt-row-actions align="end"><wt-button variant="danger">Delete</wt-button></wt-row-actions>`',
+    'html`<wt-row-actions align="end"><wt-button icon="menu-delete" variant="danger">Delete</wt-button></wt-row-actions>`',
     [],
   ],
   [
@@ -139,13 +147,13 @@ it("checks a detached till action builder without treating an ordinary helper as
   expect(
     violations(
       "apps/till/src/widgets/till-shell.ts",
-      'class Shell { #tillMenu() { return html`<wt-button size="sm">Edit</wt-button>`; } }',
+      'class Shell { #tillMenu() { return html`<wt-button icon="menu-edit" size="sm">Edit</wt-button>`; } }',
     ),
   ).toEqual(["menu size"]);
   expect(
     violations(
       "apps/till/src/widgets/till-shell.ts",
-      'class Shell { #ordinary() { return html`<wt-button size="sm">Edit</wt-button>`; } }',
+      'class Shell { #ordinary() { return html`<wt-button icon="menu-edit" size="sm">Edit</wt-button>`; } }',
     ),
   ).toEqual([]);
 });
@@ -183,7 +191,7 @@ it("skips parsing sources with no possible menu ownership match", () => {
 it.each([
   ["css`:host { --wt-button-justif\\u0079: start; }`", ["reserved alignment"]],
   [
-    'html`<wt-row-\\u0061ctions><wt-button size="sm">Edit</wt-button></wt-row-\\u0061ctions>`',
+    'html`<wt-row-\\u0061ctions><wt-button icon="menu-edit" size="sm">Edit</wt-button></wt-row-\\u0061ctions>`',
     ["menu size"],
   ],
   ["css`wt-menu-row a { padding: 0; }`", ["menu CSS"]],

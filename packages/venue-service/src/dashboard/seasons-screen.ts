@@ -3,6 +3,7 @@ import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
+  rowActionTail,
   baseStyles,
   leftToBrowser,
   pageTitleStyles,
@@ -308,16 +309,22 @@ export class SeasonsScreen extends LitElement {
               pinned: "end",
               cell: (row: SeasonRow) =>
                 html`<wt-row-actions label=${`${row.name}: ${t("menu.actions")}`} align="end">
-                  <wt-button data-test="edit-season" @click=${() => this.navigate(row.key)}
+                  <wt-button
+                    icon="menu-edit"
+                    data-test="edit-season"
+                    @click=${() => this.navigate(row.key)}
                     >${t("venue.edit")}</wt-button
                   >
-                  <wt-button
-                    data-test="delete-season"
-                    variant="danger"
-                    ?disabled=${rows.length === 1}
-                    @click=${() => this.askDelete(row)}
-                    >${t("prep.delete")}</wt-button
-                  >
+                  ${rowActionTail(true, [
+                    html`<wt-button
+                      icon="menu-delete"
+                      data-test="delete-season"
+                      variant="danger"
+                      ?disabled=${rows.length === 1}
+                      @click=${() => this.askDelete(row)}
+                      >${t("prep.delete_dialog")}</wt-button
+                    >`,
+                  ])}
                 </wt-row-actions>`,
             } satisfies DataTableColumn<SeasonRow>,
           ]),

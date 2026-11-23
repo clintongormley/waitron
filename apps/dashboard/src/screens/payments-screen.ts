@@ -3,6 +3,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  rowActionTail,
   UrlStateController,
   baseStyles,
   pageTitleStyles,
@@ -2128,20 +2129,23 @@ export class PaymentsScreen extends LitElement {
         cell: (reader) =>
           html`<wt-row-actions label=${`${t("payments.reader_col_actions")}: ${reader.name}`}>
             <wt-button
+              icon="menu-edit"
               data-test=${`edit-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openEditor(reader, "edit", event)}
-              >${t("action.edit")}</wt-button
+              >${t("action.edit_dialog")}</wt-button
             >
             <wt-button
+              icon="menu-equipment-label"
               data-test=${`label-${reader.id}`}
               @click=${(event: Event) => {
                 this.#labelOpener = event.currentTarget as HTMLElement;
                 this.labelReader = reader;
               }}
-              >${t("equipment.label")}</wt-button
+              >${t("equipment.label_dialog")}</wt-button
             >
             <wt-button
+              icon="menu-details"
               data-test=${`details-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openEditor(reader, "details", event)}
@@ -2151,21 +2155,25 @@ export class PaymentsScreen extends LitElement {
               reader.canEnable &&
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
                 ? html` <wt-button
+                    icon="menu-disconnect"
                     data-test=${`unpair-${reader.id}`}
                     ?disabled=${this.busy}
                     @click=${(event: Event) => this.#openEditor(reader, "unpair", event)}
                   >
-                    ${fill("payments.unpair", { provider: this.#providerName(reader.provider) })}</wt-button
+                    ${fill("payments.unpair_dialog", { provider: this.#providerName(reader.provider) })}</wt-button
                   >`
                 : nothing
             }
-            <wt-button
-              variant=${this.busy ? "secondary" : "danger"}
-              data-test=${`delete-${reader.id}`}
-              ?disabled=${this.busy}
-              @click=${(event: Event) => this.#openDelete(reader, event)}
-              >${t("action.delete")}</wt-button
-            >
+            ${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${reader.id}`}
+                ?disabled=${this.busy}
+                @click=${(event: Event) => this.#openDelete(reader, event)}
+                >${t("action.delete_dialog")}</wt-button
+              >`,
+            ])}
           </wt-row-actions>`,
       },
     ];

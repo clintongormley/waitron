@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
-import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
@@ -235,26 +235,36 @@ export class StaffRolesScreen extends LitElement {
 
   #rowMenu(staffRole: StaffRole, index: number) {
     const last = this.staffRoles!.length - 1;
-    const item = (test: string, label: string, run: () => void) =>
-      html`<wt-button data-test=${`${test}-${staffRole.id}`} ?disabled=${this.busy} @click=${run}
+    const item = (test: string, icon: string, label: string, run: () => void) =>
+      html`<wt-button
+        icon=${`menu-${icon}`}
+        variant=${test === "delete" ? "danger" : "secondary"}
+        data-test=${`${test}-${staffRole.id}`}
+        ?disabled=${this.busy}
+        @click=${run}
         >${label}</wt-button
       >`;
     return html`<wt-row-actions label=${tf("staffing.role.actions", { name: staffRole.name })}>
-      ${item("edit", t("staffing.role.edit"), () => {
+      ${item("edit", "edit", t("staffing.role.edit_dialog"), () => {
         this.actionError = undefined;
         this.editing = staffRole;
       })}
       ${
         index > 0
-          ? item("move-up", t("staffing.role.move_up"), () => void this.#move(staffRole, -1))
+          ? item("move-up", "up", t("staffing.role.move_up"), () => void this.#move(staffRole, -1))
           : nothing
       }
       ${
         index < last
-          ? item("move-down", t("staffing.role.move_down"), () => void this.#move(staffRole, 1))
+          ? item(
+              "move-down",
+              "down",
+              t("staffing.role.move_down"),
+              () => void this.#move(staffRole, 1),
+            )
           : nothing
       }
-      ${item("delete", t("staffing.role.delete"), () => this.#openDelete(staffRole))}
+      ${rowActionTail(true, [item("delete", "delete", t("staffing.role.delete_dialog"), () => this.#openDelete(staffRole))])}
     </wt-row-actions>`;
   }
 

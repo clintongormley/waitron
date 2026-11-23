@@ -1228,8 +1228,8 @@ describe("layout", () => {
     }
   });
   it.each([
-    ["en", "Rename", "Delete"],
-    ["es", es["kitchen.rename_course"], es["action.delete"]],
+    ["en", "Rename", "Delete…"],
+    ["es", es["kitchen.rename_course"], es["action.delete_dialog"]],
   ])(
     "offers named Rename/Delete actions and focuses the editor (%s)",
     async (locale, renameText, deleteText) => {
@@ -1384,7 +1384,7 @@ describe("permanent delete", () => {
         q<HTMLElement & { label: string }>(el, 'tr[data-course="c2"] wt-row-actions')!.label,
       ).toBe("Course actions: Mains");
       const remove = q(el, '[data-test="remove-c2"]')!;
-      expect(remove.textContent!.trim()).toBe("Delete");
+      expect(remove.textContent!.trim()).toBe("Delete…");
       remove.click();
       await vi.waitFor(() =>
         expect(
@@ -1422,7 +1422,7 @@ describe("permanent delete lifecycle", () => {
         [...q(el, `tr[data-course="${id}"] wt-row-actions`)!.querySelectorAll("wt-button")].map(
           (b) => b.textContent!.trim(),
         ),
-      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
+      ).toEqual([t("kitchen.rename_course"), t("action.delete_dialog")]);
     expect(
       [...el.shadowRoot!.querySelectorAll("th")].map((h) =>
         (h.querySelector(".column-title") ?? h).textContent!.trim(),
@@ -1455,7 +1455,7 @@ describe("permanent delete lifecycle", () => {
     await settle(el);
     expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
     expect(api.listCourses).toHaveBeenCalledTimes(1);
-    expect(q(el, '[data-test="remove-c2"]')!.textContent!.trim()).toBe(t("action.delete"));
+    expect(q(el, '[data-test="remove-c2"]')!.textContent!.trim()).toBe(t("action.delete_dialog"));
   });
 
   it("waits for impact before allowing native confirmation", async () => {

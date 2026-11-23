@@ -1,6 +1,9 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
-import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
+import {
+  actionChoiceStyles,
+  actionDividerStyles,
+} from "@waitron/ui/src/components/wt-row-actions.js";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/client.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
@@ -105,7 +108,7 @@ export interface BillSwitcherOptions {
 
 /**
  * The drop-down naming the bill on screen, listing the party's shown bills in number order and,
- * always last, + New bill. Drawn whenever there is a party, even with one bill or none.
+ * always last, New bill. Drawn whenever there is a party, even with one bill or none.
  */
 export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typeof nothing {
   const { party, billId } = options;
@@ -137,27 +140,31 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
           html`<button
             type="button"
             role="menuitemradio"
-            class="option bill-switcher-item"
+            data-row-choice
             data-switch-bill=${bill.workingOrderId}
             aria-checked=${bill.workingOrderId === billId ? "true" : "false"}
             @click=${() => {
               if (bill.workingOrderId !== billId) options.onSwitch(bill.workingOrderId);
             }}
           >
-            ${billRowContent(bill, party, marked.includes(bill))}
+            <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>
+            <span class="bill-row-details"
+              >${billRowContent(bill, party, marked.includes(bill))}</span
+            >
           </button>`,
       )}
       <button
         type="button"
         role="menuitem"
-        class="option bill-switcher-item"
+        data-row-choice
         data-new-bill
         aria-disabled=${options.newBillBusy ? "true" : nothing}
         @click=${() => {
           if (!options.newBillBusy) options.onNewBill();
         }}
       >
-        ${t("table.new_bill")}
+        <wt-icon name="menu-add" size="lg"></wt-icon>
+        ${t("table.new_bill_menu")}
       </button>
     </div>
   </wt-row-actions>`;
@@ -208,7 +215,7 @@ export function tableMenu(options: TableMenuOptions): TemplateResult {
 }
 
 export const billControlStyles = css`
-  ${menuOptionStyles}
+  ${actionChoiceStyles}
   .bill-switcher::part(trigger) {
     min-height: var(--wt-tap-min);
     padding: var(--wt-space-2) var(--wt-space-3);
@@ -221,10 +228,10 @@ export const billControlStyles = css`
     display: flex;
     flex-direction: column;
   }
-  .bill-switcher-item {
+  .bill-row-details {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    flex: 1;
     gap: var(--wt-space-1);
   }
   .bill-row-head {
@@ -243,10 +250,7 @@ export const billControlStyles = css`
     font-size: var(--wt-font-size-sm);
   }
   .table-menu-rule {
-    align-self: stretch;
-    margin: 0;
-    border: 0;
-    border-block-start: 1px solid var(--wt-color-border);
+    ${actionDividerStyles}
   }
   .bill-row-unsent {
     color: var(--wt-color-text-muted);

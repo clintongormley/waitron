@@ -1,7 +1,7 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -112,19 +112,27 @@ export class StaffList extends LitElement {
         cell: (person) => html`
           <wt-row-actions label=${`${t("staff.actions")}: ${person.displayName}`}>
             <wt-button
+              icon="menu-edit"
               data-test="edit-${person.personId}"
               @click=${(event: Event) => this.#edit(event, person.personId)}
-              >${t("action.edit")}</wt-button
+              >${t("action.edit_dialog")}</wt-button
             >
-            ${this.#action(person, "reset-login", t("person.reset_login"))}
-            ${this.#action(person, "reset-pin", t("person.reset_pin"))}
+            ${this.#action(person, "reset-login", "menu-reset-login", t("person.reset_login"))}
+            ${this.#action(person, "reset-pin", "menu-reset-pin", t("person.reset_pin"))}
             ${
               person.status === "suspended"
-                ? this.#action(person, "reactivate", t("person.enable_and_invite"))
-                : this.#action(person, "disable", t("person.disable"))
+                ? this.#action(person, "reactivate", "menu-invite", t("person.enable_and_invite"))
+                : nothing
             }
-            ${person.status === "pending" ? this.#action(person, "resend-invitation", t("person.resend_invitation")) : nothing}
+            ${person.status === "pending" ? this.#action(person, "resend-invitation", "menu-resend", t("person.resend_invitation")) : nothing}
             ${this.#downloadData(person)}
+            ${
+              person.status === "suspended"
+                ? nothing
+                : rowActionTail(true, [
+                    this.#action(person, "disable", "menu-disable", t("person.disable")),
+                  ])
+            }
           </wt-row-actions>
         `,
       },
@@ -133,11 +141,12 @@ export class StaffList extends LitElement {
     return columns;
   }
 
-  #action(person: PersonSummary, action: string, label: string) {
+  #action(person: PersonSummary, action: string, icon: string, label: string) {
     if (!this.canAdminister) return nothing;
     return this.#menuItem(
       `${action}-${person.personId}`,
       action === "disable" && person.personId === this.currentPersonId,
+      icon,
       label,
       "person-action",
       { personId: person.personId, action },
@@ -149,14 +158,23 @@ export class StaffList extends LitElement {
     return this.#menuItem(
       `download-data-${person.personId}`,
       this.downloadingPersonId !== null,
+      "menu-download",
       t("person.download_data"),
       "download-person-data",
       { personId: person.personId },
     );
   }
 
-  #menuItem(test: string, disabled: boolean, label: string, name: string, detail: object) {
+  #menuItem(
+    test: string,
+    disabled: boolean,
+    icon: string,
+    label: string,
+    name: string,
+    detail: object,
+  ) {
     return html`<wt-button
+      icon=${icon}
       data-test=${test}
       ?disabled=${disabled}
       @click=${(event: Event) => {

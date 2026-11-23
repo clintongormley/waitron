@@ -313,6 +313,15 @@ be found is solid teal from the start.
 - **Card actions** on the dashboard stay secondary at rest and take a teal or red accent only on
   hover, with a fixed minimum width so a row of them reads as one set.
 
+### Row action menus
+
+- Each action fills one row with a normal-weight, start-aligned label and a muted icon in a fixed
+  column. The row has no border or fill at rest and takes a neutral fill on hover or press.
+- Delete comes last in red. Remove and Disable stay neutral. A hairline separates these actions
+  from the ordinary rows above.
+- The menu has compact padding and a 12rem minimum where the viewport has room. Use an ellipsis
+  for an action that opens a dialog asking for input or confirmation.
+
 ### Cards / Containers
 
 - **Corner Style:** 16px.

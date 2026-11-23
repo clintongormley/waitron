@@ -10,6 +10,7 @@ import {
   formatMoney,
 } from "@waitron/shared";
 import {
+  rowActionTail,
   baseStyles,
   reorder,
   visuallyHiddenStyles,
@@ -237,12 +238,6 @@ export class MenuStructureTable extends LitElement {
       wt-data-table[wrap-to-fit]::part(name-stack) {
         min-inline-size: 0;
         overflow-wrap: anywhere;
-      }
-      wt-data-table::part(menu-divider) {
-        align-self: stretch;
-        margin: var(--wt-space-1) 0;
-        border: 0;
-        border-block-start: 1px solid var(--wt-color-border);
       }
       .empty-adds {
         display: flex;
@@ -1257,10 +1252,12 @@ export class MenuStructureTable extends LitElement {
     label: string,
     variant: "secondary" | "danger",
     act: () => void,
-    align: "start" | "center" = "start",
+    icon: string,
+    align?: "center",
   ) {
     return html`<wt-button
-      align=${align}
+      align=${align ?? nothing}
+      icon=${align === "center" ? nothing : icon}
       variant=${variant}
       data-test=${test}
       .disabled=${this.busy}
@@ -1271,7 +1268,7 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  #adds(path: string[], suffix: string, align: "start" | "center" = "start") {
+  #adds(path: string[], suffix: string, align?: "center") {
     const siblings =
       path.length === 0 ? this.nodes : (this.#rowByKey.get(path.join("/"))?.node.children ?? []);
     const canPlace = this.placeableSetMenus.some(
@@ -1284,49 +1281,73 @@ export class MenuStructureTable extends LitElement {
           label(),
           "secondary",
           () => this.#send("wt-structure-add", { action, path }),
+          "menu-add",
           align,
         ),
     );
   }
 
   #remove(row: Row, label: string) {
-    return this.#button(`remove-${row.key}`, label, "secondary", () =>
-      this.#send("wt-member-remove", {
-        path: row.path.slice(0, -1),
-        memberId: row.node.memberId,
-      }),
+    return this.#button(
+      `remove-${row.key}`,
+      label,
+      "secondary",
+      () =>
+        this.#send("wt-member-remove", {
+          path: row.path.slice(0, -1),
+          memberId: row.node.memberId,
+        }),
+      "menu-remove",
     );
   }
 
   #menuItems(row: Row) {
     const { node, key } = row;
     if (node.ref.kind === "set_menu")
-      return html`${this.#button(`move-${key}`, t("menus.move_selected"), "secondary", () =>
-        this.#send("wt-set-menu-move", { key }),
-      )}${this.#remove(row, t("menus.remove_included"))}`;
+      return html`${this.#button(
+        `move-${key}`,
+        t("menus.move_selected"),
+        "secondary",
+        () => this.#send("wt-set-menu-move", { key }),
+        "menu-move",
+      )}${rowActionTail(true, [this.#remove(row, t("menus.remove_included"))])}`;
     if (node.includedMenuId)
       return html`<a
           data-test=${`source-${key}`}
           aria-disabled=${this.busy ? "true" : nothing}
           href=${`/menus/menu/${node.includedMenuId}/view/structure`}
-          >${fill("menus.open_included", {
+          ><wt-icon name="menu-open" size="lg"></wt-icon>${fill("menus.open_included", {
             name: memberName(node.ref, this.#productNames, this.#sectionNames),
           })}</a
-        >${this.#button(`edit-${key}`, t("action.edit"), "secondary", () =>
-          this.#send("wt-include-edit", {
-            path: row.path.slice(0, -1),
-            memberId: node.memberId,
-          }),
-        )}${this.#remove(row, t("menus.remove_included"))}`;
+        >${this.#button(
+          `edit-${key}`,
+          t("action.edit"),
+          "secondary",
+          () =>
+            this.#send("wt-include-edit", {
+              path: row.path.slice(0, -1),
+              memberId: node.memberId,
+            }),
+          "menu-edit",
+        )}${rowActionTail(true, [this.#remove(row, t("menus.remove_included"))])}`;
     if (node.ref.kind === "section") {
       const detail = { sectionId: node.ref.sectionId, path: row.path };
       return html`${this.#adds(row.path, row.key)}
-        <hr part="menu-divider" />
-        ${this.#button(`edit-${key}`, t("action.edit"), "secondary", () =>
-          this.#send("wt-member-edit", detail),
-        )}${this.#button(`delete-${key}`, t("action.delete"), "danger", () =>
-          this.#send("wt-member-delete", detail),
-        )}`;
+      ${this.#button(
+        `edit-${key}`,
+        t("action.edit"),
+        "secondary",
+        () => this.#send("wt-member-edit", detail),
+        "menu-edit",
+      )}${rowActionTail(true, [
+        this.#button(
+          `delete-${key}`,
+          t("action.delete"),
+          "danger",
+          () => this.#send("wt-member-delete", detail),
+          "menu-delete",
+        ),
+      ])}`;
     }
     const productId = node.ref.productId;
     return html`${
@@ -1339,10 +1360,10 @@ export class MenuStructureTable extends LitElement {
               event.preventDefault();
               this.#send("wt-edit-product", { productId });
             }}
-            >${t("product.edit")}</a
+            ><wt-icon name="menu-edit" size="lg"></wt-icon>${t("product.edit")}</a
           >`
         : nothing
-    }${this.#remove(row, fill("members.remove_from", { list: row.holder }))}`;
+    }${rowActionTail(this.#productById.has(productId), [this.#remove(row, fill("members.remove_from", { list: row.holder }))])}`;
   }
 
   /** Never marked current: the top level is the current place when no row is marked. */

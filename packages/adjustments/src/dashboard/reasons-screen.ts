@@ -13,6 +13,7 @@ import {
   type DeleteImpact,
 } from "@waitron/shared";
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   ReorderController,
@@ -1108,8 +1109,15 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #rowMenu(reason: AdjustmentReason) {
-    const item = (test: string, label: string, run: (opener: HTMLElement) => void) =>
+    const item = (
+      test: string,
+      icon: "edit" | "delete",
+      label: string,
+      run: (opener: HTMLElement) => void,
+    ) =>
       html`<wt-button
+        icon=${`menu-${icon}`}
+        variant=${icon === "delete" ? "danger" : "secondary"}
         data-test=${test}
         ?disabled=${this.busy}
         @click=${(event: Event) => {
@@ -1123,12 +1131,14 @@ export class AdjustmentReasonsScreen extends LitElement {
       align="end"
       label=${`${t("adjustments.column.actions")}: ${reason.name}`}
     >
-      ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
+      ${item(`edit-${reason.id}`, "edit", t("adjustments.edit_dialog"), (opener) =>
         this.#open({ reason }, opener),
       )}
-      ${item(`delete-${reason.id}`, t("adjustments.delete"), (opener) =>
-        this.#openDelete(reason, opener),
-      )}
+      ${rowActionTail(true, [
+        item(`delete-${reason.id}`, "delete", t("adjustments.delete_dialog"), (opener) =>
+          this.#openDelete(reason, opener),
+        ),
+      ])}
     </wt-row-actions>`;
   }
 

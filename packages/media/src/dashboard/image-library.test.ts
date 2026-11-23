@@ -94,11 +94,11 @@ it("offers no label filter, no labels field and no alt-text field", async () => 
 });
 
 for (const { locale, edit, remove, use } of [
-  { locale: "en-GB", edit: "Edit", remove: "Delete", use: "Use image" },
+  { locale: "en-GB", edit: "Edit", remove: "Delete…", use: "Use image" },
   {
     locale: "es-ES",
     edit: MEDIA_STRINGS.es["action.edit"],
-    remove: MEDIA_STRINGS.es["image.delete"],
+    remove: MEDIA_STRINGS.es["image.delete_dialog"],
     use: MEDIA_STRINGS.es["image.select"],
   },
 ]) {
@@ -130,6 +130,8 @@ for (const { locale, edit, remove, use } of [
           `a button named "${label}: ${name}"`,
         ).not.toBeNull();
       }
+      await userEvent.keyboard("{Escape}");
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
     }
   });
 }

@@ -1,4 +1,5 @@
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   draftScopeFor,
@@ -357,26 +358,32 @@ export class AccessRolesScreen extends LitElement {
         pinned: "end",
         cell: (role) =>
           html` <wt-row-actions label=${`${t("access_roles.actions")}: ${accessRoleName(role)}`}>
-            <wt-button @click=${() => this.#open(role)}>${t("action.edit")}</wt-button>
+            <wt-button icon="menu-edit" @click=${() => this.#open(role)}
+              >${t("action.edit")}</wt-button
+            >
             <wt-button
+              icon="menu-copy"
               ?disabled=${!this.#canChange(role)}
               @click=${() => {
                 this.#open(role);
                 this.#ask("copy", true);
               }}
-              >${t("access_roles.copy")}</wt-button
+              >${t("access_roles.copy_dialog")}</wt-button
             >
             ${
               !role.builtInKey
-                ? html`<wt-button
-                    variant="danger"
-                    ?disabled=${!this.#canChange(role)}
-                    @click=${() => {
-                      this.#open(role);
-                      this.#ask("delete", true);
-                    }}
-                    >${t("action.delete")}</wt-button
-                  >`
+                ? html`${rowActionTail(true, [
+                    html`<wt-button
+                      icon="menu-delete"
+                      variant="danger"
+                      ?disabled=${!this.#canChange(role)}
+                      @click=${() => {
+                        this.#open(role);
+                        this.#ask("delete", true);
+                      }}
+                      >${t("action.delete_dialog")}</wt-button
+                    >`,
+                  ])}`
                 : nothing
             }
           </wt-row-actions>`,

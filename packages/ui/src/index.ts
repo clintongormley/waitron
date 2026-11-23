@@ -176,7 +176,7 @@ export {
 export { NavigationGuard, navigationGuardFor, type NavigationLeave } from "./navigation-guard.js";
 export { captureAppLinks, leftToBrowser } from "./app-links.js";
 
-export { WtRowActions } from "./components/wt-row-actions.js";
+export { WtRowActions, rowActionTail } from "./components/wt-row-actions.js";
 export { WtMenuRow } from "./components/wt-menu-row.js";
 export { WtHelpSwitch } from "./components/wt-help-switch.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";

@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   draftScopeFor,
@@ -334,6 +335,7 @@ export class ModulesScreen extends LitElement {
           row.category === "module" && this.canManageModules
             ? html`<wt-row-actions label=${this.#name(row)}
                 ><wt-button
+                  icon=${row.enabled ? "menu-disable" : "menu-invite"}
                   data-test=${`switch-${row.id}`}
                   @click=${() => {
                     this.switching = row;
@@ -354,6 +356,23 @@ export class ModulesScreen extends LitElement {
       (provider) => provider.providerId === row.id && provider.state === "connected",
     );
     if (!panel && !connected) return nothing;
+    const canSwitch =
+      panel &&
+      this.canManageProviders &&
+      this.menu?.find((module) => module.id === "payments" && module.category === "module")
+        ?.enabled !== false;
+    const switchModule = canSwitch
+      ? html`<wt-button
+          icon=${row.enabled ? "menu-disable" : "menu-invite"}
+          data-test=${`switch-${row.id}`}
+          @click=${() => {
+            this.switching = row;
+            this.switchError = "";
+            this.readerNames = [];
+          }}
+          >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+        >`
+      : nothing;
     return html`<wt-row-actions
       label=${this.#name(row)}
       @click=${(event: Event) => {
@@ -371,29 +390,16 @@ export class ModulesScreen extends LitElement {
           this.armedDisconnectId = null;
       }}
     >
-      ${panel ? html`<wt-button data-test=${`configure-${row.id}`} @click=${(event: Event) => this.#configure(row, event)}>${text("modules.configure")}</wt-button>` : nothing}
-      ${
-        panel &&
-        this.canManageProviders &&
-        this.menu?.find((module) => module.id === "payments" && module.category === "module")
-          ?.enabled !== false
-          ? html`<wt-button
-              data-test=${`switch-${row.id}`}
-              @click=${() => {
-                this.switching = row;
-                this.switchError = "";
-                this.readerNames = [];
-              }}
-              >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
-            >`
-          : nothing
-      }
-      ${
+      ${panel ? html`<wt-button icon="menu-settings" data-test=${`configure-${row.id}`} @click=${(event: Event) => this.#configure(row, event)}>${text("modules.configure")}</wt-button>` : nothing}
+      ${row.enabled ? nothing : switchModule}
+      ${rowActionTail(panel, [
+        row.enabled ? switchModule : nothing,
         connected
           ? html`<wt-button
+                icon="menu-disconnect"
                 data-keep-open
                 data-test=${`disconnect-${row.id}`}
-                variant=${this.armedDisconnectId === row.id ? "danger" : "ghost"}
+                variant="danger"
                 data-armed=${this.armedDisconnectId === row.id ? "true" : nothing}
                 ?disabled=${this.busy}
                 @click=${() => this.#onDisconnect(row.id)}
@@ -410,8 +416,8 @@ export class ModulesScreen extends LitElement {
                   this.refusedDisconnectId = null;
                 }}
               ></wt-toast>`
-          : nothing
-      }
+          : nothing,
+      ])}
     </wt-row-actions>`;
   }
   override render() {

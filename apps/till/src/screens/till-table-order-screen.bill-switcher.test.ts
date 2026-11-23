@@ -34,7 +34,7 @@ const switcher = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]");
 const closedLabel = (el: TillTableOrderScreen) =>
   switcher(el)!.querySelector("[data-bill-switcher-label]")!.textContent!.trim();
-/** The open list's items in order: each bill's row text, then "+ New bill". */
+/** The open list's items in order: each bill's row text, then "New bill". */
 const items = (el: TillTableOrderScreen) =>
   [...switcher(el)!.querySelectorAll<HTMLElement>("[data-switch-bill], [data-new-bill]")].map(
     (item) => item.textContent!.replace(/\s+/g, " ").trim(),
@@ -53,11 +53,27 @@ afterEach(() => {
 });
 
 describe("A803 switcher: the table screen's bill switcher", () => {
-  it("one bill: the closed label names it and what it owes; the list holds it, then + New bill", async () => {
+  it("one bill: the closed label names it and what it owes; the list holds it, then New bill", async () => {
     const el = await mountScreen(one, "wo-1");
 
     expect(closedLabel(el)).toBe("Bill 1 · €38.50");
-    expect(items(el)).toEqual(["Bill 1 €38.50", "+ New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €38.50", "New bill"]);
+  });
+
+  it("lines up the selected tick, the empty check column and the New bill icon", async () => {
+    const el = await mountScreen(three, "wo-2");
+    const menu = switcher(el)!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    const state = (selector: string) =>
+      menu.querySelector(selector)!.querySelector<HTMLElementTagNameMap["wt-icon"]>("wt-icon");
+    const unselected = state('[data-switch-bill="wo-1"]')!;
+    const selected = state('[data-switch-bill="wo-2"]')!;
+    const add = state("[data-new-bill]")!;
+    expect(selected?.getAttribute("name")).toBe("menu-check");
+    expect(add?.getAttribute("name")).toBe("menu-add");
+    expect(getComputedStyle(unselected).visibility).toBe("hidden");
+    expect(unselected.getBoundingClientRect().width).toBe(selected.getBoundingClientRect().width);
+    expect(selected.getBoundingClientRect().left).toBe(add.getBoundingClientRect().left);
   });
 
   it("three bills: a count in the closed label, rows in number order with what each owes, Paid, a name, and who has unsent dishes", async () => {
@@ -81,7 +97,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
       "Bill 3 Paid ✓",
-      "+ New bill",
+      "New bill",
     ]);
     const current = switcher(el)!.querySelector('[data-switch-bill="wo-1"]')!;
     expect(current.getAttribute("aria-checked")).toBe("true");
@@ -107,7 +123,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
       "Bill 3 · 2 bills · Deferred payment ▾",
     );
-    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "+ New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "New bill"]);
   });
 
   it("says Paid for a paid bill on screen", async () => {
@@ -126,7 +142,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     ]);
   });
 
-  it("+ New bill is the last item with one bill and with three", async () => {
+  it("New bill is the last item with one bill and with three", async () => {
     for (const bills of [one, three]) {
       const el = await mountScreen(bills, "wo-1");
       const all = [...switcher(el)!.querySelectorAll<HTMLElement>("button")];
@@ -145,7 +161,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(merged, "wo-1");
 
     expect(closedLabel(el)).toBe("Bill 1 · 2 bills · €67.00");
-    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "+ New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "New bill"]);
   });
 
   it("a table holding Bills 1 and 4 names Bill 4 and counts 2 bills apart from it", async () => {
@@ -176,7 +192,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(seen).toEqual([]);
   });
 
-  it("+ New bill dispatches new-bill", async () => {
+  it("New bill dispatches new-bill", async () => {
     const el = await mountScreen(one, "wo-1");
     const seen = capture(el, "new-bill");
     const switched = capture(el, "switch-bill");
@@ -187,7 +203,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(switched).toEqual([]);
   });
 
-  it("+ New bill is drawn quiet and marked aria-disabled while one is out, and a tap on it then sends nothing", async () => {
+  it("New bill is drawn quiet and marked aria-disabled while one is out, and a tap on it then sends nothing", async () => {
     const el = await mountScreen(one, "wo-1");
     const seen = capture(el, "new-bill");
     const newBill = () => switcher(el)!.querySelector<HTMLElement>("[data-new-bill]")!;
@@ -205,7 +221,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
   it("uses shared choice spacing without losing the bill's two columns", async () => {
     const el = await mountScreen(three, "wo-1");
-    el.style.setProperty("--wt-space-4", "23px");
+    el.style.setProperty("--wt-space-3", "23px");
     await userEvent.click(switcher(el)!.shadowRoot!.querySelector("button")!);
     const item = switcher(el)!.querySelector<HTMLElement>("[data-switch-bill]")!;
     expect(getComputedStyle(item).paddingInlineStart).toBe("23px");
@@ -228,17 +244,17 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen([partyBill("wo-1", null, "38.50")], "wo-1");
 
     expect(closedLabel(el)).toBe("Bill · €38.50");
-    expect(items(el)).toEqual(["Bill €38.50", "+ New bill"]);
+    expect(items(el)).toEqual(["Bill €38.50", "New bill"]);
   });
 
-  it("a party with no shown bill draws Bills with only + New bill", async () => {
+  it("a party with no shown bill draws Bills with only New bill", async () => {
     const el = await mountScreen(
       [partyBill("wo-1", null, "0.00", { status: "abandoned" })],
       undefined,
     );
 
     expect(closedLabel(el)).toBe("Bills");
-    expect(items(el)).toEqual(["+ New bill"]);
+    expect(items(el)).toEqual(["New bill"]);
   });
 
   it("no party: no switcher", async () => {
@@ -251,7 +267,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     [20, 390, 844],
     [40, 375, 667],
   ])(
-    "with %i bills at %ix%i the open list fits the window and scrolls + New bill fully into view",
+    "with %i bills at %ix%i the open list fits the window and scrolls New bill fully into view",
     async (count, width, height) => {
       const frame = [innerWidth, innerHeight] as const;
       await page.viewport(width, height);

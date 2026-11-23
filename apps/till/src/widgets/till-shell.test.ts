@@ -1609,7 +1609,7 @@ describe("till-shell at phone width", () => {
         await button.updateComplete;
         expect(button.variant).toBe("secondary");
         expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-          "center",
+          "start",
         );
       }
 
@@ -2216,7 +2216,7 @@ describe("till-shell above phone width", () => {
         await button.updateComplete;
         expect(button.variant).toBe("secondary");
         expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-          "center",
+          "start",
         );
       }
       const session = el.shadowRoot!.querySelector("header .session")!;

@@ -67,9 +67,9 @@ describe("till-party-guests-dialog", () => {
 
   it("names its Guests action in the order screen's menu", () => {
     setLocale("en");
-    expect(t("table.action_guests")).toBe("Guests");
+    expect(t("table.action_guests")).toBe("Guests…");
     setLocale("es");
-    expect(t("table.action_guests")).toBe("Comensales");
+    expect(t("table.action_guests")).toBe("Comensales…");
   });
 
   it("puts the cursor in the guests field when it opens", async () => {

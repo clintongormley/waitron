@@ -79,6 +79,7 @@ export function isDeleteKey(event: KeyboardEvent): boolean {
 }
 
 export interface ColumnMenuItem {
+  icon: string;
   label: string;
   select: () => void;
 }
@@ -93,9 +94,10 @@ export function columnMenu(
     icon="kebab"
     align="end"
     label=${t("paint.day_options").replace("{day}", label)}
-    ><wt-button @click=${actions.copy}>${t("paint.copy_to")}</wt-button
-    ><wt-button @click=${actions.clear}>${t("paint.clear")}</wt-button>${extra.map(
-      (item) => html`<wt-button @click=${item.select}>${item.label}</wt-button>`,
+    ><wt-button icon="menu-copy" @click=${actions.copy}>${t("paint.copy_to")}</wt-button
+    ><wt-button icon="menu-clear" @click=${actions.clear}>${t("paint.clear")}</wt-button
+    >${extra.map(
+      (item) => html`<wt-button icon=${item.icon} @click=${item.select}>${item.label}</wt-button>`,
     )}</wt-row-actions
   >`;
 }

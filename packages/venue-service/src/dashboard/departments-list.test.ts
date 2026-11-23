@@ -389,7 +389,7 @@ describe("department list", () => {
     expect(rows(el)[1]!.textContent).toContain(VENUE_SERVICE_STRINGS.es["venue.counter_service"]);
     expect(table(el).shadowRoot!.querySelectorAll('[data-row-key^="zone:"]')).toHaveLength(2);
     expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe(
-      VENUE_SERVICE_STRINGS.es["venue.delete"],
+      VENUE_SERVICE_STRINGS.es["venue.delete_dialog"],
     );
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
       "No hay ningún departamento disponible: añade uno para aceptar pedidos",

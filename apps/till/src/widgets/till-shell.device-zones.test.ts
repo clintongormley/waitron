@@ -252,7 +252,7 @@ it("a handheld More menu with the vibrate switch follows ☰ through a rotation 
     const more = await openHandheldMore([]);
     expect(more.menu.querySelector('[data-test="press-buzz-switch"]')).not.toBeNull();
     const logout = more.menu.querySelector<HTMLElement>("wt-button.logout")!;
-    await more.resizeUntilTriggerMoves(844, 480);
+    await more.resizeUntilTriggerMoves(844, 440);
     await vi.waitFor(() =>
       expect(more.popup.scrollHeight).toBeGreaterThan(more.popup.clientHeight),
     );

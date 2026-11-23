@@ -727,13 +727,15 @@ export class MenuPublicationsPanel extends LitElement {
             : html`<wt-row-actions
                 label=${`${t("menu_publications.actions")}: ${versionWords(edition)}`}
                 ><wt-button
+                  icon="menu-move"
                   data-test=${`move-${edition.versionId}`}
                   @click=${(event: Event) => this.#openMove(edition, event)}
-                  >${t("menu_publications.move")}</wt-button
+                  >${t("menu_publications.move_dialog")}</wt-button
                 ><wt-button
+                  icon="menu-cancel-publication"
                   data-test=${`cancel-${edition.versionId}`}
                   @click=${(event: Event) => this.#openCancel(edition, event)}
-                  >${t("menu_publications.cancel")}</wt-button
+                  >${t("menu_publications.cancel_dialog")}</wt-button
                 ></wt-row-actions
               >`,
       },

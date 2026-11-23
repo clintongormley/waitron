@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leftToBrowser, type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, baseStyles, leftToBrowser, type DataTableColumn } from "@waitron/ui";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -252,10 +252,27 @@ export class DepartmentsList extends LitElement {
     const department = row.kind === "department";
     const actions = department
       ? [
-          { key: `open-department-${row.id}`, label: t("venue.edit"), event: "open-department" },
-          { key: `add-zone-${row.id}`, label: t("venue.add_department_zone"), event: "add-zone" },
+          {
+            icon: "menu-edit",
+            key: `open-department-${row.id}`,
+            label: t("venue.edit"),
+            event: "open-department",
+          },
+          {
+            icon: "menu-add",
+            key: `add-zone-${row.id}`,
+            label: t("venue.add_department_zone"),
+            event: "add-zone",
+          },
         ]
-      : [{ key: `edit-zone-${row.id}`, label: t("venue.edit"), event: "edit-zone" }];
+      : [
+          {
+            icon: "menu-edit",
+            key: `edit-zone-${row.id}`,
+            label: t("venue.edit"),
+            event: "edit-zone",
+          },
+        ];
     const detail = department ? { departmentId: row.id } : { zoneId: row.id };
     return html`<wt-row-actions
       data-zone-id=${department ? nothing : row.id}
@@ -265,6 +282,7 @@ export class DepartmentsList extends LitElement {
       ${actions.map(
         (action) =>
           html`<wt-button
+            icon=${action.icon}
             data-test=${action.key}
             ?disabled=${!department && this.moving.has(row.id)}
             @click=${() => {
@@ -273,16 +291,19 @@ export class DepartmentsList extends LitElement {
             >${action.label}</wt-button
           >`,
       )}
-      <wt-button
-        variant="danger"
-        data-test=${`delete-${row.kind}-${row.id}`}
-        ?disabled=${!department && this.moving.has(row.id)}
-        @click=${() => {
-          if (department || !this.moving.has(row.id))
-            this.#emit(department ? "delete-department" : "delete-zone", detail);
-        }}
-        >${t("venue.delete")}</wt-button
-      >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`delete-${row.kind}-${row.id}`}
+          ?disabled=${!department && this.moving.has(row.id)}
+          @click=${() => {
+            if (department || !this.moving.has(row.id))
+              this.#emit(department ? "delete-department" : "delete-zone", detail);
+          }}
+          >${t("venue.delete_dialog")}</wt-button
+        >`,
+      ])}
     </wt-row-actions>`;
   }
 
