@@ -339,12 +339,6 @@ signed in, and it passed (the dated block in
 design's target. A second box is a choice for later venues (the owner's answer to question 4 of
 that design).
 
-- **What the real-box runs have not shown (left open by A947).** The records of 18, 20 and 23
-  November in the design's §11 do not show these parts of its rehearsal: a plug pulled mid-sale,
-  the old box rejoining as the spare by itself, a switch back, a switch with the internet
-  unplugged, or every box's and till's clock read at the start and the end. Nor do they show, on
-  till hardware, two-part `.local` names, the name cache after the main box dies, a passkey at each
-  way in, or the same-site cookie.
 - **Three limits 3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)) left in a
   box's certificate check.** A box in the waiting start (waiting for its peers) or a restricted
   start (handed over or superseded) serves its certificate before `ensureLeaf`
@@ -606,8 +600,7 @@ Slice 3.
   [Detail](replication-cloud.md#adoption-transaction-boundaries-and-remaining-fixture-wording)
 - **Boot membership fetch.** The credential-free chart read remains.
   [Detail](replication-cloud.md#boot-membership-fetch)
-- **Replication, membership & failover residuals.** The rehearsal parts and till-hardware checks
-  A947's real-box runs did not show, the setup-wizard choice, carry-in qualification,
+- **Replication, membership & failover residuals.** The setup-wizard choice, carry-in qualification,
   retirement, re-admission, restore/promotion, certificates and payment qualification remain.
   [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)
 - **Task 1a: unverified concurrency claims.** Promotion, sealing and scheduler takeover.

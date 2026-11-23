@@ -1327,6 +1327,14 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Two local boxes with failover are built and checked on real boxes; this
 section records what remains.
 
+- **A1567. Before the first two-box venue goes live: rehearse the parts the 18, 20 and 23 November
+  runs did not show** (watcher, 2026-11-23; the design makes the rehearsal a condition of going live
+  on two boxes). On real boxes: a plug pulled mid-sale, the old box rejoining as the spare by
+  itself, a switch back, a switch with the internet unplugged, and every box's and till's clock read
+  at the start and the end. On till hardware: two-part `.local` names, the name cache after the main
+  box dies, a passkey at each way in, and the same-site cookie. Needs the owner at the boxes.
+  [Design §11](superpowers/specs/2026-10-21-a947-two-box-failover-design.md#11-build-order-slices-35-as-pull-requests)
+
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
   exists (decision D7); the bucket-copy risk in the detail stays open.
