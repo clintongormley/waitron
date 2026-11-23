@@ -278,7 +278,6 @@ describe("product editor save", () => {
       unitPrice: "4.00",
       active: true,
       available: true,
-      vatClass: "general",
       takeawayVatRate: "21.00",
       image: null,
       variants: named,
@@ -287,8 +286,8 @@ describe("product editor save", () => {
       allergens: null,
       dietaryDeclarations: [],
       color: null,
-    }) satisfies ProductEditorInput;
-  const save = (productId: string | null, input: ProductEditorInput) =>
+    }) satisfies Omit<ProductEditorInput, "vatClass">;
+  const save = (productId: string | null, input: Omit<ProductEditorInput, "vatClass">) =>
     app((tx) => saveProductEditor(tx, productId, input, "en"));
 
   it("refuses a new product named like another, beside its Name", async () => {
@@ -379,7 +378,6 @@ describe("product editor save", () => {
           unitPrice: null,
           active: true,
           available: true,
-          vatClass: null,
           takeawayVatRate: null,
           image: null,
           variants: [],

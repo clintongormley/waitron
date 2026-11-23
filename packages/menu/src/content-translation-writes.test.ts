@@ -20,6 +20,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createMenu, createProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
+import { saveBodyOf } from "../test/save-body.js";
 import { setProductVariants } from "./variants.js";
 import { createOptionList, getOptionList, updateOptionList } from "./options.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
@@ -174,7 +175,7 @@ async function existingWrite(
 ) {
   if (kind === "product" || kind === "variant") {
     const value = await readProductEditor(tx, ids[kind]);
-    return saveProductEditor(tx, ids[kind], { ...value, customerName: names }, "en");
+    return saveProductEditor(tx, ids[kind], { ...saveBodyOf(value), customerName: names }, "en");
   }
   if (kind === "option_list" || kind === "option_label") {
     const { id, ...value } = await getOptionList(tx, ids.option_list);
@@ -182,7 +183,7 @@ async function existingWrite(
       tx,
       id,
       kind === "option_list"
-        ? { ...value, customerName: names }
+        ? { ...saveBodyOf(value), customerName: names }
         : {
             ...value,
             labels: value.labels.map((label) =>
@@ -194,7 +195,7 @@ async function existingWrite(
   }
   if (kind === "extra_list") {
     const { id, ...value } = await getExtraList(tx, ids.extra_list);
-    return updateExtraList(tx, id, { ...value, customerName: names }, "en");
+    return updateExtraList(tx, id, { ...saveBodyOf(value), customerName: names }, "en");
   }
   return updateUnit(tx, ids.unit, { name: names }, "en");
 }

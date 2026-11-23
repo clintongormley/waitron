@@ -21,7 +21,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 let menuId = "";
 let productId = "";
-let body: ProductEditorInput;
+let body: Omit<ProductEditorInput, "vatClass">;
 
 beforeEach(async () => {
   await seedVenueWithSeries(fx.db);
@@ -50,7 +50,6 @@ beforeEach(async () => {
       unitPrice: "4.50",
       active: true,
       available: true,
-      vatClass: "reduced",
       takeawayVatRate: "10.00",
       variants: [],
       primaryCategoryId: null,

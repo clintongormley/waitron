@@ -17,6 +17,7 @@ import { createCategory } from "./categories.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
+import { saveMenuSettings } from "./settings.js";
 import { readTakeawayVatSchedules } from "./takeaway-vat-rates.js";
 import {
   countingSettingsReads,
@@ -147,9 +148,7 @@ describe("one save builds one query on the content-language setting", () => {
       );
       return counting.reads();
     });
-    // The venue's settings once, and the menu settings once for the new product's hidden eat-in
-    // class; neither is read again per variant.
-    expect(reads).toBe(2);
+    expect(reads).toBe(1);
   });
 
   it("by a variant save of three named variants", async () => {
@@ -185,6 +184,17 @@ it("reads a product with no unit as unitId null", async () => {
   );
   const value = await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id));
   expect(value.unitId).toBeNull();
+});
+
+it("gives a new product the eat-in class saved as the menu settings' hidden default", async () => {
+  await withTransaction(fx.db, (tx) => saveMenuSettings(tx, { defaultProductVatClass: "zero" }));
+  const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
+  expect(saved.vatClass).toBe("zero");
+  const [row] = await fx.db
+    .select({ vatClass: products.vatClass })
+    .from(products)
+    .where(eq(products.id, saved.id));
+  expect(row).toEqual({ vatClass: "zero" });
 });
 
 it("saves and reads the canonical editor shape with independent content and variants", async () => {

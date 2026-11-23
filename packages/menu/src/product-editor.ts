@@ -1,5 +1,12 @@
-import { eq } from "drizzle-orm";
-import { now, products, readSettings, VENUE_SETTINGS, type Transaction } from "@waitron/db";
+import { eq, inArray } from "drizzle-orm";
+import {
+  decodeSettingsRow,
+  now,
+  products,
+  settings,
+  VENUE_SETTINGS,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { contentLanguagesOr, savedContentLanguagesIn } from "./content-languages.js";
@@ -12,6 +19,7 @@ import {
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { priceOrNull } from "./offer-price.js";
 import { archiveProducts } from "./archive.js";
+import { MENU_SETTINGS } from "./settings.js";
 import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
@@ -162,7 +170,18 @@ export async function saveProductEditor(
     await archiveProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
-  const venue = await readSettings(tx, VENUE_SETTINGS);
+  // One read for both documents: a create also needs the menu settings' hidden eat-in class.
+  const settingsRows = await tx
+    .select({
+      module: settings.module,
+      version: settings.version,
+      revision: settings.revision,
+      doc: settings.doc,
+    })
+    .from(settings)
+    .where(inArray(settings.module, [VENUE_SETTINGS.module, MENU_SETTINGS.module]));
+  const settingsRow = (module: string) => settingsRows.find((row) => row.module === module);
+  const venue = decodeSettingsRow(settingsRow(VENUE_SETTINGS.module), VENUE_SETTINGS);
   const config = contentLanguagesOr(savedContentLanguagesIn(venue.doc), fallbackLanguage);
   const body = input as Record<string, unknown>;
   if (productId !== null) {
@@ -206,6 +225,8 @@ export async function saveProductEditor(
         unitId: value.unitId,
         // The parser refuses a blank on a product with no parent, which every created one is.
         unitPrice: value.unitPrice!,
+        vatClass: decodeSettingsRow(settingsRow(MENU_SETTINGS.module), MENU_SETTINGS).doc
+          .defaultProductVatClass,
         takeawayVatRate: value.takeawayVatRate!,
         active: value.active,
         available: value.available ?? true,
