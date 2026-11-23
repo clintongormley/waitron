@@ -14,6 +14,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import { seedPerson } from "@waitron/identity/test/fixtures.js";
+import { jobOrigin } from "@waitron/shared";
+import { appendToChain, type TimeEntryAppend } from "@waitron/workforce";
 import {
   seedFiredOrder,
   seedKitchenStation,
@@ -203,7 +205,7 @@ describe("the old box's Activity tab", () => {
       const names = strFromU8(
         unzipSync(await build({ kind: "all" }, language))["xl/workbook.xml"]!,
       );
-      expect(names).toContain(`<sheet name="${words.activitySheet}" sheetId="4"`);
+      expect(names).toContain(`<sheet name="${words.activitySheet}" sheetId="5"`);
     },
   );
 
@@ -499,6 +501,7 @@ describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
       es.invoiceSheet,
       es.ordersSheet,
       es.paymentsSheet,
+      es.hoursSheet,
       es.activitySheet,
     ]);
     const orders = sheet(bytes, es.ordersSheet)!;
@@ -529,5 +532,154 @@ describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
     // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
     expect(es.ordersSheet).not.toBe(OLD_BOX_DATA_WORDS.en.ordersSheet);
     expect(es.paymentKinds.part).not.toBe(OLD_BOX_DATA_WORDS.en.paymentKinds.part);
+  });
+});
+
+describe("the old box's Working hours tab", () => {
+  async function clocked(
+    personId: string,
+    recordedAtMs: number,
+    entry: Partial<TimeEntryAppend> = {},
+  ): Promise<string> {
+    const { id } = await withTransaction(suite.db, (tx) =>
+      appendToChain(
+        tx,
+        { nodeId: venue.nodeId },
+        {
+          personId,
+          entryKind: "in",
+          eventAt: new Date(recordedAtMs - MINUTE).toISOString(),
+          eventOffsetMinutes: 60,
+          recordedByPersonId: personId,
+          origin: jobOrigin("dashboard"),
+          ...entry,
+        },
+        () => new Date(recordedAtMs),
+      ),
+    );
+    return id;
+  }
+
+  function correction(
+    target: string,
+    status: "approved" | "disputed",
+    reason: string,
+    actor: string,
+  ): Partial<TimeEntryAppend> {
+    return {
+      entryKind: "correction",
+      correctsEntryId: target,
+      correctionStatus: status,
+      correctionReason: reason,
+      correctionActorId: actor,
+      recordedByPersonId: actor,
+      extension: {
+        authorKind: "manager",
+        direction: "manager_proposal",
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    };
+  }
+
+  it("lists time entries recorded from the cutoff with the person's name, and not earlier ones", async () => {
+    const en = OLD_BOX_DATA_WORDS.en;
+    const marta = await namedPerson("Marta Ruiz");
+    const early = await clocked(marta, CUTOFF - 1000);
+    const atCutoff = await clocked(marta, CUTOFF, { entryKind: "out" });
+    const later = await clocked(marta, CUTOFF + 60 * MINUTE, { entryKind: "break_start" });
+    const xml = sheet(await build({ kind: "copy", fromMs: CUTOFF }), en.hoursSheet)!;
+    expect(row(xml, 1)).toEqual([en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC")]);
+    expect(row(xml, 2)).toEqual([...en.hoursColumns]);
+    expect(row(xml, 3)).toEqual([
+      "Marta Ruiz",
+      en.entryKinds.out,
+      iso(CUTOFF - MINUTE),
+      iso(CUTOFF),
+      "",
+      "",
+      "",
+      atCutoff,
+    ]);
+    expect(row(xml, 4)).toEqual([
+      "Marta Ruiz",
+      en.entryKinds.break_start,
+      iso(CUTOFF + 59 * MINUTE),
+      iso(CUTOFF + 60 * MINUTE),
+      "",
+      "",
+      "",
+      later,
+    ]);
+    expect(row(xml, 5)).toEqual([]);
+    expect(xml).not.toContain(early);
+    const all = sheet(await build({ kind: "all" }), en.hoursSheet)!;
+    expect(row(all, 3)[7]).toBe(early);
+    const names = strFromU8(unzipSync(await build({ kind: "all" }))["xl/workbook.xml"]!);
+    expect([...names.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      en.invoiceSheet,
+      en.ordersSheet,
+      en.paymentsSheet,
+      en.hoursSheet,
+      en.activitySheet,
+    ]);
+  });
+
+  it("a correction names the entry it corrects, its status and reason", async () => {
+    const en = OLD_BOX_DATA_WORDS.en;
+    const marta = await namedPerson("Marta Ruiz");
+    const luis = await namedPerson("Luis Gil");
+    const first = await clocked(marta, CUTOFF);
+    const approved = await clocked(
+      marta,
+      CUTOFF + MINUTE,
+      correction(first, "approved", "Forgot to clock in", luis),
+    );
+    const disputed = await clocked(
+      marta,
+      CUTOFF + 2 * MINUTE,
+      correction(first, "disputed", "Started later", luis),
+    );
+    const xml = sheet(await build({ kind: "copy", fromMs: CUTOFF }), en.hoursSheet)!;
+    expect(row(xml, 4)).toEqual([
+      "Marta Ruiz",
+      en.entryKinds.correction,
+      iso(CUTOFF),
+      iso(CUTOFF + MINUTE),
+      first,
+      en.correctionStatuses.approved,
+      "Forgot to clock in",
+      approved,
+    ]);
+    expect(row(xml, 5)).toEqual([
+      "Marta Ruiz",
+      en.entryKinds.correction,
+      iso(CUTOFF + MINUTE),
+      iso(CUTOFF + 2 * MINUTE),
+      first,
+      en.correctionStatuses.disputed,
+      "Started later",
+      disputed,
+    ]);
+  });
+
+  it("in Spanish", async () => {
+    const es = OLD_BOX_DATA_WORDS.es;
+    const marta = await namedPerson("Marta Ruiz");
+    const luis = await namedPerson("Luis Gil");
+    const first = await clocked(marta, CUTOFF);
+    await clocked(marta, CUTOFF + MINUTE, correction(first, "disputed", "Started later", luis));
+    const xml = sheet(await build({ kind: "all" }, "es"), es.hoursSheet)!;
+    expect(row(xml, 1)).toEqual([es.sinceAllIntro]);
+    expect(row(xml, 2)).toEqual([...es.hoursColumns]);
+    expect(row(xml, 3)[1]).toBe(es.entryKinds.in);
+    expect(row(xml, 4)[1]).toBe(es.entryKinds.correction);
+    expect(row(xml, 4)[5]).toBe(es.correctionStatuses.disputed);
+    // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
+    expect(es.hoursSheet).not.toBe(OLD_BOX_DATA_WORDS.en.hoursSheet);
+    expect(es.correctionStatuses.disputed).not.toBe(
+      OLD_BOX_DATA_WORDS.en.correctionStatuses.disputed,
+    );
   });
 });

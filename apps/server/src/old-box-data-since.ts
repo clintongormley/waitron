@@ -11,6 +11,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { payments } from "@waitron/payments";
+import { timeEntries } from "@waitron/workforce";
 import {
   centsToDecimal,
   staffPresentationName,
@@ -60,6 +61,40 @@ export async function readActivitySince(db: Database, rule: SinceRule): Promise<
     .where(rule.kind === "all" ? undefined : gte(activityLog.at, new Date(rule.fromMs)))
     .orderBy(asc(activityLog.at), asc(activityLog.id));
   return rows.map((row) => ({ ...row, at: row.at.toISOString() }));
+}
+
+export interface TimeEntryRow {
+  personName: string | null;
+  entryKind: string;
+  eventAt: string;
+  recordedAt: string;
+  correctsEntryId: string | null;
+  correctionStatus: string | null;
+  correctionReason: string | null;
+  id: string;
+}
+
+/** `time_entries` recorded from the rule's start, oldest first; reads only, with the database handle. */
+export async function readTimeEntriesSince(db: Database, rule: SinceRule): Promise<TimeEntryRow[]> {
+  return db
+    .select({
+      personName: persons.displayName,
+      entryKind: timeEntries.entryKind,
+      eventAt: timeEntries.eventAt,
+      recordedAt: timeEntries.recordedAt,
+      correctsEntryId: timeEntries.correctsEntryId,
+      correctionStatus: timeEntries.correctionStatus,
+      correctionReason: timeEntries.correctionReason,
+      id: timeEntries.id,
+    })
+    .from(timeEntries)
+    .leftJoin(persons, eq(persons.id, timeEntries.personId))
+    .where(
+      rule.kind === "all"
+        ? undefined
+        : gte(timeEntries.recordedAt, new Date(rule.fromMs).toISOString()),
+    )
+    .orderBy(asc(timeEntries.recordedAt), asc(timeEntries.sequenceNo));
 }
 
 export interface OrderRow {

@@ -5,6 +5,7 @@ import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { recordActivity, withNodeTransaction, withTransaction } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
 import { seedManager, seedPerson } from "@waitron/identity/test/fixtures.js";
@@ -13,7 +14,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { AppError } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
+import { appendToChain } from "@waitron/workforce";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -410,6 +412,38 @@ describe("the since tabs of POST /old-box-data", () => {
       paymentRows: 0,
       activityRows: 1,
     });
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
+  });
+
+  it("logs the working hours count, never the clocked person's name", async () => {
+    await admin();
+    const named = await seedPerson(suite.db, "manager");
+    const NAME = "Lucy Ferrer Bell";
+    await suite.db.run(sql`update persons set display_name = ${NAME} where id = ${named}`);
+    await seedVenue(suite.db);
+    const nodeId = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      appendToChain(
+        tx,
+        { nodeId },
+        {
+          personId: named,
+          entryKind: "in",
+          eventAt: new Date(COPY_AT).toISOString(),
+          eventOffsetMinutes: 60,
+          recordedByPersonId: named,
+          origin: jobOrigin("dashboard"),
+        },
+        () => new Date(COPY_AT),
+      ),
+    );
+    const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
+    expect(response.status).toBe(200);
+    // The control: the name reaches the file, so its absence from the log means something.
+    expect(sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.hoursSheet)).toContain(NAME);
+    const downloaded = lines.find((line) => line.event === "old_box_data.downloaded");
+    expect(downloaded?.fields).toMatchObject({ since: "copy", hoursRows: 1 });
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
   });

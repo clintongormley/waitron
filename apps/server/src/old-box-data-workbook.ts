@@ -14,6 +14,7 @@ import {
   readActivitySince,
   readOrdersSince,
   readPaymentsSince,
+  readTimeEntriesSince,
   type PaymentRow,
   type SinceRule,
 } from "./old-box-data-since.js";
@@ -39,7 +40,13 @@ export interface OldBoxWorkbookInput {
 /** The workbook's bytes and how many rows each tab lists, for the download's log line. */
 export interface OldBoxWorkbook {
   bytes: Uint8Array<ArrayBuffer>;
-  counts: { invoiceRows: number; orderRows?: number; paymentRows?: number; activityRows?: number };
+  counts: {
+    invoiceRows: number;
+    orderRows?: number;
+    paymentRows?: number;
+    hoursRows?: number;
+    activityRows?: number;
+  };
 }
 
 const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
@@ -231,9 +238,11 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
     const intro = sinceIntro(input.since, words);
     const orders = await readOrdersSince(input.db, input.since);
     const facts = await readPaymentsSince(input.db, input.since);
+    const hours = await readTimeEntriesSince(input.db, input.since);
     const activity = await readActivitySince(input.db, input.since);
     counts.orderRows = orders.length;
     counts.paymentRows = facts.length;
+    counts.hoursRows = hours.length;
     counts.activityRows = activity.length;
     sheets.push(
       {
@@ -261,6 +270,25 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
       {
         name: words.paymentsSheet,
         rows: [[intro], words.paymentColumns, ...facts.map((fact) => paymentCells(fact, words))],
+      },
+      {
+        name: words.hoursSheet,
+        rows: [
+          [intro],
+          words.hoursColumns,
+          ...hours.map((entry): Cell[] => [
+            entry.personName,
+            words.entryKinds[entry.entryKind] ?? entry.entryKind,
+            entry.eventAt,
+            entry.recordedAt,
+            entry.correctsEntryId,
+            entry.correctionStatus === null
+              ? null
+              : (words.correctionStatuses[entry.correctionStatus] ?? entry.correctionStatus),
+            entry.correctionReason,
+            entry.id,
+          ]),
+        ],
       },
     );
     sheets.push({
