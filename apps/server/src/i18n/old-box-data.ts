@@ -36,7 +36,7 @@ export const OLD_BOX_DATA_WORDS = {
   es: {
     invoiceSheet: "Facturas",
     invoiceIntro:
-      "Registros de facturación que el nuevo servidor principal no tenía a las {time}, la última vez que indicó a este servidor lo que tiene. Es posible que este servidor aún le envíe algunos antes de borrarse.",
+      "Registros de facturación que el nuevo servidor principal no tenía el {time}, la última vez que indicó a este servidor lo que tiene. Es posible que este servidor aún le envíe algunos antes de borrarse.",
     uncomparedIntro:
       "Todos los registros de facturación de este servidor, {time}. No se ha comparado con el nuevo servidor principal, así que algunos pueden estar ya en él.",
     chainFields: {

@@ -32,7 +32,7 @@ export async function buildOldBoxWorkbook(
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
   const chains: UnreturnedChain[] = [];
-  let compared = true;
+  let compared = input.mainHoldings !== null;
   for (const module of input.modules) {
     const seat = module.handover?.unreturned;
     if (seat === undefined) continue;
@@ -96,9 +96,7 @@ export async function buildOldBoxWorkbook(
     }
   }
   const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  const time = minute(
-    compared && input.mainHoldings !== null ? input.mainHoldings.heardAt : input.madeAt,
-  );
+  const time = minute((compared ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt);
   return renderWorkbook([
     {
       name: words.invoiceSheet,

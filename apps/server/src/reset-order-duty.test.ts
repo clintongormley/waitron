@@ -126,6 +126,10 @@ function clock() {
   return {
     sleeps,
     now: () => new Date(at),
+    /** Moves the clock as time passing during a request would. */
+    advance: (ms: number) => {
+      at += ms;
+    },
     sleep: async (ms: number) => {
       sleeps.push(ms);
       at += ms;
@@ -330,12 +334,14 @@ it("keeps an answer without an order, saves nothing, and asks again 30 seconds l
   await duty.stop();
 });
 
-it("keeps a verified answer's summary of the main box with the time it arrived, through a later refusal", async () => {
+it("keeps a verified answer's summary of the main box with the time its question left, through a later refusal", async () => {
   const MAIN_HELD = { sample: [{ chain: "main-box", count: 9 }] };
-  const main = await standIn((seen, index) =>
-    index === 0 ? signedOrder(seen, null, { sample: [] }, MAIN_HELD) : refused(),
-  );
   const { time, sleep, resume } = parkedClock();
+  // The answer takes a minute to come back: the kept time is when the question left.
+  const main = await standIn((seen, index) => {
+    time.advance(60_000);
+    return index === 0 ? signedOrder(seen, null, { sample: [] }, MAIN_HELD) : refused();
+  });
   const { duty } = start(main.fetch, time);
   expect(duty.mainHoldings()).toBeNull();
   await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));

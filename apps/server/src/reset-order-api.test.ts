@@ -444,6 +444,29 @@ describe("POST /api/node/reset-order answers", () => {
     expect(events("reset_acknowledged")).toEqual([]);
   });
 
+  it("the standing order without a summary, and a warning, when this box's summary cannot be read", async () => {
+    const order = await ordered();
+    const unreadable: WaitronModule[] = [
+      {
+        ...modules[0]!,
+        handover: {
+          ...VERIFACTU_HANDOVER,
+          holdings: async () => {
+            throw new Error("unreadable");
+          },
+        },
+      },
+    ];
+    const res = await ask(await queryBody({ nonce: "unread" }), oldBox, app(unreadable));
+    expect(res.status).toBe(200);
+    const answer = await answerOf(res);
+    expect(answer?.order).toEqual({ orderId: order.orderId, acceptLoss: false });
+    expect(answer).not.toHaveProperty("holdings");
+    expect(lines).toEqual([
+      { level: "warn", event: "reset-order.holdings_unread", fields: { errorCode: "unknown" } },
+    ]);
+  });
+
   it("this box's own chain summary, with or without an order, read without the write lock", async () => {
     const seriesId = randomUUID();
     await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });

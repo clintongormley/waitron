@@ -410,6 +410,13 @@ describe("the old box's Invoices tab with the main box's summary from its last a
     );
   });
 
+  it("says no comparison was made when no summary was heard, even with no module to ask", async () => {
+    const xml = sheet(await build(suite.db, [], "en", null));
+    expect(row(xml, 1)).toEqual([
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+    ]);
+  });
+
   it("lists every record under the no-comparison first line when the module cannot read the summary", async () => {
     const { first, second } = await twoSales();
     const xml = sheet(
