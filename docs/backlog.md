@@ -1331,7 +1331,7 @@ Not in any track until the standalone primary is done.
   Qualify with a current-baseline year copy before go-live.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
-- **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
+- **Remaining setup and failover gaps** (bundle of 7, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 
 **The on-prem mirror.** Joining and local takeover are built and exercised on separate databases;
 this section records the remaining build and real-box qualification.
