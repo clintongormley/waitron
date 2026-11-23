@@ -222,7 +222,8 @@ describe("receiptFacts", () => {
       countryCode: "ES",
     });
     expect(facts.payment).toEqual({ tender: { method: "cash", change: "0.31" } });
-    expect(facts.qr).toEqual({ text: result.qr, caption: "QR tributario:", legend: "VERI*FACTU" });
+    expect(facts.qr).toEqual({ text: result.qr, ...result.qrText });
+    expect(facts.qr!.caption).toBe(result.qrText!.caption);
     expect(facts.footerMessage).toBe(FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage);
     expect(facts.total).toBe("19.69");
     expect(facts.corrects).toBeUndefined();
