@@ -52,6 +52,8 @@ function partsOf(
 function wallClock(at: number, timeZone: string | undefined): { year: number; asUtc: number } {
   const p = partsOf(at, "en-GB", {
     timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -95,7 +97,7 @@ function readCalendar(
   }
   const thisYear = wallClock(now, timeZone).year;
   const p = partsOf(at, locale, { timeZone, day: "numeric", month: "short", year: "numeric" });
-  if (Number(p.year) !== thisYear)
+  if (wallClock(at, timeZone).year !== thisYear)
     return { words: `${p.day} ${p.month} ${p.year}`, changesIn: null };
   const newYear = Date.UTC(thisYear + 1, 0, 1);
   const startOfNextYear = newYear - (wallClock(newYear, timeZone).asUtc - newYear);

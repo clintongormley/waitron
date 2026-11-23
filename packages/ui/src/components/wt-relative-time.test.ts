@@ -821,6 +821,28 @@ describe("as a calendar, for a moment more than a day gone", () => {
     expect(await at(lateDecember, 'locale="en-GB" calendar time-zone="UTC"')).toBe("5 Oct");
   });
 
+  test.each([
+    // The Buddhist calendar numbers 2026 as 2569; Egyptian Arabic writes its digits as ٢٠٢٦.
+    ["th-TH", "2569"],
+    ["ar-EG", "٢٠٢٦"],
+  ])(
+    "leaves this year's year off in %s, whose year is not written 2026, and adds it in the new year",
+    async (locale, year) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(Date.parse(AT) + 6 * DAY);
+      const el = (await mount(
+        `<wt-relative-time datetime="${AT}" locale="${locale}" time-zone="UTC" calendar></wt-relative-time>`,
+      )) as WtRelativeTime;
+      expect(words(el)).not.toContain(year);
+      // The words still change at the new year, so a wait for it is set.
+      expect(vi.getTimerCount()).toBe(1);
+      el.now = () => new Date(Date.parse(AT) + NEW_YEAR);
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(words(el)).toContain(year);
+    },
+  );
+
   test("re-reads the phrase at the day and the six days, and not before", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     vi.setSystemTime(Date.parse(AT) + DAY - 30 * SECOND);
