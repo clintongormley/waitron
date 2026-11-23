@@ -3021,10 +3021,10 @@ export class TillApp extends LitElement {
     this.spareSwitchBusy = true;
     const mainAnswered = await router.probeMain();
     if (generation !== this.#switchGeneration) return;
+    this.spareSwitchBusy = false;
     const spare = router.spare;
     if (mainAnswered || spare?.answering !== true) {
       this.mainServerRefused = mainAnswered;
-      this.spareSwitchBusy = false;
       return;
     }
     const url = new URL("/handover/emergency", spare.url);

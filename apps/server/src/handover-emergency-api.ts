@@ -369,7 +369,7 @@ export function mountHandoverEmergencyApi(
       sourceNodeId,
       destinationNodeId: deps.nodeId,
       sourceServersUrl: new URL("/servers", originOf(source.contactUrl)).href,
-      timeZone: await venueTimeZoneIn(deps.db),
+      timeZone: await venueTimeZoneIn(deps.db).catch(() => "UTC"),
       copy,
       joinedAtMs:
         link?.role === "serves" && link.state === "copied" ? link.updatedAt.getTime() : null,

@@ -403,6 +403,13 @@ it("previews the checked spare copy without recording a declaration", async () =
   expect(placed.node.all(sql`select * from node_handover_events`)).toEqual(before);
 });
 
+it("still previews the copy in UTC when the venue’s time settings cannot be read", async () => {
+  await placed.venue.run(sql`update settings set version = 2 where module = 'business_day'`);
+  const answer = await service().post({ signIn: request.signIn }, true, "preview");
+  expect(answer.status).toBe(200);
+  expect(answer.body).toMatchObject({ timeZone: "UTC", copy: { source: "mirror-copy" } });
+});
+
 it("previews when this spare's held copy arrived, from its pair link's copied state", async () => {
   const pairLink = {
     role: "serves" as const,

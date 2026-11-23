@@ -1352,8 +1352,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Se ha visto a otro servidor escribiendo la copia de este local en el mismo bucket, así que este servidor no copiará encima. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
   },
   "backup.spare_stream_active": {
-    en: "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove from venue on its row on the Servers page, then save again.",
-    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar del local en su fila de Servidores y vuelve a guardar.",
+    en: "This venue has a spare box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove from venue on its row on the Servers page, then save again.",
+    es: "Este local tiene un servidor de reserva, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar del local en su fila de Servidores y vuelve a guardar.",
   },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",

@@ -18197,14 +18197,31 @@ describe("the main-server strip", () => {
       failProbe();
       await settle(el);
       expect(navigate).toHaveBeenCalledOnce();
-      expect((await switchControl(strip)).getAttribute("aria-disabled")).toBe("true");
-
-      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
-      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
-      await settle(el);
       expect((await switchControl(strip)).hasAttribute("aria-disabled")).toBe(false);
     },
   );
+
+  it("a waiter who stays with an unsent basket can press Switch again", async () => {
+    const { el, router } = await mount();
+    await signIn(el, ["payment.take"]);
+    const sale = counter(el)!;
+    sale.store.addProduct(coffee, "2");
+    const leave = new Event("beforeunload", { cancelable: true });
+    const navigate = vi.fn(() => window.dispatchEvent(leave));
+    el.navigate = navigate;
+
+    await silentFor(el, router, 20_000);
+    const strip = shellStrip(el)!;
+    (await switchControl(strip)).click();
+    await settle(el);
+
+    expect(leave.defaultPrevented).toBe(true);
+    expect(sale.store.lines[0]!.quantity).toBe("2");
+    expect((await switchControl(strip)).hasAttribute("aria-disabled")).toBe(false);
+    (await switchControl(strip)).click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledTimes(2);
+  });
 
   it("allows switching during a new outage if the first switch left the till open", async () => {
     const { el, router } = await mount();
@@ -18271,6 +18288,7 @@ describe("the main-server strip", () => {
     failProbe();
     await settle(el);
     expect(navigate).not.toHaveBeenCalled();
+    expect((await switchControl(lockStrip(el)!)).hasAttribute("aria-disabled")).toBe(false);
   });
 
   it("a till whose router is replaced during the final probe does not navigate", async () => {
