@@ -1183,7 +1183,7 @@ async function issueOrSettleWhenFullyPaid(
       refuseUnsentUnavailable: options.moneyMoved !== true,
     });
   } catch (error) {
-    // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
+    // Automatic issuance must leave an edit intact while a takeaway set menu cannot be paid.
     if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
       return unpaid;
     }

@@ -20,6 +20,7 @@ import {
   placeInOrder,
   setMenuCopyOf,
   type BillSetMenuState,
+  type Dining,
   type DishPlace,
   type DishToPlace,
   type PlacementResult,
@@ -60,17 +61,32 @@ export async function hasDraftSetMenuLines(tx: Transaction, draftId: string): Pr
   return line !== undefined;
 }
 
-// Set-menu billing replaces this refusal once it can price the menu and its dishes together.
+// A takeaway set menu files at its own takeaway class beside lines at their products' takeaway
+// rates; VAT-RATES piece B's payment check replaces this refusal.
 export async function refuseSetMenuMoney(
   tx: Transaction,
   workingOrderId: string,
   lines?: readonly LineRole[],
+  dining?: Dining,
 ): Promise<void> {
-  const hasSetMenu =
-    lines === undefined
-      ? await hasBillSetMenuLines(tx, workingOrderId)
-      : lines.some((line) => line.setMenuRole !== null);
-  if (hasSetMenu) throw new AppError("set_menu.payment_not_ready", {});
+  if (lines !== undefined && !lines.some((line) => line.setMenuRole !== null)) return;
+  if (lines !== undefined && dining !== undefined) {
+    if (dining === "takeaway") throw new AppError("set_menu.payment_not_ready", {});
+    return;
+  }
+  const [line] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        isNotNull(workingOrderLines.setMenuRole),
+        eq(workingOrders.dining, "takeaway"),
+      ),
+    )
+    .limit(1);
+  if (line !== undefined) throw new AppError("set_menu.payment_not_ready", {});
 }
 
 export async function refuseUnlessSetMenuBill(

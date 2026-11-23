@@ -161,17 +161,20 @@ it("keeps a previous part payment when an empty set menu is added and cancelled"
   const {
     setMenus: [menu],
   } = await setCount(tabId, 1);
-  await expect(cashContribution(venue, tabId, "1.00")).rejects.toMatchObject({
-    code: "set_menu.payment_not_ready",
+  const secondPayment = await cashContribution(venue, tabId, "1.00");
+  expect(await inTx(venue, (tx) => readBillBalance(tx, tabId))).toMatchObject({
+    total: "26.00",
+    received: "2.00",
+    payments: [{ id: firstPayment }, { id: secondPayment }],
   });
 
   await cancel(tabId, menu!.lineId);
   expect(await inTx(venue, (tx) => readBillBalance(tx, tabId))).toMatchObject({
     total: "12.00",
-    received: "1.00",
+    received: "2.00",
     reserved: "0.00",
-    outstanding: "11.00",
-    payments: [{ id: firstPayment }],
+    outstanding: "10.00",
+    payments: [{ id: firstPayment }, { id: secondPayment }],
   });
 });
 

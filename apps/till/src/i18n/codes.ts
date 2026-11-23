@@ -46,8 +46,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este artículo es un menú. Para quitarlo, usa Anular en el resumen de menús.",
   },
   "set_menu.payment_not_ready": {
-    en: "Bills with set menus can't be paid on this version yet. À la carte dishes can be moved to another bill and paid there.",
-    es: "Las cuentas con menús aún no se pueden cobrar en esta versión. Los platos a la carta se pueden pasar a otra cuenta y cobrar allí.",
+    en: "A takeaway set menu can't be paid yet. Remove the set menu and ring up its dishes separately.",
+    es: "Todavía no se puede cobrar un menú para llevar. Quita el menú y marca sus platos por separado.",
   },
   "sale.empty_basket": {
     en: "This order has no items. Add an item before continuing.",

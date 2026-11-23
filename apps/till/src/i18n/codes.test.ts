@@ -1310,7 +1310,7 @@ it.each([
   ["set_menu.no_place_on_target", "Hake", "Hake"],
   ["set_menu.dish_sold_by_measure", "by weight", "al peso"],
   ["set_menu.remove_from_summary", "summary", "resumen"],
-  ["set_menu.payment_not_ready", "À la carte", "a la carta"],
+  ["set_menu.payment_not_ready", "A takeaway set menu", "menú para llevar"],
 ] as const)("words %s in English and Spanish", (code, english, spanish) => {
   const params = { setMenuName: "Daily", dishNames: ["Hake", "Soup"], dishName: "Hake" };
   expect(codeMessage(code, "en-GB", params)).toContain(english);
