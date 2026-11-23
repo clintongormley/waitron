@@ -1,0 +1,17 @@
+# A997 · Keep a saved dish’s item count when its unit changes
+
+Once a dish is saved to an order, changing its product’s unit leaves its item count steady in Parked orders, the floor’s Held and Ready signals, Sent, and Find a bill. A saved 330 ml line still counts as one. New dishes use the unit they are ordered in. This is one pull request for Lane H’s A997 assignment.
+
+[A757 point 15](2026-10-21-a757-6-item-counts-by-state.md#owner-points-each-with-the-default-this-plan-builds-the-owner-is-away-until-2-nov) records the live lookup as the plan’s default while the owner was away. On base `308838b867`, a temporary test using `parkOrder`, `assignProductUnit` and `readOrderStateCounts` passed its before-check at one item and failed its after-check at 330.
+
+## Store the counting rule when the dish is ordered
+
+- Use the `takesExtras(selection.unit)` result that `priceOrderLines` already computes. Store it as `countsWholePortions` on the dish in `packages/db/src/schema/orders.ts` and `apps/server/src/working-order.ts`. That rule includes custom whole units. The receipt’s `soldInEach` identifies the Each unit and `wholePortion` describes a line’s membership in a group of expanded portions. Give the set-menu heading its existing whole-item classification in `set-menu-count.ts`. Preserve the value when splitting a row in `carveLines`. Whole moves keep the row and copies already spread it.
+- Read that flag in `order-state-counts.ts`, `order-groups.ts` and `table-signals.ts`. Use the parent’s flag for a dish with an extra at a station. Keep the existing Sent response field. In `find-bill-bills.ts`, use the flag in the existing saved-line sum before Items sorting and pagination. Find a bill already reads `working_order_lines`. Open draft rows retain their live offer check until they are written as working lines. Quantities, pricing, readiness, service actions and sale records are outside this change.
+- Add the flag to the closed-order update comparisons in `packages/db/triggers/core.sql`. Rebuild with `pnpm --filter @waitron/server migration-baseline rebuild --set core`. The preproduction reset replaces the baseline without a data backfill. Remove A997 and its empty bundle from `docs/backlog.md` and `docs/backlog/till.md`. Keep the guide’s English and Spanish counting explanations in step with the saved-line rule.
+
+## Prove the change
+
+Start with the parked 330 ml regression in `order-state-counts.test.ts`. Exercise the reverse direction with a saved custom whole unit, and check that a split retains the source’s count rule. Use the existing held and ready fixtures in `order-state-counts.test.ts` and `table-signals.test.ts`, the Sent classification in `current-orders.test.ts`, and the saved count in `find-bill-bills.test.ts` after a unit change. Preserve existing fractional, inherited-unit, cancellation, station and draft assertions. Replace fixture-only reassignment used to simulate original units with fixture setup before ordering where needed.
+
+Run each changed server test file and `history-read-plans.test.ts`, the four root schema and baseline guards named in the repository’s data conventions, and the unchanged `write-path.e2e.test.ts`, `inmutabilidad.test.ts`, `till-api.sell-published.test.ts` and `till-app-menu-refresh.test.ts` gates. Record roughly 100 production lines and 130 test lines, plus the generated core baseline and backlog and guide edits. Follow the normal branch review, push and current-head CI before landing.
