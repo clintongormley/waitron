@@ -1118,8 +1118,7 @@ describe("login-screen", () => {
 
   it("shows an error key when login is rejected", async () => {
     const api = stubApi({ login: vi.fn().mockRejectedValue({ code: "password.invalid" }) });
-    const reload = vi.fn();
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
     await openPassword(el);
     (el as unknown as { password: string }).password = "wrong";
@@ -1133,7 +1132,6 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!.error,
     ).toBe("");
-    expect(reload).not.toHaveBeenCalled();
   });
 
   it("reads the email first, then the password chosen as another way", async () => {

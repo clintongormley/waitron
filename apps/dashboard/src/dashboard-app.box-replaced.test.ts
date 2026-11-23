@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequest, LiveData, type FetchLike } from "@waitron/dashboard-kit";
+import { leaveCoordinatorFor } from "@waitron/ui";
 import { DashboardApi, type ServerListing } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
@@ -271,6 +272,41 @@ describe("dashboard: a box that no longer runs the venue, while signed in", () =
     await settle(el);
     expect(reload).toHaveBeenCalledOnce();
     expect(refusalShown(el)).toBe(false);
+  });
+  it("drops an unsaved draft before reloading, so the browser asks nothing and the reload goes ahead", async () => {
+    const { state, fetchImpl } = box({ signedIn: true });
+    const { el, reload } = await mountDashboard(fetchImpl);
+    let overview: HTMLElement | null = null;
+    await vi.waitFor(() => {
+      overview = el.shadowRoot!.querySelector<HTMLElement>("dashboard-overview-screen");
+      expect(overview).not.toBeNull();
+    });
+    await settle(el);
+    let value = "saved";
+    const scope = leaveCoordinatorFor(overview!)!.register({
+      id: overview!,
+      current: () => value,
+      snapshot: (draft) => draft,
+      equal: (a, b) => a === b,
+      restore: (draft) => {
+        value = draft;
+      },
+    });
+    value = "edited";
+    scope.changed();
+    const unload = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(unload()).toBe(true);
+    state.replaced = true;
+    await expect(el.request("/management-api/some-module/read", "GET")).rejects.toMatchObject({
+      code: "handover.stepping_down",
+    });
+    await settle(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(unload()).toBe(false);
   });
 });
 

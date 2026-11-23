@@ -1213,6 +1213,8 @@ export class DashboardApp extends LitElement {
       // Without session storage, `#leaving` still holds this page to one reload.
     }
     this.#leaving = true;
+    // A draft's "Leave site?" prompt would let the person stay on a blank page that never reloads.
+    this.leave.forceReset();
     this.reloadingForReplacedBox = true;
     this.reload();
   }

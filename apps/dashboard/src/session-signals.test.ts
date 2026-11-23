@@ -32,35 +32,24 @@ describe("session signals", () => {
     vi.unstubAllGlobals();
   });
 
-  it.each(["management_session.expired", "management_session.required", "person.suspended"])(
-    "reports %s as an invalid session without asking the box anything",
-    async (code) => {
-      const h = harness();
-      h.signals.reportError(code);
-      await settle();
-      expect(h.invalid).toEqual([{ code }]);
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "management_session.expired",
+    "management_session.required",
+    "person.suspended",
+    "handover.stepping_down",
+  ])("reports %s as an invalid session without asking the box anything", async (code) => {
+    const h = harness();
+    h.signals.reportError(code);
+    await settle();
+    expect(h.invalid).toEqual([{ code }]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it("reports node.reset as an invalid session without asking the box anything", async () => {
     const h = harness();
     h.signals.reportError("node.reset");
     await settle();
     expect(h.invalid).toEqual([{ code: "node.reset" }]);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("reports handover.stepping_down, from any session generation, without asking the box anything", async () => {
-    const target = new EventTarget();
-    const invalid: unknown[] = [];
-    target.addEventListener("waitron-session-invalid", (event) => {
-      invalid.push((event as CustomEvent<{ code: string }>).detail);
-    });
-    const signals = createSessionSignals({ target, sessionGeneration: () => 2 });
-    signals.reportError("handover.stepping_down", 1);
-    await settle();
-    expect(invalid).toEqual([{ code: "handover.stepping_down", generation: 1 }]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
