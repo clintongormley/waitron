@@ -2112,9 +2112,7 @@ describe("setup-app", () => {
     },
   );
 
-  // Weaker than its name: it checks the secret and its warning render, not that the secret is never
-  // shown a second time.
-  it("surfaces the break-glass secret ONCE on the done screen after a successful adopt", async () => {
+  it("surfaces the break-glass secret and what it is for on the done screen after a successful adopt", async () => {
     const secret = "bg-secret-once-9f3a";
     const adopt = vi.fn().mockResolvedValue({
       adopted: true,
@@ -2134,7 +2132,7 @@ describe("setup-app", () => {
     const warning = (await screenText(el, "done", "[data-test=key-why]"))
       ?.toLowerCase()
       .replace(/\s+/g, " ");
-    expect(warning).toContain("it is shown only once");
+    expect(warning).toContain("if this box ever has to take over from the main box");
   });
 
   it("hands this box's own address from Finish joining to the done screen's label", async () => {
