@@ -1,47 +1,47 @@
 # Read personal-data log fields with TypeScript
 
-CI will report an unmasked personal field in the requested source forms. The guard stays in
-`scripts/personal-log-params.test.ts`, with its existing cases, naming rules, allow-lists and stale-entry
-checks. Use the root's TypeScript 6 compiler API. The queue item is PERSONAL-LOG-GUARD-AST (Lane H,
-23 November 2026 at 03:17). The backlog entry is A980, S10 follow-ups in
-`docs/backlog/data-protection.md`.
+CI will report an unmasked personal field in the four source forms named by Lane H's
+PERSONAL-LOG-GUARD-AST item (23 November 2026 at 03:17). Keep the guard in
+`scripts/personal-log-params.test.ts` and retain every existing case, naming rule, allow-list and
+stale-entry check. The backlog entry is A980, S10 follow-ups in `docs/backlog/data-protection.md`.
 
 ## Change and checks
 
-1. Add four cases in the existing Vitest file. Run them against the old reader and record each
-   expected refusal that is missing.
+1. Add four cases to the existing Vitest file. Run them against the old reader and record each
+   missing refusal.
 
-   - **Spread details.** An `AppError` detail spreads a typed venue property like the one in
-     `apps/server/src/restore-request.ts` and `restore-stream.ts`. A synthetic `ownerEmail` on the
-     spread source is reported against the error's code even when absent from the registry. Exercise
-     a spread in a logger's fields in the same case.
-   - **Quoted keys.** A quoted `"guestName"` in a registry detail and in logger fields is reported
-     under its code or event, just like the bare spelling.
-   - **Computed level.** A caller that chooses between warning and error by condition reports
-     `guestName` under its event. Include a level held in a typed variable with no level literal
-     at the call.
-   - **Lowercase type.** A lowercase alias and a `typeof personFields` reference in registry
-     details are reported with their source path when they lack review entries.
+   - **Spread details.** Report `ownerEmail` from a typed property spread into `new AppError`
+     details even when the registry omits it. Exercise a spread into logger fields in the same
+     case. Report a spread whose keys TypeScript cannot enumerate with its code or event and
+     source location. In the real-tree check, assert that the restore throw site's spread yields
+     `legalName`, `taxId` and `venueName` from `RestoredVenue`.
+   - **Quoted keys.** Report `"guestName"` in a registry and logger fields under its code or event.
+   - **Computed level.** Report `guestName` for a conditional level as in
+     `apps/server/src/health.ts` and a typed variable as in `apps/server/src/boot.ts`
+     (`cloud.emergency_read_failed`).
+   - **Lowercase type.** Report an unreviewed lowercase alias and `typeof personFields` reference
+     with their paths. Keep the existing check for recognised error code entries.
 
-2. Replace the text reader with syntax-tree walks over the same source directories. Read property
-   signatures and type references inside each valid `ErrorParams` entry. Keep the recognised-code
-   check. Read keys from object and array literals in the logger's third argument. Keep the
-   established positional call check and recognise a computed level whose possible values are log
-   levels. Use one compiler program and its type checker for spread properties and computed level
-   expressions, so the restore code's imported types can be read at the call. Report visible spread
-   keys under the same error code or log event and apply the same allow-lists. Keep this a source
-   check. Runtime-only keys, free-text logging, tracing values through arbitrary functions and the
-   watchdog's direct writes are outside this change. Named registry references still require review
-   by name.
+2. Parse the same source directories with `ts.createSourceFile`. Walk each registry entry's
+   signatures and type references and each logger call's inline fields, including nested objects
+   and arrays. Keep existing literal-level matching and recognise conditional choices of log
+   levels directly. For spreads and other candidate level expressions, make a compiler program
+   rooted only in candidate files, using normal workspace import resolution. Use the same scan
+   for synthetic strings, supplying their contents through a compiler host when types are needed.
+   Walk direct `new AppError` calls with inline details for spreads. A nonliteral code or event is
+   reported by source path. Apply the existing allow-lists to all found keys. An opaque spread is
+   a reported finding for review. Subclasses, whole objects passed by reference, computed property
+   names, free text, runtime value tracing and the watchdog's direct writes remain outside the
+   scan. Named registry types still require review by name.
 
-3. Run `pnpm exec vitest run scripts/personal-log-params.test.ts`. In a disposable checkout, delete
-   each new recognition path in turn and capture the expected failing case, then run the restored
-   suite. Compare the guard's run time with the old reader. Correct any real exposure under the
-   existing naming rule and run the affected focused tests. Run the lane's fiscal and menu gates
-   unedited before finishing the branch.
+3. Run `pnpm exec vitest run scripts/personal-log-params.test.ts`. In a disposable checkout,
+   delete each new recognition path separately and capture the expected failure, then run the
+   restored suite. Time the focused guard against the baseline, targeting under five seconds
+   locally. Fix any real exposure under the naming rule and run the affected focused tests.
+   Run the unedited fiscal and menu checks required by the queue.
 
-4. Update the limits stated in the test header, `CLAUDE.md` and
-   `docs/developers/conventions-ui.md`. Point the historical receipt in
-   `docs/developers/conventions-data.md` to the current limits and remove the completed backlog
-   line. Expected size is about 150 scanner lines in place of about 180, about 60 added test
-   lines, and small documentation edits. Any product edit depends on what the strengthened guard finds.
+4. Update the scan limits in the test header, `CLAUDE.md` and
+   `docs/developers/conventions-ui.md`. Add a dated pointer beside the historical receipt in
+   `docs/developers/conventions-data.md`. Remove the completed backlog line. Allow roughly 200
+   added and 180 removed scanner lines, 70 added test lines, and short documentation edits.
+   Product edits depend on what the guard finds.
