@@ -69,10 +69,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close();
-  if (listener !== undefined) {
-    listener.close();
-    await once(listener, "close");
-  }
+  listener?.close();
+  if (listener !== undefined) await once(listener, "close");
 });
 
 /** A P-256 key as the virtual authenticator takes it, and as the venue database stores it. */
