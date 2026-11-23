@@ -1,5 +1,5 @@
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -413,4 +413,115 @@ it.each(reviewFailures)("keeps review hidden after %s", async (code) => {
   await flush(el);
   expect(load).toHaveBeenCalledOnce();
   expect(q(el, "[data-description-refresh]")).toBeNull();
+});
+
+const DRAFT = { reportId: "report", description: "Printer jammed", time: 1767225600000 };
+
+it("reloads the drafts when the screen is shown again", async () => {
+  const load = vi.fn().mockResolvedValue([DRAFT]);
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({ getProblemDescriptions: load }),
+    canReviewDescriptions: true,
+  });
+  await flush(el);
+  expect(load).toHaveBeenCalledOnce();
+  const parent = el.parentElement!;
+  el.remove();
+  parent.append(el);
+  await flush(el);
+  expect(load).toHaveBeenCalledTimes(2);
+});
+
+it("does not start a second draft read while the first is still loading", async () => {
+  const load = vi.fn(() => new Promise<never>(() => {}));
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({ getProblemDescriptions: load }),
+    canReviewDescriptions: true,
+  });
+  await flush(el);
+  const parent = el.parentElement!;
+  el.remove();
+  parent.append(el);
+  await flush(el);
+  expect(load).toHaveBeenCalledOnce();
+});
+
+it("sends one decision when the button is pressed twice before the screen redraws", async () => {
+  const decideProblemDescription = vi.fn(() => new Promise<void>(() => {}));
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({ getProblemDescriptions: async () => [DRAFT], decideProblemDescription }),
+    canReviewDescriptions: true,
+  });
+  await expect.poll(() => q(el, "[data-problem-description]")).not.toBeNull();
+  const send = q(el, '[data-description-decision="send"]')!;
+  send.click();
+  send.click();
+  expect(decideProblemDescription).toHaveBeenCalledOnce();
+});
+
+it("keeps the draft and says the decision failed when the server refuses it", async () => {
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({
+      getProblemDescriptions: async () => [DRAFT],
+      decideProblemDescription: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    }),
+    canReviewDescriptions: true,
+  });
+  await expect.poll(() => q(el, "[data-problem-description]")).not.toBeNull();
+  await userEvent.click(q(el, '[data-description-decision="discard"]')!);
+  await expect
+    .poll(() => q(el, ".error[role=alert]")?.textContent)
+    .toBe(t("problem_report.review_failed"));
+  expect(q(el, "[data-problem-description]")?.textContent).toContain("Printer jammed");
+});
+
+it("hides the drafts when the decision is refused for lack of permission", async () => {
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+    api: stubApi({
+      getProblemDescriptions: async () => [DRAFT],
+      decideProblemDescription: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    }),
+    canReviewDescriptions: true,
+  });
+  await expect.poll(() => q(el, "[data-problem-description]")).not.toBeNull();
+  await userEvent.click(q(el, '[data-description-decision="send"]')!);
+  await expect.poll(() => q(el, "[data-description-heading]")).toBeNull();
+  expect(q(el, "[data-problem-description]")).toBeNull();
+});
+
+it("clears a failed poll's message once a later poll succeeds", async () => {
+  vi.useFakeTimers();
+  try {
+    const getRecentLogs = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue({ lines: SEED, timeZone: "UTC", oldestScannedAt: null });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+      api: stubApi({ getRecentLogs }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+    await vi.advanceTimersByTimeAsync(1500);
+    await el.updateComplete;
+    expect(q(el, "[role=alert]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("shows only the clock for today's lines and spells out non-text details", async () => {
+  const at = new Date().toISOString();
+  const api = stubApi({
+    getRecentLogs: vi.fn().mockResolvedValue({
+      lines: [{ at, level: "warn", event: "printer.retry", attempts: 3 }],
+      timeZone: "UTC",
+      oldestScannedAt: null,
+    }),
+  });
+  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+  await flush(el);
+  const row = q(el, "li.lvl-warn")!;
+  expect(row.querySelector("time")!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  expect(row.textContent).toContain("attempts=3");
 });
