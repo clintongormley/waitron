@@ -142,6 +142,8 @@ export interface TillSaleLine {
   /** On a line taking an advance off this invoice: the advance as its own ticket names it, read
    *  through the line's `deducts_sale_id`. `issuedOn` is its issue day in the venue's zone. */
   advance?: { invoiceNumber: string; issuedOn: string };
+  /** The filed line's set-menu role; absent on a line with none. */
+  setMenuRole?: "set_menu" | "dish";
 }
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */

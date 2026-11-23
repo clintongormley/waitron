@@ -396,6 +396,7 @@ it("builds lines in allocation order from the invoice line's frozen facts, negat
     correctsLineId: ids[0],
     advanceRole: null,
     deductsSaleId: null,
+    setMenuRole: null,
   });
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
 });

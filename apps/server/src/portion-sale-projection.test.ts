@@ -415,6 +415,19 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     expect(projectPortionSale(bill.lines, bill.bindings)).toHaveLength(2);
   });
 
+  it("a portion placed in a set menu beside one that is not", () => {
+    const bill = burgers();
+    const placed = bill.lines[1]!;
+    bill.lines[1] = { ...placed, locked: { ...placed.locked, setMenuRole: "dish" } };
+    const projected = projectPortionSale(bill.lines, bill.bindings);
+    expect(projected.map((line) => line.locked.setMenuRole ?? null)).toEqual([null, "dish"]);
+    expect(
+      grossLockedLines(projected.map((line) => line.locked)).lines.map(
+        (line) => line.setMenuRole ?? null,
+      ),
+    ).toEqual([null, "dish"]);
+  });
+
   it("A803 monetary comparison: the same number of extras, but different ones", () => {
     const bill = burgers([{ name: "Cheese", price: "1.00" }]);
     const second = bill.lines[3]!;

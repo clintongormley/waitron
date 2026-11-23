@@ -1208,6 +1208,7 @@ const storedLineColumns = {
   variantKitchenName: workingOrderLines.variantKitchenName,
   kitchenName: workingOrderLines.kitchenName,
   classification: workingOrderLines.classification,
+  setMenuRole: workingOrderLines.setMenuRole,
 };
 
 type StoredLineRow = {
@@ -1255,7 +1256,6 @@ async function readLockedLinesForIssuance(
       ...portionColumns,
       dining: workingOrders.dining,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
-      setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
     })
@@ -1349,6 +1349,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
       variantDescriptions: line.variantDescriptions,
       variantKitchenName: line.variantKitchenName,
       kitchenName: line.kitchenName,
+      ...(line.setMenuRole === null ? {} : { setMenuRole: line.setMenuRole }),
     },
   }));
 }

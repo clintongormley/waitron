@@ -32,6 +32,7 @@ export type ReceiptSource = Pick<
   | "unitPrecision"
   | "lineGross"
   | "parentLineNo"
+  | "setMenuRole"
 > &
   // A stored order line holds the price it was sold at; a line rebuilt from a sale's rows does not.
   Partial<Pick<GrossLine, "grossUnitPrice">>;
@@ -63,6 +64,7 @@ export function ticketLinesFrom(
     gross: line.lineGross,
     ...soldAt(line, identities[i]!.listUnitGross),
     parentLineNo: line.parentLineNo ?? null,
+    ...(line.setMenuRole == null ? {} : { setMenuRole: line.setMenuRole }),
   }));
 }
 

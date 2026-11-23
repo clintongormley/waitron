@@ -307,20 +307,22 @@ it("still accepts a contribution on a bill without set menus", async () => {
   ]);
 });
 
-/** Each stored line of the bill against each line of the sale it filed: name, quantity and gross. */
+/** Each stored line of the bill against each line of the sale it filed: name, quantity, gross and
+ * set-menu role; and the sale's total, 73.00. */
 async function expectFiledAsStored(billId: string) {
-  const stored = (await specRows(spec, billId)).map(({ name, quantity, lineTotal }) => [
-    name,
-    quantity,
-    lineTotal,
-  ]);
-  const filed = (await specSaleLines(spec, billId)).map(({ name, quantity, lineGross }) => [
-    name,
-    quantity,
-    lineGross,
-  ]);
+  const stored = (await specRows(spec, billId)).map(
+    ({ name, quantity, lineTotal, setMenuRole }) => [name, quantity, lineTotal, setMenuRole],
+  );
+  const filed = (await specSaleLines(spec, billId)).map(
+    ({ name, quantity, lineGross, setMenuRole }) => [name, quantity, lineGross, setMenuRole],
+  );
   expect(stored).toHaveLength(12);
   expect(filed).toEqual(stored);
+  const [sale] = await venue.db
+    .select({ total: sales.total })
+    .from(sales)
+    .where(eq(sales.workingOrderId, billId));
+  expect(sale!.total).toBe(7300);
 }
 
 async function payAtReader(billId: string) {
