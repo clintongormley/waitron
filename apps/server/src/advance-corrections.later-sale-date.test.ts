@@ -14,22 +14,23 @@ import { capturedPending, clockAtIso, filedFor } from "./testing/later-sale-date
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
-// A release that ships a reduced rate of 4% from Sunday 15 March 2026, 10% before it.
-vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
-  const table = {
-    ...original.VAT_RATE_TABLE,
-    reduced: [
-      { from: null, rate: "10.00" },
-      { from: "2026-03-15", rate: "4.00" },
-    ],
-  };
+// The area's dine-in rate: 10%, and 4% from Sunday 15 March 2026.
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/country-packs")>();
   return {
-    ...original,
-    VAT_RATE_TABLE: table,
-    vatRatesOn: (...[date, given]: Parameters<typeof original.vatRatesOn>) =>
-      original.vatRatesOn(date, given ?? table),
+    ...actual,
+    vatRatesFor: (...args: Parameters<typeof actual.vatRatesFor>) => {
+      const rates = actual.vatRatesFor(...args);
+      return (
+        rates && {
+          ...rates,
+          dineIn: [
+            { from: null, rate: "10.00" },
+            { from: "2026-03-15", rate: "4.00" },
+          ],
+        }
+      );
+    },
   };
 });
 
