@@ -900,7 +900,9 @@ describe("Refund a payment naming no cancels", () => {
     return { b, paid, burger };
   }
 
-  it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
+  /** A Burger (€12.00) and a Steak (€25.00) paid on one hand-keyed card, the Burger cancelled
+   * with the Refund tick. */
+  async function handKeyedOwingTwelve() {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await send(
       venue.app,
@@ -920,18 +922,61 @@ describe("Refund a payment naming no cancels", () => {
     );
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, b.billId));
+    const [tender] = await venue.db.select().from(tenders).where(eq(tenders.saleId, sale!.id));
     await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
-    expect(
-      await send(
-        venue.app,
-        venue.cookie.manager,
-        "GET",
-        `/api/transactions/${sale!.id}/refundable-tenders`,
-      ),
-    ).toMatchObject({
+    return { saleId: sale!.id, tenderId: tender!.id };
+  }
+
+  function refundableTenders(saleId: string) {
+    return send(
+      venue.app,
+      venue.cookie.manager,
+      "GET",
+      `/api/transactions/${saleId}/refundable-tenders`,
+    );
+  }
+
+  it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
+    const paid = await handKeyedOwingTwelve();
+    expect(await refundableTenders(paid.saleId)).toMatchObject({
       status: 200,
       json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "12.00" }],
     });
+  });
+
+  it("tells the till a hand-keyed card payment gives back nothing while a correction is open, as the refund is refused", async () => {
+    const paid = await handKeyedOwingTwelve();
+    // The cancel still owes €12.00, which only the open correction holds back.
+    expect(await refundableTenders(paid.saleId)).toMatchObject({
+      json: [{ plainRefundLimit: "12.00" }],
+    });
+    const manager = (path: string, body: unknown) =>
+      send(venue.app, venue.cookie.manager, "POST", path, body);
+    const split = await manager(`/api/transactions/${paid.saleId}/corrections/preview`, {
+      gross: "5.00",
+    });
+    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    const opened = await manager(`/api/transactions/${paid.saleId}/corrections`, {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: venue.reasonId.houseVoid,
+      note: "Cold",
+      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    expect(await refundableTenders(paid.saleId)).toMatchObject({
+      status: 200,
+      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "0.00" }],
+    });
+    const before = await written();
+    expect(
+      await staffRefund(paid, {
+        ...refundBody(paid, "1.00"),
+        manualConfirmed: true,
+        override: managerPin(),
+      }),
+    ).toMatchObject({ status: 409, json: { code: "invoice_correction.already_open" } });
+    expect(await written()).toEqual(before);
   });
 
   it("is refused on a sale with no cancels, writing nothing", async () => {

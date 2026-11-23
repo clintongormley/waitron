@@ -197,11 +197,13 @@ export async function readRefundableTendersWithLimits(
     owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
   let limit: number;
   try {
+    await refuseWhileCorrectionOpen(tx, saleId);
     limit = await plainRefundLimit(tx, nodeId, fiscal, saleId, upTo, owed);
   } catch (error) {
-    // A refusal that passes by waiting refuses the refund above `owed` for now.
     if (!(error instanceof AppError)) throw error;
-    limit = Math.min(upTo, owed);
+    // An open correction refuses every plain refund; any other refusal passes by waiting, and
+    // refuses the refund above `owed` for now.
+    limit = error.code === "invoice_correction.already_open" ? 0 : Math.min(upTo, owed);
   }
   return rows.map((row) =>
     row.manual
