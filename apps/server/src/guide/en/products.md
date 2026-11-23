@@ -12,6 +12,10 @@ summarises what is inside it, so you can see at a glance which sections you have
 by clicking its heading. If a section contains something you need to fix, it opens itself and stays
 open until you have fixed it.
 
+Use **Filters** to narrow the Products list. A category shows how many of its products match,
+including products in its subcategories. If an empty category disappears after you save it,
+choose **Clear all** in **Filters**. Search by name to find it under a closed category.
+
 ## How VAT is charged {#vat}
 
 Everything eaten or drunk here is charged at one rate, shown in the product editor

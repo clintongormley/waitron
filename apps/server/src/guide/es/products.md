@@ -12,6 +12,10 @@ resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abr
 encabezado. Si una sección contiene algo que tienes que corregir, se abre sola y sigue abierta hasta
 que lo corriges.
 
+Usa **Filtros** para acotar la lista de Productos. Cada categoría indica cuántos de sus productos
+coinciden, incluidos los de sus subcategorías. Si una categoría vacía desaparece al guardarla,
+elige **Borrar todo** en **Filtros**. Busca la categoría por su nombre si está dentro de otra cerrada.
+
 ## Cómo se cobra el IVA {#vat}
 
 Todo lo que se come o se bebe en el local se cobra con un único tipo, que se muestra en el editor
