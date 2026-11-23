@@ -873,8 +873,7 @@ The till's zone offers now include published set-menu copies. They identify the 
 and the server can read a bill's recorded copy after its full menu is republished.
 Shared ordering code calculates where a dish fits, what it costs there and which moves make room.
 Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
-The server reads the recorded copies and dish places, and refuses new payments, comps,
-discounts and ticket issuance for these bills until set-menu billing is ready.
+The server reads the recorded copies and dish places.
 Kitchen tickets, station queues and service reads show the dishes from a set menu. The menu
 itself adds no kitchen work and does not count as a dish. The server keeps set-menu dishes
 separate in drafts and saves their places and prices together on Send. A table can still order
@@ -899,8 +898,20 @@ Managers can add and copy dishes in a set-menu draft, give a dish a course for t
 edit variant choices. The Dishes Save bar stages dish surcharges across courses. The editor
 shows the inclusion lines added or removed by a dish change. The dashboard piece lets managers create a set menu, place it in a full menu
 and publish its current version to the tills. The products guide covers setup in both languages.
-Selecting copy-only dishes in the live correction dialog remains open. Set-menu payments, bill documents and the demo remain. Release set menus to venues only once
-all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
+Piece 4 ([plan](../superpowers/plans/2026-11-18-a1515-set-menu-bill.md)) lets a set-menu bill
+eaten here take payments like any bill: whole, by items or in part, with comps and discounts on set
+menus. A set menu paid by items cannot be removed (`bill.line_paid`); an empty unpaid one can, comped
+or not. A comped or discounted set-menu dish moves to another bill only with its set menu
+(`set_menu.move_adjusted`). The ticket and the full invoice list set menus and supplements, not the
+dishes a set menu covers; the till's pay-by-items list leaves those out too, and category sales
+show set menus as a group of their own. The table-service guide covers this in both languages.
+It rests on the owner's answers of 21 November 2026 (decisions 2, 5, 6 and 7 at 15:15; a full
+invoice may leave covered dishes out, 15:25), the owner's answer of 23 November 2026 to decision 3
+(refuse the move), and lane L's answer of 18 November that the ticket may leave covered dishes
+off (RD 1619/2012 art. 7.1). A takeaway bill holding a set menu still refuses money
+(`set_menu.payment_not_ready`) until VAT-RATES piece B replaces that check.
+Selecting copy-only dishes in the live correction dialog remains open. Piece 5, the demo and
+courses, remains. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

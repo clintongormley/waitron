@@ -580,6 +580,11 @@ Para pasar una carta a otra cuenta, abre **Mover platos** y selecciona la carta.
 platos se mueven con ella. Si eliges un solo plato, comprueba su precio en la otra
 cuenta antes de confirmar.
 
+Una carta que los clientes han pagado eligiendo artículos se queda en la cuenta: para
+quitarla, devuelve antes su pago. Un plato con invitación o descuento solo pasa a otra
+cuenta junto con su carta. El ticket muestra las cartas y lo que cuesta aparte, como
+un suplemento, pero no los platos incluidos en el precio.
+
 En el **Mostrador**, elige **Para llevar**, indica cuántas cartas quieres y abre la
 carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los
 platos. Para añadirlos después, busca la cuenta en **Pedidos aparcados** y pulsa
