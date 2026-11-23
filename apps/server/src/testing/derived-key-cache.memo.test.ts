@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 
 const derivations = vi.hoisted(() => ({ count: 0, failNext: false }));
+const realSetImmediate = setImmediate;
 
 vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
@@ -82,5 +83,23 @@ describe("the server test setup's secret-check memo", () => {
     order.push("verified");
     await turned;
     expect(order).toEqual(["event loop", "verified"]);
+  });
+
+  it("answers a repeated check while the test clock is stopped", async () => {
+    const secret = "recovery key on a stopped test clock";
+    const stored = hashSecret(secret);
+    expect(await verifySecretAsync(secret, stored)).toBe(true);
+
+    vi.useFakeTimers();
+    try {
+      const answer = await Promise.race([
+        verifySecretAsync(secret, stored),
+        new Promise((resolve) => realSetImmediate(() => resolve("still waiting"))),
+      ]);
+      expect(answer).toBe(true);
+      expect(derivations.count).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

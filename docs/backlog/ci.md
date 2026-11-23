@@ -1025,8 +1025,8 @@ the cause or a repair.
 
 [PR #2418](https://github.com/clintongormley/waitron/pull/2418) (A1297) remembered recovery-key checks
 within a test file, migrated `heldSetup`'s databases once per file, sealed the test helpers' backups
-under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
-these, which it did not build (local figures, 2 November 2026):
+under one salt per file and split `first-fiscal-hour.e2e.test.ts`. A1443 followed up on the database
+template proposal:
 
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),

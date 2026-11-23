@@ -59,7 +59,10 @@ export function cachedKdf(real: KdfModule): KdfModule {
 
 type SecretVerifier = typeof import("@waitron/identity").verifySecretAsync;
 
-export function cachedSecretVerification(verify: SecretVerifier): SecretVerifier {
+export function cachedSecretVerification(
+  verify: SecretVerifier,
+  yieldTurn: () => Promise<void>,
+): SecretVerifier {
   const answers = new Map<string, Map<string, Promise<boolean>>>();
   return async (secret, stored) => {
     let bySecret = answers.get(stored);
@@ -67,7 +70,7 @@ export function cachedSecretVerification(verify: SecretVerifier): SecretVerifier
     const remembered = bySecret.get(secret);
     if (remembered !== undefined) {
       // A real verification lets waiting work run before returning its answer.
-      await new Promise((resolve) => setImmediate(resolve));
+      await yieldTurn();
       return remembered;
     }
     const answer = verify(secret, stored);
