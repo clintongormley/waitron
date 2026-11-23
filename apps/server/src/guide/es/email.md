@@ -33,13 +33,14 @@ un servidor guardado o Cloud.
 En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como encargado o administrador
 para abrir los mensajes guardados.
 
-## Configura el correo de Google Workspace {#google-workspace}
+## Usa una contraseña de aplicación de Google Workspace {#google-workspace}
 
 En la cuenta de Google que usas para enviar correo, activa la **Verificación en dos pasos**.
-Abre `https://myaccount.google.com/apppasswords`, ponle el nombre **Waitron** a la contraseña y
-créala. Pega la contraseña generada en **Contraseña** en Waitron y envía una prueba.
+Abre `https://myaccount.google.com/apppasswords` y crea una contraseña de aplicación.
+En **Sistema → Correo** en Waitron, activa **Usar autenticación**. Pega la contraseña de
+aplicación en **Contraseña** y envía una prueba.
 
-Si Google no ofrece **Contraseñas de aplicación**, revisa la política de inicio de sesión de tu
+Si Google no ofrece contraseñas de aplicación, revisa la política de inicio de sesión de tu
 organización. Por ejemplo, una política que solo permite llaves de seguridad puede bloquearlas.
 
 ## Envía el informe diario de ventas por correo {#daily-report}
