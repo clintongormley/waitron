@@ -391,7 +391,7 @@ platos aparecen debajo.
 
 No necesitas otro PIN para devolver hasta el valor pendiente de los platos cancelados, sin
 propina. Para devolver más que el valor pendiente de los platos cancelados, usa **Rectificar
-factura**. Si nunca podrá rectificar el recibo, subir el importe necesita permiso para devolver o una
+factura**. Si nunca puede rectificar el recibo, subir el importe necesita permiso para devolver o una
 nueva aprobación con PIN, y añadir propina siempre lo necesita. La devolución sigue contando para los platos cancelados, hasta su valor.
 Una tarjeta registrada desde un datáfono aparte siempre pide un PIN nuevo para confirmar que la
 devolución en el datáfono se ha hecho.

@@ -405,8 +405,9 @@ held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:
 ordinary cancellation it handles is written only by core's `recordVoid`
 (`packages/core/src/record-void.ts`), which no till screen or server route calls
 (`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
-2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the payments
-package's `recordVoid` is another function). The code is kept, not deleted.
+2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the fiscal
+backends' `recordVoid` methods, which core's calls, and the payments package's `recordVoid` are
+other functions). The code is kept, not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an
 ordinary cancellation still waiting to be sent: the cancellation waited for that correction's

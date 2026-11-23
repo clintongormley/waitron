@@ -3,6 +3,10 @@
 Status: plan, rewritten 2026-11-23 on `feat/adviser-goodwill-corrective` at `a460d355c4` (plus the
 two commits of the 19 November plan this replaces). No product code yet. Every `file:line` below was
 read on this branch; every figure marked "run" was produced by a command named beside it.
+2026-11-24: PR 2's review wave took the cancelled and not-fully-paid tickets out of the adviser
+sheet's question 14 list and the fiscal backlog, reworded `invoice_correction.refund_pending`, and
+made the refundable-payments read mark a hand-keyed payment while a correction is open. The sheet,
+the backlog and the code are current; quotes below that differ are not.
 Revised the same day after one fresh-context read
 (`~/waitron-campaign-l/receipts/adviser-goodwill/plan-read-2026-11-23.md`) and the driver's direction
 on it: choice 1's rule restated (section 4.6), choice 3 out, owner decisions O1–O6 named (section 10),
