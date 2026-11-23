@@ -15,6 +15,7 @@ import type {
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
+import { keepAnswerBeforeClearing } from "./history.js";
 import { imputationMonth, toAeatDate } from "./registro-row.js";
 import { retainLookupConflict } from "./reconcile-conflicts.js";
 import {
@@ -519,6 +520,7 @@ async function correct(
 ): Promise<void> {
   const target = CORRECTION[reported.estado];
   if (target === undefined) return; // Anulado / no clean local estado — incident-only.
+  await keepAnswerBeforeClearing(tx, row.id, "reconcile", { confirmadoEn: now }, now);
   await tx.execute(sql`
     update verifactu_submissions set estado = ${target}, confirmado_en = ${now.toISOString()}
     where registro_id = ${row.id}
@@ -553,6 +555,18 @@ async function correct(
  * a resubmission AEAT already holds comes back as error 3000), stamping `reconciled_resubmit_at` so a
  * later sweep can tell this from a first detection. A `pendiente` row carries no ack. */
 async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Promise<void> {
+  await keepAnswerBeforeClearing(
+    tx,
+    row.id,
+    "reconcile",
+    {
+      csv: null,
+      codigoError: null,
+      mensajeError: null,
+      confirmadoEn: null,
+    },
+    now,
+  );
   await tx.execute(sql`
     update verifactu_submissions set
       estado = 'pendiente',

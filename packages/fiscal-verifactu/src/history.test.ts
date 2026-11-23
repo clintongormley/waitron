@@ -41,6 +41,52 @@ it("sequences appends by write order and returns the ids of the stored evidence"
 });
 
 const at = new Date("2026-07-21T00:01:00Z");
+const emptyAnswer = { csv: null, codigoError: null, mensajeError: null, confirmadoEn: null };
+
+it("keeps the previous four answer values before they are cleared", async () => {
+  const {
+    nodeId,
+    registroIds: [registroId],
+  } = await seedPendingEnvios(suite.db, { count: 1 });
+  const confirmed = "2026-07-21T00:00:50.000Z";
+  await withTransaction(suite.db, async (tx) => {
+    await tx.execute(sql`update verifactu_submissions
+      set estado = 'aceptado_con_errores', csv = 'previous-csv',
+        codigo_error = '2004', mensaje_error = 'Previous answer', confirmado_en = ${confirmed}
+      where registro_id = ${registroId!}`);
+    await history.keepAnswerBeforeClearing(tx, registroId!, "reconcile", emptyAnswer, at);
+  });
+  const [entry] = await suite.db.select().from(verifactuHistory);
+  expect(entry).toMatchObject({
+    kind: "aeat.answer_cleared",
+    nodeId,
+    registroId,
+    at,
+    personId: null,
+    eventKey: null,
+  });
+  expect(entry?.data).toEqual({
+    by: "reconcile",
+    csv: "previous-csv",
+    codigoError: 2004,
+    mensajeError: "Previous answer",
+    confirmadoEn: confirmed,
+  });
+});
+
+it.each([null, "same-csv"])("writes no history when the held CSV stays %j", async (csv) => {
+  const {
+    registroIds: [registroId],
+  } = await seedPendingEnvios(suite.db, { count: 1 });
+  await withTransaction(suite.db, async (tx) => {
+    await tx.execute(
+      sql`update verifactu_submissions set csv = ${csv} where registro_id = ${registroId!}`,
+    );
+    await history.keepAnswerBeforeClearing(tx, registroId!, "drain", { ...emptyAnswer, csv }, at);
+  });
+  expect(await suite.db.select().from(verifactuHistory)).toEqual([]);
+});
+
 const invoice = {
   IDEmisorFactura: "89890001K",
   NumSerieFactura: "S1/1",

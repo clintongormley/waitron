@@ -168,6 +168,47 @@ async function recordForConflict() {
   return fixture.registroIds[0]!;
 }
 
+const clearedAnswer = {
+  by: "reconcile",
+  csv: "previous-csv",
+  codigoError: null,
+  mensajeError: null,
+  confirmadoEn: null,
+};
+
+it("accepts a cleared answer with JSON null values", async () => {
+  await insertWithLinks({
+    kind: "aeat.answer_cleared",
+    registroId: await recordForConflict(),
+    eventKey: null,
+    data: clearedAnswer,
+  });
+});
+
+it.each([
+  ["unknown writer", { data: { ...clearedAnswer, by: "handover" } }, "cleared"],
+  ...Object.keys(clearedAnswer).map(
+    (key) =>
+      [`missing ${key}`, { data: { ...clearedAnswer, [key]: undefined } }, "cleared"] as const,
+  ),
+  ["missing record", { registroId: null }, "cleared"],
+  ["unexpected person", { personId: true }, "cleared"],
+  ["unexpected key", { eventKey: "answer" }, "cleared"],
+  ["malformed JSON", { data: "{" }, "data"],
+] as const)("refuses a cleared answer with %s", async (_label, overrides, check) => {
+  const row = {
+    kind: "aeat.answer_cleared",
+    registroId: await recordForConflict(),
+    eventKey: null,
+    data: clearedAnswer,
+    ...overrides,
+    personId: "personId" in overrides ? personId : undefined,
+  };
+  expect(
+    checkFailed(await captureError(() => insertWithLinks(row)), `verifactu_history_${check}_ck`),
+  ).toBe(true);
+});
+
 it.each([
   ["missing action", { data: {} }, "note"],
   ["non-text action", { data: { action: 1 } }, "note"],

@@ -639,6 +639,13 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.recordsHalted).toBe(1); // the rechazado record only
     expect(result.recordsAccepted).toBe(2); // secuencia 1 and 3
     expect(result.incidentsRaised).toBeGreaterThanOrEqual(1);
+    expect(
+      (
+        await suite.db.execute(sql`
+      select registro_id from verifactu_history where kind = 'aeat.answer_cleared'
+    `)
+      ).rows,
+    ).toEqual([]);
 
     const inc = parseParams(
       await withTransaction(suite.db, (tx) =>

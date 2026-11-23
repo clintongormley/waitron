@@ -27,6 +27,7 @@ import {
   type FilingCase,
   type FilingCaseCause,
 } from "./filing-cases.js";
+import { keepAnswerBeforeClearing } from "./history.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
@@ -1714,6 +1715,18 @@ async function setEstado(
 ): Promise<void> {
   const codigoError =
     opts.codigoError !== undefined && opts.codigoError !== null ? String(opts.codigoError) : null;
+  await keepAnswerBeforeClearing(
+    tx,
+    registroId,
+    "drain",
+    {
+      csv: opts.csv,
+      codigoError: opts.codigoError ?? null,
+      mensajeError: opts.mensajeError ?? null,
+      confirmadoEn: opts.confirmadoEn ?? null,
+    },
+    now,
+  );
   await tx.execute(sql`
     update verifactu_submissions set
       estado = ${estado},

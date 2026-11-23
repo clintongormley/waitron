@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d349bfbc-1b9a-4e62-b569-8c54f99ef912",
+  "id": "29346a03-f21f-4fef-8781-ea2f4e565e95",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -791,7 +791,7 @@
         },
         "verifactu_history_kind_ck": {
           "name": "verifactu_history_kind_ck",
-          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')"
+          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note', 'aeat.answer_cleared')"
         },
         "verifactu_history_confirmed_source_ck": {
           "name": "verifactu_history_confirmed_source_ck",
@@ -824,6 +824,10 @@
         "verifactu_history_note_ck": {
           "name": "verifactu_history_note_ck",
           "value": "\"verifactu_history\".\"kind\" <> 'case.note' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null and \"verifactu_history\".\"person_id\" is not null\n        and substr(\"verifactu_history\".\"event_key\", 1, 10) = 'case.note:' and length(\"verifactu_history\".\"event_key\") > 10\n        and json_type(\"verifactu_history\".\"data\", '$.action') = 'text',\n        0\n      )"
+        },
+        "verifactu_history_cleared_ck": {
+          "name": "verifactu_history_cleared_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'aeat.answer_cleared' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_extract(\"verifactu_history\".\"data\", '$.by') in ('drain', 'reconcile')\n        and json_type(\"verifactu_history\".\"data\", '$.csv') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.codigoError') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.mensajeError') is not null\n        and json_type(\"verifactu_history\".\"data\", '$.confirmadoEn') is not null\n        and \"verifactu_history\".\"person_id\" is null and \"verifactu_history\".\"event_key\" is null,\n        0\n      )"
         }
       }
     },
