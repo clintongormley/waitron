@@ -14,16 +14,13 @@ export const verifactuIdentities = table(
     id: id("id").primaryKey().$defaultFn(newId),
     nodeId: id("node_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => nodes.id),
-    /* v8 ignore stop */
     nif: label("nif").notNull(),
     idSistemaInformatico: label("id_sistema_informatico").notNull(),
     numeroInstalacion: label("numero_instalacion").notNull(),
     registradoEn: ts("registrado_en").notNull().$defaultFn(now),
     revocadoEn: ts("revocado_en"),
   },
-  /* v8 ignore start */
   (t) => [
     uniqueIndex("verifactu_identities_instalacion_uq").on(
       t.nif,
@@ -36,5 +33,4 @@ export const verifactuIdentities = table(
       .where(sql`${t.revocadoEn} is null`),
     check("verifactu_identities_numero_ck", sql`length(${t.numeroInstalacion}) between 1 and 30`),
   ],
-  /* v8 ignore stop */
 );

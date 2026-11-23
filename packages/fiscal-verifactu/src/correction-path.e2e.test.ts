@@ -303,8 +303,6 @@ describe("recordCorrection from five callers started together", () => {
   // The chain's own guarantee — distinct, contiguous secuencias, each record linked to its
   // predecessor's huella — is exactly what a queue that did NOT serialise would break, and
   // `verifactu_records_node_secuencia_uq` refuses a duplicate position whatever wrote it.
-  // Control: with `withTransaction` replaced by a bare `backend.recordCorrection(...)` call, this
-  // case fails with `no such savepoint`.
   const RACERS = 5;
 
   it("commits five simultaneously-started corrections into one gap-free, correctly-chained sequence", async () => {

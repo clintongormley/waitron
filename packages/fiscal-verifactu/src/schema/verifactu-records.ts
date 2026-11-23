@@ -32,28 +32,20 @@ export const verifactuRecords = table(
     ),
     // Where the sale came from: informational only and never hashed. The chain key is `node_id`.
     source: saleSourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     // The node that owns this record's chain: the chain key.
     nodeId: id("node_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => nodes.id),
-    /* v8 ignore stop */
     // Which SIF identity generated this record. A new NúmeroInstalación is a new SIF, therefore a
     // new chain, and this column is what makes "which chain" a fact on the row
     // rather than an inference from dates.
     sifId: id("sif_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => verifactuIdentities.id),
-    /* v8 ignore stop */
     saleId: id("sale_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => sales.id),
-    /* v8 ignore stop */
     // OUR ordering aid for the outbox. NOT AEAT's — AEAT has no sequence number. It is never a
     // substitute for the four-part predecessor pointer below, and it is NEVER derived from or
     // validated against the invoice counter: chain position is chronological by generation within
@@ -117,7 +109,6 @@ export const verifactuRecords = table(
     entorno: label("entorno"),
     creadoEn: ts("creado_en").notNull().$defaultFn(now),
   },
-  /* v8 ignore start */
   (t) => [
     // THE backstop against two writers claiming one chain position. Keyed on the node: two tills
     // of one node share one sequence. See chain.node-rekey.concurrency.test.ts.
@@ -175,5 +166,4 @@ export const verifactuRecords = table(
              and ${t.anteriorHuella} is not null)`,
     ),
   ],
-  /* v8 ignore stop */
 );

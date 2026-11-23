@@ -5,7 +5,7 @@ import type { AckState } from "@waitron/fiscal";
 
 /**
  * The ack contract, its durable-table transport, and the in-process consumer that projects an
- * unsent count from a stream of acks (plan 3b design §7).
+ * unsent count from a stream of acks.
  *
  * The invariant: an ack never disagrees with the committed `verifactu_submissions.estado`/`csv` it reflects.
  * `writeAck` is the sole producer, always called in the SAME transaction as the estado write, and

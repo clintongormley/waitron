@@ -98,7 +98,7 @@ import "./errors.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
-// Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
+// Cancellations, comps and discounts applied to an open bill (service design §7),
 // against a provisioned venue that files real Veri*Factu records.
 let venue: AdjustmentVenue;
 let approvalReasonId: string;
@@ -2497,7 +2497,7 @@ describe("a reason's euro limit counts what is still off the bill (owner, 2026-1
   });
 });
 
-describe("the bill's comp limit (A758 §3.5)", () => {
+describe("the bill's comp limit", () => {
   // The venue is shared by every case in the file, so each case sets the limit it needs.
   const setLimit = (maxBillComp: string | null) =>
     inTx(venue, async (tx) =>
@@ -4106,7 +4106,7 @@ describe("a counter order (B11c)", () => {
     ]);
   });
 
-  describe("the bill's comp limit (A758 §3.5)", () => {
+  describe("the bill's comp limit", () => {
     const setLimit = (maxBillComp: string | null) =>
       inTx(venue, async (tx) =>
         saveAdjustmentSettings(

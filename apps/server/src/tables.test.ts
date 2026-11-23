@@ -528,7 +528,7 @@ describe("listTablesWithState — no dispatch state", () => {
 
 // The worst age band across the open tab's unserved lines, each against its own station's thresholds.
 describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
-  it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
+  it("bands a line by its station thresholds and clears it once served", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>

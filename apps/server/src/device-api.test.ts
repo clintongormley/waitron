@@ -2801,7 +2801,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
   });
 });
 
-describe("GET /api/device/me + station (SP-A.2 §16)", () => {
+describe("GET /api/device/me + station", () => {
   it("reports an enrolled handheld's formFactor + name, and no kitchen screen", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

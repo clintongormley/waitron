@@ -126,7 +126,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     });
   });
 
-  it("derives a stable wo idempotency key across two collects, decoupled from the random payment_ref (§4)", async () => {
+  it("derives a stable wo idempotency key across two collects, decoupled from the random payment_ref", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);

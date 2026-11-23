@@ -210,11 +210,6 @@ were the legitimate shape where a block comment heads a group of members rather 
 the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
 header-then-member shape, and its own tests, rather than re-running a scratch script.
 
-## fiscal-verifactu's schema files keep `v8 ignore` pairs with no stated reason
-
-- Schema files in `packages/fiscal-verifactu/src/schema` keep `v8 ignore` pairs, and none says
-  why. Removing a pair is a code change, for whoever next changes that package's code.
-
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 
 `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude

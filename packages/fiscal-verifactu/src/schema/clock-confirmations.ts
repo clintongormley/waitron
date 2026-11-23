@@ -43,9 +43,7 @@ export const clockConfirmations = table(
     confirmedAt: ts("confirmed_at").notNull(),
     stepMs: count("step_ms").notNull(),
     source: clockConfirmationSource("source").notNull(),
-    // The administrator or staff member who confirmed. No foreign key: `persons` is in
-    // @waitron/identity's migration set, which this set does not require. Nothing checks that it
-    // names a person.
+    // No foreign key. The writer takes this id from the supplied clock confirmation.
     personId: id("person_id"),
     reason: clockConfirmationReason("reason").notNull(),
     proof: json<unknown>("proof").notNull(),

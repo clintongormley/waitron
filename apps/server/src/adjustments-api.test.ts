@@ -59,7 +59,7 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-// The till's adjustment routes (service plan Task 11): apply, preview, and the reasons and
+// The till's adjustment routes: apply, preview, and the reasons and
 // approvers the till offers, over HTTP against a provisioned venue.
 let venue: AdjustmentVenue;
 let approvalReasonId: string;

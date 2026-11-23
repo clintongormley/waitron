@@ -2,10 +2,6 @@ import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, newId, nodes, table, ts } from "@waitron/db";
 import { verifactuRecords } from "./verifactu-records.js";
 
-/**
- * Written by nothing: kept for the go-live migration squash (A760) to drop. Declared `appendOnly()`
- * in `../classification.ts`.
- */
 export const clockStopRestarts = table(
   "clock_stop_restarts",
   {
@@ -13,8 +9,7 @@ export const clockStopRestarts = table(
     nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. Nothing checks that it names a person.
+    // This legacy table has no product writer. The person id has no foreign key.
     personId: id("person_id").notNull(),
     restartedAt: ts("restarted_at").notNull(),
     // The reading the manager accepted.

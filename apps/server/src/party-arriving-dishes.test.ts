@@ -65,7 +65,7 @@ function minutesAgo(minutes: number): string {
 }
 
 // Dishes that arrive in a party by Move a bill or Split a table get a kitchen group, so the pass
-// can mark them and the waiter can release what is unsent (table actions plan, Task 9; A96, P16).
+// can mark them and the waiter can release what is unsent (A96, P16).
 let v: PartyVenue;
 /** A counter zone whose orders are invoiced when placed. */
 let ticketThenPayZone: string;

@@ -28,7 +28,7 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// Money through `POST /api/bills/:id/move` (table actions plan, Task 7; spec §7, §9, §15). The move
+// Money through `POST /api/bills/:id/move`. The move
 // itself is tested in `party-move-bill.test.ts`.
 let venue: BillVenue;
 let ticketThenPayZone: string;

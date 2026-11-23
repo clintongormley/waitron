@@ -5,11 +5,8 @@ import { AppError } from "@waitron/shared";
 import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
 
 /**
- * The venue fields a Veri*Factu filing puts on the wire verbatim, as the host hands them over. The
- * host does not know these rules — `@waitron/verifactu` is a regime package and nothing under
- * `apps/server/src` may import one (`scripts/module-seams.test.ts`) — so they are reached through
- * `FiscalContribution.venueFields`, exactly as the AEAT certificate is reached through
- * `provisioningSecret`.
+ * The venue fields a Veri*Factu filing puts on the wire verbatim. The host supplies them through
+ * `FiscalContribution.venueFields` so the active filing regime owns their validation.
  */
 export interface VenueFiscalFields {
   readonly legalName: string;
@@ -36,9 +33,7 @@ const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
 /**
  * Every field path this validator can name, as the request body spells it. Exported so the setup
- * wizard's own copy can be checked against it (`scripts/setup-wizard-fiscal-fields.test.ts`) — the
- * wizard marks and explains the refused field, and nothing under `apps/` may import a regime package
- * (`scripts/module-seams.test.ts`), so the two lists are tied together in the root project instead.
+ * wizard's own copy can be checked against it (`scripts/setup-wizard-fiscal-fields.test.ts`).
  *
  * `refuse` takes this union rather than a bare string, so a call naming a path that is not here
  * fails to compile. What that does NOT catch is the other direction — a path listed here that

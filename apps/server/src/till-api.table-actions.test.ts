@@ -27,7 +27,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mountTillApi } from "./till-api.js";
 import { decimal } from "@waitron/shared";
 
-// The routes of Move guests, Join tables and Split a table (table actions plan, Task 8). The
+// The routes of Move guests, Join tables and Split a table. The
 // actions themselves are tested in `party-table-actions.test.ts`.
 let venue: BillVenue;
 

@@ -515,7 +515,7 @@ describe("addTabRound (append-only, no re-price)", () => {
   });
 });
 
-describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
+describe("addTabRound per-line note (non-fiscal)", () => {
   it("persists a TRIMMED note on the working_order_lines row AND snapshots it onto ticket_items at fire", async () => {
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));

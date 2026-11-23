@@ -69,7 +69,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
-// Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
+// Split, merge and transfer between a party's bills.
 // `resetPerTest: false`: the venue is provisioned once in `setup`, and each case seats its own tables.
 let v: PartyVenue;
 let counter: ZoneOffers;

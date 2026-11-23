@@ -15,20 +15,16 @@ export const acks = table(
   {
     registroId: id("registro_id")
       .primaryKey()
-      /* v8 ignore start */
       .references(() => verifactuRecords.id),
-    /* v8 ignore stop */
     submittedAt: ts("submitted_at").notNull(),
     csv: label("csv"),
     state: label("state").notNull(),
     deliveredAt: ts("delivered_at"),
   },
-  /* v8 ignore start */
   (t) => [
     check(
       "acks_state_ck",
       sql`${t.state} in ('accepted', 'accepted_with_errors', 'rejected', 'halted')`,
     ),
   ],
-  /* v8 ignore stop */
 );

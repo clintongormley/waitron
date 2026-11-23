@@ -1,5 +1,5 @@
 /**
- * The Spanish terms this module OWNS (module-system architecture §3; SP-3b spec §2–§3): legitimate
+ * The Spanish terms this module OWNS: legitimate
  * inside this package, forbidden in every generic package. Declared here and wired onto the
  * `fiscal` descriptor's `vocabulary` seat by the composition list (`@waitron/composition`);
  * interpreted only by the root english-only suite, which assembles the forbidden set from every

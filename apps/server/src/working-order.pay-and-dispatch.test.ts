@@ -1473,7 +1473,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
 
-    // Placing FIRED the order's one line to the kitchen (KDS-1 §3b): a `ticket_items` row at `queued`
+    // Placing FIRED the order's one line to the kitchen: a `ticket_items` row at `queued`
     // on the default station — the item the KDS bump verbs advance.
     expect(await ticketStateOf(id)).toBe("queued");
   });
@@ -2313,9 +2313,8 @@ describe("prepare & collect — zone payment timing", () => {
   });
 });
 
-// The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
-
-// `ticket_items`. Bill payment (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
+// Ticket prep advances a fired line through `advanceTicketItem`. Bill payment fires the line in
+// Mode P. `placeOrder` fires it in Modes I and T.
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {
@@ -2518,7 +2517,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     ).toBe("preparing");
 
     // Order 1 paid and handed over, written directly. The default-station display drops a
-    // handed-over order (§3e), so it leaves the queue.
+    // handed-over order, so it leaves the queue.
     const settledNow = nowIso();
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}

@@ -2010,7 +2010,7 @@ describe("place → station queue → per-line advance → collect, over HTTP", 
         // Collect on a settled order alone. This one is paid by the fiscal
         // `POST /api/working-orders/:id/payments` below.
         status: "placed",
-        // KDS order-timing alerts (design §3/§6/§11): the venue's DEFAULT station carries the schema's
+        // Kitchen timing alerts: the venue's DEFAULT station carries the schema's
         // default thresholds — provisioning never overrides them.
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         items: [queuedWater, queuedWater],

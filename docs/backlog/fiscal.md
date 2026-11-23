@@ -248,8 +248,10 @@ No stored fiscal row is to be rewritten.
   - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
     removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
     rejection.
-  - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
-    header says so); the protection it gives a losing attempt has no test holding it.
+  - With the nested `tx.transaction` in `appendToChain` replaced by a direct
+    `attemptAppend(tx, …)`, `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.test.ts`
+    left the real-collision case passing and failed three stub-based cases. Those failures exercise
+    the stub's shape rather than the rollback of a losing attempt's writes.
   - `write-path.e2e.test.ts` (lines 410 and 414) points at `test/fixtures.ts:249-256` for a
     receipt of one basket hashing differently filed 16th and filed standalone, and at
     `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
@@ -1062,11 +1064,12 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Bundle: One authorised edit of a protected test, plus its neighbours
 
-3 entries, size S. The first two keep their text from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
 - **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
   try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead; removing
-  `appendToChain`'s nested `tx.transaction` makes no test fail; and `write-path.e2e.test.ts` points
+  `appendToChain`'s nested `tx.transaction` leaves the real-collision test passing but three
+  stubbed cases fail. `write-path.e2e.test.ts` points
   at fixture lines that have moved. [Detail](fiscal.md#packagesfiscal-verifactu-code)
 - **Reconcile the protected fiscal write-path test's old policy quotation.** Its header still says
   no fiscal condition blocks a sale; the approved local conflict stop is an exception. Keep its
@@ -1075,6 +1078,9 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 - **Test files in `packages/fiscal-verifactu` still name their database handle `pg`**
   (`git grep -l 'const pg = ' packages/fiscal-verifactu`), among them `write-path.e2e.test.ts` and
   `inmutabilidad.test.ts`. Rename it in the same authorised edit. Left by the T2 sweep (2026-09-23).
+- **Deleted-spec citations in `packages/fiscal-verifactu/src/write-path.e2e.test.ts`.**
+  The golden test must pass unedited. Keep these citations until the protected edit described
+  here is authorised (Lane K watcher, 2026-11-23 00:59).
 
 ## An incident record the venue can show the tax office: hardware faults, a break-in, lost data
 

@@ -314,7 +314,7 @@ describe("recordCorrection — the corrective's origin", () => {
   });
 });
 
-describe("recordCorrection — series purpose guard (§5)", () => {
+describe("recordCorrection — series purpose guard", () => {
   it("rejects an ordinary (standard) series: a correction must draw a corrective number", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);

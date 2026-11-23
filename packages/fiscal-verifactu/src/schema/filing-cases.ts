@@ -49,9 +49,7 @@ export const filingCaseEvents = table(
     // The caller's idempotency key. Not `_id`: it names no row.
     actionKey: label("action_key").notNull(),
     kind: filingCaseEventKind("kind").notNull(),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. Nothing checks that it names a person yet: `recordCaseEvent` stores any id, so the
-    // route that will record events (plan Tasks 8–9) must take it from the signed-in person.
+    // No foreign key. Remedy callers pass the person id returned by `admitRecordRemedy`.
     personId: id("person_id").notNull(),
     action: label("action").notNull(),
     remedyRegistroId: id("remedy_registro_id").references(() => verifactuRecords.id),

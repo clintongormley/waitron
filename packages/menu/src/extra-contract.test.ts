@@ -209,7 +209,7 @@ describe("extra list authoring contract", () => {
     );
   });
 
-  it("refuses a pick bound above what the column can hold", () => {
+  it("refuses an oversized pick bound", () => {
     expect(() =>
       parseExtraListInput({ ...breadsBody, minPicks: 99999999999, maxPicks: null }),
     ).toThrowError(
@@ -220,7 +220,7 @@ describe("extra list authoring contract", () => {
     );
   });
 
-  it("refuses a maxQuantity above what the column can hold, naming the offending item", () => {
+  it("refuses an oversized maxQuantity and names the item", () => {
     expect(() =>
       parseExtraListInput({
         ...breadsBody,
