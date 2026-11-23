@@ -337,7 +337,7 @@ describe("a free item on a takeaway ticket mixing VAT rates", () => {
 });
 
 describe("an amount given back on Correct invoice with no dishes chosen", () => {
-  it("previews €1.00 on the comped ticket by each dish's share of the price paid", async () => {
+  it("previews €1.00 on the comped ticket by menu price", async () => {
     const billId = await saladWithFreeWater();
     await pay(billId);
     const { saleId } = await filed(billId);

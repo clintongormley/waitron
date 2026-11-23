@@ -181,10 +181,7 @@ async function plainRefundLimit(
   return Math.min(upTo, limit(amounts));
 }
 
-/**
- * The sale's refundable payments, each hand-keyed card payment with its `plainRefundLimit`, so the
- * till never asks staff to return money on the terminal that the refund would then be refused.
- */
+/** The sale's refundable payments, each hand-keyed card payment with its `plainRefundLimit`. */
 export async function readRefundableTendersWithLimits(
   tx: Transaction,
   nodeId: DeviceRequestConfig["nodeId"],

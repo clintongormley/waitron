@@ -141,7 +141,6 @@ export class TillTenderRefundDialog extends LitElement {
   #selected(): RefundableTender | undefined {
     return this.tenders.find((row) => row.tenderId === this.draft.tenderId && available(row));
   }
-  /** The reasons offered: every one on a correction's card refund, otherwise the Void ones. */
   #offered(): AdjustmentReason[] {
     return this.correcting ? (this.reasons ?? []) : voidReasons(this.reasons);
   }
@@ -561,7 +560,7 @@ export class TillTenderRefundDialog extends LitElement {
                 >`
             : !locked
               ? html`<wt-button
-                  .variant=${selected && this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
+                  .variant=${selected && this.#reason() && !this.reasonsLoading && !blocked ? "primary" : "secondary"}
                   data-submit
                   .loading=${this.#busy()}
                   .disabled=${this.#busy() || !selected || own.size > 0 || blocked}

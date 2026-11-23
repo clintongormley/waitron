@@ -199,6 +199,7 @@ export function remainingLines(history: CorrectionAmountHistory): CorrectionAmou
         !validRate(line.rate) ||
         !isMoney(line.gross) ||
         !isMoney(line.base) ||
+        !isMoney(line.menu) ||
         compareDecimal(line.base, line.gross) > 0
       )
         unusable();

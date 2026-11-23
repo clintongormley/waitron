@@ -402,11 +402,13 @@ it.each([
     expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
     expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
     expect(button(el).disabled).toBe(true);
+    expect(button(el).variant).toBe("secondary");
     await pressEnter(el);
     expect(asks).toEqual([]);
 
     await fill(el, "appliedAmount", "39.99");
     expect(bottom(el)).toBe("");
+    expect(button(el).variant).toBe("primary");
     expect(root(el).querySelector("[data-manual-instruction]")!.textContent).toContain(
       t("tender_refund.manual_instruction"),
     );
@@ -423,6 +425,17 @@ it.each([
     ]);
   },
 );
+
+it("drops the unticked terminal step's error once the amount goes above the limit", async () => {
+  const el = await mount({ tenders: [keyed("39.99")] });
+  await choose(el, "return");
+  await fill(el, "appliedAmount", "39.99");
+  await click(el);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await fill(el, "appliedAmount", "40.00");
+  expect(bottom(el)).not.toContain(t("form.fix_fields"));
+  expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction"));
+});
 
 it("asks for a hand-keyed payment's tip alone on the terminal whatever its limit", async () => {
   const el = await mount({ tenders: [{ ...keyed("0.00"), tipRemaining: "5.00" }] });

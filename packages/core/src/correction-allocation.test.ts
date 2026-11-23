@@ -295,6 +295,7 @@ describe("correction amount allocation", () => {
     ["line", "gross", "11.001"],
     ["line", "base", "10.001"],
     ["line", "gross", "1000000000000"],
+    ["line", "menu", "-1"],
     ["line", "rate", "-1"],
     ["line", "rate", "10.001"],
     ["line", "rate", "100.01"],
