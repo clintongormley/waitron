@@ -1,9 +1,5 @@
 import type { CardDetails } from "@waitron/payments";
-import {
-  recipientIdentifierLabel,
-  receiptCountryNameFor,
-  receiptLabelsFor,
-} from "@waitron/country-packs";
+import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
 import {
   addDecimal,
   compareDecimal,
@@ -23,7 +19,8 @@ import {
 import {
   filedRates,
   rateLetters,
-  receiptFigures,
+  receiptFacts,
+  type DatedInvoice,
   type FiledFigureRow,
   type WithVatFigures,
 } from "./receipt-facts.js";
@@ -34,7 +31,6 @@ import {
   receiptDayNumeric,
 } from "./receipt-dates.js";
 import { cardName } from "./card-details.js";
-import { printsAsFullInvoice } from "./invoice-typing.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -120,26 +116,9 @@ function sameAddress(lines: readonly string[], line: string, domicile: string): 
 }
 
 export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocument {
-  const {
-    result,
-    issuer: currentIssuer,
-    receiptHeader,
-    receipt,
-    venueAddress = [],
-    venueAddressLine = "",
-    surface = "thermal",
-    paperWidth,
-    invoiceLocale,
-    simulated = false,
-    simulatedCardPayment = false,
-    duplicate = false,
-    guests,
-    testPage,
-  } = input;
-  const issuer = result.issuer ?? currentIssuer;
-  const locale = invoiceLocale;
-  const label = receiptLabelsFor(locale);
-  const simplified = !printsAsFullInvoice(result.invoiceType);
+  const { result, venueAddressLine = "", surface = "thermal", paperWidth } = input;
+  const facts = receiptFacts(input);
+  const { labels: label, locale, simplified, practice, testPage, letterhead, band } = facts;
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
@@ -187,39 +166,37 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     const name = `${" ".repeat(indent)}${item}${included}`;
     row(name, `-${itemAmount(negateDecimal(amount))}${lettered(letter)}`, indent);
   };
-  if (simulated) {
+  const practiceMark = (): void => {
+    if (practice === undefined) return;
     text(label.practice);
-    if (simulatedCardPayment) text(label.noRealCharge);
-  }
+    if (practice.noRealCharge) text(label.noRealCharge);
+  };
+  practiceMark();
   if (testPage) text(label.paymentNotice);
-  if (simulated || testPage) rule();
+  if (practice || testPage) rule();
 
-  if (result.qr !== "") {
+  if (facts.qr !== undefined) {
+    const { text: qr, caption, legend } = facts.qr;
     align("center");
-    if (result.qrText) text(result.qrText.caption);
-    elements.push({ kind: "qr", text: result.qr });
-    if (result.qrText) text(result.qrText.legend);
+    if (caption !== undefined) text(caption);
+    elements.push({ kind: "qr", text: qr });
+    if (legend !== undefined) text(legend);
     rule();
     align("left");
   }
 
   align("center");
   part("logo", () => elements.push({ kind: "logo" }));
-  const tradingName = receiptHeader?.tradingName?.trim();
-  const printsTradingName =
-    receiptHeader?.printTradingName === true &&
-    !!tradingName &&
-    tradingName !== issuer.venueName.trim();
-  if (printsTradingName) text(tradingName, 0, { bold: true });
-  const { headerSubtitle, phone, email, footerMessage } = receipt;
+  const { tradingName, headerSubtitle, legalName, nif, domicile, phone, email } = letterhead;
+  if (tradingName !== undefined) text(tradingName, 0, { bold: true });
   if (headerSubtitle) part("headerSubtitle", () => text(headerSubtitle));
-  text(issuer.venueName, 0, printsTradingName ? undefined : { bold: true });
-  text(`${label.nif}: ${issuer.nif}`);
-  const venueLines = surface === "thermal" ? venueAddress : [];
+  text(legalName, 0, tradingName !== undefined ? undefined : { bold: true });
+  text(`${label.nif}: ${nif}`);
+  const venueLines = surface === "thermal" ? letterhead.venueAddress : [];
   if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
   const phoneLine = phone ? `${label.phone} ${phone}` : "";
   if (surface === "a4" && !simplified) {
-    const line = [issuer.domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
+    const line = [domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
     if (line) {
       contactLine = elements.length;
       text(line);
@@ -228,24 +205,20 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     if (phoneLine) part("phone", () => text(phoneLine));
     if (email) part("email", () => text(email));
   }
-  if (surface === "thermal" && !simplified && issuer.domicile) {
-    if (venueLines.length === 0) text(issuer.domicile);
-    else if (!sameAddress(venueLines, venueAddressLine, issuer.domicile)) {
-      text(`${label.registeredAddress}: ${issuer.domicile}`);
+  if (surface === "thermal" && !simplified && domicile) {
+    if (venueLines.length === 0) text(domicile);
+    else if (!sameAddress(venueLines, venueAddressLine, domicile)) {
+      text(`${label.registeredAddress}: ${domicile}`);
     }
   }
-  if (duplicate) text(label.duplicate);
+  if (band.duplicate) text(label.duplicate);
   rule();
   align("left");
 
-  if (result.orderLabel !== null || result.orderNumber !== 0)
-    row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
-  if (result.takeAway === true) text(label.takeAway, 0, { bold: true });
-  const dated = (invoice: {
-    invoiceNumber: string;
-    issuedAt: string;
-    issuedOffsetMinutes?: number;
-  }) => {
+  if (band.orderLabel !== null || band.orderNumber !== 0)
+    row(band.orderLabel ?? "", `${label.order} ${band.orderNumber}`, 0, undefined, 2);
+  if (band.takeAway) text(label.takeAway, 0, { bold: true });
+  const dated = (invoice: DatedInvoice) => {
     const date =
       paperWidth === "58mm"
         ? receiptDateTimeNumeric(invoice.issuedAt, locale, invoice.issuedOffsetMinutes)
@@ -253,35 +226,33 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(invoice.invoiceNumber, date, 0, undefined, 2);
   };
-  if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
+  const { corrects, customer } = facts;
+  if (corrects) text(label.correctiveInvoice, 0, { bold: true });
   if (simplified) {
-    dated(result);
+    dated(band);
   } else {
-    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
+    row(label.invoiceHeading, band.invoiceNumber, 0, { bold: true });
+    row(label.date, receiptDateTime(band.issuedAt, locale, band.issuedOffsetMinutes));
   }
-  if (result.saleDay !== undefined) {
+  if (band.saleDay !== undefined) {
     const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
-    row(label.saleDate, day(result.saleDay, locale));
+    row(label.saleDate, day(band.saleDay, locale));
   }
-  if (result.corrects) {
-    text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
-    dated(result.corrects);
+  if (corrects) {
+    text(corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
+    dated(corrects);
     // Invoicing regulation art. 15.5: a replacement states the rectification's amount, zero.
-    if (result.corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
+    if (corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
   }
   rule();
-  if (!simplified && result.recipient) {
+  if (customer) {
     text(label.customer);
-    text(result.recipient.legalName);
-    text(
-      `${recipientIdentifierLabel(result.recipient.identifierType, locale)}: ${result.recipient.taxId}`,
-    );
-    text(result.recipient.address);
-    text(receiptCountryNameFor(result.recipient.countryCode, locale));
+    text(customer.legalName);
+    text(`${recipientIdentifierLabel(customer.identifierType, locale)}: ${customer.taxId}`);
+    text(customer.address);
+    text(receiptCountryNameFor(customer.countryCode, locale));
     rule();
   }
-  const figures = receiptFigures(input);
   const withRate = filedRates(result.lines).length > 1;
   const tableRow = (figure: FiledFigureRow): ReceiptTableRow => {
     const indent = figure.indent > 0 ? { itemIndent: figure.indent } : {};
@@ -329,7 +300,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     }
   };
   let tables = 0;
-  for (const section of figures.sections) {
+  for (const section of facts.sections) {
     if (section.kind === "filed") {
       const table: ReceiptTable = {
         ...(tables === 0
@@ -357,18 +328,18 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
   if (tables > 0) text(`    ${label.pricesExcludeVat}`, 4);
   rule();
   const vatRows = (): void => {
-    for (const v of figures.vat) {
+    for (const v of facts.vat) {
       row(`${label.taxableBase} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
       row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
     }
   };
   const total = (): void => {
-    row(label.total, formatMoney(figures.total, locale), 0, { double: true });
+    row(label.total, formatMoney(facts.total, locale), 0, { double: true });
   };
   if (simplified) {
     total();
     rule();
-    if (figures.vat.length > 0)
+    if (facts.vat.length > 0)
       elements.push({
         kind: "taxTable",
         header: {
@@ -377,7 +348,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
           tax: label.taxAmountColumn,
           total: label.taxTotalColumn,
         },
-        rows: figures.vat.map((v) => {
+        rows: facts.vat.map((v) => {
           const rate = formatVatRate(v.rate, locale);
           const found = rateLetter(v.rate);
           return {
@@ -394,7 +365,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     total();
   }
   rule();
-  const t = result.tender;
+  const { payments, tender: t, owed } = facts.payment;
   const cardRows = (card: CardDetails | undefined, amount: Decimal): void => {
     if (card === undefined) {
       row(label.card, formatMoney(amount, locale));
@@ -409,8 +380,8 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     row(`${cardName(card, label.card)}${presented}`, formatMoney(amount, locale));
     if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
   };
-  if (result.payments !== undefined && result.payments.length > 0) {
-    for (const payment of result.payments) {
+  if (payments !== undefined && payments.length > 0) {
+    for (const payment of payments) {
       if (payment.method === "cash") {
         row(label.cash, formatMoney(payment.tendered, locale));
         if (payment.change !== "0.00") row(label.change, formatMoney(payment.change, locale));
@@ -429,7 +400,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
       }
     }
   } else if (t.method === "cash") {
-    row(label.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
+    row(label.cash, formatMoney(addDecimal(facts.total, decimal(t.change)), locale));
     row(label.change, formatMoney(t.change, locale));
   } else if (t.method === "deferred") {
     text(label.deferredPayment);
@@ -442,12 +413,12 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
       row(label.charged, formatMoney(t.charged, locale));
     }
   }
-  if (result.owed !== undefined)
-    row(label.owed, formatMoney(result.owed, locale), 0, { bold: true });
+  if (owed !== undefined) row(label.owed, formatMoney(owed, locale), 0, { bold: true });
   rule();
+  const { guests, footerMessage } = facts;
   if (guests !== undefined) {
     const people = `${guests} ${guests === 1 ? label.guest : label.guests}`;
-    const each = divideDecimal(decimal(result.total), decimal(String(guests)), MONEY_SCALE);
+    const each = divideDecimal(facts.total, decimal(String(guests)), MONEY_SCALE);
     row(`${people} · ${label.perPerson}`, formatMoney(each, locale));
     rule();
   }
@@ -457,11 +428,8 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     part("footerMessage", () => text(footerMessage));
     align("left");
   }
-  if (simulated || testPage) rule();
-  if (simulated) {
-    text(label.practice);
-    if (simulatedCardPayment) text(label.noRealCharge);
-  }
+  if (practice || testPage) rule();
+  practiceMark();
   if (testPage) {
     text(label.paymentNotice);
     text(testPage.printer);
@@ -472,7 +440,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     elements,
     parts,
     ...(contactLine === undefined ? {} : { contactLine }),
-    duplicate,
-    practice: simulated,
+    duplicate: band.duplicate,
+    practice: practice !== undefined,
   };
 }

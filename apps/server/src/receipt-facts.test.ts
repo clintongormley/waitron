@@ -1,6 +1,7 @@
 import { addDecimal, decimal, type Decimal } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { rateLetters, receiptFigures, type ReceiptFigures } from "./receipt-facts.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
+import { rateLetters, receiptFacts, receiptFigures, type ReceiptFigures } from "./receipt-facts.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {
@@ -184,5 +185,134 @@ describe("rateLetters", () => {
 
   it("letters nothing on a bill with one rate", () => {
     expect(rateLetters([{ rate: "10" }, { rate: "10.00" }])).toBeNull();
+  });
+});
+
+describe("receiptFacts", () => {
+  const fixture = (): ReceiptDocumentInput => structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+
+  it("carries the fixture's filed issuer, customer, band and cash tender as raw values", () => {
+    const facts = receiptFacts(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const { result } = FULL_INVOICE_DOCUMENT_FIXTURE;
+    expect(facts.labels).toEqual(receiptLabelsFor("es-ES"));
+    expect(facts.locale).toBe("es-ES");
+    expect(facts.letterhead).toEqual({
+      tradingName: "La Buena",
+      headerSubtitle: FULL_INVOICE_DOCUMENT_FIXTURE.receipt.headerSubtitle,
+      legalName: result.issuer!.venueName,
+      nif: result.issuer!.nif,
+      domicile: result.issuer!.domicile,
+      venueAddress: FULL_INVOICE_DOCUMENT_FIXTURE.venueAddress,
+      phone: FULL_INVOICE_DOCUMENT_FIXTURE.receipt.phone,
+      email: FULL_INVOICE_DOCUMENT_FIXTURE.receipt.email,
+    });
+    expect(facts.band).toEqual({
+      invoiceNumber: "FF/1",
+      issuedAt: result.issuedAt,
+      issuedOffsetMinutes: 120,
+      orderLabel: result.orderLabel,
+      orderNumber: 41,
+      takeAway: false,
+      duplicate: false,
+    });
+    expect(facts.customer).toEqual({
+      legalName: result.recipient!.legalName,
+      taxId: "B11223344",
+      address: result.recipient!.address,
+      countryCode: "ES",
+    });
+    expect(facts.payment).toEqual({ tender: { method: "cash", change: "0.31" } });
+    expect(facts.qr).toEqual({ text: result.qr, caption: "QR tributario:", legend: "VERI*FACTU" });
+    expect(facts.footerMessage).toBe(FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage);
+    expect(facts.total).toBe("19.69");
+    expect(facts.corrects).toBeUndefined();
+    expect(facts.practice).toBeUndefined();
+    expect(facts.testPage).toBeUndefined();
+    expect(facts.guests).toBeUndefined();
+  });
+
+  it("names no customer on a simplified invoice, even one the record gives a recipient", () => {
+    const input = fixture();
+    input.result.invoiceType = "F2";
+    expect(receiptFacts(input).customer).toBeUndefined();
+  });
+
+  it("leaves out a trading name the venue does not print, or one that repeats its legal name", () => {
+    const off = fixture();
+    off.receiptHeader = { tradingName: "La Buena", printTradingName: false };
+    expect(receiptFacts(off).letterhead.tradingName).toBeUndefined();
+    const same = fixture();
+    same.receiptHeader = {
+      tradingName: ` ${same.result.issuer!.venueName} `,
+      printTradingName: true,
+    };
+    expect(receiptFacts(same).letterhead.tradingName).toBeUndefined();
+  });
+
+  it("falls back to the current issuer when the record names none", () => {
+    const input = fixture();
+    delete input.result.issuer;
+    expect(receiptFacts(input).letterhead).toMatchObject({
+      legalName: "Current mutable issuer",
+      nif: "B87654321",
+      domicile: "Current mutable domicile",
+    });
+  });
+
+  it("carries a duplicate, a take-away, a sale day and the invoice a corrective corrects", () => {
+    const input = fixture();
+    input.duplicate = true;
+    input.result.takeAway = true;
+    input.result.saleDay = "2026-08-16";
+    input.result.invoiceType = "R5";
+    input.result.corrects = {
+      invoiceNumber: "A/7",
+      issuedAt: "2026-08-16T20:00:00.000Z",
+      issuedOffsetMinutes: 120,
+      inFull: true,
+    };
+    const facts = receiptFacts(input);
+    expect(facts.band).toMatchObject({ duplicate: true, takeAway: true, saleDay: "2026-08-16" });
+    expect(facts.corrects).toEqual({
+      invoiceNumber: "A/7",
+      issuedAt: "2026-08-16T20:00:00.000Z",
+      issuedOffsetMinutes: 120,
+      inFull: true,
+    });
+    delete input.result.corrects!.inFull;
+    expect(receiptFacts(input).corrects!.inFull).toBe(false);
+  });
+
+  it("carries practice, a test page, guests, what is owed and every bill payment", () => {
+    const input = fixture();
+    input.simulated = true;
+    input.simulatedCardPayment = true;
+    input.testPage = { printer: "Bar" };
+    input.guests = 3;
+    input.result.owed = "4.00";
+    input.result.qr = "";
+    delete input.result.qrText;
+    input.result.payments = [
+      {
+        method: "cash",
+        amount: "19.69",
+        tendered: "20.00",
+        change: "0.31",
+        tip: "0.00",
+        refunds: [],
+      },
+    ];
+    const facts = receiptFacts(input);
+    expect(facts.practice).toEqual({ noRealCharge: true });
+    expect(facts.testPage).toEqual({ printer: "Bar" });
+    expect(facts.guests).toBe(3);
+    expect(facts.qr).toBeUndefined();
+    expect(facts.payment).toEqual({
+      payments: input.result.payments,
+      tender: { method: "cash", change: "0.31" },
+      owed: "4.00",
+    });
+    input.simulatedCardPayment = false;
+    expect(receiptFacts(input).practice).toEqual({ noRealCharge: false });
   });
 });

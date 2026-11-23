@@ -1,6 +1,7 @@
 import { customerOptionSnapshotLabels } from "@waitron/menu";
 import type { ReceiptLabels } from "@waitron/country";
-import { receiptLabelsFor } from "@waitron/country-packs";
+import type { BankAccount } from "@waitron/db";
+import { receiptLabelsFor, type RecipientIdentifierType } from "@waitron/country-packs";
 import {
   addDecimal,
   compareDecimal,
@@ -29,7 +30,8 @@ import { receiptDayNumeric } from "./receipt-dates.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
+import type { BillTenderLine } from "./receipt-payments.js";
+import type { ReceiptAdjustment, TenderBlock, TillSaleLine } from "./till-sale.js";
 
 /** A row of a full invoice's table, before VAT. Amounts are what the row adds: a discount's are
  *  negative. */
@@ -86,6 +88,57 @@ export interface ReceiptFigures {
   vat: { rate: Decimal; base: Decimal; tax: Decimal }[];
   total: Decimal;
 }
+
+/** Where an invoice was dated: its number, instant and the offset it was filed at. */
+export interface DatedInvoice {
+  invoiceNumber: string;
+  issuedAt: string;
+  issuedOffsetMinutes?: number;
+}
+
+/** What a receipt says, as raw values; placement words, formats and lays them out. */
+export type ReceiptFacts = ReceiptFigures & {
+  labels: ReceiptLabels;
+  locale: string;
+  practice?: { noRealCharge: boolean };
+  testPage?: { printer: string };
+  qr?: { text: string; caption?: string; legend?: string };
+  letterhead: {
+    /** Present only where it prints: asked for, and not the legal name again. */
+    tradingName?: string;
+    headerSubtitle?: string;
+    legalName: string;
+    nif: string;
+    domicile?: string;
+    venueAddress: string[];
+    phone?: string;
+    email?: string;
+  };
+  band: DatedInvoice & {
+    saleDay?: string;
+    orderLabel: string | null;
+    orderNumber: number;
+    takeAway: boolean;
+    duplicate: boolean;
+  };
+  corrects?: DatedInvoice & { inFull: boolean };
+  /** Only on a full invoice. */
+  customer?: {
+    legalName: string;
+    taxId: string;
+    identifierType?: RecipientIdentifierType;
+    address: string;
+    countryCode: string;
+  };
+  payment: {
+    payments?: BillTenderLine[];
+    tender: TenderBlock;
+    owed?: Decimal;
+    deferred?: { account: BankAccount | null };
+  };
+  guests?: number;
+  footerMessage?: string;
+};
 
 const ZERO = decimal("0.00");
 const ONE = decimal("1");
@@ -358,6 +411,87 @@ export function receiptFigures({
     })),
     total: decimal(result.total),
   };
+}
+
+export function receiptFacts(input: ReceiptDocumentInput): ReceiptFacts {
+  const { result, receipt, receiptHeader, invoiceLocale: locale } = input;
+  const figures = receiptFigures(input);
+  const issuer = result.issuer ?? input.issuer;
+  const tradingName = receiptHeader?.tradingName?.trim();
+  const { headerSubtitle, phone, email, footerMessage } = receipt;
+  const { corrects, recipient } = result;
+  return {
+    ...figures,
+    labels: receiptLabelsFor(locale),
+    locale,
+    ...(input.simulated === true
+      ? { practice: { noRealCharge: input.simulatedCardPayment === true } }
+      : {}),
+    ...(input.testPage === undefined ? {} : { testPage: input.testPage }),
+    ...(result.qr === ""
+      ? {}
+      : { qr: { text: result.qr, ...(result.qrText === undefined ? {} : result.qrText) } }),
+    letterhead: {
+      ...(receiptHeader?.printTradingName === true &&
+      !!tradingName &&
+      tradingName !== issuer.venueName.trim()
+        ? { tradingName }
+        : {}),
+      ...(headerSubtitle ? { headerSubtitle } : {}),
+      legalName: issuer.venueName,
+      nif: issuer.nif,
+      ...(issuer.domicile ? { domicile: issuer.domicile } : {}),
+      venueAddress: [...(input.venueAddress ?? [])],
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+    },
+    band: {
+      invoiceNumber: result.invoiceNumber,
+      issuedAt: result.issuedAt,
+      ...offset(result),
+      ...(result.saleDay === undefined ? {} : { saleDay: result.saleDay }),
+      orderLabel: result.orderLabel,
+      orderNumber: result.orderNumber,
+      takeAway: result.takeAway === true,
+      duplicate: input.duplicate === true,
+    },
+    ...(corrects === undefined
+      ? {}
+      : {
+          corrects: {
+            invoiceNumber: corrects.invoiceNumber,
+            issuedAt: corrects.issuedAt,
+            ...offset(corrects),
+            inFull: corrects.inFull === true,
+          },
+        }),
+    ...(figures.simplified || recipient === undefined
+      ? {}
+      : {
+          customer: {
+            legalName: recipient.legalName,
+            taxId: recipient.taxId,
+            ...(recipient.identifierType === undefined
+              ? {}
+              : { identifierType: recipient.identifierType }),
+            address: recipient.address,
+            countryCode: recipient.countryCode,
+          },
+        }),
+    payment: {
+      ...(result.payments === undefined ? {} : { payments: result.payments }),
+      tender: result.tender,
+      ...(result.owed === undefined ? {} : { owed: decimal(result.owed) }),
+    },
+    ...(input.guests === undefined ? {} : { guests: input.guests }),
+    ...(footerMessage ? { footerMessage } : {}),
+  };
+}
+
+function offset({ issuedOffsetMinutes }: { issuedOffsetMinutes?: number }): {
+  issuedOffsetMinutes?: number;
+} {
+  return issuedOffsetMinutes === undefined ? {} : { issuedOffsetMinutes };
 }
 
 /**
