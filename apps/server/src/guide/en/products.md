@@ -280,8 +280,11 @@ product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
-Use **Search menus** on the Menus list to find a menu by name. **Columns** beside it chooses
-which columns you see.
+Use **Search menus** on the Menus list to find a menu by name.
+
+**Unpublished changes** under a menu's status means the tills do not have your latest edits yet:
+choose it to review them and publish. **Price clashes** there must be fixed before the menu can be
+published: choose it to see them.
 
 When you save a new product, the editor closes and a window such as **Add Flat white to menus** asks where it goes. It
 lists each menu's **Top level** and the sections inside it: tick the places you want and choose

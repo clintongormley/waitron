@@ -535,19 +535,16 @@ export class MenusScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
       }
       /* Back by the ghost button's own inline padding and border, so a name's text starts under
-         the Name heading's text; the button keeps its tap size. */
+         the Name heading's text. The padding is narrowed so the button's border and focus ring
+         stay inside the cell rather than on the table's clipped edge; it keeps its tap size. */
       wt-data-table::part(name) {
+        --wt-button-padding-inline: var(--wt-space-1);
         overflow-wrap: anywhere;
         text-align: start;
-        margin-inline-start: calc(-1 * (var(--wt-space-4) + 1px));
+        margin-inline-start: calc(-1 * (var(--wt-space-1) + 1px));
       }
-      wt-data-table::part(note),
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(note) {
-        display: block;
-        font-size: var(--wt-font-size-sm);
       }
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
@@ -587,7 +584,8 @@ export class MenusScreen extends LitElement {
         display: block;
         padding-block-start: calc((var(--wt-tap-min) - 1lh) / 2);
       }
-      wt-data-table::part(changes) {
+      wt-data-table::part(changes),
+      wt-data-table::part(clashes) {
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
@@ -605,7 +603,15 @@ export class MenusScreen extends LitElement {
         min-height: var(--wt-tap-min);
         color: var(--wt-color-primary-text);
       }
-      wt-data-table::part(changes-link):focus-visible {
+      /* Clashes stop the menu being published, so the danger colour says so. */
+      wt-data-table::part(clashes-link) {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-danger);
+      }
+      wt-data-table::part(changes-link):focus-visible,
+      wt-data-table::part(clashes-link):focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -696,6 +702,8 @@ export class MenusScreen extends LitElement {
   @state() private statuses: Record<string, MenuStatus> | null = null;
   @state() private statusesError = false;
   @state() private statusesResetRequired = false;
+  /** The code the failed read of every menu's state named, or "" when it named none. */
+  @state() private statusesErrorCode = "";
   /** The open menu's publication state, followed while its editor is shown: on the Preview tab
    * through the preview, which carries it. Null until read. */
   @state() private status: MenuStatus | null = null;
@@ -815,6 +823,7 @@ export class MenusScreen extends LitElement {
       if (this.menuId === null) {
         this.statusesError = true;
         this.statusesResetRequired = codeOf(error) === "menu.reset_required";
+        this.statusesErrorCode = codeOf(error, "");
       } else {
         this.statusError = true;
         this.statusResetRequired = codeOf(error) === "menu.reset_required";
@@ -2287,10 +2296,12 @@ export class MenusScreen extends LitElement {
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
 
-  /** What is live and when it was published; a changed menu adds a marked link to its changes. */
+  /** What is live and when it was published; a changed menu adds a marked link to its changes,
+   * and a menu with clashing prices a link to them. */
   #statusCell(menu: MenuRow) {
-    if (menu.kind === "set_menu") return nothing;
     const test = `status-${menu.id}`;
+    if (menu.kind === "set_menu")
+      return html`<span part="status muted" data-test=${test}>${t("menus.set_menu_status")}</span>`;
     if (typeof menu.status === "string")
       return html`<span part="status muted" data-test=${test}
         >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
@@ -2299,11 +2310,29 @@ export class MenusScreen extends LitElement {
       menu.status.state === "changed" ? { ...menu.status, state: "current" } : menu.status,
       this.now,
     );
+    // The dot and the time keep together, so a wrapped line never ends on the dot.
     return html`<span part="status" data-test=${test}
-        >${label}${menu.status.clashes ? html` <span part="clash">${menu.status.clashes} ${t(menu.status.clashes === 1 ? "menus.clash" : "menus.clashes")}</span>` : nothing}${
-          live === null ? nothing : html` <span part="note time">${live.time}</span>`
-        }</span
-      >${menu.status.state === "changed" ? html` ${this.#changesLink(menu)}` : nothing}`;
+        >${label}${live === null ? nothing : html` <span part="muted time">·&nbsp;${live.time}</span>`}</span
+      >${menu.status.state === "changed" ? html` ${this.#changesLink(menu)}` : nothing}${
+        menu.status.clashes ? html` ${this.#clashesLink(menu, menu.status.clashes)}` : nothing
+      }`;
+  }
+
+  #clashesLink(menu: MenuRow, clashes: number) {
+    const label =
+      clashes === 1
+        ? t("menus.price_clash")
+        : fill("menus.price_clashes", { count: String(clashes) });
+    return html`<span part="clashes"
+      ><a
+        part="clashes-link"
+        data-test=${`clashes-${menu.id}`}
+        href=${`${tabAddress(menu.id, "prices")}/filter/clashes`}
+        aria-label=${`${label}: ${menu.name}`}
+        @click=${(event: MouseEvent) => this.#openTab(event, menu.id, "prices", "clashes")}
+        >${label}</a
+      ></span
+    >`;
   }
 
   #changesLink(menu: MenuRow) {
@@ -2321,10 +2350,15 @@ export class MenusScreen extends LitElement {
     >`;
   }
 
-  #openTab(event: MouseEvent, menuId: string, tab: Tab): void {
+  #openTab(
+    event: MouseEvent,
+    menuId: string,
+    tab: Tab,
+    priceFilter: "clashes" | null = null,
+  ): void {
     if (leftToBrowser(event)) return;
     event.preventDefault();
-    this.#open(menuId, tab);
+    this.#open(menuId, tab, priceFilter);
   }
 
   /** On a narrow list the status moves under the name and its column goes, as the variants table
@@ -2575,14 +2609,35 @@ export class MenusScreen extends LitElement {
     ></dashboard-set-menu-terms-form>`;
   }
 
+  /** Said once above the list, beside the "Could not be checked" in each row. */
+  #renderStatusesError() {
+    const code = this.statusesErrorCode;
+    return html`<p class="error" role="alert" data-test="statuses-error">
+        ${t("menus.statuses_error")}${
+          code
+            ? html` <span
+                data-test=${code === "menu.reset_required" ? "status-reset-error" : "statuses-error-reason"}
+                >${codeMessage(code)}</span
+              >`
+            : nothing
+        }
+      </p>
+      <wt-button
+        data-test="statuses-retry"
+        variant="secondary"
+        @click=${() => this.#followStatus(true)}
+        >${t("menus.retry")}</wt-button
+      >`;
+  }
+
   #renderList() {
     const loaded = !this.loading && !this.loadError;
     return html`<div class="header">
         <h1>${t("menus.title")}</h1>
-        ${loaded ? this.#renderAddMenu() : nothing}
+        ${loaded && this.menus.length ? this.#renderAddMenu() : nothing}
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
-      ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
+      ${this.statusesError ? this.#renderStatusesError() : nothing}
       ${
         loaded
           ? html`<div class="list">

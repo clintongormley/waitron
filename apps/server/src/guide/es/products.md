@@ -296,8 +296,11 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
-Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre. **Columnas**,
-a su lado, elige qué columnas ves.
+Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
+
+**Cambios sin publicar** bajo el estado de una carta significa que las cajas aún no tienen tus
+últimos cambios: elígelo para revisarlos y publicar. Los **conflictos de precio** que aparecen ahí
+deben resolverse antes de poder publicar la carta: elígelos para verlos.
 
 Cuando guardas un producto nuevo, el editor se cierra y una ventana como **Añadir Flat white a las
 cartas** pregunta dónde va. Muestra el **Nivel principal** de cada carta y sus secciones: marca los

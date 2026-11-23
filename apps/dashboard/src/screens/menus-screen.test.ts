@@ -1264,9 +1264,37 @@ describe("the menus list's heading row", () => {
     });
   });
 
-  it("still offers Add menu under the empty table's sentence, and in the heading's row", async () => {
-    const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
-    expect(table(el).querySelector(":scope > [slot=empty-action]")).not.toBeNull();
+  it("offers one Add menu while there are no menus, under the empty table's sentence", async () => {
+    for (const [locale, sentence] of [
+      ["en-GB", "No menus yet. Add one, fill it with products, then publish it to the tills."],
+      [
+        "es-ES",
+        "Todavía no hay cartas. Añade una, llénala de productos y publícala para enviarla a las cajas.",
+      ],
+    ] as const)
+      await at([1280, 900], locale, async () => {
+        const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([]) }));
+        expect(table(el).querySelector(":scope > [slot=empty-action]")).not.toBeNull();
+        expect(headerAdd(el)).toBeNull();
+        expect(el.shadowRoot!.querySelectorAll('[data-test="add-menu"]')).toHaveLength(1);
+        await table(el).updateComplete;
+        expect(table(el).shadowRoot.textContent).toContain(sentence);
+        cleanupWidgets();
+      });
+  });
+
+  it("keeps the heading's Add menu when a search leaves no menu showing", async () => {
+    const el = await mount();
+    const list = table(el);
+    await list.updateComplete;
+    await userEvent.fill(
+      list.shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!,
+      "Burger",
+    );
+    await vi.waitFor(() =>
+      expect(list.shadowRoot.querySelectorAll('tbody [data-test^="open-menu-"]')).toHaveLength(0),
+    );
+    await el.updateComplete;
     expect(headerAdd(el)).not.toBeNull();
   });
 
@@ -1519,7 +1547,7 @@ describe("the menus list's columns", () => {
       });
       await vi.waitFor(() =>
         expect(text(table(el).shadowRoot.querySelector('tr[data-row-key="menu-lunch"] td'))).toBe(
-          `Lunch Menu Published 1 hour ago Unpublished changes`,
+          `Lunch Menu Published · 1 hour ago Unpublished changes`,
         ),
       );
       expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
@@ -1584,7 +1612,7 @@ describe("the menus list's Status column and its changes link", () => {
     await vi.waitFor(async () => {
       await table(el).updateComplete;
       // The publication time's words are drawn a moment after the state's label.
-      expect(statusOf(el, "menu-dinner")).toMatch(new RegExp(`^${t("menu_status.current")} \\S`));
+      expect(statusOf(el, "menu-dinner")).toMatch(new RegExp(`^${t("menu_status.current")} · \\S`));
     });
     return el;
   }
@@ -1610,11 +1638,11 @@ describe("the menus list's Status column and its changes link", () => {
       expect(heads(el)).toHaveLength(3);
       expect(heads(el)[1]).toBe(t("menus.status"));
       expect(heads(el)).not.toContain("Changes");
-      expect(statusOf(el, "menu-lunch")).toBe("Published 1 hour ago");
+      expect(statusOf(el, "menu-lunch")).toBe("Published · 1 hour ago");
       const changes = link(el, "menu-lunch")!;
       const cell = statusColumnCell(el, "menu-lunch");
       expect(changes.closest("td")).toBe(cell);
-      expect(text(cell)).toBe("Published 1 hour ago Unpublished changes");
+      expect(text(cell)).toBe("Published · 1 hour ago Unpublished changes");
       expect(text(changes)).toBe("Unpublished changes");
       expect(new URL(changes.href).pathname).toBe(PREVIEW("menu-lunch"));
       expect(changes.getAttribute("aria-label")).toBe("Unpublished changes: Lunch Menu");
@@ -1623,7 +1651,7 @@ describe("the menus list's Status column and its changes link", () => {
       expect(changes.getBoundingClientRect().top, "under the state").toBeGreaterThanOrEqual(
         state.getBoundingClientRect().bottom - 1,
       );
-      expect(statusOf(el, "menu-dinner")).toBe("Published Sunday, 18:00");
+      expect(statusOf(el, "menu-dinner")).toBe("Published · Sunday, 18:00");
       expect(statusOf(el, "menu-brunch")).toBe("Unpublished");
       for (const id of ["menu-dinner", "menu-brunch"]) {
         expect(link(el, id), id).toBeNull();
@@ -1632,30 +1660,56 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
-  it("puts the publication time on its own line in small muted text, with the exact time on hand", async () => {
+  it("puts the publication time on the state's line after a dot, muted at the state's size, with the exact time on hand", async () => {
     await at([1280, 900], "en-GB", async () => {
       const el = await listed(mixed());
-      const state = table(el).shadowRoot.querySelector('[data-test="status-menu-lunch"]')!;
+      const state = table(el).shadowRoot.querySelector<HTMLElement>(
+        '[data-test="status-menu-lunch"]',
+      )!;
       const time = state.querySelector<HTMLElement>('[part~="time"]')!;
-      expect(getComputedStyle(time).display).toBe("block");
-      const small = document.createElement("span");
-      small.style.fontSize = "var(--wt-font-size-sm)";
-      el.shadowRoot!.append(small);
-      expect(getComputedStyle(time).fontSize).toBe(getComputedStyle(small).fontSize);
-      small.remove();
+      expect(getComputedStyle(time).display).toBe("inline");
+      expect(text(time)).toBe("· 1 hour ago");
+      expect(getComputedStyle(time).fontSize).toBe(getComputedStyle(state).fontSize);
       expect(getComputedStyle(time).color).toBe(
         computedColour(el.shadowRoot!, "var(--wt-color-text-muted)"),
       );
+      expect(getComputedStyle(state).color).toBe(
+        computedColour(el.shadowRoot!, "var(--wt-color-text)"),
+      );
+      expect(time.getBoundingClientRect().top).toBeCloseTo(firstLine(state).top, 0);
+      expect(getComputedStyle(state).whiteSpace).not.toBe("nowrap");
       const relative = time.querySelector("wt-relative-time")!;
       const tip = relative.shadowRoot!.querySelector("[popover]")!;
       expect(tip.textContent!.trim()).toBe("26 September 2026 at 10:15");
     });
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "keeps the dot and the time on the state's line at phone width (%s)",
+    async (locale) => {
+      await at([390, 844], locale, async () => {
+        const el = await mount(mixed());
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(statusOf(el, "menu-lunch")).toMatch(/ · \S/);
+        });
+        const state = table(el).shadowRoot.querySelector<HTMLElement>(
+          '[data-test="status-menu-lunch"]',
+        )!;
+        const time = state.querySelector<HTMLElement>('[part~="time"]')!;
+        const line = firstLine(state);
+        for (const box of time.getClientRects()) {
+          expect(box.top).toBeLessThan(line.bottom);
+          expect(box.bottom).toBeGreaterThan(line.top);
+        }
+      });
+    },
+  );
+
   it("names a publication six days or more ago by its date, and adds the year when it is not this one", async () => {
     for (const [locale, march, december] of [
-      ["en-GB", "Published 4 Mar", "Published 1 Dec 2025"],
-      ["es-ES", "Publicada 4 mar", "Publicada 1 dic 2025"],
+      ["en-GB", "Published · 4 Mar", "Published · 1 Dec 2025"],
+      ["es-ES", "Publicada · 4 mar", "Publicada · 1 dic 2025"],
     ] as const)
       await at([1280, 900], locale, async () => {
         const el = await mount(
@@ -1712,7 +1766,7 @@ describe("the menus list's Status column and its changes link", () => {
       expect(link(el, "menu-lunch")!.getAttribute("aria-label")).toBe(
         "Cambios sin publicar: Lunch Menu",
       );
-      expect(statusOf(el, "menu-lunch")).toBe("Publicada hace 1 hora");
+      expect(statusOf(el, "menu-lunch")).toBe("Publicada · hace 1 hora");
     });
   });
 
@@ -1742,18 +1796,162 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
-  it("keeps a changed menu's clashes in Status beside its link", async () => {
+  /** Lunch is changed with 2 clashing prices and Dinner is current with 1. */
+  function clashing(): Api {
+    return api({
+      getMenuStatuses: vi.fn().mockResolvedValue({
+        ...statuses(),
+        "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+        "menu-dinner": { ...statuses()["menu-dinner"], clashes: 1 },
+      }),
+    });
+  }
+
+  function clashLink(el: MenusScreen, id: string): HTMLAnchorElement | null {
+    return row(el, id).querySelector<HTMLAnchorElement>(`[data-test="clashes-${id}"]`);
+  }
+
+  const CLASHES = (id: string) => `/menus/menu/${id}/view/prices/filter/clashes`;
+
+  it("puts a menu's price clashes on a line of their own under its changes link, linking to them", async () => {
     await at([1280, 900], "en-GB", async () => {
-      const el = await listed(
-        api({
-          getMenuStatuses: vi.fn().mockResolvedValue({
-            ...statuses(),
-            "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
-          }),
-        }),
+      const el = await listed(clashing());
+      expect(statusOf(el, "menu-lunch")).toBe("Published · 1 hour ago");
+      const lunch = clashLink(el, "menu-lunch")!;
+      expect(text(lunch)).toBe("2 price clashes");
+      expect(lunch.getAttribute("href")).toBe(CLASHES("menu-lunch"));
+      expect(lunch.getAttribute("aria-label")).toBe("2 price clashes: Lunch Menu");
+      expect(text(clashLink(el, "menu-dinner"))).toBe("1 price clash");
+      expect(clashLink(el, "menu-dinner")!.getAttribute("aria-label")).toBe(
+        "1 price clash: Dinner Menu",
       );
-      expect(statusOf(el, "menu-lunch")).toBe("Published 2 clashes 1 hour ago");
-      expect(text(link(el, "menu-lunch"))).toBe("Unpublished changes");
+      const changes = link(el, "menu-lunch")!.getBoundingClientRect();
+      const box = lunch.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(changes.bottom - 1);
+      expect(box.height).toBeCloseTo(changes.height, 0);
+      expect(getComputedStyle(lunch).color).toBe(
+        computedColour(el.shadowRoot!, "var(--wt-color-danger)"),
+      );
+      expect(clashLink(el, "menu-dinner")!.closest("td")).toBe(statusColumnCell(el, "menu-dinner"));
+    });
+  });
+
+  it("words the clash link in Spanish", async () => {
+    await at([1280, 900], "es-ES", async () => {
+      const el = await mount(clashing());
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(text(clashLink(el, "menu-lunch"))).toBe("2 conflictos de precio");
+      });
+      expect(text(clashLink(el, "menu-dinner"))).toBe("1 conflicto de precio");
+      expect(clashLink(el, "menu-lunch")!.getAttribute("aria-label")).toBe(
+        "2 conflictos de precio: Lunch Menu",
+      );
+    });
+  });
+
+  it("opens the menu's Price overrides tab filtered to its clashes from the clash link", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(clashing());
+      await userEvent.click(clashLink(el, "menu-lunch")!);
+      await vi.waitFor(() => expect(location.pathname).toBe(CLASHES("menu-lunch")));
+      expect(opens()).toEqual([CLASHES("menu-lunch")]);
+    });
+  });
+
+  it("leaves a click on the clash link with a modifier key to the browser", async () => {
+    const opens = opened();
+    const el = await listed(clashing());
+    const seen: boolean[] = [];
+    const watch = (event: Event) => {
+      seen.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    window.addEventListener("click", watch);
+    onTestFinished(() => window.removeEventListener("click", watch));
+    clashLink(el, "menu-lunch")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, metaKey: true }),
+    );
+    await el.updateComplete;
+    expect(seen).toEqual([false]);
+    expect(location.pathname).toBe("/menus");
+    expect(opens()).toEqual([]);
+  });
+
+  it("says in a set menu's Status, in muted text, that it is published with the menus that offer it", async () => {
+    for (const [locale, words] of [
+      ["en-GB", "Published with the menus that offer it"],
+      ["es-ES", "Se publica con las cartas que lo ofrecen"],
+    ] as const)
+      await at([1280, 900], locale, async () => {
+        const set: MenuSummary = {
+          id: "set-daily",
+          name: "Daily menu",
+          active: true,
+          kind: "set_menu",
+          setPrice: "14.00",
+          setVatClass: "reduced",
+        };
+        const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([...menus, set]) }));
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(statusOf(el, "set-daily")).toBe(words);
+        });
+        const cell = table(el).shadowRoot.querySelector<HTMLElement>(
+          '[data-test="status-set-daily"]',
+        )!;
+        expect(getComputedStyle(cell).color).toBe(
+          computedColour(el.shadowRoot!, "var(--wt-color-text-muted)"),
+        );
+        cleanupWidgets();
+      });
+  });
+
+  it("says above the list why the states could not be read, and reads them again on Try again", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const client = mixed({
+        getMenuStatuses: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue(statuses()),
+      });
+      const el = await mount(client);
+      const message = () => q(el, '[data-test="statuses-error"]');
+      await vi.waitFor(() =>
+        expect(text(message())).toBe(
+          `Couldn't check which menus are published. ${codeMessage("server.internal")}`,
+        ),
+      );
+      expect(message()!.getAttribute("role")).toBe("alert");
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(statusOf(el, "menu-lunch")).toBe("Could not be checked");
+      });
+      const retry = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="statuses-retry"]')!;
+      expect(text(retry)).toBe("Try again");
+      expect(retry.variant).toBe("secondary");
+      retry.click();
+      await vi.waitFor(() => expect(message()).toBeNull());
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(statusOf(el, "menu-lunch")).toBe("Published · 1 hour ago");
+      });
+      expect(client.getMenuStatuses).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("says only that the states could not be read when the failure names no reason, in Spanish too", async () => {
+    await at([1280, 900], "es-ES", async () => {
+      const el = await mount(
+        mixed({ getMenuStatuses: vi.fn().mockRejectedValue(new Error("offline")) }),
+      );
+      await vi.waitFor(() =>
+        expect(text(q(el, '[data-test="statuses-error"]'))).toBe(
+          "No se pudo comprobar qué cartas están publicadas.",
+        ),
+      );
+      expect(text(q(el, '[data-test="statuses-retry"]'))).toBe("Reintentar");
     });
   });
 
@@ -1862,6 +2060,24 @@ describe("the menus list's Status column and its changes link", () => {
             button.getBoundingClientRect().height,
             `${id}'s tap height`,
           ).toBeGreaterThanOrEqual(44);
+          const edge = table(el).shadowRoot.querySelector(".scroll")!.getBoundingClientRect().left;
+          expect(
+            button.getBoundingClientRect().left,
+            `${id}'s button box inside the table`,
+          ).toBeGreaterThanOrEqual(edge + 1);
+          const inner = button.shadowRoot!.querySelector("button")!;
+          await userEvent.keyboard("{Shift}");
+          inner.focus();
+          expect(inner.matches(":focus-visible"), `${id} focused as from the keyboard`).toBe(true);
+          const ring = getComputedStyle(inner);
+          expect(ring.outlineStyle).not.toBe("none");
+          expect(
+            inner.getBoundingClientRect().left -
+              parseFloat(ring.outlineOffset) -
+              parseFloat(ring.outlineWidth),
+            `${id}'s focus ring inside the table`,
+          ).toBeGreaterThanOrEqual(edge + 1);
+          inner.blur();
           if (width === 390) {
             const state = firstLine(
               table(el).shadowRoot.querySelector(`[data-test="status-${id}"]`)!,
@@ -1879,11 +2095,11 @@ describe("the menus list's Status column and its changes link", () => {
       const el = await listed(mixed());
       await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
       const first = row(el, "menu-lunch").querySelector("td")!;
-      expect(text(first)).toBe("Lunch Menu Published 1 hour ago Unpublished changes");
+      expect(text(first)).toBe("Lunch Menu Published · 1 hour ago Unpublished changes");
       expect(link(el, "menu-lunch")!.closest("td")).toBe(first);
       expect(mark(el, "menu-lunch")!.closest("td")).toBe(first);
       expect(text(row(el, "menu-dinner").querySelector("td"))).toBe(
-        "Dinner Menu Published Sunday, 18:00",
+        "Dinner Menu Published · Sunday, 18:00",
       );
       expect(link(el, "menu-dinner")).toBeNull();
       expect(mark(el, "menu-dinner")).toBeNull();
@@ -1916,7 +2132,7 @@ describe("the menus list's Status column and its changes link", () => {
       await at([390, 844], "en-GB", async () => {
         await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
         expect(text(row(el, "menu-lunch").querySelector("td"))).toBe(
-          "Lunch Menu Published 1 hour ago Unpublished changes",
+          "Lunch Menu Published · 1 hour ago Unpublished changes",
         );
       });
     });
@@ -9621,8 +9837,8 @@ describe("publishing", () => {
     const el = await mount(client);
     await table(el).updateComplete;
     await vi.waitFor(() => expect(statusCell(el, "menu-brunch")).toBe("Unpublished"));
-    expect(statusCell(el, "menu-lunch")).toBe(`Published 1 hour ago`);
-    expect(statusCell(el, "menu-dinner")).toBe(`Published Sunday, 18:00`);
+    expect(statusCell(el, "menu-lunch")).toBe(`Published · 1 hour ago`);
+    expect(statusCell(el, "menu-dinner")).toBe(`Published · Sunday, 18:00`);
     expect(client.getMenuStatuses).toHaveBeenCalledTimes(1);
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
@@ -9701,7 +9917,7 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(table(el)).not.toBeNull());
     await vi.waitFor(async () => {
       await table(el).updateComplete;
-      expect(statusCell(el, "menu-dinner")).toBe(`Published Sunday, 18:00`);
+      expect(statusCell(el, "menu-dinner")).toBe(`Published · Sunday, 18:00`);
     });
     expect(client.getMenuStatuses).toHaveBeenCalledTimes(2);
   });
@@ -9775,7 +9991,7 @@ describe("publishing", () => {
     const lunchRow = table(el).shadowRoot.querySelector('tr[data-row-key="menu-lunch"]')!;
     await vi.waitFor(() =>
       expect(text(lunchRow.querySelector("td"))).toBe(
-        `Lunch Menu Published 1 hour ago Unpublished changes`,
+        `Lunch Menu Published · 1 hour ago Unpublished changes`,
       ),
     );
     const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
@@ -11994,8 +12210,8 @@ it("shows the current clash count from the menus status read", async () => {
   const el = await mount(client);
   await table(el).updateComplete;
   await vi.waitFor(() =>
-    expect(text(table(el).shadowRoot.querySelector('[data-test="status-menu-lunch"]'))).toContain(
-      "2 clashes",
+    expect(text(table(el).shadowRoot.querySelector('[data-test="clashes-menu-lunch"]'))).toBe(
+      "2 price clashes",
     ),
   );
 });

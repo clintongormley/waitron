@@ -101,7 +101,9 @@ type State =
   | "failed"
   | "structure-failed"
   | "loading"
-  | "included";
+  | "included"
+  | "list-clashes"
+  | "statuses-failed";
 
 function api(state: State): DashboardApi {
   const never = () => new Promise(() => undefined);
@@ -117,6 +119,18 @@ function api(state: State): DashboardApi {
                 : [
                     { id: "menu-lunch", name: "Lunch Menu", active: true },
                     { id: "menu-dinner", name: "Dinner Menu", active: true },
+                    ...(state === "list-clashes"
+                      ? [
+                          {
+                            id: "set-daily",
+                            name: "Daily menu",
+                            active: true,
+                            kind: "set_menu",
+                            setPrice: "14.00",
+                            setVatClass: "reduced",
+                          },
+                        ]
+                      : []),
                   ],
             ),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
@@ -158,16 +172,19 @@ function api(state: State): DashboardApi {
       code: "menu_section.translation_required",
       params: { field: "names", language: "es" },
     }),
-    getMenuStatuses: vi.fn().mockResolvedValue({
-      "menu-lunch": {
-        state: "changed",
-        clashes: 0,
-        version: 2,
-        publishedAt: "2026-09-26T10:15:00.000Z",
-        hash: "a".repeat(64),
-      },
-      "menu-dinner": { state: "unpublished", clashes: 0 },
-    }),
+    getMenuStatuses:
+      state === "statuses-failed"
+        ? vi.fn().mockRejectedValue({ code: "server.internal" })
+        : vi.fn().mockResolvedValue({
+            "menu-lunch": {
+              state: "changed",
+              clashes: state === "list-clashes" ? 2 : 0,
+              version: 2,
+              publishedAt: "2026-09-26T10:15:00.000Z",
+              hash: "a".repeat(64),
+            },
+            "menu-dinner": { state: "unpublished", clashes: state === "list-clashes" ? 1 : 0 },
+          }),
     getMenuStatus: vi.fn().mockResolvedValue({
       state: "changed",
       clashes: 0,
@@ -312,6 +329,30 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
+
+  it.each([390, 1280])(
+    "accessible menus list with price clash links and a set menu's Status, %ipx wide",
+    async (width) => {
+      const frame = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      onTestFinished(() => page.viewport(frame.width, frame.height));
+      const { el, host } = await mount("list-clashes", theme, "/menus");
+      const table = q(el, '[data-test="menus"]');
+      await vi.waitFor(() => {
+        expect(table.shadowRoot!.querySelector('[data-test="clashes-menu-lunch"]')).not.toBeNull();
+        expect(table.shadowRoot!.querySelector('[data-test="clashes-menu-dinner"]')).not.toBeNull();
+        expect(table.shadowRoot!.querySelector('[data-test="status-set-daily"]')).not.toBeNull();
+      });
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it("accessible menus list whose publish states could not be read", async () => {
+    const { el, host } = await mount("statuses-failed", theme, "/menus");
+    await vi.waitFor(() => expect(q(el, '[data-test="statuses-error"]')).not.toBeNull());
+    expect(q(el, '[data-test="statuses-retry"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 
   it("accessible create form refusing a blank name", async () => {
     const { el, host } = await mount("populated", theme, "/menus");

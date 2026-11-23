@@ -1597,19 +1597,27 @@ within half a pixel and one pixel respectively. The option list form's one-line 
 its name's padding removed, because the button's minimum height centres one line; only its
 wrapping-name case failed.
 
-**The Menus list says under a menu's state when it was published, and links its unpublished
-changes under that.** Status says what is live: "Unpublished" for a menu never published, and
-"Published" for one that has been, whether or not it has changes since, with how long ago it was
-published on the next line in small muted text: the relative words under a day, the weekday and
-time under six days, then the day and month, with the year once it is not this year's
-(`wt-relative-time`'s `calendar` mode); the exact time shows on hover or tap. The list does not
-show the version number; the open menu's heading does. A menu with changes since its live version
-has a third line: a small round dot in `--wt-color-warning`, hidden from screen readers, then an
-"Unpublished changes" link, named "Unpublished changes: <menu>", that opens the menu's Preview tab
-(`/menus/menu/<id>/view/preview`) straight away; a click with a modifier key is left to the
-browser. A menu never published, one with no changes, and every menu while the states are read or
-after their read fails have neither. Sorting by Status still puts the menus waiting for a publish
-first. The list has two layouts, chosen by the list's own width through a container query on a
+**The Menus list says beside a menu's state when it was published, and links its unpublished
+changes and its price clashes under that.** Status says what is live: "Unpublished" for a menu
+never published, and "Published" for one that has been, whether or not it has changes since,
+followed on the same line by a dot and how long ago it was published, the dot and time in
+`--wt-color-text-muted` at the body size and kept together when the line wraps ("Published · 1 hour
+ago"): the relative words under a day, the weekday and time under six days, then the day and month,
+with the year once it is not this year's (`wt-relative-time`'s `calendar` mode); the exact time
+shows on hover or tap. The list does not show the version number; the open menu's heading does. A
+menu with changes since its live version has a line under it: a small round dot in
+`--wt-color-warning`, hidden from screen readers, then an "Unpublished changes" link, named
+"Unpublished changes: <menu>", that opens the menu's Preview tab (`/menus/menu/<id>/view/preview`)
+straight away. A menu with clashing prices has a line after that: a "2 price clashes" link in
+`--wt-color-danger` (clashes stop it being published), named "2 price clashes: <menu>", that opens
+its Price overrides tab filtered to the clashes (`/menus/menu/<id>/view/prices/filter/clashes`).
+Both links are a tap target tall, and a click on either with a modifier key is left to the browser.
+A set menu's Status says, in muted text, that it is published with the menus that offer it. While
+the states are read, or after their read fails, every menu says so in muted text and has neither
+link; a failed read also puts one message above the list, with the server's reason when it gave
+one, and a secondary Try again that reads the states again. With no menus at all, the heading's
+Add menu is hidden and only the empty table's shows. Sorting by Status still puts the menus waiting
+for a publish first. The list has two layouts, chosen by the list's own width through a container query on a
 probe element:
 
 - Above `30rem`, three columns: Name, Status and Actions. A click on the Status cell's blank space
@@ -1618,7 +1626,7 @@ probe element:
   Status. Wrapping lets the name column shrink further so the state and its time stay before
   Actions. With Status its only movable column, the list has no Customise columns button unless a
   set menu adds its Kind column.
-- At `30rem` or less, the state, its time and the link stack under the name, as the variants
+- At `30rem` or less, the state, its time and the links stack under the name, as the variants
   table's prices do (above). A click on the Name cell's blank space opens nothing; the name's
   button, the row menu's Open and the Actions cell's blank space still open the menu.
 
