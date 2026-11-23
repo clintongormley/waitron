@@ -346,6 +346,17 @@ describe("the since tabs of POST /old-box-data", () => {
     ]);
   });
 
+  it("still gives the file, from this box's own times, when the copy time heard is not a date", async () => {
+    await admin();
+    const response = await post(
+      appWith({ mainCopy: () => ({ lastChangeAtMs: Number.MAX_SAFE_INTEGER }) }),
+      signIn,
+    );
+    expect(response.status).toBe(200);
+    const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
+    expect(row(activity!, 1)).toEqual([OLD_BOX_DATA_WORDS.en.sinceAllIntro]);
+  });
+
   it("after a planned handover, gives only the Invoices tab", async () => {
     await admin();
     const planned = "00000000-0000-4000-8000-0000000000dd";

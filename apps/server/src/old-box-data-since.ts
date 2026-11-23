@@ -30,8 +30,23 @@ export type SinceRule =
 const COPY_MARGIN_MS = 10 * 60_000;
 const OWN_SPAN_MS = 7 * 24 * 60 * 60_000;
 
-/** Reads only, with the database handle. */
-export async function sinceRule(db: Database, copy: HeardCopy | null): Promise<SinceRule> {
+const isDate = (ms: number) => !Number.isNaN(new Date(ms).getTime());
+
+/** Whether a copy time from the main box is a whole millisecond whose cutoff is still a date. */
+export function usableCopyTime(value: unknown): value is number {
+  return (
+    Number.isSafeInteger(value) &&
+    isDate(value as number) &&
+    isDate((value as number) - COPY_MARGIN_MS)
+  );
+}
+
+/** Reads only, with the database handle. A copy time that is not usable counts as not heard. */
+export async function sinceRule(db: Database, heard: HeardCopy | null): Promise<SinceRule> {
+  const copy =
+    heard === null || heard.lastChangeAtMs === null || usableCopyTime(heard.lastChangeAtMs)
+      ? heard
+      : null;
   if (copy !== null)
     return copy.lastChangeAtMs === null
       ? { kind: "all" }

@@ -8,6 +8,7 @@ import {
 import { readHandoverRestriction } from "@waitron/node-db";
 import { checkedPeerAnswer, mainBoxToAsk } from "./main-box-answer.js";
 import { peerKeyOf } from "./handover-signing.js";
+import { usableCopyTime } from "./old-box-data-since.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { readReturnInventory, returnConfirmed, type ReturnRecordsDeps } from "./return-records.js";
 
@@ -109,8 +110,8 @@ export async function replacedResetCheck(
   const lackingChains = lacking as Record<string, CanonicalValue[]>;
   const heard = {
     ...(isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {}),
-    ...(lastChangeAtMs === null || Number.isSafeInteger(lastChangeAtMs)
-      ? { copy: { lastChangeAtMs: lastChangeAtMs as number | null } }
+    ...(lastChangeAtMs === null || usableCopyTime(lastChangeAtMs)
+      ? { copy: { lastChangeAtMs } }
       : {}),
   };
   if (order === null) return { outcome: "no-order", lacking: lackingChains, ...heard };

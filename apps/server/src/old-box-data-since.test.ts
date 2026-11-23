@@ -92,6 +92,21 @@ describe("the old box's since rule", () => {
     });
   });
 
+  it("falls back to this box's own times when the copy time, or its cutoff, is not a date", async () => {
+    for (const lastChangeAtMs of [Number.MAX_SAFE_INTEGER, -8.64e15])
+      expect(await sinceRule(suite.db, { lastChangeAtMs })).toEqual({ kind: "all" });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-20T10:00:00.000Z",
+      total: "10.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+    });
+    expect(await sinceRule(suite.db, { lastChangeAtMs: Number.MAX_SAFE_INTEGER })).toEqual({
+      kind: "own",
+      fromMs: Date.parse("2026-11-20T10:00:00.000Z") - 7 * DAY,
+    });
+  });
+
   it("lists everything when the main box said the copy held no sale or order", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

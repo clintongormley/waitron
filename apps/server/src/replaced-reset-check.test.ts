@@ -186,6 +186,22 @@ it("keeps the main box's copy time from a checked answer, a number or null, on b
   expect(await copyOf({})).toBe("absent");
 });
 
+it("keeps no copy time that, or whose cutoff 10 minutes earlier, is not a date", async () => {
+  const copyOf = async (lastChangeAtMs: number) => {
+    const checked = await check(await signedAnswer(answerBody({ lastChangeAtMs })));
+    expect(checked.outcome).toBe("ordered");
+    return "copy" in checked ? checked.copy : "absent";
+  };
+  const LAST_DATE_MS = 8.64e15;
+  expect(await copyOf(Number.MAX_SAFE_INTEGER)).toBe("absent");
+  expect(await copyOf(LAST_DATE_MS + 1)).toBe("absent");
+  expect(await copyOf(-LAST_DATE_MS)).toBe("absent");
+  expect(await copyOf(LAST_DATE_MS)).toEqual({ lastChangeAtMs: LAST_DATE_MS });
+  expect(await copyOf(-LAST_DATE_MS + 10 * 60_000)).toEqual({
+    lastChangeAtMs: -LAST_DATE_MS + 10 * 60_000,
+  });
+});
+
 it("goes ahead while its chart still names itself main and its restriction names the target", async () => {
   await holdChart(source);
   expect(await check(await signedAnswer())).toMatchObject({
