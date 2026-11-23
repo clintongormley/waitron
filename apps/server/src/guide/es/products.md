@@ -331,9 +331,9 @@ En **Qué incluye cada menú**, indica cuántos platos ofreces de cada curso. Po
 usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
 que el cliente elija entre ambos.
 
-Si tu menú incluye bebidas, pan o café, crea los cursos que necesites en **Cursos** con
-**Añadir curso**. Asigna a cada producto su curso. En cada departamento, elige **Marchar ya**
-para Bebidas y Pan, así puedes enviarlos con el primer pedido.
+Si tu menú incluye bebidas, pan o café, [crea los cursos que necesites y asígnalos a los
+productos](products.md#course). En cada departamento, elige **Marchar ya** para Bebidas y Pan,
+así puedes enviarlos con el primer pedido.
 
 Abre la carta completa que ofrecerá el menú. En **Estructura**, abre las acciones
 de la carta o sección donde quieras incluirlo, elige **Menú…** y selecciónalo.

@@ -162,13 +162,15 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
       moves: [
         {
           lineId: expect.stringMatching(/^[56]$/),
-          from: { setMenuLineId: expect.stringMatching(/^special-/) },
-          to: { setMenuLineId: expect.stringMatching(/^daily-/) },
+          from: { setMenuLineId: expect.stringMatching(/^special-/), place: 1 },
+          to: { setMenuLineId: expect.stringMatching(/^daily-/), place: 1 },
           priceCents: 500,
         },
       ],
-      place: { id: cod.id, priceCents: 0 },
+      place: { id: cod.id, priceCents: 0, place: 1 },
     });
     expect(suggestion!.place.setMenuLineId).toBe(suggestion!.moves[0]!.from.setMenuLineId);
+    const menuPrice = 2 * (day!.priceCents + extra!.priceCents);
+    expect(menuPrice + suggestion!.moves[0]!.priceCents + suggestion!.place.priceCents).toBe(7300);
   });
 });
