@@ -421,7 +421,7 @@ It printed:
 | Top sellers and category sales reports | `sale_lines.line_total` / `line_gross` | yes: the salad's money falls by the water's share | `packages/reporting/src/top-sellers.ts:67`, `category-sales.ts:212` |
 | Dashboard order detail | a bill's own order lines; filed lines only for other kinds | a bill: no | `apps/server/src/orders-list.ts:756` |
 | Correct invoice window (till) | each filed dish's gross and what is left of it | yes: salad €8.33, water €1.67 | `invoice-correction-dialog.ts:586-590` (read) |
-| Cancel and refund after payment | each dish's filed gross (`byPosition`, `apps/server/src/cancellation-refund-value.ts:89-117`, then `cancelRefundShare`) | each dish's value stays its filed share (salad €8.33, water €1.67); **O4 (owner): the free item comes back with the last paid dish**, so returning both hands back €10.00 in one refund, and a free item is never refunded alone (section 4.3.1) | read; Task 3 pins the values through the real `rowRefundValue`, Task 3b the pairing through the real `cancelItem`. Not the dish's price as sold: that would refund more than the filed line holds, which A758 §3.8's planned corrective of a cancelled dish could not file (`docs/backlog/fiscal.md:942-947`) |
+| Cancel and refund after payment | each dish's filed gross (`byPosition`, `apps/server/src/cancellation-refund-value.ts:89-117`, then `cancelRefundShare`) | each dish's value stays its filed share (salad €8.33, water €1.67); **O4 (owner): the free item comes back with the last paid dish**, so returning both hands back €10.00 in one refund, and a free item is never refunded alone (section 4.3.1) | read; Task 3 pins the values, Task 3b the pairing through the real `cancelItem`. Not the dish's price as sold: that would refund more than the filed line holds, which A758 §3.8's planned corrective of a cancelled dish could not file (`docs/backlog/fiscal.md:942-947`) |
 
 No guide sentence changes for A445's filing: it changes nothing staff do (CLAUDE.md §3, "A guide
 sentence earns its place by changing what staff do"). O4 does change what staff do; its guide
@@ -479,9 +479,8 @@ paid dishes, and what each has left to cancel):
    command: their lines join `taken`, so `serviceCancellationFamilies` (`:389`),
    `dishKitchenItems` (`:388`), `enqueueServiceCancellation` (`:482`) and
    `writeServiceCancellations` (`:525`) cover them; each gets its own cancel record through
-   `recordAdjustment` (`:439`) with its own filed share as refund value
-   (`cancellationRefundValue`, `:418`), and its own entry in the answer's `refundLinks` (`:538`, one
-   entry today).
+   `recordAdjustment` (`:439`) with its own filed share as refund value, and its own entry in the
+   answer's `refundLinks` (`:538`, one entry today).
 3. Every other cancel is as today.
 
 **Consent.** The cancellation read (`apps/server/src/line-cancel-api.ts:150-193`) answers
@@ -501,8 +500,7 @@ pairing is checked over the whole request before the loop at `:171`: a free item
 (reason `free_item`) unless the same request cancels its ticket's last paid dish with Refund ticked,
 and then each of the ticket's free items must be ticked (reason `not_listed`) and none may have a
 served portion (reason `served`, as for one dish's cancel: Finish writes nothing). The loop then
-cancels free items after paid dishes and tells `cancelItem` the pairing was checked over the
-request. Finish is deliberately stricter than cancelling one dish at a time when a paid dish is
+tells `cancelItem` the pairing was checked over the request. Finish is deliberately stricter than cancelling one dish at a time when a paid dish is
 left unticked: one at a time, that dish could be cancelled without Refund and the water would then
 come back with the last one, but Finish refuses the water's tick (`free_item`); staff void the
 unticked dish first, or untick the water. The difference is deliberate: it errs towards handing
@@ -1158,7 +1156,7 @@ O7, O8 and O9 are open (section 10).
    the filed ones; a counter sale (`working-order.ts:7867`) and the close-of-day issue
    (`close-of-day.ts:101`) file the same split; after payment, the cancellation read
    (`line-cancel-api.ts:176-181`) values the salad at €8.33 and the water at €1.67, their filed
-   shares (`cancellationRefundValue` and `rowRefundValue`), which section 4.3.1 keeps; which dishes
+   shares, which section 4.3.1 keeps; which dishes
    must come back together is Task 3b's. Run, watch them fail.
 2. Export `listGrossOf`; add `listGross` in `issuancePass`; call `shareFreeItems` in `issueMoment`.
 3. Fix every other assertion section 6 lists for A445, changing expected figures only where the
@@ -1209,7 +1207,7 @@ cancellation or kitchen correction was written:
 Run, watch them fail. Then the change: the reader beside `refundValues`, the three rules in
 `cancelItem`, `withFree` on `CancelItemAsk` and its parsing (`apps/server/src/line-cancel-input.ts`),
 the consent fields in `line-cancel-api.ts` (`withFree` with `served`, `givenFree` with
-`comesBackWith`), the request-wide check and the loop order in `finish-party-service.ts`, both
+`comesBackWith`), the request-wide check in `finish-party-service.ts`, both
 reading `lastPaidDishes`, the code in `errors.ts` and 409 in `till-api.ts`.
 
 ```sh
