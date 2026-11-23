@@ -454,7 +454,8 @@ Each fiscal record stores its predecessor's hash (`anterior_huella`,
 
 **2026-11-23 (A1308 fiscal 3).** Keep every sale header in the live database. Waitron reads the
 next invoice number from the highest numbered sale in the series. Moving that sale out of the
-live database can make its number available for reuse.
+live database can make its number available for reuse. The counter described in the next paragraph
+was in use when this proposal was written.
 
 The invoice counter is `invoice_series.next_number`, "the live counter and the single source of
 truth" (`packages/db/src/schema/series.ts:13-21`), so moving old rows out does not reset a number.
