@@ -892,6 +892,53 @@ describe("one mail sender", () => {
       attempts: 1,
     });
   });
+  it("settles a Cloud send that fails without an answer as unknown and does not send it again on the next pass", async () => {
+    await queue("one", { params: { code: "storage.space_low" } });
+    deps.owners = [
+      {
+        ...owner,
+        compose: async () => ({
+          subject: "Reset",
+          text: "Message",
+          accountEmail: {
+            class: "password_reset" as const,
+            recipient: "private@example.test",
+            displayName: "Recipient",
+            locale: "en-GB",
+            timeZone: "Europe/Madrid",
+            expiresAt: "2026-11-09T13:00:00.000Z",
+            token: Buffer.alloc(32, 7).toString("base64url"),
+          },
+        }),
+      },
+    ];
+    const sendCloudEmail = vi.fn(async () => {
+      throw new Error("connection reset");
+    });
+    const relayDeps = {
+      ...deps,
+      resolveDelivery: async () => ({ mode: "unconfigured" as const }),
+      noticeRelayAllowed: async () => true,
+      resolveAccountRelay: async () => ({
+        id: "grant",
+        revision: 1,
+        enabled: true,
+        expiresAt: "2026-11-10T00:00:00Z",
+      }),
+      sendCloudEmail,
+    };
+    await runMailPass(relayDeps);
+    expect(sendCloudEmail).toHaveBeenCalledOnce();
+    expect(await row()).toMatchObject({
+      status: "unknown",
+      failureCode: "mail.relay_unknown",
+      attempts: 1,
+      finishedAt: time.toISOString(),
+    });
+    time = new Date(time.getTime() + 60_000);
+    await runMailPass(relayDeps);
+    expect(sendCloudEmail).toHaveBeenCalledOnce();
+  });
   it("logs a relay availability failure once until recovery", async () => {
     await queue("account", { kind: "account_action" });
     deps.owners = [{ ...owner, kind: "account_action" }];

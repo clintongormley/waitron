@@ -261,6 +261,15 @@ it.each([
     "recoveryOperation",
     (form: FormData) => form.append("recoveryOperation", JSON.stringify(operation)),
   ],
+  ["recoveryContext", (form: FormData) => form.set("recoveryContext", "{broken-json")],
+  [
+    "recoveryContext",
+    (form: FormData) =>
+      form.set(
+        "recoveryContext",
+        `{"selectedSourceId":"selected-copy-digest","oldBoxGone":false,"soleRecovery":false${" ".repeat(2048)}}`,
+      ),
+  ],
 ] as const)(
   "refuses an invalid multipart %s without staging or logging the credential",
   async (field, mutate) => {

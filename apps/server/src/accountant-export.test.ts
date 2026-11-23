@@ -1309,6 +1309,83 @@ describe("refunds without a corrective invoice", () => {
     expect(toScale(sumDecimals(row!.vat.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("10.01");
   });
 
+  it("writes a refund with no VAT shares as one row, and one over two rates as two with its money once", async () => {
+    const refund = {
+      refundedAt: "2026-11-03T12:00:00.000Z",
+      amount: decimal("10.00"),
+      tip: decimal("1.00"),
+      method: "cash" as const,
+      reason: "Cold food",
+      requestedBy: "Ana",
+      authorizedBy: "Bea",
+      saleId: "sale-1",
+      invoiceNumber: "A/1",
+      takenOffBy: null,
+    };
+    const files = unzipSync(
+      await renderAccountantWorkbook(
+        {
+          invoices: [],
+          purchases: [],
+          outsidePayments: [],
+          refundsWithoutCorrective: [
+            { ...refund, id: "refund-1", vat: [] },
+            {
+              ...refund,
+              id: "refund-2",
+              vat: [
+                { rate: "10.00", base: decimal("4.55"), tax: decimal("0.45") },
+                { rate: "21.00", base: decimal("4.13"), tax: decimal("0.87") },
+              ],
+            },
+          ],
+        },
+        "en",
+      ),
+    );
+    const relationshipId = strFromU8(files["xl/workbook.xml"]!).match(
+      /<sheet name="Refunds, no corrective invoice"[^>]*r:id="([^"]+)"/,
+    )?.[1];
+    const target = strFromU8(files["xl/_rels/workbook.xml.rels"]!).match(
+      new RegExp(`<Relationship Id="${relationshipId}"[^>]*Target="([^"]+)"`),
+    )?.[1];
+    const xml = strFromU8(files[`xl/${target}`]!);
+    const common = ["Cold food", "Ana", "Bea", "sale-1", "A/1", ""];
+    expect(row(xml, 3)).toEqual([
+      "refund-1",
+      refund.refundedAt,
+      "10.00",
+      "1.00",
+      "Cash",
+      ...common,
+      "",
+      "",
+      "",
+    ]);
+    expect(row(xml, 4)).toEqual([
+      "refund-2",
+      refund.refundedAt,
+      "10.00",
+      "1.00",
+      "Cash",
+      ...common,
+      "10.00",
+      "4.55",
+      "0.45",
+    ]);
+    expect(row(xml, 5)).toEqual([
+      "refund-2",
+      refund.refundedAt,
+      "",
+      "",
+      "Cash",
+      ...common,
+      "21.00",
+      "4.13",
+      "0.87",
+    ]);
+  });
+
   it("shares a small refund over four rates in whole cents that are never negative and sum to the refund", () => {
     const shares = refundVatShares(decimal("0.02"), [
       { rate: "4.00", base: "9.62", tax: "0.38" },

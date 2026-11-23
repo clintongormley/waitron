@@ -3834,3 +3834,65 @@ describe("names holding replacement patterns or another placeholder", () => {
     );
   });
 });
+
+it("sorts by main category", async () => {
+  const el = await mount({ rows: [lager, lemonade, { ...burger, placements: [] }] });
+  await sortBy(el, "category");
+  // Beverages and Main courses are departments, which the column leaves out.
+  expect(column(el, "category")).toEqual(["", "", "Brews"]);
+  expect(shown(el)).toEqual(["mi-lemonade", "mi-burger", "mi-lager"]);
+});
+
+it("sorts a product placed nowhere with those at the menu's top", async () => {
+  const specials = { ...sections[0]!, id: "s-specials", internalName: "Specials" };
+  const soup = { ...burger, menuItemId: "mi-soup", productId: "p-soup", name: "Soup" };
+  const special = { ...lager, menuItemId: "mi-special", placements: [["s-specials"]] };
+  const el = await mount({
+    sections: [...sections, specials],
+    rows: [lager, lemonade, soup, special, { ...burger, placements: [] }],
+  });
+  await sortBy(el, "placements");
+  expect(shown(el)).toEqual(["mi-lager", "mi-lemonade", "mi-soup", "mi-burger", "mi-special"]);
+  expect(column(el, "placements")).toEqual([
+    "Drinks › Beer",
+    "Favourites Drinks",
+    t("menu_prices.top_level"),
+    "",
+    "Specials",
+  ]);
+});
+
+it("sends nothing when the quiet Save is pressed with no price changed", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  expect(button(el).disabled).toBe(true);
+  button(el).click();
+  await el.updateComplete;
+  expect(heard).not.toHaveBeenCalled();
+  expect(actions(el).error).toBe("");
+});
+
+it("keeps the typed prices while a save is being sent", async () => {
+  const el = await mount();
+  el.savePrices = vi.fn(() => new Promise<PriceSaveResult>(() => {}));
+  await typeIn(el, "mi-burger", "11.00");
+  button(el).click();
+  await el.updateComplete;
+  await typeIn(el, "mi-burger", "13.00");
+  await press(el, "mi-burger", "Escape");
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  expect(el.savePrices).toHaveBeenCalledOnce();
+});
+
+it("clears a named refusal from a field when Escape puts its stored price back", async () => {
+  const el = await mount();
+  priceSaves(el, { "mi-burger": { reason: "Price changed elsewhere", namesField: true } });
+  await typeIn(el, "mi-burger", "9.00");
+  button(el).click();
+  await vi.waitFor(() => expect(override(el, "mi-burger").error).toBe("Price changed elsewhere"));
+  await press(el, "mi-burger", "Escape");
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("");
+  expect(override(el, "mi-burger").error).toBe("");
+});

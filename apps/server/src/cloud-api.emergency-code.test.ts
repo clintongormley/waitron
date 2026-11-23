@@ -92,6 +92,36 @@ it("reveals only public code facts, with node.manage and origin checks before an
     await f.close();
   }
 });
+it("refuses a code request with a body before asking Cloud, and answers one on a box without a connection", async () => {
+  const who = await actor();
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    { db: suite.db, managementOrigin: "https://venue.test", isPrimary: () => true },
+    () => {},
+  );
+  const request = (body: string) =>
+    app.request("/management-api/cloud/emergency/code", {
+      method: "POST",
+      headers: {
+        cookie: who.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+  for (const body of ['{"again":true}', "[]", "null"]) {
+    const refused = await request(body);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: { code: "cloud.request_invalid", params: {} } });
+  }
+  const unconfigured = await request("{}");
+  expect(unconfigured.status).toBe(409);
+  expect(await unconfigured.json()).toEqual({
+    error: { code: "cloud.not_configured", params: {} },
+  });
+});
+
 it("names eligible active people and authenticator presence without disclosing credentials", async () => {
   const who = await actor();
   await seedPersons(suite.db, [

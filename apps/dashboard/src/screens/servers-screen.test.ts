@@ -1204,3 +1204,20 @@ describe("servers screen order, addresses and the replaced box", () => {
     expect(note.querySelector("a")!.getAttribute("href")).toBe("/help/es/servers#handed-over");
   });
 });
+
+it("Cancel pressed while the removal is in flight keeps the confirmation open for its answer", async () => {
+  let refuse!: (error: unknown) => void;
+  const api = stubApi({
+    removeServer: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+  });
+  const el = await mount(api);
+  await openRemove(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-remove]")!.click();
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
+  await flush(el);
+  expect(dialog(el).open).toBe(true);
+  refuse({ code: "membership.standby_joined" });
+  await flush(el);
+  expect(await messageIn(dialog(el))).toBe(codeMessage("membership.standby_joined"));
+});

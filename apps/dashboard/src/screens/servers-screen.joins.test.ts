@@ -632,3 +632,63 @@ describe("each refusal's words", () => {
       expect(find(el, "join-check-again") === null, code).toBe(code === "mirror.join_not_found");
   });
 });
+
+describe("a join request's codes dialog, while a read is out", () => {
+  it("reads the request once when Check is pressed twice before the list redraws", async () => {
+    const api = stubApi({ checkBoxJoin: vi.fn(() => new Promise(() => {})) });
+    const el = await mount(api);
+    const button = find(el, `join-check-${REQUEST}`)!;
+    button.click();
+    button.click();
+    expect(api.checkBoxJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["answer", (value: BoxJoinCheck) => Promise.resolve(value)],
+    ["refusal", () => Promise.reject({ code: "mirror.join_not_found" })],
+  ] as const)(
+    "stays closed when a check's %s arrives after the dialog was closed",
+    async (_label, settle) => {
+      let finish!: () => void;
+      const late = new Promise<void>((resolve) => (finish = resolve));
+      const api = stubApi({ checkBoxJoin: vi.fn(() => late.then(() => settle(checked))) });
+      const el = await mount(api);
+      find(el, `join-check-${REQUEST}`)!.click();
+      await flush(el);
+      expect(joinDialog(el).open).toBe(true);
+      joinDialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+      await flush(el);
+      expect(joinDialog(el).open).toBe(false);
+      finish();
+      await flush(el);
+      await flush(el);
+      expect(joinDialog(el).open).toBe(false);
+      expect(api.listServers).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("sends one approval when a code is tapped twice before the dialog redraws", async () => {
+    const api = stubApi({ approveBoxJoin: vi.fn(() => new Promise(() => {})) });
+    const el = await mount(api);
+    await check(el);
+    const code = choiceButtons(el)[0]!;
+    code.click();
+    code.click();
+    expect(api.approveBoxJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps asking the box for new requests through the main client when it has no background one", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubApi();
+      const { el } = await mountWidget<ServersScreen>("dashboard-servers-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      const before = vi.mocked(api.listServers).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(vi.mocked(api.listServers).mock.calls.length).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

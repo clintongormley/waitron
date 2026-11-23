@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, mountWithLeave } from "../widgets/test-helpers.js";
 import { localTime, setLocale } from "../i18n/t.js";
@@ -73,6 +74,19 @@ function handles(el: SetupConnectScreen): (string | undefined)[] {
   return seen;
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason: unknown): void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => ((resolve = res), (reject = rej)));
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -134,6 +148,96 @@ describe("setup-connect-screen: the address", () => {
   });
 });
 
+describe("setup-connect-screen: the address as typed", () => {
+  it.each([["waitron.local"], ["ftp://waitron.local/servers"]])(
+    "sends an address that is not an http or https web address as typed (%s)",
+    async (typed) => {
+      const { el, api } = await mount();
+      await type(el, typed);
+      await press(el, "join");
+      await vi.waitFor(() => expect(api.startJoin).toHaveBeenCalledWith(typed, undefined));
+    },
+  );
+
+  it("presses Join when Enter is pressed in the address field", async () => {
+    const { el, api } = await mount();
+    const field = q(el, "[data-test=primaryUrl]") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = MAIN;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
+  });
+
+  it("puts back the address it opened with, unmarked, when the person discards their change", async () => {
+    const { el, discard } = await mountWithLeave<SetupConnectScreen>("setup-connect-screen", {
+      api: stubApi(),
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    await press(el, "join");
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(true);
+    await type(el, "https://typed.local");
+    await discard();
+    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe("");
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+});
+
+const GENERIC =
+  "This box could not do that just now. Check the address and that the main box is switched on, then try again.";
+
+describe("setup-connect-screen: refusals whose details are missing or unreadable", () => {
+  it.each<[{ code?: unknown; params?: Record<string, unknown> }, string]>([
+    [{ code: "mirror.join_full", params: { limit: "recent" } }, GENERIC],
+    [
+      {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: "2026-11-23T10:00:00Z", max: 7 },
+      },
+      GENERIC,
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "recent", retryAt: "", max: 7, minutes: 20 } },
+      GENERIC,
+    ],
+    [{ code: "mirror.join_full", params: { limit: "listed", max: "4" } }, GENERIC],
+    [
+      { code: "mirror.join_full", params: { limit: "listed", max: 4 } },
+      "The main box already has 4 other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "address" } },
+      "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
+    ],
+    [
+      {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: "soon", max: 7, minutes: 20 },
+      },
+      "The main box has had 7 requests to join in the last 20 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until soon, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
+    ],
+    [
+      { code: "mirror.clocks_apart", params: { primaryAt: "noon", standbyAt: "half past" } },
+      "The two boxes' clocks are more than 10 minutes apart (the main box reads noon, this box half past). If this box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Join again.",
+    ],
+    [{ code: 409 }, GENERIC],
+  ])("%o", async (refusal, words) => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue(refusal);
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+  });
+});
+
 describe("setup-connect-screen: waiting", () => {
   it("joins the origin of the typed address and shows a link to the main box's Servers page, the code and the time left", async () => {
     const { el, api } = await mount();
@@ -170,6 +274,14 @@ describe("setup-connect-screen: waiting", () => {
     expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
       "Open the Servers page on the main box, choose Check beside this box's request, and tap this code:",
     );
+  });
+
+  it("shows the instruction without a link when the main box's address is a web address of another kind", async () => {
+    const { el } = await mount(stubApi({ ...WAITING, primaryUrl: "ftp://waitron.local" }), {
+      handle: "h1",
+    });
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(q(el, "[data-test=state] a")).toBeNull();
   });
 
   it("reads the join with this tab's handle on opening, and shows its waiting code", async () => {
@@ -679,6 +791,134 @@ describe("setup-connect-screen: nothing leaves the screen while a request is out
     ended();
     await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
     expect(disabled(el, "back")).toBe(false);
+  });
+});
+
+describe("setup-connect-screen: an answer that arrives after the screen moved on", () => {
+  it("shows the address field when its first read fails, and reads no more without a handle", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const api = stubApi();
+    api.joinState.mockRejectedValue({ code: "server.internal" });
+    const { el } = await mount(api);
+    expect(q(el, "[data-test=primaryUrl]")).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.joinState).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "answers",
+      (read: Deferred<JoinState>) => read.resolve({ state: "ended", reason: "cancelled" }),
+    ],
+    ["fails", (read: Deferred<JoinState>) => read.reject({ code: "server.internal" })],
+  ] as const)(
+    "keeps the new code when a read sent before Start again %s afterwards",
+    async (_, settle) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const api = stubApi(WAITING);
+      api.startJoin.mockResolvedValue({ ...STARTED, code: "105377", handle: "h2" });
+      const { el } = await mount(api, { handle: "h1" });
+      const read = deferred<JoinState>();
+      api.joinState.mockReturnValueOnce(read.promise).mockResolvedValue(WAITING);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(api.joinState).toHaveBeenCalledTimes(2);
+      await press(el, "start-again");
+      await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("105\u00a0377"));
+      settle(read);
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(text(el, "[data-test=code]")).toBe("105\u00a0377");
+      expect(q(el, "[data-test=state]")!.textContent).not.toMatch(/cancelled/);
+    },
+  );
+
+  it("keeps reading when a first read sent before the screen was taken away and shown again fails, and shows the current read's answer", async () => {
+    const older = deferred<JoinState>();
+    const current = deferred<JoinState>();
+    const api = stubApi();
+    api.joinState.mockReturnValueOnce(older.promise).mockReturnValueOnce(current.promise);
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      api,
+      handle: "h1",
+    });
+    el.remove();
+    host.appendChild(el);
+    await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
+    older.reject({ code: "server.internal" });
+    await older.promise.catch(() => {});
+    await el.updateComplete;
+    expect(text(el, "[data-test=reading]")).toBe("Checking this box's join…");
+    expect(q(el, "[data-test=primaryUrl]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    current.resolve(WAITING);
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(q(el, "[data-test=reading]")).toBeNull();
+  });
+
+  it.each([
+    ["answers", (start: Deferred<JoinStarted>) => start.resolve(STARTED)],
+    [
+      "is refused",
+      (start: Deferred<JoinStarted>) => start.reject({ code: "mirror.join_not_found" }),
+    ],
+  ] as const)(
+    "drops a Join whose start %s after the screen was taken away and shown again",
+    async (_, settle) => {
+      const api = stubApi();
+      const start = deferred<JoinStarted>();
+      api.startJoin.mockReturnValue(start.promise);
+      const { el, host } = await mount(api);
+      const seen = handles(el);
+      await type(el, MAIN);
+      await press(el, "join");
+      el.remove();
+      host.appendChild(el);
+      await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+      settle(start);
+      await start.promise.catch(() => {});
+      await el.updateComplete;
+      expect(seen).toEqual([]);
+      expect(q(el, "[data-test=code]")).toBeNull();
+      expect(await bottomOf(el)).toBe("");
+    },
+  );
+
+  it.each([
+    ["ends", (cancel: Deferred<void>) => cancel.resolve()],
+    ["is refused", (cancel: Deferred<void>) => cancel.reject({ code: "mirror.join_in_use" })],
+  ] as const)(
+    "drops a Start again whose cancel %s after the screen was taken away and shown again",
+    async (_, settle) => {
+      const api = stubApi({ state: "elsewhere" });
+      const cancel = deferred<void>();
+      api.cancelJoin.mockReturnValue(cancel.promise);
+      const { el, host } = await mount(api);
+      const seen = handles(el);
+      await press(el, "start-again");
+      el.remove();
+      host.appendChild(el);
+      await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
+      settle(cancel);
+      await cancel.promise.catch(() => {});
+      await el.updateComplete;
+      expect(seen).toEqual([]);
+      expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
+      expect(await bottomOf(el)).toBe("");
+    },
+  );
+
+  it("shows the generic words when Join is refused with nothing at all", async () => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue(undefined);
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
+      ),
+    );
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResourceChange } from "@waitron/shared";
+import { AppError, type ResourceChange } from "@waitron/shared";
 import type { ForwardResult, PaymentProvider } from "@waitron/payments";
 import { testCardFollowUp } from "./testing/card-follow-up.js";
 import { createJobRunner, type JobRunner } from "./job-runner.js";
@@ -132,6 +132,27 @@ describe("card follow-up on the job runner", () => {
     await advance(1);
     expect(ran).toEqual(["sweep", "settle", "refunds", "sweep", "settle", "refunds"]);
     expect(runner.views()["card.follow_up"]?.consecutiveFailures).toBe(0);
+  });
+
+  it("logs a refund recovery failure by its code and counts the pass as failed", async () => {
+    runner.add(
+      testCardFollowUp(
+        {
+          sweepProviders: async () => [],
+          settle: async () => settled,
+          recoverRefunds: async () => {
+            throw new AppError("cloud.unavailable", {});
+          },
+        },
+        { getRole: () => "primary", recoversRefunds: true, admissionReady: () => true, log },
+      ),
+    );
+
+    await advance(0);
+    expect(log).toHaveBeenCalledWith("error", "tender_refund.recovery_failed", {
+      errorCode: "cloud.unavailable",
+    });
+    expect(runner.views()["card.follow_up"]?.consecutiveFailures).toBe(1);
   });
 
   it("reads the role again before settlement and refund recovery", async () => {

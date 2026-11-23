@@ -440,3 +440,31 @@ it("hints inherited names while a cleared default override and an optional Spani
     overrides: { names: { en: "" }, image: "folder-photo" },
   });
 });
+
+it("Cancel pressed while saving keeps the dialog open and emits nothing", async () => {
+  const el = await includeForm();
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  el.busy = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
+  await el.updateComplete;
+  expect(cancelled).not.toHaveBeenCalled();
+  expect(el.open).toBe(true);
+});
+
+it("leaves focus where it was when a follow button is pressed without taking focus", async () => {
+  const el = await includeForm();
+  const name = field(el, "names-en")!;
+  name.focus();
+  const reset = page.getByRole("button", { name: "Use included menu photo", exact: true });
+  await expect.element(reset, { timeout: 600 }).toBeEnabled();
+  (reset.element() as HTMLElement).click();
+  await el.updateComplete;
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
+  await save.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(uploadOf(el)!.image).toBe("own-photo");
+  expect(el.shadowRoot!.activeElement).toBe(name);
+});
