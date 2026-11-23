@@ -50,6 +50,14 @@ packages, runs ESLint and Prettier with no saved results, collects coverage and 
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
 that their test script exists before running, including when result uploads are skipped.
 
+When CI selects the dashboard or till tests, `test-webkit-startup` runs the eight theme start-up
+cases for each app in WebKit. The job reports to `ci` and runs on GitHub-hosted Ubuntu for its
+sudo and APT installation. Vitest's driver uses the existing Chromium cache in restore-only
+mode, with a headless-shell install on a miss. The same browser directory holds WebKit, but
+the WebKit cache archives only `webkit-*` under a key for the OS, architecture, Ubuntu release
+and Playwright version. Before a matching default-branch cache exists, each selected pull request
+can save its own copy.
+
 After full verification on main, the run publishes its pinned SHA images and asks the existing
 `main-tag-guard.sh` before moving `:main`. Ordinary main pushes and pushes to `maintenance/*` publish no container image.
 A manual full run on another branch verifies without publishing. The private UI-package workflow
@@ -3317,6 +3325,12 @@ every job with a four-space `uses:`, relying on the called workflow's own jobs, 
 when that workflow is one of this repository's `.github/workflows/` files.
 
 ### Every apt wait is bounded
+
+The hosted WebKit job runs Playwright's `install-deps` inside a GNU timeout started by sudo.
+It passes APT configuration on sudo's command line so dpkg stays in the process group the timeout
+can stop. After a failed attempt, the job bounds `dpkg --configure -a` before retrying once.
+The existing dependency-install guard checks the command shape. The hosted probe exercises the
+process-group kill and both dpkg locks.
 
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi

@@ -779,10 +779,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     [Detail](backlog/till.md#the-profile-editor-reads-people-and-the-venues-departments-and-zones)
 
 
-- **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** Whether WebKit's Linux
-  libraries are missing from `ubuntu-latest` is an assumption to check first.
-  [Detail](backlog/till.md#webkit-in-ci-for-a841s-start-up-checks-lane-a-ruling-2026-10-21)
-
 - **Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.** A theme's Typeface
   may also be a font file the venue uploads, so every screen draws the bar's own face.
   [Detail](backlog/till.md#uploaded-font-files-for-themes-owner-2026-10-20-a841-q7-b--after-a841)

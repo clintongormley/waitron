@@ -781,17 +781,6 @@ main, so whether the 1024 overflow predates slice 11 is unchecked. Readings:
 `~/waitron-campaign/a841-11b-shots/look-report-11b.md` (lane A's machine).
 
 
-## WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).
-
-The dashboard's and the
-till's `venue-theme-startup.test.ts` run in Chromium in CI; WebKit was measured once, locally
-(`WAITRON_STARTUP_ENGINES=chromium,webkit`; receipt in `docs/developers/testing-guide.md`). To gate
-it: install WebKit in those shards under a bounded, retried apt step (CLAUDE.md §2), give the
-Playwright cache a key per engine so Chromium-only jobs do not save a cache without WebKit, and set
-the variable for those suites. Whether WebKit's Linux libraries are missing from `ubuntu-latest`
-is an assumption to check first.
-
-
 ## Uploaded font files for themes (owner, 2026-10-20, A841 Q7 B) — after A841.
 
 A theme's

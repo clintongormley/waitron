@@ -456,9 +456,15 @@ describe("disposable server routing", () => {
       const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
       if (
         !routing ||
-        ["changes", "server-queue-watchdog", "publish", "release", "ci", "server-probe"].includes(
-          entry.id,
-        )
+        [
+          "changes",
+          "server-queue-watchdog",
+          "publish",
+          "release",
+          "ci",
+          "server-probe",
+          "test-webkit-startup",
+        ].includes(entry.id)
       )
         continue;
       for (const event of ["pull_request", "push", "workflow_dispatch", "schedule"]) {
@@ -3649,12 +3655,14 @@ describe("the test shards", () => {
 
   // The owner's bound (2026-10-09): no test job should run past about four minutes. These limits
   // sit above that so a slow runner is not cut off, and well below GitHub's six hours.
-  it("bounds every test job at ten minutes, every merge job at five, and lint and the root guards at eight", () => {
+  it("bounds test shards at ten minutes, merge jobs at five and the focused WebKit job at eight", () => {
     const minutesOf = (body) => Number(/^ {4}timeout-minutes: (\d+)$/m.exec(body.join("\n"))?.[1]);
     const testJobs = jobs.filter(({ id }) => id.startsWith("test-"));
     expect(testJobs.length).toBeGreaterThan(0);
     for (const { id, body } of testJobs) {
-      expect(minutesOf(body), id).toBe(id.endsWith("-merge") ? 5 : 10);
+      expect(minutesOf(body), id).toBe(
+        id.endsWith("-merge") ? 5 : id === "test-webkit-startup" ? 8 : 10,
+      );
     }
     for (const id of ["lint", "root-guards"]) expect(minutesOf(job(id).body), id).toBe(8);
   });
@@ -4055,6 +4063,50 @@ describe("main push package gates", () => {
     },
     TWO_RUNS_TEST_TIMEOUT_MS,
   );
+});
+
+describe("the WebKit start-up job", () => {
+  it("runs on GitHub for either selected app and skips when neither is selected", () => {
+    const { body } = job("test-webkit-startup");
+    for (const [code, dashboard, till, enabled] of [
+      ["true", "true", "false", true],
+      ["true", "false", "true", true],
+      ["true", "false", "false", false],
+      ["false", "true", "true", false],
+    ]) {
+      const context = routingContext();
+      Object.assign(context.needs.changes.outputs, { code, dashboard, till });
+      expect(runsAtGitHub(body, context)).toBe(enabled);
+    }
+    expect(body).toContain("    runs-on: ubuntu-latest");
+  });
+
+  it("blocks CI if either app's WebKit start-up suite fails", () => {
+    const { body } = job("test-webkit-startup");
+    const steps = workflowSteps(body.join("\n"));
+    for (const app of ["dashboard", "till"]) {
+      const suite = steps.find((step) =>
+        step.command.includes(
+          `--filter @waitron/${app} exec vitest run src/venue-theme-startup.test.ts`,
+        ),
+      );
+      expect(suite?.env.WAITRON_STARTUP_ENGINES, app).toBe("webkit");
+      expect(suite?.continueOnError, app).toBeUndefined();
+      expect(suite?.command, app).toContain("scripts/run-with-deadline.mjs 120 --diagnostics --");
+    }
+    expect(needsOf(job("ci").body)).toContain("test-webkit-startup");
+  });
+
+  it("restores Chromium and saves only WebKit under a separate cache key", () => {
+    const steps = workflowSteps(job("test-webkit-startup").body.join("\n"));
+    const [chromium, webkit] = steps.filter((step) => step.uses?.startsWith("actions/cache"));
+    expect(chromium.uses).toMatch(/^actions\/cache\/restore@/);
+    expect(chromium.with.path).toBe("~/.cache/ms-playwright");
+    expect(chromium.with.key).toMatch(/^playwright-/);
+    expect(webkit.uses).toMatch(/^actions\/cache@/);
+    expect(webkit.with.path).toBe("~/.cache/ms-playwright/webkit-*");
+    expect(webkit.with.key).toMatch(/^playwright-webkit-/);
+  });
 });
 
 describe("the sharded jobs", () => {
@@ -4855,24 +4907,27 @@ function aptWaits(text) {
 }
 
 /**
- * Every `--with-deps` in a step's `run:` command, which makes Playwright run apt-get itself, and
- * whether the command it belongs to runs under `timeout <n>` on the same line (`if`, `!` and `sudo`
+ * Every Playwright `--with-deps` or `install-deps` in a step's `run:` command and whether it
+ * runs under a deadline on the same line. The resolved GNU timeout must run inside sudo
+ * (`if`, `!` and `sudo` before a plain timeout are also
  * allowed before `timeout`; a `;`, `&&`, `|`, `(` or a `&` that is not part of `&&`, `>&`, `<&`
  * or `&>` between them starts another command).
  */
 function withDepsWaits(text) {
-  const limited = /^\s*(?:if\s+|!\s*)?(?:sudo\s+)?timeout\s+\d+\s/;
+  const limited = /^\s*(?:if\s+|!\s*)?(?:sudo\s+)?(?:gnu)?timeout\s+\d+\s/;
+  const rootLimited =
+    /^\s*(?:if\s+|!\s*)?sudo -n APT_CONFIG="\$apt_config" "\$gnu_timeout" -k [1-9]\d* [1-9]\d*\s/;
   return workflowSteps(text).flatMap(({ step, command }) =>
     command.split("\n").flatMap((line) =>
-      [...line.matchAll(/--with-deps\b/g)].map((found) => ({
-        step,
-        bounded: limited.test(
-          line
+      [...line.matchAll(/--with-deps\b|(?:\bplaywright|"\$playwright_cli")\s+install-deps\b/g)].map(
+        (found) => {
+          const command = line
             .slice(0, found.index)
             .split(/;|&&|\|\||\||(?<![<>&])&(?![&>])|\(/)
-            .at(-1),
-        ),
-      })),
+            .at(-1);
+          return { step, bounded: limited.test(command) || rootLimited.test(command) };
+        },
+      ),
     ),
   );
 }
@@ -5409,7 +5464,7 @@ describe("the workflows' apt waits", () => {
  * it takes the same outer limit. Reads TEXT through the same step reader, line by line, and does
  * not check that the step retries or judge the number.
  */
-describe("the workflows' playwright --with-deps waits", () => {
+describe("the workflows' Playwright dependency waits", () => {
   const workflow = (run) =>
     `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - name: browsers\n        run: ${run}\n`;
 
@@ -5417,6 +5472,12 @@ describe("the workflows' playwright --with-deps waits", () => {
     ["timeout 600 pnpm exec playwright install --with-deps chromium", true],
     ["if sudo timeout 600 npx playwright install --with-deps chromium; then :; fi", true],
     ["pnpm exec playwright install --with-deps chromium", false],
+    ["pnpm exec playwright install-deps webkit", false],
+    ['"$gnu_timeout" -k 5 90 "$node" "$playwright_cli" install-deps webkit', false],
+    [
+      'if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -k 5 90 "$node" "$playwright_cli" install-deps webkit; then :; fi',
+      true,
+    ],
     ["timeout 60 true && pnpm exec playwright install --with-deps chromium", false],
     ["timeout 60 true & pnpm exec playwright install --with-deps chromium", false],
     ["timeout 600 pnpm exec playwright install 2>&1 --with-deps chromium", true],
@@ -5432,7 +5493,7 @@ describe("the workflows' playwright --with-deps waits", () => {
     expect(withDepsWaits(workflow(run))).toEqual([{ step: "browsers", bounded }]);
   });
 
-  it("finds no --with-deps without an outer timeout in any workflow", () => {
+  it("finds no Playwright dependency install without an outer timeout", () => {
     const steps = workflowFiles.flatMap((name) =>
       workflowSteps(readFileSync(join(workflowsDir, name), "utf8")).map((step) => ({
         ...step,
@@ -5449,7 +5510,7 @@ describe("the workflows' playwright --with-deps waits", () => {
           .filter((wait) => !wait.bounded)
           .map((wait) => `${name}: ${wait.step}`),
       ),
-      '--with-deps runs apt-get: run it under `timeout <seconds>` (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
+      'Playwright dependency installs run apt-get: put a deadline around the command (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
     ).toEqual([]);
   });
 });
