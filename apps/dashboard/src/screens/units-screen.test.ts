@@ -433,7 +433,7 @@ describe("units-screen", () => {
     });
   });
 
-  it("centres the shared row-action buttons", async () => {
+  it("start-aligns the shared row-action buttons and draws Delete as dangerous", async () => {
     const el = await mount();
     const menu = el
       .shadowRoot!.querySelector("wt-data-table")!
@@ -442,9 +442,9 @@ describe("units-screen", () => {
     expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) {
       await button.updateComplete;
-      expect(button.variant).toBe("secondary");
+      expect(button.variant).toBe(button.icon === "menu-delete" ? "danger" : "secondary");
       expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-        "center",
+        "start",
       );
     }
   });

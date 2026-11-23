@@ -1,4 +1,10 @@
-import { ReorderController, reorder, visuallyHiddenStyles, type ReorderModel } from "@waitron/ui";
+import {
+  rowActionTail,
+  ReorderController,
+  reorder,
+  visuallyHiddenStyles,
+  type ReorderModel,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -328,10 +334,12 @@ export class VariantTable extends LitElement {
     name: string,
     index: number,
     label: string,
+    icon: string,
     variant: "secondary" | "danger",
     blocked = false,
   ) {
     return html`<wt-button
+      icon=${icon}
       variant=${variant}
       data-test=${`${name}-${index}`}
       .disabled=${this.busy || blocked}
@@ -414,20 +422,30 @@ export class VariantTable extends LitElement {
           >${
             variant.id === undefined
               ? nothing
-              : this.#action("open", index, t("editor.open_variant"), "secondary", this.openBlocked)
-          }${this.#action("edit", index, t("action.edit"), "secondary")}${
-            variant.active
-              ? this.#action(
-                  "remove",
+              : this.#action(
+                  "open",
                   index,
-                  // A variant never saved has no row to keep, so it is really removed.
-                  t(variant.id === undefined ? "action.remove" : "product.archive"),
-                  "danger",
+                  t("editor.open_variant"),
+                  "menu-open",
+                  "secondary",
+                  this.openBlocked,
                 )
+          }${this.#action("edit", index, t("action.edit"), "menu-edit", "secondary")}${
+            variant.active
+              ? rowActionTail(true, [
+                  this.#action(
+                    "remove",
+                    index,
+                    // A variant never saved has no row to keep, so it is really removed.
+                    t(variant.id === undefined ? "action.remove" : "product.archive"),
+                    variant.id === undefined ? "menu-remove" : "menu-archive",
+                    "secondary",
+                  ),
+                ])
               : html`<wt-menu-row
                   help=${t("help.products.keep_variant")}
                   help-label=${fill("help.badge_label", { part: t("product.keep_variant") })}
-                  >${this.#action("restore", index, t("product.keep_variant"), "secondary")}</wt-menu-row
+                  >${this.#action("restore", index, t("product.keep_variant"), "menu-undo", "secondary")}</wt-menu-row
                 >`
           }</wt-row-actions
         >

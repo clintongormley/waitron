@@ -2,7 +2,7 @@ import { t as tableText } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -269,24 +269,29 @@ export class FloorPlansScreen extends LitElement {
       label=${`${row.set.name}: ${t("venue.actions")}`}
       align="end"
     >
-      <wt-button data-test="rename-set" @click=${() => this.edit("rename", set)}
+      <wt-button icon="menu-rename" data-test="rename-set" @click=${() => this.edit("rename", set)}
         >${t("floor_plans.rename")}</wt-button
       >
-      <wt-button data-test="copy-set" @click=${() => this.edit("copy", set)}
+      <wt-button icon="menu-copy" data-test="copy-set" @click=${() => this.edit("copy", set)}
         >${t("floor_plans.copy")}</wt-button
       >
       ${
         row.set.isDefault
           ? nothing
           : html`<wt-button
+                icon="menu-default"
                 data-test="make-default-set"
                 @click=${() => void this.makeDefault(set.id)}
                 >${t("floor_plans.make_default")}</wt-button
-              ><wt-button
-                data-test="delete-set"
-                @click=${() => this.askDelete(row.department.id, set.id)}
-                >${t("floor_plans.delete")}</wt-button
-              >`
+              >${rowActionTail(true, [
+                html`<wt-button
+                  icon="menu-delete"
+                  variant="danger"
+                  data-test="delete-set"
+                  @click=${() => this.askDelete(row.department.id, set.id)}
+                  >${t("floor_plans.delete")}</wt-button
+                >`,
+              ])}`
       }
     </wt-row-actions>`;
   }

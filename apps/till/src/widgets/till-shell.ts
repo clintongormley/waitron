@@ -1,5 +1,8 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
-import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
+import {
+  actionChoiceStyles,
+  actionDividerStyles,
+} from "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
@@ -165,6 +168,7 @@ export class TillShell extends LitElement {
   /** More's About Waitron: focus goes back to More's own button, the menu having closed. */
   #aboutOption(): TemplateResult {
     return html`<wt-button
+      icon="menu-details"
       class="about"
       @click=${(event: Event) =>
         this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!)}
@@ -184,7 +188,7 @@ export class TillShell extends LitElement {
 
   static override styles = [
     baseStyles,
-    menuOptionStyles,
+    actionChoiceStyles,
     chooserStyles,
     themeChoicesStyles,
     edgeFadeStyles,
@@ -371,15 +375,6 @@ export class TillShell extends LitElement {
         outline-offset: calc(-2 * var(--wt-focus-offset));
       }
 
-      [data-counter-zone] {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-      .zone-check {
-        width: var(--wt-space-4);
-      }
-
       .session {
         display: flex;
         flex: none;
@@ -450,10 +445,7 @@ export class TillShell extends LitElement {
       }
 
       .menu-rule {
-        align-self: stretch;
-        margin: 0;
-        border: 0;
-        border-block-start: 1px solid var(--wt-color-border);
+        ${actionDividerStyles}
       }
 
       wt-row-actions > span {
@@ -474,7 +466,7 @@ export class TillShell extends LitElement {
       /* A ::part() takes no attribute selector after it, so the mark sits on the host. An overlay
          rather than a mask, which would also fade the popup's border and shadow. Its negative margin
          keeps it out of the scroll height; a sticky box stops at its scroller's padding, so it
-         reaches past the --wt-space-2 that wt-row-actions pads its popup with. */
+         reaches past the --wt-space-1 that wt-row-actions pads its popup with. */
       wt-row-actions[data-test="more-menu"][data-overflow="end"]::part(popup)::after {
         content: "";
         display: block;
@@ -1122,6 +1114,7 @@ export class TillShell extends LitElement {
     ): TemplateResult =>
       this.#withHelp(
         html`<wt-button
+          icon=${cls === "zones" || cls === "equipment" ? "menu-settings" : "menu-open"}
           class=${cls}
           ?data-open-transfers=${opensTransfers}
           @click=${() => this.#emit(type)}
@@ -1199,6 +1192,7 @@ export class TillShell extends LitElement {
     const disabled = this.clockBusy || state === null;
     const action = (kind: TillClockAction, label: string) =>
       html`<wt-button
+        icon=${{ in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
         data-clock-action=${kind}
         variant=${disabled ? "secondary" : "primary"}
         .disabled=${disabled}
@@ -1212,6 +1206,7 @@ export class TillShell extends LitElement {
             ${
               state === null
                 ? html`<wt-button
+                    icon="menu-retry"
                     data-clock-retry
                     .disabled=${this.clockBusy}
                     @click=${() => this.#emit("retry-clock-read")}
@@ -1223,6 +1218,7 @@ export class TillShell extends LitElement {
                     ${action("out", t("clock.out"))}`
             }
             <wt-button
+              icon="menu-hours"
               data-my-hours
               .disabled=${this.hoursBusy}
               @click=${() => this.#emit("my-hours")}
@@ -1230,6 +1226,7 @@ export class TillShell extends LitElement {
             >
             ${this.#withHelp(
               html`<wt-button
+                icon="menu-edit"
                 data-fix-hours
                 .disabled=${this.hoursBusy}
                 @click=${() => this.#emit("fix-my-hours")}
@@ -1320,7 +1317,7 @@ export class TillShell extends LitElement {
       </div>
       <hr class="menu-rule" />
       ${this.#reportOption()}${this.#aboutOption()}
-      <wt-button class="logout" @click=${() => this.#emit("logout")}
+      <wt-button icon="menu-logout" class="logout" @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
       >
       ${this.#poweredBy()}
@@ -1330,6 +1327,7 @@ export class TillShell extends LitElement {
   #reportOption(): TemplateResult | typeof nothing {
     return reportAvailable()
       ? html`<wt-button
+          icon="menu-report"
           data-report-problem
           class="report-problem"
           @click=${(event: Event) => {
@@ -1354,6 +1352,7 @@ export class TillShell extends LitElement {
   #drawerItem(action: "close" | "cash") {
     return this.canCloseDrawer
       ? html`<wt-button
+          icon=${action === "close" ? "menu-drawer" : "menu-cash"}
           class=${`drawer-${action}`}
           @click=${(event: Event) =>
             this.#emit(`open-drawer-${action}`, {
@@ -1367,7 +1366,12 @@ export class TillShell extends LitElement {
   #tillMenu(): TemplateResult {
     const action = (cls: string, event: string, label: string, help?: HelpKey) =>
       this.#withHelp(
-        html`<wt-button class=${cls} @click=${() => this.#emit(event)}>${label}</wt-button>`,
+        html`<wt-button
+          icon=${cls === "logout" ? "menu-logout" : cls === "settings" ? "menu-settings" : "menu-open"}
+          class=${cls}
+          @click=${() => this.#emit(event)}
+          >${label}</wt-button
+        >`,
         help,
         label,
       );
@@ -1486,14 +1490,12 @@ export class TillShell extends LitElement {
                     html`<button
                       type="button"
                       role="menuitemradio"
-                      class="option"
+                      data-row-choice
                       data-counter-zone=${zone.id}
                       aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
                       @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}
                     >
-                      <span class="zone-check" aria-hidden="true"
-                        >${zone.id === this.selectedCounterZoneId ? "✓" : ""}</span
-                      >${zone.name}
+                      <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>${zone.name}
                     </button>`,
                 )}
               </div>

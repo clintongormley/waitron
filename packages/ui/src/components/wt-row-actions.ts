@@ -1,10 +1,70 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { popupIndex, popupPlacement } from "../popup-helpers.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
 import type { WtIconSize } from "./wt-icon.js";
+
+const actionRowStyles = css`
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  text-align: start;
+  gap: var(--wt-space-3);
+  width: 100%;
+  min-width: var(--wt-tap-min);
+  min-height: var(--wt-tap-min);
+  padding: var(--wt-space-1) var(--wt-space-4) var(--wt-space-1) var(--wt-space-3);
+  border: 0 solid transparent;
+  border-radius: var(--wt-radius-sm);
+  background: transparent;
+  color: var(--wt-color-text);
+  font: inherit;
+  font-size: var(--wt-font-size-md);
+  font-weight: var(--wt-font-weight-normal);
+  text-decoration: none;
+  cursor: pointer;
+`;
+
+export const actionDividerStyles = css`
+  align-self: stretch;
+  margin: var(--wt-space-1) 0;
+  border: 0;
+  border-block-start: var(--wt-field-line-width) solid var(--wt-color-border);
+`;
+
+export function rowActionTail(
+  ordinary: boolean,
+  tail: readonly (TemplateResult | typeof nothing)[],
+) {
+  if (tail.every((action) => action === nothing)) return nothing;
+  return html`${ordinary ? html`<hr part="menu-divider" />` : nothing}${tail}`;
+}
+
+export const actionChoiceStyles = css`
+  [data-row-choice] {
+    ${actionRowStyles}
+  }
+  [data-row-choice][aria-checked="true"] {
+    background: var(--wt-color-surface-lifted);
+  }
+  [data-row-choice]:not([aria-disabled="true"]):is(:hover, :active) {
+    background: var(--wt-color-field-fill);
+  }
+  [data-row-choice][aria-disabled="true"] {
+    color: var(--wt-color-text-muted);
+    cursor: not-allowed;
+  }
+  [data-row-choice] wt-icon {
+    flex: none;
+    color: var(--wt-color-text-muted);
+  }
+  [aria-checked="false"] > [data-row-check] {
+    visibility: hidden;
+  }
+`;
 
 @customElement("wt-row-actions")
 export class WtRowActions extends LitElement {
@@ -34,7 +94,8 @@ export class WtRowActions extends LitElement {
       [popover] {
         position: fixed;
         margin: 0;
-        padding: var(--wt-space-2);
+        padding: var(--wt-space-1);
+        min-width: min(var(--wt-row-menu-min-width), calc(100vw - 2 * var(--wt-space-2)));
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
@@ -49,43 +110,51 @@ export class WtRowActions extends LitElement {
         max-height: calc(100vh - 2 * var(--wt-space-2));
         overflow-y: auto;
       }
+      :host([panel]) [popover] {
+        padding: var(--wt-space-2);
+        min-width: 0;
+      }
       .actions {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
       }
-      ::slotted(*) {
-        --wt-button-justify: center;
+      :host(:not([panel])) .actions {
+        gap: 0;
+        --wt-button-justify: start;
+        --wt-action-gap: var(--wt-space-3);
+        --wt-action-padding: var(--wt-space-1) var(--wt-space-4) var(--wt-space-1) var(--wt-space-3);
+        --wt-action-border: 0 solid transparent;
+        --wt-action-border-color: transparent;
+        --wt-action-radius: var(--wt-radius-sm);
+        --wt-action-background: transparent;
+        --wt-action-text: var(--wt-color-text);
+        --wt-action-danger-text: var(--wt-color-danger);
+        --wt-action-hover: var(--wt-color-field-fill);
+        --wt-action-icon-color: var(--wt-color-text-muted);
+        --wt-action-disabled-opacity: var(--wt-opacity-disabled);
+        --wt-action-weight: var(--wt-font-weight-normal);
+        --wt-action-font-size: var(--wt-font-size-md);
+        --wt-action-text-align: start;
       }
       ::slotted(wt-button) {
         width: 100%;
       }
-      ::slotted(a[href]) {
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        gap: var(--wt-space-2);
-        width: 100%;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        text-decoration: none;
+      ::slotted(hr) {
+        ${actionDividerStyles}
       }
-      ::slotted(a[href]:not([aria-disabled="true"]):hover) {
-        border-color: var(--wt-color-primary-text);
+      ::slotted(:is(button, a[href])) {
+        --wt-action-icon-flex: none;
+        --wt-action-native-icon-color: var(--wt-color-text-muted);
+        ${actionRowStyles}
       }
-      ::slotted(a[href][aria-disabled="true"]) {
+      ::slotted(:is(button, a[href]):not(:disabled, [aria-disabled="true"]):is(:hover, :active)) {
+        background: var(--wt-color-field-fill);
+      }
+      ::slotted(:is(button, a[href]):is(:disabled, [aria-disabled="true"])) {
         ${disabledStyles}
       }
-      ::slotted(a[href]:focus-visible) {
+      ::slotted(:is(button, a[href]):focus-visible) {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }

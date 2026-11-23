@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
+  rowActionTail,
   focusFirstInvalid,
   FormFeedback,
   submitOnEnter,
@@ -2283,11 +2284,14 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  #pairAgainAction(p: Printer): TemplateResult | typeof nothing {
+  #pairAgainAction(p: Printer, inMenu = false): TemplateResult | typeof nothing {
     if (p.transport !== "bluetooth" || p.active || this.#pairedReport(p) !== undefined)
       return nothing;
-    return html`<wt-button data-test=${`pair-again-${p.id}`} @click=${() => this.#openPairAgain(p)}
-      >${t("printers.pair_again")}</wt-button
+    return html`<wt-button
+      icon=${inMenu ? "menu-pair" : nothing}
+      data-test=${`pair-again-${p.id}`}
+      @click=${() => this.#openPairAgain(p)}
+      >${t(inMenu ? "printers.pair_again_dialog" : "printers.pair_again")}</wt-button
     >`;
   }
 
@@ -2628,6 +2632,7 @@ export class PrintersScreen extends LitElement {
   #agentActions(agent: PrintAgentRow): TemplateResult {
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: agent.name })}>
       <wt-button
+        icon="menu-edit"
         data-test=${`edit-agent-${agent.id}`}
         @click=${(event: Event) => {
           this.#rememberEditTrigger(event);
@@ -2635,18 +2640,22 @@ export class PrintersScreen extends LitElement {
           this.errorKey = null;
           this.#editAgent(agent);
         }}
-        >${t("action.edit")}</wt-button
+        >${t("action.edit_dialog")}</wt-button
       >
-      <wt-button
-        variant="danger"
-        data-test=${`revoke-agent-${agent.id}`}
-        @click=${(event: Event) => {
-          this.#agentDeleteOpener = this.#rowMenuButton(event.currentTarget as HTMLElement) ?? null;
-          this.errorKey = null;
-          this.deletingAgent = agent;
-        }}
-        >${t("action.delete")}</wt-button
-      >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`revoke-agent-${agent.id}`}
+          @click=${(event: Event) => {
+            this.#agentDeleteOpener =
+              this.#rowMenuButton(event.currentTarget as HTMLElement) ?? null;
+            this.errorKey = null;
+            this.deletingAgent = agent;
+          }}
+          >${t("action.delete_dialog")}</wt-button
+        >`,
+      ])}
     </dashboard-row-actions>`;
   }
 
@@ -3213,15 +3222,17 @@ export class PrintersScreen extends LitElement {
   #printerActions(p: Printer): TemplateResult {
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: p.name })}>
       <wt-button
+        icon="menu-edit"
         data-test=${`edit-printer-${p.id}`}
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
           this.#showPrinterStatus(p.id, this.#rowMenuButton(button) ?? button);
           this.#openDetailEdit(p.id, this.#savedEditValues(p));
         }}
-        >${t("action.edit")}</wt-button
+        >${t("action.edit_dialog")}</wt-button
       >
       <wt-button
+        icon="menu-print"
         data-test=${`print-test-page-${p.id}`}
         ?disabled=${!p.active}
         ?loading=${this.testPagesPrinting.has(p.id)}
@@ -3231,26 +3242,30 @@ export class PrintersScreen extends LitElement {
       ${
         this.canManageStationPrinters
           ? html`<wt-button
+              icon="menu-default"
               data-test=${`every-station-${p.id}`}
               ?disabled=${!p.active}
               @click=${(event: Event) => {
                 const button = event.currentTarget as HTMLElement;
                 this.#openEveryStation(p, this.#rowMenuButton(button) ?? button);
               }}
-              >${t("printers.every_station")}</wt-button
+              >${t("printers.every_station_dialog")}</wt-button
             >`
           : nothing
       }
-      ${this.#pairAgainAction(p)}
-      <wt-button
-        variant="danger"
-        data-test=${`delete-printer-${p.id}`}
-        @click=${(event: Event) => {
-          const button = event.currentTarget as HTMLElement;
-          this.#openDelete(p, this.#rowMenuButton(button) ?? button);
-        }}
-        >${t("action.delete")}</wt-button
-      >
+      ${this.#pairAgainAction(p, true)}
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`delete-printer-${p.id}`}
+          @click=${(event: Event) => {
+            const button = event.currentTarget as HTMLElement;
+            this.#openDelete(p, this.#rowMenuButton(button) ?? button);
+          }}
+          >${t("action.delete_dialog")}</wt-button
+        >`,
+      ])}
     </dashboard-row-actions>`;
   }
 
@@ -4193,30 +4208,35 @@ export class PrintersScreen extends LitElement {
     const pages = this.#testPages;
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: row.name })}>
       <wt-button
+        icon="menu-edit"
         data-test=${`edit-page-printer-${row.id}`}
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
           this.#showPrinterStatus(row.id, this.#rowMenuButton(button) ?? button);
           this.#openDetailEdit(row.id, { name: row.name, host: "", port: "" });
         }}
-        >${t("action.edit")}</wt-button
+        >${t("action.edit_dialog")}</wt-button
       >
       <wt-button
+        icon="menu-print"
         data-test=${`print-test-page-${row.id}`}
         ?disabled=${pages.unavailable(row)}
         ?loading=${pages.sending.has(row.id)}
         @click=${() => void pages.print(row)}
         >${t("printers.print_test_page")}</wt-button
       >
-      <wt-button
-        variant="danger"
-        data-test=${`delete-page-printer-${row.id}`}
-        @click=${(event: Event) => {
-          const button = event.currentTarget as HTMLElement;
-          this.#openDelete(row, this.#rowMenuButton(button) ?? button, true);
-        }}
-        >${t("action.delete")}</wt-button
-      >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test=${`delete-page-printer-${row.id}`}
+          @click=${(event: Event) => {
+            const button = event.currentTarget as HTMLElement;
+            this.#openDelete(row, this.#rowMenuButton(button) ?? button, true);
+          }}
+          >${t("action.delete_dialog")}</wt-button
+        >`,
+      ])}
     </dashboard-row-actions>`;
   }
 

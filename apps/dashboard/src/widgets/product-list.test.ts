@@ -2848,7 +2848,7 @@ describe("the product list as a tree", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
-  it("offers Add product and Add category on All products, and those, a divider, Rename, Move to… and Delete on a category", async () => {
+  it("lists ordinary category actions above the divider and Delete below it", async () => {
     const { root } = await mountTree();
     const all = root.querySelector('[data-test="actions-root"]')!;
     expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
@@ -2856,10 +2856,10 @@ describe("the product list as a tree", () => {
     expect(menuItems(root.querySelector('[data-test="actions-folder-d"]')!)).toEqual([
       t("products.add_product"),
       t("folders.add_category"),
-      "—",
       t("folders.rename"),
       t("folders.move"),
-      t("action.delete"),
+      "—",
+      t("action.delete_dialog"),
     ]);
   });
 

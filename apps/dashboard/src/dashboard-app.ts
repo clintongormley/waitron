@@ -2676,8 +2676,11 @@ export class DashboardApp extends LitElement {
                     data-test="profile-row"
                     help=${t("help.account.settings")}
                     help-label=${fill("help.badge_label", { part: t("action.account_settings") })}
-                    ><wt-button data-test="profile" @click=${() => this.#openProfile()}
-                      >${t("action.account_settings")}</wt-button
+                    ><wt-button
+                      icon="menu-account"
+                      data-test="profile"
+                      @click=${() => this.#openProfile()}
+                      >${t("action.account_settings_dialog")}</wt-button
                     ></wt-menu-row
                   >
                   ${themeChoices({
@@ -2692,10 +2695,13 @@ export class DashboardApp extends LitElement {
                     .active=${currentLocale()}
                     .loadLocales=${this.#loadLocalesPassively}
                   ></wt-language-chooser>
-                  <wt-button data-test="about" @click=${() => this.#openAbout()}
+                  <wt-button icon="menu-details" data-test="about" @click=${() => this.#openAbout()}
                     >${t("about.title")}</wt-button
                   >
-                  <wt-button data-test="logout" @click=${() => void this.#onLogout()}
+                  <wt-button
+                    icon="menu-logout"
+                    data-test="logout"
+                    @click=${() => void this.#onLogout()}
                     >${t("action.logout")}</wt-button
                   >
                 </wt-row-actions>`

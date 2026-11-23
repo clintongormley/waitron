@@ -924,7 +924,10 @@ describe("the device table", () => {
       "edit-device-d1",
       "delete-device-d1",
     ]);
-    expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.edit"), t("action.delete")]);
+    expect(items.map((b) => b.textContent?.trim())).toEqual([
+      t("action.edit_dialog"),
+      t("action.delete_dialog"),
+    ]);
     expect(items[1]!.getAttribute("variant")).toBe("danger");
     (items[0] as HTMLElement).click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
@@ -5907,8 +5910,8 @@ describe("Delete", () => {
       ] as const) {
         setLocale(locale);
         const { el } = await mounted();
-        expect(deepText(el, "[data-test=delete-device-d1]")).toBe(del);
-        expect(deepText(el, "[data-test=delete-device-d2]")).toBe(del);
+        expect(deepText(el, "[data-test=delete-device-d1]")).toBe(`${del}…`);
+        expect(deepText(el, "[data-test=delete-device-d2]")).toBe(`${del}…`);
         await openDelete(el, "d1");
         const root = dialogOf(el)!.shadowRoot!;
         expect((root.querySelector("wt-modal") as unknown as { heading: string }).heading).toBe(

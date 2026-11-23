@@ -50,7 +50,7 @@ function downloadButton(menu: HTMLElement, personId: string): HTMLElement | null
 }
 
 describe("staff-list: download their data", () => {
-  it("ends each row's menu with the download item, after the existing ones in their order", async () => {
+  it("keeps Download after the ordinary actions and Disable last", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
       canAdminister: true,
       canExportPersonalData: true,
@@ -61,16 +61,16 @@ describe("staff-list: download their data", () => {
       "edit-p1",
       "reset-login-p1",
       "reset-pin-p1",
-      "disable-p1",
       "download-data-p1",
+      "disable-p1",
     ]);
     expect(buttonIds(await menuOf(el, "p2"))).toEqual([
       "edit-p2",
       "reset-login-p2",
       "reset-pin-p2",
-      "disable-p2",
       "resend-invitation-p2",
       "download-data-p2",
+      "disable-p2",
     ]);
   });
 

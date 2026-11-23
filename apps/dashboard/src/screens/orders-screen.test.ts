@@ -668,8 +668,8 @@ describe("dashboard Orders", () => {
   });
 
   it.each([
-    ["a simplified invoice", "F2", ["View details", "Print / Reprint"]],
-    ["a full invoice", "F1", ["View details", "Print / Reprint"]],
+    ["a simplified invoice", "F2", ["View details", "Print / Reprint…"]],
+    ["a full invoice", "F1", ["View details", "Print / Reprint…"]],
   ] as const)("offers the row menu's own print action for %s", async (_name, type, labels) => {
     const row = { ...ROW, invoiceType: type };
     const api = stubApi({ listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
@@ -756,7 +756,7 @@ describe("dashboard Orders", () => {
         .shadowRoot!.querySelector("wt-row-actions")!
         .querySelectorAll("wt-button")[1]!;
       expect(print.textContent?.trim()).toBe(
-        locale === "en-GB" ? "Print / Reprint" : "Imprimir / Reimprimir",
+        locale === "en-GB" ? "Print / Reprint…" : "Imprimir / Reimprimir…",
       );
       print.click();
       const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;

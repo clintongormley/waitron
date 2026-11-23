@@ -1775,8 +1775,12 @@ it("retains Delete after a failed write, without a disposition draft", async () 
   expect(q(el, '[data-test="delete-confirm"]')!.hasAttribute("disabled")).toBe(false);
 });
 it.each([
-  ["en", "Delete", "Delete station"],
-  ["es", VENUE_SERVICE_STRINGS.es["prep.delete"], VENUE_SERVICE_STRINGS.es["prep.delete_heading"]],
+  ["en", "Delete…", "Delete station"],
+  [
+    "es",
+    VENUE_SERVICE_STRINGS.es["prep.delete_dialog"],
+    VENUE_SERVICE_STRINGS.es["prep.delete_heading"],
+  ],
 ] as const)("offers only translated permanent Delete in %s", async (locale, label, heading) => {
   setLocale(locale);
   const next = withUpstairs({ open: true, why: "open" });
@@ -2194,13 +2198,13 @@ it.each([
     locale: "en",
     heading: "Category or product",
     field: "All categories, Every zone: Bar, the default station.",
-    disable: "Delete",
+    disable: "Delete…",
   },
   {
     locale: "es",
     heading: VENUE_SERVICE_STRINGS.es["routing.row_heading"],
     field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada.",
-    disable: VENUE_SERVICE_STRINGS.es["prep.delete"],
+    disable: VENUE_SERVICE_STRINGS.es["prep.delete_dialog"],
   },
 ])(
   "uses category and Delete wording without deleted stations ($locale)",

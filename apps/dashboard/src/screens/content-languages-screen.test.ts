@@ -388,21 +388,21 @@ describe("content languages screen", () => {
       const buttons = [...rows(el)[index]!.querySelectorAll("wt-button")];
       expect(buttons.map((button) => button.dataset.test)).toEqual([
         `set-default-${code}`,
-        `remove-${code}`,
         `add-version-${code}`,
         `edit-translations-${code}`,
+        `remove-${code}`,
       ]);
       expect(buttons.map((button) => button.textContent!.trim())).toEqual([
         t("content_languages.set_default"),
+        t("content_languages.add_version_dialog"),
+        t("content_languages.edit_translations_dialog"),
         t("content_languages.remove"),
-        t("content_languages.add_version"),
-        t("content_languages.edit_translations"),
       ]);
       expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
         `${t("content_languages.set_default")}: ${name(code)}`,
-        `${t("content_languages.remove")}: ${name(code)}`,
-        `${t("content_languages.add_version")}: ${name(code)}`,
+        `${t("content_languages.add_version_dialog")}: ${name(code)}`,
         null,
+        `${t("content_languages.remove")}: ${name(code)}`,
       ]);
     }
   });
@@ -892,7 +892,7 @@ describe("A420 content language table", () => {
     expect(menu.label).toBe("Actions: English");
     expect(
       [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-    ).toEqual(["Make default", "Delete", "Add regional version", "Edit translations"]);
+    ).toEqual(["Make default", "Add regional version…", "Edit translations…", "Delete"]);
     expect(rows[0]!.querySelector("[data-test=set-default-ca]")).toBeNull();
     expect(rows[0]!.querySelector("[data-test=remove-ca]")).toBeNull();
     expect(rows[0]!.querySelector("[data-test=edit-translations-ca]")).not.toBeNull();
@@ -1374,7 +1374,7 @@ it("offers a version on a main row and keeps regional names distinct with inheri
   ).toContain("Blank names use English");
   expect(q(el, "[data-test=add-version-en]")).not.toBeNull();
   expect(q(el, "[data-test=add-version-en]")!.getAttribute("aria-label")).toBe(
-    "Add regional version: English",
+    "Add regional version…: English",
   );
   q(el, "[data-test=add-version-en]")!.click();
   await flush(el);

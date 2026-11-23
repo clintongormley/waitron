@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
+  rowActionTail,
   UrlStateController,
   baseStyles,
   pageTitleStyles,
@@ -468,14 +469,20 @@ export class ModifiersScreen extends LitElement {
         pinned: "end",
         cell: (list) =>
           html`<wt-row-actions label=${`${t("modifiers.actions")}: ${list.name}`}
-            ><wt-button data-test=${`edit-${row}-${list.id}`} @click=${() => this.#edit(kind, list)}
-              >${t("action.edit")}</wt-button
             ><wt-button
-              variant=${kind === "options" ? "danger" : "secondary"}
-              data-test=${`delete-${row}-${list.id}`}
-              @click=${() => this.#openModal("delete", kind, list)}
-              >${t("action.delete")}</wt-button
-            ></wt-row-actions
+              icon="menu-edit"
+              data-test=${`edit-${row}-${list.id}`}
+              @click=${() => this.#edit(kind, list)}
+              >${t("action.edit_dialog")}</wt-button
+            >${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${row}-${list.id}`}
+                @click=${() => this.#openModal("delete", kind, list)}
+                >${t("action.delete_dialog")}</wt-button
+              >`,
+            ])}</wt-row-actions
           >`,
       },
     ];

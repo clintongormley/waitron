@@ -5,6 +5,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  rowActionTail,
   submitOnEnter,
   parseDecimalInput,
   baseStyles,
@@ -2121,21 +2122,26 @@ export class DeviceProfilesScreen extends LitElement {
             label=${`${t("device_profiles.row_actions")}: ${profile.name}`}
           >
             <wt-button
+              icon="menu-edit"
               data-test=${`edit-${profile.id}`}
               @click=${() => void this.#openEditor(profile.id)}
               >${t("action.edit")}</wt-button
             >
             <wt-button
+              icon="menu-copy"
               data-test=${`duplicate-${profile.id}`}
               @click=${() => this.#duplicate(profile)}
               >${t("device_profiles.duplicate")}</wt-button
             >
-            <wt-button
-              variant="danger"
-              data-test=${`delete-${profile.id}`}
-              @click=${(event: Event) => this.#openDelete(profile, event)}
-              >${t("device_profiles.delete_confirm")}</wt-button
-            >
+            ${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${profile.id}`}
+                @click=${(event: Event) => this.#openDelete(profile, event)}
+                >${t("action.delete_dialog")}</wt-button
+              >`,
+            ])}
           </wt-row-actions>`,
       },
     ];
@@ -2157,7 +2163,7 @@ export class DeviceProfilesScreen extends LitElement {
         variant="danger"
         data-test="confirm-delete"
         @click=${() => this.#confirmDelete()}
-        >${t("device_profiles.delete_confirm")}</wt-button
+        >${t("action.delete")}</wt-button
       >
     </wt-dialog>`;
   }

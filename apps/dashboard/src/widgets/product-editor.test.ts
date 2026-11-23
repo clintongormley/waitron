@@ -2124,7 +2124,7 @@ describe.each([
 });
 
 it.each(["light", "dark"] as const)(
-  "draws a modifier's Remove quiet like its Edit while a window opened from the editor is open, and red once it closes (%s theme)",
+  "keeps a modifier's Remove neutral and enables it when the other window closes (%s theme)",
   async (theme) => {
     const { el } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -2154,12 +2154,12 @@ it.each(["light", "dark"] as const)(
     await el.updateComplete;
     await remove.updateComplete;
     expect(remove.disabled).toBe(false);
-    expect(remove.variant).toBe("danger");
-    expect(fill(remove)).not.toBe(fill(edit));
+    expect(remove.variant).toBe("secondary");
+    expect(fill(remove)).toBe(fill(edit));
   },
 );
 
-it("keeps a modifier's Remove red while the editor's own save is being sent", async () => {
+it("keeps a modifier's Remove neutral and disabled while the editor's own save is being sent", async () => {
   const { el } = await mountTwoAttached();
   el.busy = true;
   await el.updateComplete;
@@ -2167,7 +2167,7 @@ it("keeps a modifier's Remove red while the editor's own save is being sent", as
     '[data-test="remove-modifier-extras:sauces"]',
   )!;
   expect(remove.disabled).toBe(true);
-  expect(remove.variant).toBe("danger");
+  expect(remove.variant).toBe("secondary");
 });
 
 it.each([
@@ -2196,7 +2196,7 @@ it.each([
     },
   ],
 ])(
-  "keeps a modifier's Remove red while the editor's own save is being sent, even with %s open",
+  "keeps a modifier's Remove neutral and disabled while saving, even with %s open",
   async (_window, openWindow) => {
     const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
       open: true,
@@ -2216,7 +2216,7 @@ it.each([
     el.busy = true;
     await el.updateComplete;
     expect(remove.disabled).toBe(true);
-    expect(remove.variant).toBe("danger");
+    expect(remove.variant).toBe("secondary");
   },
 );
 

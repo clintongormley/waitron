@@ -105,6 +105,7 @@
   --wt-letter-spacing-caps: 0.04em;
   --wt-letter-spacing-wide: 0.1em;
   --wt-row-field-min-width: 12rem;
+  --wt-row-menu-min-width: 12rem;
   --wt-date-field-max-width: 16rem;
 
   /* Dashboard views. The menu list's is the room its name column leaves for Status. */

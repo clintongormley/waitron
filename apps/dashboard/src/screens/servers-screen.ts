@@ -4,7 +4,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { groupedJoinCode } from "@waitron/shared";
-import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -79,23 +79,30 @@ const CAUTION_KEY: Record<NonNullable<ServerRow["recoveredRecordsBackup"]>, Stri
   "backed-up": null,
 };
 
-const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanation: StringKey }> = {
+const ACTION_KEYS: Record<
+  Action,
+  { verb: StringKey; title: StringKey; explanation: StringKey; icon: string }
+> = {
   remove: {
+    icon: "menu-remove",
     verb: "servers.remove",
     title: "servers.remove_title",
     explanation: "servers.remove_explanation",
   },
   clear: {
+    icon: "menu-clear",
     verb: "servers.clear",
     title: "servers.clear_title",
     explanation: "servers.clear_explanation",
   },
   abandon: {
+    icon: "menu-disable",
     verb: "servers.abandon",
     title: "servers.abandon_title",
     explanation: "servers.abandon_explanation",
   },
   reset: {
+    icon: "menu-delete",
     verb: "servers.reset_spare",
     title: "servers.reset_spare_title",
     explanation: "servers.reset_spare_explanation",
@@ -1091,7 +1098,7 @@ export class ServersScreen extends LitElement {
         label: t("servers.actions"),
         pinned: "end",
         cell: (row) => {
-          const actions = (["abandon", "reset", "remove", "clear"] as const).filter((action) =>
+          const actions = (["abandon", "remove", "reset", "clear"] as const).filter((action) =>
             action === "abandon"
               ? row.returnOutstanding
               : action === "reset"
@@ -1107,17 +1114,20 @@ export class ServersScreen extends LitElement {
             row.standing === "serving-secondary" &&
             row.contactUrl !== "";
           const switchLabel = this.#hasSwitchPage(row);
+          const ordinary = actions.filter((action) => action === "clear");
+          const tail = actions.filter((action) => action !== "clear");
+          const item = (action: Action) =>
+            html`<wt-button
+              icon=${ACTION_KEYS[action].icon}
+              variant=${action === "reset" ? "danger" : "secondary"}
+              data-test=${`${action}-${row.nodeId}`}
+              @click=${(event: Event) => this.#open(action, row, event)}
+              >${t(ACTION_KEYS[action].verb)}</wt-button
+            >`;
           return actions.length === 0 && !handover && !switchLabel
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#address(row)}`}
-                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${actions.map(
-                  (action) =>
-                    html`<wt-button
-                      data-test=${`${action}-${row.nodeId}`}
-                      @click=${(event: Event) => this.#open(action, row, event)}
-                      >${t(ACTION_KEYS[action].verb)}</wt-button
-                    >`,
-                )}</wt-row-actions
+                >${handover ? html`<wt-button icon="menu-move" data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button icon="menu-move" data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${ordinary.map(item)}${rowActionTail(handover || switchLabel || ordinary.length > 0, tail.map(item))}</wt-row-actions
               >`;
         },
       },

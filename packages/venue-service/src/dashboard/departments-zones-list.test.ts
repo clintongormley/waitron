@@ -138,7 +138,7 @@ it("each row opens its own editor and department menus offer Edit, Add a zone an
   const menu = table.shadowRoot!.querySelector('[data-row-key="department:d1"] wt-row-actions')!;
   expect(
     [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-  ).toEqual(["Edit", "Add zone", "Delete"]);
+  ).toEqual(["Edit", "Add zone", "Delete…"]);
   expect(menu.querySelector('[data-test="receipt-department-d1"]')).toBeNull();
 });
 
@@ -238,7 +238,7 @@ it("keeps the floor-plan link out of the zone's menu", async () => {
   await userEvent.click(menu.shadowRoot!.querySelector("button")!);
   expect(
     [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-  ).toEqual(["Edit", "Delete"]);
+  ).toEqual(["Edit", "Delete…"]);
   expect(menu.querySelector("a")).toBeNull();
   expect(
     table.shadowRoot!.querySelectorAll("wt-row-actions [data-test^=floor-plan-zone-]"),

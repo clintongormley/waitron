@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
+  rowActionTail,
   baseStyles,
   belongsToComposition,
   draftScopeFor,
@@ -430,14 +431,22 @@ export class SetMenuDishes extends LitElement {
           >
             ${
               dish.variants.length
-                ? html`<wt-button variant="secondary" @click=${() => this.showVariants(dish)}
+                ? html`<wt-button
+                    icon="menu-variants"
+                    variant="secondary"
+                    @click=${() => this.showVariants(dish)}
                     >${t("menus.set_menu_variants")}</wt-button
                   >`
                 : nothing
             }
-            <wt-button variant="secondary" @click=${() => this.#remove(dish)}
-              >${t("action.remove")}</wt-button
-            >
+            ${rowActionTail(dish.variants.length > 0, [
+              html`<wt-button
+                icon="menu-remove"
+                variant="secondary"
+                @click=${() => this.#remove(dish)}
+                >${t("action.remove")}</wt-button
+              >`,
+            ])}
           </wt-row-actions>`,
       },
     ];

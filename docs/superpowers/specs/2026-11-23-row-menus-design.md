@@ -113,3 +113,37 @@ row.
 - Update `docs/developers/design-system.md`'s `wt-row-actions` entry, which today says action
   labels are centred, and the Components section of `DESIGN.md`.
 - Relabelled strings ("..." → "…") change in the English and Spanish translation files together.
+
+## Implementation decisions, 2026-11-23
+
+The watcher cleared the additions below after the owner's “icons: fine, we can make changes later
+if we need to” at 21:16 in Lane K. Each icon is registered once in
+`packages/ui/src/components/wt-icon.ts` under its action name. The check uses the same column in the
+bill and counter-zone pickers. New bill uses Add. The separate reader dialog and the floor's
+List/Map toggle keep their existing layouts. Disconnect and Unpair are red below the divider.
+The watcher confirmed Unpair at 21:58. Delete stays last.
+
+| Action | Material Symbol |
+| --- | --- |
+| Print or reprint | `print` |
+| Archive | `archive` |
+| Clear | `ink_eraser` |
+| Follow the season | `event_repeat` |
+| Cancel publication | `event_busy` |
+| Cancel and credit | `assignment_return` |
+| Disconnect or unpair | `link_off` |
+| Pair again | `link` |
+| Join or merge | `call_merge` |
+| Split | `call_split` |
+| Discount or comp | `percent` |
+| Record unpaid departure | `credit_card_off` |
+| Finish table | `done_all` |
+| Cash in or out | `currency_exchange` |
+| Close drawer | `point_of_sale` |
+| Report a problem | `warning` |
+| Clock in, start break, end break | `login`, `pause`, `play_arrow` |
+| Retry clock read, My hours | `refresh`, `schedule` |
+| List, Map and reset today's plan | `format_list_bulleted`, `map`, `restart_alt` |
+| Download their data | `download` |
+| Equipment label | `qr_code` |
+| Current bill or counter zone | `check` |

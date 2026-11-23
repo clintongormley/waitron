@@ -178,6 +178,7 @@ export class AlertsBell extends LitElement {
     const label =
       count === 0 ? t("alerts.bell") : t("alerts.bell_count").replace("{count}", String(count));
     return html`<wt-row-actions
+      panel
       icon="bell"
       align="end"
       .iconSize=${"lg"}

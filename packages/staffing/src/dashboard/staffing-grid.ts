@@ -905,6 +905,7 @@ export class StaffingGrid extends LitElement {
                         this.followable
                           ? [
                               {
+                                icon: "menu-follow-season",
                                 label: t("staffing.grid.follow_season"),
                                 select: () => this.#follow(column.key),
                               },

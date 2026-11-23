@@ -274,7 +274,7 @@ describe("a menu's scheduled versions", () => {
     for (const queued of ["v-lunch-2", "v-lunch-4"]) {
       const menu = rowMenu(el, queued)!;
       expect(menu.querySelector(`[data-test="cancel-${queued}"]`)!.textContent!.trim()).toBe(
-        "Cancel this version",
+        "Cancel this version…",
       );
     }
     expect(rowMenu(el, "v-lunch-2")!.getAttribute("label")).toBe("Actions: Version 2");
@@ -1789,7 +1789,7 @@ describe("changing a queued version's time", () => {
   it.each([
     {
       locale: "en",
-      actions: ["move-v-lunch-2: Change time", "cancel-v-lunch-2: Cancel this version"],
+      actions: ["move-v-lunch-2: Change time…", "cancel-v-lunch-2: Cancel this version…"],
       heading: "Change the time of version 2",
       intro:
         "Version 2 of Lunch Menu goes live at the date and time you choose, on the venue's clock (Europe/Madrid).",
@@ -1797,7 +1797,7 @@ describe("changing a queued version's time", () => {
     },
     {
       locale: "es-ES",
-      actions: ["move-v-lunch-2: Cambiar la hora", "cancel-v-lunch-2: Cancelar esta versión"],
+      actions: ["move-v-lunch-2: Cambiar la hora…", "cancel-v-lunch-2: Cancelar esta versión…"],
       heading: "Cambiar la hora de la versión 2",
       intro:
         "La versión 2 de Lunch Menu se publica en la fecha y la hora que elijas, según el reloj del local (Europe/Madrid).",

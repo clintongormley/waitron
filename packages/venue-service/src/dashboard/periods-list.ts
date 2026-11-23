@@ -4,6 +4,7 @@ import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
+  rowActionTail,
   baseStyles,
   leftToBrowser,
   pageTitleStyles,
@@ -321,16 +322,19 @@ export class PeriodsList extends LitElement {
   private actions(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
     return html`<wt-row-actions label=${`${row.name}: ${t("menu.actions")}`} align="end">
-      <wt-button data-test="edit-period" @click=${() => this.edit(row)}
+      <wt-button icon="menu-edit" data-test="edit-period" @click=${() => this.edit(row)}
         >${t("venue.edit")}</wt-button
       >
-      <wt-button
-        variant="danger"
-        data-test="delete-period"
-        aria-label=${format("period.delete_named", { name: row.name })}
-        @click=${() => this.askDelete(row)}
-        >${t("prep.delete")}</wt-button
-      >
+      ${rowActionTail(true, [
+        html`<wt-button
+          icon="menu-delete"
+          variant="danger"
+          data-test="delete-period"
+          aria-label=${format("period.delete_named", { name: row.name })}
+          @click=${() => this.askDelete(row)}
+          >${t("prep.delete_dialog")}</wt-button
+        >`,
+      ])}
     </wt-row-actions>`;
   }
 

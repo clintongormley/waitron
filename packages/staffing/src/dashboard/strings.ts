@@ -143,10 +143,12 @@ const en = {
   "staffing.role.column.actions": "Actions",
   "staffing.role.actions": "Actions for {name}",
   "staffing.role.edit": "Edit",
+  "staffing.role.edit_dialog": "Edit…",
   "staffing.role.move_up": "Move up",
   "staffing.role.move_down": "Move down",
   "staffing.role.move_error": "Could not move the staff role: {reason}",
   "staffing.role.delete": "Delete",
+  "staffing.role.delete_dialog": "Delete…",
   "staffing.role.delete_question_one":
     "1 person holds this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
   "staffing.role.delete_question":
@@ -374,10 +376,12 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.column.actions": "Acciones",
   "staffing.role.actions": "Acciones de {name}",
   "staffing.role.edit": "Editar",
+  "staffing.role.edit_dialog": "Editar…",
   "staffing.role.move_up": "Subir",
   "staffing.role.move_down": "Bajar",
   "staffing.role.move_error": "No se pudo mover el rol de personal: {reason}",
   "staffing.role.delete": "Eliminar",
+  "staffing.role.delete_dialog": "Eliminar…",
   "staffing.role.delete_question_one":
     "1 persona tiene este puesto. Al eliminarlo se quita de ella, de todos los dispositivos y del plan de personal. Los turnos que lo usaron conservan su nombre.",
   "staffing.role.delete_question":

@@ -933,8 +933,13 @@ describe("reader discovery and status", () => {
 
     await flush(el);
     const unpair = t("payments.unpair").split("{provider}").join("Pay $&");
-    expect(qCell(el, "[data-test=unpair-r-1]")!.textContent!.trim()).toBe(unpair);
-    qCell(el, "[data-test=unpair-r-1]")!.click();
+    const action = qCell(el, "[data-test=unpair-r-1]")!;
+    expect(action.textContent!.trim()).toBe(`${unpair}…`);
+    expect(action.getAttribute("variant")).toBe("danger");
+    expect(action.previousElementSibling?.localName).toBe("hr");
+    expect(action.nextElementSibling?.getAttribute("data-test")).toBe("delete-r-1");
+    expect(action.nextElementSibling?.nextElementSibling).toBeNull();
+    action.click();
     await flush(el);
     expect(q(el, "[data-test=reader-editor]")!.getAttribute("heading")).toBe(
       `${unpair}: Front counter`,

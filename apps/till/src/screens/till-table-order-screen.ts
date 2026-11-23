@@ -25,6 +25,7 @@ import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js
 import type { MealEndUnservedDish, MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
+  rowActionTail,
   ContentLanguageController,
   currentContentLanguages,
   floorChipStyles,
@@ -3025,6 +3026,7 @@ export class TillTableOrderScreen extends LitElement {
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
     return html`<wt-button
+      icon="menu-discount"
       data-discount-bill
       @click=${() =>
         this.#adjust("discount", {
@@ -3035,7 +3037,7 @@ export class TillTableOrderScreen extends LitElement {
           unitTotal: null,
         })}
     >
-      ${t("table.discount_bill")}
+      ${t("table.discount_bill_dialog")}
     </wt-button>`;
   }
 
@@ -3832,11 +3834,21 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
-      ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
-      ${station ? html`<wt-button data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
-      ${comp ? html`<wt-button data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
-      ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
-      ${unserve ? html`<wt-button data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
+      ${fire ? html`<wt-button icon="menu-fire" variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
+      ${station ? html`<wt-button icon="menu-move" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${comp ? html`<wt-button icon="menu-discount" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+      ${unserve ? html`<wt-button icon="menu-undo" data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
+      ${rowActionTail(fire || station || comp || unserve, [
+        canVoid
+          ? html`<wt-button
+              icon="menu-remove"
+              data-sent-line-void
+              ?disabled=${disabled}
+              @click=${() => this.#actOnSentLine(pending, "void")}
+              >${t("table.void_line")}</wt-button
+            >`
+          : nothing,
+      ])}
     </wt-row-actions>`;
   }
 
@@ -4570,6 +4582,7 @@ export class TillTableOrderScreen extends LitElement {
           index === 0
             ? nothing
             : html`<wt-button
+                icon="menu-up"
                 data-draft-earlier
                 ?disabled=${!this.#canDragDraft(store)}
                 @click=${() => move(-1)}
@@ -4580,6 +4593,7 @@ export class TillTableOrderScreen extends LitElement {
           index === slots.length - 1
             ? nothing
             : html`<wt-button
+                icon="menu-down"
                 data-draft-later
                 ?disabled=${!this.#canDragDraft(store)}
                 @click=${() => move(1)}
@@ -6927,8 +6941,15 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #tableMenu(): TemplateResult {
-    const action = (name: string, key: StringKey, choose: () => void, disabled = false) =>
+    const action = (
+      name: string,
+      icon: string,
+      key: StringKey,
+      choose: () => void,
+      disabled = false,
+    ) =>
       html`<wt-button
+        icon=${icon}
         data-action=${name}
         data-record-departure=${name === "left-unpaid" ? "" : nothing}
         .disabled=${disabled}
@@ -6937,12 +6958,14 @@ export class TillTableOrderScreen extends LitElement {
         ${t(key)}
       </wt-button>`;
     const verb = (name: ActionVerb, key: StringKey) =>
-      action(name, key, () => this.#chooseVerb(name));
+      action(name, name === "merge" || name === "join" ? "menu-merge" : "menu-move", key, () =>
+        this.#chooseVerb(name),
+      );
     const moveDishes = verb("move-dishes", "table.action_move_dishes");
     const merge = verb("merge", "table.action_merge_bills");
     const tableMoves = [
       verb("join", "table.action_join"),
-      verb("move", "table.action_move_guests"),
+      verb("move", "table.action_move_guests_dialog"),
     ];
     const party = this.party;
     if (party === null)
@@ -6954,14 +6977,16 @@ export class TillTableOrderScreen extends LitElement {
         shown === undefined
           ? []
           : [
-              action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
+              action("name-bill", "menu-rename", "table.action_name_bill", () =>
+                this.#openBillNaming(),
+              ),
               ...(shown.status !== "open" ? [] : [moveDishes, merge]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               owing(shown) &&
               !shown.leftUnpaid &&
               compareDecimal(decimal(stillOwed(shown)), decimal("0")) > 0
-                ? action("left-unpaid", "departure.record", () =>
+                ? action("left-unpaid", "menu-unpaid", "departure.record", () =>
                     this.#dispatch("record-unpaid-departure", {
                       workingOrderId: shown.workingOrderId,
                     }),
@@ -6972,6 +6997,7 @@ export class TillTableOrderScreen extends LitElement {
                 this.#printBillOffered(shown)
                   ? action(
                       "print-bill",
+                      "menu-print",
                       "bill.print",
                       () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
                       this.busy || this.billPrintPending,
@@ -6980,22 +7006,26 @@ export class TillTableOrderScreen extends LitElement {
               ),
             ],
       tableItems: [
-        action("allergy", "allergy.title", () => {
+        action("allergy", "menu-edit", "allergy.title", () => {
           this.#closeActions();
           this.#dispatch("edit-party-allergy", {});
         }),
-        action("name", "table.action_name", () => this.#openNaming()),
-        action("guests", "table.action_guests", () => this.#openCounting()),
+        action("name", "menu-rename", "table.action_name", () => this.#openNaming()),
+        action("guests", "menu-edit", "table.action_guests", () => this.#openCounting()),
         this.#billRequestItem(party),
         party.tableIds.length > 1
-          ? action("split-table", "table.action_split_table", () => {
+          ? action("split-table", "menu-split", "table.action_split_table", () => {
               this.actionStep = "split-table";
               this.#stepFocus = "step";
               this.#watchActions();
             })
           : nothing,
         ...tableMoves,
-        html`<wt-button data-finish-table @click=${() => this.#dispatch("finish-table", {})}>
+        html`<wt-button
+          icon="menu-finish"
+          data-finish-table
+          @click=${() => this.#dispatch("finish-table", {})}
+        >
           ${t("table.finish")}
         </wt-button>`,
       ],
@@ -7019,6 +7049,7 @@ export class TillTableOrderScreen extends LitElement {
       bill.invoiceNumber === undefined &&
       this.paymentConfirmation === undefined
         ? html`<wt-button
+            icon="menu-bill"
             data-choose-bill-invoice
             .disabled=${this.busy}
             @click=${() =>
@@ -7031,12 +7062,17 @@ export class TillTableOrderScreen extends LitElement {
       this.canPrintReceipt &&
       (bill.status === "settled" || bill.status === "placed") &&
       bill.receiptAvailable
-        ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
+        ? html`<wt-button
+            icon="menu-print"
+            data-bill-receipt
+            @click=${() => this.#dispatch("reprint-bill", target)}
+          >
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
       credits
         ? html`<wt-button
+            icon="menu-credit"
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}
           >
@@ -7045,6 +7081,7 @@ export class TillTableOrderScreen extends LitElement {
         : nothing,
       credits && bill.leftUnpaid !== true
         ? html`<wt-button
+            icon="menu-split"
             data-split-after-print
             @click=${() => this.#dispatch("split-after-print-bill", target)}
           >
@@ -7058,6 +7095,7 @@ export class TillTableOrderScreen extends LitElement {
     const requested = billRequestOf(this.tables, party.id) !== undefined;
     const key = requested ? "table.cancel_bill_request" : "table.request_bill";
     return html`<wt-button
+      icon=${requested ? "menu-undo" : "menu-bill"}
       data-request-bill=${requested ? nothing : ""}
       data-cancel-bill-request=${requested ? "" : nothing}
       .disabled=${this.groupCommandBusy}

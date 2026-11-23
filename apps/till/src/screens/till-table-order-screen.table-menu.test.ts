@@ -172,11 +172,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       {
         name: "Bill 2 · Clint",
         items: [
-          "Name this bill",
+          "Name this bill…",
           "Move dishes…",
-          "Merge bills",
-          "Move this bill",
-          "Comp the bill",
+          "Merge bills…",
+          "Move this bill…",
+          "Comp the bill…",
           "Record unpaid departure",
           "Full invoice",
           "Print the bill",
@@ -186,12 +186,12 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         name: "Whole table",
         items: [
           "Allergies",
-          "Name the party",
-          "Guests",
+          "Name the party…",
+          "Guests…",
           "Mark bill requested for 4",
-          "Split a table",
-          "Join a table",
-          "Move guests",
+          "Split a table…",
+          "Join a table…",
+          "Move guests…",
           "Finish table",
         ],
       },
@@ -201,8 +201,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
   it("offers Split a table only at two or more tables", async () => {
     const el = await mountScreen({ party: switcherParty });
 
-    expect(groups(el)[1]!.items).not.toContain("Split a table");
-    expect(groups(el)[1]!.items).toContain("Join a table");
+    expect(groups(el)[1]!.items).not.toContain("Split a table…");
+    expect(groups(el)[1]!.items).toContain("Join a table…");
   });
 
   it("a paid bill with a receipt offers Name this bill and Receipt copy, and no Full invoice", async () => {
@@ -216,7 +216,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
 
     const [bill] = groups(el);
     expect(bill!.name).toBe("Bill 2");
-    expect(bill!.items).toContain("Name this bill");
+    expect(bill!.items).toContain("Name this bill…");
     expect(bill!.items).toContain("Receipt copy");
     expect(bill!.items).not.toContain("Full invoice");
     expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
@@ -338,7 +338,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
   it("with no party: no bill group; Join a table and Move guests under Whole table", async () => {
     const el = await mountScreen({ party: null, bills: [], orderId: "wo-9" });
 
-    expect(groups(el)).toEqual([{ name: "Whole table", items: ["Join a table", "Move guests"] }]);
+    expect(groups(el)).toEqual([{ name: "Whole table", items: ["Join a table…", "Move guests…"] }]);
     expect(item(el, '[data-action="merge"]')).toBeNull();
   });
 
@@ -667,21 +667,21 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(billItem(el, '[data-action="move-dishes"]')).toBeNull();
       expect(billItem(el, '[data-action="merge"]')).toBeNull();
       expect(groups(el)[0]!.items).not.toContain("Move dishes…");
-      expect(groups(el)[0]!.items).not.toContain("Merge bills");
+      expect(groups(el)[0]!.items).not.toContain("Merge bills…");
     });
 
     it("a paid bill keeps Name this bill and Receipt copy", async () => {
       const el = await mountScreen({ bills: [paid] });
 
-      expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
+      expect(groups(el)[0]!.items).toEqual(["Name this bill…", "Receipt copy"]);
     });
 
     it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy, Cancel and credit and Reopen to split", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([
-        "Name this bill",
-        "Move this bill",
+        "Name this bill…",
+        "Move this bill…",
         "Record unpaid departure",
         "Receipt copy",
         "Cancel and credit",
@@ -697,8 +697,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       const el = await mountScreen({ bills: [unnumbered] });
 
       expect(groups(el)[0]!.items).toEqual([
-        "Name this bill",
-        "Move this bill",
+        "Name this bill…",
+        "Move this bill…",
         "Record unpaid departure",
         "Full invoice",
         "Print the bill",
@@ -751,7 +751,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       });
       const el = await mountScreen({ bills: [paid] });
 
-      expect(groups(el)[0]!.items).toContain("Name this bill");
+      expect(groups(el)[0]!.items).toContain("Name this bill…");
       expect(item(el, "[data-bill-receipt]")).toBeNull();
     });
 
@@ -764,7 +764,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       });
       const el = await mountScreen({ bills: [presented] });
 
-      expect(groups(el)[0]!.items).toContain("Name this bill");
+      expect(groups(el)[0]!.items).toContain("Name this bill…");
       expect(item(el, "[data-cancel-credit]")).toBeNull();
     });
 

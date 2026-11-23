@@ -1061,7 +1061,7 @@ describe.each([
   });
 });
 
-it("keeps Extras Delete secondary and marks Options Delete as dangerous", async () => {
+it("marks both Extras and Options Delete as dangerous", async () => {
   const el = await mount();
   const extras = table(el, "extra-lists");
   await extras.updateComplete;
@@ -1069,7 +1069,7 @@ it("keeps Extras Delete secondary and marks Options Delete as dangerous", async 
     extras.shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
       '[data-test="delete-extra-e1"]',
     )!.variant,
-  ).toBe("secondary");
+  ).toBe("danger");
   await selectTab(el, "options");
   const options = table(el, "option-lists");
   await options.updateComplete;

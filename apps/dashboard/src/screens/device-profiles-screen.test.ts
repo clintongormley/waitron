@@ -627,9 +627,13 @@ describe("device-profiles-screen list mode", () => {
   it("Delete confirms then calls deleteDeviceProfile and reloads", async () => {
     const api = stubApi();
     const el = await mount(api);
+    const remove = profileListRoot(el).querySelector('[data-test="delete-p1"]')!;
+    expect(remove.textContent!.trim()).toBe(t("action.delete_dialog"));
     await profileAction(el, "delete-p1");
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+    expect(confirm.textContent!.trim()).toBe(t("action.delete"));
+    confirm.click();
     await flush(el);
     expect(api.deleteDeviceProfile).toHaveBeenCalledWith("p1");
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);

@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { rowActionTail, baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
@@ -265,11 +265,12 @@ export class ThemesCard extends LitElement {
 
   #item(
     row: Row,
-    kind: string,
+    kind: "use" | "edit" | "rename" | "copy" | "delete",
     label: string,
     onClick: (menu: HTMLElement | null) => void,
   ): TemplateResult {
     return html`<wt-button
+      icon=${kind === "use" ? "menu-default" : `menu-${kind}`}
       data-test=${`${kind}-${row.key}`}
       variant=${kind === "delete" ? "danger" : "secondary"}
       ?disabled=${this.submitting}
@@ -297,11 +298,13 @@ export class ThemesCard extends LitElement {
       ${
         view === null || view.id === this.editingId
           ? nothing
-          : this.#item(row, "delete", t("action.delete"), (menu) => {
-              this.#opener = menu;
-              this.deleteError = "";
-              this.deleting = { id: view.id, name: view.name };
-            })
+          : rowActionTail(true, [
+              this.#item(row, "delete", t("action.delete_dialog"), (menu) => {
+                this.#opener = menu;
+                this.deleteError = "";
+                this.deleting = { id: view.id, name: view.name };
+              }),
+            ])
       }
     </wt-row-actions>`;
   }

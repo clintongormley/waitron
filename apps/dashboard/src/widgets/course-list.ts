@@ -1,5 +1,6 @@
 import { guideHref } from "../help-guide.js";
 import {
+  rowActionTail,
   ReorderController,
   baseStyles,
   belongsToComposition,
@@ -492,23 +493,30 @@ export class CourseList extends LitElement {
   #actions(course: Course): TemplateResult {
     return html`<td class="actions-cell">
       <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}>
-        <wt-button data-action="rename" @click=${() => void this.#open(course.id, course.name)}
+        <wt-button
+          icon="menu-rename"
+          data-action="rename"
+          @click=${() => void this.#open(course.id, course.name)}
           >${t("kitchen.rename_course")}</wt-button
         >
-        <wt-button
-          data-action="delete"
-          aria-label=${`${t("action.delete")}: ${course.name}`}
-          data-test=${`remove-${course.id}`}
-          @click=${(event: Event) => {
-            const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
-            this.#remove(
-              course,
-              menu?.shadowRoot?.querySelector<HTMLElement>("button") ??
-                (event.currentTarget as HTMLElement),
-            );
-          }}
-          >${t("action.delete")}</wt-button
-        >
+        ${rowActionTail(true, [
+          html`<wt-button
+            icon="menu-delete"
+            variant="danger"
+            data-action="delete"
+            aria-label=${`${t("action.delete_dialog")}: ${course.name}`}
+            data-test=${`remove-${course.id}`}
+            @click=${(event: Event) => {
+              const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+              this.#remove(
+                course,
+                menu?.shadowRoot?.querySelector<HTMLElement>("button") ??
+                  (event.currentTarget as HTMLElement),
+              );
+            }}
+            >${t("action.delete_dialog")}</wt-button
+          >`,
+        ])}
       </wt-row-actions>
     </td>`;
   }

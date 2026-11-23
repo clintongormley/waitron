@@ -56,8 +56,10 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
   test("names the hamburger and its open create, edit and delete actions", async () => {
     const el = await mountThemed(
       `<wt-row-actions label="Department actions">
-      <wt-button>Create department</wt-button><wt-button>Edit</wt-button>
-      <wt-button variant="danger">Delete</wt-button>
+      <wt-button icon="menu-add">Create department</wt-button>
+      <wt-button icon="menu-edit" disabled>Edit</wt-button>
+      <hr>
+      <wt-button icon="menu-delete" variant="danger">Delete</wt-button>
     </wt-row-actions>`,
       theme,
     );

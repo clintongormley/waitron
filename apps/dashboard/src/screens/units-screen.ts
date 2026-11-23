@@ -1,5 +1,11 @@
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, pageTitleStyles, setContentLanguages, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  rowActionTail,
+  baseStyles,
+  pageTitleStyles,
+  setContentLanguages,
+  leaveCoordinatorFor,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
@@ -515,15 +521,20 @@ export class UnitsScreen extends LitElement {
         cell: (unit) => html`
           <wt-row-actions label=${`${t("units.actions")}: ${this.#unitText(unit).name}`}>
             <wt-button
+              icon="menu-edit"
               data-test=${`edit-${unit.id}`}
               @click=${(event: Event) => this.#openEdit(unit, event)}
               >${t("action.edit")}</wt-button
             >
-            <wt-button
-              data-test=${`delete-${unit.id}`}
-              @click=${(event: Event) => this.#requestDelete(unit, event)}
-              >${t("action.delete")}</wt-button
-            >
+            ${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${unit.id}`}
+                @click=${(event: Event) => this.#requestDelete(unit, event)}
+                >${t("action.delete")}</wt-button
+              >`,
+            ])}
           </wt-row-actions>
         `,
       },

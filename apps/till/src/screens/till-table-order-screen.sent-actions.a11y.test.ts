@@ -96,8 +96,8 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
               ? ["Marchar ya", "Cambiar de estación…", "Descuento…", "Cancelar…"]
               : ["Fire now", "Move to station…", "Comp…", "Void…"]
             : locale === "es"
-              ? ["Cancelar…", "Deshacer servido"]
-              : ["Void…", "Undo served"],
+              ? ["Deshacer servido", "Cancelar…"]
+              : ["Undo served", "Void…"],
         );
         for (const action of actions) {
           expect(action.checkVisibility()).toBe(true);

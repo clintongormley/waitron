@@ -2792,6 +2792,11 @@ describe("copying a menu from the list", () => {
       "rename-menu-lunch",
       "duplicate-menu-lunch",
     ]);
+    expect(items.map((item) => text(item))).toEqual(
+      currentLocale().split("-")[0] === "en"
+        ? ["Open", "Rename…", "Copy…"]
+        : ["Abrir", "Cambiar nombre…", "Copiar…"],
+    );
     expect(text(items[2]!)).toBe(t("menus.copy"));
     expect(items[2]!.variant).toBe("secondary");
   });

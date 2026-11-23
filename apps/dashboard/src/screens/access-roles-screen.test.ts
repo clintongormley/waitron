@@ -386,12 +386,12 @@ it("returns to the list after a list copy and a cancelled list delete", async ()
     [...menu.querySelectorAll("wt-button")].find((b) => b.textContent?.trim() === label)!.click();
     await el.updateComplete;
   };
-  await action("Copy role");
+  await action("Copy role…");
   change(el, "copy-name", "Books");
   await el.updateComplete;
   q(el, "copy-confirm").click();
   await expect.poll(() => q(el, "editor")).toBeNull();
-  await action("Delete");
+  await action("Delete…");
   const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
   const closed = new Promise<void>((resolve) =>
     dialog.addEventListener("wt-close", () => resolve(), { once: true }),

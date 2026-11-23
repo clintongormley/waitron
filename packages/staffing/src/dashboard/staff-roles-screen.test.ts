@@ -155,6 +155,18 @@ const cells = (id: string) =>
   [...row(id).querySelectorAll("td")].map((cell) => cell.textContent!.trim());
 const menuItem = (test: string) =>
   table()!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`);
+it("puts Delete under the divider after the ordinary role actions", async () => {
+  await mount(fakeRequest(() => [waiter, cook, runner]));
+  const menu = menuItem("delete-role-c")!.closest("wt-row-actions")!;
+  expect(Array.from(menu.children, (item) => item.getAttribute("icon") ?? item.localName)).toEqual([
+    "menu-edit",
+    "menu-up",
+    "menu-down",
+    "hr",
+    "menu-delete",
+  ]);
+});
+
 const dialog = () => el.shadowRoot!.querySelector("staff-role-dialog")!;
 const deleteDialog = () =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-delete-dialog"]>(

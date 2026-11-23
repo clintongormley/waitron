@@ -12,6 +12,7 @@ import {
   type ContentLanguages,
 } from "@waitron/shared";
 import {
+  rowActionTail,
   baseStyles,
   pageTitleStyles,
   formMessage,
@@ -383,6 +384,7 @@ export class ContentLanguagesScreen extends LitElement {
                       isRegionalContentLanguage(code)
                         ? nothing
                         : html`<wt-button
+                            icon="menu-default"
                             data-test=${`set-default-${code}`}
                             ?disabled=${this.busy}
                             aria-label=${`${t("content_languages.set_default")}: ${name(code)}`}
@@ -390,32 +392,20 @@ export class ContentLanguagesScreen extends LitElement {
                             >${t("content_languages.set_default")}</wt-button
                           >`
                     }
-                    ${
-                      rules.required.includes(code)
-                        ? nothing
-                        : html`
-                            <wt-button
-                              data-test=${`remove-${code}`}
-                              ?disabled=${this.busy}
-                              aria-label=${`${t("content_languages.remove")}: ${name(code)}`}
-                              @click=${() => this.#remove(code, config)}
-                              >${t("content_languages.remove")}</wt-button
-                            >
-                          `
-                    }
                   `
             }
             ${
               !code.includes("-")
                 ? html`<wt-button
+                    icon="menu-translations"
                     data-test=${`add-version-${code}`}
-                    aria-label=${`${t("content_languages.add_version")}: ${name(code)}`}
+                    aria-label=${`${t("content_languages.add_version_dialog")}: ${name(code)}`}
                     ?disabled=${this.busy}
                     @click=${() => {
                       this.regionalBase = code;
                       this.adding = true;
                     }}
-                    >${t("content_languages.add_version")}</wt-button
+                    >${t("content_languages.add_version_dialog")}</wt-button
                   >`
                 : nothing
             }
@@ -423,14 +413,29 @@ export class ContentLanguagesScreen extends LitElement {
               isRegionalContentLanguage(code)
                 ? nothing
                 : html`<wt-button
+                    icon="menu-translations"
                     data-test=${`edit-translations-${code}`}
                     ?disabled=${this.busy}
                     @click=${() => {
                       this.translationLanguage = code;
                       this.translating = true;
                     }}
-                    >${t("content_languages.edit_translations")}</wt-button
+                    >${t("content_languages.edit_translations_dialog")}</wt-button
                   >`
+            }
+            ${
+              code === config.defaultLanguage || rules.required.includes(code)
+                ? nothing
+                : rowActionTail(!isRegionalContentLanguage(code), [
+                    html`<wt-button
+                      icon="menu-remove"
+                      data-test=${`remove-${code}`}
+                      ?disabled=${this.busy}
+                      aria-label=${`${t("content_languages.remove")}: ${name(code)}`}
+                      @click=${() => this.#remove(code, config)}
+                      >${t("content_languages.remove")}</wt-button
+                    >`,
+                  ])
             }
           </wt-row-actions>
         `,

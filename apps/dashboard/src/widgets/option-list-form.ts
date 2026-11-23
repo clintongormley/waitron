@@ -1,5 +1,6 @@
 import { sameValue } from "./product-editor-model.js";
 import {
+  rowActionTail,
   draftScopeFor,
   FormFeedback,
   saveActionState,
@@ -652,6 +653,7 @@ export class OptionListForm extends LitElement {
       <td>
         <wt-row-actions align="end" label=${`${t("options.option_actions")}: ${label.name}`}
           ><wt-button
+            icon="menu-edit"
             data-test=${`edit-label-${index}`}
             .disabled=${this.busy}
             @click=${(event: Event) => {
@@ -659,16 +661,19 @@ export class OptionListForm extends LitElement {
               this.#openEditor(label);
             }}
             >${t("action.edit")}</wt-button
-          ><wt-button
-            variant="danger"
-            data-test=${`remove-label-${index}`}
-            .disabled=${this.busy}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              this.#removeLabel(label.id);
-            }}
-            >${t("action.delete")}</wt-button
-          ></wt-row-actions
+          >${rowActionTail(true, [
+            html`<wt-button
+              icon="menu-delete"
+              variant="danger"
+              data-test=${`remove-label-${index}`}
+              .disabled=${this.busy}
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                this.#removeLabel(label.id);
+              }}
+              >${t("action.delete")}</wt-button
+            >`,
+          ])}</wt-row-actions
         >
       </td>
     </tr>`;
