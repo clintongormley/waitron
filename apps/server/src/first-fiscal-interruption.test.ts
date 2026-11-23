@@ -206,7 +206,7 @@ it("activates the frozen assignment once and completes only after host publicati
   expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
   expect(
     (await f.db.select(seriesWithNextNumber).from(invoiceSeries)).map((s) => s.nextNumber),
-  ).toEqual([1, 1, 1]);
+  ).toEqual([1, 1, 1, 1]);
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
   const disk = await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8");
   expect(disk).not.toContain('"password":"test"');

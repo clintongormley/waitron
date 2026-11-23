@@ -48,7 +48,7 @@ const quiet: Logger = () => {};
 
 export async function provisionOrderVenue(
   db: Database,
-  options: { identity?: SoftwareIdentity } = {},
+  options: { identity?: SoftwareIdentity; fullSeriesCode?: string } = {},
 ): Promise<OrderVenue> {
   const venue = await provisionBillVenue(db, options);
   const [assigned] = await db

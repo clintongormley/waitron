@@ -103,6 +103,10 @@ async function historicalCloudFixture(configured = true) {
       taxpayerNif: context.taxId,
       softwareId: "W1",
       environment: "production",
+      series: context.bases.map(({ code, purpose }) => ({
+        code: `${code}-${p.allocation.installationIdentity}`,
+        purpose,
+      })),
     });
     Object.assign(p.continuity.scope, {
       taxpayerNif: context.taxId,
