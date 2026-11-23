@@ -44,7 +44,13 @@ import {
 } from "./receipt-dates.js";
 import { cardName } from "./card-details.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
-import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
+import {
+  groupByParent,
+  isCoveredDish,
+  mergeIdenticalGroups,
+  printsOnTicket,
+  type LineGroup,
+} from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
@@ -435,9 +441,13 @@ export function buildReceiptDocument({
     const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const amount = decimal(dish.listGross ?? dish.gross);
-    row(`${quantity}${itemName(dish)}${included}`, `${itemAmount(amount)}${letter(dish)}`, {
-      after: quantity,
-    });
+    const surcharge =
+      simplified && dish.setMenuRole === "dish" && compareDecimal(amount, decimal("0")) > 0;
+    const printedAmount =
+      simplified && isCoveredDish(dish)
+        ? ""
+        : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;
+    row(`${quantity}${itemName(dish)}${included}`, printedAmount, { after: quantity });
     const sold = decimal(count);
     const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
     if (
@@ -484,7 +494,7 @@ export function buildReceiptDocument({
   };
   let nextFiled = 0;
   const printed = simplified
-    ? mergeIdenticalGroups(groups, result.vatBreakdown.length <= 1)
+    ? mergeIdenticalGroups(groups.filter(printsOnTicket), result.vatBreakdown.length <= 1)
     : groups;
   // An advance is taken off what the bill came to, so it prints after the whole-bill discounts.
   const advances: (() => void)[] = [];

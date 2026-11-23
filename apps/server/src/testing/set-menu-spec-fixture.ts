@@ -13,10 +13,12 @@ import {
   addMember,
   addSetMenuDishes,
   createCategory,
+  createExtraList,
   createMenu,
   createProduct,
   menuItems,
   requireMenuRoot,
+  writeProductModifiers,
 } from "@waitron/menu";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
@@ -47,11 +49,18 @@ export interface SpecSetMenu {
   items: Partial<Record<SpecDish, string>>;
 }
 
+export interface SpecExtra {
+  listId: string;
+  picks: { productId: string; quantity: number }[];
+}
+
 export interface SpecVenue {
   venue: PartyVenue;
   daily: SpecSetMenu;
   special: SpecSetMenu;
   productIds: Record<SpecDish, string>;
+  /** Soup's paid extra: one Bread at 1.50. */
+  bread: SpecExtra;
 }
 
 const DISHES: { name: SpecDish; course: "Starter" | "Main"; price: string }[] = [
@@ -64,7 +73,7 @@ const DISHES: { name: SpecDish; course: "Starter" | "Main"; price: string }[] = 
 /**
  * The plan's fixture venue: Daily menu (€14.00, Sirloin +€5.00) and Special menu (€20.00, Sirloin
  * and Sea bass included), each listing Soup and Hake, with one "1 × Starter" and one "1 × Main"
- * line. Soup's paid extra is not built. The till has a receipt printer, so Print the bill runs.
+ * line. Soup offers a paid extra, Bread at €1.50, which `specBill` does not order. The till has a receipt printer, so Print the bill runs.
  */
 export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
   const venue = await setupPartyVenue(db);
@@ -101,6 +110,25 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
         .where(eq(products.id, id));
       productIds[dish.name] = id;
     }
+    const { id: breadId } = await createProduct(tx, {
+      categoryId: category.id,
+      name: "Bread",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "reduced",
+    });
+    const breadList = await createExtraList(
+      tx,
+      {
+        name: "Bread",
+        minPicks: 0,
+        maxPicks: 1,
+        items: [{ productId: breadId, maxQuantity: 1, price: "1.50" }],
+      },
+      venue.cfg.locale,
+    );
+    await writeProductModifiers(tx, productIds.Soup, [{ kind: "extras", id: breadList.id }]);
+    const bread = { listId: breadList.id, picks: [{ productId: breadId, quantity: 1 }] };
     const fullMenuId = venue.tables.menuId;
     const setMenu = async (
       name: string,
@@ -144,7 +172,7 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
       {},
     );
     daily.versionId = special.versionId = await publishWorkingMenu(tx, fullMenuId);
-    return { venue, daily, special, productIds };
+    return { venue, daily, special, productIds, bread };
   });
 }
 
@@ -155,20 +183,27 @@ export function setSpecCount(spec: SpecVenue, billId: string, setMenu: SpecSetMe
   );
 }
 
+export interface SpecDishLine {
+  dish: SpecDish;
+  from: SpecSetMenu;
+  extras?: SpecExtra[];
+}
+
 /** Saves one set-menu dish line per name, in order, each taken from `from`. */
 export function saveSpecDishes(
   spec: SpecVenue,
   bill: { partyId: string; tabId: string },
-  dishes: readonly { dish: SpecDish; from: SpecSetMenu }[],
+  dishes: readonly SpecDishLine[],
 ) {
   return saveSetMenuDraft(
     spec.venue,
     bill,
-    ...dishes.map(({ dish, from }) => ({
+    ...dishes.map(({ dish, from, extras }) => ({
       menuItemId: from.items[dish],
       menuVersionId: from.versionId,
       setMenuId: from.menuId,
       quantity: "1",
+      ...(extras === undefined ? {} : { extras }),
     })),
   );
 }
@@ -198,7 +233,7 @@ export async function sendSpecDraft(
 export async function sendSpecDishes(
   spec: SpecVenue,
   bill: { partyId: string; tabId: string },
-  dishes: readonly { dish: SpecDish; from: SpecSetMenu }[],
+  dishes: readonly SpecDishLine[],
   release: "hold" | "fire" = "hold",
 ) {
   const draft = await saveSpecDishes(spec, bill, dishes);
