@@ -219,7 +219,7 @@ describe("a new SIF identity begins a new chain", () => {
     expect(head.secuencia).toBe(7);
   });
 
-  it("reads a predecessor only after the current identity records a sale", async () => {
+  it("finds a predecessor after the first sale", async () => {
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );

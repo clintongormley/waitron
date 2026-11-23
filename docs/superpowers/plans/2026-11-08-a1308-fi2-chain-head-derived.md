@@ -14,6 +14,11 @@ saved day report and its chain described below are historical. See the
 > index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
 > See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
 
+> **2026-11-23 review follow-up.** At 10:07 the watcher cleared removing the exported
+> `esPrimerRegistro` helper and the optional `sifId` argument below. Both had only test callers.
+> `readChainHead(tx, nodeId)` reads the current identity. Append still uses the identity it
+> was supplied. The tests use the head reader and real appends.
+
 **Goal:** Delete `cadenas`, the stored copy of each node's chain head, and read the head from
 `verifactu_records` itself; drop the plain index that duplicates the records' unique position index.
 Measure first, on a year of trading grown to 100,000 and 500,000 records, with the fallback (keep
@@ -57,7 +62,9 @@ before this cannot be restored or imported."
 
 1. **A new identity's first record.** After `activate` registers a new identity on a node that
    already has records, the next record must be `PrimerRegistro = "S"`, with `secuencia` continuing.
-   Pinned by `registro-sif.test.ts:206-248`, `allocation.test.ts`, `restore.sold-node.test.ts`.
+   **2026-11-23 checks:** `chain.test.ts` appends under the supplied identity and `restore.test.ts`
+   appends under the current identity after restore. Both assert that the first record starts
+   a new chain at the next position.
 2. **A query plan that scans.** The head read and the two walks that named the dropped index must
    each `SEARCH … USING INDEX verifactu_records_node_secuencia_uq`. Pinned by Task 3's plan test.
 3. **Timing taken where both answers look alike.** A head read on an empty venue proves nothing; the
