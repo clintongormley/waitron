@@ -1,6 +1,10 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { tableNoMatches } from "@waitron/dashboard-kit";
+import {
+  tableNoMatches,
+  type MenuPeriodUsage,
+  type MenuPeriodUsageProvider,
+} from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
@@ -121,6 +125,9 @@ interface MenuRow extends MenuSummary {
 }
 
 type ListLayout = "narrow" | "wide";
+type PeriodUse = "starts" | "staff";
+type PeriodUses = Record<PeriodUse, MenuPeriodUsage[]>;
+const PERIOD_LABELS = { starts: "menus.period_starts", staff: "menus.period_staff" } as const;
 
 /** Sorted by status, the menus needing a publish come first. */
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
@@ -566,6 +573,27 @@ export class MenusScreen extends LitElement {
           display: block;
         }
       }
+      @container (max-width: 52rem) {
+        .with-usage .narrow-probe {
+          display: block;
+        }
+      }
+      wt-data-table::part(periods) {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow-wrap: anywhere;
+      }
+      wt-data-table::part(period-link) {
+        display: inline-block;
+        min-block-size: var(--wt-space-5);
+        color: var(--wt-color-primary-text);
+      }
+      wt-data-table::part(period-label) {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       wt-data-table::part(time) {
         white-space: nowrap;
       }
@@ -577,7 +605,9 @@ export class MenusScreen extends LitElement {
       }
       /* The list's cells start at their top, where the name button and the row menu are a tap target
          tall with their text centred, so the state's first line is centred on that height too. */
-      wt-data-table:not(.narrow)::part(status) {
+      wt-data-table:not(.narrow)::part(status),
+      wt-data-table:not(.narrow)::part(periods),
+      wt-data-table:not(.narrow)::part(period-status) {
         display: block;
         padding-block-start: calc((var(--wt-tap-min) - 1lh) / 2);
       }
@@ -612,7 +642,8 @@ export class MenusScreen extends LitElement {
         color: var(--wt-color-danger);
       }
       wt-data-table::part(changes-link):focus-visible,
-      wt-data-table::part(clashes-link):focus-visible {
+      wt-data-table::part(clashes-link):focus-visible,
+      wt-data-table::part(period-link):focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -635,6 +666,10 @@ export class MenusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) menuPeriodUsage?: MenuPeriodUsageProvider;
+  @state() private periodUses?: ReadonlyMap<string, PeriodUses> | null;
+  #followedUsage?: MenuPeriodUsageProvider;
+  #stopUsage?: () => void;
   /** Replaced by a test, so how long ago a menu was published reads the same on any day. */
   @property({ attribute: false }) now = (): Date => new Date();
   @state() private menus: MenuSummary[] = [];
@@ -860,6 +895,12 @@ export class MenusScreen extends LitElement {
       [...columns.slice(0, -1), this.#kindColumn, columns.at(-1)!],
     ]),
   ) as Record<ListLayout, DataTableColumn<MenuRow>[]>;
+  readonly #usageColumns = this.#buildColumns("wide", true);
+  readonly #usageColumnsWithKind = [
+    ...this.#usageColumns.slice(0, -1),
+    this.#kindColumn,
+    this.#usageColumns.at(-1)!,
+  ];
   #listSize: ResizeObserver | null = null;
   #probe: Element | undefined;
   #rows: MenuRow[] = [];
@@ -888,6 +929,7 @@ export class MenusScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    this.#followUsage();
   }
 
   /** A narrow list has no status column to sort by, so a status sort gives way, visibly, to the
@@ -909,6 +951,7 @@ export class MenusScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    this.#followUsage();
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
     // replaces the link a person may already have focused.
     if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
@@ -1474,6 +1517,10 @@ export class MenusScreen extends LitElement {
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
 
   override disconnectedCallback(): void {
+    this.#stopUsage?.();
+    this.#stopUsage = undefined;
+    this.#followedUsage = undefined;
+    this.periodUses = undefined;
     this.#moveScope?.dispose();
     this.#moveScope = undefined;
     this.#menuFormGeneration++;
@@ -2363,9 +2410,68 @@ export class MenusScreen extends LitElement {
     this.#open(menuId, tab, priceFilter);
   }
 
+  #followUsage(): void {
+    const provider = this.isConnected && this.menuId === null ? this.menuPeriodUsage : undefined;
+    if (provider === this.#followedUsage) return;
+    this.#stopUsage?.();
+    this.#followedUsage = provider;
+    this.periodUses = undefined;
+    this.#stopUsage = provider?.watch((rows) => {
+      if (rows === null) {
+        this.periodUses = null;
+        return;
+      }
+      const grouped = new Map<string, PeriodUses>();
+      const add = (id: string, role: PeriodUse, row: MenuPeriodUsage) => {
+        const uses = grouped.get(id) ?? { starts: [], staff: [] };
+        uses[role].push(row);
+        grouped.set(id, uses);
+      };
+      for (const row of rows) {
+        add(row.menuId, "starts", row);
+        for (const id of row.staffMenuIds) add(id, "staff", row);
+      }
+      this.periodUses = grouped;
+    });
+  }
+
+  #periodCell(menu: MenuRow, role: PeriodUse, stacked = false) {
+    if (!this.menuPeriodUsage || menu.kind === "set_menu") return nothing;
+    const uses = this.periodUses?.get(menu.id);
+    const periods = uses?.[role];
+    if (periods?.length) {
+      return html`
+        ${stacked ? html`<span part="period-label">${t(PERIOD_LABELS[role])}</span>` : nothing}
+        <ul part="periods" role="list">
+          ${periods.map(
+            ({ label, href }) =>
+              html`<li>
+                ${href ? html`<a part="period-link" href=${href}>${label}</a>` : label}
+              </li>`,
+          )}
+        </ul>
+      `;
+    }
+    if (role === "staff" || uses !== undefined) return nothing;
+    const label =
+      this.periodUses === undefined
+        ? "menus.period_loading"
+        : this.periodUses === null
+          ? "menus.period_error"
+          : "menus.period_unused";
+    return html`<div part="period-status muted">${t(label)}</div>`;
+  }
+
+  #listColumns(): DataTableColumn<MenuRow>[] {
+    const kinds = this.menus.some((menu) => menu.kind === "set_menu");
+    if (this.menuPeriodUsage && this.layout === "wide")
+      return kinds ? this.#usageColumnsWithKind : this.#usageColumns;
+    return (kinds ? this.#columnsWithKind : this.#columns)[this.layout];
+  }
+
   /** On a narrow list the status moves under the name and its column goes, as the variants table
    * does with its prices (docs/developers/design-system.md). */
-  #buildColumns(layout: ListLayout): DataTableColumn<MenuRow>[] {
+  #buildColumns(layout: ListLayout, withUsage = false): DataTableColumn<MenuRow>[] {
     const narrow = layout === "narrow";
     const name = (menu: MenuRow) =>
       html`<wt-button
@@ -2384,7 +2490,12 @@ export class MenusScreen extends LitElement {
         searchValue: (menu) => menu.name,
         ...(narrow ? { activatesRow: false as const } : {}),
         cell: narrow
-          ? (menu) => html`${name(menu)} <span part="stacked">${this.#statusCell(menu)}</span>`
+          ? (menu) =>
+              html`${name(menu)}
+                <div part="stacked">
+                  ${this.#statusCell(menu)} ${this.#periodCell(menu, "starts", true)}
+                  ${this.#periodCell(menu, "staff", true)}
+                </div>`
           : name,
       },
       ...(narrow
@@ -2401,6 +2512,14 @@ export class MenusScreen extends LitElement {
               cell: (menu: MenuRow) => this.#statusCell(menu),
             },
           ]),
+      ...(withUsage
+        ? (["starts", "staff"] as const).map((role) => ({
+            key: role,
+            label: t(PERIOD_LABELS[role]),
+            activatesRow: false as const,
+            cell: (menu: MenuRow) => this.#periodCell(menu, role),
+          }))
+        : []),
       {
         key: "actions",
         label: t("menus.actions"),
@@ -2670,7 +2789,7 @@ export class MenusScreen extends LitElement {
                 sortKey="name"
                 sortDirection="ascending"
                 .rows=${this.#rows}
-                .columns=${(this.menus.some((menu) => menu.kind === "set_menu") ? this.#columnsWithKind : this.#columns)[this.layout]}
+                .columns=${this.#listColumns()}
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}
@@ -4110,7 +4229,10 @@ export class MenusScreen extends LitElement {
   override render() {
     // Drawn in both views and as wide as the list, so the list's layout is known before its table
     // is first drawn, coming back from a menu included.
-    return html`<div class="sizer" aria-hidden="true">
+    return html`<div
+        class=${this.menuPeriodUsage ? "sizer with-usage" : "sizer"}
+        aria-hidden="true"
+      >
         <span class="narrow-probe" ${ref(this.#observeProbe)}></span>
       </div>
       ${this.menuId === null ? this.#renderList() : this.#renderEditor(this.menuId)}`;

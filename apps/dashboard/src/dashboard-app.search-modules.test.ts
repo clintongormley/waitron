@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import type { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -141,6 +142,8 @@ async function mount(
     width?: number;
     permissions?: string[];
     modules?: string[];
+    request?: DashboardRequest;
+    waitForScreen?: string;
   } = {},
 ) {
   await page.viewport(options.width ?? 1280, 800);
@@ -157,8 +160,19 @@ async function mount(
     modules: options.modules ?? ["venue-service", "staffing"],
   };
   const getMe = vi.fn(async () => session);
+  const liveData = new LiveData();
   const api = {
     getMe,
+    liveData,
+    listMenus: async () => model.menus,
+    listLibraryProducts: async () => [],
+    listCategories: async () => [],
+    getMenuSettings: async () => ({}),
+    getMenuStatuses: async () => ({}),
+    getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
+    getMenuStructure: async () => {
+      throw new Error("No editor model in this fixture");
+    },
     getGoogleConfig: async () => ({ configured: false }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
@@ -167,21 +181,28 @@ async function mount(
     getDiskStop: async () => ({ stopped: false, deleted: null }),
     getSalesOverview: () => new Promise(() => undefined),
   } as unknown as DashboardApi;
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request }, options.theme);
+  const { el } = await mountWidget<DashboardApp>(
+    "dashboard-app",
+    { api, request: options.request ?? request },
+    options.theme,
+  );
   await vi.waitFor(() =>
     expect(
       el.shadowRoot!.querySelector(
-        options.path?.startsWith("/seasons")
-          ? "dashboard-seasons-screen"
-          : options.path?.startsWith("/periods")
-            ? "periods-list"
-            : "dashboard-opening-hours-screen",
+        options.waitForScreen ??
+          (options.path === "/menus"
+            ? "dashboard-menus-screen"
+            : options.path?.startsWith("/seasons")
+              ? "dashboard-seasons-screen"
+              : options.path?.startsWith("/periods")
+                ? "periods-list"
+                : "dashboard-opening-hours-screen"),
       ),
     ).not.toBeNull(),
   );
   if (options.width === 390)
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!);
-  return { el, session, getMe };
+  return { el, session, getMe, liveData };
 }
 async function search(el: DashboardApp, term: string) {
   const input = el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
@@ -602,4 +623,137 @@ it("returns a dirty Periods editor to the list when a session refresh removes ed
   expect(current().shadowRoot!.querySelector("wt-data-table")!.closest("[hidden]")).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
+});
+
+const openingHours = "/management-api/venue-service/opening-hours";
+const usagePermissions = ["menu.manage", "venue.view", "venue.configure"];
+const menusTable = (el: DashboardApp) =>
+  el
+    .shadowRoot!.querySelector("dashboard-menus-screen")
+    ?.shadowRoot?.querySelector("wt-data-table");
+const periodLink = (el: DashboardApp) =>
+  menusTable(el)?.shadowRoot?.querySelector<HTMLAnchorElement>('a[href="/periods/period/lunch"]');
+
+it("opens the exact period from Menus and follows changes passively while the list is open", async () => {
+  const read = vi.fn(request);
+  const { el, liveData } = await mount({
+    path: "/menus",
+    request: read as DashboardRequest,
+    permissions: usagePermissions,
+  });
+  await expect.poll(() => periodLink(el)?.textContent?.trim()).toBe("Lunch");
+  expect(read).toHaveBeenCalledWith(openingHours, "GET", undefined, { passive: true });
+  const reads = () => read.mock.calls.filter(([path]) => path === openingHours).length;
+  const first = reads();
+  liveData.invalidate([{ type: "products" }]);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(reads()).toBe(first);
+  liveData.invalidate([{ type: "menu_periods" }]);
+  await expect.poll(reads).toBe(first + 1);
+
+  await userEvent.click(periodLink(el)!);
+  await expect.poll(() => location.pathname).toBe("/periods/period/lunch");
+  const editor = () =>
+    el.shadowRoot!.querySelector("periods-list")?.shadowRoot?.querySelector("period-dialog");
+  await expect
+    .poll(() => editor()?.shadowRoot?.querySelector<WtInput>("[name=name]")?.value)
+    .toBe("Lunch");
+  expect(reads()).toBe(first + 2);
+  history.back();
+  await expect.poll(() => location.pathname).toBe("/menus");
+  await expect.poll(() => periodLink(el)).toBeTruthy();
+  await userEvent.click(periodLink(el)!);
+  await expect
+    .poll(() => editor()?.shadowRoot?.querySelector("wt-button[slot=cancel]"))
+    .toBeTruthy();
+  await userEvent.click(
+    editor()!.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!,
+  );
+  await expect.poll(() => location.pathname).toBe("/periods");
+  history.back();
+  await expect
+    .poll(() => menusTable(el)?.shadowRoot?.querySelector<HTMLElement>('[data-test="open-menu"]'))
+    .toBeTruthy();
+  await userEvent.click(
+    menusTable(el)!.shadowRoot!.querySelector<HTMLElement>('[data-test="open-menu"]')!,
+  );
+  await expect.poll(() => location.pathname).toMatch(/^\/menus\/menu\/menu/);
+  await expect.poll(() => menusTable(el)).toBeNull();
+  const inEditor = reads();
+  liveData.invalidate([{ type: "menu_periods" }]);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(reads()).toBe(inEditor);
+});
+
+it("shows read-only period names and drops the watch and an old answer when read access ends", async () => {
+  let finish!: (value: unknown) => void;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const read = vi.fn(request);
+  const { el, session, liveData } = await mount({
+    path: "/menus",
+    request: read as DashboardRequest,
+    permissions: ["menu.manage", "venue.view"],
+  });
+  const row = () => menusTable(el)?.shadowRoot?.querySelector('tr[data-row-key="menu"]');
+  await expect
+    .poll(() => [...(row()?.querySelectorAll("td") ?? [])][2]?.textContent)
+    .toContain("Lunch");
+  expect(periodLink(el)).toBeNull();
+  read.mockImplementationOnce(() => pending);
+  liveData.invalidate([{ type: "menu_periods" }]);
+  await expect.poll(() => read.mock.results.at(-1)?.value === pending).toBe(true);
+  session.permissions = ["menu.manage"];
+  document.dispatchEvent(new Event("visibilitychange"));
+  await expect.poll(() => menusTable(el)?.shadowRoot?.querySelectorAll("th").length).toBe(3);
+  finish({
+    ...model,
+    departments: [
+      {
+        ...model.departments[0],
+        periods: [{ ...model.departments[0]!.periods[0], name: "Stale period" }],
+      },
+    ],
+  });
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(row()?.textContent).not.toContain("Stale period");
+  expect(menusTable(el)?.shadowRoot?.querySelectorAll("th")).toHaveLength(3);
+  expect(periodLink(el)).toBeNull();
+});
+
+it("does not read periods when the venue-service module is disabled", async () => {
+  const read = vi.fn(request);
+  const { el } = await mount({
+    path: "/menus",
+    request: read as DashboardRequest,
+    permissions: usagePermissions,
+    modules: [],
+  });
+  await expect
+    .poll(() => menusTable(el)?.shadowRoot?.querySelector('tr[data-row-key="menu"]'))
+    .toBeTruthy();
+  expect(read.mock.calls.some(([path]) => path === openingHours)).toBe(false);
+});
+
+it("refuses to mount with two enabled menu usage providers", async () => {
+  const contributions = DASHBOARD_MODULES as unknown as Record<string, unknown>[];
+  const venue = contributions.find((entry) => entry.module === "venue-service")!;
+  const duplicate = {
+    module: "another",
+    strings: { en: {}, es: {} },
+    menuPeriodUsage: venue.menuPeriodUsage,
+  };
+  contributions.push(duplicate);
+  try {
+    const { el } = await mount({
+      path: "/menus",
+      permissions: usagePermissions,
+      modules: ["venue-service", "another"],
+      waitForScreen: "dashboard-login-screen",
+    });
+    expect(menusTable(el)).toBeUndefined();
+  } finally {
+    contributions.pop();
+  }
 });

@@ -6,7 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { PeriodsList } from "./periods-list.js";
-import { painterModel } from "../testing/season-painter-fixture.js";
+import { painterModel, withBar } from "../testing/season-painter-fixture.js";
 
 const containers: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -547,4 +547,69 @@ it("A725 offers only Stations and Routes as Prep search destinations", () => {
       .filter((row) => row.screen === "prep-stations")
       .map((row) => row.path),
   ).toEqual(["/prep-stations/view/stations", "/prep-stations/view/routing"]);
+});
+
+describe("menu period usage", () => {
+  const model = withBar();
+  const restaurant = model.departments[0]!;
+  const bar = model.departments[2]!;
+  const read = {
+    ...model,
+    departments: [
+      restaurant,
+      { ...bar, periods: [{ ...bar.periods[0]!, name: "Lunch", staffMenuIds: ["evening"] }] },
+      { ...model.departments[1]!, periods: [{ ...restaurant.periods[1]!, id: "old" }] },
+    ],
+  };
+
+  it.each([true, false])(
+    "lists active departments and disambiguates their names (edit: %s)",
+    async (canEdit) => {
+      const request = vi.fn().mockResolvedValue(read);
+      const publish = vi.fn();
+      const stop = VENUE_SERVICE_DASHBOARD.menuPeriodUsage
+        ?.create({ request }, canEdit)
+        .watch(publish);
+      try {
+        await expect
+          .poll(() => publish.mock.lastCall?.[0])
+          .toEqual([
+            {
+              periodId: "p1",
+              label: "Restaurant: Lunch",
+              menuId: "m1",
+              staffMenuIds: [],
+              ...(canEdit ? { href: "/periods/period/p1" } : {}),
+            },
+            {
+              periodId: "p2",
+              label: "Dinner",
+              menuId: "m1",
+              staffMenuIds: [],
+              ...(canEdit ? { href: "/periods/period/p2" } : {}),
+            },
+            {
+              periodId: "q1",
+              label: "Bar: Lunch",
+              menuId: "m1",
+              staffMenuIds: ["evening"],
+              ...(canEdit ? { href: "/periods/period/q1" } : {}),
+            },
+          ]);
+      } finally {
+        stop?.();
+      }
+    },
+  );
+
+  it("publishes an unavailable read instead of an empty usage list", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("offline"));
+    const publish = vi.fn();
+    const stop = VENUE_SERVICE_DASHBOARD.menuPeriodUsage?.create({ request }, false).watch(publish);
+    try {
+      await expect.poll(() => publish.mock.lastCall?.[0]).toBeNull();
+    } finally {
+      stop?.();
+    }
+  });
 });

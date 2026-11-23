@@ -78,6 +78,7 @@ import {
   type DashboardFurtherScreen,
   type DashboardRequest,
   type DashboardModuleContext,
+  type MenuPeriodUsageProvider,
   type DashboardSettingCandidate,
   type DashboardSettingSearchDestination,
   type DashboardScreenHandle,
@@ -987,6 +988,7 @@ export class DashboardApp extends LitElement {
   @state() private navSearch = "";
   #moduleContexts = new Map<string, DashboardModuleContext>();
   #coreSearchContext?: DashboardModuleContext;
+  #menuPeriodUsage?: { module: string; canEdit: boolean; provider: MenuPeriodUsageProvider };
   #coreSettingDestinations: readonly DashboardSettingSearchDestination[] = [];
   #settingSearchEpoch = 0;
   @state() private settingSearch?: {
@@ -1365,6 +1367,7 @@ export class DashboardApp extends LitElement {
   override disconnectedCallback(): void {
     this.#closeSettingSearch();
     this.#moduleContexts.clear();
+    this.#menuPeriodUsage = undefined;
     this.#coreSearchContext = undefined;
     this.#coreSettingDestinations = [];
     this.sessionEpoch.advance();
@@ -1903,6 +1906,7 @@ export class DashboardApp extends LitElement {
   #suspendIdentity(): void {
     this.#closeSettingSearch();
     this.#moduleContexts.clear();
+    this.#menuPeriodUsage = undefined;
     this.#coreSearchContext = undefined;
     this.#coreSettingDestinations = [];
     setHelpMode(false);
@@ -1944,6 +1948,9 @@ export class DashboardApp extends LitElement {
    */
   #activate(enabled: readonly string[]): void {
     this.#moduleContexts.clear();
+    const previousUsage = this.#menuPeriodUsage;
+    this.#menuPeriodUsage = undefined;
+    let hasUsageProvider = false;
     this.#coreSearchContext = undefined;
     this.#enabledModules = [...enabled];
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
@@ -1997,6 +2004,17 @@ export class DashboardApp extends LitElement {
         calendarViews,
       };
       this.#moduleContexts.set(c.module, ctx);
+      if (c.menuPeriodUsage) {
+        if (hasUsageProvider) throw new Error("dashboard has two menu period usage providers");
+        hasUsageProvider = true;
+        if (this.#sessionPermissions.includes(c.menuPeriodUsage.readPermission)) {
+          const canEdit = this.#sessionPermissions.includes(c.menuPeriodUsage.editPermission);
+          this.#menuPeriodUsage =
+            previousUsage?.module === c.module && previousUsage.canEdit === canEdit
+              ? previousUsage
+              : { module: c.module, canEdit, provider: c.menuPeriodUsage.create(ctx, canEdit) };
+        }
+      }
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
@@ -3592,6 +3610,7 @@ export class DashboardApp extends LitElement {
       case "menus":
         return html`<dashboard-menus-screen
           .api=${this.api}
+          .menuPeriodUsage=${this.#menuPeriodUsage?.provider}
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
           .reportLatePriceSave=${this.#lateSaveReporter("menus.price_not_saved")}
         ></dashboard-menus-screen>`;

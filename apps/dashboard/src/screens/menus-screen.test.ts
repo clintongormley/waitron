@@ -4,7 +4,11 @@ import { LeaveController, NavigationGuard, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { LiveData } from "@waitron/dashboard-kit";
+import {
+  LiveData,
+  type MenuPeriodUsageProvider,
+  type MenuPeriodUsage,
+} from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -10113,6 +10117,95 @@ describe("publishing", () => {
     });
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(reported).toEqual([]);
+  });
+
+  it("shows starting and staff periods on desktop and phone, with Kind and Actions in view", async () => {
+    setLocale("es-ES");
+    const set = {
+      id: "set-daily",
+      name: "Daily menu",
+      active: true,
+      kind: "set_menu",
+      setPrice: "14.00",
+    };
+    const unused = { ...menus[0]!, id: "unused", name: "Unused menu" };
+    const client = api({ listMenus: vi.fn().mockResolvedValue([...menus, set, unused]) });
+    const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
+      api: client,
+      menuPeriodUsage: {
+        watch(publish) {
+          publish([
+            {
+              periodId: "lunch",
+              label: "Almuerzo",
+              menuId: "menu-lunch",
+              staffMenuIds: ["menu-dinner"],
+              href: "/periods/period/lunch",
+            },
+          ]);
+          return () => {};
+        },
+      } satisfies MenuPeriodUsageProvider,
+    });
+    const row = (id: string) => table(el)?.shadowRoot.querySelector(`tr[data-row-key="${id}"]`);
+    const headings = () =>
+      [...(table(el)?.shadowRoot.querySelectorAll("thead th") ?? [])].map(text);
+    for (const [width, stacked] of [
+      [1280, false],
+      [790, true],
+      [390, true],
+    ] as const) {
+      await page.viewport(width, 900);
+      await vi.waitFor(() => {
+        const lunch = row("menu-lunch");
+        const starting = lunch?.querySelector('a[href="/periods/period/lunch"]');
+        expect(starting?.textContent?.trim()).toBe("Almuerzo");
+        expect(starting?.closest("td")).toBe(lunch?.querySelectorAll("td")[stacked ? 0 : 2]);
+        expect(headings().includes(t("menus.period_starts"))).toBe(!stacked);
+        expect(headings().includes(t("menus.period_staff"))).toBe(!stacked);
+        expect(headings()).toContain("Tipo");
+        expect(text(row("menu-dinner"))).toContain("Almuerzo");
+        expect(text(row("menu-dinner"))).not.toContain(t("menus.period_unused"));
+        expect(text(row("unused"))).toContain(t("menus.period_unused"));
+        expect(text(row("set-daily"))).not.toContain(t("menus.period_unused"));
+        if (stacked) {
+          const unusedRow = row("unused")!;
+          const state = unusedRow.querySelector('[data-test="status-unused"]')!;
+          const periodState = [...unusedRow.querySelectorAll("[part]")].find(
+            (part) => text(part) === t("menus.period_unused"),
+          )!;
+          expect(periodState.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+            state.getBoundingClientRect().bottom,
+          );
+        }
+        const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+        expectRowMenusOnScreen(table(el), 4, "wt-row-actions", false);
+      });
+    }
+  });
+
+  it("only a successful read can show that a menu is unused", async () => {
+    let publish!: (rows: readonly MenuPeriodUsage[] | null) => void;
+    const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
+      api: api(),
+      menuPeriodUsage: {
+        watch(accept) {
+          publish = accept;
+          return () => {};
+        },
+      } satisfies MenuPeriodUsageProvider,
+    });
+    const lunch = () =>
+      text(table(el)?.shadowRoot.querySelector('tr[data-row-key="menu-lunch"]') ?? null);
+    await expect.poll(lunch).toContain("Checking periods…");
+    expect(lunch()).not.toContain("Not used by any period");
+    publish(null);
+    await expect.poll(lunch).toContain("Could not check periods");
+    expect(lunch()).not.toContain("Not used by any period");
+    publish([]);
+    await expect.poll(lunch).toContain("Not used by any period");
+    expect(lunch()).not.toContain("Could not check periods");
   });
 
   it("sorts by name, and shows it, when a list sorted by status turns phone-width", async () => {

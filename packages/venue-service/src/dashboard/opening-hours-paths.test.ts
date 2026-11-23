@@ -1,6 +1,7 @@
 import { decodePathSegment } from "@waitron/ui";
 import {
   calendarViewPath,
+  periodPath,
   seasonPainterPath,
   specialDayPainterPath,
 } from "./opening-hours-paths.js";
@@ -55,4 +56,10 @@ describe("opening hours paths", () => {
       "~",
     ]);
   });
+});
+
+it("opens the exact period, including ids with reserved path characters", () => {
+  const path = periodPath("late/lunch");
+  expect(path).toBe("/periods/period/late%2Flunch");
+  expect(readBack(path)).toEqual(["period", "late/lunch"]);
 });
