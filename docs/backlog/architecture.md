@@ -44,7 +44,7 @@ of the protected list. No absent
 optional table is created by that repair.
 
 A box moved from fiscal-verifactu to fiscal-none still does not re-protect or watch the unselected
-fiscal set's retained tables (`verifactu_records`, filing-case tables and other declarations).
+fiscal set's retained tables (`verifactu_records` and other declarations).
 That fiscal protection decision remains outside A646's optional-module repair.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
