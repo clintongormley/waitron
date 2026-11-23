@@ -4168,13 +4168,13 @@ describe("createAgent — A4 page jobs", () => {
   it("gives up resending a report two leases after the claim was last known alive, claiming meanwhile", async () => {
     let clock = 1_000;
     const printing = deferred<PagePrintOutcome>();
-    const { host, renewals } = pageHost(() => printing.promise, { now: () => clock });
+    const { host, renewals } = pageHost(() => printing.promise);
     const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
     const c = client({
       claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
       reportPageJob,
     });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => clock });
     await agent.runOnce();
     await settle();
     // A renewal that got through at 50 s moves the bound on.
@@ -4203,39 +4203,51 @@ describe("createAgent — A4 page jobs", () => {
     expect(c.claimPageJob).toHaveBeenCalledTimes(claimsBefore + 1);
   });
 
-  // Last known alive at 50_000; a clock read further back than two leases before that leaves the
-  // claim's start more than its limit ahead.
-  it.each([
-    ["400 days back", 50_000 - 400 * 86_400_000, 1],
-    ["two leases back exactly", 50_000 - PAGE_REPORT_GIVE_UP_MS, 2],
-    ["a millisecond past two leases back", 50_000 - PAGE_REPORT_GIVE_UP_MS - 1, 1],
-  ])(
-    "gives up a report whose claim was last known alive further ahead than two leases (%s)",
-    async (_case, steppedTo, reports) => {
-      let clock = 1_000;
-      const printing = deferred<PagePrintOutcome>();
-      const { host, renewals } = pageHost(() => printing.promise, { now: () => clock });
-      const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
-      const c = client({
-        claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
-        reportPageJob,
-      });
-      const agent = createAgent({ host, client: c });
-      await agent.runOnce();
-      await settle();
-      clock = 50_000;
-      renewals[0]!.resolve();
-      await settle();
-      printing.resolve(SENT);
-      await settle();
-      expect(reportPageJob).toHaveBeenCalledTimes(1);
+  it("resends an unsent report across wall-clock jumps either way and gives it up by the steady clock", async () => {
+    let wall = 1_000;
+    let steady = 1_000;
+    const printing = deferred<PagePrintOutcome>();
+    const { host, renewals } = pageHost(() => printing.promise, { now: () => wall });
+    const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
+    const c = client({
+      claimPageJob: vi.fn().mockResolvedValueOnce(okR(PAGE_JOB)).mockResolvedValue(okR(null)),
+      reportPageJob,
+    });
+    const agent = createAgent({ host, client: c, steady: () => steady });
+    await agent.runOnce();
+    await settle();
+    wall = 50_000;
+    steady = 50_000;
+    renewals[0]!.resolve();
+    await settle();
+    printing.resolve(SENT);
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(1);
 
-      clock = steppedTo;
-      await agent.runOnce();
-      await settle();
-      expect(reportPageJob).toHaveBeenCalledTimes(reports);
-    },
-  );
+    wall = 50_000 - 400 * 86_400_000;
+    steady = 50_001;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(2);
+
+    wall = 50_000 + 400 * 86_400_000;
+    steady = 50_002;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(3);
+    expect(host.logs.filter((line) => line.includes("abandoned"))).toEqual([]);
+
+    steady = 50_000 + PAGE_REPORT_GIVE_UP_MS;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(4);
+
+    steady += 1;
+    await agent.runOnce();
+    await settle();
+    expect(reportPageJob).toHaveBeenCalledTimes(4);
+    expect(host.logs).toContain(`warn page job report abandoned {"delivery":"${PAGE_JOB.id}"}`);
+  });
 
   it("logs a runner that throws and claims again on the next pull", async () => {
     const { host } = pageHost(vi.fn(async () => SENT));
@@ -4386,11 +4398,11 @@ describe("createAgent — A4 page jobs", () => {
     it("keeps each unsent report, resends each on the next pull with its own claim, and drops each at its own give-up time", async () => {
       let clock = 1_000;
       const { printPage, finish } = printers();
-      const { host } = pageHost(printPage, { now: () => clock });
+      const { host } = pageHost(printPage);
       const { due, claimPageJob } = serverQueue(PAGE_JOB);
       const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
       const c = client({ claimPageJob, reportPageJob });
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => clock });
       await agent.runOnce();
       await settle();
       finish(TARGET.host);
@@ -4432,11 +4444,11 @@ describe("createAgent — A4 page jobs", () => {
     it("gives up each kept report by its own last-alive time, not by its place in the list", async () => {
       let clock = 1_000;
       const { printPage, finish } = printers();
-      const { host, renewals } = pageHost(printPage, { now: () => clock });
+      const { host, renewals } = pageHost(printPage);
       const { due, claimPageJob } = serverQueue(PAGE_JOB);
       const reportPageJob = vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" }));
       const c = client({ claimPageJob, reportPageJob });
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => clock });
       await agent.runOnce();
       await settle();
       clock = 5_000;
@@ -4670,7 +4682,7 @@ describe("createAgent — A4 page jobs", () => {
     it("a job held past the report give-up time, renewed meanwhile, still has its unsent report resent, not abandoned", async () => {
       let clock = 1_000;
       const { printPage, job } = holdingPrinters();
-      const { host, renewals } = pageHost(printPage, { now: () => clock });
+      const { host, renewals } = pageHost(printPage);
       const reportPageJob = vi
         .fn<AgentClient["reportPageJob"]>()
         .mockResolvedValueOnce(failR({ kind: "unreachable", detail: "status 503" }))
@@ -4680,7 +4692,7 @@ describe("createAgent — A4 page jobs", () => {
         renewPageJob: renewer([], 20),
         reportPageJob,
       });
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => clock });
       await agent.runOnce();
       await settle();
       job(TARGET.host).onHold("paper_out");

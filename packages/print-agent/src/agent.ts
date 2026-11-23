@@ -66,6 +66,8 @@ export interface AgentOptions {
   host: Host;
   client?: AgentClient;
   intervalMs?: number;
+  /** Elapsed time for the page-report give-up check. */
+  steady?: () => number;
 }
 
 export interface AgentSetupSnapshot {
@@ -101,6 +103,8 @@ export function createAgent(opts: AgentOptions): Agent {
   const host = opts.host;
   const client = opts.client ?? createClient({ fetch: host.fetch });
   const intervalMs = opts.intervalMs ?? POLL_INTERVAL_MS;
+  // This package imports no other workspace package, so it reads the steady clock itself.
+  const steady = opts.steady ?? ((): number => performance.now());
   let router: Router | undefined;
   let approved = false;
   let halted = false;
@@ -459,7 +463,7 @@ export function createAgent(opts: AgentOptions): Agent {
       if (ended.now) return;
       const renewed = await client.renewPageJob(url, token, held.job, held.hold);
       if (renewed.ok) {
-        held.aliveAt = host.now();
+        held.aliveAt = steady();
       } else {
         if (renewed.failure.kind === "claim_lost") {
           lost.abort();
@@ -532,8 +536,7 @@ export function createAgent(opts: AgentOptions): Agent {
 
   async function resendPageReports(url: string, token: string): Promise<void> {
     for (const report of unsentPageReports) {
-      // Either side: a claim last alive further ahead than the limit predates a backward step.
-      if (Math.abs(host.now() - report.aliveAt) > PAGE_REPORT_GIVE_UP_MS) {
+      if (steady() - report.aliveAt > PAGE_REPORT_GIVE_UP_MS) {
         host.log.warn("page job report abandoned", { delivery: report.job.id });
         unsentPageReports = unsentPageReports.filter((kept) => kept !== report);
       } else {
@@ -585,7 +588,7 @@ export function createAgent(opts: AgentOptions): Agent {
           void runPageJob(
             url,
             token,
-            { job: claimed.value, aliveAt: host.now(), hold: null },
+            { job: claimed.value, aliveAt: steady(), hold: null },
             printPage,
           );
         }
