@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { recordSale, recordVoid } from "@waitron/core";
+import { recordVoid } from "@waitron/core";
 import {
   drawerOpens,
   invoiceSeries,
@@ -32,12 +32,14 @@ import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { currentSif } from "@waitron/fiscal-verifactu/src/registro-sif.js";
 import { verifyChain } from "@waitron/fiscal-verifactu/src/verify.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
-import { inTx, send } from "./testing/bill-venue.js";
+import { cashPayment, inTx, seatedWith, send } from "./testing/bill-venue.js";
+import { refundableCancel } from "./testing/cancel-line.js";
 import { provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NOW = new Date("2026-11-02T12:00:00Z");
 let venue: OrderVenue;
+let billId: string;
 let saleId: string;
 let originalId: string;
 let tenderId: string;
@@ -47,36 +49,16 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
   venue = await provisionOrderVenue(store.db);
-  const sold = await inTx(venue, (tx) =>
-    recordSale(tx, venue.backend, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      seriesId: venue.seriesId,
-      locale: "en",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant service",
-      total: "12.10",
-      lines: [
-        {
-          lineNo: 1,
-          name: "Coffee",
-          descriptions: { en: "Coffee" },
-          quantity: "2",
-          unitPrice: "5.00",
-          vatRate: "21.00",
-          lineTotal: "10.00",
-        },
-      ],
-      clock: venue.clock,
-      operatorId: venue.operatorId,
-      settlement: {
-        kind: "immediate",
-        tenders: [{ method: "cash", amount: "12.10", tipAmount: "0.00", settledAt: NOW }],
-      },
-    }),
-  );
-  saleId = sold.saleId;
-  originalId = sold.fiscal.recordId;
+  const { tabId } = await seatedWith(venue, "House salad");
+  billId = tabId;
+  expect(await cashPayment(venue, venue.cookie, billId, "12.00")).toMatchObject({ status: 200 });
+  const [sale] = await store.db.select().from(sales).where(eq(sales.workingOrderId, billId));
+  saleId = sale!.id;
+  const [original] = await store.db
+    .select()
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.saleId, saleId));
+  originalId = original!.id;
   const [tender] = await store.db.select().from(tenders).where(eq(tenders.saleId, saleId));
   tenderId = tender!.id;
   await inTx(venue, (tx) => setFreshManagementSignIn(tx, venue.adminDashboard));
@@ -131,17 +113,19 @@ async function cancelAndRefund() {
     .select()
     .from(tillSessions)
     .where(eq(tillSessions.personId, venue.supervisorId));
+  const cancellationId = await refundableCancel(store.db, venue.cfg, billId, 1, venue.supervisorId);
   const refundBody = {
     submissionId: randomUUID(),
     tenderId,
-    appliedAmount: "12.10",
+    cancellationIds: [cancellationId],
+    appliedAmount: "12.00",
     tipAmount: "0.00",
     reason: "Returned order",
   };
   const refunded = await refund(refundBody);
   expect(refunded).toMatchObject({
     status: 200,
-    json: { state: "completed", appliedAmount: "12.10", tipAmount: "0.00" },
+    json: { state: "completed", appliedAmount: "12.00", tipAmount: "0.00" },
   });
   const cancelled = await inTx(venue, (tx) =>
     recordVoid(
@@ -162,14 +146,14 @@ async function cancelAndRefund() {
       saleId,
       tenderId,
       state: "completed",
-      appliedAmount: 1210,
+      appliedAmount: 1200,
       tipAmount: 0,
       requestedBy: venue.supervisorId,
       authorizedBy: venue.supervisorId,
     },
   ]);
-  expect(facts.drawers).toHaveLength(1);
-  expect(facts.prints.filter((row) => row.kind === "drawer")).toHaveLength(1);
+  expect(facts.drawers.map((row) => row.reason).sort()).toEqual(["bill_payment", "tender_refund"]);
+  expect(facts.prints.filter((row) => row.kind === "drawer")).toHaveLength(2);
   return { cancellationId: cancelled.fiscal.recordId, refundBody, refunded, facts };
 }
 
