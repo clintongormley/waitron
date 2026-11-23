@@ -4,7 +4,9 @@ const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const BASE = 31n;
 const KEY_BYTES = 16;
 const KEY_SYMBOLS = 26;
-// Any prime above 31 catches every changed symbol and every swap of two different neighbours; this is the largest below 31², the most two check symbols can hold.
+// Any prime above 31 catches every changed symbol and every swap of two different neighbours.
+// 953 is the largest prime below 31², the number of values two check symbols can hold; the
+// 8 values from 953 to 960 would give a key a second spelling, so the decoder refuses them.
 const CHECK_PRIME = 953n;
 
 function refuse(): never {
