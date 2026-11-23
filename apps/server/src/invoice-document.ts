@@ -160,7 +160,6 @@ async function readDocument(
   const guests = await readReceiptGuests(tx, saleId);
   const deferredPayment = await readDeferredPayment(tx, saleId);
   return {
-    surface: "a4",
     issuer,
     receipt,
     logo,

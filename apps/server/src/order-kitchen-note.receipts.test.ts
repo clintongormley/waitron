@@ -179,7 +179,7 @@ describe("whole-order instructions and issued customer documents", () => {
       "es-ES": "Hamburguesa de la casa",
     });
     expect(JSON.stringify(first)).not.toContain("KITCHEN-ONLY");
-    const printed = buildReceiptDocument({ ...first.document, surface: "a4" });
+    const printed = buildReceiptDocument(first.document);
     const layout = layoutA4Invoice(first.document);
     expect(JSON.stringify(printed)).toContain("Invoice customer");
     expect(JSON.stringify(layout)).toContain("Invoice customer");

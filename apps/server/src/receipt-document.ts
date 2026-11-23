@@ -51,7 +51,6 @@ export interface ReceiptTrim {
 }
 
 export interface ReceiptDocumentInput {
-  surface?: "thermal" | "a4";
   /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
   paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
@@ -101,8 +100,6 @@ export interface ReceiptDocument {
    * only the drawing knows whether a picture prints.
    */
   parts: Partial<Record<ReceiptPart, ElementRange>>;
-  /** The element of an A4 full invoice's "address · Tel. … · email" line, wrapped at its " · ". */
-  contactLine?: number;
   duplicate: boolean;
   practice: boolean;
 }
@@ -120,14 +117,13 @@ function sameAddress(lines: readonly string[], line: string, domicile: string): 
 }
 
 export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocument {
-  const { result, venueAddressLine = "", surface = "thermal", paperWidth } = input;
+  const { result, venueAddressLine = "", paperWidth } = input;
   const facts = receiptFacts(input);
   const { labels: label, locale, simplified, practice, testPage, letterhead, band } = facts;
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
   const parts: ReceiptDocument["parts"] = {};
-  let contactLine: number | undefined;
   const part = (name: ReceiptPart, add: () => void): void => {
     const start = elements.length;
     add();
@@ -196,20 +192,12 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
   if (headerSubtitle) part("headerSubtitle", () => text(headerSubtitle));
   text(legalName, 0, tradingName !== undefined ? undefined : { bold: true });
   text(`${label.nif}: ${nif}`);
-  const venueLines = surface === "thermal" ? letterhead.venueAddress : [];
+  const venueLines = letterhead.venueAddress;
   if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
   const phoneLine = phone ? `${label.phone} ${phone}` : "";
-  if (surface === "a4" && !simplified) {
-    const line = [domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
-    if (line) {
-      contactLine = elements.length;
-      text(line);
-    }
-  } else {
-    if (phoneLine) part("phone", () => text(phoneLine));
-    if (email) part("email", () => text(email));
-  }
-  if (surface === "thermal" && !simplified && domicile) {
+  if (phoneLine) part("phone", () => text(phoneLine));
+  if (email) part("email", () => text(email));
+  if (!simplified && domicile) {
     if (venueLines.length === 0) text(domicile);
     else if (!sameAddress(venueLines, venueAddressLine, domicile)) {
       text(`${label.registeredAddress}: ${domicile}`);
@@ -462,7 +450,6 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
   return {
     elements,
     parts,
-    ...(contactLine === undefined ? {} : { contactLine }),
     duplicate: band.duplicate,
     practice: practice !== undefined,
   };

@@ -220,7 +220,7 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
         const held = deps.testPages.printing(testPageClaim(claim));
         if (held === undefined) throw new AppError("invoice_delivery.claim_lost", {});
         const bytes = await render(
-          { ...sampleDocument(deps.receiptQrText, held.receiptLocale), surface: "a4" },
+          sampleDocument(deps.receiptQrText, held.receiptLocale),
           held.format,
           held.resolutionDpi,
         );

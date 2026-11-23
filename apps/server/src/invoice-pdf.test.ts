@@ -1,8 +1,25 @@
+import { inflateSync } from "node:zlib";
 import { createCanvas } from "@napi-rs/canvas";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import type { InvoicePageElement } from "./invoice-page.js";
+
+/** The PDF's page content streams, inflated. */
+function pdfContent(bytes: Buffer): string {
+  const text = bytes.toString("latin1");
+  let content = "";
+  for (const match of text.matchAll(/stream\r?\n/g)) {
+    const start = match.index + match[0].length;
+    const end = text.indexOf("endstream", start);
+    try {
+      content += inflateSync(bytes.subarray(start, end)).toString("latin1");
+    } catch {
+      content += text.slice(start, end);
+    }
+  }
+  return content;
+}
 
 describe("A4 weights, tones and shaded boxes in the PDF", () => {
   /** Renders a page of exactly these elements. */
@@ -65,12 +82,19 @@ describe("A4 weights, tones and shaded boxes in the PDF", () => {
     ...style,
   });
 
-  it("embeds the bold face only for bold text", async () => {
-    const bold = (await pdfOf([text("Total", 36, 36, { weight: "bold" })])).toString("latin1");
+  it("embeds the bold face only for bold text, and outlines neither", async () => {
+    const boldBytes = await pdfOf([text("Total", 36, 36, { weight: "bold" })]);
+    const bold = boldBytes.toString("latin1");
     expect(bold).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Bold\b/u);
-    const regular = (await pdfOf([text("Total", 36, 36)])).toString("latin1");
+    const regularBytes = await pdfOf([text("Total", 36, 36)]);
+    const regular = regularBytes.toString("latin1");
     expect(regular).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Regular\b/u);
     expect(regular).not.toContain("NotoSans-Bold");
+    for (const bytes of [boldBytes, regularBytes]) {
+      const drawn = pdfContent(bytes);
+      expect(drawn).toContain("BT");
+      expect(drawn).not.toMatch(/\b[12] Tr\b/);
+    }
   });
 
   it("draws muted text #6b6b6b and ink text black", async () => {

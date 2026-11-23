@@ -45,7 +45,6 @@ type Result = ReceiptDocumentInput["result"];
 function items(result: Result, invoiceLocale = "es-ES"): [string, string][] {
   const { elements } = buildReceiptDocument({
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    surface: "thermal",
     invoiceLocale,
     namesLocale: invoiceLocale,
     result,
@@ -108,7 +107,7 @@ it("a simplified ticket lists the set menus and surcharges and no covered dish",
     ["1  Sirloin", "+5,00"],
   ]);
   const printed = JSON.stringify(
-    buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, surface: "thermal", result: ticket }),
+    buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, result: ticket }),
   );
   for (const covered of ["Soup", "Hake", "Sea bass"]) expect(printed).not.toContain(covered);
   expect(printed.match(/Sirloin/g)).toHaveLength(1);
@@ -251,7 +250,6 @@ it.each([
   );
   const { elements } = buildReceiptDocument({
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    surface: "thermal",
     invoiceLocale: locale,
     namesLocale: locale,
     result,

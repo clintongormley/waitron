@@ -54,7 +54,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { buildReceiptDocument, CONTACT_SEPARATOR } from "./receipt-document.js";
+import { CONTACT_SEPARATOR, type ReceiptDocumentInput } from "./receipt-document.js";
 import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -159,6 +159,11 @@ async function issue(
 }
 const read = (backend: FiscalBackend, saleId: string) =>
   withTransaction(suite.db, (tx) => readInvoiceDocument(backend, tx, venue.cfg, saleId));
+/** Every line of text the printed A4 pages carry, in drawing order. */
+const pageTexts = (document: ReceiptDocumentInput): string[] =>
+  layoutA4Invoice(document).flatMap((page) =>
+    page.elements.flatMap((element) => (element.kind === "text" ? [element.text] : [])),
+  );
 
 describe("stored invoice document projection", () => {
   it("rebuilds a no-regime full invoice from stored lines without a draft or filed receipt", async () => {
@@ -246,11 +251,10 @@ describe("stored invoice document projection", () => {
       "es-ES": `${stored!.descriptions["es-ES"]} (${stored!.variantDescriptions!["es-ES"]})`,
     });
     expect(JSON.stringify(document.result.lines)).not.toContain("Staff meat");
-    const rendered = buildReceiptDocument(document);
-    const text = JSON.stringify(rendered);
+    const text = pageTexts(document).join("\n");
     expect(text).toContain(receiptLabelsFor("es-ES").invoiceHeading);
-    expect(text).toContain(receiptLabelsFor("es-ES").pricesExcludeVat);
-    expect(text).not.toContain("Prices exclude VAT");
+    expect(text).toContain(receiptLabelsFor("es-ES").totalWithVatColumn);
+    expect(text).not.toContain(receiptLabelsFor("en-GB").totalWithVatColumn);
   });
 
   it("keeps the filed issuer, customer and issue-day facts after taxpayer and trim changes", async () => {
@@ -274,13 +278,9 @@ describe("stored invoice document projection", () => {
       expect(after.receipt).toEqual({});
       expect(after.result.qr).toContain("nif=62000003F");
       expect(after.result.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
-      const content = buildReceiptDocument(after);
-      expect(content.elements).toContainEqual({ kind: "text", text: "Saved domicile", indent: 0 });
-      expect(content.elements).not.toContainEqual({
-        kind: "text",
-        text: "Changed issuer",
-        indent: 0,
-      });
+      const content = pageTexts(after);
+      expect(content).toContain("Saved domicile");
+      expect(content.join("\n")).not.toContain("Changed issuer");
     } finally {
       await suite.db.update(taxpayer).set({
         legalName: taxpayerRow!.legalName,
@@ -635,9 +635,7 @@ describe("A4 current optional source matrix", () => {
         expect(document.venueAddress).toEqual([]);
         expect(document.receiptHeader).toBeUndefined();
         expect(document.receipt).toEqual({});
-        const text = buildReceiptDocument(document)
-          .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
-          .join("\n");
+        const text = pageTexts(document).join("\n");
         expect(text).toContain("Saved domicile");
         expect(text).not.toContain("Current street differs");
       }
@@ -729,9 +727,7 @@ describe("A4 recorded null department", () => {
     const document = await read(backend, issued.saleId);
     expect(document.receiptHeader).toBeUndefined();
     expect(document.venueAddress).toEqual([]);
-    const text = buildReceiptDocument(document)
-      .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
-      .join("\n");
+    const text = pageTexts(document).join("\n");
     expect(text).not.toContain("Stray department name");
     expect(text).toContain("Saved domicile");
   });
@@ -825,22 +821,15 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
     expect(document.namesLocale).toBe("ca-ES");
     expect(document.result.locale).toBe("es-ES");
     expect(document.result.namesLocale).toBe("ca-ES");
-    const text = buildReceiptDocument(document)
-      .elements.flatMap((element) =>
-        element.kind === "text"
-          ? [element.text]
-          : element.kind === "amount"
-            ? [[element.caption, element.amount].filter(Boolean).join(" ")]
-            : element.kind === "table"
-              ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
-              : [],
-      )
-      .join("\n");
-    expect(text).not.toMatch(/^Pedido 0$/mu);
-    expect(text).toMatch(/^Fecha /mu);
+    const labels = receiptLabelsFor("es-ES");
+    const lines = pageTexts(document);
+    const text = lines.join("\n");
+    expect(lines).not.toContain(labels.order);
+    expect(lines).toContain(labels.date);
     expect(text).not.toContain("Comanda");
     expect(text).not.toContain("Data");
-    expect(text).toMatch(/^2 CA-rac CA Torrada$/mu);
+    const dish = lines.indexOf("CA Torrada");
+    expect(lines.slice(dish, dish + 3)).toEqual(["CA Torrada", "2", "CA-rac"]);
     expect(text).toContain("CA Tipus de pa: CA Sègol");
     for (const other of ["ES Tostada", "ES-rac", "ES Tipo de pan", "ES Centeno"]) {
       expect(text, other).not.toContain(other);
@@ -900,9 +889,7 @@ describe("A4 department-only decoration", () => {
         printTradingName: true,
       });
       expect(document.venueAddress).toEqual([]);
-      const text = buildReceiptDocument(document)
-        .elements.flatMap((e) => (e.kind === "text" ? [e.text] : []))
-        .join("\n");
+      const text = pageTexts(document).join("\n");
       expect(text).toContain("Own subtitle");
       expect(text).toContain("Own footer");
       expect(text).not.toContain("Never printed description");
@@ -1009,8 +996,8 @@ describe("the theme's logo on the A4 invoice", () => {
     return (document.receipt as PrintedReceiptTrim).logo;
   }
 
-  function printedOf(document: Awaited<ReturnType<typeof read>>): string {
-    return JSON.stringify(buildReceiptDocument(document).elements);
+  function printedOf(document: Awaited<ReturnType<typeof read>>): string[] {
+    return pageTexts(document);
   }
 
   it("a department with no receipt logo prints the theme's 80 mm logo, and its trim names it", async () => {
@@ -1103,7 +1090,9 @@ describe("the theme's logo on the A4 invoice", () => {
       }
       expect(document.logo).toBeNull();
       expect(trimLogo(document)).toBeUndefined();
-      expect(printedOf(document)).toContain(`"${invoiceNumber}"`);
+      expect(printedOf(document)).toContain(
+        `${receiptLabelsFor(document.invoiceLocale).invoiceHeading} ${invoiceNumber}`,
+      );
     } finally {
       warning.mockRestore();
       await clearThemes(suite.db);
@@ -1194,10 +1183,7 @@ describe("a takeaway sale's A4 invoice", () => {
       return sale!.id;
     });
   }
-  const texts = (document: Parameters<typeof buildReceiptDocument>[0]) =>
-    buildReceiptDocument({ ...document, surface: "a4" }).elements.flatMap((e) =>
-      e.kind === "text" ? [e.text] : [],
-    );
+  const texts = pageTexts;
 
   // Fails if the A4 invoice of a takeaway sale stops saying so, or an eat-in one starts to.
   it("says Para llevar on a takeaway sale's invoice, and nothing on an eat-in one", async () => {
@@ -1314,14 +1300,23 @@ describe("the simplified receipt's A4 tax table", () => {
     const right = (cell: (typeof texts)[number]): number =>
       cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
     const heading = texts.find(({ text }) => text === labels.taxRateColumn)!;
-    const headings = texts.filter(({ y }) => y === heading.y);
-    expect(headings.map(({ text }) => text)).toEqual([
+    const firstRow = texts.find(({ text, y }) => y > heading.y && text === "A 21%")!;
+    const headingLines = texts.filter(({ y }) => y >= heading.y && y < firstRow.y);
+    const headings = headingLines.filter(({ y }) => y === heading.y);
+    expect(
+      headings.map((top) =>
+        headingLines
+          .filter((line) => Math.abs(right(line) - right(top)) < 0.01)
+          .map(({ text }) => text)
+          .join(" "),
+      ),
+    ).toEqual([
       labels.taxRateColumn,
-      labels.vatSummaryBaseColumn.split(" ")[0],
+      labels.vatSummaryBaseColumn,
       labels.vatSummaryAmountColumn,
       labels.taxTotalColumn,
     ]);
-    expect(headings.every(({ weight, tone }) => weight === "regular" && tone === "muted")).toBe(
+    expect(headingLines.every(({ weight, tone }) => weight === "regular" && tone === "muted")).toBe(
       true,
     );
     const rows = [
@@ -1336,7 +1331,6 @@ describe("the simplified receipt's A4 tax table", () => {
       for (const [index, cell] of cells.entries())
         expect(right(cell)).toBeCloseTo(right(headings[index]!));
     }
-    expect(texts.some(({ text }) => text.startsWith("Base imponible"))).toBe(false);
   });
 
   it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
@@ -1419,14 +1413,8 @@ it.each(["sumup", "simulator"] as const)(
     );
     expect(ticket.simulatedCardPayment).toBe(provider === "simulator");
     expect(document.simulated).toBe(true);
-    expect(
-      buildReceiptDocument(document).elements.some(
-        (element) => element.kind === "text" && element.text === "SIN COBRO REAL",
-      ),
-    ).toBe(provider === "simulator");
-    expect(buildReceiptDocument(document).elements).toContainEqual(
-      expect.objectContaining({ kind: "text", text: "DOCUMENTO DE PRUEBA" }),
-    );
+    expect(pageTexts(document).includes("SIN COBRO REAL")).toBe(provider === "simulator");
+    expect(pageTexts(document)).toContain("DOCUMENTO DE PRUEBA");
   },
 );
 

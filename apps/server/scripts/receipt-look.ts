@@ -480,7 +480,7 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
       tender: { method: "cash", change: "0.00" },
     },
   },
-  "full-invoice": { ...FULL, surface: "thermal" },
+  "full-invoice": FULL,
   "simplified-full-comps": {
     ...MOCKUP,
     result: {
@@ -512,7 +512,6 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
   },
   "full-invoice-comp-eu": {
     ...FULL,
-    surface: "thermal",
     invoiceLocale: "eu-ES",
     result: {
       ...FULL.result,
@@ -558,7 +557,7 @@ for (const [name, input] of Object.entries(SAMPLES))
     await ticketPng(formatReceipt({ ...input, printer }), `${name}-${paper}.png`);
 
 const A4: Record<string, ReceiptDocumentInput> = { "full-invoice": { ...FULL, guests: 4 } };
-for (const [name, input] of Object.entries(FULL_INVOICES)) A4[name] = { ...input, surface: "a4" };
+for (const [name, input] of Object.entries(FULL_INVOICES)) A4[name] = input;
 for (const [name, input] of Object.entries(A4)) {
   const pages = await renderInvoiceRaster(input, 300);
   for (const [index, page] of pages.entries())

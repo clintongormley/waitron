@@ -480,7 +480,7 @@ describe("printing a test page", () => {
     expect(rendered).toHaveLength(1);
     expect(rendered[0]!.format).toBe("image/urf");
     expect(rendered[0]!.dpi).toBe(600);
-    expect(rendered[0]!.document.surface).toBe("a4");
+    expect(rendered[0]!.document).toEqual(sampleDocument(QR_TEXT, "es-ES"));
     expect(rendered[0]!.document.result).toEqual(sampleDocument(QR_TEXT, "es-ES").result);
     expect(rendered[0]!.document.result.invoiceNumber).toBe("MUESTRA/1");
 

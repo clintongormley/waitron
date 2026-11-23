@@ -171,7 +171,6 @@ export const dishDiscountOverExtraAtAnotherRate = (): ReceiptDocumentInput => {
 /** The same dish and extra on a simplified ticket, where each amount carries its rate letter. */
 export const simplifiedDishDiscountOverExtraAtAnotherRate = (): ReceiptDocumentInput => {
   const input = dishDiscountOverExtraAtAnotherRate();
-  input.surface = "thermal";
   input.result.invoiceType = "F2";
   delete input.result.recipient;
   for (const line of input.result.lines) {

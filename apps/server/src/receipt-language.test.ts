@@ -50,7 +50,8 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { readInvoiceDocument } from "./invoice-document.js";
-import { buildReceiptDocument } from "./receipt-document.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
+import { layoutA4Invoice } from "./invoice-layout.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -1095,20 +1096,30 @@ describe("a sale prints its goods in the default content language its lines stor
       readInvoiceDocument(v.backend, tx, v.cfg, filed!.id),
     );
     expect(document.result.invoiceType).toBe("F1");
-    const text = buildReceiptDocument(document).elements.flatMap((element) =>
-      element.kind === "text"
-        ? [element.text.trim()]
-        : element.kind === "amount"
-          ? [[element.caption, element.amount].filter(Boolean).join(" ")]
-          : element.kind === "table"
-            ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
-            : [],
+    const labels = receiptLabelsFor("ca-ES");
+    const text = layoutA4Invoice(document).flatMap((page) =>
+      page.elements.flatMap((element) => (element.kind === "text" ? [element.text] : [])),
     );
-    expect(startsWith(text, "Base imposable"), "Base imposable").toBe(true);
-    expect(text.some((line) => /^Comanda \d+/u.test(line))).toBe(true);
-    expect(startsWith(text, "Pedido")).toBe(false);
-    expect(text).toContain("Client");
-    expectGoods(text, "es");
+    expect(text.join(" ")).toContain(
+      [
+        labels.taxRateColumn,
+        labels.vatSummaryBaseColumn,
+        labels.vatSummaryAmountColumn,
+        labels.taxTotalColumn,
+      ].join(" "),
+    );
+    expect(text[text.indexOf(labels.order) + 1]).toMatch(/^\d+$/u);
+    expect(text).not.toContain(receiptLabelsFor("es-ES").order);
+    expect(text).toContain(labels.customer);
+    const words = GOODS.es;
+    const dish = text.indexOf(words.name);
+    expect(text.slice(dish, dish + 3)).toEqual([words.name, "2", words.unit]);
+    expect(text).toContain(`${words.list}: ${words.label}`);
+    for (const other of otherWords("es"))
+      expect(
+        text.some((line) => line.includes(other)),
+        other,
+      ).toBe(false);
   });
 
   it("reprints a sale's original and a Spanish copy with the goods it stored, after the default content language changes", async () => {

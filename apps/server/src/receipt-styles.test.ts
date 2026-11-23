@@ -1,15 +1,7 @@
-import { inflateSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReceiptElement } from "./receipt-document.js";
 import { formatReceipt } from "./receipt-ticket.js";
-import { layoutA4Invoice } from "./invoice-layout.js";
-import type { InvoicePageElement } from "./invoice-page.js";
-import { renderInvoicePdf } from "./invoice-pdf.js";
-import { renderInvoiceRaster } from "./invoice-raster.js";
-import {
-  FULL_INVOICE_DOCUMENT_FIXTURE,
-  FULL_INVOICE_FIXTURE,
-} from "./testing/full-invoice-fixture.js";
+import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { printedCommands } from "./testing/decode-ticket.js";
 
 // No document yet asks for every style, so these cases replace the built document's elements.
@@ -27,76 +19,12 @@ vi.mock("./receipt-document.js", async (importOriginal) => {
   };
 });
 
-vi.mock("./invoice-layout.js", async (importOriginal) => {
-  const real = await importOriginal<typeof import("./invoice-layout.js")>();
-  return { ...real, layoutA4Invoice: vi.fn(real.layoutA4Invoice) };
-});
-
 afterEach(() => {
   injected.elements = undefined;
-  vi.mocked(layoutA4Invoice).mockReset();
 });
 
 const PLAIN: ReceiptElement = { kind: "text", text: "Gracias", indent: 0 };
 const BOLD: ReceiptElement = { ...PLAIN, style: { bold: true } };
-
-function pdfContent(bytes: Buffer): string {
-  const text = bytes.toString("latin1");
-  let content = "";
-  for (const match of text.matchAll(/stream\r?\n/g)) {
-    const start = match.index + match[0].length;
-    const end = text.indexOf("endstream", start);
-    try {
-      content += inflateSync(bytes.subarray(start, end)).toString("latin1");
-    } catch {
-      content += text.slice(start, end);
-    }
-  }
-  return content;
-}
-
-describe("styled elements on the A4 page", () => {
-  const page = (elements: InvoicePageElement[]) =>
-    vi.mocked(layoutA4Invoice).mockReturnValue([{ elements }]);
-  const word = (weight: "regular" | "bold"): InvoicePageElement => ({
-    kind: "text",
-    text: "Gracias",
-    x: 36,
-    y: 36,
-    size: 10,
-    weight,
-    tone: "ink",
-  });
-
-  it("draws bold text in the bold face and plain text in the regular one, neither outlined", async () => {
-    page([word("bold")]);
-    const boldBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
-    expect(boldBytes.toString("latin1")).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Bold\b/u);
-    const bold = pdfContent(boldBytes);
-    expect(bold).toContain("BT");
-    expect(bold).not.toMatch(/\b[12] Tr\b/);
-    page([word("regular")]);
-    const plainBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
-    expect(plainBytes.toString("latin1")).not.toContain("NotoSans-Bold");
-    const plain = pdfContent(plainBytes);
-    expect(plain).toContain("BT");
-    expect(plain).not.toMatch(/\b[12] Tr\b/);
-  });
-
-  it("draws bold text with more ink than the same text plain in the raster", async () => {
-    const ink = async (weight: "regular" | "bold"): Promise<number> => {
-      page([word(weight)]);
-      const [raster] = await renderInvoiceRaster(FULL_INVOICE_DOCUMENT_FIXTURE, 300);
-      let count = 0;
-      for (const value of raster!.pixels) if (value < 128) count++;
-      return count;
-    };
-    const plain = await ink("regular");
-    const bold = await ink("bold");
-    expect(plain).toBeGreaterThan(0);
-    expect(bold).toBeGreaterThan(plain * 1.1);
-  });
-});
 
 describe("styled elements on the roll", () => {
   const drawn = (elements: ReceiptElement[]) => {

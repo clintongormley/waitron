@@ -277,6 +277,52 @@ describe("layoutInvoiceHeader", () => {
     expect(texts(elements).map((text) => text.text)).not.toContain(labels.customer);
   });
 
+  describe("the letterhead's address and contact lines", () => {
+    /** The letterhead's lines after the NIF, up to the band's title. */
+    const contactLines = (
+      receipt: ReceiptDocumentInput["receipt"],
+      domicile: string | undefined,
+      invoiceType: "F1" | "F2",
+    ): string[] => {
+      const input = fixture();
+      input.receiptHeader = undefined;
+      input.receipt = receipt;
+      input.result.qr = "";
+      input.result.invoiceType = invoiceType;
+      input.result.issuer = {
+        venueName: "Legal SL",
+        nif: "B12345678",
+        ...(domicile === undefined ? {} : { domicile }),
+      };
+      const shown = texts(header(input).elements).map((text) => text.text);
+      const nif = shown.findIndex((text) => text.endsWith(`${labels.nif} B12345678`));
+      const title = shown.findIndex((text) => text.endsWith(" FF/1"));
+      return shown.slice(nif + 1, title);
+    };
+    const phone = `${labels.phone} 912 345 678`;
+
+    it("puts a full invoice's registered address, then its phone and email on one line", () => {
+      expect(
+        contactLines({ phone: "912 345 678", email: "hola@labuena.es" }, "Filed domicile", "F1"),
+      ).toEqual(["Filed domicile", `${phone} · hola@labuena.es`]);
+    });
+
+    it("leaves out of a full invoice's letterhead the parts that are not set", () => {
+      expect(contactLines({ email: "hola@labuena.es" }, "Filed domicile", "F1")).toEqual([
+        "Filed domicile",
+        "hola@labuena.es",
+      ]);
+      expect(contactLines({ phone: "912 345 678" }, undefined, "F1")).toEqual([phone]);
+      expect(contactLines({}, undefined, "F1")).toEqual([]);
+    });
+
+    it("gives a simplified invoice its phone and email but no registered address", () => {
+      expect(
+        contactLines({ phone: "912 345 678", email: "hola@labuena.es" }, "Filed domicile", "F2"),
+      ).toEqual([`${phone} · hola@labuena.es`]);
+    });
+  });
+
   it("puts a practice document's bordered box above the QR", () => {
     const input = fixture();
     input.simulated = true;
@@ -1150,6 +1196,35 @@ describe("layoutA4Invoice, printed", () => {
       expect(legend && "height" in legend ? legend.height : undefined).toBeCloseTo(9, 1);
     },
   );
+
+  it("moves a row that does not fit above the page foot onto the next page whole", () => {
+    const words = "Mineral water from a spring high in the northern mountains, bottled at source";
+    const name = `${words} ${words} ${words}`;
+    let moved = 0;
+    for (let count = 20; count <= 60; count++) {
+      const input = longInvoice(count);
+      input.result.lines.at(-1)!.descriptions = { "es-ES": name, "en-GB": name };
+      const pages = layoutA4Invoice(input);
+      const holding = pages.flatMap((page, number) =>
+        texts(page.elements)
+          .filter((text) => text.text.length > 1 && name.includes(text.text))
+          .map((text) => ({ number, text })),
+      );
+      expect(holding.map(({ text }) => text.text).join(" "), `${count} items`).toBe(name);
+      expect(new Set(holding.map(({ number }) => number)).size, `${count} items`).toBe(1);
+      for (const { text } of holding)
+        expect(text.y + text.size, `${count} items`).toBeLessThanOrEqual(INVOICE_PAGE_HEIGHT - 36);
+      const { number, text: first } = holding[0]!;
+      const heading = pages[number]!.elements.find(
+        (element): element is Box => element.kind === "box" && element.fill === "heading",
+      );
+      const rowsAbove = texts(pages[number]!.elements).filter(
+        (text) => heading !== undefined && text.y > heading.y + heading.height && text.y < first.y,
+      );
+      if (number > 0 && rowsAbove.length === 0) moved++;
+    }
+    expect(moved).toBeGreaterThan(0);
+  });
 
   it("wraps long unbroken item names onto later pages inside the margins, drawing the QR on page 1 only", async () => {
     const marker = "ABCDEFGHIJ".repeat(25);

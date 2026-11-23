@@ -3,6 +3,7 @@ import { grossLockedLines, type LockedLine } from "@waitron/menu";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
 import {
   buildReceiptDocument,
   type ReceiptDocumentInput,
@@ -130,7 +131,7 @@ describe("format-neutral invoice content", () => {
     );
     expect(text[text.indexOf("Charcutería La Buena SL") + 1]).toBe("NIF: B12345678");
     expect(text).toContain(
-      "Calle del domicilio fiscal original número 27, edificio de la plaza mayor, segunda planta, Madrid 28001",
+      `${receiptLabelsFor("es-ES").registeredAddress}: ${FULL_INVOICE_DOCUMENT_FIXTURE.result.issuer!.domicile}`,
     );
     expect(text).toContain("Cliente de nombre largo y completo Sociedad Limitada");
     expect(text).toContain(
@@ -146,7 +147,12 @@ describe("format-neutral invoice content", () => {
     );
     expect(text).not.toContain("Current mutable issuer");
     expect(text).not.toContain("Current mutable domicile");
-    expect(text).not.toContain("Current mutable location address");
+    expect(text).toContain("Current mutable location address");
+    const page = layoutA4Invoice({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      receipt: { headerSubtitle: "Gracias por su visita", footerMessage: "Hasta pronto" },
+    }).flatMap(({ elements }) => elements.flatMap((e) => (e.kind === "text" ? [e.text] : [])));
+    expect(page.join("\n")).not.toContain("Current mutable location address");
     expect(rows).toEqual([
       ["Mesa 6", "Pedido 41"],
       ["FACTURA", "FF/1"],
@@ -208,37 +214,28 @@ describe("format-neutral invoice content", () => {
   });
 });
 
-it.each(["thermal", "a4"] as const)(
-  "keeps filed domicile separate from optional current address on %s",
-  (surface) => {
-    for (const domicile of ["Filed domicile", undefined]) {
-      const document = buildReceiptDocument({
-        ...FULL_INVOICE_DOCUMENT_FIXTURE,
-        surface,
-        result: {
-          ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
-          issuer: {
-            venueName: "Filed issuer",
-            nif: "B12345678",
-            ...(domicile === undefined ? {} : { domicile }),
-          },
+it("keeps filed domicile separate from optional current address on the roll", () => {
+  for (const domicile of ["Filed domicile", undefined]) {
+    const document = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        issuer: {
+          venueName: "Filed issuer",
+          nif: "B12345678",
+          ...(domicile === undefined ? {} : { domicile }),
         },
-        venueAddress: ["Current address"],
-      });
-      const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
-      expect(text.includes("Current address")).toBe(surface === "thermal");
-      if (surface === "thermal")
-        expect(text.some((line) => line.endsWith("Filed domicile"))).toBe(domicile !== undefined);
-      else
-        expect(text.includes("Filed domicile · Tel. 910000000 · venue@example.test")).toBe(
-          domicile !== undefined,
-        );
-      expect(text[text.indexOf("Filed issuer") + 1]).toBe("NIF: B12345678");
-      expect(text).not.toContain("Current mutable issuer");
-      expect(text).not.toContain("Current mutable domicile");
-    }
-  },
-);
+      },
+      venueAddress: ["Current address"],
+    });
+    const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
+    expect(text.includes("Current address")).toBe(true);
+    expect(text.some((line) => line.endsWith("Filed domicile"))).toBe(domicile !== undefined);
+    expect(text[text.indexOf("Filed issuer") + 1]).toBe("NIF: B12345678");
+    expect(text).not.toContain("Current mutable issuer");
+    expect(text).not.toContain("Current mutable domicile");
+  }
+});
 
 describe("the top block (A497)", () => {
   const SIMPLIFIED = {
@@ -258,7 +255,6 @@ describe("the top block (A497)", () => {
 
   const input = {
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    surface: "thermal" as const,
     receiptHeader: { tradingName: "Bar La Buena", printTradingName: true },
     receipt: { headerSubtitle: "Desde 1952", phone: "912 345 678", email: "hola@labuena.es" },
     venueAddress: ["Calle Mayor 1, Local 2", "03001 Alicante, Alicante/Alacant"],
@@ -322,70 +318,6 @@ describe("the top block (A497)", () => {
     ]);
   });
 
-  it("puts a full A4 invoice's registered address, phone and email on one line", () => {
-    expect(
-      topBlock(
-        buildReceiptDocument({ ...input, surface: "a4", result: FULL, invoiceLocale: "es-ES" }),
-      ),
-    ).toEqual([
-      { kind: "logo" },
-      bold("Bar La Buena"),
-      t("Desde 1952"),
-      t("Charcutería La Buena SL"),
-      t("NIF: B12345678"),
-      t("Filed domicile · Tel. 912 345 678 · hola@labuena.es"),
-      t("DUPLICADO"),
-    ]);
-  });
-
-  it("leaves out of a full A4 invoice's line the parts that are not set", () => {
-    const block = (receipt: ReceiptDocumentInput["receipt"], domicile?: string) =>
-      topBlock(
-        buildReceiptDocument({
-          ...input,
-          surface: "a4",
-          receipt,
-          duplicate: false,
-          result: {
-            ...FULL,
-            issuer: {
-              venueName: FULL.issuer.venueName,
-              nif: FULL.issuer.nif,
-              ...(domicile === undefined ? {} : { domicile }),
-            },
-          },
-          invoiceLocale: "es-ES",
-        }),
-      ).at(-1);
-    expect(block({ email: "hola@labuena.es" }, "Filed domicile")).toEqual(
-      t("Filed domicile · hola@labuena.es"),
-    );
-    expect(block({ phone: "912 345 678" })).toEqual(t("Tel. 912 345 678"));
-    expect(block({})).toEqual(t("NIF: B12345678"));
-  });
-
-  it("keeps a simplified A4 invoice's phone and email on lines of their own", () => {
-    expect(
-      topBlock(
-        buildReceiptDocument({
-          ...input,
-          surface: "a4",
-          result: SIMPLIFIED,
-          invoiceLocale: "es-ES",
-        }),
-      ),
-    ).toEqual([
-      { kind: "logo" },
-      bold("Bar La Buena"),
-      t("Desde 1952"),
-      t("Charcutería La Buena SL"),
-      t("NIF: B12345678"),
-      t("Tel. 912 345 678"),
-      t("hola@labuena.es"),
-      t("DUPLICADO"),
-    ]);
-  });
-
   it.each([
     { receipt: { phone: "912 345 678" }, want: "Tel. 912 345 678" },
     { receipt: { email: "hola@labuena.es" }, want: "hola@labuena.es" },
@@ -409,22 +341,18 @@ describe("the top block (A497)", () => {
     ]);
   });
 
-  it.each(["thermal", "a4"] as const)(
-    "draws a rule, not a blank line, directly above TOTAL on %s",
-    (surface) => {
-      const { elements } = buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, surface });
-      const total = elements.findIndex((e) => e.kind === "amount" && e.caption === "TOTAL");
-      expect(elements[total - 1]).toEqual({ kind: "rule" });
-      expect(elements[total - 2]).not.toEqual({ kind: "rule" });
-    },
-  );
+  it("draws a rule, not a blank line, directly above TOTAL on the roll", () => {
+    const { elements } = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const total = elements.findIndex((e) => e.kind === "amount" && e.caption === "TOTAL");
+    expect(elements[total - 1]).toEqual({ kind: "rule" });
+    expect(elements[total - 2]).not.toEqual({ kind: "rule" });
+  });
 });
 
 describe("the business block, one fact per line, and ruled sections (A663)", () => {
   it("puts one fact on each line of the business block, the first one bold", () => {
     const document = buildReceiptDocument({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
-      surface: "thermal",
       receiptHeader: { tradingName: "Santet Deli Co", printTradingName: true },
       receipt: { phone: "910000000", email: "hola@santet.example" },
       venueAddress: ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
@@ -549,7 +477,6 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
   const withAddresses = (venueAddress: string[], domicile: string) =>
     buildReceiptDocument({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
-      surface: "thermal",
       venueAddress,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -578,7 +505,6 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
   it("prints the address once when the registered address names a province the venue's lines leave out", () => {
     const text = buildReceiptDocument({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
-      surface: "thermal",
       venueAddress: ["Carrer de Mallorca 123", "08010 Barcelona"],
       venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
       result: {
@@ -1835,20 +1761,17 @@ describe("the corrective invoice (R5)", () => {
     },
   );
 
-  it("carries the real day of sale onto the A4 page's document", () => {
-    const document = buildReceiptDocument({
-      surface: "a4",
+  it("carries the real day of sale onto the A4 page", () => {
+    const [page] = layoutA4Invoice({
       result: { ...REPLACEMENT, saleDay: SALE_DAY },
       issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
       receipt: {},
       invoiceLocale: "en-GB",
     });
-    expect(document.elements).toContainEqual({
-      kind: "amount",
-      caption: "Date of the sale",
-      amount: receiptDay(SALE_DAY, "en-GB"),
-      indent: 0,
-    });
+    const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
+    const label = texts.find(({ text }) => text === receiptLabelsFor("en-GB").saleDate)!;
+    const day = texts.find(({ text }) => text === receiptDay(SALE_DAY, "en-GB"))!;
+    expect([day.x, day.y > label.y]).toEqual([label.x, true]);
   });
 
   // A replacement of a full invoice: the original's customer and lines, typed R4.
