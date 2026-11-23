@@ -1647,11 +1647,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Printer, reader and device delete wording** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 
-- **Unchecked: pairing a new reader can undo the SumUp registration it just made** when SumUp is
-  disconnected during the add (the post-provider compensation branch of the add-reader route,
-  `apps/server/src/payments-api.ts`), and an adoption running at the same time is not told.
-  Believed to predate A435 step 3 (#1520); not reproduced.
-
 
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax

@@ -13,15 +13,13 @@ on 23 November at 20:06 in Lane F's `questions.md`.
 - [ ] In `apps/server/src/payments-api.test.ts`, reuse the probe's SumUp client and fake HTTP
   provider. Have the fake keep the registration from the pair POST, return paired registrations
   on GET and drop the reader on DELETE. Switch SumUp off before giving Add its pair reply.
-  Assert 409 `payment.provider_disabled`, no local row and zero provider DELETEs after Add ends.
-  Run this case first and see it fail at retention. Enable SumUp and assert the retained reader
-  is offered as available and Adopt returns 201 with one local row.
-- [ ] Test the recovery a second manager can use after a disconnect. Disconnect before the
-  pair reply, assert the 409 `reader.provider_disconnected` and absence of a local row, reconnect
-  the same account, and have the second manager use the available reader and adopt it.
-  Verify the provider still lists the reader and saw zero DELETEs after both requests ended.
-  Cite Lane F's `receipts/sumup-pairing-undo/probe-full-file.log` in the PR for the failing
-  fast-reconnect and overlapping Adopt sequence.
+  Assert the 409 refusal, then enable SumUp and assert the reader is offered as available
+  and Adopt returns 201 with one local row. Run the test before the fix and see the available
+  list come back empty. The existing fake-provider switch-off case checks zero removals.
+  Cite Lane F's `receipts/sumup-pairing-undo/probe-full-file.log` in the PR for the fast-reconnect
+  and overlapping Adopt sequence. In the PR, state what is known about retrying Add with a
+  fresh code. The watcher cleared this test scope on 23 November at 20:15 in Lane F's
+  `questions.md`.
 - [ ] In `apps/server/src/payments-api.ts`, drop the automatic provider removal when Add's
   post-pair save check refuses. Keep the checks, refusal codes, and the explicit Unpair and
   Delete paths. The existing available-readers and Adopt routes handle the retained registration.
@@ -36,5 +34,5 @@ on 23 November at 20:06 in Lane F's `questions.md`.
   before finishing and resolve overlap on rebase. Run two Claude branch reviews before opening
   the PR because the change concerns overlapping requests.
 
-Expected change is about 1–5 production lines and 100–150 new test lines, with roughly 45
+Expected change is about 1–5 production lines and 50–80 new test lines, with roughly 45
 obsolete test lines removed. Existing Add wording and provider interfaces stay as they are.

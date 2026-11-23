@@ -1142,15 +1142,15 @@ describe("add reader — races with a concurrent disconnect", () => {
     // The disconnect wins (204); the add refuses rather than inserting an orphaned active reader.
     expect(disconnected.status).toBe(204);
     expect(added.status).toBe(409);
-    expect((await added.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.provider_disconnected" },
+    expect(await added.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
-    // No reader row was inserted, and the just-paired vendor reader was best-effort unpaired.
     const readers = (await (
       await send(app, "GET", "/management-api/payments/readers", { cookie: venue.managerCookie })
     ).json()) as unknown[];
     expect(readers).toEqual([]);
-    expect(removed).toEqual([ref]);
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
+    expect(removed).toEqual([]);
   });
 });
 
@@ -2238,56 +2238,6 @@ describe("screens and unknown ids", () => {
     expect(await suite.db.select({ name: cardReaders.name }).from(cardReaders)).toEqual([
       { name: "Barra 3" },
     ]);
-  });
-
-  it("still refuses a mid-add disconnect when the best-effort vendor unpair itself fails", async () => {
-    const venue = await seedVenueWithStaff();
-    let entered!: () => void;
-    let release!: () => void;
-    const started = new Promise<void>((r) => {
-      entered = r;
-    });
-    const hold = new Promise<void>((r) => {
-      release = r;
-    });
-    let removeAttempts = 0;
-    const seat: CardProviderContribution = {
-      ...stripeSeat,
-      readers: {
-        ...stripeSeat.readers,
-        add: async () => {
-          entered();
-          await hold;
-          return { providerRef: nextRef(), status: "paired" as const };
-        },
-        remove: async () => {
-          removeAttempts += 1;
-          throw new Error("vendor unreachable");
-        },
-      },
-    };
-    const app = mountApp(venue, [seat]);
-    expect((await connectStripe(app, venue)).status).toBe(200);
-    const adding = send(app, "POST", "/management-api/payments/readers", {
-      cookie: venue.managerCookie,
-      body: { providerId: "stripe", name: "Barra 1", reference: nextRef() },
-    });
-    await started;
-    const disconnected = await send(
-      app,
-      "POST",
-      "/management-api/payments/providers/stripe/disconnect",
-      { cookie: venue.managerCookie },
-    );
-    release();
-    const added = await adding;
-    expect(disconnected.status).toBe(204);
-    expect(added.status).toBe(409);
-    expect(await added.json()).toEqual({
-      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
-    });
-    expect(removeAttempts).toBe(1);
-    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
   });
 
   it("refuses a chosen reader for an unknown device, or naming an unknown or disabled reader", async () => {
@@ -3563,9 +3513,77 @@ it.each(["pair", "adopt"] as const)(
       status: 409,
       body: { error: { code: "payment.provider_disabled" } },
     });
-    expect(remove).toHaveBeenCalledTimes(mode === "pair" ? 1 : 0);
+    expect(remove).not.toHaveBeenCalled();
   },
 );
+
+it("offers a reader for adoption after SumUp is switched off during pairing", async () => {
+  const venue = await seedVenueWithStaff();
+  const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { method: "password", personId: admin!.id }),
+  );
+  const base = "/management-api/payments";
+  const provider = `${base}/providers/sumup`;
+  const readers = "/v0.1/merchants/MC/readers";
+  const reader = { id: "rdr_1", name: "Front reader", status: "paired" };
+  const manager = { cookie: venue.managerCookie };
+  let registered = false;
+  const changeProviderState = (enabled: boolean, revision: number) =>
+    send(app, "PUT", `${provider}/state`, {
+      cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+      body: { enabled, revision },
+    });
+  const app = mountApp(venue, [SUMUP_CARD_PROVIDER], suite.db, {
+    fetch: async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : input).pathname;
+      const method = init?.method ?? "GET";
+      if (method === "GET" && path === "/v0.1/memberships")
+        return Response.json({ items: [{ resource_id: "MC", resource: { name: "Bar" } }] });
+      if (method === "POST" && path === readers) {
+        registered = true;
+        expect((await changeProviderState(false, 0)).status).toBe(200);
+        return Response.json(reader);
+      }
+      if (method === "GET" && path === readers)
+        return Response.json({ items: registered ? [reader] : [] });
+      if (method === "DELETE" && path === `${readers}/${reader.id}`) {
+        registered = false;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected SumUp request: ${method} ${path}`);
+    },
+  });
+  const connected = await send(app, "POST", `${provider}/connect`, {
+    ...manager,
+    body: { apiKey: "sup_sk_test" },
+  });
+  expect(connected.status).toBe(200);
+
+  const added = await send(app, "POST", `${base}/readers`, {
+    ...manager,
+    body: { providerId: "sumup", name: reader.name, code: "ABC123" },
+  });
+  expect({ status: added.status, body: await added.json() }).toMatchObject({
+    status: 409,
+    body: { error: { code: "payment.provider_disabled" } },
+  });
+
+  expect((await changeProviderState(true, 1)).status).toBe(200);
+  const available = await send(app, "GET", `${provider}/available-readers`, manager);
+  expect({ status: available.status, body: await available.json() }).toEqual({
+    status: 200,
+    body: [{ providerRef: reader.id, name: reader.name, status: "available" }],
+  });
+  const adopted = await send(app, "POST", `${base}/readers/adopt`, {
+    ...manager,
+    body: { providerId: "sumup", providerRef: reader.id, name: reader.name },
+  });
+  expect(adopted.status).toBe(201);
+  expect(await suite.db.select({ providerRef: cardReaders.providerRef }).from(cardReaders)).toEqual(
+    [{ providerRef: reader.id }],
+  );
+});
 
 describe("backup-machine audit read", () => {
   it("requires manager access and selects the latest successful local-day summaries", async () => {
