@@ -34,6 +34,13 @@ describe("shareByWeight", () => {
     );
   });
 
+  it("refuses an empty list of weights when the total is above zero, and gives none for a zero total", () => {
+    expect(() => shares("1.00", [])).toThrow(
+      expect.objectContaining({ code: "shared.invalid_decimal" }),
+    );
+    expect(shares("0.00", [])).toEqual([]);
+  });
+
   it("sums to the total", () => {
     const result = shares("7.00", ["3.33", "3.33", "3.34"]);
     expect(result).toEqual(["2.33", "2.33", "2.34"]);
