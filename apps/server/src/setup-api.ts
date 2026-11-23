@@ -21,6 +21,7 @@ import { createReadStream } from "node:fs";
 import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { MadeMasterKey, VenueRequest, VenueResult } from "@waitron/provisioning";
+import { makeNewMasterKey } from "@waitron/provisioning";
 import {
   validateVenueFields,
   venueFiscalSelection,
@@ -86,7 +87,7 @@ import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { makePreparationRecoveryPack } from "./backup-recovery-pack-output.js";
-import { makeNewMasterKey, saveNewMasterKey } from "./master-key-record.js";
+import { saveNewMasterKey } from "./master-key-record.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";

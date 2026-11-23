@@ -21,7 +21,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn, persons } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
-import { newBreakGlassKeyName } from "@waitron/provisioning";
+import { makeNewMasterKey, newBreakGlassKeyName } from "@waitron/provisioning";
 import type { PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
@@ -32,7 +32,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
-import { makeNewMasterKey, saveNewMasterKey } from "./master-key-record.js";
+import { saveNewMasterKey } from "./master-key-record.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
   buildEmergencyPart,

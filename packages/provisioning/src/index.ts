@@ -126,9 +126,9 @@ export {
   createFirstSetupNodeKeys,
   firstSetupFrozenDigest,
   readFirstSetupStagedKey,
-  type MadeMasterKey,
   type StagedNodeKey,
 } from "./first-setup-node-key.js";
+export { makeNewMasterKey, type MadeMasterKey, type NewMasterKey } from "./new-master-key.js";
 export { firstFiscalPublicDigest, firstFiscalPublicJson } from "./first-setup-public-digest.js";
 export {
   createFirstSetupRecoveryDelivery,

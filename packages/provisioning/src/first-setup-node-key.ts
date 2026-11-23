@@ -1,14 +1,9 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { AppError, encodeMasterKeyCode, isCalendarDate } from "@waitron/shared";
+import { AppError, isCalendarDate } from "@waitron/shared";
 import { hashSecretAsync } from "@waitron/identity";
-import {
-  makeMasterKey,
-  masterKeyCheckValue,
-  masterKeyName,
-  sealingPublicKey,
-} from "@waitron/credentials";
+import { masterKeyName } from "@waitron/credentials";
 import {
   insertMasterKey,
   insertRecoveryPack,
@@ -19,6 +14,7 @@ import {
 } from "@waitron/db";
 import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
+import { makeNewMasterKey, type MadeMasterKey } from "./new-master-key.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import type {
@@ -42,11 +38,6 @@ export interface StagedNodeKey {
   readonly masterKeyCheckValue: string;
   /** The sealing public key, SPKI DER, as base64. */
   readonly masterKeyPublicKey: string;
-}
-/** A new master key as printed (seven groups of four, spaced) and its name. */
-export interface MadeMasterKey {
-  readonly masterKey: string;
-  readonly masterKeyName: string;
 }
 interface Options {
   stateDir: string;
@@ -140,8 +131,7 @@ export function createFirstSetupNodeKeys(options: Options) {
     const secret = generatePassword();
     const day = new Date().toISOString().slice(0, 10);
     const name = newBreakGlassKeyName(day, new Set(prior === undefined ? [] : [prior.name]));
-    const masterKey = makeMasterKey();
-    const publicKey = sealingPublicKey(masterKey);
+    const masterKey = makeNewMasterKey(day);
     const stage: StagedNodeKey = {
       version: 1,
       stageId: randomUUID(),
@@ -150,15 +140,15 @@ export function createFirstSetupNodeKeys(options: Options) {
       frozenDigest: firstSetupFrozenDigest(state),
       name,
       verifier: await hashSecretAsync(secret),
-      masterKeyName: masterKeyName(publicKey, day),
-      masterKeyCheckValue: masterKeyCheckValue(masterKey),
-      masterKeyPublicKey: publicKey.toString("base64"),
+      masterKeyName: masterKey.made.masterKeyName,
+      masterKeyCheckValue: masterKey.checkValue,
+      masterKeyPublicKey: masterKey.publicKey.toString("base64"),
     };
     await updateSetupFlowSection(options.stateDir, "nodeKey", () => stage);
     transient = {
       stage,
       key: { nodeId: stage.nodeId, name, secret },
-      made: { masterKey: encodeMasterKeyCode(masterKey), masterKeyName: stage.masterKeyName },
+      made: masterKey.made,
       ownerGeneration: state.ownerGeneration,
     };
     return structuredClone({ stage, key: transient.key, ...transient.made });
