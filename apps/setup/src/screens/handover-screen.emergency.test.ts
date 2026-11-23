@@ -1122,7 +1122,7 @@ async function check(el: SetupHandoverScreen) {
   q(el, "[data-test=emergency-preview]").click();
 }
 
-it("Check this copy first brings the copy up to date, waits for the restart, then shows it", async () => {
+it("Continue first brings the copy up to date, waits for the restart, then shows it", async () => {
   const { el, posts } = await mount({ held: true, takes: ["restarting"] });
   await check(el);
   await vi.waitFor(() =>
@@ -1875,7 +1875,7 @@ it("when the main server answers, the page refuses and links to its Servers page
   );
 });
 
-it("Check again lets the switch go on once the main server is silent, and Check this copy asks it again", async () => {
+it("Check again lets the switch go on once the main box is silent, and Continue asks it again", async () => {
   let answering = true;
   const { el, posts } = await mount({
     mainUrl: MAIN,
@@ -1977,7 +1977,7 @@ it.each([
   },
 );
 
-it.each(["Check this copy", "Declare"])(
+it.each(["Continue", "Switch to this box"])(
   "a check at %s that finds the main box answering moves focus to the heading",
   async (step) => {
     let answering = false;
@@ -1986,7 +1986,7 @@ it.each(["Check this copy", "Declare"])(
       mainAnswers: () => (answering ? answers() : silent()),
     });
     await startSwitching(el);
-    if (step === "Declare") {
+    if (step === "Switch to this box") {
       await authenticate(el);
       await declarationFields(el);
     } else {
@@ -1998,7 +1998,9 @@ it.each(["Check this copy", "Declare"])(
     answering = true;
     q(
       el,
-      step === "Declare" ? "[data-test=emergency-declare]" : "[data-test=emergency-preview]",
+      step === "Switch to this box"
+        ? "[data-test=emergency-declare]"
+        : "[data-test=emergency-preview]",
     ).click();
     await mainAnsweringRefusal(el);
     await el.updateComplete;
@@ -2519,7 +2521,7 @@ it("a refusal that needs the sign-in opens it again, before Declare", async () =
   expect(code.shadowRoot!.querySelector("input")!.value).toBe(signIn.totp);
 });
 
-it("an expired code at the clock check opens the sign-in again, without Use a different copy", async () => {
+it("an expired code at the clock check opens the sign-in again, without Upload a backup file instead", async () => {
   const { el } = await mount({ saved: true, preparationRefusal: "password.invalid" });
   await authenticate(el);
   expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
@@ -2527,7 +2529,7 @@ it("an expired code at the clock check opens the sign-in again, without Use a di
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
-  // After Declare the copy cannot change, so the backup choice stays away.
+  // After Switch to this box the copy cannot change, so the backup choice stays away.
   expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
   expect(q(el, "[data-test=upload-backup]")).toBeNull();
 });
