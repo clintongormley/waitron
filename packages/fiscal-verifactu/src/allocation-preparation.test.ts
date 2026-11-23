@@ -49,6 +49,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -155,6 +156,7 @@ it("activates every purpose through the public module preparation seat", async (
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ]);
   const rows = await suite.db.select().from(fiscalAllocations);
   expect(rows).toHaveLength(1);
@@ -198,7 +200,7 @@ it("refuses a copied prepared token while accepting the original in the same aut
         const result = await withTransaction(suite.db, (tx) =>
           preparation.activatePreparedModuleAllocation(tx, node, operation),
         );
-        expect(result.series).toHaveLength(3);
+        expect(result.series).toHaveLength(4);
       },
     ),
   );
@@ -272,12 +274,12 @@ it("collects outside the write transaction so another writer can commit", async 
     return receipt();
   });
   expect(written).toBe(true);
-  expect(result.series).toHaveLength(3);
+  expect(result.series).toHaveLength(4);
   const retired = await suite.db
     .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(isNull(invoiceSeries.retiredAt));
-  expect(retired.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+  expect(retired.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
 });
 
 it("refuses missing host trust through the public paper selector", async () => {

@@ -30,8 +30,8 @@ separate retained preproduction sample database.
 | `keyring` | nothing at all — no venue directory, no files       | once per deployment |
 | `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
-`venue` creates the taxpayer row, the venue, a node and its standard, full and corrective
-invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
+`venue` creates the taxpayer row, the venue, a node and its standard, full, corrective and
+full-corrective invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
 An existing venue does not rerun those seeds on a setup retry. Recover a replacement box through
@@ -47,12 +47,14 @@ usage: waitron-provision <command> [options]
            [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
-           [--corrective-series-code <code>] [--admin-name <name>] [--admin-email <email>]
-           [--admin-first-names <names>] [--admin-last-names <names>]
-           [--recovery-pdf <absolute external path of a new file>] [--yes]
+           [--corrective-series-code <code>] [--full-corrective-series-code <code>]
+           [--admin-name <name>] [--admin-email <email>]
+           [--admin-first-names <names>] [--admin-last-names <names>] [--yes] [--test-fiscal]
+           [--recovery-pdf <absolute path of a new file, outside box state and venue directories>]
 ```
 
-Most venue options are prompted for when omitted. `--full-series-code` defaults to `FF` without a prompt.
+Most venue options are prompted for when omitted. `--full-series-code` defaults to `F` and
+`--full-corrective-series-code` to `FR`, both without a prompt.
 `--admin-first-names` and `--admin-last-names` are read from flags but never prompted for, so a
 script that already drives `venue` non-interactively is not stopped by those questions.
 
@@ -72,7 +74,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`taxpayer` holds exactly one), an
-**admin person**, the venue, a node, and standard, full and corrective invoice series, and
+**admin person**, the venue, a node, and standard, full, corrective and full-corrective invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
@@ -193,7 +195,7 @@ not the venue.
 (common-territory Spain, Veri\*Factu with IVA) or `GB-vat`, which selects `fiscal-none` and files
 nothing; any other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also
 refuses a `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes
-among the standard, full and corrective series (`provisioning.duplicate_series_code`) before the directory is opened.
+among the standard, full, corrective and full-corrective series (`provisioning.duplicate_series_code`) before the directory is opened.
 `--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
@@ -212,7 +214,10 @@ transaction.
 If your filing seed declares a `series` contribution, it creates the invoice series itself.
 Setup skips the base-series inserts and checks that `series.resolve` returns the complete active
 set for the new node. On retry, setup calls that resolver without running the seed again. The
-resolver must reject requested bases that differ from the active series configuration.
+resolver must reject requested bases that differ from the active series configuration. The
+seed also answers `series.bases(tx, node)`: the node's live series as the bases an operator
+configures, without anything the module added to the codes it created; the configuration export
+reads it.
 
 ## Secrets
 
@@ -257,20 +262,20 @@ appear nowhere — not in plaintext, not as a hash.
 
 Every refusal is a structured code and its params on stderr — never a raw driver message.
 
-| Code                                 | What happened                                                                                                   | What to do                                                                                                                                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt.                                                                                                                                                                               |
-| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                            | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                                                       |
-| `provisioning.database_unmigrated`   | Nothing has migrated the venue directory — its venue file holds no `deployment` table                           | Boot the box against that directory first: boot migrates it. Then stop the server, because while it runs it holds the folder and `venue` is refused. This is also what a mistyped path gives, because a virgin directory opens fine. |
-| `provisioning.database_in_use`       | Another process, usually the running server, holds the venue folder                                             | Stop that process (on a box, `docker compose stop app`), then re-run. The refusal comes before either database file is opened.                                                                                                       |
-| `provisioning.invalid_environment`   | `WAITRON_ENV` is not `production`, `preproduction` or `dev`                                                     | Type one of those, or leave it unset for `preproduction`. `Production` and a space-padded ` production` are refused, never rounded.                                                                                                  |
-| `deployment.already_stamped`         | The venue directory is stamped for the OTHER environment (`@waitron/db`'s code, not this package's)             | Stop. One database per environment is a fiscal invariant; a pre-production database that took production numbering leaves a permanent hole in the series. Point at the right directory, or fix `WAITRON_ENV`.                        |
-| `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.                         |
-| `provisioning.foreign_taxpayer`      | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One taxpayer per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                         |
-| `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                         | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
-| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give one of the territories named above, such as `ES-common`.                                                                                                                                                                        |
-| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
-| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--corrective-series-code` are the same                        | Give each invoice purpose a different code.                                                                                                                                                                                          |
+| Code                                 | What happened                                                                                                             | What to do                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing           | Set the variable, pass the flag, or answer the prompt.                                                                                                                                                                               |
+| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                                      | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                                                       |
+| `provisioning.database_unmigrated`   | Nothing has migrated the venue directory — its venue file holds no `deployment` table                                     | Boot the box against that directory first: boot migrates it. Then stop the server, because while it runs it holds the folder and `venue` is refused. This is also what a mistyped path gives, because a virgin directory opens fine. |
+| `provisioning.database_in_use`       | Another process, usually the running server, holds the venue folder                                                       | Stop that process (on a box, `docker compose stop app`), then re-run. The refusal comes before either database file is opened.                                                                                                       |
+| `provisioning.invalid_environment`   | `WAITRON_ENV` is not `production`, `preproduction` or `dev`                                                               | Type one of those, or leave it unset for `preproduction`. `Production` and a space-padded ` production` are refused, never rounded.                                                                                                  |
+| `deployment.already_stamped`         | The venue directory is stamped for the OTHER environment (`@waitron/db`'s code, not this package's)                       | Stop. One database per environment is a fiscal invariant; a pre-production database that took production numbering leaves a permanent hole in the series. Point at the right directory, or fix `WAITRON_ENV`.                        |
+| `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code                 | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.                         |
+| `provisioning.foreign_taxpayer`      | The venue already holds a DIFFERENT taxpayer                                                                              | Stop. One taxpayer per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                         |
+| `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                                   | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
+| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                              | Give one of the territories named above, such as `ES-common`.                                                                                                                                                                        |
+| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                                         | Give one.                                                                                                                                                                                                                            |
+| `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code`, `--corrective-series-code` and `--full-corrective-series-code` are the same | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
 several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved
@@ -324,7 +329,7 @@ pnpm --filter @waitron/provisioning test:coverage
 **Superseded on the A679 candidate, 2026-10-19.** The CLI refuses
 `WAITRON_INITIAL_VENUE_INPUT` as Live activation authority with
 `provisioning.initial_input_invalid`. The built owned-CLI check now completes hour setup,
-checks all three new series/counters and refuses mismatched state/venue roots without writes.
+checks the new series and their counters and refuses mismatched state/venue roots without writes.
 The following records the earlier supplied-allocation interface and its qualification context.
 
 To carry identities chosen before signing, set `WAITRON_INITIAL_VENUE_INPUT` to a JSON file holding

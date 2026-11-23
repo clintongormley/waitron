@@ -41,19 +41,23 @@ import { ALL_MODULES } from "./modules.js";
 import type { ModuleOperationHost } from "@waitron/module";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
+  assertArchiveNotAhead,
   lockRestoreTarget,
   INCOMING_SUFFIX,
   restoreFromArtifactFile,
+  validateArtifact,
   validateArtifactFile,
   validateDatabaseEntries,
   writeStagedNodeCopy,
   type EntryValidationDeps,
   type RestoreFileDeps,
   type RestoreOperationRunner,
+  type ValidationDeps,
 } from "./restore.js";
 import {
   confirmsVenue,
   prepareStreamRestore,
+  refuseIfArchiveSourceLive,
   writeStreamRestore,
   type PrepareStreamDeps,
   type WriteStreamArgs,
@@ -705,6 +709,33 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
     return hashes;
   } finally {
     await opened.close();
+  }
+}
+
+/** The setup page's checks on an archive before staging it; answers its administrators' hashes. */
+export async function validateArchiveForStaging(
+  candidate: ArchiveRequest,
+  deps: Pick<ValidationDeps, "stateDir" | "migrationsRoot" | "modules"> &
+    Omit<Parameters<typeof refuseIfArchiveSourceLive>[0], "validated">,
+): Promise<readonly string[]> {
+  const validation = {
+    recoveryKey: candidate.recoveryKey,
+    stateDir: deps.stateDir,
+    stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+    migrationsRoot: deps.migrationsRoot,
+    modules: deps.modules,
+    environment: candidate.environment,
+  };
+  const validated =
+    candidate.kind === "archive-file"
+      ? await validateArtifactFile({ ...validation, artifactPath: candidate.artifactPath })
+      : await validateArtifact({ ...validation, artifact: candidate.artifact });
+  try {
+    await assertArchiveNotAhead(validated, deps);
+    await refuseIfArchiveSourceLive({ ...deps, validated });
+    return await readRestoreAdminVerifiers(validated.databasePath);
+  } finally {
+    await validated.discard();
   }
 }
 

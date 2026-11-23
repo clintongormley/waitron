@@ -105,10 +105,16 @@ it("records a fresh emergency identity outside the backup before activating all 
       `A-${data.allocation.installationIdentity}`,
       `FF-${data.allocation.installationIdentity}`,
       `R-${data.allocation.installationIdentity}`,
+      `RF-${data.allocation.installationIdentity}`,
     ]);
     return activated;
   });
-  expect(result.series.map(({ purpose }) => purpose)).toEqual(["standard", "full", "corrective"]);
+  expect(result.series.map(({ purpose }) => purpose)).toEqual([
+    "standard",
+    "full",
+    "corrective",
+    "full_corrective",
+  ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   const saved = (await incident()).data;
   const template = altaFor(

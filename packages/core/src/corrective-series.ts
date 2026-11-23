@@ -8,12 +8,13 @@ import type { NodeId, SeriesId } from "@waitron/shared";
 
 /**
  * Refuses a series a corrective invoice may not be numbered from: one that does not exist, belongs
- * to another node, is not `corrective`, or is retired. Answers the series' code.
+ * to another node, is not of the `expected` purpose, or is retired. Answers the series' code.
  */
 export async function requireCorrectiveSeries(
   tx: Transaction,
   seriesId: SeriesId,
   nodeId: NodeId,
+  expected: "corrective" | "full_corrective",
 ): Promise<{ code: string }> {
   const [series] = await tx
     .select({
@@ -35,10 +36,10 @@ export async function requireCorrectiveSeries(
       actual: nodeId,
     });
   }
-  if (series.purpose !== "corrective") {
+  if (series.purpose !== expected) {
     throw new AppError("sale.series_wrong_purpose", {
       seriesId,
-      expected: "corrective",
+      expected,
       actual: series.purpose,
     });
   }

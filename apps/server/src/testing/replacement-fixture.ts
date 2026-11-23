@@ -6,7 +6,8 @@ import type { SaleId } from "@waitron/shared";
 
 /**
  * Inserts a corrective of `correctsSaleId` directly, numbered next in its node's corrective
- * series (made when the node has none): a replacement repeating the corrected sale's total and
+ * series — `full_corrective` when the corrected sale names a customer, else `corrective` — made
+ * when the node has none: a replacement repeating the corrected sale's total and
  * customer (with `supplyDay`, the real day of the sale), or, with `total`, an ordinary corrective
  * such as a refund of a replacement.
  */
@@ -16,18 +17,18 @@ export async function insertCorrective(
   change: { replaces: true; supplyDay?: string } | { total: string },
 ): Promise<SaleId> {
   const [corrected] = await tx.select().from(sales).where(eq(sales.id, correctsSaleId));
+  const full = corrected!.counterpartyTaxId !== null;
+  const purpose = full ? "full_corrective" : "corrective";
   const [found] = await tx
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
-    .where(
-      and(eq(invoiceSeries.nodeId, corrected!.nodeId), eq(invoiceSeries.purpose, "corrective")),
-    );
+    .where(and(eq(invoiceSeries.nodeId, corrected!.nodeId), eq(invoiceSeries.purpose, purpose)));
   const series =
     found ??
     (
       await tx
         .insert(invoiceSeries)
-        .values({ nodeId: corrected!.nodeId, code: "R", purpose: "corrective" })
+        .values({ nodeId: corrected!.nodeId, code: full ? "RF" : "R", purpose })
         .returning({ id: invoiceSeries.id })
     )[0];
   const invoiceNumber = await allocateInvoiceNumber(tx, series!.id);

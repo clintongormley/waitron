@@ -53,6 +53,7 @@ const provisionBody: ProvisionBody = {
     seriesCode: "A",
     fullSeriesCode: "FF",
     correctiveSeriesCode: "RA",
+    fullCorrectiveSeriesCode: "FR",
     admin: {
       firstNames: "Ada",
       lastNames: "Lovelace",

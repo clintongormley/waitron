@@ -59,6 +59,7 @@ function frozenAttempt(passwordHash: string): FirstSetupFrozen {
       seriesCode: "A",
       fullSeriesCode: "F",
       correctiveSeriesCode: "R",
+      fullCorrectiveSeriesCode: "RF",
       admin: { ...START_AGAIN_ADMIN, pinHash: hashPin("4826"), passwordHash },
     },
   };

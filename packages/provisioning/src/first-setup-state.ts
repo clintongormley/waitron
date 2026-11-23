@@ -213,6 +213,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         "fullSeriesCode",
         "staffLanguage",
         "correctiveSeriesCode",
+        "fullCorrectiveSeriesCode",
         "admin",
       ],
       [

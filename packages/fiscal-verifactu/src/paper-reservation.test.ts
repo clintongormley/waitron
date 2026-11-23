@@ -23,6 +23,7 @@ const allocation = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-12T08:00:00.000Z",
@@ -57,6 +58,7 @@ const blockBytes = Buffer.from(
           ["A-P000042", "standard"],
           ["FF-P000042", "full"],
           ["R-P000042", "corrective"],
+          ["RF-P000042", "full_corrective"],
         ],
         "paper",
         "2026-10-12T08:00:00.000Z",
@@ -269,10 +271,14 @@ describe("a paper reservation for a dormant named standby", () => {
     ).toEqual({ ok: false, reason: "scope_mismatch" });
   });
 
-  it("requires the complete standard, full and corrective series", () => {
-    expect(
-      check(undefined, trust, { ...context, requiredBases: context.requiredBases.slice(0, 2) }),
-    ).toEqual({ ok: false, reason: "series_mismatch" });
+  it("requires the complete series set", () => {
+    for (const kept of [2, 3])
+      expect(
+        check(undefined, trust, {
+          ...context,
+          requiredBases: context.requiredBases.slice(0, kept),
+        }),
+      ).toEqual({ ok: false, reason: "series_mismatch" });
     expect(check(undefined, trust, { ...context, requiredBases: [] })).toEqual({
       ok: false,
       reason: "series_mismatch",

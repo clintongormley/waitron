@@ -425,7 +425,7 @@ async function filesBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 57 as const,
+    version: 58 as const,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -449,6 +449,7 @@ async function filesBeforeActivation(stateDir: string) {
       seriesCode: "F",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "R",
+      fullCorrectiveSeriesCode: "RF",
     },
     privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
     modules: { core: 1 },

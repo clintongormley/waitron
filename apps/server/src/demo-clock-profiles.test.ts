@@ -29,8 +29,8 @@ describe("installed starter clock profiles", () => {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "04:00",
-      seriesCode: "FS",
-      correctiveSeriesCode: "FR",
+      seriesCode: "S",
+      correctiveSeriesCode: "SR",
       admin: {
         displayName: "Owner",
         pinHash: "scrypt$00$00",

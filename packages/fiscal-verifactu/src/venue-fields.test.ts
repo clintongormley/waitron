@@ -10,6 +10,7 @@ const GOOD = {
   seriesCode: "FS",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "FR",
+  fullCorrectiveSeriesCode: "RF",
 };
 
 describe("validateVenueFiscalFields", () => {
@@ -39,6 +40,20 @@ describe("validateVenueFiscalFields", () => {
         params: { field: "fullSeriesCode" },
       }),
     );
+  });
+
+  it("refuses an invalid full invoice corrective series before provisioning, naming its field", () => {
+    expect(() =>
+      validateVenueFiscalFields({ ...GOOD, fullCorrectiveSeriesCode: "Rectificativa F" }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "fullCorrectiveSeriesCode" },
+      }),
+    );
+    expect(() =>
+      validateVenueFiscalFields({ ...GOOD, fullCorrectiveSeriesCode: "F".repeat(22) }),
+    ).toThrow(expect.objectContaining({ params: { field: "fullCorrectiveSeriesCode" } }));
   });
 
   it("refuses a series code too long to survive a restore's installation suffix", () => {

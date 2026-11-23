@@ -121,6 +121,7 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "corrective" },
+      { code: "RF-P000042", purpose: "full_corrective" },
     ],
   };
   Reflect.deleteProperty(allocation, "reservationEvidence");
@@ -253,6 +254,7 @@ it.each(["archive", "stream"] as const)(
       { code: "A-0CNQR", purpose: "standard" },
       { code: "FF-0CNQR", purpose: "full" },
       { code: "R-0CNQR", purpose: "corrective" },
+      { code: "RF-0CNQR", purpose: "full_corrective" },
     ]);
     expect(f.journal()).not.toContain(f.key.secret);
     expect(f.journal()).not.toContain(f.encryptionKey);

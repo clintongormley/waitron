@@ -41,10 +41,11 @@ it.each(["archive", "stream"] as const)(
       { code: "A-0CNQT", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNQT", purpose: "full", nextNumber: 1 },
       { code: "R-0CNQT", purpose: "corrective", nextNumber: 1 },
+      { code: "RF-0CNQT", purpose: "full_corrective", nextNumber: 1 },
     ]);
     expect(
       rows.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
-    ).toEqual([123, 123, 123]);
+    ).toEqual([123, 123, 123, 123]);
     expect(f.journal()).toBe(retained);
     expect(retained).not.toContain(f.key.secret);
     expect(retained).not.toContain(f.encryptionKey);

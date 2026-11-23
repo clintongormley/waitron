@@ -124,6 +124,7 @@ it("activates the complete Cloud identity through collected local authority and 
     { code: "A-C000042", purpose: "standard" },
     { code: "FF-C000042", purpose: "full" },
     { code: "R-C000042", purpose: "corrective" },
+    { code: "RF-C000042", purpose: "full_corrective" },
   ]);
   const rows = await suite.db.select().from(fiscalAllocations);
   expect(rows).toHaveLength(1);
@@ -263,6 +264,7 @@ it("passes a Cloud manual packet through the default configured module preparati
     "A-C000042",
     "FF-C000042",
     "R-C000042",
+    "RF-C000042",
   ]);
 });
 it.each([

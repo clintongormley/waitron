@@ -151,6 +151,7 @@ it.each(["production", "preproduction"] as const)(
           series: [
             { code: "A-0CNNY", purpose: "standard" },
             { code: "FF-0CNNY", purpose: "full" },
+            { code: "FR-0CNNY", purpose: "full_corrective" },
             { code: "R-0CNNY", purpose: "corrective" },
           ],
         },
@@ -265,6 +266,7 @@ it("writes and reads back the configured hour through the real provisioning and 
   ).toEqual([
     { code: "A-0CNNY", nextNumber: 1 },
     { code: "FF-0CNNY", nextNumber: 1 },
+    { code: "FR-0CNNY", nextNumber: 1 },
     { code: "R-0CNNY", nextNumber: 1 },
   ]);
   const committed = await withTransaction(venue.db, (tx) =>

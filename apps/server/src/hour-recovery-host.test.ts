@@ -86,6 +86,7 @@ it("persists a recovery hour before the real configured restore runner activates
     { code: "A-0CNQT", nextNumber: 1 },
     { code: "FF-0CNQT", nextNumber: 1 },
     { code: "R-0CNQT", nextNumber: 1 },
+    { code: "RF-0CNQT", nextNumber: 1 },
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
 });
@@ -473,7 +474,7 @@ it("admits recovery from the real validated archive preview with its public spen
     (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
       .filter((row) => row.retiredAt === null)
       .map((row) => row.code),
-  ).toEqual(["A-0CNVJ", "FF-0CNVJ", "R-0CNVJ"]);
+  ).toEqual(["A-0CNVJ", "FF-0CNVJ", "R-0CNVJ", "RF-0CNVJ"]);
 });
 
 it("finishes an already committed restore after restart without selecting or comparing clocks again", async () => {
@@ -696,6 +697,7 @@ describe("module-owned recovery facts from the actual database", () => {
       { code: "A-0CNQT", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNQT", purpose: "full", nextNumber: 1 },
       { code: "R-0CNQT", purpose: "corrective", nextNumber: 1 },
+      { code: "RF-0CNQT", purpose: "full_corrective", nextNumber: 1 },
     ]);
     for (const row of before)
       expect(after.find((entry) => entry.id === row.id)).toEqual({
@@ -763,6 +765,7 @@ describe("module-owned recovery facts from the actual database", () => {
             { code: "A-0CNQT", purpose: "standard" },
             { code: "FF-0CNQT", purpose: "full" },
             { code: "R-0CNQT", purpose: "corrective" },
+            { code: "RF-0CNQT", purpose: "full_corrective" },
           ],
         },
       },

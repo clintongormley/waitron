@@ -756,14 +756,16 @@ describe("setup-app", () => {
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
       correctiveSeriesCode: "OLDR",
+      fullCorrectiveSeriesCode: "OLDFR",
     };
-    const sixFields = {
+    const taxpayerFields = {
       taxId: "B12345678",
       legalName: "Old Owner SL",
       taxpayerDomicile: "Calle Vieja 1, 28001 Madrid, Madrid",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
       correctiveSeriesCode: "OLDR",
+      fullCorrectiveSeriesCode: "OLDFR",
     };
     const typed = {
       taxId: "A58818501",
@@ -772,6 +774,7 @@ describe("setup-app", () => {
       seriesCode: "NEW",
       fullSeriesCode: "NEWF",
       correctiveSeriesCode: "NEWR",
+      fullCorrectiveSeriesCode: "NEWFR",
     };
 
     async function staged(
@@ -818,7 +821,7 @@ describe("setup-app", () => {
       await el.updateComplete;
       const venue = await screenHost(el, "venue");
       // The old registered address is dropped: an empty line opens as the venue's address.
-      const fiscal = Object.keys(sixFields).filter((key) => key !== "taxpayerDomicile");
+      const fiscal = Object.keys(taxpayerFields).filter((key) => key !== "taxpayerDomicile");
       expect(
         venue.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
           "[data-test=registeredSameAsVenue]",
@@ -854,9 +857,10 @@ describe("setup-app", () => {
       expect(Object.fromEntries(fiscal.map((key) => [key, venueValue(venue, key)]))).toEqual({
         taxId: "",
         legalName: "",
-        seriesCode: "FS",
-        fullSeriesCode: "FF",
-        correctiveSeriesCode: "FR",
+        seriesCode: "S",
+        fullSeriesCode: "F",
+        correctiveSeriesCode: "SR",
+        fullCorrectiveSeriesCode: "FR",
       });
       expect(venueValue(venue, "name")).toBe("Prepared");
       patch(el, { venue: typed });
@@ -879,7 +883,7 @@ describe("setup-app", () => {
       const body = provision.mock.calls[0]![0] as ProvisionBody;
       expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
       expect(body.configurationImport).toBe(true);
-      expect(body.venue).toMatchObject(sixFields);
+      expect(body.venue).toMatchObject(taxpayerFields);
     });
 
     it("drafts an export's empty address fields as empty text, so the form shows them empty", async () => {
@@ -954,7 +958,7 @@ describe("setup-app", () => {
       await flush(el);
       const body = provision.mock.calls[0]![0] as ProvisionBody;
       expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
-      expect(body.venue).toMatchObject(sixFields);
+      expect(body.venue).toMatchObject(taxpayerFields);
     });
 
     it("ignores a fiscal test answer for the old taxpayer that arrives after New tax ID", async () => {
@@ -1061,7 +1065,7 @@ describe("setup-app", () => {
       configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
       await flush(el);
       expect(Object.hasOwn(readDraft(el), "newTaxpayer")).toBe(false);
-      expect(readDraft(el).venue).toMatchObject(sixFields);
+      expect(readDraft(el).venue).toMatchObject(taxpayerFields);
     });
 
     it("forgets the choice when the mode switches to demo", async () => {
@@ -4881,21 +4885,21 @@ describe("restoring a backup file whose old server may still be running", () => 
     },
   );
 
-  it.each([["restore.schema_too_new", { module: "core", backup: 207, target: 1 }]])(
-    "words a backup file from another version of Waitron (%s)",
-    async (code, params) => {
-      const el = await mountSetupApp(
-        stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 409 }) }),
-      );
-      restoreRequest(el, backup);
-      await flush(el);
-      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
-      expect(screen.invalidField).toBeUndefined();
-      expect(await bottomOf(screen)).toBe(
-        "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
-      );
-    },
-  );
+  it.each([
+    ["restore.schema_too_new", { module: "core", backup: 207, target: 1 }],
+    ["provisioning.database_ahead", { set: "core", unknownMigrations: ["0123abcd"] }],
+  ])("words a backup file from another version of Waitron (%s)", async (code, params) => {
+    const el = await mountSetupApp(
+      stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 409 }) }),
+    );
+    restoreRequest(el, backup);
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect(screen.invalidField).toBeUndefined();
+    expect(await bottomOf(screen)).toBe(
+      "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
+    );
+  });
 
   it.each([
     ["en-GB", "This backup has no active administrator with a password. Choose another backup."],
@@ -5369,6 +5373,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     "This snapshot could not be opened. It is damaged, or the backup encryption key Waitron Cloud holds for it does not open it.";
   it.each([
     ["restore.schema_too_new", 409, cloudOtherVersion],
+    ["provisioning.database_ahead", 409, cloudOtherVersion],
     ["recovery.passphrase_invalid", 422, cloudUnopenable],
     ["backup.artifact_invalid", 422, cloudUnopenable],
     ["backup.archive_invalid", 422, cloudUnopenable],

@@ -14,6 +14,7 @@ const bases = [
   { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
+  { code: "RF", purpose: "full_corrective" },
 ];
 function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
@@ -164,6 +165,7 @@ describe("owner-declared paper register", () => {
       { code: "B-S000001", purpose: "standard" },
       { code: "FF-S000001", purpose: "full" },
       { code: "R-S000001", purpose: "corrective" },
+      { code: "RF-S000001", purpose: "full_corrective" },
     ]);
     expect(result.history).toEqual(input);
     expect(result.history.revisions[0]?.events).toEqual([reserve(), consume()]);
@@ -577,6 +579,7 @@ describe("owner-declared paper register", () => {
       "B-P000008",
       "FF-P000008",
       "R-P000008",
+      "RF-P000008",
     ]);
     const cp = api.projectDeclaredHistory(api.parseDeclaredHistory(checkpoint()), known);
     expect(() =>

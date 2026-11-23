@@ -188,7 +188,9 @@ async function setupVenue(): Promise<{
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "FA",
+        fullSeriesCode: "FF",
         correctiveSeriesCode: "RF",
+        fullCorrectiveSeriesCode: "RFF",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
@@ -327,6 +329,7 @@ async function withFixtureOperation(
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
       { code: "RF", purpose: "corrective" },
+      { code: "RFF", purpose: "full_corrective" },
     ],
     await personIdForLoginEmail(db, request.email),
   );
@@ -1199,6 +1202,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "RF-P000042", purpose: "corrective" },
+      { code: "RFF-P000042", purpose: "full_corrective" },
     ]);
     const byCode = new Map(allocation.series.map((s) => [s.code, s.purpose]));
     expect(byCode.get("FA-P000042")).toBe("standard");
@@ -1212,6 +1216,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "RF-P000042", purpose: "corrective" },
+      { code: "RFF-P000042", purpose: "full_corrective" },
     ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
@@ -2394,6 +2399,7 @@ async function allocatedReply(
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
       { code: "RF", purpose: "corrective" },
+      { code: "RFF", purpose: "full_corrective" },
     ],
     adminPersonId,
   );

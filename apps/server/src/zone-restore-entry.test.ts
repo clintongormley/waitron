@@ -71,6 +71,7 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
         { code: "A-0CNQT", nextNumber: 1 },
         { code: "FF-0CNQT", nextNumber: 1 },
         { code: "R-0CNQT", nextNumber: 1 },
+        { code: "RF-0CNQT", nextNumber: 1 },
       ]);
     } finally {
       await placed.close();
@@ -107,6 +108,7 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
       { code: "A-0CNSP", nextNumber: 1 },
       { code: "FF-0CNSP", nextNumber: 1 },
       { code: "R-0CNSP", nextNumber: 1 },
+      { code: "RF-0CNSP", nextNumber: 1 },
     ]);
   } finally {
     await placed.close();

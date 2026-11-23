@@ -320,7 +320,9 @@ const en = {
   "fiscal_filing.refused.correction_unsupported":
     "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
   "fiscal_filing.refused.no_corrective_series":
-    "This box has no corrective invoice series, so nothing was sent. Waitron makes one when it sets up, restores or promotes a box, so this is a fault in Waitron; the case stays open.",
+    "This box has no series for correcting simplified invoices, so nothing was sent. Waitron makes one when it sets up, restores or promotes a box, so this is a fault in Waitron; the case stays open.",
+  "fiscal_filing.refused.no_full_corrective_series":
+    "This box has no series for correcting full invoices, so nothing was sent. Waitron makes one when it sets up, restores or promotes a box, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.taxpayer_domicile":
     "The business has no registered address, which a full invoice must show, so nothing was sent. The invoice was issued with one, so this is a fault in Waitron; the case stays open.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
@@ -708,7 +710,9 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.correction_unsupported":
     "La AEAT tiene, o aún puede recibir, otro registro de esta factura, así que una rectificativa podría contar la venta dos veces. No se ha enviado nada y aquí no se puede hacer nada; el caso sigue abierto.",
   "fiscal_filing.refused.no_corrective_series":
-    "Este servidor no tiene una serie de facturas rectificativas, así que no se ha enviado nada. Waitron la crea al configurar, restaurar o promocionar un servidor, así que es un fallo de Waitron; el caso sigue abierto.",
+    "Este servidor no tiene una serie para rectificar facturas simplificadas, así que no se ha enviado nada. Waitron la crea al configurar, restaurar o promocionar un servidor, así que es un fallo de Waitron; el caso sigue abierto.",
+  "fiscal_filing.refused.no_full_corrective_series":
+    "Este servidor no tiene una serie para rectificar facturas completas, así que no se ha enviado nada. Waitron la crea al configurar, restaurar o promocionar un servidor, así que es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.taxpayer_domicile":
     "La empresa no tiene domicilio fiscal, que una factura completa debe mostrar, así que no se ha enviado nada. La factura se emitió con él, así que es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",

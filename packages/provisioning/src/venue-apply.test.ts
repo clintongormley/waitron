@@ -239,7 +239,12 @@ it.each([undefined, "en", "es"] as const)(
     await stampDeployment(suite.db, "preproduction");
     await realApplyVenue(
       planVenue(
-        { ...request("B10000015"), ...(staffLanguage === undefined ? {} : { staffLanguage }) },
+        {
+          ...request("B10000015"),
+          fullSeriesCode: "FF",
+          fullCorrectiveSeriesCode: "RF",
+          ...(staffLanguage === undefined ? {} : { staffLanguage }),
+        },
         modules,
       ),
       {
@@ -439,7 +444,7 @@ describe("applyVenue: the one taxpayer row", () => {
 });
 
 describe("applyVenue", () => {
-  it("provisions a sellable venue: taxpayer, venue, node, live SIF, three series, and no till", async () => {
+  it("provisions a sellable venue: taxpayer, venue, node, live SIF, four series, and no till", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -470,7 +475,7 @@ describe("applyVenue", () => {
     expect(counts.rows[0]).toEqual({
       taxpayer: 1,
       nodes: 1,
-      series: 3,
+      series: 4,
       sif: 1,
       default_stations: 1,
       default_departments: 1,
@@ -481,7 +486,12 @@ describe("applyVenue", () => {
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
-    expect(series.rows.map((r) => r.purpose)).toEqual(["corrective", "full", "standard"]);
+    expect(series.rows.map((r) => r.purpose)).toEqual([
+      "corrective",
+      "full",
+      "full_corrective",
+      "standard",
+    ]);
 
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
@@ -504,7 +514,7 @@ describe("applyVenue", () => {
       {
         module: "fiscal-verifactu",
         report: expect.stringMatching(
-          /^SIF [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} \(installation S000001\); series A-S000001, FF-S000001, R-S000001$/,
+          /^SIF [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} \(installation S000001\); series A-S000001, F-S000001, FR-S000001, R-S000001$/,
         ),
       },
       {
@@ -853,7 +863,8 @@ describe("applyVenue", () => {
       );
       expect(series.rows).toEqual([
         { code: "A-S000001" },
-        { code: "FF-S000001" },
+        { code: "F-S000001" },
+        { code: "FR-S000001" },
         { code: "R-S000001" },
       ]);
     });

@@ -1611,7 +1611,8 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       "fiscal.correction_unsupported",
       "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
     ],
-    ["series.no_corrective_for_node", "This box has no corrective invoice series"],
+    ["series.no_corrective_for_node", "This box has no series for correcting simplified invoices"],
+    ["series.no_full_corrective_for_node", "This box has no series for correcting full invoices"],
   ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {
     const request = replacementServer(futureCase("2026-11-03"), async () => {
       throw refusal(code);

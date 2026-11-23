@@ -513,6 +513,23 @@ it.each([
     expect((await f.host.store.read())?.status).toBe("abandoned");
   },
 );
+it.each(["seriesCode", "fullCorrectiveSeriesCode"] as const)(
+  "refuses a claim whose %s the regime refuses before saving a setup record",
+  async (field) => {
+    const f = await fixture(undefined, { claimOnMount: false });
+    const refused = await f.post("/setup-api/first-setup/claim", {
+      venue: { ...request, [field]: "BAD CODE" },
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field } },
+    });
+    expect(await f.host.store.read()).toBeNull();
+    const accepted = await f.post("/setup-api/first-setup/claim", { venue: request });
+    expect(accepted.status).toBe(200);
+    expect((await f.host.store.read())?.status).toBe("claimed");
+  },
+);
 it("answers a staged configuration the claim cannot read with 422 setup.configuration_unreadable", async () => {
   const f = await fixture();
   vi.spyOn(f.host.owner, "claimFirstSetup").mockRejectedValue(

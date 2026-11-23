@@ -235,6 +235,7 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
       allocation: {
         series: [
           { code: "B-0CNPK", purpose: "standard" },
+          { code: "FR-0CNPK", purpose: "full_corrective" },
           { code: "FULL-0CNPK", purpose: "full" },
           { code: "RECT-0CNPK", purpose: "corrective" },
         ],

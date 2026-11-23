@@ -5,8 +5,9 @@ export const custodyBases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
+  { code: "RF", purpose: "full_corrective" },
 ];
-export async function custodyRequest() {
+export async function custodyRequest(bases: { code: string; purpose: string }[] = custodyBases) {
   const candidates: PaperAllocation[] = [1, 2].map((n) => ({
     version: 1,
     allocationId: `allocation-${n}`,
@@ -14,7 +15,7 @@ export async function custodyRequest() {
     softwareId: "W1",
     environment: "production",
     installationIdentity: `S00000${n}`,
-    series: custodyBases.map(({ code, purpose }) => ({ code: `${code}-S00000${n}`, purpose })),
+    series: bases.map(({ code, purpose }) => ({ code: `${code}-S00000${n}`, purpose })),
     source: "initial-paper",
     issuedAt: "2026-10-15T08:00:00.000Z",
   }));
@@ -38,7 +39,7 @@ export async function custodyRequest() {
     taxpayerNif: "B12345674",
     softwareId: "W1",
     environment: "production" as const,
-    requiredBases: custodyBases,
+    requiredBases: bases,
     candidates,
     candidateDigest: Array.from(new Uint8Array(hash), (v) => v.toString(16).padStart(2, "0")).join(
       "",

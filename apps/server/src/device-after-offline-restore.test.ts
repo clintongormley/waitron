@@ -62,7 +62,7 @@ it.each([
       "0CNQT",
     ]);
     expect(recovered.series.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual(
-      ["A-0CNQT", "FF-0CNQT", "R-0CNQT"],
+      ["A-0CNQT", "FF-0CNQT", "R-0CNQT", "RF-0CNQT"],
     );
     const store = await openVenueDatabase(restore.venueDir);
     let listener: ReturnType<typeof serve> | undefined;
@@ -192,7 +192,7 @@ it.each([
         (await store.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt !== null)
           .map((row) => row.nextNumber),
-      ).toEqual([123, 123, 123]);
+      ).toEqual([123, 123, 123, 123]);
       expect(network).not.toHaveBeenCalled();
     } finally {
       try {

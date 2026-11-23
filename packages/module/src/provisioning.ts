@@ -25,6 +25,12 @@ export interface NodeSeed {
   /** A filing seed may own series creation. Resolve its active references after setup and on
    * retries, without activating again; reject requested bases that differ from the allocation. */
   readonly series?: {
+    /** The node's live series as the bases an operator configures, without anything the module
+     * added to the codes it created. */
+    bases(
+      tx: Transaction,
+      node: ProvisionedNode,
+    ): Promise<readonly { readonly code: string; readonly purpose: string }[]>;
     resolve(
       tx: Transaction,
       node: ProvisionedNode,

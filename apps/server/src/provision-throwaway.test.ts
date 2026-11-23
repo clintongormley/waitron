@@ -101,6 +101,7 @@ describe("provisionVenue with a throwaway allocation", () => {
       expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
+        { code: "FR-0CNNW", purpose: "full_corrective" },
         { code: "R-0CNNW", purpose: "corrective" },
       ]);
       expect(suite.db.all(sql`select tax_id, legal_name from taxpayer`)).toEqual([
@@ -175,7 +176,7 @@ describe("provisionVenue with a throwaway allocation", () => {
       venueModuleConfig(ALL_ENABLED, "GB-vat"),
     );
 
-    expect(result.seriesIds).toHaveLength(3);
+    expect(result.seriesIds).toHaveLength(4);
     expect(suite.db.all(sql`select * from fiscal_allocations`)).toEqual([]);
     expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual([]);
     expect(suite.db.all(sql`select tax_id from taxpayer`)).toEqual([{ tax_id: real.taxId }]);

@@ -592,7 +592,7 @@ describe("a merged file close to its limit", () => {
     { title: "the most attempts one box holds", m1: 20, m2: 0, venueHistory: false, waits: true },
     {
       title: "the most, reading the venue's history",
-      m1: 20,
+      m1: 19,
       m2: 0,
       venueHistory: true,
       waits: true,

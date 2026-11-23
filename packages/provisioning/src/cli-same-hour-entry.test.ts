@@ -191,8 +191,13 @@ it("the built command waits and takes its name in the same run, and completes th
   try {
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
-    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(series.map((row) => row.code).sort()).toEqual([
+      "A-0CRFW",
+      "F-0CRFW",
+      "FR-0CRFW",
+      "R-0CRFW",
+    ]);
+    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
   } finally {
     await stored.close();
   }

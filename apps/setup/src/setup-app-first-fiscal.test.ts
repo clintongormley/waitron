@@ -1000,6 +1000,7 @@ it("labels the frozen series inputs as bases on the owner-bound review", async (
   expect(review.shadowRoot!.textContent).toContain("Invoice series base");
   expect(review.shadowRoot!.textContent).toContain("Full invoice series base");
   expect(review.shadowRoot!.textContent).toContain("Corrective series base");
+  expect(review.shadowRoot!.textContent).toContain("Full invoice corrective series base");
   expect(review.shadowRoot!.querySelector("[data-test=summary-seriesCode]")!.textContent).toBe("A");
 });
 
@@ -1308,6 +1309,7 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       "dayCutover",
       "fiscalTerritory",
       "fullSeriesCode",
+      "fullCorrectiveSeriesCode",
       "invoiceLocales",
       "legalName",
       "name",

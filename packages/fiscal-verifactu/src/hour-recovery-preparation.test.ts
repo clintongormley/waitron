@@ -187,6 +187,7 @@ it("selects and activates the next hour through the unchanged restore hook while
       { code: "A-0CNQR", purpose: "standard" },
       { code: "FF-0CNQR", purpose: "full" },
       { code: "R-0CNQR", purpose: "corrective" },
+      { code: "RF-0CNQR", purpose: "full_corrective" },
     ]);
     await restore(f.preparation, { binding, authority, input: selected.input });
   });
@@ -197,7 +198,7 @@ it("selects and activates the next hour through the unchanged restore hook while
       retiredAt: expect.any(Date),
     });
   expect(after.series.filter((row) => row.retiredAt === null).map((row) => row.nextNumber)).toEqual(
-    [1, 1, 1],
+    [1, 1, 1, 1],
   );
   expect(
     after.sifs.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),

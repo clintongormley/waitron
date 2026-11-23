@@ -45,6 +45,7 @@ const selected = {
         { code: "A-0CSQW", purpose: "standard" },
         { code: "FF-0CSQW", purpose: "full" },
         { code: "R-0CSQW", purpose: "corrective" },
+        { code: "RF-0CSQW", purpose: "full_corrective" },
       ],
     },
   },
@@ -276,7 +277,7 @@ it("requires the scope confirmation then imports only selected server input", as
   expect(calls.filter((c) => c.action === "candidates")).toEqual([
     { action: "candidates", value: { comparisonId: "comparison-2" } },
   ]);
-  for (const code of ["A-0CSQW", "FF-0CSQW", "R-0CSQW"])
+  for (const code of ["A-0CSQW", "FF-0CSQW", "R-0CSQW", "RF-0CSQW"])
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
   const chosen = el.shadowRoot!.querySelector("[data-test=selected-hour] h2");
@@ -1113,7 +1114,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(deliveries).toEqual([
     {
       stageId: "stage",
-      inputDigest: "dbb78bd723502a8dddb18cf3d1548488f409447a2eb5e20f3505fea6ac6bd531",
+      inputDigest: "db52d3f458452c6372a9516b6fb2a6bdae1317b71ad1b0c1fc3ad7a5b271445f",
       bindingDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       documentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       statement: {
@@ -1741,13 +1742,23 @@ it.each([
     "en",
     "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
-    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Corrective"],
+    [
+      "A-0CSQW — Standard",
+      "FF-0CSQW — Full invoice",
+      "R-0CSQW — Corrective",
+      "RF-0CSQW — Full invoice corrective",
+    ],
   ],
   [
     "es",
     "Hemos creado estas series de facturas:",
     "Waitron no puede crear series de facturas para esta fecha: está fuera del rango que cubren los códigos de serie.",
-    ["A-0CSQW — Simplificada", "FF-0CSQW — Factura completa", "R-0CSQW — Rectificativa"],
+    [
+      "A-0CSQW — Simplificada",
+      "FF-0CSQW — Factura completa",
+      "R-0CSQW — Rectificativa de simplificadas",
+      "RF-0CSQW — Rectificativa de completas",
+    ],
   ],
 ] as const)(
   "%s labels say invoice series, list each code with what it is for and never the bare name",

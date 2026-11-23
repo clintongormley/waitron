@@ -1,8 +1,8 @@
 import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { saveVenueFields, withTransaction } from "@waitron/db";
+import { invoiceSeries, saveVenueFields, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -112,7 +112,7 @@ it("refuses export while a future cutover change would be lost", async () => {
   ).toEqual([{ day_cutover: "04:30:00" }]);
 });
 
-it.each(["standard", "full", "corrective"])(
+it.each(["standard", "full", "corrective", "full_corrective"])(
   "refuses export without an active %s series",
   async (purpose) => {
     const target = await seed();
@@ -125,6 +125,120 @@ it.each(["standard", "full", "corrective"])(
     );
   },
 );
+
+const BASES = {
+  seriesCode: request.seriesCode,
+  fullSeriesCode: request.fullSeriesCode,
+  correctiveSeriesCode: request.correctiveSeriesCode,
+  fullCorrectiveSeriesCode: request.fullCorrectiveSeriesCode,
+};
+
+const SUFFIX = "-0CNM2";
+
+/** A series seat that adds {@link SUFFIX} to the codes it creates, so its bases drop it. */
+const suffixingSeries = {
+  bases: async (tx: Transaction, node: { nodeId: string }) =>
+    (
+      await tx
+        .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+        .from(invoiceSeries)
+        .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
+    ).map(({ code, purpose }) => ({ code: code.slice(0, -SUFFIX.length), purpose })),
+  resolve: async () => [],
+};
+
+/** The venue's filing module (`fiscal-none`, for GB-vat) owning its series. */
+function filingModuleOwningSeries(): WaitronModule[] {
+  const filing = venueFiscalSelection(ALL_MODULES, "GB-vat").contribution?.id;
+  return modules.map((module) =>
+    module.fiscal?.id === filing
+      ? {
+          ...module,
+          provisioning: {
+            ...module.provisioning,
+            seed: { summary: "", run: async () => "", series: suffixingSeries },
+          },
+        }
+      : module,
+  );
+}
+
+/** A module that owns series but is not the venue's filing module, answering codes nobody stored. */
+function otherSeriesOwner(name: string): WaitronModule {
+  return {
+    ...transfer([]),
+    fiscal: undefined,
+    name,
+    provisioning: {
+      seed: {
+        summary: "",
+        run: async () => "",
+        series: {
+          bases: async () =>
+            ["standard", "full", "corrective", "full_corrective"].map((purpose) => ({
+              code: "NOT-STORED",
+              purpose,
+            })),
+          resolve: async () => [],
+        },
+      },
+    },
+  };
+}
+
+it("exports the series owner's configured bases, not the box's suffixed live codes", async () => {
+  const target = await seed();
+  await withTransaction(suite.db, (tx) =>
+    tx.execute(sql`update invoice_series set code = code || ${SUFFIX}`),
+  );
+  const owned = await buildConfigurationBundle(
+    suite.db,
+    target,
+    filingModuleOwningSeries(),
+    now,
+    {},
+  );
+  expect(owned.venue).toMatchObject(BASES);
+});
+
+it("exports the stored codes unchanged when no module owns the venue's series", async () => {
+  const target = await seed();
+  const unowned = await buildConfigurationBundle(suite.db, target, [], now, {});
+  expect(unowned.venue).toMatchObject(BASES);
+});
+
+it("asks only the venue's filing module for its series bases", async () => {
+  const target = await seed();
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    [...modules, otherSeriesOwner("other-series-owner")],
+    now,
+    {},
+  );
+  expect(bundle.venue).toMatchObject(BASES);
+});
+
+it("asks no module without a fiscal seat for the bases when the filing module is absent", async () => {
+  const target = await seed();
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    [otherSeriesOwner("other-series-owner")],
+    now,
+    {},
+  );
+  expect(bundle.venue).toMatchObject(BASES);
+});
+
+it("refuses an export when two of the venue's filing modules own its series", async () => {
+  const target = await seed();
+  const twice = filingModuleOwningSeries();
+  const filing = twice.find((module) => module.provisioning?.seed?.series !== undefined)!;
+  await expect(
+    buildConfigurationBundle(suite.db, target, [...twice, { ...filing, name: "copy" }], now, {}),
+  ).rejects.toMatchObject(invalid("venue"));
+});
 
 it("refuses an export whose requested node does not belong to the stored venue", async () => {
   const target = await seed();

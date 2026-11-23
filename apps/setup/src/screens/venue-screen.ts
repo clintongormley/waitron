@@ -36,6 +36,7 @@ import {
   resolveInstalledStarterLanguages,
 } from "@waitron/country-packs";
 import { resolveContentText } from "@waitron/shared";
+import { DEFAULT_SERIES_CODES } from "../default-series-codes.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -85,7 +86,8 @@ type TextField =
   | "dayCutover"
   | "seriesCode"
   | "fullSeriesCode"
-  | "correctiveSeriesCode";
+  | "correctiveSeriesCode"
+  | "fullCorrectiveSeriesCode";
 
 /**
  * Each postal address's tokens share a section of its own: without one, Chromium filled the street
@@ -110,22 +112,19 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   seriesCode: "off",
   fullSeriesCode: "off",
   correctiveSeriesCode: "off",
+  fullCorrectiveSeriesCode: "off",
 };
 
 const INPUT_NAME: Readonly<Partial<Record<TextField, string>>> = { name: "venueName" };
-
-const CODE_FIELDS: ReadonlySet<TextField> = new Set([
-  "taxId",
-  "seriesCode",
-  "fullSeriesCode",
-  "correctiveSeriesCode",
-]);
 
 const SERIES_FIELDS: readonly TextField[] = [
   "seriesCode",
   "fullSeriesCode",
   "correctiveSeriesCode",
+  "fullCorrectiveSeriesCode",
 ];
+
+const CODE_FIELDS: ReadonlySet<TextField> = new Set(["taxId", ...SERIES_FIELDS]);
 
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold as one field. `taxpayerDomicile`
@@ -166,9 +165,7 @@ const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   ...REGISTERED_FIELDS,
   "invoiceLocales",
   "dayCutover",
-  "seriesCode",
-  "fullSeriesCode",
-  "correctiveSeriesCode",
+  ...SERIES_FIELDS,
 ]);
 
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
@@ -181,9 +178,7 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "city",
   "province",
   "dayCutover",
-  "seriesCode",
-  "fullSeriesCode",
-  "correctiveSeriesCode",
+  ...SERIES_FIELDS,
 ];
 
 type HintedField =
@@ -223,6 +218,7 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   seriesCode: "venue.help.series_codes",
   fullSeriesCode: "venue.help.series_codes",
   correctiveSeriesCode: "venue.help.series_codes",
+  fullCorrectiveSeriesCode: "venue.help.series_codes",
 };
 
 const hasHint = (key: TextField): key is HintedField => key in FIELD_HINT;
@@ -245,6 +241,7 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   seriesCode: "venue.field.series_code",
   fullSeriesCode: "venue.field.full_series_code",
   correctiveSeriesCode: "venue.field.corrective_series_code",
+  fullCorrectiveSeriesCode: "venue.field.full_corrective_series_code",
 };
 
 function venueAddressParts(values: Record<TextField, string>): RegisteredAddressParts {
@@ -430,9 +427,7 @@ export class SetupVenueScreen extends LitElement {
     city: "",
     province: "",
     dayCutover: "04:00",
-    seriesCode: "FS",
-    fullSeriesCode: "FF",
-    correctiveSeriesCode: "FR",
+    ...DEFAULT_SERIES_CODES,
   };
 
   @state() private invoiceLocales: string[] = ["es-ES"];
@@ -608,6 +603,8 @@ export class SetupVenueScreen extends LitElement {
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
       correctiveSeriesCode: venue.correctiveSeriesCode ?? this.values.correctiveSeriesCode,
+      fullCorrectiveSeriesCode:
+        venue.fullCorrectiveSeriesCode ?? this.values.fullCorrectiveSeriesCode,
     };
     this.#demoVenueNameSource =
       this.draft.demoVenueNameSource ?? (this.values.name === "" ? "automatic" : "custom");
@@ -1035,6 +1032,7 @@ export class SetupVenueScreen extends LitElement {
         seriesCode: this.values.seriesCode,
         fullSeriesCode: this.values.fullSeriesCode,
         correctiveSeriesCode: this.values.correctiveSeriesCode,
+        fullCorrectiveSeriesCode: this.values.fullCorrectiveSeriesCode,
       },
     };
     dispatchSetupPatch(this, patch);
@@ -1062,8 +1060,7 @@ export class SetupVenueScreen extends LitElement {
       return this.#jurisdiction()?.supported === false
         ? t("venue.error.territory_unsupported")
         : t("venue.error.province");
-    if (key === "seriesCode" || key === "fullSeriesCode" || key === "correctiveSeriesCode")
-      return t("venue.error.series_codes");
+    if (SERIES_FIELDS.includes(key)) return t("venue.error.series_codes");
     return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
 
@@ -1351,7 +1348,8 @@ export class SetupVenueScreen extends LitElement {
               <h2>${t("venue.section.invoicing")}</h2>
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
               ${this.#field(t("venue.label.full_series_code"), "fullSeriesCode")}
-              ${this.#field(t("venue.label.corrective_series_code"), "correctiveSeriesCode")}`
+              ${this.#field(t("venue.label.corrective_series_code"), "correctiveSeriesCode")}
+              ${this.#field(t("venue.label.full_corrective_series_code"), "fullCorrectiveSeriesCode")}`
       }
       <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}

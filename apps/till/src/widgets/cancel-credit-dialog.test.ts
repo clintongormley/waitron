@@ -176,7 +176,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
       "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
     );
     expect(actions(shared).error).toBe(
-      "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
+      "Este local no tiene una serie para rectificar facturas simplificadas. Avisa a un responsable",
     );
   });
 

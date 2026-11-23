@@ -202,6 +202,7 @@ function switchMode(
   delete venue.seriesCode;
   delete venue.fullSeriesCode;
   delete venue.correctiveSeriesCode;
+  delete venue.fullCorrectiveSeriesCode;
   delete venue.dayCutover;
   delete venue.invoiceLocales;
   const switched = { ...draft, venue };
@@ -263,6 +264,7 @@ const TAXPAYER_FIELDS = [
   "seriesCode",
   "fullSeriesCode",
   "correctiveSeriesCode",
+  "fullCorrectiveSeriesCode",
 ] as const;
 
 const CLAIM_VENUE_FIELDS = [
@@ -288,6 +290,7 @@ const claimVenueFieldsComplete: [
     | "seriesCode"
     | "fullSeriesCode"
     | "correctiveSeriesCode"
+    | "fullCorrectiveSeriesCode"
     | "admin"
     | "staffLanguage"
   >,
@@ -599,6 +602,7 @@ const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.archive_resource_limit": "shell.restore.archive_resource_limit",
   ...FIRST_SETUP_ERROR_MESSAGES,
   "restore.schema_too_new": "shell.cloud.other_version",
+  "provisioning.database_ahead": "shell.cloud.other_version",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
@@ -2327,7 +2331,7 @@ export class SetupApp extends LitElement {
                   ? say("shell.restore.archive_resource_limit")
                   : code === "restore.environment_mismatch"
                     ? say("shell.restore.environment_mismatch")
-                    : code === "restore.schema_too_new"
+                    : code === "restore.schema_too_new" || code === "provisioning.database_ahead"
                       ? say("shell.restore.other_version")
                       : this.restoreInvalidField !== undefined
                         ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])

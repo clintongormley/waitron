@@ -63,7 +63,7 @@ CREATE TABLE `invoice_series` (
 	`purpose` text DEFAULT 'standard' NOT NULL,
 	`retired_at` text,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "invoice_series_purpose_ck" CHECK("invoice_series"."purpose" in ('standard', 'full', 'corrective')),
+	CONSTRAINT "invoice_series_purpose_ck" CHECK("invoice_series"."purpose" in ('standard', 'full', 'corrective', 'full_corrective')),
 	CONSTRAINT "invoice_series_code_ck" CHECK("invoice_series"."code" <> '')
 );
 --> statement-breakpoint

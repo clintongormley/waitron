@@ -40,6 +40,7 @@ const input = {
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
       { code: "R-0CNNW", purpose: "corrective" },
+      { code: "RF-0CNNW", purpose: "full_corrective" },
     ],
     source: "hour",
     reservationEvidence: null,
@@ -937,7 +938,7 @@ it("refuses a delivered sheet that still carries an installation code", () => {
   );
 });
 
-it.each(["standard", "full", "corrective", "unknown"])(
+it.each(["standard", "full", "corrective", "full_corrective", "unknown"])(
   "refuses a matching setup allocation with a second %s prefix",
   (purpose) => {
     const saved = fixture();
@@ -952,7 +953,7 @@ it.each(["standard", "full", "corrective", "unknown"])(
   },
 );
 
-it.each(["standard", "full", "corrective"])(
+it.each(["standard", "full", "corrective", "full_corrective"])(
   "refuses a matching setup allocation missing its %s prefix",
   (purpose) => {
     const saved = fixture();
@@ -970,7 +971,7 @@ it.each(["standard", "full", "corrective"])(
 );
 
 it.each(["standard", "corrective", "unknown"])(
-  "refuses three setup prefixes whose full purpose is replaced by %s",
+  "refuses setup prefixes whose full purpose is replaced by %s",
   (purpose) => {
     const saved = fixture();
     saved.bases = saved.bases.map((base, index) => (index === 1 ? { ...base, purpose } : base));

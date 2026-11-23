@@ -303,8 +303,13 @@ it("the built preproduction command completes checked publication in one run", a
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const { invoiceSeries } = await import("@waitron/db");
     const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
-    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(series.map((row) => row.code).sort()).toEqual([
+      "A-0CRFY",
+      "F-0CRFY",
+      "FR-0CRFY",
+      "R-0CRFY",
+    ]);
+    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
     const identity = await stored.venue.execute<{ public_key: string }>(
       "select public_key from nodes",
     );
@@ -494,8 +499,13 @@ it("the built production command checks readiness and seals settings without sen
     const { invoiceSeries, sales, withTransaction } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
     const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
-    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(series.map((row) => row.code).sort()).toEqual([
+      "A-0CRFY",
+      "FF-0CRFY",
+      "FR-0CRFY",
+      "R-0CRFY",
+    ]);
+    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
     const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
     const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64") });
     expect(

@@ -798,6 +798,7 @@ const importedConfiguration: ConfigurationPreview = {
     seriesCode: "F",
     fullSeriesCode: "C",
     correctiveSeriesCode: "R",
+    fullCorrectiveSeriesCode: "CR",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
     fiscalTerritory: "ES-common",

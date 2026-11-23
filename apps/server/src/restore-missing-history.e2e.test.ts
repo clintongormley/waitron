@@ -237,7 +237,7 @@ it.each(["archive", "stream"] as const)(
         (await store.venue.select().from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
-      ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR"]);
+      ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR", "RF-0CNQR"]);
       expect(await store.venue.select().from(fiscalAllocations)).toEqual(allocationsBefore);
       await sell(standard("live").id);
       expect(numbers()).toEqual(["A-0CNNW/1", "A-0CNQR/1", "A-0CNQR/2"]);

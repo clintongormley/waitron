@@ -24,6 +24,8 @@ const venue = {
   taxId: "123456789",
   fiscalTerritory: "GB-vat",
   timeZone: "Europe/London",
+  fullSeriesCode: "F",
+  fullCorrectiveSeriesCode: "FR",
   admin: {
     displayName: "Target owner",
     email: "target@example.test",
@@ -57,7 +59,7 @@ async function fixture() {
   };
 }
 
-it("recovers the existing venue, node and all three series without allocating replacements", async () => {
+it("recovers the existing venue, node and all four series without allocating replacements", async () => {
   const f = await fixture();
   await withTransaction(suite.db, (tx) => advanceSeriesTo(tx, f.target.nodeId, 47));
   const before = (
@@ -83,8 +85,31 @@ it("recovers the existing venue, node and all three series without allocating re
       )
     ).rows,
   ).toEqual(before);
-  const defaulted = { ...venue, fullSeriesCode: undefined };
+  const defaulted = { ...venue, fullSeriesCode: undefined, fullCorrectiveSeriesCode: undefined };
   expect(await recoverProvisionedVenue(suite.db, { venue: defaulted }, ALL_MODULES)).toEqual({
+    nodeId: f.target.nodeId,
+    seriesIds: f.target.seriesIds,
+    seeded: [],
+  });
+});
+
+it("asks no module without a fiscal seat for the series when the filing module is absent", async () => {
+  const f = await fixture();
+  const unstored = async () =>
+    ["standard", "full", "corrective", "full_corrective"].map((purpose) => ({
+      id: `not-stored-${purpose}`,
+      code: "NOT-STORED",
+      purpose,
+    }));
+  const owner = {
+    ...ALL_MODULES.find((module) => module.name === "fiscal-none")!,
+    name: "series-owner-without-fiscal-seat",
+    fiscal: undefined,
+    provisioning: {
+      seed: { summary: "", run: async () => "", series: { bases: unstored, resolve: unstored } },
+    },
+  };
+  expect(await recoverProvisionedVenue(suite.db, { venue }, [owner])).toEqual({
     nodeId: f.target.nodeId,
     seriesIds: f.target.seriesIds,
     seeded: [],

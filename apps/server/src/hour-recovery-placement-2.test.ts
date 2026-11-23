@@ -217,6 +217,7 @@ describe("selected-hour admission before archive placement", () => {
         { code: "A-0CNQT", nextNumber: 1 },
         { code: "FF-0CNQT", nextNumber: 1 },
         { code: "R-0CNQT", nextNumber: 1 },
+        { code: "RF-0CNQT", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -284,7 +285,7 @@ describe("selected-hour admission before archive placement", () => {
         (await restored.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
-      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
+      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT", "RF-0CNQT"]);
       expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
       await restored.close();
@@ -319,7 +320,7 @@ describe("selected-hour admission before archive placement", () => {
       (await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
         (row) => row.nextNumber,
       ),
-    ).toEqual([123, 123, 123]);
+    ).toEqual([123, 123, 123, 123]);
   });
 
   it.each(["archive", "stream"] as const)(
@@ -361,9 +362,10 @@ describe("selected-hour admission before archive placement", () => {
           "A-0CNQT",
           "FF-0CNQT",
           "R-0CNQT",
+          "RF-0CNQT",
         ]);
         expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-          123, 123, 123,
+          123, 123, 123, 123,
         ]);
         expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
       } finally {
@@ -592,6 +594,7 @@ describe("selected-hour admission before archive placement", () => {
             { code: "A-0CNSP", purpose: "standard" },
             { code: "FF-0CNSP", purpose: "full" },
             { code: "R-0CNSP", purpose: "corrective" },
+            { code: "RF-0CNSP", purpose: "full_corrective" },
           ],
         },
       },
@@ -619,9 +622,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNSP",
         "FF-0CNSP",
         "R-0CNSP",
+        "RF-0CNSP",
       ]);
       expect(result.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        123, 123, 123,
+        123, 123, 123, 123,
       ]);
     } finally {
       await restored.close();

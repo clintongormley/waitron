@@ -158,7 +158,7 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
 minute's code is `0D0RY` (`hour-selection.test.ts`, "restore waits until a minute start 90 to 150
-seconds after its check"). Prefixes `A`, `FF` and `R` become `A-0D0RY`, `FF-0D0RY` and `R-0D0RY`.
+seconds after its check"). Prefixes `A`, `FF`, `R` and `RF` become `A-0D0RY`, `FF-0D0RY`, `R-0D0RY` and `RF-0D0RY`.
 Correct clocks
 and surviving history reduce accidental reuse; they cannot discover another box whose activity
 you did not report.

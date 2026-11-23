@@ -1,5 +1,6 @@
 import { AppError } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
+import { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
 import type { FirstSetupState } from "./first-setup-state.js";
 import "./errors.js";
 function refuse(): never {
@@ -28,8 +29,16 @@ export function firstSetupModuleContext(
     recipientVenueId: frozen.sourceId,
     bases: [
       { code: frozen.request.seriesCode, purpose: "standard" },
-      { code: frozen.request.fullSeriesCode ?? "FF", purpose: "full" },
+      {
+        code: frozen.request.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode,
+        purpose: "full",
+      },
       { code: frozen.request.correctiveSeriesCode, purpose: "corrective" },
+      {
+        code:
+          frozen.request.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+        purpose: "full_corrective",
+      },
     ],
     request: module.request,
   };

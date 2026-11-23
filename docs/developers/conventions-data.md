@@ -4289,6 +4289,11 @@ of 8. So such an edit ships only with a reset of every venue already migrated,
 said in the pull request's first line. Cost: #1036 had to restore both files byte for byte; the
 owner then chose to edit them and reset the venues.
 
+2026-11-23: a cold restore now refuses an archive taken before such an edit before placement
+(`writeValidated`, `apps/server/src/restore.ts`), and the setup page's Review backup refuses it
+first (`readRecoveryCopyPreview`); the sentence below that it 'runs no ahead check of its own' no
+longer holds.
+
 The unit case "reports an EDITED migration, whose hash changed although the count did not"
 (`packages/provisioning/src/schema-ahead.test.ts`) covers the comparison on plain strings. The
 review of the 2026-10-02 edit also ran it against real databases: one migrated with the files as
@@ -5302,6 +5307,31 @@ control still sends before the wait. Run them with
 
 ## Boot, the contained upgrade data checker and the bucket rebuild carry an ahead-of-image check
 
+**2026-11-23 (series split, PR 2):** a restore is another caller, at three steps. Each runs
+`assertNotAhead`, through `assertArchiveNotAhead` (`apps/server/src/restore.ts`), on the archive's
+copy, and on its node copy when that replaces the box's: the review of a backup
+(`readRecoveryCopyPreview`, `apps/server/src/recovery-backup-preview.ts`), before it migrates its
+private copy; the setup page's staging of an archive file (`validateArchiveForStaging`,
+`apps/server/src/restore-request.ts`), which migrates nothing; and placement (`writeValidated`),
+before anything is placed. The review answers the setup page's Review backup, Waitron Cloud's review
+and the bucket's, and runs first on the command line's `--confirm-sole-recovery`
+(`apps/server/src/recovery-entry.ts`). So an archive made before or after a starting migration was
+rebuilt is refused with `provisioning.database_ahead`, the box's database and identity left as they
+were. The restore gate still compares only migration counts. Pinned in
+`apps/server/src/restore-rebuilt-baseline.test.ts`, for archives made before and after a rebuild:
+the review of an archive file, which keeps no private copy; the setup page's staging; the command
+line with and without a recovery operation; and the staged restore at the next start.
+`apps/setup/src/screens/recovery-copy.test.ts` pins the words the setup page shows for that refusal
+at review. The setup page's restore with a recovery operation, and a bucket or Cloud review, were
+not run against such an archive.
+The 2026-11-11 note's "or calls `assertNotAhead`" no longer holds. Nor does the GAP paragraph's
+statement below that only boot and the bucket rebuild carry the check, for the paths that place a
+copy through `writeValidated`: the command line's cold restore, the staged restore (run by boot or
+by `apps/server/scripts/cloud-recovery-client-fixture.ts`), the bucket rebuild and
+`apps/server/scripts/cloud-backup-fixture.ts`. The review (`readRecoveryCopyPreview`), which has
+migrated a private copy since 2026-10-15 and so is missing from that 2026-09-25 list, now carries
+the check as well. The other migrating paths it lists are unchanged.
+
 **2026-11-12, manual activation:** [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades) now invoke the contained data checker and a separate copy-sale process through the retained host runtime. The 3a note below records the earlier dormant slice.
 
 **2026-11-17 (A1425 part 3, PR 1):** `assertCopyNotAhead` (`apps/server/src/spare-copy.ts`) runs
@@ -6303,7 +6333,8 @@ so an entry at or below a recorded watermark never runs and drizzle raises nothi
 bump starts with a grep for the outgoing version number and `grep -rn 'dialect.js'`.
 
 **2026-11-12 update:** the historical boot/bucket-only statement below now has the A950
-upgrade data checker as a third caller; see the current ahead-of-image section above.
+upgrade data checker as a third caller, and a restore about to place its copy (`writeValidated`) is
+another (2026-11-23); see the current ahead-of-image section above.
 The current [manual Restore/Keep path](../../deploy/README.md#checked-manual-upgrades) also
 supersedes the earlier one-way-door description below.
 

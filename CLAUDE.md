@@ -700,7 +700,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
-- **Of the paths that migrate, only boot, bucket rebuild and the contained upgrade data checker call `assertNotAhead` (a handover's compare refuses such a copy itself); a checked manual `waitron.sh install <ref>`
+- **Of the paths that migrate, only boot, bucket rebuild, the contained upgrade data checker, a restore's preview (`readRecoveryCopyPreview`) and a restore about to place its copy (`writeValidated`) call `assertNotAhead` (a handover's compare refuses such a copy itself); a checked manual `waitron.sh install <ref>`
   holds a failed check for Restore or Keep.** `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths
   do not carry that check. Their list: [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into

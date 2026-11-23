@@ -207,6 +207,15 @@ describe("runCli", () => {
     expect(h.lines.join("\n")).toContain("--recovery-pdf <absolute path of a new file,");
   });
 
+  it("the usage names the full series codes' defaults", async () => {
+    const h = harness();
+    await runCli([], h.deps);
+    const usage = h.lines.join("\n");
+    expect(usage).toContain("--full-series-code (default F)");
+    expect(usage).toContain("--full-corrective-series-code (default FR)");
+    expect(usage).not.toContain("defaults to FF");
+  });
+
   it("prints usage and exits 2 when no command is given at all", async () => {
     const h = harness();
     expect(await runCli([], h.deps)).toBe(2);
@@ -284,6 +293,7 @@ describe("runCli venue", () => {
       "seed-device-profiles",
       "create-venue",
       "create-node",
+      "create-series",
       "create-series",
       "create-series",
       "create-series",
@@ -413,9 +423,9 @@ describe("runCli venue", () => {
   });
 
   it.each([
-    [undefined, "FF"],
-    ["", "FF"],
-    ["  \t  ", "FF"],
+    [undefined, "F"],
+    ["", "F"],
+    ["  \t  ", "F"],
     ["  F1  ", "F1"],
   ])("normalizes full-series flag %s to %s without prompting", async (supplied, expected) => {
     const h = harness({ env: VENUE_ENV, modules: verifactuModules });
@@ -432,6 +442,29 @@ describe("runCli venue", () => {
     expect(h.asked).toEqual([]);
     expect(h.askedSecretly).toEqual([]);
   });
+
+  it.each([
+    [undefined, "FR"],
+    ["", "FR"],
+    ["  FR1  ", "FR1"],
+  ])(
+    "normalizes full-corrective-series flag %s to %s without prompting",
+    async (supplied, expected) => {
+      const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+      const flags = supplied === undefined ? [] : ["--full-corrective-series-code", supplied];
+
+      const code = await runCli([...VENUE_ARGS, ...flags, "--yes"], h.deps);
+
+      expect(code).toBe(0);
+      expect(h.applyVenue.mock.calls[0]?.[0]).toContainEqual({
+        kind: "create-series",
+        code: expected,
+        purpose: "full_corrective",
+      });
+      expect(h.asked).toEqual([]);
+      expect(h.askedSecretly).toEqual([]);
+    },
+  );
 
   it("keeps the taxpayer domicile separate from the venue address", async () => {
     const h = harness({ env: VENUE_ENV, modules: verifactuModules });

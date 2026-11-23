@@ -51,6 +51,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -206,6 +207,7 @@ it("restores through the real key runner, public paper selection and the complet
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "corrective" },
+      { code: "RF-P000042", purpose: "full_corrective" },
     ]);
     expect(result.seriesId).toBe(
       retained[0]!.result.series.find((row) => row.purpose === "standard")!.id,
@@ -268,10 +270,10 @@ it("uses the fiscal restore hook with node-key authentication without recreating
     const expected = retained[0]!.result;
     expect(result.seriesId).toBe(expected.series.find((row) => row.purpose === "standard")!.id);
     expect(result.reports).toEqual([
-      `fiscal-verifactu: SIF ${expected.sifId} (installation P000042); series A-P000042, FF-P000042, R-P000042`,
+      `fiscal-verifactu: SIF ${expected.sifId} (installation P000042); series A-P000042, FF-P000042, R-P000042, RF-P000042`,
     ]);
     const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-    expect(series).toHaveLength(6);
+    expect(series).toHaveLength(8);
     for (const old of oldSeries)
       expect(series.find((row) => row.id === old.id)).toEqual({
         ...old,
@@ -292,6 +294,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
       { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
+      { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
     ]);
     const sifs = await suite.db.select().from(verifactuIdentities);
     expect(sifs).toHaveLength(2);

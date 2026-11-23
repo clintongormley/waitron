@@ -68,6 +68,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T07:00:00.000Z",
@@ -223,6 +224,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
         { code: "A-S000001", purpose: "standard" },
         { code: "FF-S000001", purpose: "full" },
         { code: "R-S000001", purpose: "corrective" },
+        { code: "RF-S000001", purpose: "full_corrective" },
       ],
     },
     permission,
@@ -243,8 +245,9 @@ it("opens the supplied initial identities without writing scaffold series", asyn
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
     { code: "R-S000001", purpose: "corrective" },
+    { code: "RF-S000001", purpose: "full_corrective" },
   ]);
-  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
   expect((await suite.db.select().from(fiscalAllocations))[0]!.approval.operatorId).toBe(
     "administrator",
   );
@@ -318,6 +321,7 @@ it("activates the exact retained dormant reservation at promotion", async () => 
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ]);
   expect(await suite.db.select().from(fiscalReservations)).toEqual(before);
   expect((await suite.db.select().from(fiscalAllocations))[0]!.nodeId).toBe(target.nodeId);
@@ -355,6 +359,7 @@ it("preserves a genuine in-process emergency draw while detaching the outside hi
         `A-${draw.identity}`,
         `FF-${draw.identity}`,
         `R-${draw.identity}`,
+        `RF-${draw.identity}`,
       ]);
     }),
   );
@@ -567,6 +572,7 @@ it("activates all purposes from opaque module input with the independently authe
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ]);
   const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.id).toBe(result.sifId);

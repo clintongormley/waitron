@@ -446,7 +446,7 @@ it("retains the selected hour across restart but discards transient comparison a
   expect((await rows()).allocations).toHaveLength(2);
 });
 
-it.each(["standard", "full", "corrective"])(
+it.each(["standard", "full", "corrective", "full_corrective"])(
   "refuses a second %s prefix before dormant admission or hour selection",
   async (purpose) => {
     await suite.db.insert(invoiceSeries).values({
@@ -1017,11 +1017,11 @@ it.each(["key", "manager"])(
       server = undefined;
       await advanceSeriesTo(suite.db, standby.nodeId, 47);
       const before = await rows();
-      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(3);
+      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(4);
       expect(before.allocations).toHaveLength(2);
       expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
         expect.arrayContaining(
-          ["A-0CNQR", "FF-0CNQR", "R-0CNQR"].map((code) =>
+          ["A-0CNQR", "FF-0CNQR", "R-0CNQR", "RF-0CNQR"].map((code) =>
             expect.objectContaining({ code, nextNumber: 47 }),
           ),
         ),

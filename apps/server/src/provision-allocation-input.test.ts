@@ -54,6 +54,7 @@ const request: VenueRequest = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "RF",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -74,6 +75,7 @@ const candidate = {
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
     { code: "R-S000042", purpose: "corrective" },
+    { code: "RF-S000042", purpose: "full_corrective" },
   ],
 };
 const approval = {
@@ -220,6 +222,7 @@ async function allocatedVenue() {
     { code: "A-S000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000042", purpose: "full", nextNumber: 1 },
     { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
+    { code: "RF-S000042", purpose: "full_corrective", nextNumber: 1 },
   ]);
   expect(
     await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
@@ -376,6 +379,7 @@ it("checks the module's recovered ids against the actual committed rows", async 
       seed: {
         ...seed,
         series: {
+          ...seed.series!,
           resolve: async (tx, node, bases) =>
             (await resolve(tx, node, bases)).map((reference) => ({
               ...reference,

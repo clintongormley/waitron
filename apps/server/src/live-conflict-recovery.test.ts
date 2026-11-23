@@ -228,7 +228,12 @@ it("runs the sessionless real key/clock/activation route and reconciles its comm
     kind: "committed",
     result: {
       activationEventId: "conflict-event-1",
-      series: [{ code: "A-0CNQT" }, { code: "FF-0CNQT" }, { code: "R-0CNQT" }],
+      series: [
+        { code: "A-0CNQT" },
+        { code: "FF-0CNQT" },
+        { code: "R-0CNQT" },
+        { code: "RF-0CNQT" },
+      ],
     },
   });
   expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(before);

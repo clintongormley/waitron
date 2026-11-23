@@ -231,6 +231,7 @@ State: An AEAT response rejects a record and opens a filing case. An external re
 
 Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path. _2026-11-14 (Q37-FIX): the case dialog now sends a correction record for a code-1100 refusal whose message names the operation description, and a replacement corrective invoice for a simplified invoice refused for a future date (code 1112); every other refusal still has no decision route._
 _2026-11-15 (A1407): the same replacement is built for a full invoice refused for a future date, as an R4 "S" naming the same customer, but switched off until full invoices' correctives get a series of their own (adviser question S14 is answered: they may not share the tickets' corrective series) and the probe on AEAT's test service has run, so the page still offers it for an invoice AEAT refused for a future date only when that invoice is simplified. A corrective refused for a future date (`1112`) has no fix on the page, and a refusal about the customer block (AEAT `1193`, `2001`) has no writer at all._
+_2026-11-23: full invoices' correctives now have a series of their own; the R4 "S" stays switched off until the probe on AEAT's test service has run._
 
 ### `fiscal.respuesta_descuadrada`
 

@@ -187,6 +187,7 @@ it("commits a real prepared hour only after kept consent and publishes its check
       { code: "A-0CNNY", nextNumber: 1 },
       { code: "FF-0CNNY", nextNumber: 1 },
       { code: "R-0CNNY", nextNumber: 1 },
+      { code: "RF-0CNNY", nextNumber: 1 },
     ],
   });
 });

@@ -124,6 +124,7 @@ it.each(["setup", "restore"])(
       `A-${prefix}000043`,
       `FF-${prefix}000043`,
       `R-${prefix}000043`,
+      `RF-${prefix}000043`,
     ]);
   },
 );
@@ -202,6 +203,7 @@ it.each([40, 43])(
         "A-P000043",
         "FF-P000043",
         "R-P000043",
+        "RF-P000043",
       ]);
   },
 );
@@ -258,6 +260,7 @@ it.each(["old", "fresh", "missing known file", "malformed known file"])(
           "A-P000043",
           "FF-P000043",
           "R-P000043",
+          "RF-P000043",
         ]);
       else {
         await expect(run()).rejects.toMatchObject(refusal);
@@ -329,6 +332,7 @@ it.each([40, 43])(
         "A-P000043",
         "FF-P000043",
         "R-P000043",
+        "RF-P000043",
       ]);
   },
 );

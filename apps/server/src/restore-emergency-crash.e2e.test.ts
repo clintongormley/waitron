@@ -104,6 +104,7 @@ it.each([
       ["A-0CNQR", 1],
       ["FF-0CNQR", 1],
       ["R-0CNQR", 1],
+      ["RF-0CNQR", 1],
     ]);
     const journal = f.journal();
     if (corrupt) await writeFile(join(f.venueDir, "venue.db"), "corrupt partial database");

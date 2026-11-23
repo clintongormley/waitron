@@ -357,14 +357,12 @@ import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import {
-  readRestoreAdminVerifiers,
   stageRestoreRequest,
   stageStreamRestore,
+  validateArchiveForStaging,
 } from "./restore-request.js";
 import { stageResetRequest } from "./reset-request.js";
-import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
-import { validateArtifact, validateArtifactFile } from "./restore.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { assertOutsideScratchResolved, emptyScratch } from "./scratch.js";
 import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
@@ -1614,35 +1612,16 @@ async function bootServer(
             openStore: openBoundedBucket,
           }),
         stageRestore: (request, { oldBoxGone }) =>
-          stageRestoreRequest(config.stateDir, request, async (candidate) => {
-            const validation = {
-              recoveryKey: candidate.recoveryKey,
+          stageRestoreRequest(config.stateDir, request, (candidate) =>
+            validateArchiveForStaging(candidate, {
               stateDir: config.stateDir,
-              stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
               migrationsRoot: config.migrationsRoot,
               modules: availableModules,
-              environment: candidate.environment,
-            };
-            const validated =
-              candidate.kind === "archive-file"
-                ? await validateArtifactFile({
-                    ...validation,
-                    artifactPath: candidate.artifactPath,
-                  })
-                : await validateArtifact({ ...validation, artifact: candidate.artifact });
-            try {
-              await refuseIfArchiveSourceLive({
-                validated,
-                stateDir: config.stateDir,
-                oldBoxGone,
-                now,
-                openStore: openBoundedBucket,
-              });
-              return await readRestoreAdminVerifiers(validated.databasePath);
-            } finally {
-              await validated.discard();
-            }
-          }),
+              oldBoxGone,
+              now,
+              openStore: openBoundedBucket,
+            }),
+          ),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
         stageBucketRestore: async (
           {

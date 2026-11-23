@@ -59,6 +59,7 @@ const venue: VenueRequest = {
   timeZone: "Europe/London",
   dayCutover: "06:00",
   seriesCode: "F",
+  fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
   admin: { displayName: "Admin", email: "admin@example.test", pinHash: "pin", passwordHash: "pw" },
 };
@@ -756,6 +757,7 @@ it("a supplied disposable hour keeps its node and one sample across a readiness 
     ).toEqual([
       { purpose: "corrective", nextNumber: 1 },
       { purpose: "full", nextNumber: 1 },
+      { purpose: "full_corrective", nextNumber: 1 },
       { purpose: "standard", nextNumber: 2 },
     ]);
   } finally {

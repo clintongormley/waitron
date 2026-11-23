@@ -65,6 +65,13 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
   });
 }
 
+const NO_LIVE_SERIES = {
+  standard: "series.no_standard_for_node",
+  full: "series.no_full_for_node",
+  corrective: "series.no_corrective_for_node",
+  full_corrective: "series.no_full_corrective_for_node",
+} as const;
+
 /**
  * The id of a node's LIVE invoice series of `purpose`, inside the caller's transaction.
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
@@ -77,7 +84,7 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
 export async function readLiveSeriesIdTx(
   tx: Transaction,
   nodeId: string,
-  purpose: "standard" | "full" | "corrective",
+  purpose: keyof typeof NO_LIVE_SERIES,
 ): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })
@@ -92,11 +99,7 @@ export async function readLiveSeriesIdTx(
     .limit(2);
   const [row, extra] = rows;
   if (row === undefined) {
-    throw purpose === "standard"
-      ? new AppError("series.no_standard_for_node", { nodeId })
-      : purpose === "full"
-        ? new AppError("series.no_full_for_node", { nodeId })
-        : new AppError("series.no_corrective_for_node", { nodeId });
+    throw new AppError(NO_LIVE_SERIES[purpose], { nodeId });
   }
   if (extra !== undefined) {
     throw new Error(`invoice_series: node ${nodeId} has more than one ${purpose} series`);

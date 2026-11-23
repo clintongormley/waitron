@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { SERIES_BASES } from "./series-bases.js";
 
 describe("SERIES_BASES", () => {
-  it("lists the standard, full and corrective series, in that order", () => {
-    expect(SERIES_BASES.map((base) => base.purpose)).toEqual(["standard", "full", "corrective"]);
+  it("lists the standard, full, corrective and full corrective series, in that order", () => {
+    expect(SERIES_BASES.map((base) => base.purpose)).toEqual([
+      "standard",
+      "full",
+      "corrective",
+      "full_corrective",
+    ]);
   });
 
   it("refuses a change, so one test cannot leak a series into the next", () => {

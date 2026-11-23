@@ -85,6 +85,7 @@ export function createDemoVenueProvisioner(
           timeZone: fixture.timeZone,
           dayCutover: "05:00",
           seriesCode: "A",
+          fullSeriesCode: "FF",
           correctiveSeriesCode: "R",
           admin: {
             displayName: "Administrator",

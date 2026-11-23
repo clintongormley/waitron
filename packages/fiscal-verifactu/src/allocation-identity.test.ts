@@ -111,6 +111,7 @@ const PAPER_SERIES = [
   { code: "A-P000042", purpose: "standard" },
   { code: "FF-P000042", purpose: "full" },
   { code: "R-P000042", purpose: "corrective" },
+  { code: "RF-P000042", purpose: "full_corrective" },
 ];
 
 describe("a frozen allocation's complete series set", () => {

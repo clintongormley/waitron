@@ -1,4 +1,13 @@
-export const seriesPurposes = ["standard", "full", "corrective"] as const;
+export const seriesPurposes = ["standard", "full", "corrective", "full_corrective"] as const;
+
+export function seriesPurposeLabel(
+  purpose: string,
+  locale: keyof typeof fiscalSetupStrings,
+): string {
+  const known = seriesPurposes.find((item) => item === purpose);
+  return known === undefined ? purpose : fiscalSetupStrings[locale][known];
+}
+
 export const fiscalSetupStrings = {
   en: {
     heading: "First fiscal identity",
@@ -16,6 +25,7 @@ export const fiscalSetupStrings = {
     standard: "Standard",
     full: "Full invoice",
     corrective: "Corrective",
+    full_corrective: "Full invoice corrective",
     production: "Live / Production",
     preproduction: "Live / Preproduction",
     question: "Does this scope already have a current master?",
@@ -69,7 +79,8 @@ export const fiscalSetupStrings = {
     source: "Origen de configuración",
     standard: "Simplificada",
     full: "Factura completa",
-    corrective: "Rectificativa",
+    corrective: "Rectificativa de simplificadas",
+    full_corrective: "Rectificativa de completas",
     production: "Real / Producción",
     preproduction: "Real / Preproducción",
     question: "¿Este ámbito ya tiene un registro maestro vigente?",

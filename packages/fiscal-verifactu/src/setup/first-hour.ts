@@ -39,9 +39,6 @@ interface Context {
     legalName: string;
     country: string;
     taxId: string;
-    seriesCode: string;
-    fullSeriesCode?: string;
-    correctiveSeriesCode: string;
     name: string;
     city: string;
     fiscalTerritory: string;

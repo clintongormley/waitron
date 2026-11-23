@@ -1,5 +1,6 @@
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -163,6 +164,7 @@ it("collects the standby's current outside input before the promotion transactio
   expect((await suite.db.select().from(invoiceSeries)).map((row) => row.purpose).sort()).toEqual([
     "corrective",
     "full",
+    "full_corrective",
     "standard",
   ]);
 });
@@ -215,9 +217,9 @@ async function mirror(activate: StandbyProvisioning["activate"]) {
 }
 async function activateSeries(tx: Transaction, node: ProvisionedNode) {
   await tx.insert(invoiceSeries).values(
-    ["standard", "full", "corrective"].map((purpose) => ({
+    SERIES_BASES.map(({ code, purpose }) => ({
       nodeId: node.nodeId,
-      code: purpose + "-P000042",
+      code: `${code}-P000042`,
       purpose,
     })),
   );
@@ -356,13 +358,7 @@ describe("opaque authenticated standby carriers", () => {
         expect(readOperationAuthority(operation!.authority, operation!.binding)).toEqual({
           operatorId: "admin",
         });
-        await tx.insert(invoiceSeries).values(
-          ["standard", "full", "corrective"].map((purpose) => ({
-            nodeId: node.nodeId,
-            code: purpose + "-P000042",
-            purpose,
-          })),
-        );
+        await activateSeries(tx, node);
       },
     );
     const holders = createDeploymentHolders("mirror", "secondary");

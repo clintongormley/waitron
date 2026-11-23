@@ -193,7 +193,7 @@ for the empty-setup, both history controls and the real boot refusal that preser
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — the taxpayer row, the
-venue, a node, and standard, full and corrective invoice series — and runs every enabled module's
+venue, a node, and standard, full, corrective and full-corrective invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
@@ -234,6 +234,7 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --address-line1 '1 Main Street' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
     --series-code A --full-series-code FF --corrective-series-code R \
+    --full-corrective-series-code RF \
     --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```
@@ -248,9 +249,9 @@ Dashboard management login is **email + password**: `loginManager` resolves the 
 the setup UI and the bare `venue` CLI require the first admin's email and thread it into `seed-admin`,
 so the provisioned admin can sign in immediately.
 
-Every option is prompted for when omitted, so a bare `venue` is a complete interactive session; the
-exceptions are `--admin-first-names` and `--admin-last-names`, which are read from a flag but never
-prompted for, so an existing non-interactive script gains no new question. `--yes` skips the
+Most options are prompted for when omitted. `--full-series-code` (default `F`),
+`--full-corrective-series-code` (default `FR`), `--admin-first-names` and `--admin-last-names` are
+never prompted for, so an existing non-interactive script gains no new question. `--yes` skips the
 confirmation for a non-interactive run. The SIF's `id_sistema_informatico` is **not** an
 option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's
 software, not the venue. The venue directory carries no password, so it is an ordinary

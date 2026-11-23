@@ -34,6 +34,7 @@ const bases = [
   { code: "a/b_.-", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
+  { code: "RF", purpose: "full_corrective" },
 ];
 const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
@@ -185,7 +186,7 @@ it("includes higher retired names on another node under another software identif
     contradictions: [],
   });
   expect(latestRecordedAt(facts.history)).toBe(Date.parse("2026-10-16T13:20:00Z"));
-  expect(facts.bases).toHaveLength(3);
+  expect(facts.bases).toHaveLength(4);
 });
 
 it.each([
@@ -245,7 +246,7 @@ describe("recorded country", () => {
   });
 });
 
-it.each(["standard", "full", "corrective"])(
+it.each(["standard", "full", "corrective", "full_corrective"])(
   "refuses recovery with two %s prefixes without changing fiscal rows",
   async (purpose) => {
     await seed([...bases, { code: "second", purpose }]);

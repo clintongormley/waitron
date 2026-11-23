@@ -40,6 +40,7 @@ const context: InitialSetupContext = {
     { code: "B", purpose: "standard" },
     { code: "FF", purpose: "full" },
     { code: "R", purpose: "corrective" },
+    { code: "RF", purpose: "full_corrective" },
   ],
 };
 const venueId = "10000000-0000-4000-8000-000000000002";
@@ -405,6 +406,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       { code: "B-C000042", purpose: "standard" },
       { code: "FF-C000042", purpose: "full" },
       { code: "R-C000042", purpose: "corrective" },
+      { code: "RF-C000042", purpose: "full_corrective" },
     ]);
     f.current.priorActivation = "committed";
     const replay = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
@@ -581,6 +583,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       "B-P000008",
       "FF-P000008",
       "R-P000008",
+      "RF-P000008",
     ]);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
     expect(await readFile(paperPath)).toEqual(Buffer.from(priorBytes));

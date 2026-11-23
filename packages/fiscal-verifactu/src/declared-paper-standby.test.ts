@@ -307,7 +307,12 @@ it("promotes the exact retained unsigned reservation with fresh current consumpt
   const f = fixture();
   await prepare(f, "establish");
   const result = await promote(f);
-  expect(result.series.map((x) => x.code)).toEqual(["A-P000043", "FF-P000043", "R-P000043"]);
+  expect(result.series.map((x) => x.code)).toEqual([
+    "A-P000043",
+    "FF-P000043",
+    "R-P000043",
+    "RF-P000043",
+  ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 it("known burn floors still refuse promotion of an unsigned dormant reservation", async () => {

@@ -276,6 +276,7 @@ it("switches with key authority, preserves the rejected original and case, and r
     ["A-0CNQR", 1],
     ["FF-0CNQR", 1],
     ["R-0CNQR", 1],
+    ["RF-0CNQR", 1],
   ]);
   const head = await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId));
   expect(head).toMatchObject({ ultimoRegistroId: null, ultimaHuella: null });

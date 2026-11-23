@@ -130,6 +130,7 @@ describe("selected-hour admission before archive placement", () => {
           { code: "A-0CNNY", nextNumber: 123 },
           { code: "FF-0CNNY", nextNumber: 123 },
           { code: "R-0CNNY", nextNumber: 123 },
+          { code: "RF-0CNNY", nextNumber: 123 },
         ]);
         expect(
           rows
@@ -139,6 +140,7 @@ describe("selected-hour admission before archive placement", () => {
           { code: "A-0CNQT", nextNumber: 1 },
           { code: "FF-0CNQT", nextNumber: 1 },
           { code: "R-0CNQT", nextNumber: 1 },
+          { code: "RF-0CNQT", nextNumber: 1 },
         ]);
         expect(await result.venue.select().from(fiscalAllocations)).toHaveLength(2);
       } finally {
@@ -171,6 +173,7 @@ describe("selected-hour admission before archive placement", () => {
         { code: "A-0CNQT", nextNumber: 1 },
         { code: "FF-0CNQT", nextNumber: 1 },
         { code: "R-0CNQT", nextNumber: 1 },
+        { code: "RF-0CNQT", nextNumber: 1 },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -377,6 +380,7 @@ describe("selected-hour admission before archive placement", () => {
           { code: "A-0CNQT", nextNumber: 1 },
           { code: "FF-0CNQT", nextNumber: 1 },
           { code: "R-0CNQT", nextNumber: 1 },
+          { code: "RF-0CNQT", nextNumber: 1 },
         ]);
         await expect(sell(placed.venue, standard!.id)).rejects.toMatchObject({
           code: "sale.series_retired",
@@ -448,6 +452,7 @@ describe("selected-hour admission before archive placement", () => {
         { code: "A-0CNQT", nextNumber: 1 },
         { code: "FF-0CNQT", nextNumber: 1 },
         { code: "R-0CNQT", nextNumber: 1 },
+        { code: "RF-0CNQT", nextNumber: 1 },
       ]);
     } finally {
       await restored.close();
@@ -483,9 +488,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNQT",
         "FF-0CNQT",
         "R-0CNQT",
+        "RF-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        123, 123, 123,
+        123, 123, 123, 123,
       ]);
       expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -547,6 +553,7 @@ describe("selected-hour admission before archive placement", () => {
         { nextNumber: 123, retired: false },
         { nextNumber: 123, retired: false },
         { nextNumber: 123, retired: false },
+        { nextNumber: 123, retired: false },
       ]);
       expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(1);
     } finally {
@@ -568,7 +575,7 @@ describe("selected-hour admission before archive placement", () => {
         (await restored.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
-      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
+      ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT", "RF-0CNQT"]);
     } finally {
       await restored.close();
     }
@@ -599,9 +606,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNSP",
         "FF-0CNSP",
         "R-0CNSP",
+        "RF-0CNSP",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        123, 123, 123,
+        123, 123, 123, 123,
       ]);
       expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
     } finally {
@@ -721,9 +729,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNQT",
         "FF-0CNQT",
         "R-0CNQT",
+        "RF-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        125, 123, 123,
+        125, 123, 123, 123,
       ]);
     } finally {
       await placed.close();
@@ -936,6 +945,7 @@ describe("selected-hour admission before archive placement", () => {
           { code: "A-0CNNY", nextNumber: 123 },
           { code: "FF-0CNNY", nextNumber: 123 },
           { code: "R-0CNNY", nextNumber: 123 },
+          { code: "RF-0CNNY", nextNumber: 123 },
         ]);
         expect(allocations).toHaveLength(1);
       } finally {
@@ -968,6 +978,7 @@ describe("selected-hour admission before archive placement", () => {
           { code: "A-0CNQT", nextNumber: 1 },
           { code: "FF-0CNQT", nextNumber: 1 },
           { code: "R-0CNQT", nextNumber: 1 },
+          { code: "RF-0CNQT", nextNumber: 1 },
         ]);
         const active = await retained.venue.select().from(fiscalAllocations);
         expect(active.slice(0, 1)).toEqual(allocations);
