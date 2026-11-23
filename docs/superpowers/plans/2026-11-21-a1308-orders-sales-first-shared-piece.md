@@ -1,59 +1,67 @@
-# A1308 first shared piece — seed a bill venue without the till
+# A1308 first shared piece — seed a bill venue without mounting till routes
 
-The watcher requested this design at 19:56 on 21 November in Lane H’s `questions.md`.
-Build the split with the first part of the package move that takes these two suites. That part
-also gives the seed a package home and resolves its remaining server imports. The watcher
-clears the work. [19 November direction](2026-11-08-a1308-build-order.md#batch-2--area-slices)
+Two server suites can exercise a provisioned bill venue without importing the till routes.
+The watcher put this fixture split first on 23 November at 17:42 in Lane H's questions log,
+followed by small moves that lanes C, E and L can rebase across. This revises the 21 November
+plan, which paired the split with the first move that takes these two suites.
+[Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices)
 
-## Inventory on main
+## First pull request
 
-At `0beeb11be3`, after os13 and pa5, the [os1 selection](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move)
-contains 105 production files (38,590 lines), 146 tests (135,603 lines) and five helpers (1,412 lines).
-Production imports 88 distinct server files outside the selection. Tests and helpers bring the
-total to 178. Of the selected suites, 67 import `testing/bill-venue.ts`. The TypeScript scan counts
-direct relative imports, exports, import types and literal dynamic imports from tracked files.
+On `1d21cbb08c`, extract the data setup to `apps/server/src/testing/bill-venue-seed.ts`.
+Export `BillVenueSeed`, `BillVenueSeedOptions = { apply?: typeof applyVenue; identity?: SoftwareIdentity }`
+and `seedBillVenue(db: Database, options?: BillVenueSeedOptions): Promise<BillVenueSeed>`.
+Move the existing data fields, historical provisioning, published offers, fake reader pool and
+three device sign-ins. Keep the current `correctiveSeriesCode` and #4088's
+`setTipsForTest(db, true)` in the seed. The seed still uses server enrolment, session and menu
+helpers. Keep `bill-venue`, `serve-line`, `cancel-line`, `order-writer-fixture` and
+`grouped-counter-order` imports out of it.
 
-A source scan for route and fixture helper names left six candidates. Three use only `inTx`;
-`order-portions.counter.test.ts` still reaches the till through `serve-line.ts`. The other two
-can switch with this split. They passed five tests in 6.21 s. V8 attributed about 9 ms to route
-registration in that run. Loading `till-api.ts` with Node and tsx took 102–197 ms in three
-processes that preloaded shared dependencies. The split’s elapsed saving in Vitest remains
-unmeasured. Lane H kept both measurements and the scan in `receipts/orders-sales-first-shared-piece/`.
+Keep `provisionBillVenue` in `testing/bill-venue.ts`. Extend `BillVenueSeed` with the existing
+`app`, `appAt` and `appWith` mounts and their options. Keep `appDatabases`, `send` and the
+request-body helpers there. Use the seed's locale for the mounts. This is a fixture-only pull
+request. Package ownership, production changes and the remaining server imports belong to later
+plans. Expected size is zero production lines, +270/−230 test support and +20/−10 tests.
 
-## First slice
+## Checks
 
-Add `apps/server/src/testing/bill-venue-seed.ts` with
-`seedBillVenue(db: Database, options?: BillVenueSeedOptions): Promise<BillVenueSeed>`.
-Keep options `{ apply?: typeof applyVenue; identity?: SoftwareIdentity }`. Move the existing data
-fields of `BillVenue` into `BillVenueSeed`, along with the menu, provisioning, device enrolment,
-fake provider pool and real sign-in from `testing/bill-venue.ts:68,132,315`. Reuse the same
-`useVenueDb` setup, historical provisioning, device profiles and published offers.
+In `order-preview.test.ts` and `working-order.customer-fallback.test.ts`, add a hoisted
+`vi.mock("./till-api.js", …)` whose factory throws `Error("till must not load")`.
+See both fail with that cause on the old fixture. Switch them to the seed and keep the guards,
+`useVenueDb` setup and existing preview, pricing, fiscal and receipt assertions. The fixture's
+HTTP callers keep their checks in `receipt-device-evidence.test.ts`,
+`till-api.disk-full-gate.test.ts` and `bill-payments.card.test.ts`. The five files passed
+80 tests on the base via `pnpm --filter @waitron/server exec vitest run src/<file> …`.
 
-Keep `provisionBillVenue` and the route helpers in `testing/bill-venue.ts`. Call the seed and add
-`app`, `appAt`, `appWith` and `appTipsOff` through the current mount factory. Keep the
-`appDatabases` map and request-body helpers alongside `send`. Declare `BillVenue extends BillVenueSeed`.
-Switch `order-preview.test.ts` and `working-order.customer-fallback.test.ts` to the seed and its type.
-The seed uses the server’s join, session and menu setup. Keep the seed’s imports clear of
-`bill-venue`, `serve-line`, `cancel-line`, `order-writer-fixture` and `grouped-counter-order`.
-The order helpers reach the HTTP sender through `testing/cancel-line.ts:22`.
+Run those five files, server `typecheck` and root `scripts/workspace-cycles.test.ts` again.
+Run the unchanged queue gates in their packages. Fiscal runs `write-path.e2e.test.ts` and
+`inmutabilidad.test.ts`, server runs `till-api.sell-published.test.ts` including Review Focus 1
+and 2, and till runs `till-app-menu-refresh.test.ts`.
 
-## Acceptance for the future build
+### Expected protection-list difference
 
-1. In both direct suites, make a hoisted `vi.mock("./till-api.js", …)` throw
-   `Error("till must not load")` if the suite loads the route module. Observe both failures
-   before extraction. Keep both guards and the existing query, item, fiscal and receipt assertions.
-2. Run `receipt-device-evidence.test.ts`, `till-api.disk-full-gate.test.ts` and
-   `bill-payments.card.test.ts` for invoice evidence and the fixture’s disk and tip settings. Use
-   `pnpm --filter @waitron/server exec vitest run src/<file>` for each named server test,
-   `pnpm --filter @waitron/server typecheck`, and `pnpm exec vitest run scripts/workspace-cycles.test.ts`.
-3. Keep the queue gates unedited and run them in their packages. These are
-   `write-path.e2e.test.ts`, `inmutabilidad.test.ts`, `till-api.sell-published.test.ts`
-   (Review Focus 1/2), and `till-app-menu-refresh.test.ts`.
+Run `pnpm protection-list list` before and after from `apps/server` and compare. Expect `EQUAL`
+for both compositions, all phases and both databases. [Slice rules](2026-11-08-a1308-slice-rules.md#3-the-protection-list-predicted-then-checked)
 
-## Expected protection-list difference
+## Proposed pull requests after the fixture split
 
-Expect `EQUAL` across both compositions, all phases and both databases. Run the before and after
-comparison in the [slice rules](2026-11-08-a1308-slice-rules.md#3-the-protection-list-predicted-then-checked).
-Budget three hours. Production is 0 lines, test support +270/−230 (165 moved menu and body lines,
-plus fields and imports), tests +20/−10. The lane finishes and lands after review, the normal push
-hook and current-head CI. [Earlier package decision](2026-11-17-a1308-orders-sales-package-move.md)
+The current scan counts 105 production candidates (38,804 lines), 148 suites (136,846 lines) and
+five helpers (1,445 lines). Direct relative imports reach 182 outside modules, 89 from production.
+Of the selected suites, 67 import the bill fixture. The scan flags 44 suite candidates by
+following imports through test helpers. Each still needs its full dependencies checked.
+[CI assessment and sizing method](2026-11-22-a1308-orders-sales-ci-assessment.md)
+
+| Candidate PR | Size to check when planning |
+| --- | --- |
+| First independent package and CI wiring with `receipt-dates`, `receipt-logo`, `receipt-money` and `receipt-table` | Four sources (311 moved lines) and four suites (587 moved lines), plus package and CI wiring |
+| Orders error declarations | One source (2,148 lines), with 61 production and 36 test importers |
+| Trading context and till boundary | Six sources, with 44 production and 31 test importers |
+| Floor and kitchen boundary | Seven sources, with 18 production and 33 test importers |
+| Device and document boundary | Five sources, with 12 production and 18 test importers |
+| Card and refund boundary | Four sources, with six production and three test importers |
+
+The last five rows size the current contact points, with each actual edit sized separately
+before clearance. Split further where a change would exceed three hours. In the first move,
+qualify assets and source guards, root shard wiring, package-only and server-only CI selection,
+and independent `98/98/98/95` coverage. Keep boot, till mounts and their integration tests in
+the server. [Earlier boundary decisions](2026-11-17-a1308-orders-sales-package-move.md)
