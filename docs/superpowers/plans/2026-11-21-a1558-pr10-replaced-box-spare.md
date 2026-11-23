@@ -604,7 +604,9 @@ Download.**
     given a new password on the main box since the handover would still be judged by their old
     details.
   - It supports passwords only. Passkeys and Google sign-in need a challenge row in `venue.db` and
-    the old box's own address. Recovery codes write when they are used up.
+    the old box's own address. Recovery codes write when they are used up. (2026-11-23: a passkey
+    now signs in on the old box's page too, its challenge held in memory rather than in `venue.db`;
+    Google sign-in still does not.)
   - The main box never learns whether a download was taken, so the alert cannot say.
   - The same login refusal rules apply: one sentence, `password.invalid`, after the same hashing
     work (CLAUDE.md §3, `manager-login.ts:95-152`).

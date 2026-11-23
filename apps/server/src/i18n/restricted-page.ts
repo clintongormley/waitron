@@ -126,6 +126,12 @@ export interface RestrictedDownloadWords {
   otherPage: string;
   busy: string;
   signInRefused: string;
+  /** The secondary button that signs in with a passkey instead of the email and password. */
+  passkeyAction: string;
+  passkeyRefused: string;
+  passkeyExpired: string;
+  /** Shown by the page's script when the browser's passkey request is cancelled or fails. */
+  passkeyCancelled: string;
   totpRequired: string;
   notPermitted: string;
   throttled: (minutes: number) => string;
@@ -161,6 +167,12 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
       busy: "This box is already making the file. Try again in a minute.",
       signInRefused:
         "That email and password do not match an account on this box. This box knows the accounts as they were when it last ran the venue. Nothing was changed.",
+      passkeyAction: "Sign in with a passkey",
+      passkeyRefused:
+        "That passkey could not sign you in. This box knows the passkeys as they were when it stopped running the venue. Try again, or use your email and password. Nothing was changed.",
+      passkeyExpired: "The passkey request expired. Try again. Nothing was changed.",
+      passkeyCancelled:
+        "The passkey sign-in did not finish. Try again, or use your email and password.",
       totpRequired: "Enter your password again and the code from your authenticator app.",
       notPermitted:
         "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
@@ -191,6 +203,13 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
       busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
       signInRefused:
         "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban la última vez que llevó el local. No se ha cambiado nada.",
+      passkeyAction: "Entrar con passkey",
+      passkeyRefused:
+        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban cuando dejó de llevar el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
+      passkeyExpired:
+        "La solicitud de passkey ha caducado. Vuelve a intentarlo. No se ha cambiado nada.",
+      passkeyCancelled:
+        "El inicio de sesión con passkey no ha terminado. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña.",
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
       notPermitted:

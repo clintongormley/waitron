@@ -179,7 +179,7 @@ function invalid(field: string): never {
   throw new AppError("setup.request_invalid", { field });
 }
 
-export async function formBody(c: Context): Promise<string> {
+export async function formBody(c: Context, maxBytes = MAX_FORM_BYTES): Promise<string> {
   const type = c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
   if (type !== "application/x-www-form-urlencoded") invalid("body");
   const reader = c.req.raw.body?.getReader();
@@ -191,7 +191,7 @@ export async function formBody(c: Context): Promise<string> {
       const next = await reader.read();
       if (next.done) break;
       length += next.value.byteLength;
-      if (length > MAX_FORM_BYTES) {
+      if (length > maxBytes) {
         await reader.cancel();
         invalid("body");
       }

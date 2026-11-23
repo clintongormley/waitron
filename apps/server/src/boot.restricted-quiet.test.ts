@@ -1,6 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedManager } from "@waitron/identity/test/fixtures.js";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
+import { webauthnCredentials } from "@waitron/identity";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -111,11 +113,29 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 
 const QUIET_MS = 5_000;
 const ADMIN_EMAIL = "admin@example.test";
+const MANAGEMENT_ORIGIN = "https://dashboard.example";
+const RP_ID = "dashboard.example";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
+
+interface Download {
+  status: number;
+  contentType: string | null;
+  head: number[];
+  setCookie: string | null;
+}
+
+async function downloadOf(response: Response): Promise<Download> {
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    head: [...new Uint8Array(await response.arrayBuffer()).slice(0, 4)],
+    setCookie: response.headers.get("set-cookie"),
+  };
+}
 
 interface Observed {
   hashBefore: string;
@@ -128,7 +148,9 @@ interface Observed {
   /** The status of a GET of `/` made during the quiet period. */
   pageStatus: number;
   /** A download made on the old box's page during the quiet period, on a restricted start. */
-  download?: { status: number; contentType: string | null; head: number[] };
+  download?: Download;
+  /** The same download after a passkey sign-in: the options request, then the signed answer. */
+  passkeyDownload?: Download;
   mailStatus: string;
 }
 
@@ -212,11 +234,15 @@ function observeStart(options: { restricted: boolean }): () => Observed {
         }),
       );
     }
-    await seedManager(suite.db, { email: ADMIN_EMAIL, role: "admin" });
-    // A pending change row, as a write outside `withTransaction` leaves one: a GET that opened a
-    // write transaction would drain it and change the file.
-    suite.db.run(
-      sql`insert into change_log (id, payload) values (${randomUUID()}, ${JSON.stringify({ resource: "venue" })})`,
+    const adminId = await seedManager(suite.db, { email: ADMIN_EMAIL, role: "admin" });
+    const passkey = signingPasskey(RP_ID);
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(webauthnCredentials).values({
+        personId: adminId,
+        credentialId: passkey.credentialId,
+        publicKey: passkey.publicKey,
+        counter: 0,
+      }),
     );
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-quiet-"));
     await ensureBoxSecrets({
@@ -239,7 +265,8 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       ...KEY_ENV,
       WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789",
       WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
+      WAITRON_MANAGEMENT_ORIGIN: MANAGEMENT_ORIGIN,
+      WAITRON_MANAGEMENT_RP_ID: RP_ID,
       WAITRON_STATE_DIR: scratch,
       WAITRON_VENUE_DIR: dirname(venueFile(suite)),
       WAITRON_NODE_ID: nodeId,
@@ -258,6 +285,11 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     calls.spawn = 0;
     calls.drain = 0;
     calls.runner = 0;
+    // A pending change row, as a write outside `withTransaction` leaves one: a request that opened a
+    // write transaction would drain it and change the file. Last, so no seeding transaction drains it.
+    suite.db.run(
+      sql`insert into change_log (id, payload) values (${randomUUID()}, ${JSON.stringify({ resource: "venue" })})`,
+    );
     const hashBefore = await venueHash(suite);
     server = await startServer(env, env, {
       timings: { maxTickMs: 600000, minTickMs: 200 },
@@ -272,18 +304,26 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     // A person opening the box's address is part of the quiet period: the page must not write.
     const pageStatus = (await fetch(`https://127.0.0.1:${httpPort()}/`, via)).status;
     let download: Observed["download"];
+    let passkeyDownload: Observed["passkeyDownload"];
     if (options.restricted) {
-      const response = await fetch(`https://127.0.0.1:${httpPort()}/old-box-data`, {
+      const downloadWith = async (fields: Record<string, string>) =>
+        downloadOf(
+          await fetch(`https://127.0.0.1:${httpPort()}/old-box-data`, {
+            ...via,
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams(fields).toString(),
+          }),
+        );
+      download = await downloadWith({ email: ADMIN_EMAIL, password: "correct horse" });
+      const offered = await fetch(`https://127.0.0.1:${httpPort()}/old-box-data/passkey-options`, {
         ...via,
         method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ email: ADMIN_EMAIL, password: "correct horse" }).toString(),
       });
-      download = {
-        status: response.status,
-        contentType: response.headers.get("content-type"),
-        head: [...new Uint8Array(await response.arrayBuffer()).slice(0, 4)],
-      };
+      const { challenge } = (await offered.json()) as { challenge: string };
+      passkeyDownload = await downloadWith({
+        passkey: JSON.stringify(passkey.assert(challenge, MANAGEMENT_ORIGIN)),
+      });
     }
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
     observed = {
@@ -292,6 +332,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       ...calls,
       pageStatus,
       download,
+      passkeyDownload,
       mailStatus: suite.db.get<{ status: string }>(
         sql`select status from outgoing_mail where dedupe_key = 'quiet-mail'`,
       )!.status,
@@ -316,13 +357,21 @@ function observeStart(options: { restricted: boolean }): () => Observed {
 describe("a restricted start touches nothing outside and nothing in venue.db", () => {
   const observed = observeStart({ restricted: true });
 
+  const workbook = {
+    status: 200,
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    head: [0x50, 0x4b, 0x03, 0x04],
+    setCookie: null,
+  };
+
   it("writes nothing to venue.db, with its own page opened and its data downloaded", () => {
     expect(observed().pageStatus).toBe(200);
-    expect(observed().download).toEqual({
-      status: 200,
-      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      head: [0x50, 0x4b, 0x03, 0x04],
-    });
+    expect(observed().download).toEqual(workbook);
+    expect(observed().hashAfter).toBe(observed().hashBefore);
+  });
+
+  it("writes nothing to venue.db and sets no cookie for a download after a passkey sign-in", () => {
+    expect(observed().passkeyDownload).toEqual(workbook);
     expect(observed().hashAfter).toBe(observed().hashBefore);
   });
 

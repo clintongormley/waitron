@@ -2063,6 +2063,11 @@ async function bootServer(
           ...restrictedDownloadDeps(restrictedPage),
           modules: enabledAtStart,
           totpKeyRing: ring,
+          passkey: {
+            rpId: config.managementRpId,
+            managementOrigin: config.managementOrigin,
+            nodeId: restrictedPage.nodeId,
+          },
           mainHoldings: () => resetOrder.mainHoldings(),
           mainCopy: () => resetOrder.mainCopy(),
         }),

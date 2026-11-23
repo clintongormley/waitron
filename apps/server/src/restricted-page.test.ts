@@ -939,6 +939,12 @@ describe("the restricted page's download section", () => {
       busy: "This box is already making the file. Try again in a minute.",
       otherPage: "The download must be asked for on this page. Nothing was changed.",
       totpRequired: "Enter your password again and the code from your authenticator app.",
+      passkeyAction: "Sign in with a passkey",
+      passkeyRefused:
+        "That passkey could not sign you in. This box knows the passkeys as they were when it stopped running the venue. Try again, or use your email and password. Nothing was changed.",
+      passkeyExpired: "The passkey request expired. Try again. Nothing was changed.",
+      passkeyCancelled:
+        "The passkey sign-in did not finish. Try again, or use your email and password.",
       throttled: "Too many incorrect attempts. Wait 2 minutes and try again. Nothing was changed.",
       emailMissing: "Enter your email.",
       passwordMissing: "Enter your password.",
@@ -969,6 +975,13 @@ describe("the restricted page's download section", () => {
       otherPage: "La descarga debe pedirse en esta página. No se ha cambiado nada.",
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
+      passkeyAction: "Entrar con passkey",
+      passkeyRefused:
+        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban cuando dejó de llevar el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
+      passkeyExpired:
+        "La solicitud de passkey ha caducado. Vuelve a intentarlo. No se ha cambiado nada.",
+      passkeyCancelled:
+        "El inicio de sesión con passkey no ha terminado. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña.",
       throttled:
         "Demasiados intentos incorrectos. Espera 2 minutos y vuelve a intentarlo. No se ha cambiado nada.",
       emailMissing: "Introduce tu correo electrónico.",
@@ -1036,6 +1049,11 @@ describe("the restricted page's download section", () => {
     return html.slice(start, html.indexOf("</section>", start) + "</section>".length);
   }
 
+  /** The section's markup alone: its script's text names the ids and marks the script clears. */
+  function markup(drawn: string): string {
+    return drawn.replace(/<script>[\s\S]*?<\/script>/g, "");
+  }
+
   it("words every line in English and in Spanish", () => {
     for (const [locale] of LANGUAGES) {
       const words = RESTRICTED_DOWNLOAD_WORDS[locale];
@@ -1055,6 +1073,10 @@ describe("the restricted page's download section", () => {
         busy: words.busy,
         otherPage: words.otherPage,
         totpRequired: words.totpRequired,
+        passkeyAction: words.passkeyAction,
+        passkeyRefused: words.passkeyRefused,
+        passkeyExpired: words.passkeyExpired,
+        passkeyCancelled: words.passkeyCancelled,
         throttled: words.throttled(2),
         emailMissing: words.emailMissing,
         passwordMissing: words.passwordMissing,
@@ -1128,13 +1150,47 @@ describe("the restricted page's download section", () => {
       expect(drawn).not.toContain('role="alert"');
       expect(drawn).toContain('<form method="post" action="/old-box-data" class="box-form">');
       expect(html).toContain(BOX_FORM_STYLE);
-      const script = html.slice(html.indexOf("<script>") + 8, html.indexOf("</script>"));
-      const hash = createHash("sha256").update(script).digest("base64");
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, body]) =>
+        createHash("sha256").update(body!).digest("base64"),
+      );
+      expect(scripts).toHaveLength(2);
       expect(response.headers.get("content-security-policy")).toBe(
-        `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'`,
+        `default-src 'none'; style-src 'unsafe-inline'; script-src ${scripts.map((hash) => `'sha256-${hash}'`).join(" ")}; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'`,
       );
     },
   );
+
+  it.each(LANGUAGES)(
+    "offers a passkey sign-in, hidden until the script finds the browser can make one, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header);
+      const drawn = section(html);
+      inOrder(drawn, [
+        '<form method="post" action="/old-box-data" class="box-form">',
+        'name="password"',
+        '<form method="post" action="/old-box-data" class="box-form" id="old-box-data-passkey-form">',
+        '<input type="hidden" name="passkey">',
+        `<button type="button" class="secondary" id="old-box-data-passkey" data-failed="${escapeHtml(DOWNLOAD[locale].passkeyCancelled)}" hidden>${escapeHtml(DOWNLOAD[locale].passkeyAction)}</button>`,
+        "<script>",
+      ]);
+      const script = drawn.slice(drawn.indexOf("<script>"));
+      expect(script).toContain("window.PublicKeyCredential");
+      expect(script).toContain('"/old-box-data/passkey-options"');
+      expect(script).toContain('userVerification: "required"');
+      expect(script).not.toContain(DOWNLOAD[locale].passkeyCancelled);
+    },
+  );
+
+  it("offers no passkey sign-in over plain HTTP or while the box is wiped", async () => {
+    await handOver(await seedSuccessor("Counter box"), "emergency");
+    for (const options of [{ secure: false }, { resetOrdered: true }]) {
+      const { response, html } = await answer("en-GB", options);
+      expect(html).not.toContain("passkey");
+      expect(html.match(/<script>/g)).toHaveLength(1);
+      expect(response.headers.get("content-security-policy")).not.toContain("connect-src");
+    }
+  });
 
   it.each(LANGUAGES)(
     "draws no form over plain HTTP, only the HTTPS sentence, in %s",
@@ -1195,11 +1251,39 @@ describe("the restricted page's download section", () => {
       const drawn = section(html);
       expect(drawn).toContain(`value="${escapeHtml(email)}"`);
       expect(drawn).not.toContain(email);
-      expect(drawn).not.toContain("aria-invalid");
+      expect(markup(drawn)).not.toContain("aria-invalid");
       inOrder(drawn, [
         'name="password"',
         `<p id="old-box-data-message" role="alert">${escapeHtml(message)}</p>`,
         "<button",
+      ]);
+    },
+  );
+
+  const PASSKEY_SLOT = LANGUAGES.flatMap(([locale, header]) =>
+    (["passkeyRefused", "passkeyExpired", "notPermitted", "busy", "failed"] as const).map(
+      (refusal) => [locale, header, refusal, DOWNLOAD[locale][refusal]] as const,
+    ),
+  );
+
+  it.each(PASSKEY_SLOT)(
+    "draws a refused passkey post's %s line above the passkey button alone (%s): %s",
+    async (_locale, header, refusal, message) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header, {
+        download: { refusal, email: "", passkey: true },
+      });
+      const drawn = section(html);
+      expect(markup(drawn).match(/role="alert"/g)).toHaveLength(1);
+      expect(markup(drawn)).not.toContain("old-box-data-message");
+      expect(markup(drawn)).not.toMatch(/-error"|aria-invalid/);
+      inOrder(drawn, [
+        'name="password"',
+        '<button type="submit">',
+        'id="old-box-data-passkey-form"',
+        '<input type="hidden" name="passkey">',
+        `<p id="old-box-data-passkey-message" role="alert">${escapeHtml(message)}</p>`,
+        'id="old-box-data-passkey"',
       ]);
     },
   );
@@ -1257,7 +1341,7 @@ describe("the restricted page's download section", () => {
         "<button",
       ]);
       expect(drawn).toMatch(/<input type="text" id="old-box-data-totp" name="totp"[^>]* required>/);
-      expect(drawn).not.toContain("aria-invalid");
+      expect(markup(drawn)).not.toContain("aria-invalid");
     },
   );
 
