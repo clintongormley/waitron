@@ -234,6 +234,14 @@ The till's **This device hasn't trusted the till yet** page follows your browser
 supported language, with English as the fallback. Choose **Open the setup page for instructions**
 to install the box's certificate on this device, then reopen the till.
 
+On a device that has never trusted the box, the browser may warn about the connection before the
+till can open. Open `http://` followed by the box's IP address and `/setup/trust` instead, for
+example `http://192.168.1.20/setup/trust`, to reach the page that installs its certificate. When
+the box is connected by cable, someone who can manage the system finds its address beside **Wired**
+under **Network** on [Box status](box-status.md#network). `http://waitron.local/setup/trust` works
+too where the device can find that name, but a VPN switched on in the device can stop it opening,
+so switch the VPN off; [opening the box](servers.md) says more.
+
 ## Refund all or part of a payment {#refund-payment}
 
 When a bill's payment needs returning, start with that payment so you can see how much remains

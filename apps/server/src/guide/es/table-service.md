@@ -250,6 +250,15 @@ preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Abre
 configuración para ver las instrucciones** para instalar el certificado del servidor en este
 dispositivo y vuelve a abrir la caja.
 
+En un dispositivo que nunca ha confiado en el servidor, el navegador puede avisar de la conexión
+antes de que la caja pueda abrirse. Abre en su lugar `http://` seguido de la dirección IP del
+servidor y `/setup/trust`, por ejemplo `http://192.168.1.20/setup/trust`, para llegar a la página
+que instala su certificado. Si el servidor está conectado por cable, quien puede gestionar el
+sistema encuentra su dirección junto a **Cable** en **Red** dentro de
+[Estado del servidor](box-status.md#network). `http://waitron.local/setup/trust` también funciona
+si el dispositivo encuentra ese nombre, pero una VPN activada en el dispositivo puede impedir
+abrirlo, así que desactívala; [Servidores](servers.md) lo explica.
+
 ## Devolver un pago entero o una parte {#refund-payment}
 
 Cuando tengas que devolver un pago de una cuenta, empieza por ese pago para comprobar cuánto queda
