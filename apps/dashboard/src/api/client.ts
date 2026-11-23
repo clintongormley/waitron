@@ -713,7 +713,6 @@ export interface VenueDefaults {
   receiptLanguage: string;
   receiptLanguageChoices: string[];
   fixedReceiptLanguage: string | null;
-  defaultProductVatClass: VatClass;
   /** The rate a new product's takeaway VAT starts at ("10.00"). */
   defaultTakeawayVatRate: string;
   /** Whether the venue's region charges takeaway VAT at its own rate. */
@@ -4274,9 +4273,7 @@ export class DashboardApi {
   }
 
   putVenueDefaults(
-    changes: Partial<
-      Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass" | "defaultTakeawayVatRate">
-    >,
+    changes: Partial<Pick<VenueDefaults, "receiptLanguage" | "defaultTakeawayVatRate">>,
   ): Promise<VenueDefaults> {
     return this.#request<VenueDefaults>("/management-api/venue-defaults", "PUT", changes);
   }

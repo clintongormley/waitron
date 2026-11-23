@@ -3,7 +3,6 @@ import type { MenuDocument } from "@waitron/shared";
 import { fixedLanguages, patchFieldValue } from "@waitron/menu/src/menu-patch.js";
 import type { MenuPatchChange } from "@waitron/menu/src/menu-patch-types.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { vatClassName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -18,7 +17,6 @@ const FIELD_LABELS: Record<string, StringKey> = {
   description: "editor.description",
   image: "image.label",
   price: "editor.price",
-  vatClass: "product.vat",
 };
 
 const CHILD_KINDS = new Set(["variant", "extra", "option_label"]);
@@ -75,7 +73,6 @@ export function refusalWords({ code, params }: Refusal): string {
 
 function words(field: string, value: unknown, isNew: boolean): string {
   if (field === "price") return formatMoney(value as string, currentLocale());
-  if (field === "vatClass") return vatClassName(value as string);
   if (field === "image")
     return t(
       value === null

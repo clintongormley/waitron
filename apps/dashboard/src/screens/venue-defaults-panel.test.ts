@@ -18,7 +18,6 @@ const MADRID: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
-  defaultProductVatClass: "reduced",
   defaultTakeawayVatRate: "10.00",
   takeawayVat: false,
   vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -27,7 +26,6 @@ const BARCELONA: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["ca-ES"],
   fixedReceiptLanguage: "ca-ES",
-  defaultProductVatClass: "reduced",
   defaultTakeawayVatRate: "10.00",
   takeawayVat: false,
   vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -96,23 +94,10 @@ afterEach(() => {
 });
 
 it.each([
-  [
-    "en-GB",
-    "Defaults",
-    "Edit",
-    ["Default receipt language: Spanish", "VAT class for new products: Reduced (10%)"],
-  ],
-  [
-    "es",
-    "Valores predeterminados",
-    "Editar",
-    [
-      "Idioma predeterminado del recibo: Español",
-      "Clase de IVA para productos nuevos: Reducido (10%)",
-    ],
-  ],
+  ["en-GB", "Defaults", "Edit", ["Default receipt language: Spanish"]],
+  ["es", "Valores predeterminados", "Editar", ["Idioma predeterminado del recibo: Español"]],
 ])(
-  "shows the two defaults in a card headed by an h2 (%s)",
+  "shows the receipt language, and no eat-in VAT class, in a card headed by an h2 (%s)",
   async (locale, heading, edit, expected) => {
     setLocale(locale);
     const el = await mount(rig().api);
@@ -123,9 +108,7 @@ it.each([
     expect(q(el, "[data-test=edit]")!.closest("header")?.parentElement).toBe(card);
     expect(rows(el)).toEqual(expected);
     expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe(expected[0]!.split(": ")[1]);
-    expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe(
-      expected[1]!.split(": ")[1],
-    );
+    expect(q(el, "[data-test=saved-defaultProductVatClass]")).toBeNull();
   },
 );
 
@@ -156,12 +139,12 @@ it("warns when the receipt language is not a content language, following a live 
 
 it("follows a live change to the stored defaults", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   const el = await mount(r.api);
-  r.state.stored = { ...r.state.stored, defaultProductVatClass: "zero", receiptLanguage: "ca-ES" };
+  r.state.stored = { ...r.state.stored, defaultTakeawayVatRate: "0.00", receiptLanguage: "ca-ES" };
   r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
-  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
+  expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe("0%");
 });
 
 it.each([
@@ -188,10 +171,7 @@ it("a read-only card shows the stored defaults, the stored-differs note and the 
   setLocale("en-GB");
   const { api } = rig(BARCELONA, { defaultLanguage: "ca", languages: ["ca"] });
   const el = await mount(api, true);
-  expect(rows(el)).toEqual([
-    "Default receipt language: Spanish",
-    "VAT class for new products: Reduced (10%)",
-  ]);
+  expect(rows(el)).toEqual(["Default receipt language: Spanish"]);
   expect(q(el, "[data-test=stored-differs]")).not.toBeNull();
   expect(q(el, "[data-test=edit]")).toBeNull();
   expect(q(el, "form")).toBeNull();
@@ -210,10 +190,7 @@ it("a draft open when the card turns read-only shows the stored defaults, with n
   expect(q(el, "wt-combobox")).toBeNull();
   expect(q(el, "[data-test=edit]")).toBeNull();
   expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
-  expect(rows(el)).toEqual([
-    "Default receipt language: Spanish",
-    "VAT class for new products: Reduced (10%)",
-  ]);
+  expect(rows(el)).toEqual(["Default receipt language: Spanish"]);
   expect(api.putVenueDefaults).not.toHaveBeenCalled();
 });
 
@@ -249,18 +226,17 @@ async function pick(el: Panel, name: string, value: string) {
   await el.updateComplete;
 }
 
-it("where the region charges no takeaway VAT, Edit opens the receipt language and the VAT class, required and without search, with Save quiet and disabled", async () => {
+it("where the region charges no takeaway VAT, Edit opens the receipt language alone, required and without search, with Save quiet and disabled", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
   await edit(el);
   expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
   expect(q(el, "[data-test=edit]")).toBeNull();
   const language = combo(el, "receiptLanguage")!;
-  const vat = combo(el, "defaultProductVatClass")!;
-  for (const field of [language, vat]) {
-    expect(field.required).toBe(true);
-    expect(field.search).toBe("never");
-  }
+  expect(language.required).toBe(true);
+  expect(language.search).toBe("never");
+  expect(combo(el, "defaultProductVatClass")).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(1);
   expect(language.label).toBe("Default receipt language");
   expect(language.value).toBe("es-ES");
   expect(language.options.map((option) => option.value)).toEqual([
@@ -268,14 +244,6 @@ it("where the region charges no takeaway VAT, Edit opens the receipt language an
     "ca-ES",
     "gl-ES",
     "eu-ES",
-  ]);
-  expect(vat.label).toBe("VAT class for new products");
-  expect(vat.value).toBe("reduced");
-  expect(vat.options.map((option) => option.label)).toEqual([
-    "General (21%)",
-    "Reduced (10%)",
-    "Super-reduced (4%)",
-    "No tax (0%)",
   ]);
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).variant).toBe("secondary");
@@ -291,8 +259,8 @@ it.each([
   async (locale, row) => {
     setLocale(locale);
     const el = await mount(rig(TAKEAWAY).api);
-    expect(rows(el)).toHaveLength(3);
-    expect(rows(el)[2]).toBe(row);
+    expect(rows(el)).toHaveLength(2);
+    expect(rows(el)[1]).toBe(row);
     expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe(row.split(": ")[1]);
   },
 );
@@ -300,11 +268,11 @@ it.each([
 it("shows no takeaway rate, viewing or editing, where the region charges no takeaway VAT", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
-  expect(rows(el)).toHaveLength(2);
+  expect(rows(el)).toHaveLength(1);
   expect(q(el, "[data-test=saved-defaultTakeawayVatRate]")).toBeNull();
   await edit(el);
   expect(combo(el, "defaultTakeawayVatRate")).toBeNull();
-  expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(2);
+  expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(1);
 });
 
 it("Edit offers the pickable takeaway rates as percentages, required and without search", async () => {
@@ -374,7 +342,7 @@ it("puts a refused takeaway rate beside its field, with the generic sentence at 
   expect(combo(el, "defaultTakeawayVatRate")!.error).toBe(
     "Choose the VAT when taken away for new products.",
   );
-  expect(combo(el, "defaultProductVatClass")!.error).toBe("");
+  expect(combo(el, "receiptLanguage")!.error).toBe("");
   expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("4.00");
 });
@@ -393,43 +361,53 @@ it("offers a stored language outside the choices, so the field shows what is sto
   expect(combo(el, "receiptLanguage")!.value).toBe("en-GB");
 });
 
-it("sends only the changed VAT class, and changing it back quiets Save", async () => {
-  setLocale("en-GB");
-  const r = rig();
-  const el = await mount(r.api);
-  await edit(el);
-  await pick(el, "defaultProductVatClass", "general");
-  expect(saveButton(el).disabled).toBe(false);
-  expect(saveButton(el).variant).toBe("primary");
-  await pick(el, "defaultProductVatClass", "reduced");
-  expect(saveButton(el).disabled).toBe(true);
-  expect(saveButton(el).variant).toBe("secondary");
-  await pick(el, "defaultProductVatClass", "zero");
-  saveButton(el).click();
-  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
-  expect(r.api.putVenueDefaults.mock.calls).toEqual([[{ defaultProductVatClass: "zero" }]]);
-  expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
-  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
-});
+it.each([
+  ["en-GB", /VAT class/],
+  ["es", /Clase de IVA/],
+])(
+  "offers no eat-in VAT class, viewing or editing, and a save sends none (%s)",
+  async (locale, words) => {
+    setLocale(locale);
+    const r = rig(TAKEAWAY);
+    const el = await mount(r.api);
+    expect(el.shadowRoot!.textContent).not.toMatch(words);
+    await edit(el);
+    expect(combo(el, "defaultProductVatClass")).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-combobox")].map((field) =>
+        field.getAttribute("name"),
+      ),
+    ).toEqual(["receiptLanguage", "defaultTakeawayVatRate"]);
+    expect(el.shadowRoot!.textContent).not.toMatch(words);
+    await pick(el, "receiptLanguage", "ca-ES");
+    await pick(el, "defaultTakeawayVatRate", "4.00");
+    saveButton(el).click();
+    await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+    expect(r.api.putVenueDefaults.mock.calls).toEqual([
+      [{ receiptLanguage: "ca-ES", defaultTakeawayVatRate: "4.00" }],
+    ]);
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+  },
+);
 
 it("sends both changes in one call and shows the answer in view mode", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   r.api.putVenueDefaults.mockImplementationOnce(async () => {
-    r.state.stored = { ...MADRID, receiptLanguage: "gl-ES", defaultProductVatClass: "general" };
+    r.state.stored = { ...TAKEAWAY, receiptLanguage: "gl-ES", defaultTakeawayVatRate: "21.00" };
     return structuredClone(r.state.stored);
   });
   const el = await mount(r.api);
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   saveButton(el).click();
   await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
   expect(r.api.putVenueDefaults.mock.calls).toEqual([
-    [{ receiptLanguage: "ca-ES", defaultProductVatClass: "zero" }],
+    [{ receiptLanguage: "ca-ES", defaultTakeawayVatRate: "0.00" }],
   ]);
   expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Galician");
-  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("General (21%)");
+  expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe("21%");
 });
 
 it("Save does nothing while the draft is unchanged", async () => {
@@ -474,17 +452,11 @@ it.each([
     "ca-ES",
     "Choose one of the languages offered.",
   ],
-  [
-    { code: "product.invalid", params: { field: "defaultProductVatClass" } },
-    "defaultProductVatClass",
-    "zero",
-    "Choose a VAT class for new products.",
-  ],
 ] as const)(
   "puts the refusal %j beside its field, with the generic sentence at the bottom",
   async (refusal, field, value, sentence) => {
     setLocale("en-GB");
-    const r = rig();
+    const r = rig(TAKEAWAY);
     r.api.putVenueDefaults.mockRejectedValueOnce(refusal);
     const el = await mount(r.api);
     await edit(el);
@@ -493,13 +465,12 @@ it.each([
     await expect.poll(() => combo(el, field)!.error).not.toBe("");
     if (sentence) expect(combo(el, field)!.error).toBe(sentence);
     else expect(combo(el, field)!.error).toBe(codeMessage(refusal.code));
-    const other = field === "receiptLanguage" ? "defaultProductVatClass" : "receiptLanguage";
-    expect(combo(el, other)!.error).toBe("");
+    expect(combo(el, "defaultTakeawayVatRate")!.error).toBe("");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     await el.updateComplete;
     expect(saveButton(el).disabled).toBe(false);
     expect(combo(el, field)!.value).toBe(value);
-    await pick(el, field, field === "receiptLanguage" ? "gl-ES" : "general");
+    await pick(el, field, "gl-ES");
     expect(combo(el, field)!.error).toBe("");
     expect(bottom(el)).toBe("");
   },
@@ -507,35 +478,35 @@ it.each([
 
 it("shows any other refusal at the bottom only, and Save stays enabled", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   r.api.putVenueDefaults.mockRejectedValueOnce({ code: "connection.failed" });
   const el = await mount(r.api);
   await edit(el);
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   saveButton(el).click();
   await expect.poll(() => bottom(el)).toBe(codeMessage("connection.failed"));
   expect(combo(el, "receiptLanguage")!.error).toBe("");
-  expect(combo(el, "defaultProductVatClass")!.error).toBe("");
+  expect(combo(el, "defaultTakeawayVatRate")!.error).toBe("");
   await el.updateComplete;
   expect(saveButton(el).disabled).toBe(false);
 });
 
 it("a clean draft adopts a live change and a dirty one keeps its value", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   const el = await mount(r.api);
   await edit(el);
-  r.state.stored = { ...r.state.stored, defaultProductVatClass: "general" };
+  r.state.stored = { ...r.state.stored, defaultTakeawayVatRate: "21.00" };
   r.liveData.invalidate([{ type: "settings.menu" }]);
-  await expect.poll(() => combo(el, "defaultProductVatClass")!.value).toBe("general");
+  await expect.poll(() => combo(el, "defaultTakeawayVatRate")!.value).toBe("21.00");
   expect(saveButton(el).disabled).toBe(true);
   await pick(el, "receiptLanguage", "gl-ES");
-  r.state.stored = { ...r.state.stored, receiptLanguage: "eu-ES", defaultProductVatClass: "zero" };
+  r.state.stored = { ...r.state.stored, receiptLanguage: "eu-ES", defaultTakeawayVatRate: "0.00" };
   r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(3);
   await flush(el);
   expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
-  expect(combo(el, "defaultProductVatClass")!.value).toBe("general");
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("21.00");
   expect(saveButton(el).disabled).toBe(false);
 });
 
@@ -679,7 +650,7 @@ it("a staged language survives a live read and reconnecting, and once reverted a
 
 it("while a save is in flight a pick and a second Save are ignored, and a refusal brings Save back", async () => {
   setLocale("en-GB");
-  const r = rig(BARCELONA);
+  const r = rig({ ...BARCELONA, takeawayVat: true });
   const pending = deferred<VenueDefaults>();
   r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
   const el = await mountWithLeave(r.api);
@@ -690,9 +661,9 @@ it("while a save is in flight a pick and a second Save are ignored, and a refusa
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).loading).toBe(true);
   expect(combo(el, "receiptLanguage")!.disabled).toBe(true);
-  expect(combo(el, "defaultProductVatClass")!.disabled).toBe(true);
-  await pick(el, "defaultProductVatClass", "zero");
-  expect(combo(el, "defaultProductVatClass")!.value).toBe("reduced");
+  expect(combo(el, "defaultTakeawayVatRate")!.disabled).toBe(true);
+  await pick(el, "defaultTakeawayVatRate", "0.00");
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("10.00");
   saveButton(el).click();
   expect(r.api.putVenueDefaults.mock.calls).toEqual([[{ receiptLanguage: "ca-ES" }]]);
   pending.reject({ code: "receipt.language_orders_open" });
@@ -949,12 +920,12 @@ it("a refusal that arrives after reconnecting during the save goes under its fie
 
 it("a save in flight when the card turns read-only shows its answer once it succeeds", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   const pending = deferred<VenueDefaults>();
   r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
   const el = await mount(r.api);
   await edit(el);
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   saveButton(el).click();
   await el.updateComplete;
   el.readOnly = true;
@@ -962,23 +933,23 @@ it("a save in flight when the card turns read-only shows its answer once it succ
   expect(q(el, "form")).toBeNull();
   const reread = deferred<VenueDefaults>();
   r.api.getVenueDefaults.mockImplementationOnce(() => reread.promise);
-  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  pending.resolve({ ...TAKEAWAY, defaultTakeawayVatRate: "0.00" });
   await pending.promise;
   await frame();
   await flush(el);
-  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
+  expect(text(q(el, "[data-test=saved-defaultTakeawayVatRate]"))).toBe("0%");
   expect(q(el, "form")).toBeNull();
-  reread.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  reread.resolve({ ...TAKEAWAY, defaultTakeawayVatRate: "0.00" });
 });
 
 it("a save that succeeds after the card turned read-only and back leaves the new clean draft open on its answer", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   const pending = deferred<VenueDefaults>();
   r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
   const el = await mountWithLeave(r.api);
   await edit(el);
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   saveButton(el).click();
   await el.updateComplete;
   el.readOnly = true;
@@ -988,16 +959,16 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   await edit(el);
   const reread = deferred<VenueDefaults>();
   r.api.getVenueDefaults.mockImplementationOnce(() => reread.promise);
-  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  pending.resolve({ ...TAKEAWAY, defaultTakeawayVatRate: "0.00" });
   await pending.promise;
   await frame();
   await flush(el);
   expect(q(el, "form")).not.toBeNull();
-  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("0.00");
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).loading).toBe(false);
   expect(unload()).toBe(false);
-  reread.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  reread.resolve({ ...TAKEAWAY, defaultTakeawayVatRate: "0.00" });
 });
 
 it("a refusal that arrives after the card turned read-only and back leaves the new draft alone", async () => {
@@ -1115,7 +1086,6 @@ it.each([
       receiptLanguage: "A $& {fixed}",
       receiptLanguageChoices: [],
       fixedReceiptLanguage: "B $& {stored}",
-      defaultProductVatClass: "reduced",
       defaultTakeawayVatRate: "10.00",
       takeawayVat: false,
       vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -1128,13 +1098,13 @@ it.each([
   ]);
 });
 
-it("a live update that fixes the language moves a staged choice to the fixed one and keeps the VAT draft", async () => {
+it("a live update that fixes the language moves a staged choice to the fixed one and keeps the takeaway VAT draft", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   const el = await mount(r.api);
   await edit(el);
   await pick(el, "receiptLanguage", "gl-ES");
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   r.state.stored = {
     ...r.state.stored,
     receiptLanguageChoices: ["ca-ES"],
@@ -1143,7 +1113,7 @@ it("a live update that fixes the language moves a staged choice to the fixed one
   r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("ca-ES");
   expect(combo(el, "receiptLanguage")!.options).toEqual([{ value: "ca-ES", label: "Catalan" }]);
-  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("0.00");
   expect(saveButton(el).disabled).toBe(false);
 });
 
@@ -1182,25 +1152,25 @@ it("Retry reads through the background client, as every read after the first doe
   expect(r.background.getVenueDefaults).toHaveBeenCalledTimes(1);
 });
 
-it("a VAT refusal and its value survive a live read", async () => {
+it("a takeaway VAT refusal and its value survive a live read", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(TAKEAWAY);
   r.api.putVenueDefaults.mockRejectedValueOnce({
     code: "product.invalid",
-    params: { field: "defaultProductVatClass" },
+    params: { field: "defaultTakeawayVatRate" },
   });
   const el = await mount(r.api);
   await edit(el);
-  await pick(el, "defaultProductVatClass", "zero");
+  await pick(el, "defaultTakeawayVatRate", "0.00");
   saveButton(el).click();
   await expect
-    .poll(() => combo(el, "defaultProductVatClass")!.error)
-    .toBe(t("menu_settings.invalid"));
+    .poll(() => combo(el, "defaultTakeawayVatRate")!.error)
+    .toBe(t("menu_settings.takeaway_invalid"));
   r.liveData.invalidate([{ type: "settings.menu" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await flush(el);
-  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
-  expect(combo(el, "defaultProductVatClass")!.error).toBe(t("menu_settings.invalid"));
+  expect(combo(el, "defaultTakeawayVatRate")!.value).toBe("0.00");
+  expect(combo(el, "defaultTakeawayVatRate")!.error).toBe(t("menu_settings.takeaway_invalid"));
   expect(bottom(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(false);
 });

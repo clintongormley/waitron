@@ -4,7 +4,6 @@ import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
-import { vatClassLabel } from "./i18n/domain.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
@@ -121,7 +120,6 @@ function stubApi(role = "manager", permissions = ["test.use", "venue.view"]): Da
       receiptLanguage: "es-ES",
       receiptLanguageChoices: ["es-ES"],
       fixedReceiptLanguage: null,
-      defaultProductVatClass: "reduced",
       defaultTakeawayVatRate: "21.00",
       takeawayVat: true,
       vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -273,7 +271,7 @@ it("replaces a removed Receipts deep link with Venue details for a manager with 
   expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("venue-details");
 });
 
-it("shows the VAT class for new products in the Defaults card to venue.configure without menu.manage", async () => {
+it("shows no eat-in VAT class for new products in the Defaults card to venue.configure", async () => {
   const el = await mount("/venue-settings/view/venue-details", "manager", [
     "venue.view",
     "venue.configure",
@@ -281,10 +279,9 @@ it("shows the VAT class for new products in the Defaults card to venue.configure
   const defaults = () =>
     page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
   await expect
-    .poll(
-      () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
-    )
-    .toBe(vatClassLabel("reduced"));
+    .poll(() => defaults()?.querySelector('[data-test="saved-receiptLanguage"]'))
+    .not.toBeNull();
+  expect(defaults()!.querySelector('[data-test="saved-defaultProductVatClass"]')).toBeNull();
 });
 
 it("shows the takeaway rate for new products in the Defaults card to venue.configure without menu.manage", async () => {
@@ -307,9 +304,9 @@ it("shows a supervisor the Defaults card's values with nothing to edit", async (
     page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
   await expect
     .poll(
-      () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
+      () => defaults()?.querySelector('[data-test="saved-defaultTakeawayVatRate"]')?.textContent,
     )
-    .toBe(vatClassLabel("reduced"));
+    .toBe("21 %");
   expect(defaults()!.querySelector('[data-test="saved-receiptLanguage"]')).not.toBeNull();
   expect(defaults()!.querySelector('[data-test="edit"]')).toBeNull();
   expect(defaults()!.querySelector("wt-combobox")).toBeNull();

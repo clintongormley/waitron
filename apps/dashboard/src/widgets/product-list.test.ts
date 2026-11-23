@@ -1210,8 +1210,9 @@ describe("product-list", () => {
     );
   });
 
-  it("notes a variant's VAT under its price only where it differs from its product's", async () => {
+  it("notes no eat-in VAT under a variant's price, even where its class differs from its product's", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      takeawayVat: true,
       products: [
         product({
           id: "wine",
@@ -1256,11 +1257,17 @@ describe("product-list", () => {
       cellUnder(root, rowKey, t("product.price")).querySelector<HTMLElement>(
         '[data-test="vat-note"]',
       );
-    expect(note("wine:w175")!.textContent!.trim()).toBe(
-      `${t("product.vat")}: ${vatClassName("general")}`,
-    );
+    const takeawayNote = (rowKey: string) =>
+      cellUnder(root, rowKey, t("product.price")).querySelector<HTMLElement>(
+        '[data-test="takeaway-vat-note"]',
+      );
+    expect(note("wine:w175")).toBeNull();
     expect(note("wine:w125")).toBeNull();
     expect(note("wine")).toBeNull();
+    expect(cellUnder(root, "wine:w175", t("product.price")).textContent).not.toContain(
+      vatClassName("general"),
+    );
+    expect(takeawayNote("wine:w175")!.textContent!.trim()).toBe("IVA para llevar: 21 %");
     for (const [rowKey, name] of [
       ["wine:w175", "175 ml"],
       ["wine:w125", "125 ml"],
@@ -1272,7 +1279,7 @@ describe("product-list", () => {
         .textContent!.trim(),
     ).toBe(euros("4,00"));
     // Cell markup lives in the table's shadow root, so only ::part reaches it.
-    const style = getComputedStyle(note("wine:w175")!);
+    const style = getComputedStyle(takeawayNote("wine:w175")!);
     expect(style.display).toBe("block");
     expect(style.color).not.toBe(
       getComputedStyle(cellUnder(root, "wine:w175", t("product.price"))).color,
@@ -1322,12 +1329,9 @@ describe("product-list", () => {
             '[part="vat-note"]',
           ),
         ].map((note) => note.textContent!.trim());
-      const served = `${t("product.vat")}: ${vatClassName("general")}`;
-      expect(notes("wine:served")).toEqual([served]);
+      expect(notes("wine:served")).toEqual([]);
       expect(notes("wine:away")).toEqual(takeawayVat ? ["IVA para llevar: 0 %"] : []);
-      expect(notes("wine:both")).toEqual(
-        takeawayVat ? [served, "IVA para llevar: 7,5 %"] : [served],
-      );
+      expect(notes("wine:both")).toEqual(takeawayVat ? ["IVA para llevar: 7,5 %"] : []);
       expect(notes("wine:same")).toEqual([]);
       expect(notes("wine")).toEqual([]);
     },

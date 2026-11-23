@@ -543,7 +543,6 @@ describe("DashboardApi routes", () => {
       receiptLanguage: "es-ES",
       receiptLanguageChoices: ["es-ES", "ca-ES"],
       fixedReceiptLanguage: null,
-      defaultProductVatClass: "zero" as const,
       defaultTakeawayVatRate: "4.00",
       takeawayVat: true,
       vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -552,12 +551,12 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getVenueDefaults()).resolves.toEqual(answer);
-    await expect(api.putVenueDefaults({ defaultProductVatClass: "zero" })).resolves.toEqual(answer);
+    await expect(api.putVenueDefaults({ receiptLanguage: "ca-ES" })).resolves.toEqual(answer);
     await expect(api.putVenueDefaults({ defaultTakeawayVatRate: "4.00" })).resolves.toEqual(answer);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/venue-defaults", "GET", undefined],
-      ["/management-api/venue-defaults", "PUT", { defaultProductVatClass: "zero" }],
+      ["/management-api/venue-defaults", "PUT", { receiptLanguage: "ca-ES" }],
       ["/management-api/venue-defaults", "PUT", { defaultTakeawayVatRate: "4.00" }],
     ]);
   });

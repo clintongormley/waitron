@@ -960,7 +960,6 @@ it.each([
           receiptLanguage: "en-GB",
           receiptLanguageChoices: ["en-GB"],
           fixedReceiptLanguage: null,
-          defaultProductVatClass: "general",
           defaultTakeawayVatRate: "10.00",
           takeawayVat: false,
           vatRates: ["0.00", "4.00", "10.00", "21.00"],

@@ -65,7 +65,6 @@ it("words each change as its item, field, old value and new value", () => {
       [
         { target: soup, field: "name", value: "Broth" },
         { target: soup, field: "price", value: "3.50" },
-        { target: soup, field: "vatClass", value: "general" },
         { target: soup, field: "kitchenName", value: null },
         {
           target: { kind: "section", sectionId: "sec-starters" },
@@ -78,7 +77,6 @@ it("words each change as its item, field, old value and new value", () => {
   ).toEqual([
     "Soup: Name Soup → Broth",
     "Soup: Price €3.00 → €3.50",
-    "Soup: VAT Reduced → General",
     "Soup: Prep station name SOUP KITCHEN → (empty)",
     "Starters: Internal name Starters → First",
   ]);
@@ -194,34 +192,15 @@ it("words a picture as added, replaced or removed", () => {
   ]);
 });
 
-it("writes money and VAT in the screen language", () => {
+it("writes money in the screen language", () => {
   setLocale("es");
   expect(
-    changeLines(
-      lunch(),
-      [
-        { target: soup, field: "price", value: "3.50" },
-        { target: soup, field: "vatClass", value: "general" },
-      ],
-      languages,
-    ),
-  ).toEqual(["Soup: Precio 3,00\u00a0€ → 3,50\u00a0€", "Soup: IVA Reducido → General"]);
-});
-
-it.each([
-  ["en", ["Soup: VAT Reduced → General"]],
-  ["es", ["Soup: IVA Reducido → General"]],
-] as const)("words a VAT class change under its label (%s)", (locale, expected) => {
-  setLocale(locale);
-  const document = lunch();
-  document.offers["mi-soup"]!.takeawayVatClass = "reduced";
-  expect(
-    changeLines(document, [{ target: soup, field: "vatClass", value: "general" }], languages),
-  ).toEqual(expected);
+    changeLines(lunch(), [{ target: soup, field: "price", value: "3.50" }], languages),
+  ).toEqual(["Soup: Precio 3,00\u00a0€ → 3,50\u00a0€"]);
 });
 
 it("always notes open orders and the products, and names each queued version by its date", () => {
-  const openOrders = "Lines already on open orders keep their old price and VAT class.";
+  const openOrders = "Lines already on open orders keep their old price.";
   const products =
     "The next normal publish from the products puts the old values back unless you fix the products too.";
   expect(reviewNotes([])).toEqual([openOrders, products]);

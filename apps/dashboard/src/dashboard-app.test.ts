@@ -273,7 +273,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       receiptLanguage: "es-ES",
       receiptLanguageChoices: ["es-ES"],
       fixedReceiptLanguage: null,
-      defaultProductVatClass: "general",
     }),
     getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),

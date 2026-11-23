@@ -169,7 +169,7 @@ const value: ProductEditorValue = {
   dietaryDeclarations: ["vegetarian"],
   courseId: null,
 };
-/** What Archive sends back: the editor's read without the `vatClass` the save refuses. */
+/** The editor's read without the `vatClass` the save refuses, as Archive and Save send it. */
 const readBody = withoutVatClass(value);
 
 // Drinks is on both menus. A section's customer-facing name differs from its internal one, so the

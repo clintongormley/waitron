@@ -1452,17 +1452,11 @@ export class ProductEditor extends LitElement {
         ? html`<p class="dine-in-vat">
             <span data-test="dine-in-vat"
               >${fill("editor.dine_in_vat", { rate: vatRateNumber(this.dineInVatRate) })}</span
-            ><wt-help-tooltip
-              mode="help-mode"
-              aria-label=${fill("help.badge_label", { part: t("product.vat") })}
-              guide-href=${guideHref("products.vat")}
-              guide-label=${t("help.guide_link")}
-              >${t(
-                this.takeawayVat
-                  ? "help.products.dine_in_vat_takeaway"
-                  : "help.products.dine_in_vat",
-              )}</wt-help-tooltip
-            >
+            >${this.help(
+              t("product.vat"),
+              this.takeawayVat ? "help.products.dine_in_vat_takeaway" : "help.products.dine_in_vat",
+              "products.vat",
+            )}
           </p>`
         : nothing
     }${this.takeawayVat ? this.renderTakeawayTax() : nothing}`;

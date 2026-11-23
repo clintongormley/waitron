@@ -1161,8 +1161,6 @@ export const en = {
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
-  "menu_settings.default_vat": "VAT class for new products",
-  "menu_settings.invalid": "Choose a VAT class for new products.",
   "menu_settings.default_takeaway_vat": "New products start at (VAT when taken away)",
   "menu_settings.takeaway_invalid": "Choose the VAT when taken away for new products.",
   "action.save": "Save",
@@ -4058,7 +4056,7 @@ export const en = {
   "menu_patch.changed": "Changed",
   "menu_patch.variants": "Variants",
   "menu_patch.variants_note":
-    "Sold through its variants: the till charges each variant's own price and VAT class.",
+    "Sold through its variants: the till charges each variant's own price.",
   "menu_patch.review_one": "Review 1 change",
   "menu_patch.review_many": "Review {count} changes",
   "menu_patch.review_heading": "Check the changes before putting them live",
@@ -4070,7 +4068,7 @@ export const en = {
   "menu_patch.new_image": "new image",
   "menu_patch.image_not_found":
     "This image is no longer in the image library. Choose another, or remove it.",
-  "menu_patch.open_orders_note": "Lines already on open orders keep their old price and VAT class.",
+  "menu_patch.open_orders_note": "Lines already on open orders keep their old price.",
   "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
   "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
   "menu_patch.needs_correcting": "Needs correcting",
@@ -5911,8 +5909,6 @@ export const es: Record<StringKey, string> = {
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",
-  "menu_settings.default_vat": "Clase de IVA para productos nuevos",
-  "menu_settings.invalid": "Elige una clase de IVA para productos nuevos.",
   "menu_settings.default_takeaway_vat": "Los productos nuevos empiezan con (IVA para llevar)",
   "menu_settings.takeaway_invalid": "Elige el IVA para llevar de los productos nuevos.",
   "action.save": "Guardar",
@@ -8864,7 +8860,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.changed": "Con cambios",
   "menu_patch.variants": "Variantes",
   "menu_patch.variants_note":
-    "Se vende a través de sus variantes: la caja cobra el precio y la clase de IVA de cada variante.",
+    "Se vende a través de sus variantes: la caja cobra el precio de cada variante.",
   "menu_patch.review_one": "Revisar 1 corrección",
   "menu_patch.review_many": "Revisar {count} correcciones",
   "menu_patch.review_heading": "Revisa las correcciones antes de publicarlas",
@@ -8877,7 +8873,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.image_not_found":
     "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
   "menu_patch.open_orders_note":
-    "Las líneas que ya están en pedidos abiertos mantienen su precio y su clase de IVA anteriores.",
+    "Las líneas que ya están en pedidos abiertos mantienen su precio anterior.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
   "menu_patch.queued_note_many":
     "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",

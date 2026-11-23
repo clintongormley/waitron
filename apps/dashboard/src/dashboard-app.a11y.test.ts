@@ -502,7 +502,6 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         receiptLanguage: "es-ES",
         receiptLanguageChoices: ["es-ES"],
         fixedReceiptLanguage: null,
-        defaultProductVatClass: "general",
       }),
       getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
       listStaff: vi.fn().mockResolvedValue(people),

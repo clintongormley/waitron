@@ -99,7 +99,6 @@ describe("archived product details", () => {
       "BAR COFFEE",
       "€3.00",
       "Cup",
-      "Reduced",
       "Drinks staff",
       "Large staff",
       "€4.00",
@@ -110,6 +109,7 @@ describe("archived product details", () => {
       "Cooked staff",
     ])
       expect(text).toContain(expected);
+    expect(text).not.toContain("Reduced");
     expect(
       root.querySelectorAll(
         "input, select, textarea, wt-input, wt-switch, wt-combobox, wt-price-input",
@@ -147,7 +147,7 @@ describe("archived product details", () => {
     const root = el.shadowRoot;
     expect(root?.querySelector("dl")).toBeTruthy();
     const labels = [...root!.querySelectorAll("dt")].map((node) => node.textContent);
-    expect(labels).toEqual(["Price", "VAT"]);
+    expect(labels).toEqual(["Price"]);
     expect(root!.textContent).toContain("€3.00 each");
     expect([...root!.querySelectorAll("dd")].every((node) => node.textContent!.trim())).toBe(true);
   });
@@ -169,7 +169,7 @@ describe("archived product details", () => {
     expect(el.shadowRoot!.textContent).toContain("€3.00 / {from} $& $1");
   });
 
-  it("shows a variant's inherited price, unit, VAT and category without substituting its parent's name", async () => {
+  it("shows a variant's inherited price, unit and category, and no eat-in VAT, without substituting its parent's name", async () => {
     const { el } = await mount({
       name: "Small staff",
       parentId: "parent",
@@ -195,7 +195,7 @@ describe("archived product details", () => {
     expect(el.shadowRoot?.querySelector("wt-modal")?.heading).toBe("Small staff");
     expect(el.shadowRoot?.textContent).toContain("€2.00");
     expect(el.shadowRoot?.textContent).toContain("Cup");
-    expect(el.shadowRoot?.textContent).toContain("General");
+    expect(el.shadowRoot?.textContent).not.toContain("General");
     expect(el.shadowRoot?.textContent).toContain("Drinks staff");
   });
 
@@ -207,12 +207,9 @@ describe("archived product details", () => {
       ])
       .filter(([label]) => label!.startsWith("VAT"));
 
-  it("shows the rate charged taken away, as a percentage, beside the served class where the region charges it", async () => {
+  it("shows the rate charged taken away, as a percentage, and no eat-in VAT, where the region charges it", async () => {
     const { el } = await mount({ takeawayVatRate: "21.00" }, true);
-    expect(vatPairs(el)).toEqual([
-      ["VAT", "Reduced"],
-      ["VAT when taken away", "21%"],
-    ]);
+    expect(vatPairs(el)).toEqual([["VAT when taken away", "21%"]]);
   });
 
   it.each([
@@ -244,15 +241,12 @@ describe("archived product details", () => {
       },
       true,
     );
-    expect(vatPairs(el)).toEqual([
-      ["VAT", "Super-reduced"],
-      ["VAT when taken away", shown],
-    ]);
+    expect(vatPairs(el)).toEqual([["VAT when taken away", shown]]);
   });
 
-  it("shows no takeaway rate where the region does not charge one", async () => {
+  it("shows no VAT at all where the region does not charge a takeaway rate", async () => {
     const { el } = await mount({ takeawayVatRate: "21.00" });
-    expect(vatPairs(el)).toEqual([["VAT", "Reduced"]]);
+    expect(vatPairs(el)).toEqual([]);
   });
 
   it.each(["close", "modal-close", "escape"])(

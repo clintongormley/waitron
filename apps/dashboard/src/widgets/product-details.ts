@@ -10,7 +10,7 @@ import type { CategorySummary, ProductEditorValue } from "../api/client.js";
 import type { ModifierListChoice, UnitChoice } from "./product-editor-model.js";
 import { modifierListName, modifierListNames } from "./product-editor-model.js";
 import { priceText } from "./form-fields.js";
-import { allergenLabel, vatClassName, vatRateText } from "../i18n/domain.js";
+import { allergenLabel, vatRateText } from "../i18n/domain.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-product-details")
@@ -106,7 +106,6 @@ export class ProductDetails extends LitElement {
     const parent = value.inherited;
     const price = value.unitPrice ?? parent?.unitPrice ?? null;
     const unitId = parent ? parent.unitId : value.unitId;
-    const tax = value.vatClass ?? parent?.vatClass ?? null;
     const takeaway = value.takeawayVatRate ?? parent?.takeawayVatRate ?? null;
     const categoryId = parent ? parent.primaryCategoryId : value.primaryCategoryId;
     const category = this.categories.find(({ id }) => id === categoryId);
@@ -126,7 +125,6 @@ export class ProductDetails extends LitElement {
         .map(([language, text]) => this.#field(`${t("editor.customer_name")} (${language})`, text))}
       ${this.#field(t("editor.kitchen_name"), value.kitchenName)}
       ${this.#field(t("product.price"), this.#price(price, unitId))}
-      ${this.#field(t("product.vat"), tax === null ? null : vatClassName(tax))}
       ${
         this.takeawayVat
           ? this.#field(t("editor.takeaway_vat"), takeaway === null ? null : vatRateText(takeaway))

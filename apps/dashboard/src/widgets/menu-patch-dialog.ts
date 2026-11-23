@@ -19,15 +19,11 @@ import {
   textSearch,
   toScale,
   type AppError,
-  VAT_CLASSES,
-  localToday,
-  vatRateOn,
 } from "@waitron/shared";
 import { fixedLanguages, parseMenuPatch, patchFieldValue } from "@waitron/menu/src/menu-patch.js";
 import type { MenuDocument } from "@waitron/shared";
 import { PATCH_FIELDS } from "@waitron/menu/src/menu-patch-types.js";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -40,7 +36,6 @@ import type {
   MenuPatchTarget,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { vatClassName } from "../i18n/domain.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
@@ -77,7 +72,6 @@ const INPUT_NAMES: Record<string, string> = {
   kitchenName: "kitchen-name",
   description: "description",
   price: "price",
-  vatClass: "tax",
 };
 
 function refusalText(field: string, error: unknown): string {
@@ -198,7 +192,6 @@ export class MenuPatchDialog extends LitElement {
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
   /** Replaced whenever the dialog opens or closes, so an answer to an earlier opening is ignored. */
   #session = {};
-  #taxCache: { key: string; options: { value: string; label: string }[] } | null = null;
   #imageApi: { api: DashboardApi; uploader: ImageUploader } | null = null;
 
   readonly #queries = new DashboardQueries(
@@ -695,10 +688,9 @@ export class MenuPatchDialog extends LitElement {
     );
   }
 
-  /** A variant's price and VAT class as putting the draft live would leave them. */
+  /** A variant's price as putting the draft live would leave it. */
   #variantValues(target: MenuPatchTarget): string {
-    const price = formatMoney(this.#putValue(target, "price") as string, currentLocale());
-    return `${price} · ${vatClassName(this.#putValue(target, "vatClass") as string)}`;
+    return formatMoney(this.#putValue(target, "price") as string, currentLocale());
   }
 
   /** The field's value as putting the draft live would leave it: its staged change's, else the
@@ -786,20 +778,6 @@ export class MenuPatchDialog extends LitElement {
     else form.scrollIntoView({ block: "nearest" });
     if (pressed !== null && !pressed.isConnected)
       form.querySelector("h3")!.focus({ preventScroll: this.wideEdit });
-  }
-
-  get #taxes() {
-    const today = localToday();
-    const key = `${currentLocale()}/${today}`;
-    if (this.#taxCache?.key !== key)
-      this.#taxCache = {
-        key,
-        options: VAT_CLASSES.map((id) => ({
-          value: id,
-          label: `${vatClassName(id)} (${vatRateOn(id, today).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`,
-        })),
-      };
-    return this.#taxCache.options;
   }
 
   get #uploader(): ImageUploader {
@@ -1104,22 +1082,6 @@ export class MenuPatchDialog extends LitElement {
         );
       case "price":
         return priceField(context, "price", t("editor.price"), value as string, change, true);
-      case "vatClass":
-        return html`<wt-combobox
-          name=${name!}
-          label=${t("product.vat")}
-          required
-          search="auto"
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${this.#taxes}
-          .value=${value as string}
-          error=${error}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            change(event.detail.value);
-          }}
-        ></wt-combobox>`;
       default:
         return html`<dashboard-image-upload
           label=${t("image.label")}
