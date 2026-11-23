@@ -172,6 +172,30 @@ describe("a free item on a takeaway ticket mixing VAT rates", () => {
     expect(invoice.vatBreakdown).toEqual(WATER_COMPED);
   });
 
+  it("keeps a free item's menu price per unit when its share rounds up to that price", async () => {
+    await takeawayRates(venue, { Ham: "4.00", Coffee: "21.00" });
+    const { billId } = await billWith(
+      venue,
+      [{ name: "Ham", quantity: "18.750" }, { name: "Coffee" }],
+      { dining: "takeaway" },
+    );
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp" });
+    await pay(billId);
+
+    const got = await filed(billId);
+    const breakdown = [
+      { rate: "4.00", base: "431.25", tax: "17.25" },
+      { rate: "21.00", base: "1.24", tax: "0.26" },
+    ];
+    expect(got.vatBreakdown).toEqual(breakdown);
+    expect(got.record).toEqual([breakdown]);
+    expect(got.integrity.issues).toEqual([]);
+    expect(got.lines).toEqual([
+      { gross: 44850, base: 43125, list: 45000, listUnit: 2400 },
+      { gross: 150, base: 124, list: 150, listUnit: 150 },
+    ]);
+  });
+
   it("shares a whole-bill discount taken after the comp by menu price too", async () => {
     const billId = await saladWithFreeWater();
     await adjust(billId, { action: "discount_amount", amount: "1.00" });

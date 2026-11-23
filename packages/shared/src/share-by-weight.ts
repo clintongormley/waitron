@@ -22,17 +22,15 @@ const CENT = decimal("0.01");
 export function shareByWeight(total: Decimal, weights: readonly Decimal[]): Decimal[] {
   if (compareDecimal(total, ZERO) === 0) return weights.map(() => ZERO);
   const sum = sumDecimals(weights);
-  const shares = weights.map((weight, index) => {
+  const shares = weights.map((weight) => {
     const numerator = multiplyDecimal(total, weight);
     let amount = divideDecimal(numerator, sum, 2);
     if (compareDecimal(multiplyDecimal(amount, sum), numerator) > 0)
       amount = subtractDecimal(amount, CENT);
-    return { index, amount, remainder: subtractDecimal(numerator, multiplyDecimal(amount, sum)) };
+    return { amount, remainder: subtractDecimal(numerator, multiplyDecimal(amount, sum)) };
   });
   let left = subtractDecimal(total, sumDecimals(shares.map((share) => share.amount)));
-  for (const share of [...shares].sort(
-    (a, b) => compareDecimal(b.remainder, a.remainder) || a.index - b.index,
-  )) {
+  for (const share of [...shares].sort((a, b) => compareDecimal(b.remainder, a.remainder))) {
     if (compareDecimal(left, ZERO) <= 0) break;
     share.amount = addDecimal(share.amount, CENT);
     left = subtractDecimal(left, CENT);

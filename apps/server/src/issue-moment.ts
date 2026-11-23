@@ -27,10 +27,11 @@ export interface IssueAdvances {
 }
 
 /**
- * Take ONE clock reading and rate `gross` at its local calendar date, or at `mealDay` when the meal
- * ended on an earlier venue day: the rate in force when the sale happened applies, and that day is
- * returned as the operation date to file. Every till path that issues an invoice from an order's
- * lines rates them here and hands `recordSale` the returned clock.
+ * Take ONE clock reading and rate `gross`, each free item given its share (`shareFreeItems`), at its
+ * local calendar date, or at `mealDay` when the meal ended on an earlier venue day: the rate in
+ * force when the sale happened applies, and that day is returned as the operation date to file.
+ * Every till path that issues an invoice from an order's lines rates them here and hands
+ * `recordSale` the returned clock.
  */
 export function issueMoment(
   clock: TrustedClock,
