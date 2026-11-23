@@ -667,3 +667,64 @@ it("shows the set menu guide from the editor in Help mode", async () => {
   await expect.element(link).toBeVisible();
   expect(link.element().getAttribute("href")).toMatch(/\/products#set-menus$/);
 });
+
+async function startSetMenu(screen: MenusScreen) {
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector('.header [data-test="add-menu"]')).toBeTruthy(),
+  );
+  screen.shadowRoot!.querySelector<HTMLElement>('.header [data-test="add-menu"]')!.click();
+  await screen.updateComplete;
+  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="create-set_menu"]')!.click();
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")).toBeTruthy(),
+  );
+  return screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")!;
+}
+
+it("closes the new set menu form when it is cancelled", async () => {
+  const screen = await mount();
+  const form = await startSetMenu(screen);
+  await form.updateComplete;
+  await userEvent.click(page.getByRole("button", { name: "Cancel" }));
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")).toBeNull(),
+  );
+});
+
+it("opens a created set menu and reports a failed re-read of the menus", async () => {
+  const client = api();
+  const screen = await mount("/menus", client);
+  const form = await startSetMenu(screen);
+  await form.updateComplete;
+  client.listMenus.mockRejectedValue(new Error("Connection lost"));
+  const change = (name: string, value: string) =>
+    form
+      .shadowRoot!.querySelector(`[name="${name}"]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  change("name", "Daily menu");
+  change("setPrice", "14.00");
+  await form.updateComplete;
+  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await vi.waitFor(() => expect(client.createMenu).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(new URL(location.href).pathname).toBe(dailyPath));
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector('[data-test="retry"]')).toBeTruthy(),
+  );
+});
+
+it("reads the menus list again after the set menu's terms are saved", async () => {
+  const client = api();
+  const screen = await mount(dailyPath, client);
+  const price = page.getByRole("textbox", { name: "Price per set menu" });
+  await price.fill("15.00");
+  const reads = client.listMenus.mock.calls.length;
+  const form = screen
+    .shadowRoot!.querySelector("dashboard-set-menu-editor")!
+    .shadowRoot!.querySelector("dashboard-set-menu-terms-form")!;
+  await form.updateComplete;
+  form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await vi.waitFor(() => expect(client.updateMenuDetails).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.listMenus.mock.calls.length).toBeGreaterThan(reads));
+});
