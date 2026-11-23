@@ -1,5 +1,6 @@
 import type {
   CountryDemoMenu,
+  CountryDemoSetMenu,
   CountryDemoCategory,
   CountryDemoProductOptionLists,
   CountryDemoProductExtraLists,
@@ -1730,3 +1731,83 @@ export const MENU_DEL_DIA = {
     },
   ],
 } as const satisfies CountryDemoMenu<CasaDelgadoLanguage>;
+
+const sharedDishes = [
+  "ensalada-mixta",
+  "gazpacho",
+  "lentejas",
+  "pollo-asado",
+  "merluza-rebozada",
+  "flan",
+  "arroz-con-leche",
+  "pan-de-la-casa",
+  "vino-tinto",
+  "agua-mineral",
+  "cana-cerveza",
+  "refresco-cola",
+].map((image) => ({ productImage: `${image}.png`, surcharge: null }));
+
+const starter = { count: 1, courses: ["starters"] } as const;
+const laterLines = [
+  { count: 1, courses: ["desserts", "coffee"] },
+  { count: 1, courses: ["bread"] },
+  { count: 1, courses: ["drinks"] },
+] as const;
+
+export const DEMO_SET_MENUS = [
+  {
+    name: {
+      en: "Menu of the day",
+      es: "Menú del día",
+      ca: "Menú del dia",
+      "ca-ES-valencia": "Menú del dia",
+      gl: "Menú do día",
+    },
+    customerName: {
+      en: "Daily lunch menu",
+      es: "Menú del día",
+      ca: "Menú del dia",
+      "ca-ES-valencia": "Menú del dia",
+      gl: "Menú do día",
+    },
+    price: "14.00",
+    vatClass: "reduced",
+    lines: [starter, { count: 1, courses: ["mains"] }, ...laterLines],
+    dishes: [
+      ...sharedDishes,
+      { productImage: "solomillo.png", surcharge: "5.00" },
+      { productImage: "cafe-solo.png", surcharge: null, excludedVariants: ["Double coffee"] },
+    ],
+  },
+  {
+    name: {
+      en: "Special menu",
+      es: "Menú especial",
+      ca: "Menú especial",
+      "ca-ES-valencia": "Menú especial",
+      gl: "Menú especial",
+    },
+    customerName: {
+      en: "Special lunch menu",
+      es: "Menú especial",
+      ca: "Menú especial",
+      "ca-ES-valencia": "Menú especial",
+      gl: "Menú especial",
+    },
+    price: "20.00",
+    vatClass: "reduced",
+    lines: [starter, { count: 1, courses: ["mains", "starters"] }, ...laterLines],
+    dishes: [
+      ...sharedDishes,
+      ...[
+        "solomillo",
+        "cafe-solo",
+        "bacalao",
+        "merluza",
+        "crema-catalana",
+        "tarta-de-santiago",
+      ].map((image) => ({ productImage: `${image}.png`, surcharge: null })),
+      { productImage: "patatas-bravas.png", surcharge: null, course: "starters" },
+    ],
+  },
+] as const satisfies readonly CountryDemoSetMenu<CasaDelgadoLanguage>[];

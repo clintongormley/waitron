@@ -3,6 +3,7 @@ import {
   CASA_DELGADO,
   DELI_TAKEAWAY,
   MENU_DEL_DIA,
+  DEMO_SET_MENUS,
   PRODUCT_OPTION_LISTS,
   PRODUCT_EXTRA_LISTS,
 } from "./menu.js";
@@ -108,6 +109,7 @@ export const CASA_DELGADO_ES = {
     restaurant: CASA_DELGADO,
     deli: DELI_TAKEAWAY,
     lunch: MENU_DEL_DIA,
+    setMenus: DEMO_SET_MENUS,
     drinksName: {
       en: "Drinks",
       es: "Bebidas",

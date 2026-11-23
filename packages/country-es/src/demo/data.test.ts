@@ -30,6 +30,7 @@ describe("pack-owned Spanish demo", () => {
       "restaurant",
       "deli",
       "lunch",
+      "setMenus",
       "drinksName",
       "drinksImage",
       "drinksCustomerName",
@@ -415,6 +416,48 @@ describe("Casa Delgado courses", () => {
       }
     }
   });
+});
+
+const demoSets: CountryDemoData[] = [
+  CASA_DELGADO_ES,
+  CASA_DELGADO_CA,
+  CASA_DELGADO_VALENCIA,
+  CASA_DELGADO_GL,
+];
+
+it.each(demoSets)("defines two set menus with eligible dishes in $id", (set) => {
+  const setMenus = set.menus.setMenus;
+  expect(setMenus).toHaveLength(2);
+  const products = new Map(
+    [set.menus.restaurant, set.menus.lunch].flatMap((menu) =>
+      menu.categories.flatMap((category) =>
+        category.products.map(
+          (product) =>
+            [
+              product.image,
+              { pricingUnit: product.pricingUnit, course: product.course ?? category.course },
+            ] as const,
+        ),
+      ),
+    ),
+  );
+  for (const menu of setMenus) {
+    const servedCourses = menu.dishes.map((dish) => {
+      const product = products.get(dish.productImage);
+      expect(product?.pricingUnit, dish.productImage).toBe("each");
+      return dish.course ?? product?.course;
+    });
+    for (const course of servedCourses)
+      expect(
+        menu.lines.flatMap((line) => line.courses),
+        menu.name.en,
+      ).toContain(course);
+    for (const line of menu.lines)
+      expect(
+        line.courses.some((course) => servedCourses.includes(course)),
+        menu.name.en,
+      ).toBe(true);
+  }
 });
 
 describe("Casa Delgado VAT classes", () => {
