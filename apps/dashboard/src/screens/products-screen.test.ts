@@ -2275,7 +2275,7 @@ describe("menu-screen", () => {
       expect(popup.matches(":popover-open")).toBe(true);
       expect(
         [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-      ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
+      ).toEqual([t("kitchen.rename_course"), t("action.delete_dialog")]);
       await userEvent.keyboard("{Escape}");
       await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
       expect(dialog.open).toBe(true);

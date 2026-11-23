@@ -2142,7 +2142,7 @@ export class PaymentsScreen extends LitElement {
                 this.#labelOpener = event.currentTarget as HTMLElement;
                 this.labelReader = reader;
               }}
-              >${t("equipment.label_dialog")}</wt-button
+              >${t("equipment.label")}…</wt-button
             >
             <wt-button
               icon="menu-details"
@@ -2166,7 +2166,7 @@ export class PaymentsScreen extends LitElement {
                 : nothing,
               html`<wt-button
                 icon="menu-delete"
-                variant="danger"
+                variant=${this.busy ? "secondary" : "danger"}
                 data-test=${`delete-${reader.id}`}
                 ?disabled=${this.busy}
                 @click=${(event: Event) => this.#openDelete(reader, event)}

@@ -205,9 +205,9 @@ describe("dashboard-themes-card actions", () => {
     expect(Object.keys(luciaItems)).toEqual(["edit", "rename", "copy", "delete"]);
     expect(Object.values(luciaItems).map((item) => item.textContent!.trim())).toEqual([
       "Edit",
-      "Rename",
-      "Make a copy",
-      "Delete",
+      "Rename…",
+      "Make a copy…",
+      "Delete…",
     ]);
     const xmasItems = itemsOf(await openMenu(el, "t-xmas"), "t-xmas");
     expect(Object.keys(xmasItems)).toEqual(["use", "edit", "rename", "copy", "delete"]);
@@ -216,7 +216,7 @@ describe("dashboard-themes-card actions", () => {
       await item.updateComplete;
       expect(item.variant).toBe(kind === "delete" ? "danger" : "secondary");
       expect(getComputedStyle(item.shadowRoot!.querySelector("button")!).justifyContent).toBe(
-        "center",
+        "start",
       );
     }
     expect(Object.keys(itemsOf(await openMenu(el, "waitron"), "waitron"))).toEqual(["use", "copy"]);

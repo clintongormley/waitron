@@ -56,8 +56,8 @@ it.each([false, true])(
             "edit-other",
             "reset-login-other",
             "reset-pin-other",
-            "disable-other",
             "resend-invitation-other",
+            "disable-other",
           ]
         : ["edit-other"],
     );

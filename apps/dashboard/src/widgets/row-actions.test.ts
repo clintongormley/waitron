@@ -43,7 +43,7 @@ describe("row actions", () => {
       ],
     });
     // A narrow table leaves room on both sides so alignment is observed, not clamped to the viewport.
-    table.style.width = "320px";
+    table.style.width = "240px";
     table.style.marginTop = "150px";
     const actions = table.shadowRoot!.querySelector<RowActions>("dashboard-row-actions")!;
     await actions.updateComplete;

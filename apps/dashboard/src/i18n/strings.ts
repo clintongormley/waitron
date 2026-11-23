@@ -4256,7 +4256,6 @@ export const en = {
   "equipment.holder_with_person": "{device} ({person})",
   "equipment.holder_none": "Nobody has it",
   "equipment.label": "Equipment label",
-  "equipment.label_dialog": "Equipment label…",
   "equipment.label_title": "Equipment label: {name}",
   "equipment.label_hint":
     "Print this label and stick it on the equipment. Scanning it on a device gives the equipment to that device.",
@@ -9106,7 +9105,6 @@ export const es: Record<StringKey, string> = {
   "equipment.holder_with_person": "{device} ({person})",
   "equipment.holder_none": "No lo lleva nadie",
   "equipment.label": "Etiqueta del equipo",
-  "equipment.label_dialog": "Etiqueta del equipo…",
   "equipment.label_title": "Etiqueta del equipo: {name}",
   "equipment.label_hint":
     "Imprime esta etiqueta y pégala en el equipo. Al escanearla en un dispositivo, el equipo pasa a ese dispositivo.",

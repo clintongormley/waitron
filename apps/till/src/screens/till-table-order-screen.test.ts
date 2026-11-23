@@ -4074,7 +4074,7 @@ describe("till-table-order-screen", () => {
       const alone = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(alone.el);
       expect(alone.el.shadowRoot!.querySelector('[data-action="move"]')!.textContent!.trim()).toBe(
-        t("table.action_move_guests"),
+        t("table.action_move_guests_dialog"),
       );
       expect(alone.el.shadowRoot!.querySelector('[data-action="split-table"]')).toBeNull();
       expect(alone.el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
