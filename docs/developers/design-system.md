@@ -1223,14 +1223,13 @@ Tab button and no side drawer.
 - **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
   a rule. The bill section, headed with the bill on screen's short label and left out when no bill
-  is on screen, lists Name this bill, then for an open bill Move dishes… and Merge bills,
+  is on screen or the order belongs to no party, lists Name this bill, then for an open bill Move dishes… and Merge bills,
   then Move this bill, Comp the bill, Record unpaid departure, Full invoice and Print the bill, in
   that order; Print the bill and Receipt copy only where this device may print what they need, and
   Receipt copy, Cancel and credit and Reopen to split join it where they apply. Whole table lists Allergies, Name the party, Guests,
   Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
-  table, Move guests and Finish table. With no party it offers Merge bills under "Bill" and Join a
-  table and Move guests under Whole table; Move dishes… is not offered there, because the app moves
-  dishes only between a party's bills. Full invoice, in the
+  table, Move guests and Finish table. With no party it offers only Join a table and Move guests, under
+  Whole table. Full invoice, in the
   ⋮ and on the payment step alike, is offered only for a bill still owing with no invoice number.
 - **The action panel.** A ⋮ item that needs a choice draws its step in `aside.action-panel`
   (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is

@@ -5156,20 +5156,13 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("offers no Move dishes…, Split by item or Transfer items for an order that belongs to no party", async () => {
+    it("offers no Move dishes…, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
 
-      for (const verb of ["move-dishes", "split", "transfer"]) {
+      for (const verb of ["move-dishes", "split", "transfer", "merge"]) {
         expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`), verb).toBeNull();
       }
-    });
-
-    it("offers no Merge bills for an order that belongs to no party", async () => {
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
-      await toMenu(el);
-
-      expect(el.shadowRoot!.querySelector('[data-action="merge"]')).toBeNull();
     });
 
     it("names the merge verb for bills", async () => {
@@ -5188,6 +5181,20 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetIds(el)).toEqual(["wo-4"]);
+    });
+
+    it("falls back to the plain heading when a bills read stops listing the bill on screen while Merge bills is open", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+
+      el.bills = [];
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.actions_title"),
+      );
     });
 
     it("shows an empty-state when there are no other tables to move to", async () => {
