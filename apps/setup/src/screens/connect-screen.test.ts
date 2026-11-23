@@ -447,11 +447,7 @@ describe("setup-connect-screen: Spanish words that name the page's buttons", () 
       { limit: "recent", retryAt: "soon", max: 7, minutes: 20 },
       "contando las terminadas con No o Empezar de nuevo,",
     ],
-    [
-      "mirror.join_in_use",
-      undefined,
-      "Continúa allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
-    ],
+    ["mirror.join_in_use", undefined, es["connect.refusal.join_in_use"]],
   ] as const)("names No and Start again as drawn for %s", async (code, params, words) => {
     setLocale("es-ES");
     const api = stubApi();
@@ -467,9 +463,7 @@ describe("setup-connect-screen: Spanish words that name the page's buttons", () 
     const { el } = await mount(stubApi(APPROVED), { handle: "h1" });
     el.refusal = { code: "mirror.join_handle_invalid" };
     await vi.waitFor(async () =>
-      expect(await bottomOf(el)).toBe(
-        "Esta unión se empezó en otra página o dispositivo, así que esta página no puede terminarla. Continúa allí o elige Empezar de nuevo.",
-      ),
+      expect(await bottomOf(el)).toBe(es["connect.refusal.join_handle_invalid"]),
     );
   });
 });
@@ -590,9 +584,7 @@ describe("setup-connect-screen: Join on the code", () => {
     );
     setLocale("es-ES");
     await vi.waitFor(async () =>
-      expect(await bottomOf(el)).toBe(
-        "Este servidor no ha recibido una respuesta útil del servidor principal a su Unirse. Comprueba que el servidor principal está encendido y vuelve a elegir Unirse.",
-      ),
+      expect(await bottomOf(el)).toBe(es["connect.confirm.bundle_fetch_failed"]),
     );
     setLocale("en-GB");
     await el.updateComplete;
@@ -1167,7 +1159,7 @@ describe("setup-connect-screen in Spanish", () => {
     expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
       `${es["connect.waiting.open_link"]}${es["connect.waiting.open_after"]}`,
     );
-    expect(text(el, "[data-test=question]")).toBe("¿El servidor principal muestra este código?");
+    expect(text(el, "[data-test=question]")).toBe(es["connect.waiting.lead"]);
     expect(text(el, "[data-test=servers-page]")).toBe(es["connect.waiting.open_link"]);
     expect(q(el, "[data-test=servers-page]")!.getAttribute("href")).toBe(`${MAIN}/servers`);
     expect(q(el, "[data-test=addresses]")).toBeNull();
@@ -1180,9 +1172,7 @@ describe("setup-connect-screen in Spanish", () => {
   it("asks for Add as spare on the main box in Spanish once this box said Join", async () => {
     setLocale("es-ES");
     const { el } = await mount(stubApi(CONFIRMED), { handle: "h1" });
-    expect(text(el, "[data-test=question]")).toBe(
-      "Ahora elige Añadir como reserva en el servidor principal.",
-    );
+    expect(text(el, "[data-test=question]")).toBe(es["connect.waiting.confirmed"]);
   });
 });
 

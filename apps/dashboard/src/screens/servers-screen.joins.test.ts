@@ -681,13 +681,11 @@ describe("a box asking to join, on the Servers screen", () => {
       const asked = await mount(api);
       await check(asked);
       expect(find(asked, "join-question")!.textContent!.trim()).toBe(
-        "¿El servidor nuevo muestra este código?",
+        es["servers.join_match_prompt"],
       );
-      expect(dialogButton(asked, "join-add")!.textContent!.trim()).toBe("Añadir como reserva");
+      expect(dialogButton(asked, "join-add")!.textContent!.trim()).toBe(es["servers.join_add"]);
       await add(asked);
-      expect(find(asked, "join-waiting")!.textContent!.trim()).toBe(
-        "Ahora elige Unirse en el servidor nuevo.",
-      );
+      expect(find(asked, "join-waiting")!.textContent!.trim()).toBe(es["servers.join_waiting"]);
     } finally {
       setLocale(before);
     }
