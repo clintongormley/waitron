@@ -66,7 +66,7 @@ export interface AgentOptions {
   host: Host;
   client?: AgentClient;
   intervalMs?: number;
-  /** Elapsed time for the page-report give-up check. */
+  /** Steady-clock milliseconds for elapsed deadlines and intervals. */
   steady?: () => number;
 }
 
@@ -75,6 +75,7 @@ export interface AgentSetupSnapshot {
   config: AgentConfig | null;
   joined: boolean;
   outOfTouch: boolean;
+  /** Wall-clock deadline for the setup countdown. */
   resetAt?: number;
 }
 
@@ -115,13 +116,11 @@ export function createAgent(opts: AgentOptions): Agent {
   // Not `running`, which is false before start(), when runOnce() must still claim.
   let stopped = false;
   let outOfTouch = false;
-  let resetAt: number | undefined;
+  let resetDeadline: number | undefined;
   let operation = Promise.resolve();
   let wakePromise: Promise<void>;
   let wakeResolve: () => void;
-  // 0 means no discovery window. Its length is how far ahead its end lay when it arrived.
   let discoveryUntil = 0;
-  let discoveryLength = 0;
   let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
@@ -143,7 +142,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let probing = false;
   let nextProbeAt = 0;
   let probeGeneration = 0;
-  let probeFound: { device: DiscoveredDevice; expiresAt: number; length: number }[] = [];
+  let probeFound: { device: DiscoveredDevice; expiresAt: number }[] = [];
   let nextScanAt = 0;
   // One claim loop at a time, with any number of A4 jobs out: the server hands out at most one job
   // per printer, so the agent keeps no lock of its own.
@@ -152,11 +151,8 @@ export function createAgent(opts: AgentOptions): Agent {
   let claimAgain = false;
   let unsentPageReports: PageReport[] = [];
 
-  /** A deadline further ahead of the clock than its own length was set before the clock stepped
-   * back, so it counts as passed rather than lasting the step's length longer. */
-  function passed(deadline: number, length: number): boolean {
-    const now = host.now();
-    return now >= deadline || deadline - now > length;
+  function wallDeadline(steadyDeadline: number): number {
+    return host.now() + (steadyDeadline - steady());
   }
 
   function replaceWakeSignal(): void {
@@ -189,7 +185,7 @@ export function createAgent(opts: AgentOptions): Agent {
     halted = false;
     selfEnrolAt = 0;
     outOfTouch = false;
-    resetAt = undefined;
+    resetDeadline = undefined;
     discoveryUntil = 0;
     networkProbes = [];
     probeServer = undefined;
@@ -237,10 +233,10 @@ export function createAgent(opts: AgentOptions): Agent {
 
   async function halt(config: AgentConfig, current: string): Promise<void> {
     halted = true;
-    selfEnrolAt = host.now();
+    selfEnrolAt = steady();
     approved = false;
     outOfTouch = false;
-    resetAt = undefined;
+    resetDeadline = undefined;
     await host.saveToken(null);
     if (config.pendingVerificationNumber !== undefined) {
       await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
@@ -386,8 +382,8 @@ export function createAgent(opts: AgentOptions): Agent {
     const generation = scanGeneration;
     let found: DiscoveredDevice[] = [];
     try {
-      nextScanAt = host.now() + intervalMs;
-      found = await classify(await host.scan(undefined, discoveryUntil));
+      nextScanAt = steady() + intervalMs;
+      found = await classify(await host.scan(undefined, wallDeadline(discoveryUntil)));
       // An unanswered IPP-only queue cannot become a receipt printer.
       found = found.map((device) =>
         device.ippOnly === true && device.ipp !== undefined && device.office === undefined
@@ -423,16 +419,14 @@ export function createAgent(opts: AgentOptions): Agent {
     probing = true;
     const generation = probeGeneration;
     try {
-      nextProbeAt = host.now() + intervalMs;
+      nextProbeAt = steady() + intervalMs;
       const found = await classify(await host.probeNetwork(targets.map(({ target }) => target)));
       if (generation === probeGeneration) {
         probeFound = found.flatMap((device) => {
           const hit = targets.find(
             ({ target }) => target.host === device.host && target.port === device.port,
           );
-          return hit === undefined
-            ? []
-            : [{ device, expiresAt: hit.expiresAt, length: hit.target.expiresInMs }];
+          return hit === undefined ? [] : [{ device, expiresAt: hit.expiresAt }];
         });
       }
     } catch (error) {
@@ -613,7 +607,7 @@ export function createAgent(opts: AgentOptions): Agent {
       report({ phase: "unconfigured", serverUrl: null, current: null });
       return false;
     }
-    if (resetAt !== undefined && outOfTouch && passed(resetAt, RESET_WINDOW_MS)) {
+    if (resetDeadline !== undefined && outOfTouch && steady() >= resetDeadline) {
       await host.saveToken(null);
       config = { ...config, servers: undefined };
       await host.saveConfig(config);
@@ -634,7 +628,7 @@ export function createAgent(opts: AgentOptions): Agent {
     if ((await host.token()) === null) {
       // While the wait runs, nothing below runs either, so a knock only ever follows a self-enrol
       // ask made in the same round.
-      if (!passed(selfEnrolAt, SELF_ENROL_RETRY_INTERVAL_MS)) {
+      if (steady() < selfEnrolAt) {
         if (halted) report({ phase: "unauthorized", serverUrl: config.serverUrl });
         return false;
       }
@@ -646,11 +640,11 @@ export function createAgent(opts: AgentOptions): Agent {
         halted = false;
         approved = true;
         outOfTouch = false;
-        resetAt = undefined;
+        resetDeadline = undefined;
         report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
         return false;
       }
-      if (halted) selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
+      if (halted) selfEnrolAt = steady() + SELF_ENROL_RETRY_INTERVAL_MS;
       else askedSelf = true;
     }
     if (halted) {
@@ -664,8 +658,7 @@ export function createAgent(opts: AgentOptions): Agent {
     // loopback box serving as the spare: its server asks the main box for us, against the main
     // box's limit. Anywhere else the next round asks again, so a main box whose server is still
     // starting self-enrols on the round its server first answers.
-    if (askedSelf && round.configuredIsSpare)
-      selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
+    if (askedSelf && round.configuredIsSpare) selfEnrolAt = steady() + SELF_ENROL_RETRY_INTERVAL_MS;
     if (config.environment === undefined && r.environment !== undefined) {
       config = { ...config, environment: r.environment };
       await host.saveConfig(config);
@@ -777,24 +770,23 @@ export function createAgent(opts: AgentOptions): Agent {
       nextProbeAt = 0;
       probeGeneration += 1;
     }
-    const discoveryOpen = !passed(discoveryUntil, discoveryLength);
+    const now = steady();
+    const discoveryOpen = now < discoveryUntil;
     if (!discoveryOpen && !scanUnsent) scanFound = [];
     const sentScan = scanFound;
     const scanned = discoveryOpen || scanUnsent ? [...sentScan] : [];
-    if (discoveryOpen && !scanning && (!running || passed(nextScanAt, intervalMs))) void discover();
-    const targets = networkProbes.filter(
-      (probe) => !passed(probe.expiresAt, probe.target.expiresInMs),
-    );
-    for (const { device, expiresAt, length } of probeFound) {
+    if (discoveryOpen && !scanning && (!running || now >= nextScanAt)) void discover();
+    const targets = networkProbes.filter(({ expiresAt }) => now < expiresAt);
+    for (const { device, expiresAt } of probeFound) {
       if (
-        !passed(expiresAt, length) &&
+        now < expiresAt &&
         !scanned.some(
           (d) => d.transport === "network_tcp" && d.host === device.host && d.port === device.port,
         )
       )
         scanned.push(device);
     }
-    if (targets.length && !probing && (!running || passed(nextProbeAt, intervalMs)))
+    if (targets.length && !probing && (!running || now >= nextProbeAt))
       void checkAddresses(targets);
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
@@ -830,7 +822,7 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     outOfTouch = false;
-    resetAt = undefined;
+    resetDeadline = undefined;
     bluetoothOutcomes = bluetoothOutcomes.filter((outcome) => !sentOutcomes.includes(outcome));
     if (scanFound === sentScan) scanUnsent = false;
     r.merge(pulled.value.servers);
@@ -842,10 +834,8 @@ export function createAgent(opts: AgentOptions): Agent {
       config = { ...config, servers };
       await host.saveConfig(config);
     }
-    // A remote server's epoch deadline cannot be compared with this host's clock.
-    const receivedAt = host.now();
-    discoveryLength = pulled.value.discoveryExpiresInMs ?? 0;
-    discoveryUntil = receivedAt + discoveryLength;
+    const receivedAt = steady();
+    discoveryUntil = receivedAt + (pulled.value.discoveryExpiresInMs ?? 0);
     networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
       target,
       expiresAt: receivedAt + target.expiresInMs,
@@ -930,7 +920,7 @@ export function createAgent(opts: AgentOptions): Agent {
         // The round this waited behind may have found the spare, which the page no longer offers a
         // reset on.
         if (!isJoined(config, token) || !outOfTouch || status.phase === "spare_box") return false;
-        resetAt ??= host.now() + RESET_WINDOW_MS;
+        resetDeadline ??= steady() + RESET_WINDOW_MS;
         wake();
         return true;
       });
@@ -940,8 +930,8 @@ export function createAgent(opts: AgentOptions): Agent {
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();
-        if (!isJoined(config, token) || resetAt === undefined) return false;
-        resetAt = undefined;
+        if (!isJoined(config, token) || resetDeadline === undefined) return false;
+        resetDeadline = undefined;
         return true;
       });
     },
@@ -953,7 +943,7 @@ export function createAgent(opts: AgentOptions): Agent {
         config,
         joined: isJoined(config, token),
         outOfTouch,
-        ...(resetAt === undefined ? {} : { resetAt }),
+        ...(resetDeadline === undefined ? {} : { resetAt: wallDeadline(resetDeadline) }),
       };
     },
   };

@@ -992,35 +992,55 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
   });
 });
 
-it("passes the Linux scan deadline through the real network composition to its sweep", async () => {
-  let now = 1_000;
-  const calls: [string, number][] = [];
-  const devices = createLinuxDevices({
-    sysfsRoot: root,
-    bluetooth: fakeBluetooth(),
-    now: () => now,
-    networkScanDeps: {
-      interfaces: () => ({
-        en0: [
-          {
-            address: "10.0.0.1",
-            cidr: "10.0.0.1/29",
-            family: "IPv4",
-            internal: false,
-            netmask: "255.255.255.248",
-            mac: "00:00:00:00:00:00",
-          },
-        ],
-      }),
-      mdns: async () => [],
-      connect: async (host, _port, timeout) => {
-        calls.push([host, timeout]);
-        now = 2_000;
-        return true;
+it.each(["during USB discovery", "between dial batches"] as const)(
+  "keeps the Linux network scan cutoff when the wall clock moves %s",
+  async (when) => {
+    let wall = 1_700_000_000_000;
+    let steady = 5_000;
+    const calls: [string, number][] = [];
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth(),
+      now: () => wall,
+      steady: () => steady,
+      networkScanDeps: {
+        interfaces: () => ({
+          en0: [
+            {
+              address: "10.0.0.1",
+              cidr: "10.0.0.1/25",
+              family: "IPv4",
+              internal: false,
+              netmask: "255.255.255.128",
+              mac: "00:00:00:00:00:00",
+            },
+          ],
+        }),
+        mdns: async () => [],
+        connect: async (host, _port, timeout) => {
+          calls.push([host, timeout]);
+          if (host === "10.0.0.2" && when === "between dial batches") {
+            await Promise.resolve();
+            wall -= 400 * 86_400_000;
+            steady += 100;
+          }
+          return host === "10.0.0.2" || host === "10.0.0.66";
+        },
       },
-    },
-  });
-  const found = await devices.scan(["network_tcp"], 1_100);
-  expect(calls).toEqual([["10.0.0.2", 100]]);
-  expect(found).toEqual([{ transport: "network_tcp", host: "10.0.0.2", port: 9100 }]);
-});
+    });
+    const scan = devices.scan(["usb", "network_tcp"], wall + 400);
+    if (when === "during USB discovery") {
+      wall += 400 * 86_400_000;
+      steady += 100;
+    }
+    const found = await scan;
+    expect(calls.find(([host]) => host === "10.0.0.2")).toEqual([
+      "10.0.0.2",
+      when === "during USB discovery" ? 300 : 400,
+    ]);
+    expect(calls.find(([host]) => host === "10.0.0.66")).toEqual(["10.0.0.66", 300]);
+    expect(found.filter((device) => device.transport === "network_tcp").map((d) => d.host)).toEqual(
+      ["10.0.0.2", "10.0.0.66"],
+    );
+  },
+);

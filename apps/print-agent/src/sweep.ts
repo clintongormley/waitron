@@ -83,19 +83,18 @@ export interface SweepOptions {
   connect: (host: string, port: number, timeoutMs: number) => Promise<boolean>;
   concurrency?: number;
   timeoutMs?: number;
-  deadline?: number;
-  now?: () => number;
+  steadyDeadline?: number;
+  steady?: () => number;
 }
 
 export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]> {
   const concurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const now = opts.now ?? Date.now;
-  const allowance = opts.deadline === undefined ? Infinity : opts.deadline - now();
+  const steady = opts.steady ?? ((): number => performance.now());
   const open: boolean[] = new Array<boolean>(opts.hosts.length).fill(false);
   await forEachBounded(opts.hosts, concurrency, async (host, i) => {
-    const remaining = opts.deadline === undefined ? Infinity : opts.deadline - now();
-    if (remaining <= 0 || remaining > allowance) return;
+    const remaining = opts.steadyDeadline === undefined ? Infinity : opts.steadyDeadline - steady();
+    if (remaining <= 0) return;
     try {
       open[i] = await opts.connect(host, opts.port, Math.min(timeoutMs, remaining));
     } catch {

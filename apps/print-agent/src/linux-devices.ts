@@ -28,8 +28,8 @@ export interface LinuxDeviceOptions {
   sysfsRoot?: string;
   devRoot?: string;
   bluetooth?: BluetoothHost;
-  scanNetwork?: (deadline?: number) => Promise<DiscoveredDevice[]>;
-  networkScanDeps?: NetworkScanDeps;
+  scanNetwork?: (steadyDeadline?: number) => Promise<DiscoveredDevice[]>;
+  networkScanDeps?: Omit<NetworkScanDeps, "steady">;
   /** A paired report's deadline: the wait for its devices' kinds gets only what the listing left of
    * it. With the default `bluetooth` it also kills a paired listing, and an `info` the report
    * starts, that BlueZ has not answered. */
@@ -37,7 +37,7 @@ export interface LinuxDeviceOptions {
   log?: HostLog;
   /** Wall clock, for the network scan's deadline only. */
   now?: () => number;
-  /** Elapsed time for the Bluetooth waits. */
+  /** Steady-clock milliseconds for Bluetooth waits and the network sweep. */
   steady?: () => number;
 }
 
@@ -87,7 +87,8 @@ export function createLinuxDevices(
   const steadyNow = opts.steady ?? ((): number => performance.now());
   const scanNetworkImpl =
     opts.scanNetwork ??
-    ((deadline?: number) => scanNetwork(deadline, { ...opts.networkScanDeps, now }));
+    ((steadyDeadline?: number) =>
+      scanNetwork(steadyDeadline, { ...opts.networkScanDeps, steady: steadyNow }));
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
@@ -188,6 +189,10 @@ export function createLinuxDevices(
 
     async scan(kinds?, deadline?): Promise<DiscoveredDevice[]> {
       const wanted = new Set(kinds ?? (["usb", "network_tcp", "bluetooth"] as const));
+      const steadyDeadline =
+        deadline !== undefined && wanted.has("network_tcp")
+          ? steadyNow() + (deadline - now())
+          : undefined;
       const found: DiscoveredDevice[] = [];
       if (wanted.has("usb")) {
         for (const u of await usb()) {
@@ -199,7 +204,7 @@ export function createLinuxDevices(
           });
         }
       }
-      if (wanted.has("network_tcp")) found.push(...(await scanNetworkImpl(deadline)));
+      if (wanted.has("network_tcp")) found.push(...(await scanNetworkImpl(steadyDeadline)));
       if (wanted.has("bluetooth")) {
         try {
           found.push(...(await bluetooth.scan()));
@@ -301,11 +306,11 @@ export interface NetworkScanDeps {
   interfaces?: typeof networkInterfaces;
   connect?: typeof connectTcp;
   mdns?: () => Promise<DiscoveredDevice[]>;
-  now?: () => number;
+  steady?: () => number;
 }
 
 export async function scanNetwork(
-  deadline?: number,
+  steadyDeadline?: number,
   deps: NetworkScanDeps = {},
 ): Promise<DiscoveredDevice[]> {
   const [announced, swept] = await Promise.all([
@@ -314,8 +319,8 @@ export async function scanNetwork(
       hosts: sweepCandidates({ interfaces: deps.interfaces ?? networkInterfaces }),
       port: SWEEP_PORT,
       connect: deps.connect ?? connectTcp,
-      deadline,
-      now: deps.now,
+      steadyDeadline,
+      steady: deps.steady,
     }),
   ]);
   return mergeDiscovered(announced, swept);
