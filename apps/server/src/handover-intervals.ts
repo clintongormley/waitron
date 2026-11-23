@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { handoverActivations, nodes, type Database, type Transaction } from "@waitron/db";
 import { readCompletedReturns } from "./return-completion.js";
 import type { Declaration } from "./handover-emergency-api.js";
+import type { HeardCopy } from "./old-box-holdings.js";
 
 export async function readHandoverIntervals(tx: Transaction) {
   const source = alias(nodes, "source");
@@ -58,7 +59,7 @@ export async function latestTakeoverFrom(db: Database, sourceNodeId: string) {
 export async function emergencyCopyFrom(
   db: Database,
   sourceNodeId: string,
-): Promise<{ lastChangeAtMs: number | null } | null> {
+): Promise<HeardCopy | null> {
   const row = await latestTakeoverFrom(db, sourceNodeId);
   if (row?.scenario !== "emergency") return null;
   const body: unknown = row.evidence.body;

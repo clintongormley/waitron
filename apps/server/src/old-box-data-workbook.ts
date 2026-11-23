@@ -180,18 +180,11 @@ async function wholeChains(db: Database, seats: readonly Seat[]): Promise<Unretu
 }
 
 /**
- * The workbook an old main box makes: an Invoices tab listing, for each module that fills the
- * `unreturned` seat, the records the main box's summary does not show it holds (all of them, for
- * every module, when one module's part is not compared), each with its invoice's accountant
- * columns, one line per VAT rate.
+ * The workbook an old main box makes, with each tab's row count: an Invoices tab listing, for each
+ * module that fills the `unreturned` seat, the records the main box's summary does not show it
+ * holds (all of them, for every module, when one module's part is not compared), each with its
+ * invoice's accountant columns, one line per VAT rate.
  */
-export async function buildOldBoxWorkbook(
-  input: OldBoxWorkbookInput,
-): Promise<Uint8Array<ArrayBuffer>> {
-  return (await makeOldBoxWorkbook(input)).bytes;
-}
-
-/** {@link buildOldBoxWorkbook}, with each tab's row count. */
 export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<OldBoxWorkbook> {
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
@@ -325,21 +318,21 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           ]),
         ],
       },
+      {
+        name: words.activitySheet,
+        rows: [
+          [intro],
+          words.activityColumns,
+          ...activity.map((entry) => [
+            entry.at,
+            entry.kind,
+            entry.personName,
+            entry.subjectKind,
+            entry.subjectId,
+          ]),
+        ],
+      },
     );
-    sheets.push({
-      name: words.activitySheet,
-      rows: [
-        [intro],
-        words.activityColumns,
-        ...activity.map((entry) => [
-          entry.at,
-          entry.kind,
-          entry.personName,
-          entry.subjectKind,
-          entry.subjectId,
-        ]),
-      ],
-    });
   }
   return { bytes: await renderWorkbook(sheets), counts };
 }

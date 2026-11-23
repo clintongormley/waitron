@@ -8,6 +8,7 @@ import {
 import { readHandoverRestriction } from "@waitron/node-db";
 import { checkedPeerAnswer, mainBoxToAsk } from "./main-box-answer.js";
 import { peerKeyOf } from "./handover-signing.js";
+import type { HeardCopy } from "./old-box-holdings.js";
 import { usableCopyTime } from "./old-box-data-since.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { readReturnInventory, returnConfirmed, type ReturnRecordsDeps } from "./return-records.js";
@@ -21,7 +22,7 @@ export type ReplacedResetCheck =
       setAside: boolean;
       lacking: Record<string, CanonicalValue[]>;
       holdings?: Record<string, CanonicalValue>;
-      copy?: HeardCopyTime;
+      copy?: HeardCopy;
     }
   | {
       outcome: "no-order";
@@ -29,7 +30,7 @@ export type ReplacedResetCheck =
       /** The main box's own summary; absent when it sent none or sent something else. */
       holdings?: Record<string, CanonicalValue>;
       /** The copy's latest sale or order time; absent when the main box sent none or something else. */
-      copy?: HeardCopyTime;
+      copy?: HeardCopy;
     }
   /** The main box answered `handover.reset_query_refused`. */
   | { outcome: "refused"; reason: unknown }
@@ -46,8 +47,6 @@ export type ReplacedResetCheck =
         | "source"
         | "unconfirmed";
     };
-
-type HeardCopyTime = { lastChangeAtMs: number | null };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

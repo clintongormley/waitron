@@ -36,7 +36,7 @@ import { latestChangeAtMs, latestChangeAtMsFromMaxima } from "./handover-emergen
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
 import { completeRefundReservation } from "./tender-refund-completion.js";
 import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
@@ -59,15 +59,17 @@ function sheet(bytes: Uint8Array, name: string): string | undefined {
   return sheetNamed(unzipSync(bytes), name);
 }
 
-function build(since: SinceRule, language: "en" | "es" = "en") {
-  return buildOldBoxWorkbook({
-    db: suite.db,
-    modules: [],
-    mainHoldings: null,
-    madeAt: MADE_AT,
-    language,
-    since,
-  });
+async function build(since: SinceRule, language: "en" | "es" = "en") {
+  return (
+    await makeOldBoxWorkbook({
+      db: suite.db,
+      modules: [],
+      mainHoldings: null,
+      madeAt: MADE_AT,
+      language,
+      since,
+    })
+  ).bytes;
 }
 
 async function namedPerson(name: string): Promise<string> {

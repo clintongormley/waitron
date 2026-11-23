@@ -20,7 +20,7 @@ import {
 import { readAccountantInvoices } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
 import {
   insertFiscalRecord,
   insertNumberedFiscalRecord,
@@ -76,19 +76,21 @@ function sheet(bytes: Uint8Array, name = "xl/worksheets/sheet1.xml"): string {
   return strFromU8(unzipSync(bytes)[name]!);
 }
 
-function build(
+async function build(
   db: Database,
   modules: readonly WaitronModule[],
   language: "en" | "es" = "en",
   mainHoldings: Readonly<Record<string, CanonicalValue>> | null = { fiscal: [] },
 ) {
-  return buildOldBoxWorkbook({
-    db,
-    modules,
-    mainHoldings: mainHoldings === null ? null : { holdings: mainHoldings, heardAt: MADE_AT },
-    madeAt: MADE_AT,
-    language,
-  });
+  return (
+    await makeOldBoxWorkbook({
+      db,
+      modules,
+      mainHoldings: mainHoldings === null ? null : { holdings: mainHoldings, heardAt: MADE_AT },
+      madeAt: MADE_AT,
+      language,
+    })
+  ).bytes;
 }
 
 /** A part payment: its own ticket, paid in cash on an open bill. */
@@ -391,16 +393,18 @@ describe("the old box's Invoices tab with the main box's summary from its last a
     const { second, held } = await twoSales();
     for (const language of ["en", "es"] as const) {
       const xml = sheet(
-        await buildOldBoxWorkbook({
-          db: suite.db,
-          modules: [fiscal],
-          mainHoldings: {
-            holdings: { fiscal: held },
-            heardAt: new Date("2026-11-23T08:15:42.000Z"),
-          },
-          madeAt: MADE_AT,
-          language,
-        }),
+        (
+          await makeOldBoxWorkbook({
+            db: suite.db,
+            modules: [fiscal],
+            mainHoldings: {
+              holdings: { fiscal: held },
+              heardAt: new Date("2026-11-23T08:15:42.000Z"),
+            },
+            madeAt: MADE_AT,
+            language,
+          })
+        ).bytes,
       );
       expect(row(xml, 1)).toEqual([
         OLD_BOX_DATA_WORDS[language].invoiceIntro.replace("{time}", "2026-11-23 08:15 UTC"),
@@ -449,13 +453,15 @@ describe("the old box's Invoices tab with the main box's summary from its last a
   it("lists every record under the no-comparison first line when the module cannot read the summary", async () => {
     const { first, second } = await twoSales();
     const xml = sheet(
-      await buildOldBoxWorkbook({
-        db: suite.db,
-        modules: [fiscal],
-        mainHoldings: { holdings: { fiscal: "not a summary" }, heardAt: MADE_AT },
-        madeAt: MADE_AT,
-        language: "en",
-      }),
+      (
+        await makeOldBoxWorkbook({
+          db: suite.db,
+          modules: [fiscal],
+          mainHoldings: { holdings: { fiscal: "not a summary" }, heardAt: MADE_AT },
+          madeAt: MADE_AT,
+          language: "en",
+        })
+      ).bytes,
     );
     expect(row(xml, 1)).toEqual([
       OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),

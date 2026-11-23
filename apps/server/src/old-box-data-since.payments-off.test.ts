@@ -12,7 +12,7 @@ import {
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
 import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
 const suite = useVenueDb({
@@ -70,14 +70,16 @@ it("lists part payments and drawer entries, and no card payments, when the payme
       billPaymentId: part!.id,
     });
   });
-  const bytes = await buildOldBoxWorkbook({
-    db: suite.db,
-    modules: [],
-    mainHoldings: null,
-    madeAt: new Date(AT),
-    language: "en",
-    since: { kind: "all" },
-  });
+  const bytes = (
+    await makeOldBoxWorkbook({
+      db: suite.db,
+      modules: [],
+      mainHoldings: null,
+      madeAt: new Date(AT),
+      language: "en",
+      since: { kind: "all" },
+    })
+  ).bytes;
   const xml = sheetNamed(unzipSync(bytes), OLD_BOX_DATA_WORDS.en.paymentsSheet)!;
   expect([3, 4, 5].map((n) => row(xml, n).slice(0, 2))).toEqual([
     ["Payment", AT],

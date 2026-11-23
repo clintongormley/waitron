@@ -68,7 +68,7 @@ import { ASK_AFTER_REFUSAL_MS, startResetOrderDuty } from "./reset-order-duty.js
 import { ALL_MODULES } from "./modules.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule } from "./old-box-data-since.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { listServers, removeStandby } from "./membership-removal.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -1476,14 +1476,16 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       const since = await sinceRule(mainBox.db, heard.mainCopy);
       expect(since).toEqual({ kind: "copy", fromMs: copyAt - 10 * 60_000 });
       const files = unzipSync(
-        await buildOldBoxWorkbook({
-          db: mainBox.db,
-          modules: boxes.main.modules,
-          mainHoldings: heard.mainHoldings,
-          madeAt: new Date(),
-          language: "en",
-          since,
-        }),
+        (
+          await makeOldBoxWorkbook({
+            db: mainBox.db,
+            modules: boxes.main.modules,
+            mainHoldings: heard.mainHoldings,
+            madeAt: new Date(),
+            language: "en",
+            since,
+          })
+        ).bytes,
       );
       const words = OLD_BOX_DATA_WORDS.en;
       const tab = (name: string) => sheetNamed(files, name)!;
