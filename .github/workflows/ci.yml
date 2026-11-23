@@ -2437,6 +2437,28 @@ jobs:
             echo "WebKit dependency install attempt $attempt failed or stalled" >&2
             if [ "$attempt" = 1 ]; then
               sudo -n "$gnu_timeout" -s KILL 60 dpkg --configure -a
+              apt_mirrors=/etc/apt/apt-mirrors.txt
+              if [ -f "$apt_mirrors" ] && grep -Eq '^URIs:[[:blank:]]+mirror\+file:/etc/apt/apt-mirrors\.txt[[:blank:]]*$' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null; then
+                mirror_hosts=$(awk '$1 ~ /^https?:\/\// { split($1, url, "[/:]"); print tolower(url[4]) }' "$apt_mirrors")
+                retry_mirror=
+                for mirror in azure.archive.ubuntu.com mirrors.edge.kernel.org; do
+                  if ! grep -Fqx "$mirror" <<< "$mirror_hosts"; then
+                    retry_mirror=$mirror
+                    break
+                  fi
+                done
+                if [ -n "$retry_mirror" ]; then
+                  if printf 'https://%s/ubuntu/\n' "$retry_mirror" | sudo -n tee "$apt_mirrors"; then
+                    echo "Retrying WebKit dependency install on Ubuntu mirror $retry_mirror"
+                  else
+                    echo "Could not set Ubuntu mirror $retry_mirror; retrying WebKit dependency install" >&2
+                  fi
+                else
+                  echo "No distinct Ubuntu mirror available; retrying with the runner's mirror list" >&2
+                fi
+              else
+                echo "Ubuntu mirror-list layout not recognised; retrying with the runner's sources" >&2
+              fi
             fi
           done
           exit 1
