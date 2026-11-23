@@ -140,9 +140,8 @@ como servido. La lista Enviado conserva el tiempo que lleva listo para que veas 
 
 Usa la etiqueta de platos listos de cada estación en el plano para decidir qué recoger allí.
 Una ración vendida por peso o medida muestra **1**, y tres raciones enteras muestran **3**.
-Si cambia la unidad del producto, los platos que ya están en el pedido conservan el recuento de
-la unidad con la que los pediste. Si un plato tiene partes en dos estaciones, recógelas en ambas;
-cada estación lo cuenta una vez. En **Enviado**, espera a que diga **Listo** para saber que todas sus partes están listas.
+Si un plato tiene partes en dos estaciones, recógelas en ambas; cada estación lo cuenta una vez.
+En **Enviado**, espera a que diga **Listo** para saber que todas sus partes están listas.
 
 Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
 Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.

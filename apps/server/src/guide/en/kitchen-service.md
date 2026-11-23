@@ -123,8 +123,7 @@ On the table, a ready dish stays **Ready** in its detail window until you mark i
 The Sent list keeps showing how long it has been ready so you can see what still needs serving.
 
 Use each station’s ready chip on the floor to choose what to collect there. A weighed or measured
-serving shows **1**, and three whole portions show **3**. If the product’s unit changes, dishes
-already on the order keep the count for the unit you ordered in.
+serving shows **1**, and three whole portions show **3**.
 If a dish has parts at two stations, collect them from both; each station counts it once.
 In **Sent**, wait for **Ready** to see when all its parts are ready.
 
