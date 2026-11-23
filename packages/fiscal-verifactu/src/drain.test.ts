@@ -790,8 +790,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
 
-    // Resubmit our own already-accepted record, as a lost response would: the fake answers error
-    // 3000 with `EstadoRegistroDuplicado` "Correcta", which must read as an accept.
+    // Requeue with the first CSV still present to check the history write before a second reply.
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`
         update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}

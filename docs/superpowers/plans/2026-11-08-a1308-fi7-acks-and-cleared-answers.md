@@ -131,11 +131,14 @@ The other thirteen updates write only `estado`, `incidencia`, `technical_inciden
 `:1039`, `:1121`, `:1164`, `:1201`, `:1222`, `:1669`; `outbox.ts:42`; `record-remedy-held.ts:94`;
 `reconcile.ts:572`).
 
-**2026-11-23, watcher clearance:** The preflight added two insert paths to the trace.
+**2026-11-23, watcher clearance (21:11 CET, Lane E `questions.md`):** The preflight found two
+insert paths outside the earlier trace.
 `handover-return.ts:440–454` skips records the receiving box already holds. For a missing record it
 inserts the record and its submission in the same transaction. The returned answer goes into that new
-submission, so no earlier answer is lost. `apps/server/scripts/bench/grow-fiscal.ts:157–160` inserts
-a new synthetic submission with a copied CSV. The history helper stays at the three update sites.
+submission. For a record the receiver already holds, the return keeps the receiver's existing
+submission and skips the returned delivery. `apps/server/scripts/bench/grow-fiscal.ts:157–160`
+inserts a new synthetic submission with a copied CSV. The history helper stays at the three update
+sites.
 
 `keepAnswerBeforeClearing` therefore takes the values about to be written and compares each with the
 row; the design's "hold" (`setAside`) is covered by the `setEstado` call, and is not a separate call
