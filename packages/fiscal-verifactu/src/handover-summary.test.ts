@@ -58,21 +58,36 @@ function records(nodeId: string) {
 
 const TIME = "2026-07-20T17:20:00.000Z";
 
-async function envio(registroId: string, estado: string) {
+async function envio(
+  registroId: string,
+  estado: string,
+  {
+    csv = null,
+    codigoError = null,
+    mensajeError = null,
+    enviadoEn = null,
+    confirmadoEn = null,
+  }: {
+    csv?: string | null;
+    codigoError?: string | null;
+    mensajeError?: string | null;
+    enviadoEn?: string | null;
+    confirmadoEn?: string | null;
+  } = {},
+) {
   await suite.db.execute(
-    sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en) values (${registroId}, ${estado}, ${TIME})`,
+    sql`insert into verifactu_submissions (
+      registro_id, estado, proximo_intento_en, csv, codigo_error, mensaje_error, enviado_en, confirmado_en
+    ) values (
+      ${registroId}, ${estado}, ${TIME}, ${csv}, ${codigoError}, ${mensajeError},
+      ${enviadoEn}, ${confirmadoEn}
+    )`,
   );
+  return [registroId, estado, csv, codigoError, mensajeError, enviadoEn, confirmadoEn];
 }
 
-async function ack(registroId: string, csv: string | null, state: string) {
-  await suite.db.execute(
-    sql`insert into acks (registro_id, submitted_at, csv, state) values (${registroId}, ${TIME}, ${csv}, ${state})`,
-  );
-  return [registroId, TIME, csv, state, null];
-}
-
-function acksHash(acks: (string | null)[][]) {
-  const sorted = [...acks].sort((x, y) => (x[0]! < y[0]! ? -1 : 1));
+function submissionsHash(submissions: (string | null)[][]) {
+  const sorted = [...submissions].sort((x, y) => (x[0]! < y[0]! ? -1 : 1));
   return createHash("sha256").update(JSON.stringify(sorted)).digest("hex");
 }
 
@@ -107,12 +122,14 @@ describe("summariseChains", () => {
     await seedNode(suite.db, "Never traded");
     const [a1, a2] = records(first.nodeId);
     const [b1, b2] = records(second.nodeId);
-    await envio(a1!.id, "aceptado");
-    await envio(a2!.id, "enviando");
-    await envio(b1!.id, "rechazado");
-    await envio(b2!.id, "enviando");
-    const ackA = await ack(a1!.id, "csv-first", "accepted");
-    const ackB = await ack(b2!.id, null, "rejected");
+    const submissionsA = [
+      await envio(a1!.id, "aceptado", { csv: "csv-first", confirmadoEn: TIME }),
+      await envio(a2!.id, "enviando", { enviadoEn: TIME }),
+    ];
+    const submissionsB = [
+      await envio(b1!.id, "rechazado", { codigoError: "1100", mensajeError: "Refused" }),
+      await envio(b2!.id, "enviando", { enviadoEn: TIME }),
+    ];
 
     const summaries = await summarise();
 
@@ -125,7 +142,7 @@ describe("summariseChains", () => {
         headRegistroId: a2!.id,
         headHuella: a2!.huella,
         envios: { ...noEnvios, aceptado: 1, enviando: 1 },
-        acksSha256: acksHash([ackA]),
+        submissionsSha256: submissionsHash(submissionsA),
         enviandoIds: [a2!.id],
       },
       {
@@ -136,7 +153,7 @@ describe("summariseChains", () => {
         headRegistroId: b2!.id,
         headHuella: b2!.huella,
         envios: { ...noEnvios, rechazado: 1, enviando: 1 },
-        acksSha256: acksHash([ackB]),
+        submissionsSha256: submissionsHash(submissionsB),
         enviandoIds: [b2!.id],
       },
     ].sort((x, y) => (x.nodeId < y.nodeId ? -1 : 1));
@@ -160,10 +177,8 @@ describe("summariseChains", () => {
     );
     await append(node, 3);
     const rows = records(node.nodeId);
-    await envio(rows[0]!.id, "aceptado");
-    await envio(rows[2]!.id, "enviando");
-    const oldAck = await ack(rows[1]!.id, "csv-old", "accepted");
-    const newAck = await ack(rows[2]!.id, null, "halted");
+    const oldSubmission = await envio(rows[0]!.id, "aceptado", { csv: "csv-old" });
+    const newSubmission = await envio(rows[2]!.id, "enviando", { enviadoEn: TIME });
 
     const summaries = await summarise();
 
@@ -176,7 +191,7 @@ describe("summariseChains", () => {
         headRegistroId: rows[1]!.id,
         headHuella: rows[1]!.huella,
         envios: { ...noEnvios, aceptado: 1 },
-        acksSha256: acksHash([oldAck]),
+        submissionsSha256: submissionsHash([oldSubmission]),
         enviandoIds: [],
       },
       {
@@ -188,7 +203,7 @@ describe("summariseChains", () => {
         headRegistroId: rows[2]!.id,
         headHuella: rows[2]!.huella,
         envios: { ...noEnvios, enviando: 1 },
-        acksSha256: acksHash([newAck]),
+        submissionsSha256: submissionsHash([newSubmission]),
         enviandoIds: [rows[2]!.id],
       },
     ].sort((x, y) => (x.sifId < y.sifId ? -1 : 1));
@@ -196,23 +211,17 @@ describe("summariseChains", () => {
     expect(summaries).toEqual(expected);
   });
 
-  it("counts every envio state, lists the ones being sent and hashes the acks", async () => {
+  it("counts each submission state, lists the ones being sent and hashes the delivery rows", async () => {
     const node = await seedNode(suite.db, "States");
     const states = Object.keys(noEnvios);
     for (let i = 0; i < states.length + 1; i++) await append(node, i + 1);
     const rows = records(node.nodeId);
-    const time = "2026-07-20T17:20:00.000Z";
     const estados = [...states, "enviando"];
+    const submissions = [];
     for (const [i, row] of rows.entries())
-      await suite.db.execute(
-        sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en) values (${row.id}, ${estados[i]!}, ${time})`,
+      submissions.push(
+        await envio(row.id, estados[i]!, estados[i] === "aceptado" ? { csv: "csv-a" } : {}),
       );
-    await suite.db.execute(
-      sql`insert into acks (registro_id, submitted_at, csv, state) values (${rows[2]!.id}, ${time}, 'csv-a', 'accepted')`,
-    );
-    await suite.db.execute(
-      sql`insert into acks (registro_id, submitted_at, csv, state, delivered_at) values (${rows[0]!.id}, ${time}, null, 'rejected', ${time})`,
-    );
 
     const [summary] = await summarise();
 
@@ -226,19 +235,13 @@ describe("summariseChains", () => {
       retenido: 1,
     });
     expect(summary!.enviandoIds).toEqual([rows[1]!.id, rows[7]!.id].sort());
-    const acked = [
-      [rows[0]!.id, time, null, "rejected", time],
-      [rows[2]!.id, time, "csv-a", "accepted", null],
-    ].sort((x, y) => (x[0]! < y[0]! ? -1 : 1));
-    expect(summary!.acksSha256).toBe(
-      createHash("sha256").update(JSON.stringify(acked)).digest("hex"),
-    );
+    expect(summary!.submissionsSha256).toBe(submissionsHash(submissions));
 
     await suite.db.execute(
-      sql`update acks set state = 'halted' where registro_id = ${rows[2]!.id}`,
+      sql`update verifactu_submissions set csv = 'csv-b' where registro_id = ${rows[2]!.id}`,
     );
     const [changed] = await summarise();
-    expect(changed!.acksSha256).not.toBe(summary!.acksSha256);
+    expect(changed!.submissionsSha256).not.toBe(summary!.submissionsSha256);
   });
 
   it("refuses a copy holding an envio state it does not know", async () => {
@@ -290,7 +293,6 @@ describe("summariseChains", () => {
     await append(node, 1);
     const [record] = records(node.nodeId);
     await envio(record!.id, "enviando");
-    await ack(record!.id, null, "accepted");
     const opened = await openBackupQuery(await copy());
     try {
       for (const field of [
@@ -303,10 +305,12 @@ describe("summariseChains", () => {
         "id",
         "huella",
         "registro_id",
-        "submitted_at",
+        "estado",
         "csv",
-        "state",
-        "delivered_at",
+        "codigo_error",
+        "mensaje_error",
+        "enviado_en",
+        "confirmado_en",
       ]) {
         const incomplete: BackupQuery = {
           async *rows(statement, params) {

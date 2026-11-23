@@ -116,20 +116,6 @@ describe("verifactu_sending_state migration", () => {
   });
 });
 
-describe("acks migration", () => {
-  it("creates acks with the required state and delivery columns", async () => {
-    const db = suite.db;
-    const by = await nullabilityOf(db, "acks");
-    expect(by).toMatchObject({
-      registro_id: "NO",
-      submitted_at: "NO",
-      state: "NO",
-      delivered_at: "YES",
-      csv: "YES",
-    });
-  });
-});
-
 describe("verifactu_submissions.reconciled_resubmit_at migration", () => {
   it("adds verifactu_submissions.reconciled_resubmit_at (nullable)", async () => {
     const db = suite.db;

@@ -19,7 +19,6 @@ import {
   resetInFlightClaims,
   type DrainDeps,
 } from "./drain.js";
-import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
   seedIndependentChain,
@@ -1147,10 +1146,6 @@ describe("drain — Route B's lookup and the write transaction", () => {
         proximo_intento_en: new Date("2026-07-21T00:00:00Z").toISOString(),
       },
     ]);
-    const acks = await suite.db.execute<{ registro_id: string; state: string }>(
-      sql`select registro_id, state from acks where registro_id = ${other.registroId}`,
-    );
-    expect(acks.rows).toEqual([{ registro_id: other.registroId, state: "accepted" }]);
   });
 });
 
@@ -1499,13 +1494,6 @@ describe("drain — a reply line with no recognisable status", () => {
     expect(result.recordsHalted).toBe(0);
     expect(result.nextDueAt?.toISOString()).toBe(retryAt);
 
-    const acks = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ registro_id: string }>(
-        sql`select registro_id from acks where ${ownChain(seeded)}`,
-      ),
-    );
-    expect(acks.rows).toEqual([]);
-
     const inc = parseParams(
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ code: string; severity: string; params: string }>(
@@ -1554,12 +1542,8 @@ describe("drain — a reply line with no recognisable status", () => {
   });
 });
 
-/**
- * A halted record stays counted AND flagged, and the flag rides its `acks` row. The bulk
- * chain-halt path bypasses `setEstado`'s `writeAck`, so it must write its own `halted` acks.
- */
-describe("drain — halted records get a halted ack (the bulk chain-halt path)", () => {
-  it("writes a rejected ack for a rejection and a halted ack for a record the same-code brake holds", async () => {
+describe("drain — the same-code brake", () => {
+  it("holds the record following three same-code refusals", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
@@ -1583,26 +1567,6 @@ describe("drain — halted records get a halted ack (the bulk chain-halt path)",
       "rechazado",
       "detenido",
     ]);
-
-    const acks = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ registro_id: string; state: string }>(
-        sql`select registro_id, state from acks where ${ownChain(seeded)}`,
-      ),
-    );
-    const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
-
-    const rejected = envios.rows.find((r) => r.secuencia === 1)!;
-    expect(ackState.get(rejected.registro_id)).toBe("rejected");
-
-    const halted = envios.rows.find((r) => r.secuencia === 4)!;
-    expect(ackState.get(halted.registro_id)).toBe("halted");
-
-    // Every terminal row is acked, and every ack agrees with its committed estado.
-    for (const env of envios.rows) {
-      const state = ackState.get(env.registro_id);
-      expect(state).toBeDefined();
-      expect(state).toBe(ackStateOf(env.estado));
-    }
   });
 });
 

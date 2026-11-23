@@ -32,7 +32,6 @@ export type {
 } from "./contribution.js";
 export { emptyDrainResult, IssuanceRefusedError } from "./backend.js";
 export type {
-  AckState,
   BootReading,
   ClockAdminConfirm,
   ClockAdminReading,

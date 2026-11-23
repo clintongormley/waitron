@@ -49,7 +49,6 @@ async function immutableSnapshot() {
     "invoice_series",
     "fiscal_allocations",
     "fiscal_reservations",
-    "acks",
   ];
   const result: Record<string, unknown> = {
     verifactu_submissions: (
@@ -296,7 +295,6 @@ describe("runtime lookup conflicts use the administrator stop without changing f
       const f = await fixture();
       await withTransaction(suite.db, async (tx) => {
         await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
-        await tx.execute(sql`delete from acks`);
       });
       const before = await immutableSnapshot();
       const client: VerifactuClient = {

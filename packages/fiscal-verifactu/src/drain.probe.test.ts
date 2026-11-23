@@ -109,13 +109,6 @@ async function estados(ids: string[]): Promise<string[]> {
   return found;
 }
 
-async function ackOf(registroId: string): Promise<string | undefined> {
-  const { rows } = await suite.db.execute<{ state: string }>(
-    sql`select state from acks where registro_id = ${registroId}`,
-  );
-  return rows[0]?.state;
-}
-
 async function incidentCodes(): Promise<string[]> {
   const { rows } = await suite.db.execute<{ code: string }>(
     sql`select code from incidents order by detected_at, code`,
@@ -238,7 +231,6 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
         intentos: 0,
         proximo_intento_en: at(HOUR).toISOString(),
       });
-      expect(await ackOf(id)).toBeUndefined();
     }
     expect(await refusalAlerts(at(HOUR))).toEqual([]);
     expect(probe.nextDueAt).not.toBeNull();
@@ -374,7 +366,6 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       enviado_en: at(HOUR).toISOString(),
       intentos: 2,
     });
-    expect(await ackOf(first!)).toBe("halted");
     expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
     const { rows } = await suite.db.execute<{ params: string }>(sql`
       select params from incidents where code = 'fiscal.estado_desconocido'
@@ -770,7 +761,6 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toEqual([[first]]);
       expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
       expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
-      expect(await ackOf(cancellation)).toBe("halted");
       const caseOf = async (id: string) =>
         (await cases()).filter((c) => c.registroId === id).map((c) => [c.cause, c.status]);
       expect(await caseOf(cancellation)).toEqual([["fiscal.anulacion_retenida", "open"]]);

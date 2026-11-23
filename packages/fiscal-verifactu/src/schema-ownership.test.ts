@@ -8,7 +8,6 @@ import * as schema from "./schema/index.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = [
-  "acks",
   "verifactu_history",
   "declaraciones_responsables",
   "verifactu_sending_state",

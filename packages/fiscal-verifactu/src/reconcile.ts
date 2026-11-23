@@ -13,7 +13,6 @@ import type {
   RegistroConsultado,
   VerifactuClient,
 } from "@waitron/verifactu";
-import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { keepAnswerBeforeClearing } from "./history.js";
 import { imputationMonth, toAeatDate } from "./registro-row.js";
@@ -501,9 +500,7 @@ function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): Re
 }
 
 /**
- * Corrects one mismatch's local estado toward what AEAT reports, then writes the ack the lost
- * response would have produced, on the same transaction so the ack reflects the estado this commit
- * writes. No-ops for a state `CORRECTION` does not map. A record corrected to
+ * Corrects one mismatch's local estado toward what AEAT reports. A record corrected to
  * `aceptado_con_errores` gets the drainer's case for it, with the error AEAT reports, and, on the
  * lost-acknowledgement path, the drainer's `fiscal.aceptado_con_errores` warning; on the drift
  * path the sweep has already raised `fiscal.reconcile_drift_errores` for it.
@@ -525,7 +522,6 @@ async function correct(
     update verifactu_submissions set estado = ${target}, confirmado_en = ${now.toISOString()}
     where registro_id = ${row.id}
   `);
-  await writeAck(tx, row.id, now);
   if (target === "aceptado_con_errores") {
     if (lostAck) {
       await recordIncident(tx, {
@@ -553,7 +549,7 @@ async function correct(
 
 /** First-detection `noTrace` remediation: reset to `pendiente` so the drainer re-submits it (safe:
  * a resubmission AEAT already holds comes back as error 3000), stamping `reconciled_resubmit_at` so a
- * later sweep can tell this from a first detection. A `pendiente` row carries no ack. */
+ * later sweep can tell this from a first detection. */
 async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Promise<void> {
   await keepAnswerBeforeClearing(
     tx,
@@ -578,7 +574,6 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
       reconciled_resubmit_at = ${now.toISOString()}
     where registro_id = ${row.id}
   `);
-  await deleteAck(tx, row.id);
 }
 
 async function clearReconciledMarker(tx: Transaction, row: PeriodRow): Promise<void> {

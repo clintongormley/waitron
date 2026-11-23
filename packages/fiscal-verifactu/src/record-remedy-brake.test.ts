@@ -13,7 +13,6 @@ import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
-import { pendingAcks, writeAck } from "./acks.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
 import { heldRecords, listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
@@ -133,7 +132,6 @@ async function snapshot() {
       .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
     held: await withTransaction(suite.db, heldRecords),
-    acks: await pendingAcks(suite.db),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
     sales: await suite.db.select().from(sales),
     tenders: await suite.db.select().from(tenders),
@@ -167,7 +165,6 @@ it("makes only the first brake-held record due now and audits a note without res
     estado: "pendiente",
     proximoIntentoEn: NOW,
   });
-  expect(after.acks).toEqual(before.acks.filter((a) => a.recordId !== ids[3]));
   expect(after.cases.slice(0, 2)).toEqual(before.cases.slice(0, 2));
   expect(after.cases[2]).toEqual({
     ...before.cases[2],
@@ -366,7 +363,6 @@ async function refuseFourth(
       .update(verifactuSubmissions)
       .set({ estado: "rechazado", codigoError: "1100" })
       .where(eq(verifactuSubmissions.registroId, ids[3]!));
-    await writeAck(tx, ids[3]!, NOW);
     return openFilingCase(tx, {
       registroId: ids[3]!,
       cause,
@@ -416,7 +412,6 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
         .update(verifactuSubmissions)
         .set({ estado: "rechazado", codigoError: "1100" })
         .where(eq(verifactuSubmissions.registroId, ids[4]!));
-      await writeAck(tx, ids[4]!, NOW);
       const holdingCase = await openFilingCase(tx, {
         registroId: ids[4]!,
         cause: "fiscal.registro_rechazado",
@@ -438,7 +433,6 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
         enviadoEn: HELD_AT,
         proximoIntentoEn: NOW,
       });
-      await writeAck(tx, record.id, NOW);
       body = { ...body, registroId: record.id, caseRegistroId: holdingCase.registroId };
     });
     const before = await snapshot();
@@ -470,7 +464,7 @@ it.each(["refused original", "accepted original", "absent-original marker"])(
   },
 );
 
-it("rolls delivery and acknowledgement changes back when the audit event cannot be stored", async () => {
+it("rolls delivery changes back when the audit event cannot be stored", async () => {
   await suite.db.execute(
     sql`create trigger refuse_brake_event before insert on verifactu_history when new.kind = 'case.note' begin select raise(abort, 'synthetic audit failure'); end`,
   );

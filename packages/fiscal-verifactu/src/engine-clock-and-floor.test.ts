@@ -6,7 +6,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { markDelivered } from "./acks.js";
 import { seedSoldRegistro } from "../test/fixtures.js";
 import { readChainHead } from "./chain.js";
 
@@ -14,7 +13,6 @@ const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NODE = brandNodeId("11111111-1111-4111-8111-111111111111");
-const ACK_RECORD = "22222222-2222-4222-8222-222222222222";
 /** An instant no clock reading taken during the test can precede. */
 const STARTED_AT = Date.now() - 1;
 
@@ -104,32 +102,5 @@ describe("registerSif stamps the clock", () => {
     await withTransaction(venue.db, (tx) => registerSif(tx, { ...SIF, nodeId: NODE }));
 
     expect(await head()).toEqual({ secuencia: 7, ultimoRegistroId: null, ultimaHuella: null });
-  });
-});
-
-describe("markDelivered", () => {
-  /**
-   * Seeded through raw SQL with the foreign key off, so no `verifactu_records` row is needed:
-   * `markDelivered` updates `delivered_at`, which no key reads.
-   */
-  beforeEach(() => {
-    venue.db.run(sql`pragma foreign_keys = off`);
-    venue.db.run(sql`
-      insert into acks (registro_id, submitted_at, state, delivered_at) values
-        (${ACK_RECORD}, '2026-01-01T00:00:00.000Z', 'accepted', null),
-        ('other', '2026-01-01T00:00:00.000Z', 'accepted', null)`);
-    venue.db.run(sql`pragma foreign_keys = on`);
-  });
-
-  it("stamps delivered_at on the named ack, and on no other", async () => {
-    await markDelivered(venue.db, ACK_RECORD);
-
-    const rows = venue.db.all<{ registro_id: string; delivered_at: string | null }>(
-      sql`select registro_id, delivered_at from acks order by registro_id`,
-    );
-    const delivered = rows.find((r) => r.registro_id === ACK_RECORD)!.delivered_at;
-    expect(delivered).not.toBeNull();
-    expect(new Date(delivered!).getTime()).toBeGreaterThanOrEqual(STARTED_AT);
-    expect(rows.find((r) => r.registro_id === "other")!.delivered_at).toBeNull();
   });
 });

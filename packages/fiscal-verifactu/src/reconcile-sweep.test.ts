@@ -62,7 +62,6 @@ async function fixture() {
   );
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`update verifactu_submissions set estado = 'pendiente'`);
-    await tx.execute(sql`delete from acks`);
   });
   const deps = {
     db: suite.db,
@@ -79,10 +78,10 @@ async function fixture() {
   return { seeded, ids, client, deps };
 }
 
-async function acknowledgements() {
+async function acceptedRecords() {
   return (
     await suite.db.execute<{ registro_id: string }>(
-      sql`select registro_id from acks order by registro_id`,
+      sql`select registro_id from verifactu_submissions where estado = 'aceptado' order by registro_id`,
     )
   ).rows.map((row) => row.registro_id);
 }
@@ -105,7 +104,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       { year: "2026", month: "12", outcome: "observed", checked: 1 },
       { year: "2027", month: "01", outcome: "observed", checked: 2 },
     ]);
-    expect(await acknowledgements()).toEqual([...ids].sort());
+    expect(await acceptedRecords()).toEqual([...ids].sort());
     expect(result.nextDueAt).toEqual(new Date("2027-02-02T12:00:00Z"));
   });
 
@@ -117,14 +116,13 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       await tx.execute(
         sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`,
       );
-      await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
     expect((await sweep(new Date("2027-02-02T11:59:59.999Z"))).periods).toEqual([]);
-    expect(await acknowledgements()).toHaveLength(2);
+    expect(await acceptedRecords()).toHaveLength(2);
     const result = await sweep(new Date("2027-02-02T12:00:00Z"));
     expect(result.periods).toHaveLength(2);
-    expect(await acknowledgements()).toEqual([...ids].sort());
+    expect(await acceptedRecords()).toEqual([...ids].sort());
   });
 
   it("does not postpone checks for a month when the box clock steps backward", async () => {
@@ -135,13 +133,12 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       await tx.execute(
         sql`update verifactu_submissions set estado = 'pendiente' where registro_id = ${ids[2]}`,
       );
-      await tx.execute(sql`delete from acks where registro_id = ${ids[2]}`);
     });
 
     const result = await sweep(new Date("2027-01-01T12:00:00Z"));
 
     expect(result.periods.map(({ outcome }) => outcome)).toEqual(["observed", "observed"]);
-    expect(await acknowledgements()).toEqual([...ids].sort());
+    expect(await acceptedRecords()).toEqual([...ids].sort());
     expect(result.nextDueAt).toEqual(new Date("2027-01-02T12:00:00Z"));
   });
 
@@ -164,14 +161,14 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       { month: "01", outcome: "unknown" },
     ]);
     expect(first.nextDueAt).toEqual(new Date("2027-02-01T12:05:00Z"));
-    expect(await acknowledgements()).toEqual([ids[0]]);
+    expect(await acceptedRecords()).toEqual([ids[0]]);
     available = true;
     expect((await sweep(new Date("2027-02-01T12:04:59.999Z"))).periods).toEqual([]);
     const retried = await sweep(new Date("2027-02-01T12:05:00Z"));
     expect(retried.periods.map(({ month, outcome }) => ({ month, outcome }))).toEqual([
       { month: "01", outcome: "observed" },
     ]);
-    expect(await acknowledgements()).toEqual([...ids].sort());
+    expect(await acceptedRecords()).toEqual([...ids].sort());
     expect(retried.nextDueAt).toEqual(new Date("2027-02-02T12:00:00Z"));
   });
 
@@ -191,7 +188,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
 
     expect(result.periods.map(({ outcome }) => outcome)).toEqual(["unknown", "unknown"]);
     expect(result.nextDueAt).toEqual(new Date("2027-02-01T12:05:00Z"));
-    expect(await acknowledgements()).toEqual([]);
+    expect(await acceptedRecords()).toEqual([]);
     expect(
       (await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)).rows,
     ).toEqual(before);
@@ -214,7 +211,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
     ]);
     expect(result.periods[1]?.result?.deferred).toEqual([ids[2]]);
     expect(result.nextDueAt).toEqual(new Date("2027-02-01T12:05:00Z"));
-    expect(await acknowledgements()).toHaveLength(2);
+    expect(await acceptedRecords()).toHaveLength(2);
   });
 
   it.each(["node", "taxpayer", "environment"] as const)(
@@ -241,7 +238,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
         nextDueAt: new Date("2027-02-02T12:00:00Z"),
       });
       expect(resolved).toBe(0);
-      expect(await acknowledgements()).toEqual([]);
+      expect(await acceptedRecords()).toEqual([]);
     },
   );
 
@@ -270,7 +267,7 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       const second = sweep(START);
       release.resolve();
       expect(await second).toBe(await first);
-      expect(await acknowledgements()).toEqual([...ids].sort());
+      expect(await acceptedRecords()).toEqual([...ids].sort());
     } finally {
       release.resolve();
       await first;
@@ -303,7 +300,7 @@ it("abandons an in-flight lookup and starts no later month after stepdown", asyn
   }
   await pending;
   expect(months).toEqual(["12"]);
-  expect(await acknowledgements()).toEqual([]);
+  expect(await acceptedRecords()).toEqual([]);
   expect(
     (await suite.db.execute(sql`select estado from verifactu_submissions order by rowid`)).rows,
   ).toEqual([{ estado: "pendiente" }, { estado: "pendiente" }, { estado: "pendiente" }]);

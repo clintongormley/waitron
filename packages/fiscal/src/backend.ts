@@ -184,14 +184,8 @@ export function emptyDrainResult(): DrainResult {
 }
 
 /**
- * How this POS classifies what a regime reports back about a submission, whatever raw code the
- * regime uses. `"accepted_with_errors"` still counts as accepted.
- */
-export type AckState = "accepted" | "accepted_with_errors" | "rejected" | "halted";
-
-/**
  * One record `reconcile` found this POS and the regime disagreeing about. The states are plain
- * strings because each side's vocabulary is the regime's, not `FiscalState` or `AckState`.
+ * strings because each side's vocabulary belongs to the regime.
  */
 export interface ReconcileMismatch {
   recordId: string;

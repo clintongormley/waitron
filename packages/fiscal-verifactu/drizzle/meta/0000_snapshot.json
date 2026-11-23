@@ -1,73 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "29346a03-f21f-4fef-8781-ea2f4e565e95",
+  "id": "6074be3f-30f6-4865-a726-b2d9c6dbf1b7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "acks": {
-      "name": "acks",
-      "columns": {
-        "registro_id": {
-          "name": "registro_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "submitted_at": {
-          "name": "submitted_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "csv": {
-          "name": "csv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "delivered_at": {
-          "name": "delivered_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "acks_registro_id_verifactu_records_id_fk": {
-          "name": "acks_registro_id_verifactu_records_id_fk",
-          "tableFrom": "acks",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "acks_state_ck": {
-          "name": "acks_state_ck",
-          "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
-        }
-      }
-    },
     "declaraciones_responsables": {
       "name": "declaraciones_responsables",
       "columns": {

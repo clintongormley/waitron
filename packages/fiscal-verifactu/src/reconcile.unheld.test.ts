@@ -95,7 +95,6 @@ async function snapshot() {
   for (const table of [
     "verifactu_records",
     "verifactu_submissions",
-    "acks",
     "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",

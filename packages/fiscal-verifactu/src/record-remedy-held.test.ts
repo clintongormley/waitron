@@ -13,7 +13,6 @@ import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
-import { writeAck, pendingAcks } from "./acks.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
 import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
@@ -80,7 +79,6 @@ beforeEach(async () => {
     await tx
       .insert(verifactuSubmissions)
       .values({ registroId: held.id, estado: "retenido", intentos: 1, incidencia: true });
-    await writeAck(tx, held.id, NOW);
     const heldCase = await openFilingCase(tx, {
       registroId: held.id,
       cause: "fiscal.anulacion_retenida",
@@ -157,7 +155,6 @@ async function snapshot() {
     tenders: await suite.db.select().from(tenders),
     refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
-    acks: await pendingAcks(suite.db),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
 }
@@ -185,7 +182,6 @@ it("releases the existing held cancellation and resolves its case without a new 
     ...body,
     acceptedRegistroId: currentId,
   });
-  expect(after.acks).toEqual([]);
   expect(after.deliveries.filter((r) => r.registroId !== body.registroId)).toEqual(
     before.deliveries.filter((r) => r.registroId !== body.registroId),
   );

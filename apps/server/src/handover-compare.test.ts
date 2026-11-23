@@ -811,7 +811,7 @@ describe("compareFinalCopy", () => {
       alter(
         r.path,
         `delete from ${setNamed(FISCAL).table} where hash = '${lastMigration(FISCAL)}';
-         alter table acks drop column csv`,
+         alter table verifactu_submissions drop column mensaje_error`,
       );
       // Failing case: `handover.summary_unreadable`, which waits for ever with M1 stopped.
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
@@ -1358,7 +1358,7 @@ describe("compareFinalCopy", () => {
 
     it("a summary this box cannot work out has its own code, not the old box's", async () => {
       const r = await rig();
-      alter(r.path, "drop table acks");
+      alter(r.path, "alter table verifactu_submissions drop column mensaje_error");
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.summary_unreadable", { module: FISCAL }),
       );

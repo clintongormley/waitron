@@ -1914,7 +1914,7 @@ interface RefilingSeen {
 }
 
 /**
- * Closes M2, sets `recordId` in M2's own venue.db to `enviando` with no answer and no ack, starts
+ * Closes M2, sets `recordId` in M2's own venue.db to `enviando` with no answer, starts
  * M2 and asks for a filing pass.
  */
 async function resendAfterRestart(boxes: Boxes, recordId: string): Promise<Resent> {
@@ -1928,7 +1928,6 @@ async function resendAfterRestart(boxes: Boxes, recordId: string): Promise<Resen
          mensaje_error = null, confirmado_en = null where registro_id = ?`,
       )
       .run(recordId);
-    raw.prepare("delete from acks where registro_id = ?").run(recordId);
   } finally {
     raw.close();
   }

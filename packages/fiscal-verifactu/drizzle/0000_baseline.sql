@@ -1,13 +1,3 @@
-CREATE TABLE `acks` (
-	`registro_id` text PRIMARY KEY NOT NULL,
-	`submitted_at` text NOT NULL,
-	`csv` text,
-	`state` text NOT NULL,
-	`delivered_at` text,
-	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "acks_state_ck" CHECK("acks"."state" in ('accepted', 'accepted_with_errors', 'rejected', 'halted'))
-);
---> statement-breakpoint
 CREATE TABLE `declaraciones_responsables` (
 	`version` text PRIMARY KEY NOT NULL,
 	`text` text NOT NULL,

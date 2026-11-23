@@ -17,7 +17,6 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
-import { deleteAck, writeAck } from "./acks.js";
 import { recordConflictEvidence, type ConflictComparison } from "./conflict-evidence.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import {
@@ -745,8 +744,7 @@ async function claimBatch(
   };
 }
 
-// The rollback reuses claim/hold/name/cap rules without retaining claims, acknowledgements or
-// incidents. A separate eligibility query can drift from those rules as they change.
+// The rollback uses the same claim rules without retaining their writes.
 async function pendingWasSendable(
   tx: Transaction,
   now: Date,
@@ -820,8 +818,7 @@ async function pendingWasSendable(
  * skipped (`recordsBefore`, ./filing-cases.ts).
  *
  * A held row gets no incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each
- * held record beside the case that holds it. A `halted` ack is written per held id, because this
- * bulk UPDATE bypasses `setEstado`'s `writeAck`.
+ * held record beside the case that holds it.
  *
  * Of these holds, only the run's is lifted by the drain: `claimProbes` sends its first held record
  * hourly and `releaseSettledBrakeHolds` releases the chain once that send breaks the run.
@@ -877,7 +874,6 @@ async function haltOpenChainClaims(
   await tx.execute(sql`
     update verifactu_submissions set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
   `);
-  for (const id of haltedIds) await writeAck(tx, id, now);
   result.recordsHalted += haltedIds.length;
   return kept;
 }
@@ -1066,7 +1062,6 @@ export async function releaseBrakeHold(
     returning registro_id
   `);
   if (rows.length === 0) return false;
-  await deleteAck(tx, registroId);
   return true;
 }
 
@@ -1159,8 +1154,7 @@ function releasableHeads(): SQL {
  * (`setAsideHeldCancellations`), then releases each `releasableHeads` chain: its head and the
  * `detenido` records after it go back to `pendiente`, due `now`, up to the first `detenido` record
  * with a case of its own. Each one's claim is given back (`intentos - 1`), so a first claim after
- * the release still reads 1 in `haltOpenChainClaims`. Its ack is deleted, as `pendiente` carries
- * none.
+ * the release still reads 1 in `haltOpenChainClaims`.
  */
 async function releaseSettledBrakeHolds(
   tx: Transaction,
@@ -1175,7 +1169,7 @@ async function releaseSettledBrakeHolds(
     secuencia: number;
   }>(releasableHeads());
   for (const head of heads.rows) {
-    const released = await tx.execute<{ registro_id: string }>(sql`
+    await tx.execute(sql`
       update verifactu_submissions set estado = 'pendiente', proximo_intento_en = ${now.toISOString()},
         intentos = max(intentos - 1, 0)
       where estado = 'detenido' and registro_id in (
@@ -1190,9 +1184,7 @@ async function releaseSettledBrakeHolds(
               and stop_envio.estado = 'detenido' and stop_envio.case_opened_at is not null
           )
       )
-      returning registro_id
     `);
-    for (const { registro_id } of released.rows) await deleteAck(tx, registro_id);
   }
 }
 
@@ -1737,9 +1729,6 @@ async function setEstado(
       incidencia = ${opts.incidencia ? 1 : 0} or incidencia
     where registro_id = ${registroId}
   `);
-  // The ack is written in the same transaction as the estado it reflects, so the two never
-  // disagree. `haltOpenChainClaims` writes its own.
-  await writeAck(tx, registroId, now);
 }
 
 /**
