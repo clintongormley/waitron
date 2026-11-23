@@ -145,6 +145,7 @@ export class WtPriceInput extends WtInput {
 
       button.unit wt-icon {
         margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-primary);
         vertical-align: middle;
       }
 

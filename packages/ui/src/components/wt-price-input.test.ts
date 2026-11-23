@@ -50,10 +50,10 @@ test("unit-haspopup tells assistive technology what the unit button opens; witho
   expect(button().hasAttribute("aria-haspopup")).toBe(false);
 });
 
-test("the unit button is a link-style control: text from the primary-text token, chevron from the text token, no border or fill", async () => {
+test("the unit button is a link-style control: text from the primary-text token, chevron from the primary (icon) token, no border or fill", async () => {
   const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
   host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
-  host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
   const button = el.shadowRoot!.querySelector("button.unit")!;
   const styles = getComputedStyle(button);
   expect(styles.borderTopStyle).toBe("none");

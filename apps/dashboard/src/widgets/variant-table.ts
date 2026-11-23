@@ -97,6 +97,9 @@ export class VariantTable extends LitElement {
         padding-inline: 0;
         color: var(--wt-color-primary-text);
       }
+      [data-test="pricing-unit"] wt-icon {
+        color: var(--wt-color-primary);
+      }
       /* An amount never breaks inside the number. */
       .amount {
         white-space: nowrap;

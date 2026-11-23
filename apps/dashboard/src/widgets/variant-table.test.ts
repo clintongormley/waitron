@@ -222,6 +222,20 @@ it("draws the pricing unit as an unbordered link with a dropdown chevron", async
   });
 });
 
+it("paints the pricing unit's chevron in the brand icon colour, beside its brand-coloured text", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({ unitLabel: "kg" });
+    el.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+    el.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+    const unit = unitButton(el);
+    await unit.updateComplete;
+    const button = unit.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(button).color).toBe("rgb(4, 5, 6)");
+    const icon = unit.querySelector('wt-icon[name="chevron-down"]')!;
+    expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
+  });
+});
+
 // Each width shows the price exactly once, so neither a sighted person nor a screen reader meets it
 // twice: in its own column on a wide table, under the name on a narrow one.
 it("moves each price under its name on a narrow table, and back to its own column on a wide one", async () => {

@@ -287,7 +287,7 @@ which need 3:1 against what they sit on rather than 4.5:1. Guard:
 `scripts/primary-coloured-text.test.ts`, weaker than its name: it reads text, and refuses only a
 `color:` declaration whose value is `var(--wt-color-primary)` (with or without a fallback) outside
 the icons and spinners its `GRAPHIC_USES` list names by file and selector
-(`scripts/primary-coloured-text.test.ts:56-82`). Its header lists what it misses
+(`scripts/primary-coloured-text.test.ts:54-95`). Its header lists what it misses
 (`scripts/primary-coloured-text.test.ts:9-19`):
 
 - a rule that sets another token to the brand colour, such as
