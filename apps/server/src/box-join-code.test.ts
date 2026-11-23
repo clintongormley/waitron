@@ -9,13 +9,14 @@ import {
   JOIN_COMMITMENT_LABEL,
   JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
+  JOIN_PROTOCOL,
   JOIN_REVEAL_LABEL,
   commitmentFor,
   commitmentMatches,
-  drawDecoys,
   encodeFields,
   joinCode,
   joinMessageText,
+  pollMessageFields,
   signJoinMessage,
   verifyJoinMessage,
   type JoinCodeInputs,
@@ -232,38 +233,37 @@ describe("joinCode", () => {
   });
 });
 
-describe("drawDecoys", () => {
-  function sequence(...codes: string[]): () => string {
-    let i = 0;
-    return () => {
-      const code = codes[i++];
-      if (code === undefined) throw new Error("sequence ran out");
-      return code;
-    };
-  }
-
-  it("draws two codes that differ from the real code and from each other", () => {
-    const decoys = drawDecoys("482913", [], sequence("482913", "000123", "000123", "999999"));
-    expect(decoys).toEqual(["000123", "999999"]);
+describe("a poll's signed fields", () => {
+  it("are the poll's clock reading and whether the new box said Join, as text", () => {
+    expect(pollMessageFields(1_234, true)).toEqual([Buffer.from("1234"), Buffer.from("true")]);
+    expect(pollMessageFields(1_234, false)).toEqual([Buffer.from("1234"), Buffer.from("false")]);
   });
 
-  it("avoids every code a listed request shows", () => {
-    const decoys = drawDecoys(
-      "482913",
-      ["111111", "222222", "333333"],
-      sequence("111111", "222222", "444444", "333333", "555555"),
+  it("do not let a signature over a poll without the Yes pass for one with it", () => {
+    const keys = generateNodeKeyPair();
+    const signature = signJoinMessage(
+      JOIN_POLL_LABEL,
+      "req-1",
+      2,
+      pollMessageFields(1_234, false),
+      keys.privateKey,
     );
-    expect(decoys).toEqual(["444444", "555555"]);
+    expect(
+      verifyJoinMessage(
+        JOIN_POLL_LABEL,
+        "req-1",
+        2,
+        pollMessageFields(1_234, true),
+        signature,
+        keys.publicKey,
+      ),
+    ).toBe(false);
   });
+});
 
-  it("draws six-digit codes from the real random source", () => {
-    const listed = ["111111", "222222"];
-    for (let i = 0; i < 50; i++) {
-      const [a, b] = drawDecoys("482913", listed);
-      expect(a).toMatch(/^\d{6}$/);
-      expect(b).toMatch(/^\d{6}$/);
-      expect(new Set([a, b, "482913", ...listed]).size).toBe(5);
-    }
+describe("the join protocol", () => {
+  it("is version 2, so a box on the release before the Yes is refused at its hello", () => {
+    expect(JOIN_PROTOCOL).toBe(2);
   });
 });
 

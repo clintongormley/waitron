@@ -1,5 +1,5 @@
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { commitmentFor, drawDecoys, joinCode, type JoinHello } from "./box-join-code.js";
+import { randomBytes, randomUUID } from "node:crypto";
+import { commitmentFor, joinCode, type JoinHello } from "./box-join-code.js";
 import type { LockedJoinBundle } from "./box-join-seal.js";
 
 const MINUTE = 60_000;
@@ -22,7 +22,6 @@ interface MainIdentity {
 export const JOIN_LIMITS = ["address", "network", "listed", "recent"] as const;
 export type JoinLimit = (typeof JOIN_LIMITS)[number];
 export const JOIN_END_REASONS = [
-  "wrong_code",
   "dismissed",
   "replaced",
   "cancelled",
@@ -65,6 +64,7 @@ export interface ListedJoinRequest {
   address: string;
   askedAt: string;
   startedAgain: boolean;
+  newConfirmed: boolean;
 }
 
 export interface HeldJoinRequest {
@@ -82,8 +82,6 @@ interface Revealed {
   seq: number;
   answer: RevealAnswer;
   code: string;
-  /** The three codes in the order Check shows them, drawn once. */
-  choices: string[];
   startedAgain: boolean;
 }
 
@@ -97,6 +95,8 @@ interface JoinRequest extends Omit<HeldJoinRequest, "revealed"> {
   latestAt: string;
   latestAtReceived: number;
   phase: Phase;
+  /** Whether a poll has carried the new box's Yes. */
+  newConfirmed: boolean;
   revealed?: Revealed;
   locked?: LockedJoinBundle;
   reason?: JoinEndReason;
@@ -116,21 +116,11 @@ interface BoxJoinRequestsOptions {
   wallNow?: () => number;
   newId?: () => string;
   newMainNonce?: (requestId: string) => Buffer;
-  drawCode?: () => string;
   /**
-   * Called when a request joins or leaves the list. A request that runs out of time leaves it
-   * unannounced, when the store next reads its requests.
+   * Called when a request joins or leaves the list, or its new box says Join. A request that runs
+   * out of time leaves it unannounced, when the store next reads its requests.
    */
   changed?: () => void;
-}
-
-function shuffled(codes: string[]): string[] {
-  const out = [...codes];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = randomInt(0, i + 1);
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
 }
 
 export type BoxJoinRequests = ReturnType<typeof createBoxJoinRequests>;
@@ -261,6 +251,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       latestAt: input.at,
       latestAtReceived: now,
       phase: "unrevealed",
+      newConfirmed: false,
     });
     return {
       requestId: id,
@@ -319,27 +310,24 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         mainNonce: r.mainNonce,
         requestId: r.id,
       });
-      const shown = (list: JoinRequest[]) => list.flatMap((l) => l.revealed!.choices);
-      // The real code cannot be redrawn, so a reveal whose code a listed request shows is refused.
-      if (shown(listedRequests()).includes(code)) {
+      // The code cannot be redrawn, so a reveal whose code a listed request shows is refused.
+      if (listedRequests().some((l) => l.revealed!.code === code)) {
         end(r, "code_taken", now);
         return { refused: "code_taken" };
       }
       // An approved request from this address goes too. A new request from the same address is
-      // taken as its box starting again, so the older one no longer holds back a tap on this one.
+      // taken as its box starting again, so the older one no longer holds back approving this one.
       // One from another address still does.
       for (const older of requests.values()) {
         if (older.address === r.address && (isListed(older) || older.phase === "approved"))
           end(older, "replaced", now);
       }
-      const decoys = drawDecoys(code, shown(listedRequests()), options.drawCode);
       const answer = { mainNonce: r.mainNonce, signature: input.signAnswer(r.mainNonce) };
       r.revealed = {
         newNonce: input.newNonce,
         seq: input.seq,
         answer,
         code,
-        choices: shuffled([code, ...decoys]),
         startedAgain: startedAgainAt.has(r.address),
       };
       r.phase = "waiting";
@@ -347,17 +335,22 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       return answer;
     },
 
-    /** The caller has checked the poll's signature. */
+    /** The caller has checked the poll's signature, which covers `confirmed`. */
     poll(input: {
       requestId: string;
       seq: number;
       at: string;
+      confirmed: boolean;
     }): PollAnswer | JoinNotFound | JoinInvalid {
       const r = held(input.requestId);
       if (!r || r.phase === "unrevealed") return { refused: "not_found" };
       if (!acceptSeq(r, input.seq)) return { refused: "invalid" };
       r.latestAt = input.at;
       r.latestAtReceived = steadyNow();
+      if (input.confirmed && r.phase === "waiting" && !r.newConfirmed) {
+        r.newConfirmed = true;
+        changed();
+      }
       if (r.phase === "ended") return { state: "ended", reason: r.reason! };
       if (r.phase === "approved") return { state: "approved", locked: r.locked! };
       return { state: "waiting" };
@@ -371,7 +364,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       const r = held(input.requestId);
       if (!r) return { refused: "not_found" };
       if (!acceptSeq(r, input.seq)) return { refused: "invalid" };
-      // Once a right tap has begun, the approval decides: a cancel answered here never leaves the
+      // Once an approval has begun, it decides: a cancel answered here never leaves the
       // chart listing a box that stopped asking. A stopped approval listed it, so a waiting new box
       // is kept polling until it reads that.
       if (
@@ -405,18 +398,26 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         address: r.address,
         askedAt: r.askedAt,
         startedAgain: r.revealed!.startedAgain,
+        newConfirmed: r.newConfirmed,
       }));
     },
 
-    /** The hello, the three codes in a random order, and the new box's latest clock reading. */
-    check(
-      requestId: string,
-    ): { hello: JoinHello; choices: string[]; at: string; atReceivedAt: string } | JoinNotFound {
+    /** The hello, the code, whether the new box said Join, and its latest clock reading. */
+    check(requestId: string):
+      | {
+          hello: JoinHello;
+          code: string;
+          newConfirmed: boolean;
+          at: string;
+          atReceivedAt: string;
+        }
+      | JoinNotFound {
       const r = held(requestId);
       if (!r || !isListed(r)) return { refused: "not_found" };
       return {
         hello: r.hello,
-        choices: [...r.revealed!.choices],
+        code: r.revealed!.code,
+        newConfirmed: r.newConfirmed,
         at: r.latestAt,
         atReceivedAt: wallAt(r.latestAtReceived),
       };
@@ -432,24 +433,22 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     },
 
     approve: {
-      /** Marks the request building before the caller's first await, so a second tap waits. */
+      /**
+       * Marks the request building before the caller's first await, so a second approve waits.
+       * Nothing is built before the new box's Yes, so until then its cancel still ends the request.
+       */
       begin(
         requestId: string,
-        code: string,
       ):
         | { encryptionKey: string }
         | JoinNotFound
         | { refused: "in_progress" }
-        | { refused: "wrong_code" }
+        | { refused: "not_confirmed" }
         | { refused: "other_approved" } {
         const r = held(requestId);
         if (!r || !isListed(r)) return { refused: "not_found" };
         if (r.phase === "building") return { refused: "in_progress" };
-        if (code !== r.revealed!.code) {
-          end(r, "wrong_code", steadyNow());
-          freePlace(r.id);
-          return { refused: "wrong_code" };
-        }
+        if (!r.newConfirmed) return { refused: "not_confirmed" };
         // The venue holds one pending pair link, so a second approval would take the first box's.
         // Once the first is forgotten, or a newer request from its address has ended it, a new
         // approval may replace its pair if it never finished.
@@ -478,7 +477,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         if (r?.phase === "building") end(r, "stopped", steadyNow());
       },
 
-      /** A build refusal leaves the request waiting, so a right tap can be sent again. */
+      /** A build refusal leaves the request waiting, so the approve can be sent again. */
       abandon(requestId: string): void {
         const r = held(requestId);
         if (r?.phase === "building") r.phase = "waiting";

@@ -21,13 +21,20 @@ function helloFrom(address: string): JoinHello {
 const newNonceOf = (address: string) => Buffer.alloc(32, address);
 const mainNonceOf = (id: string) => Buffer.alloc(32, `main ${id}`);
 
+/** A nonce that gives request `req-2` from 10.0.0.2 the code `req-1` from 10.0.0.1 shows (found by search). */
+function takenNonce(): Buffer {
+  const nonce = Buffer.alloc(32);
+  nonce.writeUInt32BE(1_995_409, 28);
+  return nonce;
+}
+
 /** The real code request `id` from `address` will show, computed the way the new box does. */
-function codeOf(id: string, address: string): string {
+function codeOf(id: string, address: string, newNonce: Buffer = newNonceOf(address)): string {
   const inputs: JoinCodeInputs = {
     ...helloFrom(address),
     mainNodeId: MAIN.nodeId,
     mainPublicKey: MAIN.publicKey,
-    newNonce: newNonceOf(address),
+    newNonce,
     mainNonce: mainNonceOf(id),
     requestId: id,
   };
@@ -36,9 +43,7 @@ function codeOf(id: string, address: string): string {
 
 function setup() {
   const clock = { steady: 1_000, wall: WALL_START };
-  const decoys: string[] = [];
   let ids = 0;
-  let decoyFill = 0;
   const changed = vi.fn();
   const store = createBoxJoinRequests({
     changed,
@@ -46,7 +51,6 @@ function setup() {
     wallNow: () => clock.wall,
     newId: () => `req-${++ids}`,
     newMainNonce: (id) => mainNonceOf(id),
-    drawCode: () => decoys.shift() ?? String(100_000 + decoyFill++),
   });
   const advance = (ms: number) => {
     clock.steady += ms;
@@ -56,7 +60,7 @@ function setup() {
     store.admitHello(address) ??
     store.openHello({ address, hello: helloFrom(address), main: MAIN, at: iso(0) });
   const signAnswer = vi.fn((mainNonce: Buffer) => `signed ${mainNonce.toString("hex", 0, 4)}`);
-  const reveal = (id: string, address: string, nonce = newNonceOf(address), seq = 1) =>
+  const reveal = (id: string, address: string, nonce: Buffer = newNonceOf(address), seq = 1) =>
     store.reveal({ requestId: id, newNonce: nonce, seq, signAnswer });
   /** Hello and reveal; returns the request id. */
   const revealFrom = (address: string) => {
@@ -65,7 +69,10 @@ function setup() {
     const revealed = reveal(answer.requestId, address);
     return { id: answer.requestId, revealed };
   };
-  return { store, clock, decoys, advance, hello, reveal, revealFrom, signAnswer, changed };
+  /** A poll carrying the new box's Yes. */
+  const confirm = (id: string, seq = 2) =>
+    store.poll({ requestId: id, seq, at: iso(0), confirmed: true });
+  return { store, clock, advance, hello, reveal, revealFrom, confirm, signAnswer, changed };
 }
 
 const locked = (tag: string): LockedJoinBundle => ({
@@ -155,9 +162,8 @@ describe("hello", () => {
 });
 
 describe("reveal", () => {
-  it("lists the request with its code and two decoys, and answers the main box's nonce", () => {
-    const { store, decoys, revealFrom, signAnswer } = setup();
-    decoys.push("111111", "222222");
+  it("lists the request, not yet confirmed, with its one code, and answers the main box's nonce", () => {
+    const { store, revealFrom, signAnswer } = setup();
     const { revealed } = revealFrom("10.0.0.1");
     expect(revealed).toEqual({
       mainNonce: mainNonceOf("req-1"),
@@ -170,12 +176,13 @@ describe("reveal", () => {
         address: "10.0.0.1",
         askedAt: iso(0),
         startedAgain: false,
+        newConfirmed: false,
       },
     ]);
-    const check = store.check("req-1");
-    expect("refused" in check ? [] : [...check.choices].sort()).toEqual(
-      ["111111", "222222", codeOf("req-1", "10.0.0.1")].sort(),
-    );
+    expect(store.check("req-1")).toMatchObject({
+      code: codeOf("req-1", "10.0.0.1"),
+      newConfirmed: false,
+    });
   });
 
   it("repeats the stored answer for the same nonce and seq, counting it once", () => {
@@ -196,7 +203,7 @@ describe("reveal", () => {
     const { store, reveal, revealFrom } = setup();
     const { id } = revealFrom("10.0.0.1");
     expect(reveal(id, "10.0.0.1", Buffer.alloc(32, "other"))).toEqual({ refused: "invalid" });
-    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: id, seq: 2, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "invalid",
     });
@@ -214,7 +221,7 @@ describe("reveal", () => {
     const { store, revealFrom } = setup();
     const { id } = revealFrom("10.0.0.1");
     store.endInvalid(id);
-    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: id, seq: 2, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "invalid",
     });
@@ -230,22 +237,10 @@ describe("reveal", () => {
   it("does not answer a poll before the reveal, and the reveal still succeeds", () => {
     const { store, hello, reveal } = setup();
     hello("10.0.0.1");
-    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0), confirmed: false })).toEqual({
       refused: "not_found",
     });
     expect(reveal("req-1", "10.0.0.1")).toHaveProperty("mainNonce");
-  });
-
-  it("keeps the order of the three codes from one Check to the next", () => {
-    const { store, revealFrom } = setup();
-    const { id } = revealFrom("10.0.0.1");
-    const order = () => {
-      const check = store.check(id);
-      return "refused" in check ? [] : check.choices;
-    };
-    const first = order();
-    expect(first).toHaveLength(3);
-    for (let n = 0; n < 20; n++) expect(order()).toEqual(first);
   });
 
   it("reports the same asked time on every read, however the two clocks have moved", () => {
@@ -258,22 +253,13 @@ describe("reveal", () => {
     expect([asked(), asked()]).toEqual([first, first]);
   });
 
-  it("hands Check a copy of the codes, so a caller cannot reorder the stored list", () => {
-    const { store, revealFrom } = setup();
-    const { id } = revealFrom("10.0.0.1");
-    const read = store.check(id);
-    if ("refused" in read) throw new Error("not listed");
-    const first = [...read.choices];
-    read.choices.reverse();
-    expect(store.check(id)).toMatchObject({ choices: first });
-  });
-
-  it("refuses a code a listed request shows, real or decoy, without the main box's nonce", () => {
-    const { store, decoys, revealFrom } = setup();
-    decoys.push(codeOf("req-2", "10.0.0.2"), "222222");
+  it("refuses a code a listed request shows, without the main box's nonce", () => {
+    const { store, hello, reveal, revealFrom } = setup();
+    expect(codeOf("req-2", "10.0.0.2", takenNonce())).toBe(codeOf("req-1", "10.0.0.1"));
     revealFrom("10.0.0.1");
-    expect(revealFrom("10.0.0.2").revealed).toEqual({ refused: "code_taken" });
-    expect(store.poll({ requestId: "req-2", seq: 2, at: iso(0) })).toEqual({
+    hello("10.0.0.2");
+    expect(reveal("req-2", "10.0.0.2", takenNonce())).toEqual({ refused: "code_taken" });
+    expect(store.poll({ requestId: "req-2", seq: 2, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "code_taken",
     });
@@ -292,27 +278,26 @@ describe("reveal", () => {
       minutes: 15,
     });
     expect(revealFrom("10.0.0.1").revealed).toHaveProperty("mainNonce");
-    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "replaced",
     });
     expect(store.listed().map((r) => r.id)).toEqual(["req-2", "req-3", "req-5"]);
   });
 
-  it("frees a reveal place on a wrong tap or a Dismiss, not on a cancel, replacement, expiry or taken code", () => {
-    const { store, decoys, hello, reveal, revealFrom, advance } = setup();
-    hello("10.0.0.9");
+  it("frees a reveal place on a Dismiss, not on a cancel, replacement, expiry or taken code", () => {
+    const { store, hello, reveal, revealFrom, advance } = setup();
+    hello("10.0.0.1");
     advance(29_000);
-    reveal("req-1", "10.0.0.9"); // 1: expires 14 min 31 s from now
-    store.dismiss(revealFrom("10.0.0.1").id);
-    store.approve.begin(revealFrom("10.0.0.2").id, "not-the-code");
-    store.cancel({ requestId: revealFrom("10.0.0.3").id, seq: 2 }); // 2
-    revealFrom("10.0.0.4"); // 3
-    decoys.push(codeOf("req-7", "10.0.0.5"));
-    revealFrom("10.0.0.4"); // 4: replaces req-5
-    expect(revealFrom("10.0.0.5").revealed).toEqual({ refused: "code_taken" }); // 5
+    reveal("req-1", "10.0.0.1"); // 1: expires 14 min 31 s from now
+    hello("10.0.0.2");
+    expect(reveal("req-2", "10.0.0.2", takenNonce())).toEqual({ refused: "code_taken" }); // 2
+    store.dismiss(revealFrom("10.0.0.3").id);
+    store.cancel({ requestId: revealFrom("10.0.0.4").id, seq: 2 }); // 3
+    revealFrom("10.0.0.5"); // 4
+    revealFrom("10.0.0.5"); // 5: replaces req-5
     advance(15 * 60_000 - 29_000);
-    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0), confirmed: false })).toEqual({
       refused: "not_found",
     });
     expect(revealFrom("10.0.0.6").revealed).toHaveProperty("mainNonce"); // 6
@@ -349,12 +334,20 @@ describe("waiting", () => {
   it("takes only a rising seq, and keeps the latest at even when it is earlier", () => {
     const { store, revealFrom, advance } = setup();
     const { id } = revealFrom("10.0.0.1");
-    expect(store.poll({ requestId: id, seq: 1, at: iso(0) })).toEqual({ refused: "invalid" });
+    expect(store.poll({ requestId: id, seq: 1, at: iso(0), confirmed: false })).toEqual({
+      refused: "invalid",
+    });
     advance(2_000);
-    expect(store.poll({ requestId: id, seq: 2, at: iso(5_000) })).toEqual({ state: "waiting" });
-    expect(store.poll({ requestId: id, seq: 2, at: iso(5_000) })).toEqual({ refused: "invalid" });
+    expect(store.poll({ requestId: id, seq: 2, at: iso(5_000), confirmed: false })).toEqual({
+      state: "waiting",
+    });
+    expect(store.poll({ requestId: id, seq: 2, at: iso(5_000), confirmed: false })).toEqual({
+      refused: "invalid",
+    });
     advance(2_000);
-    expect(store.poll({ requestId: id, seq: 3, at: iso(-60_000) })).toEqual({ state: "waiting" });
+    expect(store.poll({ requestId: id, seq: 3, at: iso(-60_000), confirmed: false })).toEqual({
+      state: "waiting",
+    });
     expect(store.check(id)).toMatchObject({ at: iso(-60_000), atReceivedAt: iso(4_000) });
   });
 
@@ -362,68 +355,123 @@ describe("waiting", () => {
     const { store, revealFrom, advance } = setup();
     const { id } = revealFrom("10.0.0.1");
     advance(15 * 60_000 - 1);
-    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({ state: "waiting" });
+    expect(store.poll({ requestId: id, seq: 2, at: iso(0), confirmed: false })).toEqual({
+      state: "waiting",
+    });
     advance(1);
-    expect(store.poll({ requestId: id, seq: 3, at: iso(0) })).toEqual({ refused: "not_found" });
+    expect(store.poll({ requestId: id, seq: 3, at: iso(0), confirmed: false })).toEqual({
+      refused: "not_found",
+    });
     expect(store.listed()).toEqual([]);
   });
 
   it("keeps an ended request's reason, and an approved request's bundle, for 2 minutes", () => {
-    const { store, revealFrom, advance } = setup();
+    const { store, revealFrom, confirm, advance } = setup();
     const ended = revealFrom("10.0.0.1").id;
     const approved = revealFrom("10.0.0.2").id;
     store.dismiss(ended);
-    store.approve.begin(approved, codeOf(approved, "10.0.0.2"));
+    confirm(approved);
+    store.approve.begin(approved);
     store.approve.finish(approved, locked("a"));
     advance(2 * 60_000 - 1);
-    expect(store.poll({ requestId: ended, seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: ended, seq: 2, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "dismissed",
     });
-    expect(store.poll({ requestId: approved, seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: approved, seq: 3, at: iso(0), confirmed: false })).toEqual({
       state: "approved",
       locked: locked("a"),
     });
     advance(1);
-    expect(store.poll({ requestId: ended, seq: 3, at: iso(0) })).toEqual({ refused: "not_found" });
-    expect(store.poll({ requestId: approved, seq: 3, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: ended, seq: 3, at: iso(0), confirmed: false })).toEqual({
+      refused: "not_found",
+    });
+    expect(store.poll({ requestId: approved, seq: 4, at: iso(0), confirmed: false })).toEqual({
       refused: "not_found",
     });
   });
 });
 
-describe("approve", () => {
-  it("ends the request on a wrong code", () => {
-    const { store, revealFrom } = setup();
+describe("the new box's Yes", () => {
+  it("is recorded from the first poll that carries it, announced once, and never taken back", () => {
+    const { store, revealFrom, confirm, changed } = setup();
     const { id } = revealFrom("10.0.0.1");
-    expect(store.approve.begin(id, "000000")).toEqual({ refused: "wrong_code" });
-    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(store.poll({ requestId: id, seq: 2, at: iso(0), confirmed: false })).toEqual({
+      state: "waiting",
+    });
+    expect(store.listed()[0]!.newConfirmed).toBe(false);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(confirm(id, 3)).toEqual({ state: "waiting" });
+    expect(store.listed()[0]!.newConfirmed).toBe(true);
+    expect(store.check(id)).toMatchObject({ newConfirmed: true });
+    expect(changed).toHaveBeenCalledTimes(2);
+    confirm(id, 4);
+    store.poll({ requestId: id, seq: 5, at: iso(0), confirmed: false });
+    expect(store.listed()[0]!.newConfirmed).toBe(true);
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("is not recorded from a poll the store refuses", () => {
+    const { store, revealFrom, confirm, changed } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    expect(confirm(id, 1)).toEqual({ refused: "invalid" });
+    expect(store.listed()[0]!.newConfirmed).toBe(false);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not stop the new box's cancel ending a waiting request", () => {
+    const { store, revealFrom, confirm } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    confirm(id);
+    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ cancelled: true });
+    expect(store.poll({ requestId: id, seq: 4, at: iso(0), confirmed: true })).toEqual({
       state: "ended",
-      reason: "wrong_code",
+      reason: "cancelled",
+    });
+    expect(store.listed()).toEqual([]);
+  });
+});
+
+describe("approve", () => {
+  it("refuses an approve before the new box said Join, leaving the request waiting and listed", () => {
+    const { store, revealFrom, confirm, changed } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    expect(store.approve.begin(id)).toEqual({ refused: "not_confirmed" });
+    expect(store.listed().map((r) => r.id)).toEqual([id]);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(confirm(id)).toEqual({ state: "waiting" });
+    expect(store.approve.begin(id)).toEqual({
+      encryptionKey: helloFrom("10.0.0.1").encryptionKey,
     });
   });
 
   it("blocks a second approve while building, and a failed build leaves the request waiting", () => {
-    const { store, revealFrom } = setup();
+    const { store, revealFrom, confirm } = setup();
     const { id } = revealFrom("10.0.0.1");
-    const code = codeOf(id, "10.0.0.1");
-    expect(store.approve.begin(id, code)).toEqual({
+    confirm(id);
+    expect(store.approve.begin(id)).toEqual({
       encryptionKey: helloFrom("10.0.0.1").encryptionKey,
     });
-    expect(store.approve.begin(id, code)).toEqual({ refused: "in_progress" });
+    expect(store.approve.begin(id)).toEqual({ refused: "in_progress" });
     store.approve.abandon(id);
-    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({ state: "waiting" });
-    expect(store.approve.begin(id, code)).not.toHaveProperty("refused");
+    expect(store.poll({ requestId: id, seq: 3, at: iso(0), confirmed: false })).toEqual({
+      state: "waiting",
+    });
+    expect(store.approve.begin(id)).not.toHaveProperty("refused");
   });
 
   it("gives a locked bundle only to its own request", () => {
-    const { store, revealFrom } = setup();
+    const { store, revealFrom, confirm } = setup();
     const a = revealFrom("10.0.0.1").id;
     const b = revealFrom("10.0.0.2").id;
-    store.approve.begin(a, codeOf(a, "10.0.0.1"));
+    confirm(a);
+    store.approve.begin(a);
     expect(store.approve.finish(a, locked("a"))).toBe(true);
-    expect(store.poll({ requestId: b, seq: 2, at: iso(0) })).toEqual({ state: "waiting" });
-    expect(store.poll({ requestId: a, seq: 2, at: iso(0) })).toEqual({
+    expect(store.poll({ requestId: b, seq: 2, at: iso(0), confirmed: false })).toEqual({
+      state: "waiting",
+    });
+    expect(store.poll({ requestId: a, seq: 3, at: iso(0), confirmed: false })).toEqual({
       state: "approved",
       locked: locked("a"),
     });
@@ -432,57 +480,57 @@ describe("approve", () => {
 });
 
 describe("changes to the list", () => {
-  it("tells its listener when a request is listed, approved or ends, and not for a hello or a poll", () => {
-    const { store, hello, reveal, revealFrom, changed } = setup();
+  it("tells its listener when a request is listed, confirmed, approved or ends, and not for a hello or another poll", () => {
+    const { store, hello, reveal, revealFrom, confirm, changed } = setup();
     const opened = hello("10.0.0.1");
     if ("refused" in opened) throw new Error("hello refused");
     expect(changed).not.toHaveBeenCalled();
     reveal(opened.requestId, "10.0.0.1");
     expect(changed).toHaveBeenCalledTimes(1);
-    store.poll({ requestId: opened.requestId, seq: 2, at: iso(0) });
+    store.poll({ requestId: opened.requestId, seq: 2, at: iso(0), confirmed: false });
     expect(changed).toHaveBeenCalledTimes(1);
 
     const approved = revealFrom("10.0.0.2").id;
     expect(changed).toHaveBeenCalledTimes(2);
-    store.approve.begin(approved, codeOf(approved, "10.0.0.2"));
-    store.approve.finish(approved, locked("a"));
+    confirm(approved);
     expect(changed).toHaveBeenCalledTimes(3);
+    store.approve.begin(approved);
+    store.approve.finish(approved, locked("a"));
+    expect(changed).toHaveBeenCalledTimes(4);
 
     store.dismiss(opened.requestId);
-    expect(changed).toHaveBeenCalledTimes(4);
+    expect(changed).toHaveBeenCalledTimes(5);
     const cancelled = revealFrom("10.0.0.3").id;
     store.cancel({ requestId: cancelled, seq: 2 });
-    expect(changed).toHaveBeenCalledTimes(6);
-    const wrong = revealFrom("10.0.0.4").id;
-    store.approve.begin(wrong, "000000");
-    expect(changed).toHaveBeenCalledTimes(8);
+    expect(changed).toHaveBeenCalledTimes(7);
   });
 });
 
 describe("stopping a request while it is approved", () => {
   it("refuses a cancel while the copy is built or once approved, and a Dismiss while it is built", () => {
-    const { store, revealFrom } = setup();
+    const { store, revealFrom, confirm } = setup();
     const { id } = revealFrom("10.0.0.1");
-    const code = codeOf(id, "10.0.0.1");
-    store.approve.begin(id, code);
-    expect(store.cancel({ requestId: id, seq: 2 })).toEqual({ refused: "approving" });
+    confirm(id);
+    store.approve.begin(id);
+    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ refused: "approving" });
     expect(store.dismiss(id)).toEqual({ refused: "in_progress" });
     expect(store.approve.finish(id, locked("a"))).toBe(true);
-    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ refused: "approving" });
-    expect(store.poll({ requestId: id, seq: 4, at: iso(0) })).toEqual({
+    expect(store.cancel({ requestId: id, seq: 4 })).toEqual({ refused: "approving" });
+    expect(store.poll({ requestId: id, seq: 5, at: iso(0), confirmed: false })).toEqual({
       state: "approved",
       locked: locked("a"),
     });
   });
 
   it("takes a cancel again once a failed build has left the request waiting", () => {
-    const { store, revealFrom } = setup();
+    const { store, revealFrom, confirm } = setup();
     const { id } = revealFrom("10.0.0.1");
-    store.approve.begin(id, codeOf(id, "10.0.0.1"));
-    expect(store.cancel({ requestId: id, seq: 2 })).toEqual({ refused: "approving" });
+    confirm(id);
+    store.approve.begin(id);
+    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ refused: "approving" });
     store.approve.abandon(id);
-    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ cancelled: true });
-    expect(store.poll({ requestId: id, seq: 4, at: iso(0) })).toEqual({
+    expect(store.cancel({ requestId: id, seq: 4 })).toEqual({ cancelled: true });
+    expect(store.poll({ requestId: id, seq: 5, at: iso(0), confirmed: false })).toEqual({
       state: "ended",
       reason: "cancelled",
     });
@@ -490,28 +538,34 @@ describe("stopping a request while it is approved", () => {
 });
 
 describe("one approval at a time", () => {
-  it("refuses a tap on another request while one is built or approved, until that one is forgotten", () => {
-    const { store, revealFrom, advance } = setup();
+  it("refuses approving another request while one is built or approved, until that one is forgotten", () => {
+    const { store, revealFrom, confirm, advance } = setup();
     const a = revealFrom("10.0.0.1").id;
     const b = revealFrom("10.0.0.2").id;
-    store.approve.begin(a, codeOf(a, "10.0.0.1"));
-    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({ refused: "other_approved" });
+    confirm(a);
+    confirm(b);
+    store.approve.begin(a);
+    expect(store.approve.begin(b)).toEqual({ refused: "other_approved" });
     store.approve.finish(a, locked("a"));
-    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({ refused: "other_approved" });
-    expect(store.poll({ requestId: b, seq: 2, at: iso(0) })).toEqual({ state: "waiting" });
+    expect(store.approve.begin(b)).toEqual({ refused: "other_approved" });
+    expect(store.poll({ requestId: b, seq: 3, at: iso(0), confirmed: false })).toEqual({
+      state: "waiting",
+    });
     advance(2 * 60_000);
-    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({
+    expect(store.approve.begin(b)).toEqual({
       encryptionKey: helloFrom("10.0.0.2").encryptionKey,
     });
   });
 
-  it("takes a tap on another request once a failed build has left the first waiting", () => {
-    const { store, revealFrom } = setup();
+  it("takes an approve of another request once a failed build has left the first waiting", () => {
+    const { store, revealFrom, confirm } = setup();
     const a = revealFrom("10.0.0.1").id;
     const b = revealFrom("10.0.0.2").id;
-    store.approve.begin(a, codeOf(a, "10.0.0.1"));
+    confirm(a);
+    confirm(b);
+    store.approve.begin(a);
     store.approve.abandon(a);
-    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).not.toHaveProperty("refused");
+    expect(store.approve.begin(b)).not.toHaveProperty("refused");
   });
 });
 

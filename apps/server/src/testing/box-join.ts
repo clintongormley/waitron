@@ -8,6 +8,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   JOIN_CANCEL_LABEL,
   JOIN_POLL_LABEL,
+  JOIN_PROTOCOL,
   JOIN_REVEAL_LABEL,
   joinCode,
   pollMessageFields,
@@ -100,7 +101,7 @@ export function helloBody(
   } catch {
     // A field that cannot be signed goes unsigned, for the route's own shape check to answer.
   }
-  return { protocol: 1, ...box.hello, at, signature, ...overrides };
+  return { protocol: JOIN_PROTOCOL, ...box.hello, at, signature, ...overrides };
 }
 
 export function revealBody(box: JoiningBox, requestId: string): Record<string, unknown> {
@@ -215,7 +216,13 @@ export async function listedJoin(app: Hono, box: JoiningBox, at = Date.now()): P
   return listed;
 }
 
-export async function pollJoin(app: Hono, listed: ListedJoin, at = Date.now()): Promise<unknown> {
+/** A poll from the new box; `confirmed` is whether it carries the new box's Yes. */
+export async function pollJoin(
+  app: Hono,
+  listed: ListedJoin,
+  at = Date.now(),
+  confirmed = false,
+): Promise<unknown> {
   listed.box.seq += 1;
   const { requestId, box } = listed;
   const response = await boxPost(
@@ -225,7 +232,14 @@ export async function pollJoin(app: Hono, listed: ListedJoin, at = Date.now()): 
       requestId,
       seq: box.seq,
       at,
-      signature: signedBy(box, JOIN_POLL_LABEL, requestId, box.seq, pollMessageFields(at)),
+      confirmed,
+      signature: signedBy(
+        box,
+        JOIN_POLL_LABEL,
+        requestId,
+        box.seq,
+        pollMessageFields(at, confirmed),
+      ),
     },
     box.address,
   );
@@ -329,8 +343,8 @@ export function mountBoxJoin(
 }
 
 /**
- * A whole join on routes {@link mountBoxJoin} mounted: hello, reveal, the person's tap on the right
- * code, then the new box's poll and unlock. Answers 200 with the bundle when the poll hands one
+ * A whole join on routes {@link mountBoxJoin} mounted: hello, reveal, the new box's Yes in a poll,
+ * the person's approve, then the new box's poll and unlock. Answers 200 with the bundle when the poll hands one
  * that opens, otherwise the hello's, reveal's or approve's refusal. A
  * refused approve dismisses the request, so it holds no place in the store.
  */
@@ -345,10 +359,11 @@ export async function joinAsBundleAnswer(
 ): Promise<Response> {
   const listed = await askToJoin(app, join.box, join.at);
   if (listed instanceof Response) return listed;
+  await pollJoin(app, listed, Date.now(), true);
   const approved = await approveJoin(
     app,
     listed.requestId,
-    { code: listed.code, moduleOperation: join.moduleOperation },
+    { moduleOperation: join.moduleOperation },
     join.sent,
   );
   if (approved.status !== 202) {

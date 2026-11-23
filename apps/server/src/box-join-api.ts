@@ -1,6 +1,6 @@
 // `POST /api/node/join/*`, on the singleton primary: a new box asks to join as a spare. Each message
 // after the hello is signed with the new box's node key and must come from an address its hello
-// listed; the person compares the code on both screens before anything is sent.
+// listed. Approve builds nothing until a poll has carried the new box's Yes.
 import "./errors.js";
 import { createPublicKey } from "node:crypto";
 import { isIP } from "node:net";
@@ -297,12 +297,19 @@ export function mountBoxJoinApi(
   app.post("/api/node/join/poll", (c) =>
     run(c, log, async () => {
       let at = 0;
+      let confirmed = false;
       const { requestId, seq } = await signedRequest(c, JOIN_POLL_LABEL, (body) => {
-        if (!isTime(body.at)) throw invalid();
+        if (!isTime(body.at) || typeof body.confirmed !== "boolean") throw invalid();
         at = body.at;
-        return pollMessageFields(at);
+        confirmed = body.confirmed;
+        return pollMessageFields(at, confirmed);
       });
-      const answer = requests.poll({ requestId, seq, at: new Date(at).toISOString() });
+      const answer = requests.poll({
+        requestId,
+        seq,
+        at: new Date(at).toISOString(),
+        confirmed,
+      });
       if ("refused" in answer) throw storeRefusal(answer.refused);
       return c.json(answer);
     }),
@@ -334,7 +341,7 @@ const PERSON_STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "node.operation_page_required": 403,
   "mirror.join_not_found": 404,
-  "mirror.join_wrong_code": 409,
+  "mirror.join_not_confirmed": 409,
   "mirror.join_in_progress": 409,
   "mirror.join_stopped_after_listing": 409,
   "mirror.join_other_approved": 409,
@@ -385,7 +392,7 @@ export function mountBoxJoinPersonApi(
       await guard(c, true);
       const view = listedView(c.req.param("id"));
       await refuseJoinBeforeApproving(deps, view.hello.newNodeId, newBoxNow(view));
-      return c.json({ choices: view.choices });
+      return c.json({ code: view.code, newConfirmed: view.newConfirmed });
     }),
   );
 
@@ -396,16 +403,13 @@ export function mountBoxJoinPersonApi(
   app.post("/management-api/box-joins/:id/approve", (c) =>
     run(c, log, async () => {
       const approverId = await guard(c, true);
-      const body = await readJsonBody<{ code?: unknown; moduleOperation?: unknown }>(c);
+      const body = await readJsonBody<{ moduleOperation?: unknown }>(c);
       const requestId = c.req.param("id");
       const view = listedView(requestId);
       const { hello } = view;
-      const begun = requests.approve.begin(
-        requestId,
-        typeof body.code === "string" ? body.code : "",
-      );
+      const begun = requests.approve.begin(requestId);
       if ("refused" in begun) {
-        if (begun.refused === "wrong_code") throw new AppError("mirror.join_wrong_code", {});
+        if (begun.refused === "not_confirmed") throw new AppError("mirror.join_not_confirmed", {});
         if (begun.refused === "in_progress") throw new AppError("mirror.join_in_progress", {});
         if (begun.refused === "other_approved")
           throw new AppError("mirror.join_other_approved", {});
@@ -447,7 +451,7 @@ export function mountBoxJoinPersonApi(
               ),
             );
         }
-        // Read first, so a retried tap never follows a failure after the chart write committed.
+        // Read first, so a retried approve never follows a failure after the chart write committed.
         const mainPrivateKey = await readNodeIdentityKey(
           deps.node,
           deps.ring,
@@ -462,7 +466,7 @@ export function mountBoxJoinPersonApi(
           requests.approve.abandon(requestId);
           throw error;
         }
-        // The chart names the spare now, so neither a second tap nor the new box's cancel follows.
+        // The chart names the spare now, so neither a second approve nor the new box's cancel follows.
         requests.approve.stop(requestId);
         log("error", "mirror.join_failed", {
           errorCode: codeOf(error),
