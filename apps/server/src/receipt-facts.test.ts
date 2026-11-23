@@ -223,13 +223,28 @@ describe("receiptFacts", () => {
     });
     expect(facts.payment).toEqual({ tender: { method: "cash", change: "0.31" } });
     expect(facts.qr).toEqual({ text: result.qr, ...result.qrText });
-    expect(facts.qr!.caption).toBe(result.qrText!.caption);
     expect(facts.footerMessage).toBe(FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage);
     expect(facts.total).toBe("19.69");
     expect(facts.corrects).toBeUndefined();
     expect(facts.practice).toBeUndefined();
     expect(facts.testPage).toBeUndefined();
     expect(facts.guests).toBeUndefined();
+  });
+
+  it("carries the recipient's identifier type", () => {
+    const input = fixture();
+    input.result.recipient!.identifierType = "03";
+    expect(receiptFacts(input).customer).toHaveProperty("identifierType", "03");
+  });
+
+  it("leaves out trim text that is empty", () => {
+    const input = fixture();
+    input.receipt = { headerSubtitle: "", phone: "", email: "", footerMessage: "" };
+    const facts = receiptFacts(input);
+    expect(Object.keys(facts.letterhead)).not.toContain("headerSubtitle");
+    expect(Object.keys(facts.letterhead)).not.toContain("phone");
+    expect(Object.keys(facts.letterhead)).not.toContain("email");
+    expect(Object.keys(facts)).not.toContain("footerMessage");
   });
 
   it("names no customer on a simplified invoice, even one the record gives a recipient", () => {
