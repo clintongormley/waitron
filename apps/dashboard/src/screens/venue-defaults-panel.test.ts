@@ -452,6 +452,12 @@ it.each([
     "ca-ES",
     "Choose one of the languages offered.",
   ],
+  [
+    { code: "product.invalid", params: { field: "defaultTakeawayVatRate" } },
+    "defaultTakeawayVatRate",
+    "4.00",
+    "Choose the VAT when taken away for new products.",
+  ],
 ] as const)(
   "puts the refusal %j beside its field, with the generic sentence at the bottom",
   async (refusal, field, value, sentence) => {
@@ -465,12 +471,13 @@ it.each([
     await expect.poll(() => combo(el, field)!.error).not.toBe("");
     if (sentence) expect(combo(el, field)!.error).toBe(sentence);
     else expect(combo(el, field)!.error).toBe(codeMessage(refusal.code));
-    expect(combo(el, "defaultTakeawayVatRate")!.error).toBe("");
+    const other = field === "receiptLanguage" ? "defaultTakeawayVatRate" : "receiptLanguage";
+    expect(combo(el, other)!.error).toBe("");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     await el.updateComplete;
     expect(saveButton(el).disabled).toBe(false);
     expect(combo(el, field)!.value).toBe(value);
-    await pick(el, field, "gl-ES");
+    await pick(el, field, field === "receiptLanguage" ? "gl-ES" : "21.00");
     expect(combo(el, field)!.error).toBe("");
     expect(bottom(el)).toBe("");
   },

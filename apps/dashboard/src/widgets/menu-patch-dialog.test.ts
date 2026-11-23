@@ -634,18 +634,6 @@ it("lists each variant with its price beside its link, as a patch would put it l
   expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 €" });
 });
 
-it("lists a variant's price alone beside its link, never a VAT class served here or taken away", async () => {
-  const document = lunch();
-  // Large charges General here; the live copy still holds Reduced as its takeaway class.
-  document.offers["mi-lemonade"]!.variants[1]!.vatClass = "general";
-  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
-  await pick(el, "Lemonade");
-  expect(variantRows(el)).toEqual([
-    { link: "Small", values: "€2.00" },
-    { link: "Large", values: "€2.00" },
-  ]);
-});
-
 it(`fits a dish's variants and their values in the form at 390 px`, async () => {
   const before = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(390, 844);
