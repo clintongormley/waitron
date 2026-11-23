@@ -494,6 +494,7 @@ describe.each(["en-GB", "es-ES"])("emergency switch after Switch %s", (locale) =
                     { code: "A-0CSQW", purpose: "standard" },
                     { code: "FF-0CSQW", purpose: "full" },
                     { code: "R-0CSQW", purpose: "corrective" },
+                    { code: "FR-0CSQW", purpose: "full_corrective" },
                   ],
                 },
               },

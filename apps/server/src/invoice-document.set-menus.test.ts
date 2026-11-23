@@ -184,7 +184,7 @@ it("a replacement (R4) of a set-menu invoice follows the same rule", async () =>
       operationDescription: "Restaurante",
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
-      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "full_corrective")),
       correctsSaleId: saleId,
       authz: { sessionId: venue.operator.sessionId },
       clock: venue.clock,
