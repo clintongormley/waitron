@@ -248,8 +248,8 @@ const valueLabels: Record<
   en: {
     standard: "Ordinary",
     full: "Full",
-    corrective: "Corrective",
-    full_corrective: "Full corrective",
+    corrective: "Corrective of simplified invoices",
+    full_corrective: "Corrective of full invoices",
     production: "Production",
     preproduction: "Preproduction",
   },

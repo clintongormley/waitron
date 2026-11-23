@@ -226,8 +226,8 @@ describe("register PDF", () => {
         "A-S000001 / Standard",
         "B-S000001 / Standard",
         "FF-S000001 / Full invoice",
-        "R-S000001 / Corrective",
-        "RF-S000001 / Full invoice corrective",
+        "R-S000001 / Corrective of simplified invoices",
+        "RF-S000001 / Corrective of full invoices",
       ],
     ],
     [

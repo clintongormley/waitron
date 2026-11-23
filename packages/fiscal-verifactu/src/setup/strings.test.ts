@@ -6,8 +6,8 @@ describe("seriesPurposeLabel", () => {
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "en"))).toEqual([
       "Standard",
       "Full invoice",
-      "Corrective",
-      "Full invoice corrective",
+      "Corrective of simplified invoices",
+      "Corrective of full invoices",
     ]);
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "es"))).toEqual([
       "Simplificada",

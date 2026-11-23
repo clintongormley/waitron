@@ -1745,8 +1745,8 @@ it.each([
     [
       "A-0CSQW — Standard",
       "FF-0CSQW — Full invoice",
-      "R-0CSQW — Corrective",
-      "RF-0CSQW — Full invoice corrective",
+      "R-0CSQW — Corrective of simplified invoices",
+      "RF-0CSQW — Corrective of full invoices",
     ],
   ],
   [
