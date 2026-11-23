@@ -210,6 +210,14 @@ const MENU: {
     unit: "each",
     vat: "general",
   },
+  {
+    name: "Soup",
+    customer: "Soup of the day",
+    kitchen: "SOUP",
+    price: "6.00",
+    unit: "each",
+    vat: "general",
+  },
 ];
 
 /** The reasons every suite shares; a case that edits a reason makes its own. */

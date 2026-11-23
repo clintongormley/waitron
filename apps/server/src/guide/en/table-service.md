@@ -304,6 +304,9 @@ and unticked when it has. The main button then reads **Cancel and refund** with 
 the tick it reads **Cancel**, and the bill keeps the charge. If you cannot give refunds yourself,
 someone who can enters their PIN.
 
+A dish given free can come back with the last paid dish on the bill: that dish's window then lists
+it, and the amount includes it. Cancelled on its own, a dish given free gives no money back.
+
 The tick appears only when this device can return the payment. When the guest paid in a way this
 device does not take, the window says **Refund the payment at a till: choose Refund a payment on
 the receipt.** After **Cancel and refund**, the receipt's refund opens filled in, as described
@@ -318,7 +321,9 @@ counter.
 For a dish that has gone to the station but is not marked started, answer **Has preparation
 started?**. For the others, the window shows the answer. Tick **Refund** beside each dish whose
 money goes back; a dish starts ticked when preparation has not started. One **Reason** covers every
-dish, and it starts on **Not served** when your venue keeps that reason.
+dish, and it starts on **Not served** when your venue keeps that reason. A dish marked **Given
+free** has no tick of its own: its money comes back with the bill's paid dishes when you tick them
+all.
 
 Choose **Cancel and refund** with the ticked dishes' total, or **Cancel** when nothing is ticked.
 **Back** leaves the table open. If you tick **Refund** and cannot give refunds yourself, someone who

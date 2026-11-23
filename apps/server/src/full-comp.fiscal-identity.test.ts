@@ -300,30 +300,30 @@ describe("a full comp's filed record and the receipt's words", () => {
       tipo_factura: "F2",
       num_serie_factura: "A/1",
       importe_total: "2.00",
-      cuota_total: "0.35",
+      cuota_total: "0.33",
       desglose: [
         {
           ClaveRegimen: "01",
           CalificacionOperacion: "S1",
-          BaseImponibleOimporteNoSujeto: "1.65",
+          BaseImponibleOimporteNoSujeto: "1.57",
           TipoImpositivo: "21.00",
-          CuotaRepercutida: "0.35",
+          CuotaRepercutida: "0.32",
         },
-        // Bread: a zero row at 10%, kept because rateLines does not drop empty groups.
+        // Bread: its share of the price paid at 10%.
         {
           ClaveRegimen: "01",
           CalificacionOperacion: "S1",
-          BaseImponibleOimporteNoSujeto: "0.00",
+          BaseImponibleOimporteNoSujeto: "0.10",
           TipoImpositivo: "10.00",
-          CuotaRepercutida: "0.00",
+          CuotaRepercutida: "0.01",
         },
       ],
       descripcion_operacion: "Restaurante",
       fecha_hora_huso_gen_registro: "2026-09-25T11:30:00.000Z",
-      huella: "60A40E8701DAB1526AC551BEF1FF522BCD88CE3471DCECBBFB10828374748E94",
+      huella: "4951AAE8E3C6B41946208115DD7F26028DD0D25178FE54A526901E7428B3D57D",
     });
     expect(createHash("sha256").update(shipped.xml).digest("hex")).toBe(
-      "b2e296be90f1d3eb959eaf2d988078ac920e60fb6c90a2f6138a13464a983e17",
+      "6c5fe5ea170befb629b3941c338a8245e9763f40b4713aad4f3bca273e4913f2",
     );
   });
 

@@ -75,8 +75,13 @@ function soldAt(
   listUnit: Decimal | null,
 ): Pick<TillSaleLine, "listGross" | "listUnitPriceGross" | "unitPriceGross" | "priceQuantity"> {
   const list = listGrossOf(line, listUnit);
+  // A filed row whose total is its total at list price was sold at that price each, even when the
+  // bill's line it came from was given free and its share of the price paid is the whole of it.
+  const sold =
+    line.grossUnitPrice ??
+    (list.listGross === undefined && listUnit !== null ? listUnit : undefined);
   const prices = {
-    ...(line.grossUnitPrice === undefined ? {} : { unitPriceGross: line.grossUnitPrice }),
+    ...(sold === undefined ? {} : { unitPriceGross: sold }),
     ...(list.listGross === undefined ? {} : { listUnitPriceGross: listUnit! }),
   };
   return {
@@ -104,7 +109,7 @@ export function withReceiptListPrices<T extends ReceiptSource>(
 }
 
 /** The line's total at its list price, rounded as a line total is (`grossRows`), when it differs. */
-function listGrossOf(
+export function listGrossOf(
   line: Pick<GrossLine, "quantity" | "priceQuantity" | "lineGross">,
   listUnit: Decimal | null,
 ): { listGross?: string } {

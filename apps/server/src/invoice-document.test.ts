@@ -23,16 +23,26 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { recordSale, settleSale } from "@waitron/core";
+import { previewCorrectionAmounts, recordCorrection, recordSale, settleSale } from "@waitron/core";
+import { loginWithPin } from "@waitron/identity";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import { decimal, jobOrigin, seriesId, type PrintedReceiptTrim } from "@waitron/shared";
+import {
+  decimal,
+  jobOrigin,
+  negateDecimal,
+  saleId as brandSaleId,
+  seriesId,
+  type PrintedReceiptTrim,
+} from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
   billWith,
   lineIdOf,
+  PINS,
   provisionAdjustmentVenue,
+  takeawayRates,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import {
@@ -48,6 +58,7 @@ import { buildReceiptDocument } from "./receipt-document.js";
 import { formatAmount } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
+import type { TillSaleLine } from "./till-sale.js";
 import { INVOICE_PAGE_WIDTH, invoiceTextWidth, layoutInvoicePages } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
@@ -1410,3 +1421,332 @@ it.each(["sumup", "simulator"] as const)(
     );
   },
 );
+
+// A445 D3a and D3b: a free item on a takeaway ticket mixing VAT rates files its share of the price
+// paid (salad €10.00 at 4% files 8.33, the comped water €2.00 at 21% files 1.67).
+describe("a free item holding its share of the price paid", () => {
+  /** The water comped beside a €10.00 salad, or with `also`: the €9.00 pizza in its place, a
+   *  percentage off it, a percentage off the whole bill and the price paid in cents. */
+  async function comped(
+    dining: "takeaway" | "here",
+    full: boolean,
+    also: { dish?: "Salad" | "Pizza"; dishOffBp?: number; billOffBp?: number; paid?: number } = {},
+  ): Promise<string> {
+    const dish = also.dish ?? "Salad";
+    if (dining === "takeaway")
+      await takeawayRates(venue, { [dish]: dish === "Salad" ? "4.00" : "10.00", Water: "21.00" });
+    const { billId } = await billWith(
+      venue,
+      [{ name: dish }, { name: "Water" }],
+      dining === "takeaway" ? { dining: "takeaway" } : {},
+    );
+    const dishId = await lineIdOf(venue, billId, 1);
+    const waterId = await lineIdOf(venue, billId, 2);
+    const adjust = (ask: {
+      lineId: string | null;
+      action: "comp" | "discount_percent";
+      percentBp?: number;
+    }) =>
+      withTransaction(suite.db, async (tx) => {
+        const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+        await applyAdjustment(
+          tx,
+          venue.cfg,
+          {
+            admission: testTradingAdmission(),
+            expectedEdit: await readBillEditState(tx, billId),
+            orderId: billId,
+            submissionId: randomUUID(),
+            expectedRevision: order!.revision,
+            reasonId: venue.reasonId.house,
+            note: null,
+            operatorId: venue.supervisorId,
+            ...ask,
+          },
+          venue.venueLocale,
+        );
+      });
+    await adjust({ lineId: waterId, action: "comp" });
+    if (also.dishOffBp !== undefined)
+      await adjust({ lineId: dishId, action: "discount_percent", percentBp: also.dishOffBp });
+    if (also.billOffBp !== undefined)
+      await adjust({ lineId: null, action: "discount_percent", percentBp: also.billOffBp });
+    if (full) {
+      const [order] = await suite.db
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId));
+      await setOrderInvoiceChoice(suite.db, venue.backend, venue.cfg, billId, {
+        revision: order!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Bill customer",
+          countryCode: "ES",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+        },
+      });
+    }
+    return withTransaction(suite.db, async (tx) => {
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: `invoice-document-free-${dining}-${full}-${randomUUID()}`,
+          kind: "contribution",
+          method: "cash",
+          applied: also.paid ?? 1000,
+          tendered: also.paid ?? 1000,
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      return sale!.id;
+    });
+  }
+  const shown = (lines: readonly TillSaleLine[]) =>
+    lines.map((line) => ({
+      gross: line.gross,
+      listGross: line.listGross,
+      adjustments: line.adjustments?.map(({ kind, amount }) => ({ kind, amount })),
+    }));
+  const SOLD = [
+    { gross: "8.33", listGross: "10.00", adjustments: undefined },
+    { gross: "1.67", listGross: "2.00", adjustments: [{ kind: "comp", amount: "2.00" }] },
+  ];
+
+  // Fails if Find a bill's reprint drops the filed list price: it then prints 8.33 and 1.67, no comp.
+  it("Find a bill reprints the dishes as sold, with the comp beneath the water", async () => {
+    const saleId = await comped("takeaway", false);
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(receipt.lines)).toEqual(SOLD);
+  });
+
+  it("the A4 page of the simplified ticket shows the dishes as sold, with the comp", async () => {
+    const saleId = await comped("takeaway", false);
+    const document = await withTransaction(suite.db, (tx) =>
+      readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(document.result.lines)).toEqual(SOLD);
+  });
+
+  it("a comped ticket eaten here reprints with its comp", async () => {
+    const saleId = await comped("here", false);
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(receipt.lines)).toEqual([
+      { gross: "10.00", listGross: undefined, adjustments: undefined },
+      { gross: "0.00", listGross: "2.00", adjustments: [{ kind: "comp", amount: "2.00" }] },
+    ]);
+  });
+
+  const tableRows = (document: Parameters<typeof buildReceiptDocument>[0]) =>
+    buildReceiptDocument({ ...document, surface: "a4" })
+      .elements.flatMap((e) => (e.kind === "table" ? e.table.rows : []))
+      .map(({ item, price, amount, rate }) => ({ item, price, amount, rate }));
+
+  // D3b: each line comes to its filed base. The water's 0,27 is a bare discount like the salad's
+  // 1,61: its comp's "100%" would contradict the amount.
+  it("the full invoice's table comes to the filed bases, a discount under each dish", async () => {
+    const saleId = await comped("takeaway", true);
+    const document = await read(venue.backend, saleId);
+    expect(tableRows(document)).toEqual([
+      { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
+      { item: "Descuento", price: "", amount: "-1,61", rate: "4%" },
+      { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-0,27", rate: "21%" },
+    ]);
+    expect(tableRows({ ...document, invoiceLocale: "en-GB" }).map(({ item }) => item)).toEqual([
+      "House salad",
+      "Discount",
+      "Mineral water",
+      "Discount",
+    ]);
+  });
+
+  // A dish beside a free item that holds a share loses more than its own adjustment: it also carries
+  // part of the free item's price. Its row names no percentage the amount does not match.
+  it("a takeaway salad's 50% off prints as a bare discount when it also carries the water's share", async () => {
+    const saleId = await comped("takeaway", true, { dishOffBp: 5000, paid: 500 });
+    expect(tableRows(await read(venue.backend, saleId))).toEqual([
+      { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
+      { item: "Descuento", price: "", amount: "-5,61", rate: "4%" },
+      { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-0,96", rate: "21%" },
+    ]);
+  });
+
+  it("a takeaway pizza's 10% off prints as a bare discount when it also carries the water's share", async () => {
+    const saleId = await comped("takeaway", true, { dish: "Pizza", dishOffBp: 1000, paid: 810 });
+    expect(tableRows(await read(venue.backend, saleId))).toEqual([
+      { item: "Margherita pizza", price: "8,18", amount: "8,18", rate: "10%" },
+      { item: "Descuento", price: "", amount: "-2,15", rate: "10%" },
+      { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-0,44", rate: "21%" },
+    ]);
+  });
+
+  it("10% off the bill prints as a bare discount at the end when the water holds a share", async () => {
+    const saleId = await comped("takeaway", true, { billOffBp: 1000, paid: 900 });
+    expect(tableRows(await read(venue.backend, saleId))).toEqual([
+      { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
+      { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-0,41", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-2,41", rate: "4%" },
+    ]);
+  });
+
+  it("a full invoice eaten here still names the water's comp, which takes off all of it", async () => {
+    const saleId = await comped("here", true);
+    const document = await read(venue.backend, saleId);
+    expect(tableRows(document)).toEqual([
+      { item: "House salad", price: "9,09", amount: "9,09", rate: "10%" },
+      { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
+      { item: "Descuento 100%", price: "", amount: "-1,82", rate: "10%" },
+    ]);
+  });
+});
+
+describe("a correction's receipts", () => {
+  // Salad €10.00 with 10% off and a water €2.00, eaten here and paid €11.00; then €3.00 given back,
+  // corrected as `fileCorrectionIn` files it.
+  async function corrected(): Promise<string> {
+    const { billId } = await billWith(venue, [{ name: "Salad" }, { name: "Water" }]);
+    const saladId = await lineIdOf(venue, billId, 1);
+    return withTransaction(suite.db, async (tx) => {
+      const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          admission: testTradingAdmission(),
+          expectedEdit: await readBillEditState(tx, billId),
+          orderId: billId,
+          submissionId: randomUUID(),
+          expectedRevision: order!.revision,
+          lineId: saladId,
+          reasonId: venue.reasonId.house,
+          action: "discount_percent",
+          percentBp: 1000,
+          note: null,
+          operatorId: venue.supervisorId,
+        },
+        venue.venueLocale,
+      );
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "invoice-document-corrected",
+          kind: "contribution",
+          method: "cash",
+          applied: 1100,
+          tendered: 1100,
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      const original = brandSaleId(sale!.id);
+      const preview = await previewCorrectionAmounts(
+        tx,
+        venue.backend,
+        original,
+        venue.cfg.nodeId,
+        {
+          gross: decimal("3.00"),
+        },
+      );
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, "corrective"));
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.managerId,
+        pin: PINS.manager,
+      });
+      const { saleId } = await recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: seriesId(series!.id),
+        correctsSaleId: original,
+        total: negateDecimal(preview.gross),
+        lines: preview.lines,
+        partialVatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({
+          rate,
+          base: negateDecimal(base),
+          tax: negateDecimal(tax),
+        })),
+        authz: { sessionId: session.id },
+        clock: venue.clock,
+      });
+      return saleId;
+    });
+  }
+  const shown = (lines: readonly TillSaleLine[]) =>
+    lines.map((line) => ({
+      gross: line.gross,
+      listGross: line.listGross,
+      adjustments: line.adjustments?.map(({ kind, amount }) => ({ kind, amount })),
+    }));
+  const FILED = [
+    { gross: "-2.45", listGross: undefined, adjustments: undefined },
+    { gross: "-0.55", listGross: undefined, adjustments: undefined },
+  ];
+  const itemRows = (document: Parameters<typeof buildReceiptDocument>[0]) => {
+    const elements = buildReceiptDocument({ ...document, surface: "a4" }).elements;
+    const rules = elements.flatMap((e, i) => (e.kind === "rule" ? [i] : []));
+    // The item rows sit between the rules around them, after the invoice numbers.
+    return elements
+      .slice(rules[2]! + 1, rules[3])
+      .map((e) => (e.kind === "amount" ? { caption: e.caption, amount: e.amount } : e));
+  };
+
+  // Fails if the corrective's lines take the list prices they copied from the original: the page
+  // then prints the salad at -10,00 with a discount of --7,55.
+  it("the A4 page of a correction shows the filed figures and no discount", async () => {
+    const saleId = await corrected();
+    const document = await withTransaction(suite.db, (tx) =>
+      readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(document.result.lines)).toEqual(FILED);
+    expect(itemRows(document)).toEqual([
+      { caption: "-1  House salad", amount: "-2,45" },
+      { caption: "-1  Mineral water", amount: "-0,55" },
+    ]);
+  });
+
+  it("Find a bill's reprint of a correction shows the filed figures and no discount", async () => {
+    const saleId = await corrected();
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(receipt.lines)).toEqual(FILED);
+  });
+});

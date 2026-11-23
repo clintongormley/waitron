@@ -691,6 +691,28 @@ describe("invoiceDiscounts", () => {
       });
     });
 
+    // A445 D3a: a free water beside a takeaway salad files its share of the price paid (1,67 of
+    // its 2,00), so its row takes off 0,27, not what the comp's "100%" would say.
+    it("leaves unnamed the row of a free item that holds a share of the price paid", () => {
+      const salad = filed({
+        gross: "8.33",
+        listGross: "10.00",
+        listUnitPriceGross: "10.00",
+        net: net("8.01", "8.01", "4.00"),
+      });
+      const water = filed({
+        gross: "1.67",
+        listGross: "2.00",
+        listUnitPriceGross: "2.00",
+        net: net("1.38", "1.38", "21.00"),
+        adjustments: [{ kind: "comp", amount: "2.00" }],
+      });
+      expect(under(invoiceDiscounts([group(0, 0, salad), group(1, 1, water)], []))).toEqual({
+        0: [{ rate: "4.00", amount: "1.61", comp: false, named: null }],
+        1: [{ rate: "21.00", amount: "0.27", comp: false, named: null }],
+      });
+    });
+
     it("names no percentage for two discounts on one dish", () => {
       const burger = filed({
         gross: "10.26",

@@ -595,6 +595,11 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
   amounts in JavaScript at money scale. Nothing guards this boundary or makes mistakes loud.
   Narrower guards: `packages/db/src/schema/columns.test.ts`, `packages/shared/src/conventions.test.ts`.
+- **On a ticket where a free item took its share of the price paid (A445), a filed line's total
+  differs from its stored line's, and a grouped filed row may not split into whole cents per
+  portion; code pairing or valuing them allows for both.** Cost: a reprint dropped the comp, a
+  reprint dropped a price each, and refunds overshot the filed row. Nothing guards it.
+  [Receipt](docs/developers/conventions-data.md#a-free-items-share-changes-filed-line-totals).
 - **A reader that sums, counts or tests for a sale's correctives goes through `correctivesOf`
   (`@waitron/db`), which leaves a replacement out and takes in its refunds: the original carries
   the sale.** Guard: `scripts/corrective-sums.test.ts`, weaker than its name: reads lines of text,

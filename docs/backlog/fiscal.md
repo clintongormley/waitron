@@ -17,25 +17,6 @@ threshold, or 6 October 2028 otherwise. Establish scope and design exchange, pub
 copies and required state/payment reporting before the applicable date. No connector is built
 or qualified by this research; current delivery and preservation checks remain open.
 
-## A445. A free item on a bill with mixed VAT rates should take a share of the price paid
-
-Allocate by value instead of setting the item to €0 (V0555-17, binding). Only bills mixing rates
-are affected (the deli's 4%, 10% and 21%). Asked as
-[S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09), and confirmed by the
-adviser's answer 1.10 of 15 November; the owner's decision D4 is to build it now. A table given its
-whole meal free is not this entry: the owner's answer of 18 November (owner, 2026-11-18; the adviser
-still to confirm the details) is that it is a self-supply only
-when given in exchange for services, and that it goes on the report for the accountant: the Given
-free sheet of the VAT return screen's corrections workbook.
-Everything eaten here now files at one dine-in rate, so an eaten-in bill's own lines share one
-rate and a free item among them cannot shift VAT between rates (at one rate both methods give the
-same VAT, as the adviser's sheet says). An advance keeps the rate of the day it was paid, so a bill
-whose advance was paid before a dine-in rate change carries two rates; whether this entry needs
-anything for that case is not yet checked. The entry still matters for takeaway bills mixing rates
-(the deli's 4%, 10% and 21%), and would matter for eaten-in bills again only if the adviser rules
-that drinks served without food take 21%.
-Fiscal: the owner lands it.
-
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
 
 **Owner, 2026-11-17: not scheduled.** Asked whether to build the printed pre-bill or decision D1
@@ -1141,6 +1122,26 @@ after a handover count on their own stamps, since nothing records when they arri
 replacement and the invoice it replaces are read whatever their date. The purchases side is not
 covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
 that period's return changes with it.
+
+### A445: a free item on a ticket with two or more VAT rates takes its share of the price paid (owner and watcher, 2026-11-23)
+
+When a ticket mixing VAT rates holds an item given free (a comp, or a discount that takes it to
+€0), the price paid is shared across every line, the free one included, by menu price, and each
+share is filed at its line's own rate (the adviser's answer 1.10 of 15 November, DGT V0555-17,
+[adviser answers](../compliance/2026-11-15-adviser-answers.md) section B4; the owner's word of 21
+November, "i think we can build them", lane L `questions.md`, "WATCHER 2026-11-21 18:17").
+Its scope, free items on tickets at two or more rates only, is the watcher's call (the plan's D2,
+lane L `questions.md`, "WATCHER 2026-11-23 13:47"). When the same ticket also carries another
+discount, every line weighs its menu price, so that discount is shared too: the watcher's call
+following the owner's O1 rule ("its the proportions which matter", said about goodwill money back),
+not the owner's own answer (O3, "WATCHER 2026-11-23 16:05"). A free item comes back with the
+ticket's paid dishes, never on its own: the owner's words, on a €10 salad returned from a ticket
+with a free €2 water, "they would have to return both, and get the 10€ back" (O4, "WATCHER
+2026-11-23 14:17"). That it goes with the last paid dish, and that Cancel and refund of that dish
+is refused once the free item was served, pointing staff to Correct invoice, are the watcher's
+calls ("WATCHER 2026-11-23 15:17"). Question 14 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
+[Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 

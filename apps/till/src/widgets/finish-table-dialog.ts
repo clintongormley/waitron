@@ -84,6 +84,9 @@ export class TillFinishTableDialog extends LitElement {
   ];
   @property({ attribute: false }) dishes: UnservedDish[] = [];
   @property({ attribute: false }) refunds: Record<string, string> = {};
+  /** Each free item holding a share of the price paid, by line id, with the paid dishes of its bill
+   * it comes back with: all of them ticked brings it back, and none listed never does. */
+  @property({ attribute: false }) freeItems: Record<string, string[]> = {};
   @property({ type: Boolean }) refundAtTill = false;
   @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
   @property() defaultReasonId = "";
@@ -124,7 +127,7 @@ export class TillFinishTableDialog extends LitElement {
     return this.#busy() && (this.sending ? this.sentCollect : this.collectPending);
   }
   #currentKey(): string {
-    return JSON.stringify([this.dishes, this.refunds]);
+    return JSON.stringify([this.dishes, this.refunds, this.freeItems]);
   }
   #asks(dish: UnservedDish): boolean {
     return (
@@ -132,8 +135,31 @@ export class TillFinishTableDialog extends LitElement {
       dish.context.components.some((item) => item.firedAt !== null)
     );
   }
+  /** A paid dish whose own refund is €0.00 can still bring back a free item that gives money back. */
   #canRefund(dish: UnservedDish): boolean {
-    return compareDecimal(decimal(this.refunds[dish.lineId] ?? "0"), decimal("0")) > 0;
+    const above = (lineId: string) =>
+      compareDecimal(decimal(this.refunds[lineId] ?? "0"), decimal("0")) > 0;
+    return (
+      above(dish.lineId) ||
+      (this.refunds[dish.lineId] !== undefined &&
+        Object.entries(this.freeItems).some(
+          ([free, paid]) => paid.includes(dish.lineId) && above(free),
+        ))
+    );
+  }
+  #isFree(lineId: string): boolean {
+    return Object.hasOwn(this.freeItems, lineId);
+  }
+  /** Whether the cancel of `choice`'s dish gives money back. */
+  #refunding(choice: Choice): boolean {
+    if (!this.#isFree(choice.lineId)) return choice.refund;
+    const paid = this.freeItems[choice.lineId]!;
+    return (
+      paid.length > 0 &&
+      paid.every(
+        (lineId) => this.draft.choices.find((other) => other.lineId === lineId)?.refund === true,
+      )
+    );
   }
   #reasons(): AdjustmentReason[] {
     return (this.reasons ?? []).filter((reason) => reason.actions.includes("cancel"));
@@ -242,7 +268,9 @@ export class TillFinishTableDialog extends LitElement {
   #refundTotal(): string {
     return this.draft.choices.reduce(
       (total, choice) =>
-        choice.refund ? addDecimal(total, decimal(this.refunds[choice.lineId] ?? "0")) : total,
+        this.#refunding(choice)
+          ? addDecimal(total, decimal(this.refunds[choice.lineId] ?? "0"))
+          : total,
       decimal("0"),
     );
   }
@@ -272,7 +300,9 @@ export class TillFinishTableDialog extends LitElement {
               expectedBillRevision: dish.billRevision,
               expectedContext: structuredClone(dish.context),
               ...(this.#asks(dish) ? { preparationStarted: choice.preparationStarted! } : {}),
-              ...(choice.refund && this.#canRefund(dish) ? { refundHandoff: true } : {}),
+              ...(this.#refunding(choice) && (this.#isFree(dish.lineId) || this.#canRefund(dish))
+                ? { refundHandoff: true }
+                : {}),
               reasonId: this.draft.reasonId,
               ...(this.#reason()?.noteRequired ? { note: this.draft.note.trim() } : {}),
             };
@@ -368,7 +398,16 @@ export class TillFinishTableDialog extends LitElement {
                   </p>`
             }
             ${
-              this.#canRefund(dish) && choice?.preparationStarted !== null
+              this.#isFree(dish.lineId) && choice !== undefined
+                ? html`<p data-free>
+                    ${t(this.#refunding(choice) ? "finish_table.free_refunded" : "finish_table.free_kept")}
+                  </p>`
+                : nothing
+            }
+            ${
+              this.#canRefund(dish) &&
+              !this.#isFree(dish.lineId) &&
+              choice?.preparationStarted !== null
                 ? html`<label
                     ><input
                       type="checkbox"

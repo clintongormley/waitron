@@ -13,6 +13,7 @@ import {
   MONEY_SCALE,
   localToday,
   rateOn,
+  shareByWeight,
   AppError,
   VAT_RATE_TABLE,
   type VatClass,
@@ -262,6 +263,36 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
     return { rate, base, tax: subtractDecimal(g.gross, base) };
   });
   return { lines, total: gross.total, vatBreakdown };
+}
+
+/**
+ * The price paid shared over every line by menu price (its list gross, else its gross) when a free
+ * line (gross 0, list price above 0) is on a ticket whose lines with a menu price or gross above 0
+ * carry two or more rates on `on`; any other ticket comes back as it is.
+ * The tax adviser's answer 1.10.
+ */
+export function shareFreeItems(gross: GrossLines, on: string): GrossLines {
+  if (gross.lines.some((line) => line.vatRates.length === 0)) return gross;
+  const listed = (line: GrossLine) => line.listGross !== undefined && line.listGross !== null;
+  const menuPrice = (line: GrossLine) => (listed(line) ? decimal(line.listGross!) : line.lineGross);
+  const above = (amount: Decimal) => compareDecimal(amount, ZERO) > 0;
+  const rates = new Set(
+    gross.lines
+      .filter((line) => above(menuPrice(line)) || above(line.lineGross))
+      .map((line) => rateOn(line.vatRates, on)),
+  );
+  const free = gross.lines.some((line) => isZeroDecimal(line.lineGross) && above(menuPrice(line)));
+  if (rates.size < 2 || !free) return gross;
+  const shares = shareByWeight(gross.total, gross.lines.map(menuPrice));
+  const lines = gross.lines.map((line, index) => {
+    const share = shares[index]!;
+    if (compareDecimal(share, line.lineGross) === 0) return line;
+    const asSold = listed(line)
+      ? {}
+      : { listGross: line.lineGross, listUnitPriceGross: line.grossUnitPrice };
+    return { ...line, ...asSold, lineGross: share };
+  });
+  return { lines, total: gross.total };
 }
 
 /** The product's own rates, else its `vatClass`'s in the shipped table. */

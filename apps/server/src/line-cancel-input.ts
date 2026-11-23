@@ -46,3 +46,10 @@ export function parseCancellationContext(raw: unknown): CancellationContext {
     components,
   };
 }
+
+/** The free items a Cancel and refund names as coming back with it, by line id; absent when unsent. */
+export function parseWithFree(raw: unknown): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw invalid("withFree");
+  return raw.map((id: unknown) => requireBodyUuid(id, "withFree").toLowerCase());
+}

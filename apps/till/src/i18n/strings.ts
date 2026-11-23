@@ -87,6 +87,8 @@ export const en = {
   "finish_table.unserved": "{n} dishes not served",
   "finish_table.preparation_known": "Preparation started: {answer}",
   "finish_table.collect": "They'll collect it at the counter",
+  "finish_table.free_refunded": "Given free: refunded with the paid dishes",
+  "finish_table.free_kept": "Given free: no money back",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
   "cancel_item.yes": "Yes",
@@ -99,6 +101,9 @@ export const en = {
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
   "cancel_item.refund": "Cancel and refund {amount}",
+  "cancel_item.with_free": "Comes back with it, given free: {dishes}",
+  "cancel_item.free_served":
+    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
   "cancel_item.unavailable": "This dish cannot be cancelled here.",
 
   "device_zones.title": "Zones on this device",
@@ -2415,6 +2420,8 @@ export const es: Record<StringKey, string> = {
   "finish_table.unserved": "{n} platos sin servir",
   "finish_table.preparation_known": "En preparación: {answer}",
   "finish_table.collect": "Lo recogerán en el mostrador",
+  "finish_table.free_refunded": "Por invitación: se devuelve con los platos pagados",
+  "finish_table.free_kept": "Por invitación: no se devuelve dinero",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",
   "cancel_item.yes": "Sí",
@@ -2426,6 +2433,9 @@ export const es: Record<StringKey, string> = {
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",
   "cancel_item.refund": "Cancelar y devolver {amount}",
+  "cancel_item.with_free": "Vuelve con él, por invitación: {dishes}",
+  "cancel_item.free_served":
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",

@@ -3,19 +3,32 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  sales,
   workingOrderLines,
   workingOrders,
   type Transaction,
   type DeferredClosurePartyBlocker,
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/menu";
-import { AppError, thousandthsToDecimal, type ErrorCode } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  decimalToThousandths,
+  thousandthsToDecimal,
+  type ErrorCode,
+} from "@waitron/shared";
 import {
   orderedCancellationContext,
   readCancellationContext,
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
+import {
+  freeItemRefusal,
+  freeItemsLeft,
+  lastPaidDishes,
+  readShareHolders,
+} from "./cancellation-refund-value.js";
 import {
   cancelItem,
   type CancelItemAsk,
@@ -167,6 +180,7 @@ async function finish(
     )
       throw refused();
   }
+  await checkFreeItemPairing(tx, dishes, requested);
   const refundLinks: RefundLink[] = [];
   for (const dish of dishes) {
     const item = requested.find((item) => item.lineId === dish.lineId)!;
@@ -194,6 +208,7 @@ async function finish(
           .digest("hex"),
         approver: args.approver,
         refundApprovedBy: args.refundApprovedBy,
+        freeItemsChecked: true,
       },
       args.operatorId,
       attendance,
@@ -206,6 +221,47 @@ async function finish(
     attendance === undefined ? undefined : { recorder: attendance.recorder },
   );
   return refundLinks.length === 0 ? closed : { ...closed, refundLinks };
+}
+
+/**
+ * Checks the Refund ticks of the free items holding a share among `dishes` (plan 2026-11-19
+ * §4.3.1) over the whole request: a free item's tick stands only when the request lists and ticks
+ * every one of its bill's {@link lastPaidDishes} (the cancellation read's `comesBackWith`), and then
+ * every free item of that bill must be ticked and none may have a served portion.
+ */
+async function checkFreeItemPairing(
+  tx: Transaction,
+  dishes: readonly UnservedDish[],
+  requested: readonly FinishCancellation[],
+): Promise<void> {
+  const ticked = (lineId: string) =>
+    requested.find((item) => item.lineId === lineId)?.refundHandoff === true;
+  for (const billId of new Set(dishes.map((dish) => dish.billId))) {
+    const [sale] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, billId));
+    if (sale === undefined) continue;
+    const { free, paid } = await readShareHolders(tx, billId, sale.id);
+    if (free.length === 0) continue;
+    const listed = new Map(
+      dishes
+        .filter((dish) => dish.billId === billId)
+        .map((dish) => [dish.lineId, decimalToThousandths(decimal(dish.quantity))]),
+    );
+    const back = lastPaidDishes(paid);
+    const returned =
+      back.size > 0 &&
+      [...back].every(([lineId, quantity]) => listed.get(lineId) === quantity && ticked(lineId));
+    const left = freeItemsLeft(free);
+    if (returned && left.some(({ line }) => line.servedQuantity > 0))
+      throw freeItemRefusal("served");
+    for (const { line } of left) {
+      if (!listed.has(line.id)) continue;
+      if (ticked(line.id) && !returned) throw freeItemRefusal("free_item");
+      if (!ticked(line.id) && returned) throw freeItemRefusal("not_listed");
+    }
+  }
 }
 
 /**

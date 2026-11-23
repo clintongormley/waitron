@@ -55,8 +55,9 @@ export interface GroupDiscount {
   /** Every line of the family at this rate has a filed base of zero; always false on an end row. */
   comp: boolean;
   /**
-   * The adjustment whose words name the row, or null when no one adjustment does: the row then
-   * prints the full-comp words when `comp` is set, and the bare discount word otherwise.
+   * The adjustment whose words name the row, or null when no one adjustment does or its words would
+   * not describe the row's amount: the row then prints the full-comp words when `comp` is set, and
+   * the bare discount word otherwise.
    */
   named: ReceiptAdjustment | null;
 }
@@ -92,9 +93,16 @@ export function invoiceDiscounts(
   const hasBill = billAdjustments.length > 0;
   const under = new Map<number, GroupDiscount[]>();
   const billShares: { rate: string; amount: Decimal }[] = [];
+  let sharedFreeItem = false;
   for (const members of families.values()) {
     const lines = members.flatMap((group) => group.lines);
     const ownEntries = lines.flatMap(({ line }) => line.adjustments ?? []);
+    const lostVersusOwn = compareDecimal(lost(lines), sumDecimals(ownEntries.map(amountOf)));
+    if (ownEntries.length > 0 && lostVersusOwn < 0) sharedFreeItem = true;
+    // Lines lose their own adjustment plus any share of a bill adjustment; a loss that differs
+    // means a free item's share of the price paid moved part of it, and the words would not fit.
+    const nameable =
+      ownEntries.length === 1 && (hasBill ? lostVersusOwn >= 0 : lostVersusOwn === 0);
     const byRate = discountsByRate(lines);
     const oneRate = byRate.length === 1;
     const home =
@@ -120,14 +128,16 @@ export function invoiceDiscounts(
         rate: entry.rate,
         amount: ownAmount,
         comp: entry.comp,
-        named: ownEntries.length === 1 && (!hasBill || oneRate) ? ownEntries[0]! : null,
+        named: nameable && (!hasBill || oneRate) ? ownEntries[0]! : null,
       };
       const rows = under.get(home.at);
       if (rows === undefined) under.set(home.at, [row]);
       else rows.push(row);
     }
   }
-  const atEndNamed = billAdjustments.length === 1 ? billAdjustments[0]! : null;
+  // A free item holding a share of the price paid moved part of every line's loss onto the others,
+  // so the bill adjustment's words no longer describe what each rate's end row takes off.
+  const atEndNamed = billAdjustments.length === 1 && !sharedFreeItem ? billAdjustments[0]! : null;
   const atEnd = firstRates(groups)
     .map((rate) => ({
       rate,
@@ -181,6 +191,19 @@ function discountsByRate(
     }
   }
   return byRate;
+}
+
+/** What the lines' list prices lost, VAT included. */
+function lost(lines: readonly FiguredLine[]): Decimal {
+  return sumDecimals(
+    lines.map(({ line }) =>
+      subtractDecimal(decimal(line.listGross ?? line.gross), decimal(line.gross)),
+    ),
+  );
+}
+
+function amountOf({ amount }: ReceiptAdjustment): Decimal {
+  return decimal(amount);
 }
 
 /** `value` kept between zero and `ceiling`. */

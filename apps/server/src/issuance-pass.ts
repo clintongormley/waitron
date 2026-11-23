@@ -2,12 +2,14 @@ import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
 import { VENUE_SERVICE } from "./modules.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
 import type { GrossOrder } from "./working-order.js";
 
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product — the
  * product sold, a variant's parent, the menu and menu version it was sold from, and the reporting
- * chain the line recorded when it was added, copied as it is. Every till filing path calls it on
+ * chain the line recorded when it was added, copied as it is — and its total and unit price before a
+ * comp or discount, where that total differs. Every till filing path calls it on
  * the gross lines it files, before `issueMoment` rates them, and a replay or reprint never does.
  *
  * `order.identities[i]` is the working-order line `order.gross.lines[i]` was priced from, as
@@ -50,7 +52,7 @@ export async function issuancePass(
 
   return {
     ...gross,
-    lines: gross.lines.map((line, i) => {
+    lines: withReceiptListPrices(gross.lines, identities).map((line, i) => {
       const { id, productId, classification } = identities[i]!;
       return {
         ...line,

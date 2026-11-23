@@ -3890,6 +3890,42 @@ describe("till-app: service cancellation consent", () => {
       });
     });
 
+    it("fills in a grouped row's refund as the server records it, its last portion first", async () => {
+      // Three salads filed as one €28.13 row are worth 9.38, 9.38 and 9.37 each; the row gives up
+      // its last first, so cancelling one refunds €9.37, not a third of €28.13.
+      const lineIds = ["line-1", "line-2", "line-3"];
+      const base = { ...consent("settled"), saleId: "own-sale" };
+      const read: CancellationRead = {
+        ...base,
+        refundValue: { quantity: "3.000", gross: "28.13" },
+        rowRefunds: ["9.37", "9.38", "9.38"],
+        context: {
+          ...base.context,
+          components: lineIds.map((lineId, i) => ({
+            ...base.context.components[0]!,
+            id: `kitchen-${i + 1}`,
+            lineId,
+          })),
+        },
+      };
+      const { el } = await mountApp(
+        linkedMethods({ getCancellation: vi.fn().mockResolvedValue(read) }),
+      );
+      await openTable4(el);
+      emit(tableOrder(el), "cancel-item", { lineId: "line-1", lineIds });
+      await flush(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: read,
+        reasonId: "r-unserved",
+      });
+      await flush(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(refundForm(el)!.target).toBe("9.37");
+    });
+
     it("keeps cancellation ids when the amount is raised above the filled total", async () => {
       const { el } = await mountApp(linkedMethods());
       await openTable4(el);
@@ -3932,6 +3968,110 @@ describe("till-app: service cancellation consent", () => {
         appliedAmount: "3.00",
         cancellationIds: [cancelId],
       });
+    });
+
+    const waterCancelId = "44444444-4444-4444-8444-444444444444";
+    const withWater = (): CancellationRead => {
+      const read = { ...consent("settled"), saleId: "own-sale" };
+      read.refundValue = { quantity: "1.000", gross: "8.33" };
+      read.withFree = [
+        { lineId: "water-1", name: "Water", quantity: "1.000", refundAmount: "1.67" },
+      ];
+      return read;
+    };
+
+    it("refunds the last paid dish with the free items that come back with it", async () => {
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(withWater()),
+        cancelItem: vi.fn().mockResolvedValue({
+          revision: 4,
+          refundLinks: [
+            { lineId: "line-1", adjustmentId: cancelId },
+            { lineId: "water-1", adjustmentId: waterCancelId },
+          ],
+        }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: withWater(),
+        reasonId: "r-unserved",
+        withFree: ["water-1"],
+      });
+      await flush(el);
+      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+      expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
+        refundHandoff: true,
+        withFree: ["water-1"],
+      });
+      const form = refundForm(el)!;
+      expect(form.target).toBe("10.00");
+      expect(form.dishes).toBe("1 × Wine, 1 × Water");
+      await sendRefund(el);
+      expect(vi.mocked(api.refundTransaction).mock.calls[0]![1]).toMatchObject({
+        appliedAmount: "10.00",
+        cancellationIds: [cancelId, waterCancelId],
+      });
+    });
+
+    it("reads the dish again when a free item should have come back with it, and says so", async () => {
+      const before = { ...withWater(), withFree: undefined };
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(withWater()),
+        cancelItem: vi.fn().mockRejectedValue({
+          code: "tab.free_item_with_dish",
+          status: 409,
+          reason: "not_listed",
+        }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: before,
+        reasonId: "r-unserved",
+      });
+      await flush(el);
+      await expect.poll(() => cancelDialog(el)?.consent?.withFree).toEqual(withWater().withFree);
+      expect(cancelDialog(el)!.refusal).toBe(
+        "A dish given free comes back with this one. The window now lists it: check the amount and choose again.",
+      );
+      expect(methods.getCancellation).toHaveBeenCalledTimes(2);
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    });
+
+    it("explains a free item that was served instead of refunding", async () => {
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(withWater()),
+        cancelItem: vi
+          .fn()
+          .mockRejectedValue({ code: "tab.free_item_with_dish", status: 409, reason: "served" }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: withWater(),
+        reasonId: "r-unserved",
+        withFree: ["water-1"],
+      });
+      await flush(el);
+      await expect
+        .poll(() => cancelDialog(el)?.refusal)
+        .toBe(
+          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then give the money back with Correct invoice on the receipt.",
+        );
+      expect(api.refundTransaction).not.toHaveBeenCalled();
     });
 
     it("loads the reasons for a receipt's refund screen and retries a failed read", async () => {

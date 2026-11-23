@@ -110,7 +110,7 @@ import {
   setLocale,
   t,
 } from "./i18n/t.js";
-import { codeMessage } from "./i18n/codes.js";
+import { codeMessage, freeItemAtFinishMessage } from "./i18n/codes.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import { TillProblemReport } from "./problem-report.js";
@@ -219,8 +219,7 @@ import {
   type OverrideConfirmDetail,
 } from "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
-import "./widgets/cancel-item-dialog.js";
-import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
+import { cancelRefundOf, type CancelItemChoice } from "./widgets/cancel-item-dialog.js";
 import "./widgets/finish-table-dialog.js";
 import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
 import type {
@@ -229,6 +228,7 @@ import type {
   UnservedDish,
 } from "./api/finish-table-types.js";
 import type { CancellationRead, CancelItemRequest, RefundLink } from "./api/line-cancel-types.js";
+import { finishFreeItems } from "./finish-free-items.js";
 import {
   refusalField,
   type AdjustKind,
@@ -1544,6 +1544,8 @@ interface FinishingTable {
   partyRevision: number;
   dishes: UnservedDish[];
   refunds: Record<string, string>;
+  /** The finish dialog's `freeItems`: each free item and the paid dishes it comes back with. */
+  freeItems: Record<string, string[]>;
   receipts: { saleId: string; workingOrderId: string; lineId: string; label: string }[];
   refundAtTill: boolean;
   reasons: AdjustmentReason[] | null;
@@ -17320,6 +17322,9 @@ export class TillApp extends LitElement {
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
       ...(choice.outcome === "refund" ? { refundHandoff: true } : {}),
+      ...(choice.outcome === "refund" && choice.withFree !== undefined
+        ? { withFree: [...choice.withFree] }
+        : {}),
       ...(choice.preparationStarted === undefined
         ? {}
         : { preparationStarted: choice.preparationStarted }),
@@ -17390,18 +17395,30 @@ export class TillApp extends LitElement {
     choice: CancelItemChoice,
     links: RefundLink[],
   ): RefundFill | undefined {
-    const value = choice.consent.refundValue;
     const ids = open.lineIds ?? [open.lineId];
     const dishes = choice.consent.context.components.filter((row) => ids.includes(row.lineId));
-    if (value === undefined || dishes.length === 0) return undefined;
-    const cancelled = sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity)));
+    if (dishes.length === 0) return undefined;
+    const own = cancelRefundOf(
+      choice.consent,
+      open.lineIds !== undefined,
+      sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity))),
+      choice.quantity,
+    );
+    if (own === undefined) return undefined;
+    const free = (choice.consent.withFree ?? []).filter((item) =>
+      choice.withFree?.includes(item.lineId),
+    );
     return {
-      target: toScale(cancelRefundShare(value, cancelled, choice.quantity), MONEY_SCALE),
+      target: toScale(
+        sumDecimals([own, ...free.map((item) => decimal(item.refundAmount))]),
+        MONEY_SCALE,
+      ),
       startReasonId: choice.reasonId ?? "",
-      dishes: this.#refundDishWords(choice.quantity, open.name),
-      cancellationIds: links
-        .filter((link) => link.lineId === open.lineId)
-        .map((link) => link.adjustmentId),
+      dishes: [
+        this.#refundDishWords(choice.quantity, open.name),
+        ...free.map((item) => this.#refundDishWords(item.quantity, item.name)),
+      ].join(", "),
+      cancellationIds: links.map((link) => link.adjustmentId),
       ...(open.reasons === undefined ? {} : { reasons: open.reasons }),
     };
   }
@@ -17416,7 +17433,15 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     if (!this.#itemCancellationShown(open)) return;
     const code = (error as { code?: string } | undefined)?.code ?? "server.internal";
-    if (code === "tab.cancel_context_changed") {
+    const reason = (error as { reason?: unknown } | undefined)?.reason;
+    const said =
+      code === "tab.free_item_with_dish"
+        ? codeMessage(code, undefined, { reason })
+        : codeMessage(code);
+    if (
+      code === "tab.cancel_context_changed" ||
+      (code === "tab.free_item_with_dish" && reason === "not_listed")
+    ) {
       try {
         const consent = await open.api.getCancellation(
           open.partyId ?? { billId: open.billId },
@@ -17438,7 +17463,7 @@ export class TillApp extends LitElement {
           refundableTenders,
           approval: undefined,
           busy: false,
-          refusal: codeMessage(code),
+          refusal: said,
         };
       } catch {
         if (this.#itemCancellationShown(open)) {
@@ -17503,7 +17528,7 @@ export class TillApp extends LitElement {
         ...open,
         busy: false,
         approval: undefined,
-        refusal: codeMessage(code),
+        refusal: said,
         refusalField: field === "quantity" || field === "reason" || field === "note" ? field : null,
         reasons:
           code === "adjustment.note_required"
@@ -20516,12 +20541,16 @@ export class TillApp extends LitElement {
     const receipts: FinishingTable["receipts"] = [];
     const budgets = new Map<string, ReturnType<typeof decimal>>();
     let refundAtTill = false;
+    const consents = new Map<string, CancellationRead>();
+    const unvalued = new Map<string, FinishingTable["receipts"][number]>();
+    const valued: { dish: UnservedDish; consent: CancellationRead; saleId: string }[] = [];
     try {
       for (const dish of observation.dishes) {
         const consent = await asked.api.getCancellation(asked.partyId, dish.lineId, {
           signal: opening.controller.signal,
         });
         if (!current()) return;
+        consents.set(dish.lineId, consent);
         if (
           consent.billId !== dish.billId ||
           consent.billRevision !== dish.billRevision ||
@@ -20552,29 +20581,52 @@ export class TillApp extends LitElement {
         }
         const value = consent.refundValue;
         if (compareDecimal(decimal(value.quantity), decimal("0")) <= 0) continue;
+        valued.push({ dish, consent, saleId: consent.saleId });
+      }
+      // A free item gives money back only with its paid dishes, so they take the money left first.
+      valued.sort(
+        (a, b) => Number(a.consent.givenFree === true) - Number(b.consent.givenFree === true),
+      );
+      for (const { dish, consent, saleId } of valued) {
         const gross = cancelRefundShare(
-          value,
+          consent.refundValue!,
           consent.context.components.find((row) => row.lineId === dish.lineId)!.cancelledQuantity,
           dish.quantity,
         );
-        const budget = budgets.get(consent.saleId)!;
+        const budget = budgets.get(saleId)!;
         const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
-        if (compareDecimal(amount, decimal("0")) <= 0) continue;
-        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
-        budgets.set(consent.saleId, subtractDecimal(budget, amount));
-        receipts.push({
-          saleId: consent.saleId,
+        const receipt = {
+          saleId,
           workingOrderId: dish.billId,
           lineId: dish.lineId,
           label: this.#paymentBillLabel(dish.billId) ?? dish.name,
-        });
+        };
+        if (compareDecimal(gross, decimal("0")) === 0) unvalued.set(dish.lineId, receipt);
+        if (compareDecimal(amount, decimal("0")) <= 0) continue;
+        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
+        budgets.set(saleId, subtractDecimal(budget, amount));
+        receipts.push(receipt);
       }
+      // A paid dish whose own share is €0.00 still brings back a free item that gives money back.
+      for (const [lineId, consent] of consents) {
+        if (consent.givenFree !== true || refunds[lineId] === undefined) continue;
+        for (const paid of consent.comesBackWith ?? []) {
+          const receipt = unvalued.get(paid);
+          if (receipt === undefined || refunds[paid] !== undefined) continue;
+          refunds[paid] = toScale(decimal("0"), MONEY_SCALE);
+          receipts.push(receipt);
+        }
+      }
+      const row = (lineId: string) =>
+        observation.dishes.findIndex((dish) => dish.lineId === lineId);
+      receipts.sort((a, b) => row(a.lineId) - row(b.lineId));
       if (!current() || !this.#billCompositionUnchanged(asked)) return;
       this.finishingTable = {
         composition: asked,
         partyRevision,
         dishes: structuredClone(observation.dishes),
         refunds,
+        freeItems: finishFreeItems(observation.dishes, consents),
         receipts,
         refundAtTill,
         reasons: null,
@@ -20645,7 +20697,9 @@ export class TillApp extends LitElement {
           choice.quantity !== dish.quantity ||
           choice.expectedBillRevision !== dish.billRevision ||
           !sameFinishContext(choice.expectedContext, dish.context) ||
-          (choice.refundHandoff === true && open.refunds[dish.lineId] === undefined)
+          (choice.refundHandoff === true &&
+            open.refunds[dish.lineId] === undefined &&
+            !Object.hasOwn(open.freeItems, dish.lineId))
         );
       })
     )
@@ -20781,7 +20835,7 @@ export class TillApp extends LitElement {
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
         await this.#readAfterFinishRefused(asked.visit, true);
-      } else if (code === "party.unserved_dishes") {
+      } else if (code === "party.unserved_dishes" || code === "tab.free_item_with_dish") {
         const opening = { composition: asked, controller: new AbortController() };
         this.#finishOpening = opening;
         this.finishingTable = null;
@@ -20789,11 +20843,19 @@ export class TillApp extends LitElement {
           await this.#readFinishDishes(
             opening,
             open.partyRevision,
-            error as { dishes: UnservedDish[] },
+            code === "party.unserved_dishes"
+              ? (error as { dishes: UnservedDish[] })
+              : { dishes: open.dishes },
           );
         } finally {
           if (this.#finishOpening === opening) this.#finishOpening = undefined;
         }
+        const reread = this.finishingTable as FinishingTable | null;
+        if (code === "tab.free_item_with_dish" && reread?.composition === asked)
+          this.finishingTable = {
+            ...reread,
+            refusal: freeItemAtFinishMessage((error as { reason?: unknown }).reason),
+          };
       } else if (
         code === "authorization.not_permitted" &&
         approver === undefined &&
@@ -20830,7 +20892,11 @@ export class TillApp extends LitElement {
           retryApproverId: isNetworkFailure(error)
             ? (approver?.personId ?? open.retryApproverId)
             : undefined,
-          refusal: isNetworkFailure(error) ? t("adjust.unconfirmed") : codeMessage(code),
+          refusal: isNetworkFailure(error)
+            ? t("adjust.unconfirmed")
+            : codeMessage(code, undefined, {
+                reason: (error as { reason?: unknown } | undefined)?.reason,
+              }),
         };
         if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
       }
@@ -20962,6 +21028,7 @@ export class TillApp extends LitElement {
         : html`<till-finish-table-dialog
               .dishes=${open.dishes}
               .refunds=${open.refunds}
+              .freeItems=${open.freeItems}
               .refundAtTill=${open.refundAtTill}
               .reasons=${open.reasons}
               .defaultReasonId=${open.reasons?.find((reason) => reason.startsFinishTable)?.id ?? ""}

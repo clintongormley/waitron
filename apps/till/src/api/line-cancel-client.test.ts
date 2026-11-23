@@ -155,6 +155,47 @@ describe("the cancellation HTTP client", () => {
     expect(JSON.parse(fetcher.mock.calls[1]![1].body as string)).toEqual(keep);
   });
 
+  it("reads the free items that come back with the last paid dish, and sends them", async () => {
+    const paid = { ...context, billStatus: "settled" as const };
+    const read = {
+      billId: "bill-4",
+      revision: 8,
+      billRevision: 4,
+      context: paid,
+      saleId: "sale-1",
+      refundValue: { quantity: "1.000", gross: "8.33" },
+      withFree: [{ lineId: "water-1", name: "Water", quantity: "1.000", refundAmount: "1.67" }],
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json(read))
+      .mockResolvedValueOnce(
+        json({ ...read, withFree: undefined, givenFree: true, comesBackWith: ["dish-3"] }),
+      )
+      .mockResolvedValueOnce(json({ revision: 9 }));
+    const api = new TillApi("", fetcher);
+    const consent = await api.getCancellation("party-1", "dish-3");
+    expect(consent.withFree).toEqual(read.withFree);
+    expect(await api.getCancellation("party-1", "water-1")).toMatchObject({
+      givenFree: true,
+      comesBackWith: ["dish-3"],
+    });
+    const ask: CancelItemRequest = {
+      expectedEdit,
+      submissionId: "refund-1",
+      expectedPartyRevision: consent.revision,
+      expectedBillRevision: consent.billRevision,
+      quantity: "1",
+      outcome: "keep_charge",
+      refundHandoff: true,
+      withFree: ["water-1"],
+      expectedContext: consent.context,
+      reasonId: "reason-1",
+    };
+    await api.cancelItem("party-1", "dish-3", ask);
+    expect(JSON.parse(fetcher.mock.calls[2]![1].body as string).withFree).toEqual(["water-1"]);
+  });
+
   it("propagates a failed context read without a follow-up command", async () => {
     const fetcher = vi
       .fn()

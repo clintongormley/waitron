@@ -21,6 +21,8 @@ import {
   subtractDecimal,
   centsToDecimal,
   saleId as brandSaleId,
+  shareByWeight,
+  sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
@@ -74,8 +76,9 @@ function receiptGrosses(
  * The sale's bill as stored, null when it has none or the bill has no stored lines; and the bill
  * line each filed row was priced from, as the settled-bill read pairs them: by position in the
  * stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
- * none. `identities` is null when there is no stored bill or it no longer prices to the filed rows;
- * the receipt then prints one entry per dish, without a percentage.
+ * none. `identities` is null when there is no stored bill or it no longer prices to the filed rows,
+ * as stored or with each free item given its share (`freeItemShares`); the receipt then prints one
+ * entry per dish, without a percentage.
  */
 async function billLinesFiled(
   tx: Transaction,
@@ -91,13 +94,15 @@ async function billLinesFiled(
   }
   const stored = await readStoredOrder(tx, workingOrderId);
   const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
+  const filedAs = (amounts: readonly Decimal[] | null) =>
+    amounts !== null && amounts.every((amount, i) => same(amount, grosses.get(dishes[i]!.id)!));
   const paired =
     stored.gross.lines.length === dishes.length &&
-    stored.gross.lines.every(
-      (line, i) =>
-        same(line.quantity, thousandthsToDecimal(dishes[i]!.quantity)) &&
-        same(line.lineGross, grosses.get(dishes[i]!.id)!),
-    );
+    stored.gross.lines.every((line, i) =>
+      same(line.quantity, thousandthsToDecimal(dishes[i]!.quantity)),
+    ) &&
+    (filedAs(stored.gross.lines.map((line) => line.lineGross)) ||
+      filedAs(freeItemShares(stored.gross.total, dishes, grosses)));
   return {
     stored,
     identities: paired
@@ -107,6 +112,23 @@ async function billLinesFiled(
         }))
       : null,
   };
+}
+
+/**
+ * The bill's `total` shared over the filed rows by menu price (a row's filed list total, else its
+ * total), as `shareFreeItems` shared it at issue; null when no row has a menu price.
+ */
+function freeItemShares(
+  total: Decimal,
+  dishes: readonly (typeof saleLines.$inferSelect)[],
+  grosses: ReadonlyMap<string, Decimal>,
+): Decimal[] | null {
+  const menuPrices = dishes.map((row) =>
+    row.listGross === null ? grosses.get(row.id)! : centsToDecimal(row.listGross),
+  );
+  return compareDecimal(sumDecimals(menuPrices), decimal("0")) > 0
+    ? shareByWeight(total, menuPrices)
+    : null;
 }
 
 export async function readTransactionReceipt(

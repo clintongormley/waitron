@@ -54,9 +54,11 @@ import {
   placeGrouped,
   provisionAdjustmentVenue,
   rowsOf,
+  takeawayRates,
   type AdjustmentVenue,
   PINS,
 } from "./testing/adjustment-venue.js";
+import { applyAdjustment } from "./adjustments-apply.js";
 
 let venue: AdjustmentVenue;
 useVenueDb({
@@ -939,4 +941,239 @@ describe("whether a party's service can finish, read without writing", () => {
         thrown: { code: "management.request_invalid", params: { field: "expectedEdits" } },
       });
   });
+});
+
+describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () => {
+  /** A paid takeaway table of a Salad (4%) and comped Waters (21%), held unless fired. */
+  async function freeWaterTable(
+    waters = 1,
+    release: "hold" | "fire" = "hold",
+    paid = ["Salad"],
+    freeFirst = false,
+  ) {
+    await takeawayRates(venue, { Salad: "4.00", Soup: "4.00", Water: "21.00" });
+    const paidLines = paid.map((name) => ({ name }));
+    const waterLines = Array.from({ length: waters }, () => ({ name: "Water" }));
+    const p = await billWith(
+      venue,
+      freeFirst ? [...waterLines, ...paidLines] : [...paidLines, ...waterLines],
+      { release, dining: "takeaway" },
+    );
+    const rows = await rowsOf(venue, p.billId);
+    for (const water of freeFirst ? rows.slice(0, waters) : rows.slice(paid.length))
+      await inTx(venue, async (tx) => {
+        const [order] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, p.billId));
+        await applyAdjustment(
+          tx,
+          venue.cfg,
+          {
+            admission: testTradingAdmission(),
+            orderId: p.billId,
+            expectedEdit: await readBillEditState(tx, p.billId),
+            submissionId: randomUUID(),
+            expectedRevision: order!.revision,
+            lineId: water.id,
+            action: "comp",
+            reasonId: venue.reasonId.house,
+            note: null,
+            operatorId: venue.staffId,
+          },
+          venue.venueLocale,
+        );
+      });
+    await paySavedBillInCash(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
+      },
+      p.billId,
+      "100.00",
+    );
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    return {
+      ...p,
+      lines: await rowsOf(venue, p.billId),
+      body: {
+        expectedPartyRevision: party!.revision,
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, p.billId))],
+        submissionId: randomUUID(),
+      },
+    };
+  }
+
+  async function ticked(p: Fixture, refund: [salad: boolean, water: boolean]) {
+    const body = await confirm(p);
+    return {
+      ...body,
+      cancellations: body.cancellations.map((item, index) =>
+        refund[index] ? { ...item, refundHandoff: true } : item,
+      ),
+    };
+  }
+
+  it.each([
+    ["the salad ticked and the water not", [true, false], "not_listed"],
+    ["the water ticked and the salad not", [false, true], "free_item"],
+  ] as const)("refuses %s", async (_, refund, reason) => {
+    const p = await freeWaterTable();
+    const body = await ticked(p, [...refund]);
+    const before = await snapshot(p);
+    expect(await post(p, body, venue.cookie.manager)).toMatchObject({
+      status: 409,
+      body: { error: { code: "tab.free_item_with_dish", params: { reason } } },
+    });
+    expect(await snapshot(p)).toEqual(before);
+  });
+
+  it("accepts both ticked and answers both refund links", async () => {
+    const p = await freeWaterTable();
+    const answer = await post(p, await ticked(p, [true, true]), venue.cookie.manager);
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    const cancelOf = (lineId: string) => rows.find((row) => row.lineId === lineId)!;
+    expect(answer.body).toEqual({
+      state: "closed",
+      refundLinks: [
+        { lineId: p.lines[0]!.id, adjustmentId: cancelOf(p.lines[0]!.id).id },
+        { lineId: p.lines[1]!.id, adjustmentId: cancelOf(p.lines[1]!.id).id },
+      ],
+    });
+    expect(cancelOf(p.lines[0]!.id).refundValue).toBe(833);
+    expect(cancelOf(p.lines[1]!.id).refundValue).toBe(167);
+  });
+
+  it("cancels a free item listed before its paid dish in the order listed, each at its share", async () => {
+    const p = await freeWaterTable(1, "hold", ["Salad"], true);
+    const answer = await post(p, await ticked(p, [true, true]), venue.cookie.manager);
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    const cancelOf = (lineId: string) => rows.find((row) => row.lineId === lineId)!;
+    const [water, salad] = p.lines;
+    expect(answer.body).toEqual({
+      state: "closed",
+      refundLinks: [
+        { lineId: water!.id, adjustmentId: cancelOf(water!.id).id },
+        { lineId: salad!.id, adjustmentId: cancelOf(salad!.id).id },
+      ],
+    });
+    expect(cancelOf(salad!.id).refundValue).toBe(833);
+    expect(cancelOf(water!.id).refundValue).toBe(167);
+  });
+
+  it.each([
+    ["fully served", 1],
+    ["partly served, one of two water lines", 2],
+  ] as const)(
+    "refuses the salad's refund, writing nothing, once the water was %s",
+    async (_, waters) => {
+      const p = await freeWaterTable(waters, "fire");
+      const served = p.lines[1]!;
+      const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+      await inTx(venue, (tx) =>
+        markServed(tx, venue.cfg, p.partyId, [{ lineId: served.id, quantity: "1" }], {
+          expectedPartyRevision: party!.revision,
+          operatorId: venue.staffId,
+          submissionId: randomUUID(),
+        }),
+      );
+      const [after] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+      p.body.expectedPartyRevision = after!.revision;
+      const confirmed = await confirm(p);
+      const body = {
+        ...confirmed,
+        cancellations: confirmed.cancellations
+          .filter((item) => item.lineId !== served.id)
+          .map((item) => ({ ...item, preparationStarted: false, refundHandoff: true })),
+      };
+      const before = await snapshot(p);
+      expect(await post(p, body, venue.cookie.manager)).toMatchObject({
+        status: 409,
+        body: { error: { code: "tab.free_item_with_dish", params: { reason: "served" } } },
+      });
+      expect(await snapshot(p)).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["nothing served", false],
+    ["the bread served in full", true],
+  ] as const)(
+    "brings the water back with exactly the paid dishes its read names, %s",
+    async (_, breadServed) => {
+      const p = await freeWaterTable(1, "fire", ["Salad", "Soup", "Bread"]);
+      const [salad, soup, bread, water] = p.lines.map((line) => line.id) as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      if (breadServed) {
+        const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+        await inTx(venue, (tx) =>
+          markServed(tx, venue.cfg, p.partyId, [{ lineId: bread, quantity: "1" }], {
+            expectedPartyRevision: party!.revision,
+            operatorId: venue.staffId,
+            submissionId: randomUUID(),
+          }),
+        );
+        const [after] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+        p.body.expectedPartyRevision = after!.revision;
+      }
+      const read = await venue.app.request(
+        `/api/parties/${p.partyId}/lines/${water}/cancellation`,
+        { headers: { cookie: venue.cookie.manager } },
+      );
+      const { comesBackWith } = (await read.json()) as { comesBackWith?: string[] };
+      expect(comesBackWith).toEqual(breadServed ? [] : [salad, soup, bread]);
+
+      const confirmed = await confirm(p);
+      const listed = confirmed.cancellations.filter(
+        (item) => !(breadServed && item.lineId === bread),
+      );
+      const tick = (ids: string[]) => ({
+        ...confirmed,
+        submissionId: randomUUID(),
+        cancellations: listed.map((item) => ({
+          ...item,
+          preparationStarted: false,
+          ...(ids.includes(item.lineId) ? { refundHandoff: true } : {}),
+        })),
+      });
+      const paidListed = listed.map((item) => item.lineId).filter((id) => id !== water);
+      if (breadServed) {
+        // The till's guess before the read named them: the water follows every listed paid dish.
+        const before = await snapshot(p);
+        expect(await post(p, tick([...paidListed, water]), venue.cookie.manager)).toMatchObject({
+          status: 409,
+          body: { error: { code: "tab.free_item_with_dish", params: { reason: "free_item" } } },
+        });
+        expect(await snapshot(p)).toEqual(before);
+      }
+      const follows =
+        comesBackWith!.length > 0 && comesBackWith!.every((id) => paidListed.includes(id));
+      const answer = await post(
+        p,
+        tick([...paidListed, ...(follows ? [water] : [])]),
+        venue.cookie.manager,
+      );
+      expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    },
+  );
 });

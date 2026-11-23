@@ -630,6 +630,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "service_step.not_found": 404,
   "party.out_of_date": 409,
   "tab.cancel_context_changed": 409,
+  "tab.free_item_with_dish": 409,
   "party.bill_outstanding": 409,
   "party.unserved_dishes": 409,
   "unpaid_departure.nothing_outstanding": 409,

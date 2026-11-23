@@ -192,3 +192,26 @@ it("a preparation answer is staged input and Keep retains the native selected an
   await expect.poll(() => app.closes).toBe(1);
   expect(unload()).toBe(false);
 });
+it("a new read whose served free item leaves only Keep charge opens with nothing unsaved", async () => {
+  const { app, form } = await mount();
+  form.refundAvailable = true;
+  const dish = app.consent.context.components[0]!;
+  app.consent = {
+    ...app.consent,
+    saleId: "s",
+    refundValue: { quantity: "1.000", gross: "8.33" },
+    context: {
+      ...app.consent.context,
+      billStatus: "settled",
+      components: [{ ...dish, quantity: "1.000", kitchenQuantity: "1.000" }],
+    },
+    withFree: [
+      { lineId: "water", name: "Water", quantity: "1.000", refundAmount: "1.67", served: true },
+    ],
+  };
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+  expect(unload()).toBe(false);
+});

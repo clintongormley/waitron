@@ -61,7 +61,7 @@ export async function enqueueServiceCancellation(
   billId: string,
   families: readonly Family[],
   work: ReadonlyMap<string, readonly DishKitchenItem[]>,
-  preparationStarted = false,
+  preparationStarted: (dish: Line) => boolean = () => false,
 ) {
   const corrections = families.flatMap(({ dish, family }) =>
     family.flatMap(({ row, remaining }) => {
@@ -80,7 +80,7 @@ export async function enqueueServiceCancellation(
                 workingOrderLineId: row.id,
                 stationId: item!.stationId,
                 quantity: corrected,
-                wasStarted: preparationStarted || isStarted(item!.state),
+                wasStarted: preparationStarted(dish) || isStarted(item!.state),
                 fired: item!.firedAt !== null,
               },
             },

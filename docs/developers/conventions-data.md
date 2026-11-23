@@ -7254,3 +7254,18 @@ guard and pointer.
 ### Restore and promotion start a new chain under a new installation name
 
 > the proposal the owner agreed named an administrator sign-in
+
+## A free item's share changes filed line totals
+
+Since A445 (plan `docs/superpowers/plans/2026-11-19-adviser-goodwill-corrective.md`), a takeaway
+ticket at two or more VAT rates holding a free item files every line's share of the price paid by
+menu price (`shareFreeItems`, `packages/menu/src/pricing.ts`), so the stored bill's line totals and
+the filed ones differ. Three places that paired or valued them by total broke on its review: #4143's
+Find a bill reprint check (`apps/server/src/transaction-receipt.ts`, which now also accepts the
+shared totals), the reprint's price each (`soldAt`, `apps/server/src/receipt-lines.ts`), and the
+refund of a grouped row of identical portions whose filed cents do not divide evenly (each portion
+now takes its own whole cents, `byPortion` and `rowRefundsIn` in
+`apps/server/src/cancellation-refund-value.ts`). The review's runs of whole-bill and line discounts on
+one-rate tickets (2026-11-23) produced no uneven grouped row: the portions split into separate rows
+instead.
+

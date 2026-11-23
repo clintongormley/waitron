@@ -1,4 +1,4 @@
-import { localCalendarDate, rateLines } from "@waitron/menu";
+import { localCalendarDate, rateLines, shareFreeItems } from "@waitron/menu";
 import type { GrossLines, PricedLines } from "@waitron/menu";
 import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fiscal";
 import { deductAdvances, type AdvanceCredit, type DeductionLine } from "./advance-deduction.js";
@@ -11,7 +11,7 @@ export interface IssueMoment {
   meal: PricedLines;
   /** One line per advance and rate, to follow `priced.lines` on the invoice. */
   deductionLines: DeductionLine[];
-  /** The lines `priced` was rated from, still holding the gross unit prices they were sold at. */
+  /** The lines as sold, before `shareFreeItems` gave a free item its share; the receipt prints them. */
   gross: GrossLines;
   /** Answers the reading `issueMoment` took on every `now()`, so `recordSale` dates the invoice on
    * the issue day `priced` and `operationDate` were worked out from, even across midnight. */
@@ -27,10 +27,11 @@ export interface IssueAdvances {
 }
 
 /**
- * Take ONE clock reading and rate `gross` at its local calendar date, or at `mealDay` when the meal
- * ended on an earlier venue day: the rate in force when the sale happened applies, and that day is
- * returned as the operation date to file. Every till path that issues an invoice from an order's
- * lines rates them here and hands `recordSale` the returned clock.
+ * Take ONE clock reading and rate `gross`, each free item given its share (`shareFreeItems`), at its
+ * local calendar date, or at `mealDay` when the meal ended on an earlier venue day: the rate in
+ * force when the sale happened applies, and that day is returned as the operation date to file.
+ * Every till path that issues an invoice from an order's lines rates them here and hands
+ * `recordSale` the returned clock.
  */
 export function issueMoment(
   clock: TrustedClock,
@@ -43,7 +44,8 @@ export function issueMoment(
   fiscal.assertRecordableAt(reading);
   const issueDay = localCalendarDate(reading.instant, reading.offsetMinutes);
   const earlier = mealDay !== undefined && mealDay < issueDay ? mealDay : undefined;
-  const meal = rateLines(gross, earlier ?? issueDay);
+  const on = earlier ?? issueDay;
+  const meal = rateLines(shareFreeItems(gross, on), on);
   const { priced, deductionLines } = deductAdvances(meal, advances?.credits ?? [], {
     languages: advances?.languages ?? [],
   });

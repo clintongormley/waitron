@@ -49,6 +49,7 @@ function dish(lineId: string, stage: "held" | "fired" | "started" = "held"): Uns
 type Dialog = LitElement & {
   dishes: UnservedDish[];
   refunds: Record<string, string>;
+  freeItems: Record<string, string[]>;
   refundAtTill: boolean;
   reasons: AdjustmentReason[] | null;
   defaultReasonId: string;
@@ -659,4 +660,106 @@ it("localises the unserved total and dish quantity in Spanish", async () => {
   const el = await mount({ dishes: [{ ...dish("flan"), quantity: "0.500" }] });
   expect(root(el).querySelector("wt-dialog")!.heading).toContain("0,5");
   expect(root(el).querySelector(".name")!.textContent).toContain("0,5 × Flan");
+});
+
+const water = (): UnservedDish => {
+  const row = dish("flan");
+  row.lineId = "water";
+  row.name = "Water";
+  row.context.components[0]!.lineId = "water";
+  row.context.components[0]!.id = "ticket-water";
+  return row;
+};
+const salad = (): UnservedDish => ({ ...dish("flan"), name: "Salad" });
+const mountFree = (props: Partial<Dialog> = {}) =>
+  mount({
+    dishes: [water(), salad(), dish("croquetas")],
+    refunds: { flan: "8.33", water: "1.67", croquetas: "6.00" },
+    freeItems: { water: ["flan", "croquetas"] },
+    ...props,
+  });
+const refundOf = (calls: unknown[], lineId: string) =>
+  (calls[0] as { cancellations: { lineId: string; refundHandoff?: boolean }[] }).cancellations.find(
+    (row) => row.lineId === lineId,
+  )!.refundHandoff;
+
+it("gives a free item no tick of its own and brings it back with every paid dish of its bill", async () => {
+  const el = await mountFree();
+  await reason(el);
+  expect(root(el).querySelector('[data-dish="water"] input[name=refund]')).toBeNull();
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €16.00");
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBe(true);
+  expect(refundOf(calls, "flan")).toBe(true);
+});
+it("leaves a free item and its value out while a paid dish of its bill is unticked", async () => {
+  const el = await mountFree();
+  await reason(el);
+  await click(el, '[data-dish="croquetas"] input[name=refund]');
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €8.33");
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBeUndefined();
+  expect(refundOf(calls, "flan")).toBe(true);
+});
+it("never brings back a free item that follows no paid dish in the list", async () => {
+  const el = await mountFree({ freeItems: { water: [] } });
+  await reason(el);
+  expect(root(el).querySelector('[data-dish="water"] input[name=refund]')).toBeNull();
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €14.33");
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBeUndefined();
+});
+it("says on a free item's row whether it gives money back, in English and Spanish", async () => {
+  const el = await mountFree();
+  const line = () => root(el).querySelector('[data-dish="water"] [data-free]')?.textContent?.trim();
+  expect(line()).toBe("Given free: refunded with the paid dishes");
+  await click(el, '[data-dish="croquetas"] input[name=refund]');
+  expect(line()).toBe("Given free: no money back");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(line()).toBe(es["finish_table.free_kept"]);
+  await click(el, '[data-dish="croquetas"] input[name=refund]');
+  expect(line()).toBe(es["finish_table.free_refunded"]);
+});
+it("ticks a paid dish worth €0.00 on its own whose free item gives money back, and sends both", async () => {
+  const el = await mountFree({
+    dishes: [water(), salad()],
+    refunds: { flan: "0.00", water: "0.01" },
+    freeItems: { water: ["flan"] },
+  });
+  await reason(el);
+  expect(
+    root(el).querySelector<HTMLInputElement>('[data-dish="flan"] input[name=refund]')!.checked,
+  ).toBe(true);
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €0.01");
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBe(true);
+  expect(refundOf(calls, "flan")).toBe(true);
+});
+it("gives a paid dish worth €0.00 no tick when its free item gives no money back", async () => {
+  const el = await mountFree({
+    dishes: [water(), salad()],
+    refunds: { flan: "0.00" },
+    freeItems: { water: ["flan"] },
+  });
+  expect(root(el).querySelector('[data-dish="flan"] input[name=refund]')).toBeNull();
+});
+it("sends a free item's Refund when the money left gave it no amount of its own", async () => {
+  const el = await mountFree({
+    refunds: { flan: "7.00" },
+    freeItems: { water: ["flan"] },
+  });
+  await reason(el);
+  expect(root(el).querySelector('[data-dish="water"] [data-free]')?.textContent?.trim()).toBe(
+    "Given free: refunded with the paid dishes",
+  );
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBe(true);
+  expect(refundOf(calls, "flan")).toBe(true);
 });

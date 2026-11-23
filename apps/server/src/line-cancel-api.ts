@@ -9,9 +9,10 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, thousandthsToDecimal } from "@waitron/shared";
+import { staffPresentationName } from "@waitron/menu";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
-import { parseCancellationContext } from "./line-cancel-input.js";
+import { parseCancellationContext, parseWithFree } from "./line-cancel-input.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import { approverToCheck } from "./adjustments-api.js";
 import { invalid } from "./bill-allocation.js";
@@ -19,11 +20,21 @@ import { issueIfFullyPaid } from "./bill-payments.js";
 import { asObject, submissionIdOf } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { readLineCancellations } from "./line-service-state.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
-import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
+import {
+  freeItemRefund,
+  freeItemsLeft,
+  lastPaidDishes,
+  readBillFiling,
+  refundValueIn,
+  rowRefundValueIn,
+  rowRefundsIn,
+  shareHoldersIn,
+} from "./cancellation-refund-value.js";
 import {
   overrideToCheck,
   withCheck,
@@ -89,6 +100,7 @@ function parseAsk(body: Record<string, unknown>, counter: boolean): CancelItemAs
   const lineIds = (body.lineIds as string[] | undefined)?.map((id) =>
     requireBodyUuid(id, "lineIds").toLowerCase(),
   );
+  const withFree = parseWithFree(body.withFree);
   const expectedContext = parseCancellationContext(body.expectedContext);
   if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
     throw invalid("refundHandoff");
@@ -115,6 +127,7 @@ function parseAsk(body: Record<string, unknown>, counter: boolean): CancelItemAs
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
     expectedContext,
     ...(lineIds === undefined ? {} : { lineIds }),
+    ...(withFree === undefined ? {} : { withFree }),
     submissionId: submissionIdOf(body),
     reasonId,
     note: body.note as string | undefined,
@@ -173,12 +186,36 @@ export function mountLineCancelApi(
           .select({ id: sales.id })
           .from(sales)
           .where(eq(sales.workingOrderId, bill!.id));
-        const refundValue =
+        const filing =
           context.billStatus === "settled" && sale !== undefined
-            ? lineIds === undefined
-              ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
-              : await rowRefundValue(tx, bill!.id, sale.id, lineIds)
+            ? await readBillFiling(tx, bill!.id, sale.id)
             : undefined;
+        const refundValue =
+          filing === undefined
+            ? undefined
+            : lineIds === undefined
+              ? refundValueIn(filing, lineId)
+              : rowRefundValueIn(filing, lineIds);
+        const rowRefunds =
+          filing === undefined || lineIds === undefined
+            ? undefined
+            : rowRefundsIn(filing, lineIds, await readLineCancellations(tx, lineIds));
+        const holders =
+          filing === undefined ? { free: [], paid: [] } : await shareHoldersIn(tx, filing);
+        const subject = lineIds ?? [lineId];
+        const givenFree = holders.free.some(({ line }) => subject.includes(line.id));
+        const back = lastPaidDishes(holders.paid);
+        const last = back.size > 0 && [...back.keys()].every((id) => subject.includes(id));
+        const withFree =
+          givenFree || !last
+            ? undefined
+            : freeItemsLeft(holders.free).map(({ line, value, cancelled }) => ({
+                lineId: line.id,
+                name: staffPresentationName(line),
+                quantity: thousandthsToDecimal(line.quantity - cancelled),
+                refundAmount: freeItemRefund({ line, value, cancelled }),
+                ...(line.servedQuantity > 0 ? { served: true } : {}),
+              }));
         return {
           context,
           revision: counter ? bill!.revision : await partyRevision(tx, id),
@@ -186,6 +223,9 @@ export function mountLineCancelApi(
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
           ...(refundValue === undefined ? {} : { refundValue }),
+          ...(rowRefunds === undefined ? {} : { rowRefunds }),
+          ...(givenFree ? { givenFree: true, comesBackWith: [...back.keys()] } : {}),
+          ...(withFree === undefined || withFree.length === 0 ? {} : { withFree }),
         };
       });
       return c.json(answer);
