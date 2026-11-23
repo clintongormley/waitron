@@ -145,7 +145,7 @@ O7, O8 and O9 are open. One fresh-context read
 
 - **A takeaway ticket with a free item at another rate.** Salad €10.00 at 4%, water €2.00 at 21%
   given free; the guest pays €10.00. The receipt still lists the salad at €10.00 and the water at
-  €2.00 with "On the house −€2.00" beneath it; its VAT rows now read 4%: base €8.01, VAT €0.32 and
+  €2.00 with "Discount 100% −€2.00" beneath it; its VAT rows now read 4%: base €8.01, VAT €0.32 and
   21%: base €1.38, VAT €0.29 (today 4%: €9.62 and €0.38, and a 21% row of €0.00). The total does
   not change.
 - **Goodwill.** A guest complains after paying; on the past receipt the manager chooses **Correct
@@ -411,10 +411,10 @@ It printed:
 
 | Surface | Reads | Changes? | Receipt |
 | --- | --- | --- | --- |
-| Receipt printed at payment | lines from the unshared `gross` and the order's list prices; VAT rows from the filed breakdown | Lines: no (water still "On the house −€2.00"). VAT rows: yes, the filed split | prototype: receipt lines salad 10.00, water 0.00 list 2.00 with comp 2.00; VAT 8.01/0.32, 1.38/0.29; `bill-payments.ts:1285-1286` |
+| Receipt printed at payment | lines from the unshared `gross` and the order's list prices; VAT rows from the filed breakdown | Lines: no (water still "Discount 100% −€2.00"). VAT rows: yes, the filed split | prototype: receipt lines salad 10.00, water 0.00 list 2.00 with comp 2.00; VAT 8.01/0.32, 1.38/0.29; `bill-payments.ts:1285-1286` |
 | Reprint of a settled ticket from the till (`readSettledTicket`) | the order's stored lines | Lines: no; VAT rows: filed | `apps/server/src/till-sale.ts:388-395` (read) |
 | Reprint from **Find a bill** (`readTransactionReceipt`) and the A4 document of a simplified ticket (`invoice-document.ts`) | filed line grosses, with **no** list price (`listUnitGross: null`, `transaction-receipt.ts:118`, `invoice-document.ts:116`, since #1778 and #1399) | **D3a, the watcher's call: yes** — pass the filed `list_unit_price_gross` instead of `null`, so the reprint shows the dish as sold | prototype, before: lines 8.33 and 1.67, no comp; after: salad 8.33 list 10.00, water 1.67 list 2.00 with comp 2.00, which prints as 10.00, 2.00, −2.00 (`receipt-document.ts:437`, `listGross ?? gross`). Today a comped ticket's Find a bill reprint already shows no comp; this fixes that too |
-| Full invoice naming a customer (A4 table, `receipt-figures.ts`) | each line's filed base, and its list price | **D3b, the watcher's call: keep the existing rules**, decided now: each line still comes to its filed base, and by reading the A4 prints a bare "Discount −1.61" (4%) under the salad and "On the house −0.27" (21%) under the water. Task 4 pins those rows and looks at the rendered page | read, not run (`receipt-figures.ts:39-48`, `invoiceDiscounts` `:82-133`) |
+| Full invoice naming a customer (A4 table, `receipt-figures.ts`) | each line's filed base, and its list price | **D3b, the watcher's call: keep the existing rules**, decided now: each line still comes to its filed base, and the A4 prints a bare "Discount −1.61" (4%) under the salad and a bare "Discount −0.27" (21%) under the water. The water's row is not named by its comp: "Discount 100%" beside −0.27, on a line of 1.65, would contradict the amount, so a row is named by its one adjustment only when its lines lost at least what that adjustment took off (`invoiceDiscounts`, Task 4) | rendered at Task 4 (`invoice-document.test.ts`, "a free item holding its share of the price paid"); the plan first read "On the house −0.27", a wording no surface prints |
 | VAT return and its modelo 303 download | `sales.vat_breakdown` | yes, the filed split | `packages/reporting/src/vat-movements.ts:171-205` |
 | Accountant export | `sales.vat_breakdown`; a plain refund's VAT share | yes, the filed split | `apps/server/src/accountant-export.ts:424`, `:552` |
 | Given free sheet | adjustment records and order lines | no | `free-items.ts:130-140` |
@@ -804,7 +804,7 @@ rewords it to whatever the owner decides on those three):
 >   rate. The guest's ticket still shows the water as given free, with the shared figures in its VAT
 >   rows; the accountant's Given free sheet still lists the water at its menu price. On a full
 >   invoice naming a customer for the same ticket, the salad's line shows its menu price less a
->   discount of €1.61 and the water's less "On the house" of €0.27, though only the water was given
+>   discount of €1.61 and the water's less a discount of €0.27, though only the water was given
 >   free. *Have we done this right? Should a discount on one item also be shared when nothing is
 >   free? Is the full invoice's discount line under the salad acceptable?*
 > - **Money given back as goodwill** (question 6). Wherever Waitron can correct the ticket, it now
@@ -844,7 +844,7 @@ Part 2:
 >   mostrando el agua como invitación, con las cifras repartidas en sus líneas de IVA; la hoja de
 >   invitaciones para el gestor sigue mostrando el agua a su precio de carta. En una factura completa
 >   a nombre de un cliente para el mismo tique, la línea de la ensalada muestra su precio de carta
->   menos un descuento de 1,61 € y la del agua menos una invitación de 0,27 €, aunque solo el agua
+>   menos un descuento de 1,61 € y la del agua menos un descuento de 0,27 €, aunque solo el agua
 >   fue gratis. *¿Lo hemos hecho bien? ¿Debería repartirse también un descuento en un producto cuando
 >   nada es gratuito? ¿Es aceptable la línea de descuento bajo la ensalada en la factura completa?*
 > - **Una devolución de cortesía** (pregunta 6). Siempre que Waitron puede rectificar el tique, ese
@@ -869,8 +869,8 @@ Part 2:
 >   *¿Lo hemos hecho bien?*
 
 The repository copy only; the shared Google Doc is copied by the desk, as the sheet's other
-additions say. The full-invoice figures (€1.61, €0.27) are read, not rendered (D3b); Task 8 copies
-them, and the line labels, from the page Task 4 renders.
+additions say. The full-invoice figures (€1.61, €0.27) and their bare discount labels were rendered at Task 4
+(D3b); Task 8 copies them from the page Task 4 renders.
 
 **Guides** (`apps/server/src/guide/en/table-service.md`, `apps/server/src/guide/es/table-service.md`;
 no `{#id}` changes). The words follow O2's answer ("Yes") and O7's default.
@@ -1248,8 +1248,12 @@ pnpm --filter @waitron/till exec vitest run src/widgets/cancel-item-dialog.test.
    reprints with the salad at list 10.00, the water at list 2.00 and "comp 2.00" beneath it; a
    comped ticket eaten here reprints with its comp (today it prints none). A full invoice naming a
    customer for the same basket: the A4 table's lines come to the filed bases, and its rows read as
-   D3b says (a discount row of 1.61 at 4% under the salad, an "On the house" row of 0.27 at 21% under
-   the water). Run, watch the first two fail.
+   D3b says (a bare discount row of 1.61 at 4% under the salad, and a bare discount row of 0.27 at
+   21% under the water: rendered, not read, it first printed "Descuento 100%" there, words that
+   contradict a €0.27 row on a 1.65 line, so `invoiceDiscounts` names a row by its one adjustment
+   only when the row's lines lost at least what that adjustment took off). A full invoice for the
+   same basket eaten here, where the water files €0, still prints "Descuento 100%" under it. Run,
+   watch the first two fail.
 2. Pass the filed `list_unit_price_gross` at `transaction-receipt.ts:118` and
    `invoice-document.ts:116`.
 3. Render the full invoice and the simplified reprint to files and open them in the workspace's
@@ -1545,14 +1549,13 @@ it; the others decide neither what is filed nor the money handed back:
 | D1 | Where the one rounding function lives | `shareByWeight` in `@waitron/shared` |
 | D2 | A445's scope | free items only, on tickets at two or more rates (the adviser's answer 1.10) |
 | D3a | Find a bill and A4 reprints | print the filed menu price, so they match the receipt printed at payment |
-| D3b | The full invoice's discount rows on a shared ticket | the existing rules, which print, by reading, "Discount −1.61" under the salad and "On the house −0.27" under the water; Task 4 pins them |
+| D3b | The full invoice's discount rows on a shared ticket | the existing rules, which print, as rendered at Task 4, a bare "Discount −1.61" under the salad and a bare "Discount −0.27" under the water (the comp's "100%" would contradict the €0.27); Task 4 pins them |
 | D5b | A new line in the Refund a payment window | none |
 | D7 | The adviser's list | question 14, both parts |
 | D8 | Guides and backlog | section 4.7 |
 
 ## 11. Not established
 
-- What the full invoice's A4 table prints for a shared free item (D3b): read, not rendered.
 - The `invoice-document.ts` half of D3a, and every till and dashboard suite: not run on either
   prototype.
 - The ~1,350 `apps/server` suites outside the 84 run: a comp on a ticket at two rates, or a plain

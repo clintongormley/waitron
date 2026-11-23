@@ -1527,19 +1527,37 @@ describe("a free item holding its share of the price paid", () => {
     ]);
   });
 
-  // D3b: each line comes to its filed base; the salad's 1.61 is a bare discount, the water's 0.27
-  // is named by its comp.
+  const tableRows = (document: Parameters<typeof buildReceiptDocument>[0]) =>
+    buildReceiptDocument({ ...document, surface: "a4" })
+      .elements.flatMap((e) => (e.kind === "table" ? e.table.rows : []))
+      .map(({ item, price, amount, rate }) => ({ item, price, amount, rate }));
+
+  // D3b: each line comes to its filed base. The water's 0,27 is a bare discount like the salad's
+  // 1,61: its comp's "100%" would contradict the amount.
   it("the full invoice's table comes to the filed bases, a discount under each dish", async () => {
     const saleId = await comped("takeaway", true);
     const document = await read(venue.backend, saleId);
-    const rows = buildReceiptDocument({ ...document, surface: "a4" }).elements.flatMap((e) =>
-      e.kind === "table" ? e.table.rows : [],
-    );
-    expect(rows.map(({ item, price, amount, rate }) => ({ item, price, amount, rate }))).toEqual([
+    expect(tableRows(document)).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
       { item: "Descuento", price: "", amount: "-1,61", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Invitación", price: "", amount: "-0,27", rate: "21%" },
+      { item: "Descuento", price: "", amount: "-0,27", rate: "21%" },
+    ]);
+    expect(tableRows({ ...document, invoiceLocale: "en-GB" }).map(({ item }) => item)).toEqual([
+      "House salad",
+      "Discount",
+      "Mineral water",
+      "Discount",
+    ]);
+  });
+
+  it("a full invoice eaten here still names the water's comp, which takes off all of it", async () => {
+    const saleId = await comped("here", true);
+    const document = await read(venue.backend, saleId);
+    expect(tableRows(document)).toEqual([
+      { item: "House salad", price: "9,09", amount: "9,09", rate: "10%" },
+      { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
+      { item: "Descuento 100%", price: "", amount: "-1,82", rate: "10%" },
     ]);
   });
 });

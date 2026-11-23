@@ -55,8 +55,9 @@ export interface GroupDiscount {
   /** Every line of the family at this rate has a filed base of zero; always false on an end row. */
   comp: boolean;
   /**
-   * The adjustment whose words name the row, or null when no one adjustment does: the row then
-   * prints the full-comp words when `comp` is set, and the bare discount word otherwise.
+   * The adjustment whose words name the row, or null when no one adjustment does or its words would
+   * not describe the row's amount: the row then prints the full-comp words when `comp` is set, and
+   * the bare discount word otherwise.
    */
   named: ReceiptAdjustment | null;
 }
@@ -95,6 +96,7 @@ export function invoiceDiscounts(
   for (const members of families.values()) {
     const lines = members.flatMap((group) => group.lines);
     const ownEntries = lines.flatMap(({ line }) => line.adjustments ?? []);
+    const nameable = ownEntries.length === 1 && takesOffAtLeast(lines, ownEntries);
     const byRate = discountsByRate(lines);
     const oneRate = byRate.length === 1;
     const home =
@@ -120,7 +122,7 @@ export function invoiceDiscounts(
         rate: entry.rate,
         amount: ownAmount,
         comp: entry.comp,
-        named: ownEntries.length === 1 && (!hasBill || oneRate) ? ownEntries[0]! : null,
+        named: nameable && (!hasBill || oneRate) ? ownEntries[0]! : null,
       };
       const rows = under.get(home.at);
       if (rows === undefined) under.set(home.at, [row]);
@@ -181,6 +183,21 @@ function discountsByRate(
     }
   }
   return byRate;
+}
+
+/** Whether the lines' list prices lost at least what their own adjustments say they took off. A
+ *  free item holding a share of the price paid (A445 D3a) lost less, so its adjustment's words
+ *  would not describe its row. */
+function takesOffAtLeast(
+  lines: readonly FiguredLine[],
+  own: readonly ReceiptAdjustment[],
+): boolean {
+  const lost = sumDecimals(
+    lines.map(({ line }) =>
+      subtractDecimal(decimal(line.listGross ?? line.gross), decimal(line.gross)),
+    ),
+  );
+  return compareDecimal(lost, sumDecimals(own.map(({ amount }) => decimal(amount)))) >= 0;
 }
 
 /** `value` kept between zero and `ceiling`. */
