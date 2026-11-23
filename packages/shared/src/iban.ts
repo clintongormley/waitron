@@ -62,6 +62,11 @@ export function ibanShapeProblem(iban: string): "format" | undefined {
 /** The most characters a saved bank name may hold. */
 export const BANK_NAME_MAX_LENGTH = 70;
 
+/** What is wrong with a bank name already NFC-normalised and trimmed, or undefined. */
+export function bankNameProblem(bankName: string): "length" | undefined {
+  return [...bankName].length > BANK_NAME_MAX_LENGTH ? "length" : undefined;
+}
+
 export function ibanGroups(iban: string): string[] {
   return iban.match(/.{1,4}/g) ?? [];
 }

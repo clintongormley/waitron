@@ -168,7 +168,7 @@ describe("saveBankAccount and readBankAccount", () => {
       ),
     ).toEqual({
       code: "venue.detail_invalid",
-      params: { field: "bankName", reason: "too_long" },
+      params: { field: "bankName", reason: "length" },
     });
     expect(await venueRevision()).toBe(revision);
   });

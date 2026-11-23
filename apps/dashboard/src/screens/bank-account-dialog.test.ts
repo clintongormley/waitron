@@ -158,7 +158,7 @@ it("a bank name over 70 characters is marked under the bank name and blocks Save
     await press(panel);
     expect(api.saveBankAccount).not.toHaveBeenCalled();
     expect(field(panel, "bankName").error).toBe(
-      fill("venue_details.bank_name_too_long", { max: "70" }),
+      fill("venue_details.bank_name_length", { max: "70" }),
     );
     expect(field(panel, "iban").error).toBe("");
     expect(actions(panel).error).toBe(t("form.fix_fields"));
@@ -176,14 +176,14 @@ it("a server refusal of a too-long bank name shows under the bank name, in Engli
     const api = stubApi();
     api.saveBankAccount.mockRejectedValue({
       code: "venue.detail_invalid",
-      params: { field: "bankName", reason: "too_long" },
+      params: { field: "bankName", reason: "length" },
     });
     const panel = await mount(api);
     await open(panel);
     await type(panel, "bankName", "Other bank");
     await press(panel);
     expect(field(panel, "bankName").error).toBe(
-      fill("venue_details.bank_name_too_long", { max: "70" }),
+      fill("venue_details.bank_name_length", { max: "70" }),
     );
     expect(field(panel, "iban").error).toBe("");
     expect(actions(panel).error).toBe(t("form.fix_fields"));

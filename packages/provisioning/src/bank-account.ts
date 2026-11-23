@@ -6,7 +6,7 @@ import {
   type BankAccount,
   type Transaction,
 } from "@waitron/db";
-import { AppError, BANK_NAME_MAX_LENGTH, ibanProblem, normalizeIban } from "@waitron/shared";
+import { AppError, bankNameProblem, ibanProblem, normalizeIban } from "@waitron/shared";
 import "./errors.js";
 
 export async function readBankAccount(tx: Transaction): Promise<BankAccount | null> {
@@ -36,8 +36,9 @@ export async function saveBankAccount(
   const iban = normalizeIban(change.iban);
   const bankName = change.bankName.normalize("NFC").trim() || null;
   if (iban === "" && bankName !== null) throw refuse("required");
-  if (bankName !== null && [...bankName].length > BANK_NAME_MAX_LENGTH)
-    throw new AppError("venue.detail_invalid", { field: "bankName", reason: "too_long" });
+  const nameProblem = bankName === null ? undefined : bankNameProblem(bankName);
+  if (nameProblem !== undefined)
+    throw new AppError("venue.detail_invalid", { field: "bankName", reason: nameProblem });
   if (iban !== "") {
     const problem = ibanProblem(iban);
     if (problem !== undefined) throw refuse(problem);

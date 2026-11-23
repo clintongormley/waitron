@@ -137,7 +137,7 @@ describe("saving the venue's bank account", () => {
     const response = await save({ ...valid, bankName: "B".repeat(71) });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: { code: "venue.detail_invalid", params: { field: "bankName", reason: "too_long" } },
+      error: { code: "venue.detail_invalid", params: { field: "bankName", reason: "length" } },
     });
     expect(await stored()).toBeNull();
   });

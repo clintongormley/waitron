@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ibanGroups, ibanProblem, ibanShapeProblem, maskIban, normalizeIban } from "./iban.js";
+import {
+  BANK_NAME_MAX_LENGTH,
+  bankNameProblem,
+  ibanGroups,
+  ibanProblem,
+  ibanShapeProblem,
+  maskIban,
+  normalizeIban,
+} from "./iban.js";
 
 const SPANISH = "ES9121000418450200051332";
 const GERMAN = "DE89370400440532013000";
@@ -155,5 +163,23 @@ describe("maskIban", () => {
   it("shows the first four and last four characters and hides the rest, in groups", () => {
     expect(maskIban(SPANISH)).toBe("ES91 •••• •••• •••• •••• 1332");
     expect(maskIban(GERMAN)).toBe("DE89 •••• •••• •••• ••30 00");
+  });
+});
+
+describe("bankNameProblem", () => {
+  it("accepts no name and a name of exactly 70 characters", () => {
+    expect(BANK_NAME_MAX_LENGTH).toBe(70);
+    expect(bankNameProblem("")).toBeUndefined();
+    expect(bankNameProblem("B".repeat(70))).toBeUndefined();
+  });
+
+  it("refuses a name of 71 characters as too long", () => {
+    expect(bankNameProblem("B".repeat(71))).toBe("length");
+  });
+
+  it("counts characters, not UTF-16 code units", () => {
+    // Each of these takes two code units, so 70 of them are 140 units but 70 characters.
+    expect(bankNameProblem("\u{1D505}".repeat(70))).toBeUndefined();
+    expect(bankNameProblem("\u{1D505}".repeat(71))).toBe("length");
   });
 });

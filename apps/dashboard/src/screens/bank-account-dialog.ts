@@ -1,7 +1,13 @@
 import { css, html, type TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { BANK_NAME_MAX_LENGTH, formatIban, ibanProblem, normalizeIban } from "@waitron/shared";
+import {
+  BANK_NAME_MAX_LENGTH,
+  bankNameProblem,
+  formatIban,
+  ibanProblem,
+  normalizeIban,
+} from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
 import {
   normalizedText,
@@ -34,7 +40,7 @@ const SETTINGS: TaxpayerFieldSettings<BankAccountValue> = {
 };
 
 const tooLong = (): string =>
-  fill("venue_details.bank_name_too_long", { max: String(BANK_NAME_MAX_LENGTH) });
+  fill("venue_details.bank_name_length", { max: String(BANK_NAME_MAX_LENGTH) });
 
 /** Sets, changes or clears the bank account that invoices for deferred-payment bills print. An
  *  empty IBAN clears it. */
@@ -74,7 +80,7 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
       const problem = ibanProblem(iban);
       if (problem !== undefined) errors.iban = t(refusals[problem]!);
     }
-    if ([...bankName].length > BANK_NAME_MAX_LENGTH) errors.bankName = tooLong();
+    if (bankNameProblem(bankName) !== undefined) errors.bankName = tooLong();
     return errors;
   }
 
@@ -84,7 +90,7 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
     message: string,
     field: string,
   ): Record<string, string> {
-    return { [field]: reason === "too_long" ? tooLong() : message };
+    return { [field]: reason === "length" ? tooLong() : message };
   }
 
   protected override renderFields(view: TaxpayerFieldsView<BankAccountValue>): TemplateResult {
