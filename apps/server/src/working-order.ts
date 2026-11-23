@@ -1197,12 +1197,6 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // Only a label that rates its line (`readLineVatRates`) may tell portions apart; both readers
-  // join the order.
-  vatClass: sql<GetColumnData<typeof workingOrderLines.takeawayVatClass> | null>`case
-    when ${workingOrders.dining} = ${"takeaway" satisfies Dining}
-      and ${workingOrderLines.setMenuRole} = ${"set_menu"} then ${workingOrderLines.takeawayVatClass}
-    else null end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -1238,7 +1232,6 @@ export async function readLockedLines(
   const rows = await tx
     .select({ ...storedLineColumns, ...portionColumns })
     .from(workingOrderLines)
-    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
   return groupedByPortion(rows, toStoredLines(rows));
@@ -1333,7 +1326,6 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    vatClass: line.vatClass as VatClass | null,
     identity: {
       id: line.id,
       productId: line.productId,
@@ -1361,13 +1353,10 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity, its locked composition, and, on a set-menu line of a
- * takeaway order, its takeaway VAT label, which grouping bound portions compares; null on every
- * other line. */
+/** A stored working-order line: its identity and its locked composition. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
-  vatClass: VatClass | null;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */
