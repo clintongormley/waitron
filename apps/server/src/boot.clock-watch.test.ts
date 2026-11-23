@@ -216,7 +216,9 @@ describe("boot's clock watch", () => {
         return { status: response.status, body: answer };
       };
       const rows = () =>
-        suite.db.all<{ n: number }>(sql`select count(*) as n from clock_confirmations`)[0]!.n;
+        suite.db.all<{ n: number }>(
+          sql`select count(*) as n from verifactu_history where kind = 'clock.confirmed'`,
+        )[0]!.n;
       const before = rows();
       const asked = await post("/api/box-clock/challenge", {});
       expect(asked.status).toBe(200);

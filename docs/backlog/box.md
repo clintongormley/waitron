@@ -1927,15 +1927,6 @@ repair route reissues a leaf the box itself sees as not healthy; whether a devic
 certificate can reach that route is not checked. Slice 9c should refuse a certificate issue while a
 clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
 
-## `clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when A1308 rewrites the starting migrations.
-
-A760 kept every table's shape, so the table survived the squash; A1308's slices edit the starting
-migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md)).
-
-Slice 9 kept the shipped append-only table rather than
-  rebuild or drop it; the backup check still checks its links to `nodes` and
-  `verifactu_records` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
-
 ## The email about a clock set before 28 October 2024 rarely leaves the box.
 
 With a date that early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`,

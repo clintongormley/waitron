@@ -8,58 +8,6 @@ CREATE TABLE `acks` (
 	CONSTRAINT "acks_state_ck" CHECK("acks"."state" in ('accepted', 'accepted_with_errors', 'rejected', 'halted'))
 );
 --> statement-breakpoint
-CREATE TABLE `clock_checks` (
-	`id` text PRIMARY KEY NOT NULL,
-	`seq` integer NOT NULL,
-	`node_id` text NOT NULL,
-	`opened_at` text NOT NULL,
-	`reason` text NOT NULL,
-	`detail` text NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "clock_checks_reason_ck" CHECK("clock_checks"."reason" in ('start', 'change', 'behind_chain', 'disagrees'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `clock_checks_seq_uq` ON `clock_checks` (`seq`);--> statement-breakpoint
-CREATE TABLE `clock_confirmations` (
-	`id` text PRIMARY KEY NOT NULL,
-	`seq` integer NOT NULL,
-	`node_id` text NOT NULL,
-	`box_clock_at` text NOT NULL,
-	`confirmed_at` text NOT NULL,
-	`step_ms` integer NOT NULL,
-	`source` text NOT NULL,
-	`person_id` text,
-	`reason` text NOT NULL,
-	`proof` text NOT NULL,
-	`check_id` text,
-	`registro_id` text,
-	`record_at` text,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`check_id`) REFERENCES `clock_checks`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "clock_confirmations_source_ck" CHECK("clock_confirmations"."source" in ('authority', 'devices', 'admin', 'staff', 'elapsed')),
-	CONSTRAINT "clock_confirmations_reason_ck" CHECK("clock_confirmations"."reason" in ('start', 'change', 'behind_chain', 'disagrees', 'unusable')),
-	CONSTRAINT "clock_confirmations_person_ck" CHECK(("clock_confirmations"."source" in ('admin', 'staff')) = ("clock_confirmations"."person_id" is not null) and ("clock_confirmations"."person_id" is null or length("clock_confirmations"."person_id") > 0)),
-	CONSTRAINT "clock_confirmations_record_ck" CHECK(("clock_confirmations"."registro_id" is null) = ("clock_confirmations"."record_at" is null))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `clock_confirmations_seq_uq` ON `clock_confirmations` (`seq`);--> statement-breakpoint
-CREATE UNIQUE INDEX `clock_confirmations_check_uq` ON `clock_confirmations` (`check_id`);--> statement-breakpoint
-CREATE INDEX `clock_confirmations_registro_idx` ON `clock_confirmations` (`registro_id`);--> statement-breakpoint
-CREATE TABLE `clock_stop_restarts` (
-	`id` text PRIMARY KEY NOT NULL,
-	`node_id` text NOT NULL,
-	`person_id` text NOT NULL,
-	`restarted_at` text NOT NULL,
-	`clock_at` text NOT NULL,
-	`registro_id` text NOT NULL,
-	`record_at` text NOT NULL,
-	`proof` text NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `clock_stop_restarts_registro_uq` ON `clock_stop_restarts` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `declaraciones_responsables` (
 	`version` text PRIMARY KEY NOT NULL,
 	`text` text NOT NULL,
@@ -213,6 +161,30 @@ CREATE TABLE `verifactu_certificates` (
 );
 --> statement-breakpoint
 CREATE INDEX `verifactu_certificates_node_idx` ON `verifactu_certificates` (`node_id`,`installed_at`);--> statement-breakpoint
+CREATE TABLE `verifactu_history` (
+	`id` text PRIMARY KEY NOT NULL,
+	`seq` integer NOT NULL,
+	`kind` text NOT NULL,
+	`node_id` text NOT NULL,
+	`person_id` text,
+	`at` text NOT NULL,
+	`data` text NOT NULL,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "verifactu_history_data_ck" CHECK(case when json_valid("verifactu_history"."data") then json_type("verifactu_history"."data") = 'object' else 0 end),
+	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" = 'clock.confirmed'),
+	CONSTRAINT "verifactu_history_confirmed_source_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.source') in ('admin', 'staff'), 0)),
+	CONSTRAINT "verifactu_history_confirmed_reason_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.reason') in ('start', 'unusable'), 0)),
+	CONSTRAINT "verifactu_history_confirmed_person_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(length("verifactu_history"."person_id") > 0, 0)),
+	CONSTRAINT "verifactu_history_confirmed_shape_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(
+        json_type("verifactu_history"."data", '$.confirmedAt') = 'text'
+        and json_type("verifactu_history"."data", '$.stepMs') = 'integer'
+        and json_type("verifactu_history"."data", '$.proof') = 'object',
+        0
+      ))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `verifactu_history_seq_uq` ON `verifactu_history` (`seq`);--> statement-breakpoint
 CREATE TABLE `verifactu_identities` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,

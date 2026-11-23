@@ -310,6 +310,7 @@ const RENAMED_COLUMNS: MadridColumnRenames = {
 };
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
+  "verifactu_history",
   "sign_in_challenges",
   "staff_activity",
   "returned_invoice_records",
@@ -341,6 +342,9 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "clock_checks",
+  "clock_confirmations",
+  "clock_stop_restarts",
   "sale_receipt_guests",
   "sale_receipt_headers",
   "order_group_events",

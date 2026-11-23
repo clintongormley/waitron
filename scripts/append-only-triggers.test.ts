@@ -38,9 +38,6 @@ const EXPECTED = [
   "attendance_answers",
   "bill_advances",
   "bill_payment_lines",
-  "clock_checks",
-  "clock_confirmations",
-  "clock_stop_restarts",
   "declaraciones_responsables",
   "deferred_closures",
   "document_page_reprints",
@@ -72,6 +69,7 @@ const EXPECTED = [
   "time_entries",
   "unpaid_departures",
   "verifactu_certificates",
+  "verifactu_history",
   "verifactu_records",
   "verifactu_series_conflicts",
 ];

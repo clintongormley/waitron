@@ -563,6 +563,12 @@ machine state (section 0).
 
 ## 3. History
 
+**2026-11-23, Fi4.** A1420 removed the clock-stop readers and the check-to-confirmation link.
+The [combined Fi4 plan](../../plans/2026-11-08-a1308-fi4a-history-table.md) gives the
+surviving verified step one kind, `clock.confirmed`. The before reading goes in `at` and the
+after reading in `data.confirmedAt`. The source is `admin` or `staff` and the reason is
+`start` or `unusable`. The latest-step read still comes from clock incidents.
+
 ### Typed history the product reads back
 
 **`verifactu_history`** is read by:
@@ -738,6 +744,11 @@ payments and adjustments research, found none.
 | **adjustment_settings**: singleton; cap `> 0`; non-empty role list | Validation of `settings.adjustments`. |
 
 How `clock_confirmations`' protections land in `verifactu_history`:
+
+**2026-11-23, Fi4.** Follow the [combined Fi4 plan](../../plans/2026-11-08-a1308-fi4a-history-table.md)
+for clock evidence. The history row links to the node and person. A1420 retired the clock-check
+link, its planned trigger, and the record pairing. Fi5 introduces the event key and record link
+for conflict evidence and requires both to be null on a clock row.
 
 - **`seq` and "one confirmation per check":** the shared unique `seq`, and
   `event_key = clock.confirmed:<check>`.

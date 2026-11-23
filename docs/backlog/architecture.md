@@ -912,9 +912,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
 - **Left open by #1261's review (W111):** the receipt editor's copied phone and email limits remain open.
 
-- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
-  A1308 rewrites the starting migrations.**
-  [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**

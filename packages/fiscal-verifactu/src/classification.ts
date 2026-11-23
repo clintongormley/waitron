@@ -16,9 +16,7 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("verifactu_series_conflicts", "ledger", LEDGER),
   appendOnly("fiscal_allocations", "ledger", LEDGER),
   appendOnly("fiscal_reservations", "ledger", LEDGER),
-  appendOnly("clock_stop_restarts", "ledger", LEDGER),
-  appendOnly("clock_checks", "ledger", LEDGER),
-  appendOnly("clock_confirmations", "ledger", LEDGER),
+  appendOnly("verifactu_history", "ledger", LEDGER),
   appendOnly(
     "declaraciones_responsables",
     "state",

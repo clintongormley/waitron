@@ -1,8 +1,9 @@
 import "./errors.js";
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type {
+  ClockAdminConfirm,
   ClockAdminReading,
   ClockStep,
   ClockStepRecorded,
@@ -11,7 +12,7 @@ import type {
 } from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
 import { recordCorrected } from "./clock-corrected-incident.js";
-import { clockConfirmations } from "./schema/clock-confirmations.js";
+import { appendHistory } from "./history.js";
 
 /** An unverified step this small is the clock's own drift, not a step worth an alert. */
 const UNVERIFIED_STEP_FLOOR_MS = 1_000;
@@ -20,7 +21,7 @@ const UNVERIFIED_STEP_FLOOR_MS = 1_000;
  * a `setup` step matches no person here, since the regime never records one. */
 function assertPersonMatchesSource(
   input: ClockStepRequest,
-): asserts input is ClockStepRequest & { source: "admin" | "staff" } {
+): asserts input is ClockStepRequest & { source: "admin" | "staff"; admin: ClockAdminConfirm } {
   const { source, admin } = input;
   const matches =
     source === "admin"
@@ -30,12 +31,6 @@ function assertPersonMatchesSource(
         : false;
   if (!matches)
     throw new Error(`confirmClockStep: a ${source} step was given a person that does not match it`);
-}
-
-/** The `seq` the next confirmation takes, read in the writing transaction. */
-async function nextConfirmationSeq(tx: Transaction): Promise<number> {
-  const [row] = await tx.select({ seq: max(clockConfirmations.seq) }).from(clockConfirmations);
-  return (row?.seq ?? 0) + 1;
 }
 
 interface StepWitnesses {
@@ -77,10 +72,6 @@ function storedWitnesses(witnesses: StepWitnesses) {
   };
 }
 
-/** Records a step of the box's clock from `before` to `after` (decision 7 of the 9b plan): a
- * verified step writes one `clock_confirmations` row, `confirmed_at` the after reading, naming no
- * check and no record. Every step records `clock.corrected`; an unverified one writes no row, and
- * nothing at all when the clock moved by a second or less. */
 export async function confirmClockStep(
   tx: Transaction,
   input: ClockStepRequest,
@@ -90,9 +81,9 @@ export async function confirmClockStep(
   const params: ErrorParams["clock.corrected"] = {
     confirmationId: null,
     source,
-    person: admin?.personName ?? null,
-    deviceId: admin?.device?.deviceId ?? null,
-    device: admin?.device?.deviceLabel ?? null,
+    person: admin.personName,
+    deviceId: admin.device?.deviceId ?? null,
+    device: admin.device?.deviceLabel ?? null,
     before: input.before.instant.toISOString(),
     beforeOffsetMinutes: input.before.offsetMinutes,
     after: after.instant.toISOString(),
@@ -112,41 +103,36 @@ export async function confirmClockStep(
     return { confirmation: null, corrected };
   }
 
-  const personId = admin?.personId ?? null;
-  const seq = await nextConfirmationSeq(tx);
-  const [row] = await tx
-    .insert(clockConfirmations)
-    .values({
-      seq,
-      nodeId: input.nodeId as NodeId,
-      boxClockAt: input.before.instant,
-      confirmedAt: after.instant,
+  const personId = admin.personId;
+  const confirmedAt = after.instant.toISOString();
+  const { id: confirmationId, seq } = await appendHistory(tx, {
+    kind: "clock.confirmed",
+    nodeId: input.nodeId as NodeId,
+    personId,
+    at: input.before.instant,
+    data: {
+      confirmedAt,
       stepMs: Math.round(input.stepMs),
       source,
-      personId,
       reason: input.reason,
       proof: {
         ...storedWitnesses({
           devices: input.witnesses,
-          admin: admin?.reading ?? null,
-          ...(admin?.role === undefined ? {} : { role: admin.role }),
-          ...(admin?.device === undefined
+          admin: admin.reading,
+          ...(admin.role === undefined ? {} : { role: admin.role }),
+          ...(admin.device === undefined
             ? {}
             : { device: { deviceId: admin.device.deviceId, address: admin.device.address } }),
         }),
         step: {
           beforeAt: input.before.instant.toISOString(),
-          afterAt: after.instant.toISOString(),
+          afterAt: confirmedAt,
           stepMs: input.stepMs,
           targetAt: input.targetAt,
         },
       },
-      checkId: null,
-      registroId: null,
-      recordAt: null,
-    })
-    .returning({ id: clockConfirmations.id });
-  const confirmationId = row!.id;
+    },
+  });
   const corrected = await recordCorrected(tx, {
     detectedAt: after.instant,
     params: { ...params, confirmationId },
@@ -158,7 +144,7 @@ export async function confirmClockStep(
       seq,
       source,
       personId,
-      confirmedAt: after.instant.toISOString(),
+      confirmedAt,
       checkId: null,
       recordId: null,
     },

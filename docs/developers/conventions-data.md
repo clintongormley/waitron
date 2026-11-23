@@ -5056,11 +5056,11 @@ wall clock has moved against the steady clock by more than 1 000 ms (a step by t
 by hand): an offset is valid only while the clock has not stepped since it was measured.
 
 **A step's row and alert** (`confirmClockStep`, `packages/fiscal-verifactu/src/clock-step.ts`). A
-verified step writes one `clock_confirmations` row: `box_clock_at` the reading before,
-`confirmed_at` the reading after (the time the cover takes as adopted), `step_ms` the measured step
-rounded, `source` `admin` or `staff`, `person_id` the person, `reason` `unusable` or `start`, and in
-`proof` what set the clock (the person's reading, with `device` naming the till when there was one)
-plus `step: { beforeAt, afterAt, stepMs, targetAt }`. Every verified step, and every unverified one that moved the clock by more than a second,
+verified step writes a `clock.confirmed` entry in `verifactu_history`. The row links to the box's
+node and the person and stores the before reading in `at`. Its payload holds `confirmedAt` (the
+after reading), the rounded `stepMs`, the `admin` or `staff` source, the `unusable` or `start`
+reason, and `proof`. The proof keeps the person's reading, the till where it applies, and the
+before, after, target and measured step. Every verified step, and every unverified one that moved the clock by more than a second,
 records `clock.corrected` (a warning, `system.manage`): who, which till, both readings with their
 offsets, the step, and whether it verified; recording it first marks any open `clock.corrected`
 handled. An unverified step writes no row and lifts nothing. The managers' email duty queues one

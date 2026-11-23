@@ -321,7 +321,7 @@ function count(sqlText: ReturnType<typeof sql>): number {
 
 function written(box: Box) {
   return {
-    rows: count(sql`select count(*) as n from clock_confirmations`),
+    rows: count(sql`select count(*) as n from verifactu_history where kind = 'clock.confirmed'`),
     corrected: count(sql`select count(*) as n from incidents where code = 'clock.corrected'`),
     hostSets: box.host.sets.length,
   };
@@ -332,11 +332,13 @@ function confirmationRow(id: string) {
     source: string;
     person_id: string | null;
     reason: string;
-    check_id: string | null;
     step_ms: number;
     proof: string;
   }>(
-    sql`select source, person_id, reason, check_id, step_ms, proof from clock_confirmations where id = ${id}`,
+    sql`select person_id, json_extract(data, '$.source') as source,
+      json_extract(data, '$.reason') as reason, json_extract(data, '$.stepMs') as step_ms,
+      json_extract(data, '$.proof') as proof
+      from verifactu_history where kind = 'clock.confirmed' and id = ${id}`,
   );
   return { ...row!, proof: JSON.parse(row!.proof) as Record<string, unknown> };
 }
@@ -590,7 +592,6 @@ it("sets a clock that reads a date before 28-10-2024, as that stop", async () =>
   expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
     source: "admin",
     reason: "unusable",
-    check_id: null,
     proof: { devices: [] },
   });
   expect(boxTime(box)).toBe(trueTime);

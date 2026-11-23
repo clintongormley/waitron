@@ -1408,6 +1408,9 @@ type Row = Record<string, Value>;
 const CANDIDATES: Record<string, readonly Value[]> = {
   "settings.module": ["venue", "another"],
   "settings.doc": ['{"invoiceLocales":["es"]}'],
+  "verifactu_history.data": [
+    '{"source":"admin","reason":"start","confirmedAt":"2026-01-01T10:00:01.000Z","stepMs":1000,"proof":{}}',
+  ],
   "parties.allergy_answer": ["allergies", "none"],
   "party_allergy_guests.allergens": ['{"milk":{}}'],
   "day_cutover_changes.effective_business_day": ["2026-01-01", "2026-01-02"],
