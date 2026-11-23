@@ -18,17 +18,21 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
-  nifBase: 90_000_900,
-  nifFormat: "calculated",
-  invoiceLocale: "es-ES",
-  staffLanguage: "es",
-});
-
-it.each(["en", "es"] as const)(
-  "seeds the kitchen courses in the setup language for a demo in %s",
-  async (locale) => {
-    const venue = await provisionVenue();
+it.each([
+  ["es", "en", ["Café", "Bebidas", "Pan"]],
+  ["es", "es", ["Café", "Bebidas", "Pan"]],
+  ["en", "es", ["Coffee", "Drinks", "Bread"]],
+] as const)(
+  "uses the %s setup course names for a demo seeded in %s",
+  async (staffLanguage, locale, [coffee, drinks, bread]) => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 90_000_900,
+      nifFormat: "calculated",
+      invoiceLocale: "es-ES",
+      staffLanguage,
+    })();
+    const starter = (name: keyof typeof STARTER_COURSE_NAMES) =>
+      staffLanguage === "en" ? name : STARTER_COURSE_NAMES[name].es;
     const dataSet = CASA_DELGADO_ES;
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -41,10 +45,13 @@ it.each(["en", "es"] as const)(
     await withTransaction(suite.db, async (tx) => {
       const courses = await listCourses(tx);
       expect(courses.map(({ name }) => name)).toEqual([
-        ...Object.values(STARTER_COURSE_NAMES).map(({ es }) => es),
-        "Café",
-        "Bebidas",
-        "Pan",
+        starter("Sharing plates"),
+        starter("Starters"),
+        starter("Mains"),
+        starter("Desserts"),
+        coffee,
+        drinks,
+        bread,
       ]);
       const ids = new Map(courses.map(({ name, id }) => [name, id]));
       const settings = await listDepartmentCourseSettings(tx);
@@ -61,13 +68,13 @@ it.each(["en", "es"] as const)(
           ),
           name,
         ).toEqual([
-          ids.get(STARTER_COURSE_NAMES["Sharing plates"].es),
-          ids.get(STARTER_COURSE_NAMES.Starters.es),
-          ids.get("Bebidas"),
-          ids.get("Pan"),
+          ids.get(starter("Sharing plates")),
+          ids.get(starter("Starters")),
+          ids.get(drinks),
+          ids.get(bread),
         ]);
         expect(
-          settings[id]!.some(({ courseId }) => courseId === ids.get("Café")),
+          settings[id]!.some(({ courseId }) => courseId === ids.get(coffee)),
           name,
         ).toBe(false);
       }
@@ -78,8 +85,8 @@ it.each(["en", "es"] as const)(
         menu.categories.flatMap(({ products }) => products),
       );
       for (const [image, courseId] of [
-        ["solomillo.png", ids.get(STARTER_COURSE_NAMES.Mains.es)],
-        ["pan-de-la-casa.png", ids.get("Pan")],
+        ["solomillo.png", ids.get(starter("Mains"))],
+        ["pan-de-la-casa.png", ids.get(bread)],
         ["manchego-curado.png", null],
       ] as const) {
         const product = demoProducts.find((product) => product.image === image)!;

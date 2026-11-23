@@ -235,18 +235,23 @@ it("compares the declared course and its department firing policy", () => {
   after.tables.kitchen_courses = table({
     [drinks]: { id: drinks, name: "Drinks", display_order: 5 },
   });
-  const firePolicy = { department_id: deli, course_id: drinks, held_until_fired: 0 };
+  const firePolicy = {
+    department_id: deli,
+    course_id: drinks,
+    held_until_fired: 0,
+    reminder_minutes: 10,
+  };
   after.tables.department_courses = table({ [stable(firePolicy)]: firePolicy });
   const changes = {
     ...declared,
     added: {
       ...declared.added,
       kitchen_courses: [[drinks, 5]],
-      department_courses: [[deli, drinks, 0]],
+      department_courses: [[deli, drinks, 0, 10]],
     },
   };
   expect(madridWithSharedOffers(before, after, changes).semantics).toEqual(after);
-  firePolicy.held_until_fired = 1;
+  firePolicy.reminder_minutes = 99;
   expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
     "Madrid added rows differ: department_courses",
   );

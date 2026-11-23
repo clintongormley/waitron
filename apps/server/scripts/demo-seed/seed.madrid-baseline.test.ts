@@ -2827,7 +2827,12 @@ for (const locale of ["en", "es"] as const) {
             ...shared.added,
             kitchen_courses: NEW_COURSES.map((name, index) => [courseKey(name), index + 4]),
             department_courses: departmentKeys.flatMap((department) =>
-              [NEW_COURSES[1], NEW_COURSES[2]].map((course) => [department, courseKey(course), 0]),
+              [NEW_COURSES[1], NEW_COURSES[2]].map((course) => [
+                department,
+                courseKey(course),
+                0,
+                10,
+              ]),
             ),
           },
         };
