@@ -105,13 +105,18 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
   },
 };
 
-/** The download section of the page (`../restricted-page.ts`), posted to `../old-box-data-page.ts`. */
+/**
+ * The download section of the restricted page (`../restricted-page.ts`) and the waiting page
+ * (`../waiting-start.ts`), posted to `../old-box-data-page.ts`.
+ */
 export interface RestrictedDownloadWords {
   heading: string;
   /** After an emergency switch, or a restriction naming no operation. */
   emergency: string;
   /** After a planned handover. */
   planned: string;
+  /** On the waiting page, where this box has heard nothing from a box that may have taken over. */
+  waiting: string;
   email: string;
   password: string;
   totp: string;
@@ -147,13 +152,15 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
       emergency:
         "This box may hold data that the new main box does not have. To keep it, download it here before this box is wiped.",
       planned: "Download the invoice records this box holds that the new main box does not.",
+      waiting:
+        "If another box took over running the venue while this box was off or out of reach, this box may hold data that box does not have. To keep it, download it here before this box is wiped.",
       action: "Download",
       insecure: "To download this box's data, open this page at its https:// address.",
       wipeUnderWay: "This box is being wiped, so its data can no longer be downloaded.",
       otherPage: "The download must be asked for on this page. Nothing was changed.",
       busy: "This box is already making the file. Try again in a minute.",
       signInRefused:
-        "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
+        "That email and password do not match an account on this box. This box knows the accounts as they were when it last ran the venue. Nothing was changed.",
       totpRequired: "Enter your password again and the code from your authenticator app.",
       notPermitted:
         "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
@@ -174,6 +181,8 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
         "Este servidor puede tener datos que el nuevo servidor principal no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
       planned:
         "Descarga los registros de facturación que tiene este servidor y que el nuevo servidor principal no tiene.",
+      waiting:
+        "Si otro servidor pasó a llevar el local mientras este estaba apagado o sin conexión, este servidor puede tener datos que ese no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
       action: "Descargar",
       insecure:
         "Para descargar los datos de este servidor, abre esta página en su dirección https://.",
@@ -181,7 +190,7 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
       otherPage: "La descarga debe pedirse en esta página. No se ha cambiado nada.",
       busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
       signInRefused:
-        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban cuando dejó de llevar el local. No se ha cambiado nada.",
+        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban la última vez que llevó el local. No se ha cambiado nada.",
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
       notPermitted:

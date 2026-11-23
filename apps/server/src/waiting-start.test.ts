@@ -1,4 +1,8 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedSale, seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
+import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
+import type { WaitronModule } from "@waitron/module";
+import { strFromU8, unzipSync } from "fflate";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
@@ -38,6 +42,11 @@ import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
+import { escapeHtml } from "./html-page.js";
+import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
+import { RESTRICTED_DOWNLOAD_WORDS } from "./i18n/restricted-page.js";
+import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
+import { row } from "./testing/xlsx-rows.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { readBoxAddresses } from "./restricted-page.js";
@@ -71,6 +80,13 @@ const WAIT: StartPeerCheckOutcome = {
 const PROCEED: StartPeerCheckOutcome = { result: "proceed", successorNodeId: null };
 
 const migrations = migrationOptionsFor(manifestSets(), null);
+
+const fiscal: WaitronModule = {
+  name: "fiscal",
+  version: "1.0.0",
+  tier: "mandatory",
+  handover: VERIFACTU_HANDOVER,
+};
 
 function harness(
   recheck: () => Promise<StartPeerCheckOutcome>,
@@ -721,7 +737,7 @@ describe("the waiting start", () => {
       h = harness(() => new Promise(() => {}), {
         node: suite.node,
         intervalMs: 60_000,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [fiscal] },
       });
     });
     afterEach(async () => {
@@ -799,6 +815,7 @@ describe("the waiting start", () => {
         carryOn: {
           db: suite.db,
           credentialKeyRing: TOTP_KEY_RING,
+          modules: [],
           readNewerMain: async () =>
             newer
               ? { successorNodeId: SPARE_ID, membershipTerm: 4, contactUrl: "https://m2.test" }
@@ -872,7 +889,7 @@ describe("the waiting start", () => {
             .map((route) => `${route.method} ${route.path}`),
         ),
       ];
-      expect(writes).toEqual(expect.arrayContaining(["POST /carry-on"]));
+      expect(writes).toEqual(expect.arrayContaining(["POST /carry-on", "POST /old-box-data"]));
       const uncovered: string[] = [];
       for (const write of writes) {
         const [method, path] = write.split(" ") as [string, string];
@@ -1169,7 +1186,7 @@ describe("the waiting start", () => {
         node: suite.node,
         intervalMs: 60_000,
         addressesOf: (ids) => readBoxAddresses(suite.db, ids),
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
       });
       await holdChart();
       await withNodeTransaction(suite.node, (tx) =>
@@ -1218,7 +1235,7 @@ describe("the waiting start", () => {
         node: suite.node,
         intervalMs: 60_000,
         addressesOf: (ids) => readBoxAddresses(suite.db, ids),
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
       });
       await holdChart();
       const english = await page();
@@ -1252,7 +1269,7 @@ describe("the waiting start", () => {
       h = harness(recheck, {
         node: suite.node,
         intervalMs: 1,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
         onCarryOn: (stage) => {
           if (stage === "turn") answer(outcome);
         },
@@ -1301,7 +1318,7 @@ describe("the waiting start", () => {
       h = harness(() => new Promise(() => {}), {
         node: suite.node,
         intervalMs: 60_000,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
         routes: [
           (app, hooks) =>
             app.post("/step", async (c) =>
@@ -1342,7 +1359,7 @@ describe("the waiting start", () => {
       h = harness(() => new Promise(() => {}), {
         node: suite.node,
         intervalMs: 60_000,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
         routes: [
           (app, hooks) =>
             app.post("/step", async (c) => {
@@ -1422,13 +1439,233 @@ describe("the waiting start", () => {
       expect(await events()).toEqual([]);
     });
 
+    describe("downloading this box's data", () => {
+      const download = (fields: Record<string, string>, origin = "https://box.test") =>
+        h.app().request(
+          "https://box.test/old-box-data",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              "accept-language": "en-GB",
+              origin,
+              "sec-fetch-site": origin === "https://box.test" ? "same-origin" : "cross-site",
+            },
+            body: new URLSearchParams(fields).toString(),
+          },
+          tls(),
+        );
+      const words = RESTRICTED_DOWNLOAD_WORDS["en-GB"];
+
+      it("the page offers the download below the carry-on form over HTTPS, and the https:// line over HTTP", async () => {
+        const shown = await page();
+        expect(shown).toContain(`<h2>${escapeHtml(words.heading)}</h2>`);
+        expect(shown).toContain(
+          "If another box took over running the venue while this box was off or out of reach, this box may hold data that box does not have. To keep it, download it here before this box is wiped.",
+        );
+        expect(shown).toContain('<form method="post" action="/old-box-data" class="box-form">');
+        expect(shown).toContain('id="old-box-data-email"');
+        expect(shown).toContain('id="old-box-data-password"');
+        expect(shown).toContain(`<button type="submit">${words.action}</button>`);
+        expect(shown.indexOf('action="/carry-on"')).toBeGreaterThan(-1);
+        expect(shown.indexOf('action="/carry-on"')).toBeLessThan(
+          shown.indexOf('action="/old-box-data"'),
+        );
+        const plain = await page(false);
+        expect(plain).toContain(`<h2>${escapeHtml(words.heading)}</h2>`);
+        expect(plain).toContain(escapeHtml(words.insecure));
+        expect(plain).not.toContain('action="/old-box-data"');
+      });
+
+      it("answers an administrator with a workbook listing every invoice record this box holds, uncompared", async () => {
+        const venue = await seedVenueWithSeries(suite.db);
+        const saleId = await seedSale(suite.db, venue, {
+          invoiceNumber: 1,
+          issuedAt: "2026-11-20T10:00:00.000Z",
+          total: "12.10",
+          lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+        });
+        await insertFiscalRecord(
+          suite.db,
+          await seedFiscalParents(suite.db, {
+            ids: { nodeId: venue.nodeId, seriesId: venue.seriesId, saleId },
+            reuseExistingParents: true,
+            skipSale: true,
+          }),
+        );
+        const answer = await download(ADMIN);
+        expect(answer.status).toBe(200);
+        expect(answer.headers.get("content-type")).toBe(
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        const sheets = unzipSync(new Uint8Array(await answer.arrayBuffer()));
+        // Not a planned handover, so the "since" tabs follow the invoices.
+        expect(sheets["xl/worksheets/sheet2.xml"]).toBeDefined();
+        const xml = strFromU8(sheets["xl/worksheets/sheet1.xml"]!);
+        const [before, after] = OLD_BOX_DATA_WORDS.en.uncomparedIntro.split("{time}");
+        expect(row(xml, 1)[0]).toContain(before!.trim());
+        expect(row(xml, 1)[0]).toContain(after!.trim());
+        expect(row(xml, 1)[0]).not.toContain("{time}");
+        expect(row(xml, 3)[0]).toBe(saleId);
+        await stillWaiting();
+      });
+
+      it("a refused download answers the waiting page, its carry-on form still drawn", async () => {
+        const wrong = await download({ ...ADMIN, password: "notThePassword" });
+        expect(wrong.status).toBe(401);
+        const wrongPage = await wrong.text();
+        expect(wrongPage).toContain("<h1>This box is waiting for Spare</h1>");
+        expect(wrongPage).toContain('action="/carry-on"');
+        expect(wrongPage).toContain(escapeHtml(words.signInRefused));
+        expect(wrongPage).toContain('value="owner@example.test"');
+
+        await seedPersons(suite.db, {
+          displayName: "Signed-in Manager",
+          role: "manager",
+          email: "manager@example.test",
+          passwordHash: fixturePasswordHash("managerPass1"),
+        });
+        const manager = await download({
+          email: "manager@example.test",
+          password: "managerPass1",
+        });
+        expect(manager.status).toBe(403);
+        const managerPage = await manager.text();
+        expect(managerPage).toContain("<h1>This box is waiting for Spare</h1>");
+        expect(managerPage).toContain(escapeHtml(words.notPermitted));
+
+        const elsewhere = await download(ADMIN, "https://elsewhere.test");
+        expect(elsewhere.status).toBe(403);
+        const elsewherePage = await elsewhere.text();
+        expect(elsewherePage).toContain("<h1>This box is waiting for Spare</h1>");
+        expect(elsewherePage).toContain(escapeHtml(words.otherPage));
+        expect(elsewherePage).toContain('const destination = "/";');
+        await stillWaiting();
+        expect(await events()).toEqual([]);
+      });
+
+      it("counts wrong carry-on passwords against the download's attempts for the same email", async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1)
+          expect((await post({ ...ADMIN, password: "notThePassword", ...BOTH })).status).toBe(401);
+        const throttled = await download(ADMIN);
+        expect(throttled.status).toBe(429);
+        expect(await throttled.text()).toContain(escapeHtml(words.throttled(1)));
+        await stillWaiting();
+      });
+
+      it("counts one email's attempts together however its accent is typed", async () => {
+        const composed = "jos\u00e9@example.test";
+        const decomposed = "jose\u0301@example.test";
+        for (let attempt = 0; attempt < 4; attempt += 1)
+          expect((await download({ email: composed, password: "notThePassword" })).status).toBe(
+            401,
+          );
+        const throttled = await post({ email: decomposed, password: "notThePassword", ...BOTH });
+        expect(throttled.status).toBe(429);
+        await stillWaiting();
+      });
+
+      it("a refused download keeps the till destination the page was opened at", async () => {
+        const till = "/till/tabs/counter?view=all";
+        const kept = `name="returnTo" value="${escapeHtml(till)}"`;
+        const opened = await (
+          await h
+            .app()
+            .request(
+              `https://box.test${till}`,
+              { headers: { "accept-language": "en-GB", accept: "text/html" } },
+              tls(),
+            )
+        ).text();
+        const [openedCarryOn, openedDownload] = opened.split('action="/old-box-data"');
+        expect(openedCarryOn).toContain(kept);
+        expect(openedDownload).toContain(kept);
+
+        const refused = await download({ ...ADMIN, password: "notThePassword", returnTo: till });
+        expect(refused.status).toBe(401);
+        const html = await refused.text();
+        expect(html).toContain(escapeHtml(words.signInRefused));
+        const [carryOnPart, downloadPart] = html.split('action="/old-box-data"');
+        expect(carryOnPart).toContain(kept);
+        expect(downloadPart).toContain(kept);
+        expect(html).toContain(`const destination = ${JSON.stringify(till)};`);
+
+        const outside = await download({
+          ...ADMIN,
+          password: "notThePassword",
+          returnTo: "//elsewhere.example/till/",
+        });
+        expect(outside.status).toBe(401);
+        const outsideHtml = await outside.text();
+        expect(outsideHtml).not.toContain("elsewhere.example");
+        expect(outsideHtml).toContain('const destination = "/";');
+      });
+
+      it("with this box's own records unreadable, the page and a refused download still offer the download", async () => {
+        await h.waiting.server.close();
+        const log = vi.fn();
+        const unreadable = Object.assign(new Error("disk I/O error"), { code: "EIO" });
+        h = harness(() => new Promise(() => {}), {
+          node: {
+            select: () => {
+              throw unreadable;
+            },
+          } as never,
+          intervalMs: 60_000,
+          carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
+          log,
+        });
+        const unavailable = `<p>${escapeHtml(WAITING_PAGE_WORDS["en-GB"].carryOn.unavailable)}</p>`;
+        const shown = await page();
+        expect(shown).toContain(unavailable);
+        expect(shown).not.toContain('action="/carry-on"');
+        expect(shown).toContain('action="/old-box-data"');
+        expect(log).toHaveBeenCalledWith("warn", "waiting_page.section_failed", {
+          errorCode: "unknown",
+          errno: "EIO",
+        });
+
+        const refused = await download({ ...ADMIN, password: "notThePassword" });
+        expect(refused.status).toBe(401);
+        const html = await refused.text();
+        expect(html).toContain("<h1>This box is waiting for Spare</h1>");
+        expect(html).toContain(unavailable);
+        expect(html).toContain(escapeHtml(words.signInRefused));
+        expect(html).toContain('action="/old-box-data"');
+        expect(html).toContain('value="owner@example.test"');
+      });
+
+      it("a refused download answers the waiting page when the box names cannot be read", async () => {
+        await h.waiting.server.close();
+        const log = vi.fn();
+        h = harness(() => new Promise(() => {}), {
+          node: suite.node,
+          intervalMs: 60_000,
+          addressesOf: () => {
+            throw Object.assign(new Error("disk I/O error"), { code: "EIO" });
+          },
+          carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
+          log,
+        });
+        const refused = await download({ ...ADMIN, password: "notThePassword" });
+        expect(refused.status).toBe(401);
+        expect(refused.headers.get("x-waitron-waiting")).toBe("1");
+        const html = await refused.text();
+        expect(html).toContain("<h1>This box is waiting for the other box</h1>");
+        expect(html).toContain(escapeHtml(words.signInRefused));
+        expect(log).toHaveBeenCalledWith("warn", "waiting_page.names_failed", {
+          errorCode: "unknown",
+        });
+      });
+    });
+
     it("a sign-in whose form cannot be read answers the failure sentence, logged, and still waits", async () => {
       await h.waiting.server.close();
       const log = vi.fn();
       h = harness(() => new Promise(() => {}), {
         node: suite.node,
         intervalMs: 60_000,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [] },
         log,
       });
       const answer = await h.app().request(
@@ -1467,14 +1704,19 @@ describe("the waiting start", () => {
       const h = harness(() => new Promise(() => {}), {
         node: failingNode,
         intervalMs: 60_000,
-        carryOn: { db: undefined as never, credentialKeyRing: TOTP_KEY_RING, secure: () => true },
+        carryOn: {
+          db: undefined as never,
+          credentialKeyRing: TOTP_KEY_RING,
+          modules: [],
+          secure: () => true,
+        },
         log,
       });
       const shown = await h.app().request("/", { headers: { "accept-language": "en-GB" } });
       expect(shown.status).toBe(200);
       const html = await shown.text();
       expect(html).toContain("<h1>This box is waiting for Spare</h1>");
-      expect(html).not.toContain("<form");
+      expect(html).not.toContain('action="/carry-on"');
       expect(html).toContain(
         "<p>The form to carry on as the main box could not be shown. Reload this page to try again.</p>",
       );

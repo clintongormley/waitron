@@ -14,6 +14,7 @@ import { FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron
 import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
+import type { OldBoxDataDeps } from "./old-box-data-page.js";
 import { escapeHtml, httpsLinkLine } from "./html-page.js";
 import { BOX_FORM_STYLE, boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import { codeInput, emailInput } from "./carry-on.js";
@@ -63,6 +64,8 @@ export interface OldBoxDownloadState {
   retryAfterSeconds?: number;
   /** Whether the refused form held the authenticator code field. */
   askCode?: boolean;
+  /** The refused form's `returnTo`, as posted; only the waiting page draws one. */
+  returnTo?: string;
 }
 
 interface RestrictedView {
@@ -288,10 +291,31 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
     const alert = view.download === undefined ? "" : ' role="alert"';
     return `<section>\n${heading}<p${alert}>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
   }
-  const intro = `<p>${escapeHtml(view.planned ? words.planned : words.emergency)}</p>\n`;
+  return downloadForm(
+    view.planned ? words.planned : words.emergency,
+    locale,
+    secure,
+    view.download,
+  );
+}
+
+/**
+ * The download section under its heading: `introText`, then the form, or over HTTP why not. The
+ * form carries `returnTo` when given.
+ */
+export function downloadForm(
+  introText: string,
+  locale: SupportedLocale,
+  secure: boolean,
+  download?: OldBoxDownloadState,
+  returnTo?: string,
+): string {
+  const words = RESTRICTED_DOWNLOAD_WORDS[locale];
+  const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
+  const intro = `<p>${escapeHtml(introText)}</p>\n`;
   if (!secure)
     return `<section>\n${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n</section>`;
-  const shown = downloadMessages(view.download, words);
+  const shown = downloadMessages(download, words);
   const error = (field: "email" | "password" | "totp") =>
     shown[field] === undefined
       ? ""
@@ -310,8 +334,8 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
   return `<section>
 ${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
-<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
-<p>${emailInput("old-box-data-email", view.download?.email ?? "", invalid("email"))}</p>
+${returnTo === undefined ? "" : `<input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">\n`}<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
+<p>${emailInput("old-box-data-email", download?.email ?? "", invalid("email"))}</p>
 ${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
 ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
@@ -350,6 +374,19 @@ function renderFailure(locale: SupportedLocale): string {
 }
 
 /** The restricted page as this request's answer, with the download section's state when given. */
+/** The download route's settings on the restricted page, whose refusals answer this page again. */
+export function restrictedDownloadDeps(
+  page: RestrictedPageDeps,
+): Pick<OldBoxDataDeps, "venue" | "log" | "resetOrdered" | "answer" | "planned"> {
+  return {
+    venue: page.venue,
+    log: page.log,
+    resetOrdered: page.resetOrdered,
+    answer: (c, status, state) => restrictedPageAnswer(page, c, status, state),
+    planned: () => readPlannedHandover(page),
+  };
+}
+
 export async function restrictedPageAnswer(
   deps: RestrictedPageDeps,
   c: Context,

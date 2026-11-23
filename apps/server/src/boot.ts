@@ -265,6 +265,7 @@ import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-
 import { mainServerUrl, mountMainServerApi, mountNodeApi } from "./node-api.js";
 import {
   readBoxAddresses,
+  restrictedDownloadDeps,
   restrictedPageRoute,
   type RestrictedPageDeps,
 } from "./restricted-page.js";
@@ -2059,7 +2060,7 @@ async function bootServer(
       routes: [
         restrictedPageRoute(restrictedPage),
         oldBoxDataRoute({
-          page: restrictedPage,
+          ...restrictedDownloadDeps(restrictedPage),
           modules: enabledAtStart,
           totpKeyRing: ring,
           mainHoldings: () => resetOrder.mainHoldings(),
@@ -2162,6 +2163,7 @@ async function bootServer(
         carryOn: {
           db,
           credentialKeyRing: ring,
+          modules: enabledAtStart,
           readNewerMain: () =>
             readNewerBucketMain({
               db,

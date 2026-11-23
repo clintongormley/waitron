@@ -4,19 +4,33 @@ import type { Context } from "hono";
 import type { Database, NodeDatabase } from "@waitron/db";
 
 import type { SignedMembershipDocument } from "@waitron/membership";
+import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
+import type { SupportedLocale } from "@waitron/shared";
 import type { NewerBucketMain } from "./stream-host.js";
 import type { StartedServer } from "./boot.js";
 import { mountCarryOn, type CarryOnTurn } from "./carry-on.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { mountDeclarationPages } from "./declaration-pages.js";
+import { isSecure } from "./encrypted-connection.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { stepDown, type StepDownRequest, type StepDownResult } from "./handover-stepdown.js";
 import { healthApp, type HealthState } from "./health.js";
+import { RESTRICTED_DOWNLOAD_WORDS } from "./i18n/restricted-page.js";
+import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import type { Logger } from "./logger.js";
 import { mountNodeApi } from "./node-api.js";
+import { oldBoxDataRoute } from "./old-box-data-page.js";
+import { createPasswordThrottle } from "./password-throttle.js";
+import { downloadForm, type OldBoxDownloadState } from "./restricted-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
-import { waitingPageRoute } from "./waiting-page.js";
+import { escapeHtml } from "./html-page.js";
+import {
+  failureFields,
+  waitingPageAnswer,
+  waitingPageRoute,
+  type WaitingPageSection,
+} from "./waiting-page.js";
 
 /** The page's words say "every 15 seconds"; change both together. */
 export const WAIT_RECHECK_MS = 15_000;
@@ -46,10 +60,15 @@ export interface WaitingStartDeps {
   waitingOn: readonly string[];
   /** The page's name for each box (`readBoxAddresses`: its address, never its venue name). */
   addressesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
-  /** Signs in the person who carries on as the main box; without it the page offers no form. */
+  /**
+   * Signs in the person who carries on as the main box or downloads this box's data; without it the
+   * page offers neither form.
+   */
   carryOn?: {
     db: Database;
     credentialKeyRing: KeyRing;
+    /** What this box's data download asks for its invoice records. */
+    modules: readonly WaitronModule[];
     readNewerMain?: () => Promise<NewerBucketMain | null>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;
@@ -119,19 +138,62 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     log,
   );
   let waitingOn = deps.waitingOn;
-  const section =
-    deps.carryOn === undefined
-      ? undefined
-      : mountCarryOn(app, {
-          ...deps.carryOn,
-          node: deps.node,
-          nodeId: deps.nodeId,
-          peerNodeIds: () => waitingOn,
-          addressesOf: deps.addressesOf,
-          chartTerm: async () => (await deps.readMembership())?.body.term ?? 0,
-          beginCarryOn: () => beginCarryOn(),
+  let section: WaitingPageSection | undefined;
+  if (deps.carryOn !== undefined) {
+    const { carryOn } = deps;
+    const throttle = createPasswordThrottle();
+    const carryOnSection = mountCarryOn(app, {
+      ...carryOn,
+      node: deps.node,
+      nodeId: deps.nodeId,
+      peerNodeIds: () => waitingOn,
+      addressesOf: deps.addressesOf,
+      chartTerm: async () => (await deps.readMembership())?.body.term ?? 0,
+      beginCarryOn: () => beginCarryOn(),
+      throttle,
+      log,
+    });
+    // A box that already knows its successor shows that page whole, with no download.
+    const below = async (
+      c: Context,
+      other: string,
+      locale: SupportedLocale,
+      destination: string,
+      download?: OldBoxDownloadState,
+    ): Promise<string | { page: string }> => {
+      let drawn: string | { page: string };
+      try {
+        drawn = await carryOnSection(c, other, locale, destination);
+      } catch (error) {
+        log("warn", "waiting_page.section_failed", failureFields(error));
+        drawn = `<p>${escapeHtml(WAITING_PAGE_WORDS[locale].carryOn.unavailable)}</p>\n`;
+      }
+      if (typeof drawn !== "string") return drawn;
+      const intro = RESTRICTED_DOWNLOAD_WORDS[locale].waiting;
+      const secure = (carryOn.secure ?? isSecure)(c);
+      return drawn + downloadForm(intro, locale, secure, download, destination);
+    };
+    section = below;
+    oldBoxDataRoute({
+      venue: carryOn.db,
+      log,
+      modules: carryOn.modules,
+      totpKeyRing: carryOn.credentialKeyRing,
+      secure: carryOn.secure,
+      throttle,
+      // A waiting box holds no handover restriction: it did not hand over in a planned handover.
+      planned: async () => false,
+      answer: (c, status, download) =>
+        waitingPageAnswer(
+          c,
+          () => deps.addressesOf(waitingOn),
           log,
-        });
+          (c, other, locale, destination) => below(c, other, locale, destination, download),
+          status,
+          download.returnTo ?? "/",
+        ),
+    })(app);
+  }
   waitingPageRoute(() => deps.addressesOf(waitingOn), log, section)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};

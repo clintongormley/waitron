@@ -18,6 +18,7 @@ import {
   authorizeManager,
   checkManagerPassword,
   endManagementSession,
+  foldedLoginEmail,
   loginManager,
   withInspectorAdmitted,
 } from "@waitron/identity";
@@ -27,7 +28,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import type { NewerBucketMain } from "./stream-host.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
-import { createPasswordThrottle } from "./password-throttle.js";
+import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { isSecure } from "./encrypted-connection.js";
 import { escapeHtml } from "./html-page.js";
 import { renderLogoBoxPage } from "./guide-pages.js";
@@ -85,6 +86,8 @@ export interface CarryOnDeps {
   /** Takes the one carry-on turn, after any re-ask in flight has settled. */
   beginCarryOn: () => Promise<CarryOnTurn>;
   readNewerMain?: () => Promise<NewerBucketMain | null>;
+  /** Shared with any other password form on the page, so one email gets one set of attempts. */
+  throttle?: PasswordThrottle;
   log: Logger;
 }
 
@@ -214,7 +217,7 @@ const flowPage = (locale: SupportedLocale, title: string, body: string, head = "
  * only. Mounts its POST route and returns what the page draws below its body.
  */
 export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
-  const passwordThrottle = createPasswordThrottle();
+  const passwordThrottle = deps.throttle ?? createPasswordThrottle();
   const successorName = async (id: string | null, locale: SupportedLocale) =>
     id === null
       ? `<strong>${escapeHtml(otherBoxPhrase([null], locale))}</strong>`
@@ -313,7 +316,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
 
     let personId: string;
     try {
-      const finishAttempt = passwordThrottle.begin(view.email);
+      const finishAttempt = passwordThrottle.begin(foldedLoginEmail(view.email));
       try {
         const checked = await checkManagerPassword(deps.db, { email: view.email }, password);
         personId = await withTransaction(deps.db, async (tx) => {
@@ -410,7 +413,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     return carriedOn();
   });
 
-  return async (c, other, locale) => {
+  return async (c, other, locale, destination) => {
     const words = WAITING_PAGE_WORDS[locale].carryOn;
     const successor = await knownHandoverSuccessor(deps.node, deps.nodeId);
     if (successor !== null)
@@ -422,11 +425,6 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
         ),
       };
     if (!(deps.secure ?? isSecure)(c)) return `<p>${escapeHtml(words.insecure)}</p>\n`;
-    return formSection(
-      BLANK,
-      other,
-      words,
-      pageReturnPath(new URL(c.req.url).pathname + new URL(c.req.url).search),
-    );
+    return formSection(BLANK, other, words, destination);
   };
 }

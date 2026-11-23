@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   FALLBACK_LOCALE,
   isAppError,
@@ -85,13 +86,14 @@ ${section === "" ? "" : `<section>\n${section}</section>\n`}${leaveWhenDone(page
 }
 
 /**
- * Draws what the page shows below its body for this request (the carry-on form or why not), or a
- * whole `page` in place of the waiting page.
+ * Draws what the page shows below its body for this request (the carry-on form or why not, and the
+ * download form), or a whole `page` in place of the waiting page.
  */
 export type WaitingPageSection = (
   c: Context,
   other: string,
   locale: SupportedLocale,
+  destination: string,
 ) => Promise<string | { page: string }>;
 
 /** The page a person opening a box that waits for its peers sees; the addresses are read per request. */
@@ -109,36 +111,43 @@ export function waitingPageRoute(
           !(c.req.header("Accept") ?? "").includes("text/html"))
       )
         return next();
-      const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-      c.header("Cache-Control", "no-store");
-      c.header("Vary", "Accept-Language");
-      c.header(WAITING_HEADER, "1");
-      let shown: readonly (string | null)[] = [];
-      try {
-        shown = await names();
-      } catch (error) {
-        log("warn", "waiting_page.names_failed", { errorCode: codeOf(error) });
-      }
-      const other = otherBoxPhrase(shown, locale);
-      let below: string | { page: string } = "";
-      if (section !== undefined) {
-        try {
-          below = await section(c, other, locale);
-        } catch (error) {
-          log("warn", "waiting_page.section_failed", failureFields(error));
-          below = `<p>${escapeHtml(WAITING_PAGE_WORDS[locale].carryOn.unavailable)}</p>\n`;
-        }
-      }
-      return c.html(
-        typeof below === "string"
-          ? renderWaitingPage(
-              other,
-              locale,
-              below,
-              new URL(c.req.url).pathname + new URL(c.req.url).search,
-            )
-          : below.page,
-      );
+      return waitingPageAnswer(c, names, log, section);
     });
   };
+}
+
+/** The waiting page as `waitingPageRoute` answers it, with `status` and the page's `returnTo`. */
+export async function waitingPageAnswer(
+  c: Context,
+  names: () => Promise<readonly (string | null)[]>,
+  log: Logger,
+  section?: WaitingPageSection,
+  status: ContentfulStatusCode = 200,
+  returnTo: unknown = new URL(c.req.url).pathname + new URL(c.req.url).search,
+): Promise<Response> {
+  const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
+  const destination = pageReturnPath(returnTo);
+  c.header("Cache-Control", "no-store");
+  c.header("Vary", "Accept-Language");
+  c.header(WAITING_HEADER, "1");
+  let shown: readonly (string | null)[] = [];
+  try {
+    shown = await names();
+  } catch (error) {
+    log("warn", "waiting_page.names_failed", { errorCode: codeOf(error) });
+  }
+  const other = otherBoxPhrase(shown, locale);
+  let below: string | { page: string } = "";
+  if (section !== undefined) {
+    try {
+      below = await section(c, other, locale, destination);
+    } catch (error) {
+      log("warn", "waiting_page.section_failed", failureFields(error));
+      below = `<p>${escapeHtml(WAITING_PAGE_WORDS[locale].carryOn.unavailable)}</p>\n`;
+    }
+  }
+  return c.html(
+    typeof below === "string" ? renderWaitingPage(other, locale, below, destination) : below.page,
+    status,
+  );
 }

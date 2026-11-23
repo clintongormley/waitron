@@ -1874,7 +1874,7 @@ with `app.use("*", …)` straight after the request-id and build-header middlewa
 (`boot.ts:1319`), so it runs ahead of every route registered after it, in the full, restricted and
 setup starts, and ahead of routes merged in with `app.route()`. The waiting start gets the same
 middleware through `WaitingStartDeps.pageCheck` and mounts it ahead of its routes
-(`apps/server/src/waiting-start.ts:100`). A new route on either app needs nothing, but must not be
+(`apps/server/src/waiting-start.ts:127`). A new route on either app needs nothing, but must not be
 registered ahead of it. The recovery listener's own app (`recovery-surface.ts`,
 `recovery-start-again.ts`, `recovery-listener.ts`), the first-setup apps (`first-setup-entry.ts`,
 `first-setup-launch.ts`), `landing-app.ts` and `node-entry.ts` never reach it; none of them read the
