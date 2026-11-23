@@ -15178,6 +15178,7 @@ export class TillApp extends LitElement {
       if (read === this.#partyBillsRead) {
         const before = this.partyBills;
         this.partyBills = bills;
+        if (this.activeTabId !== undefined) this.#refreshOpenPayLines(this.activeTabId);
         this.#followSplitBills(bills);
         this.#syncDraftBillStatus();
         if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {

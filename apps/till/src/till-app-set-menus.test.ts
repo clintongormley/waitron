@@ -25,6 +25,7 @@ import {
 import { deviceZonesFixture } from "../test/device-zones.js";
 import type { TillApp } from "./till-app.js";
 import type { TabLine } from "./api/client.js";
+import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
@@ -795,5 +796,83 @@ it("the panel total after a comped set menu equals the server's balance", async 
   // The draft Sirloin takes Daily 2's open main at +5.00; the bill's balance is 19.00.
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain("24.00"),
+  );
+});
+
+const soupBill = {
+  ...bill,
+  dishes: [
+    ...bill.dishes,
+    { ...bill.dishes[0]!, lineId: "sent-soup", productId: "product-soup", priceCents: 0 },
+  ],
+};
+
+const soupLines = [
+  tabRow({ id: "daily-1", lineNo: 1, name: "Daily menu", unitPriceGross: "14.00" }),
+  tabRow({ id: "daily-2", lineNo: 2, name: "Daily menu", unitPriceGross: "14.00" }),
+  tabRow({ id: "special-1", lineNo: 3, name: "Special menu", unitPriceGross: "19.00" }),
+  tabRow({ id: "sent-soup", lineNo: 4, productId: "product-soup", name: "Soup" }),
+];
+
+const soupPartyBill = (setMenus: typeof bill) => ({
+  ...partyBillOf("v1", "wo-4", 1, { outstanding: "47.00" }),
+  setMenus,
+  setMenuCopies: [daily, special],
+});
+
+const payDialogLines = (el: TillApp) =>
+  el
+    .shadowRoot!.querySelector("till-bill-pay-dialog")
+    ?.lines.map(({ lineNo, total }) => [lineNo, total]);
+
+it("a refund's pay window leaves out a covered dish at 0.00", async () => {
+  const { el, screen } = await tableWithSetMenus({
+    getTabLines: vi.fn().mockResolvedValue({ lines: soupLines, revision: 6 }),
+    getPartyBills: vi.fn(async () => [soupPartyBill(soupBill)]),
+  });
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(4));
+
+  emitApp(screen, "refund-excess", { excess: "5.00" });
+
+  await vi.waitFor(() =>
+    expect(payDialogLines(el)).toEqual([
+      [1, "14.00"],
+      [2, "14.00"],
+      [3, "19.00"],
+    ]),
+  );
+});
+
+it("an open pay window drops a covered dish when the bills read after the lines places it", async () => {
+  const stream = liveReadFixture();
+  const getTabLines = vi.fn().mockResolvedValue({ lines: soupLines, revision: 6 });
+  const getPartyBills = vi.fn(async () => [soupPartyBill(bill)]);
+  const { el, screen } = await tableWithSetMenus({
+    readLiveEvents: stream.read,
+    getTabLines,
+    getPartyBills,
+  });
+  stream.event("ready");
+  await flush(el);
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(4));
+  await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
+  await vi.waitFor(() => expect(payDialogLines(el)).toContainEqual([4, "0.00"]));
+
+  const reads = getPartyBills.mock.calls.length;
+  getPartyBills.mockImplementation(async () => [soupPartyBill(soupBill)]);
+  getTabLines.mockRejectedValue(new TypeError("Failed to fetch"));
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el, 10);
+
+  await vi.waitFor(() => expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads));
+  await vi.waitFor(() =>
+    expect(screen.bills[0]!.setMenus!.dishes.map(({ lineId }) => lineId)).toContain("sent-soup"),
+  );
+  await vi.waitFor(() =>
+    expect(payDialogLines(el)).toEqual([
+      [1, "14.00"],
+      [2, "14.00"],
+      [3, "19.00"],
+    ]),
   );
 });
