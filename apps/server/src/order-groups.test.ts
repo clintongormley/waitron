@@ -2465,7 +2465,6 @@ describe("a held line on a paid bill", () => {
   });
 });
 
-/** The PartyCommand a tab path is sent, at both parties' current revisions. */
 /** What a bill action on the party is sent: its revision as read now, and who acts. */
 async function billCommand(partyId: string) {
   return { expectedPartyRevision: await revisionOf(partyId), operatorId: ALEX };

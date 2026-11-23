@@ -45,8 +45,6 @@ declare module "@waitron/shared" {
     "payment.already_associated": { paymentRef: string; saleId: string | null };
     "payment.hold_not_found": { paymentId: string };
     "payment.hold_already_recorded": { paymentId: string };
-    /** An INCIDENT, never thrown. The sale already chained and is immutable, so this is an
-     * uncollected-receivable notice, not a fiscal reversal. */
     /** An INCIDENT, never thrown: the processor's outcome is neither a capture nor a certain
      * refusal. The row is resolved `failed` so the sweep terminates; the incident is what makes a
      * human look. */

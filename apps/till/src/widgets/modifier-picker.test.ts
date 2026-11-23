@@ -179,7 +179,6 @@ afterEach(async () => {
   if (vi.isMockFunction(history.replaceState)) vi.mocked(history.replaceState).mockRestore();
 });
 
-/** The picker the grid opened, or null when none is mounted. */
 /** The menu browser offering `product` alone, the way a till mounts it. */
 async function mountBrowser(product: TillProduct, store: WorkingOrderStore) {
   const menu: TillZoneMenu = {
