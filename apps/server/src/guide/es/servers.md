@@ -281,16 +281,16 @@ y el código del autenticador si la cuenta lo usa; las llaves de acceso y el ini
 Google no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los
 registros de facturación; su primera línea dice si son solo los que el principal no tenía o todos
 los que tiene este servidor. Tras un [traspaso de emergencia](servers.md#emergency), el archivo tiene
-también las pestañas **Pedidos**, **Pagos y caja**, **Horas de trabajo** y **Actividad**. Cada una
-lista lo que este servidor registró desde la hora que indica su primera línea, normalmente poco
-antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal.
+también las pestañas **Pedidos**, **Pagos y caja**, **Horas de trabajo** y **Actividad**. La primera
+línea de cada pestaña dice qué lista, normalmente desde poco antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal.
 
-Cuando el servidor principal elige **Borrar y retirar**, este servidor se borra. La página lo indica entonces, y el servidor se reinicia en breve en la primera
+Cuando alguien elige **Borrar y retirar** en el servidor principal, este servidor se borra. La página lo indica entonces, y el servidor se reinicia en breve en la primera
 página de la configuración, listo para [volver a unirse como servidor de
 reserva](servers.md#adding-a-spare). El borrado retira sus datos del local, incluidas las líneas de
 venta y las copias de seguridad locales, que esta devolución no incluye; conserva los datos del
-servidor anterior si los necesitas. Si no habían vuelto todos sus registros de facturación, aparta
-sus bases de datos en lugar de borrarlas.
+servidor anterior si los necesitas. Si se eligió Borrar y retirar antes
+de que volvieran todos sus registros de facturación, o al servidor principal le faltan registros de
+facturación que tiene este servidor, aparta sus bases de datos en lugar de borrarlas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los

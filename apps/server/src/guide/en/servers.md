@@ -254,15 +254,16 @@ this box stopped running the venue, and the authenticator code if the account us
 Google sign-in do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice
 records; its first line says whether they are only those the main box did not have or every one this
 box holds. After an [emergency handover](servers.md#emergency), the file also has **Orders**,
-**Payments and cash**, **Working hours** and **Activity** tabs. Each lists what this box recorded
-from the time its first line states, normally shortly before the last sale or order in the copy
+**Payments and cash**, **Working hours** and **Activity** tabs. Each tab's first line says what it
+lists, normally from shortly before the last sale or order in the copy
 the new main box started from.
 
-When the main box chooses **Wipe and remove**, this box wipes itself. The
+When someone chooses **Wipe and remove** on the main box, this box wipes itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
 spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
-and local backups, which this return does not carry; keep the old box's data if you need them. If its invoice
-records had not all come back, it sets its databases aside instead of deleting them.
+and local backups, which this return does not carry; keep the old box's data if you need them. If Wipe and remove
+was chosen before its invoice records were all back, or the main box lacks invoice records this
+box holds, it sets its databases aside instead of deleting them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.

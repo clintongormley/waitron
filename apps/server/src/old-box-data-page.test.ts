@@ -346,7 +346,7 @@ describe("the since tabs of POST /old-box-data", () => {
     ]);
   });
 
-  it("still gives the file, from this box's own times, when the copy time heard is not a date", async () => {
+  it("still gives the file when the copy time heard is not a date", async () => {
     await admin();
     const response = await post(
       appWith({ mainCopy: () => ({ lastChangeAtMs: Number.MAX_SAFE_INTEGER }) }),

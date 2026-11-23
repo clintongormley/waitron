@@ -45,9 +45,9 @@ export const OLD_BOX_DATA_WORDS = {
     yes: "Yes",
     no: "No",
     sinceCopyIntro:
-      "Everything this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from. Some rows may also be on the new main box; changes made to older rows, and lines not yet sent on older orders, are not listed.",
+      "Everything this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from. Some rows may also be on the new main box. Older orders are listed only if settled, collected, or with a line sent or served since then; other changes to older rows are not listed.",
     sinceOwnIntro:
-      "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told the time of the last sale or order in the copy the new main box started from, and anything earlier is not listed. Some rows may also be on the new main box; changes made to older rows, and lines not yet sent on older orders, are not listed.",
+      "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told the time of the last sale or order in the copy the new main box started from, and anything earlier is not listed. Some rows may also be on the new main box. Older orders are listed only if settled, collected, or with a line sent or served since then; other changes to older rows are not listed.",
     sinceAllIntro: "Everything this box recorded. Some rows may also be on the new main box.",
     paymentsCopyIntro:
       "Every payment and cash movement this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from, and each earlier payment or refund whose state changed from then. Some rows may also be on the new main box.",
@@ -104,7 +104,7 @@ export const OLD_BOX_DATA_WORDS = {
       RefundState,
       string
     >,
-    cardRefundStates: { succeeded: "Refunded", failed: "Failed" } satisfies Record<
+    cardRefundStates: { succeeded: "Completed", failed: "Failed" } satisfies Record<
       CardRefundState,
       string
     >,
@@ -186,9 +186,9 @@ export const OLD_BOX_DATA_WORDS = {
     yes: "Sí",
     no: "No",
     sinceCopyIntro:
-      "Todo lo que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal; no se listan los cambios hechos en filas anteriores ni las líneas aún no enviadas de pedidos anteriores.",
+      "Todo lo que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal. Los pedidos anteriores solo se listan si se cobraron, se recogieron o se envió o sirvió una línea desde entonces; no se listan otros cambios hechos en filas anteriores.",
     sinceOwnIntro:
-      "Todo lo que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y no se lista nada anterior. Algunas filas pueden estar también en el nuevo servidor principal; no se listan los cambios hechos en filas anteriores ni las líneas aún no enviadas de pedidos anteriores.",
+      "Todo lo que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y no se lista nada anterior. Algunas filas pueden estar también en el nuevo servidor principal. Los pedidos anteriores solo se listan si se cobraron, se recogieron o se envió o sirvió una línea desde entonces; no se listan otros cambios hechos en filas anteriores.",
     sinceAllIntro:
       "Todo lo que este servidor registró. Algunas filas pueden estar también en el nuevo servidor principal.",
     paymentsCopyIntro:
@@ -247,7 +247,7 @@ export const OLD_BOX_DATA_WORDS = {
       completed: "Completada",
       failed: "Fallida",
     } satisfies Record<RefundState, string>,
-    cardRefundStates: { succeeded: "Devuelta", failed: "Fallida" } satisfies Record<
+    cardRefundStates: { succeeded: "Completada", failed: "Fallida" } satisfies Record<
       CardRefundState,
       string
     >,

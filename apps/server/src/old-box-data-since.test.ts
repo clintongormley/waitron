@@ -609,7 +609,7 @@ describe("the old box's Payments and cash tab", () => {
       expect(refunds.map((r) => r.state)).toEqual(["succeeded", "failed"]);
       // prettier-ignore
       expect([3, 4, 5, 6].map((n) => row(xml, n))).toEqual([
-        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
+        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
         ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
         ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", "", refunds[1]!.id],
         [],
@@ -735,7 +735,7 @@ describe("the old box's Payments and cash tab", () => {
         ["Refund", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 6 * MINUTE), "-3.00", "0.00", "Card", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Marta Ruiz", late.id],
         ["Refund", iso(CUTOFF + 8 * MINUTE), iso(CUTOFF + 9 * MINUTE), "-1.00", "0.00", "Card", "Failed", "12", "simulator", "ref-card", "", "", "", "Marta Ruiz", failed.id],
         ["Card payment", iso(CUTOFF - 40 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
-        ["Card refund", iso(LATER), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
+        ["Card refund", iso(LATER), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
         [],
       ]);
       expect(xml).not.toContain(settledBefore.id);
