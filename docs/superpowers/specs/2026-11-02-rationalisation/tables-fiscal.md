@@ -867,6 +867,9 @@ for conflict evidence and requires both to be null on a clock row.
      `scripts/schema-constraints.test.ts` against the new schema.
    - Failing result: a check that does not fire. That field then becomes a typed column on
      `verifactu_history`.
+   - On 2026-11-23, Fi5's `verifactu-history.test.ts` refused the invalid rows for both conflict
+     kinds and accepted valid rows. It also refused both conflict links on clock entries.
+     `scripts/schema-constraints.test.ts` passed with the new CHECKs, unique key and record link.
 5. **The new guard triggers on `payments` and `verifactu_submissions`.**
    - Measure: run every writer in `packages/payments/src/store.ts` and in
      `drain.ts`/`reconcile.ts` under the new triggers (`store.test.ts`, the `drain.*.test.ts` files

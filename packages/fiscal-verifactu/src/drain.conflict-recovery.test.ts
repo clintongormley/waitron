@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { sql, type Query } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { captureError, triggerRaised, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createClient, type RespuestaLinea, type VerifactuClient } from "@waitron/verifactu";
@@ -10,6 +10,7 @@ import { collideAtAeat, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
+import { readFilingOverview } from "./filing-overview.js";
 import * as conflicts from "./conflict-evidence.js";
 import type { ConflictEvidence } from "./conflict-evidence.js";
 
@@ -30,11 +31,14 @@ const run = (client: VerifactuClient, now = FIRST) =>
     now,
   );
 
+const observationRows = `
+  select h.id, h.registro_id, c.id as case_id, json_extract(h.data, '$.attempt') as attempt,
+    json_extract(h.data, '$.cause') as cause, json_extract(h.data, '$.evidence') as evidence,
+    h.at as recorded_at
+  from verifactu_history h join filing_cases c on c.registro_id = h.registro_id
+  where h.kind = 'conflict.observed' order by h.at, h.id`;
+
 async function observations() {
-  const present = await suite.db.execute(sql`
-    select name from sqlite_master where type = 'table' and name = 'fiscal_conflict_evidence'
-  `);
-  if (present.rows.length === 0) return [];
   const { rows } = await suite.db.execute<{
     id: string;
     registro_id: string;
@@ -43,12 +47,43 @@ async function observations() {
     cause: string;
     evidence: string;
     recorded_at: string;
-  }>(sql`select * from fiscal_conflict_evidence order by recorded_at, id`);
+  }>(sql.raw(observationRows));
   return rows.map((row) => ({ ...row, evidence: JSON.parse(row.evidence) as ConflictEvidence }));
 }
 
 const active = (nodeId: string) =>
   withTransaction(suite.db, (tx) => conflicts.readActiveConflicts(tx, nodeId));
+
+it("looks up observed and lookup evidence through the history record index", async () => {
+  const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+  await withTransaction(suite.db, async (tx) => {
+    type Session = { prepareQuery(query: Query, ...rest: unknown[]): { all(): unknown } };
+    const session = (tx as unknown as { session: Session }).session;
+    const prepare = vi.spyOn(session, "prepareQuery");
+    const query = await conflicts
+      .readActiveConflicts(tx, seeded.nodeId)
+      .then(() =>
+        prepare.mock.calls.map(([query]) => query).find(({ sql }) => sql.includes("filing_cases")),
+      )
+      .finally(() => prepare.mockRestore());
+    expect(query).toBeDefined();
+    const rows = session
+      .prepareQuery(
+        { sql: `explain query plan ${query!.sql}`, params: query!.params },
+        undefined,
+        "all",
+        false,
+      )
+      .all() as { detail: string }[];
+    for (const alias of ["observed", "lookup"]) {
+      expect(rows.map(({ detail }) => detail)).toContainEqual(
+        expect.stringContaining(
+          `SEARCH ${alias} USING INDEX verifactu_history_registro_kind_seq_idx (registro_id=? AND kind=?)`,
+        ),
+      );
+    }
+  });
+});
 
 async function retry(registroId: string) {
   await suite.db.execute(sql`
@@ -124,7 +159,6 @@ describe("durable conflict observations", () => {
     await withTransaction(suite.db, (tx) =>
       conflicts.recordConflictEvidence(tx, {
         registroId,
-        caseId: observed.case_id,
         attempt: 2,
         cause: "fiscal.huella_divergente",
         evidence: observed.evidence,
@@ -135,7 +169,6 @@ describe("durable conflict observations", () => {
     await withTransaction(suite.db, (tx) =>
       conflicts.recordConflictEvidence(tx, {
         registroId,
-        caseId: observed.case_id,
         attempt: 3,
         cause: "fiscal.huella_divergente",
         evidence: observed.evidence,
@@ -162,6 +195,73 @@ describe("durable conflict observations", () => {
     `);
     expect(accepted.rows[0]).toEqual({ estado: "aceptado", csv: expect.any(String) });
     expect(observed!.evidence.csv).toBe(accepted.rows[0]!.csv);
+  });
+
+  it("keeps the annulled observation first when both causes share an attempt", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const registroId = seeded.registroIds[0]!;
+    const aeat = fake();
+    await collideAtAeat(suite.db, aeat, seeded, registroId);
+    await run(clientFor(aeat));
+    const [first] = await observations();
+    expect(first!.cause).toBe("fiscal.huella_divergente");
+    const evidence = { ...first!.evidence, comparison: { kind: "annulled" as const } };
+    await withTransaction(suite.db, (tx) =>
+      conflicts.recordConflictEvidence(tx, {
+        registroId,
+        attempt: first!.attempt,
+        cause: "fiscal.duplicado_anulado",
+        evidence,
+        now: SECOND,
+      }),
+    );
+    expect(await active(seeded.nodeId)).toEqual([
+      expect.objectContaining({
+        registroId,
+        cause: "fiscal.duplicado_anulado",
+        observedAt: SECOND.toISOString(),
+        evidence,
+      }),
+    ]);
+  });
+
+  it("uses the stored cause that the database checked", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const registroId = seeded.registroIds[0]!;
+    await withTransaction(suite.db, async (tx) => {
+      await openFilingCase(tx, {
+        registroId,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: null, mensaje: null, csv: null },
+        now: FIRST,
+      });
+      const evidence = {
+        line: {
+          IDFactura: {
+            IDEmisorFactura: seeded.nif,
+            NumSerieFactura: "S1/1",
+            FechaExpedicionFactura: "20-07-2026",
+          },
+        },
+        comparison: { kind: "annulled" },
+        csv: null,
+      };
+      const data = `{"attempt":1,"cause":"fiscal.duplicado_anulado","cause":"fiscal.huella_divergente","evidence":${JSON.stringify(evidence)}}`;
+      await tx.execute(sql`insert into verifactu_history (id, seq, kind, node_id, at, data, event_key, registro_id)
+        values ('observation', 1, 'conflict.observed', ${seeded.nodeId}, ${SECOND.toISOString()},
+          ${data}, ${`conflict:${registroId}:1:fiscal.duplicado_anulado`}, ${registroId})`);
+    });
+    expect(await active(seeded.nodeId)).toEqual([
+      expect.objectContaining({
+        registroId,
+        cause: "fiscal.duplicado_anulado",
+        evidenceId: "observation",
+      }),
+    ]);
+    const overview = await withTransaction(suite.db, (tx) =>
+      readFilingOverview(tx, { nodeId: seeded.nodeId, limit: null }),
+    );
+    expect(overview.cases[0]?.conflicts[0]?.cause).toBe("fiscal.duplicado_anulado");
   });
 
   it("retains a mismatching fingerprint when the stored software identity is absent", async () => {
@@ -194,12 +294,12 @@ describe("durable conflict observations", () => {
       const before = await observations();
       const statement =
         kind === "update"
-          ? sql`update fiscal_conflict_evidence set attempt = 9`
+          ? sql`update verifactu_history set data = json_set(data, '$.attempt', 9) where kind = 'conflict.observed'`
           : kind === "delete"
-            ? sql`delete from fiscal_conflict_evidence`
-            : sql`insert or replace into fiscal_conflict_evidence select * from fiscal_conflict_evidence`;
+            ? sql`delete from verifactu_history where kind = 'conflict.observed'`
+            : sql`insert or replace into verifactu_history select * from verifactu_history where kind = 'conflict.observed'`;
       const error = await captureError(() => suite.db.execute(statement));
-      expect(triggerRaised(error, "fiscal_conflict_evidence is append-only")).toBe(true);
+      expect(triggerRaised(error, "verifactu_history is append-only")).toBe(true);
       expect(await observations()).toEqual(before);
     },
   );
@@ -371,9 +471,8 @@ describe("durable conflict observations", () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const aeat = fake();
     await collideAtAeat(suite.db, aeat, seeded, seeded.registroIds[0]!);
-    await suite.db
-      .execute(sql`create trigger fail_after_conflict after insert on fiscal_conflict_evidence
-      begin select raise(abort, 'test_evidence_failure'); end`);
+    await suite.db.execute(sql`create trigger fail_after_conflict after insert on verifactu_history
+      when new.kind = 'conflict.observed' begin select raise(abort, 'test_evidence_failure'); end`);
     try {
       const result = await run(clientFor(aeat));
       expect(result.recordsHalted).toBe(0);
@@ -420,7 +519,7 @@ describe("durable conflict observations", () => {
         `
       const { DatabaseSync } = require('node:sqlite');
       const db = new DatabaseSync(process.argv[1], {readOnly:true});
-      process.stdout.write(JSON.stringify(db.prepare('select * from fiscal_conflict_evidence').all()));
+      process.stdout.write(JSON.stringify(db.prepare(${JSON.stringify(observationRows)}).all()));
       db.close();`,
         file,
       ],

@@ -13,7 +13,7 @@ import { recordConflictEvidence } from "./conflict-evidence.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
+import { appendHistory } from "./history.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
@@ -106,11 +106,7 @@ async function seedOverview() {
   });
 
   await openCase(refused, "fiscal.registro_rechazado", "2026-07-21T09:00:00.000Z");
-  const divergedCase = await openCase(
-    diverged,
-    "fiscal.huella_divergente",
-    "2026-07-21T08:00:00.000Z",
-  );
+  await openCase(diverged, "fiscal.huella_divergente", "2026-07-21T08:00:00.000Z");
   await openCase(cancellation, "fiscal.anulacion_retenida", "2026-07-21T07:00:00.000Z");
   const resolvedCase = await openCase(
     resolved,
@@ -136,7 +132,6 @@ async function seedOverview() {
   await inTx((tx) =>
     recordConflictEvidence(tx, {
       registroId: diverged,
-      caseId: divergedCase.id,
       attempt: 1,
       cause: "fiscal.huella_divergente",
       evidence: {
@@ -162,19 +157,24 @@ async function seedOverview() {
       now: OBSERVED_AT,
     }),
   );
-  await suite.db.insert(fiscalLookupConflicts).values({
-    registroId: diverged,
-    caseId: divergedCase.id,
-    evidence: {
-      source: "consulta",
-      invoice,
-      reference: LOOKUP_REFERENCE,
-      state: "Correcto",
-      fingerprint: "B".repeat(64),
-      system: null,
-    },
-    recordedAt: LOOKED_UP_AT,
-  });
+  await inTx((tx) =>
+    appendHistory(tx, {
+      kind: "conflict.lookup",
+      nodeId: seeded.nodeId,
+      registroId: diverged,
+      at: LOOKED_UP_AT,
+      data: {
+        evidence: {
+          source: "consulta",
+          invoice,
+          reference: LOOKUP_REFERENCE,
+          state: "Correcto",
+          fingerprint: "B".repeat(64),
+          system: null,
+        },
+      },
+    }),
+  );
 
   const [series] = await suite.db
     .select({ id: invoiceSeries.id })

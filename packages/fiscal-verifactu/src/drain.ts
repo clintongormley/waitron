@@ -1922,10 +1922,9 @@ async function handleDuplicate(
   if (row.probe === undefined || String(linea.CodigoErrorRegistro) !== row.probe.runCode) {
     await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
   }
-  const opened = await openCase(tx, row, cause, linea, csv, now);
+  await openCase(tx, row, cause, linea, csv, now);
   await recordConflictEvidence(tx, {
     registroId: row.id,
-    caseId: opened.id,
     attempt: row.intentos,
     cause,
     evidence: {

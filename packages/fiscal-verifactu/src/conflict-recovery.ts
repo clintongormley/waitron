@@ -1,6 +1,6 @@
 import "./errors.js";
 import { isDeepStrictEqual as equal } from "node:util";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { invoiceSeries, type Transaction } from "@waitron/db";
 import {
   type LiveModuleOperationScope,
@@ -24,7 +24,7 @@ import { fiscalAllocations, type ActivationResult } from "./schema/allocations.j
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { filingCases } from "./schema/filing-cases.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
+import { lookupConflict } from "./history.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { activateModuleAllocation, readModuleAllocationSeries } from "./allocation-operation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -87,16 +87,8 @@ async function checkOriginal(
     .select()
     .from(verifactuSubmissions)
     .where(eq(verifactuSubmissions.registroId, conflict.registroId));
-  const [lookup] = await tx
-    .select()
-    .from(fiscalLookupConflicts)
-    .where(
-      and(
-        eq(fiscalLookupConflicts.registroId, conflict.registroId),
-        eq(fiscalLookupConflicts.caseId, conflict.caseId),
-      ),
-    );
-  if (reply?.estado !== "rechazado" && lookup === undefined) return refuse("conflict_not_active");
+  const lookup = await lookupConflict(tx, conflict.registroId);
+  if (reply?.estado !== "rechazado" && lookup === null) return refuse("conflict_not_active");
 }
 
 async function checkActive(tx: Transaction, node: ProvisionedNode, conflict: ConflictRef) {
