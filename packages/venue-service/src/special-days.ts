@@ -651,14 +651,21 @@ async function assertOwnPeriods(
     });
 }
 
-/** Refuses a painted time the clocks skip on the date's business day; a repeating date is checked
- *  at its next occurrence from the venue's today. */
-function assertNoSkippedTimes(
+// A save stores the request's touching ranges of one period (or Closed), or of one zone kind, as
+// one range.
+const samePeriod = (a: PaintRange, b: PaintRange) => a.periodId === b.periodId;
+const sameKind = (a: ZonePaint, b: ZonePaint) => a.kind === b.kind;
+
+/** Refuses a painted time the clocks skip on the date's business day, checking each entry's ranges
+ *  as `asStored` gives them. A repeating date is checked at its next occurrence from the venue's
+ *  today. */
+function assertNoSkippedTimes<T extends ClosedRange>(
   clock: BusinessDayClock,
   today: LocalDate | null,
   ruleOf: (date: LocalDate) => SpecialDayDateRule,
   holidays: HolidayDates,
-  entries: readonly ParsedEntry<ClosedRange>[],
+  entries: readonly ParsedEntry<T>[],
+  asStored: (ranges: AtPosition<T>[]) => AtPosition<T>[],
 ): void {
   if (!isReadableClock(clock)) return;
   for (const entry of entries) {
@@ -666,14 +673,19 @@ function assertNoSkippedTimes(
       clock,
       ruleOf(entry.date),
       today ?? entry.date,
-      entry.ranges,
+      asStored(entry.ranges),
       holidays,
     );
-    if (skipped !== null)
-      entry.refuse(`ranges.${skipped.range.position}.${skipped.end}`, {
-        reason: "clock_skips",
-        date: skipped.date,
-      });
+    if (skipped === null) continue;
+    // One owner's ranges on a date never overlap, so an end time names one range of the entry.
+    const { position } =
+      skipped.end === "endsAt"
+        ? entry.ranges.find((range) => range.endsAt === skipped.range.endsAt)!
+        : skipped.range;
+    entry.refuse(`ranges.${position}.${skipped.end}`, {
+      reason: "clock_skips",
+      date: skipped.date,
+    });
   }
 }
 
@@ -916,12 +928,15 @@ export async function saveSpecialDay(
   });
   const ruleOf = new Map(rules.map((rule) => [rule.date, rule]));
   const today = venueLocalMoment(at, clock)?.civilDate ?? null;
-  assertNoSkippedTimes(clock, today, (date) => ruleOf.get(date)!, holidays, [
-    ...parsed.paint,
-    ...parsed.zonePaint,
-    ...retainedPaint,
-    ...retainedZonePaint,
-  ]);
+  const skipCheck = <T extends ClosedRange>(
+    entries: readonly ParsedEntry<T>[],
+    asStored: (ranges: AtPosition<T>[]) => AtPosition<T>[],
+  ) => assertNoSkippedTimes(clock, today, (date) => ruleOf.get(date)!, holidays, entries, asStored);
+  // The writes below join only the request's paint; retained rows stay as they are stored.
+  skipCheck(parsed.paint, (ranges) => joinTouching(ranges, samePeriod));
+  skipCheck(parsed.zonePaint, (ranges) => joinTouching(ranges, sameKind));
+  skipCheck(retainedPaint, (ranges) => ranges);
+  skipCheck(retainedZonePaint, (ranges) => ranges);
   await assertDatesFree(tx, id, rules, holidays);
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
@@ -971,7 +986,7 @@ export async function saveSpecialDay(
       );
     if (entry.ranges.length === 0) continue;
     await tx.insert(openingHours).values(
-      joinTouching(entry.ranges, (a, b) => a.periodId === b.periodId).map((range) => ({
+      joinTouching(entry.ranges, samePeriod).map((range) => ({
         departmentId: entry.ownerId,
         specialDayDateId,
         kind: range.periodId === null ? ("closed" as const) : ("period" as const),
@@ -993,7 +1008,7 @@ export async function saveSpecialDay(
       );
     if (entry.ranges.length === 0) continue;
     await tx.insert(openingHours).values(
-      joinTouching(entry.ranges, (a, b) => a.kind === b.kind).map((range) => ({
+      joinTouching(entry.ranges, sameKind).map((range) => ({
         zoneId: entry.ownerId,
         specialDayDateId,
         kind: range.kind,
