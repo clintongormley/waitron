@@ -1023,7 +1023,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-backup-read-limits) to reduce bucket requests.
 
-- **A1323. One master key for the venue (owner, 2026-11-04; designed with the owner 2026-11-21, not built).**
+- **A1323. One master key for the venue (owner, 2026-11-04; designed with the owner 2026-11-21 and 2026-11-23; a library that makes, prints and checks the master key is built, and nothing uses it yet).**
   The owner keeps one key, printed in the recovery pack, in place of the backup key, the server key, the Cloud emergency code and the disk key; the box keeps only a check value and numbered backup keys calculated from it. The emergency start in Cloud needs the master key typed in, and the pack no longer holds the storage password.
   Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)

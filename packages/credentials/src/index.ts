@@ -67,3 +67,13 @@ export {
   openText,
   openTextWithPurposeKeys,
 } from "./purpose-seal.js";
+
+export {
+  authorityKey,
+  makeMasterKey,
+  masterKeyCheckValue,
+  masterKeyId,
+  masterKeyMatches,
+  masterKeyName,
+  sealingPublicKey,
+} from "./master-key.js";

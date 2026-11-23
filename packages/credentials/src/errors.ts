@@ -61,5 +61,8 @@ declare module "@waitron/shared" {
     /** `set` could not read its payload from `--file` or stdin. `path` is the argument the operator
      * typed, never file CONTENT, and no underlying error message is carried. */
     "credentials.payload_unreadable": { source: "file" | "stdin"; path: string | null };
+    /** The day handed for a master key's name is not a real calendar day written `YYYY-MM-DD`.
+     * Carries nothing, so a wrong value passed by mistake (such as the printed key) is not kept. */
+    "master_key.name_day_invalid": Record<string, never>;
   }
 }

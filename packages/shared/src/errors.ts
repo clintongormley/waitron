@@ -91,6 +91,9 @@ export interface ErrorParams {
   "shared.invalid_cents": { value: string };
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
+  /** Not a 16-byte master key, or not its 28-symbol printed code: a symbol outside the alphabet, a
+   * wrong length, a wrong check or a number of 2^128 or more. Never carries the key or the text. */
+  "master_key.code_invalid": Record<string, never>;
   "release.version_invalid": Record<string, never>;
   "locale.unsupported": { locale: string };
   /**

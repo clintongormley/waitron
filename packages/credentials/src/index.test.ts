@@ -46,6 +46,13 @@ describe("the public surface", () => {
         "readPairSecret",
         "setPairLinkStateTx",
         "writePairLinkTx",
+        "authorityKey",
+        "makeMasterKey",
+        "masterKeyCheckValue",
+        "masterKeyId",
+        "masterKeyMatches",
+        "masterKeyName",
+        "sealingPublicKey",
       ].sort(),
     );
   });
