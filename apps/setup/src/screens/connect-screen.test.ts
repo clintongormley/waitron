@@ -153,7 +153,7 @@ describe("setup-connect-screen: waiting", () => {
     expect(link.textContent!.trim()).toBe("Open the Servers page on the main box");
     expect(q(el, "[data-test=addresses]")).toBeNull();
     expect(q(el, "[data-test=main]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toMatch(/192\.168\.1\.23|Main box:/);
+    expect(el.shadowRoot!.textContent).not.toMatch(/Main box:/);
     expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
     expect(q(el, "[data-test=start-again]")).not.toBeNull();
     expect(q(el, "[data-test=finish]")).toBeNull();

@@ -48,9 +48,9 @@ Introduce la dirección del servidor principal por su nombre, `https://waitron.l
 **Unirse**; su dirección IP, como `https://192.168.1.10`, se rechaza. El servidor nuevo muestra un
 código de seis cifras y un enlace a la página Servidores del servidor principal.
 
-En el servidor principal, abre **Sistema → Servidores** (el enlace la abre), elige **Comprobar** junto
-a la solicitud y toca el código que muestra el servidor nuevo. Un toque equivocado termina la
-solicitud; elige **Empezar de nuevo** en el servidor nuevo.
+En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa página), elige
+**Comprobar** junto a la solicitud y toca el código que muestra el servidor nuevo. Un toque
+equivocado termina la solicitud; elige **Empezar de nuevo** en el servidor nuevo.
 
 De vuelta en el servidor nuevo, elige **Terminar la unión**. El servidor nuevo recibe su primera copia por la red del
 local y se reinicia solo como servidor de reserva. Su página muestra lo que queda por hacer:
