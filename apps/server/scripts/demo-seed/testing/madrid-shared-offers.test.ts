@@ -255,6 +255,11 @@ it("compares the declared course and its department firing policy", () => {
   expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
     "Madrid added rows differ: department_courses",
   );
+  firePolicy.reminder_minutes = 10;
+  firePolicy.held_until_fired = 1;
+  expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
+    "Madrid added rows differ: department_courses",
+  );
 });
 
 it("refuses an existing cell changed beyond the declaration", () => {
