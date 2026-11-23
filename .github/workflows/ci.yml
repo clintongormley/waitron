@@ -2324,6 +2324,137 @@ jobs:
           retention-days: 1
           overwrite: true
 
+  # The WebKit dependency install uses sudo and APT on the hosted Ubuntu image.
+  test-webkit-startup:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && (needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.till == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version and Ubuntu release
+        id: playwright-version
+        run: |
+          . /etc/os-release
+          echo "release=$VERSION_ID" >> "$GITHUB_OUTPUT"
+          version=$(pnpm --fail-if-no-match --filter @waitron/till exec playwright --version)
+          echo "version=${version#Version }" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached Chromium for the Vitest driver
+        uses: actions/cache/restore@v6
+        id: browser-cache
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
+
+      - name: Install Chromium's headless shell
+        timeout-minutes: 3
+        run: timeout 120 pnpm --fail-if-no-match --filter @waitron/till exec playwright install chromium --only-shell
+
+      - name: Cache Playwright WebKit
+        uses: actions/cache@v6
+        id: webkit-cache
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          path: ~/.cache/ms-playwright/webkit-*
+          key: playwright-webkit-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.release }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete WebKit cache
+        if: steps.webkit-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME"/.cache/ms-playwright/webkit-*
+
+      - name: Install WebKit system libraries
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          gnu_timeout=$(command -v gnutimeout || command -v timeout)
+          [[ $("$gnu_timeout" --version) == *'GNU coreutils'* ]]
+          node=$(command -v node)
+          playwright_cli=$(pnpm --fail-if-no-match --filter @waitron/till exec node -p 'require.resolve("playwright/package.json").replace(/package\.json$/, "cli.js")')
+          apt_config="$RUNNER_TEMP/webkit-apt.conf"
+          # Keep dpkg in the process group that the root-owned timeout can stop.
+          printf 'Dpkg::Use-Pty "false";\n' > "$apt_config"
+          # The CLI can exit on TERM before timeout would send a second signal to its children.
+          for attempt in 1 2; do
+            if sudo -n APT_CONFIG="$apt_config" "$gnu_timeout" -s KILL 90 "$node" "$playwright_cli" install-deps webkit; then
+              exit 0
+            fi
+            echo "WebKit dependency install attempt $attempt failed or stalled" >&2
+            if [ "$attempt" = 1 ]; then
+              sudo -n "$gnu_timeout" -s KILL 60 dpkg --configure -a
+            fi
+          done
+          exit 1
+
+      - name: Install Playwright WebKit
+        timeout-minutes: 3
+        run: timeout 120 pnpm --fail-if-no-match --filter @waitron/till exec playwright install webkit
+
+      - name: Check dashboard theme start-up in WebKit
+        env:
+          WAITRON_STARTUP_ENGINES: webkit
+        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/dashboard exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
+
+      - name: Check till theme start-up in WebKit
+        env:
+          WAITRON_STARTUP_ENGINES: webkit
+        run: node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts --reporter=verbose
+
   # The coverage gate for @waitron/dashboard: merges the test-dashboard blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-dashboard-merge:
@@ -4222,6 +4353,7 @@ jobs:
       - test-till-merge
       - test-dashboard
       - test-dashboard-merge
+      - test-webkit-startup
       - test-setup
       - test-venue-service
       - test-venue-service-merge

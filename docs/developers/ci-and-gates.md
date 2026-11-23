@@ -50,6 +50,15 @@ packages, runs ESLint and Prettier with no saved results, collects coverage and 
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
 that their test script exists before running, including when result uploads are skipped.
 
+When CI selects the dashboard or till tests, `test-webkit-startup` runs the eight theme start-up
+cases for each app in WebKit. Changes scoped to the shared UI package reach these cases on the
+next full run. The job reports to `ci` and runs on GitHub-hosted Ubuntu for its
+sudo and APT installation. Vitest's driver uses the existing Chromium cache in restore-only
+mode, with a headless-shell install on a miss. The same browser directory holds WebKit, but
+the WebKit cache archives only `webkit-*` under a key for the OS, architecture, Ubuntu release
+and Playwright version. Before a matching default-branch cache exists, each selected pull request
+can save its own copy. See [GitHub's cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)
+
 After full verification on main, the run publishes its pinned SHA images and asks the existing
 `main-tag-guard.sh` before moving `:main`. Ordinary main pushes and pushes to `maintenance/*` publish no container image.
 A manual full run on another branch verifies without publishing. The private UI-package workflow
@@ -3318,6 +3327,15 @@ when that workflow is one of this repository's `.github/workflows/` files.
 
 ### Every apt wait is bounded
 
+The hosted WebKit job runs Playwright's `install-deps` inside a GNU timeout started by sudo.
+It passes APT configuration on sudo's command line so dpkg stays in the process group the timeout
+can stop. The deadline sends KILL to the group because the CLI can exit on TERM before GNU
+timeout would send its second signal. After a failed attempt, the job bounds `dpkg --configure -a` before retrying once.
+The hosted [dpkg stall probe](https://github.com/clintongormley/waitron/actions/runs/45254587589/job/137972944893)
+held the frontend lock at its pre-invoke hook. The backend lock was free at that point.
+It exited 137 at the deadline with no running process in the group. Neither lock was held
+afterwards, and the retry installed the libraries.
+
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
 through `scripts/image-apt-cache.sh`, using saved signed indexes and debs, the runner's
@@ -3436,11 +3454,12 @@ closed port. If the setting did nothing, the bounded run would exit 0 after one 
   `attempt N of 3 failed or stalled: apt-get update` three times and exited 1, in 21 s;
 - control, the image's own sources with the same settings: one attempt, exit 0.
 
-Guards: the "apt waits" and "playwright --with-deps waits" cases in `scripts/ci-workflow.test.mjs`,
+Guards: the "apt waits" and "Playwright dependency waits" cases in `scripts/ci-workflow.test.mjs`,
 and "the Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt
 waits" cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
-`--with-deps` case asks only that the command holding it start with `timeout <n>` (after an
-optional `if`, `!` or `sudo`) on the same line (a lone `&` ends a command; the `&` in `2>&1` does not), not for a retry. The waitron.sh case asks
+Playwright guard reads the same shell line. It accepts `timeout <n>` or `gnutimeout <n>`
+for `--with-deps`. For `install-deps` it checks that the command names
+`"$gnu_timeout" -s KILL` inside sudo. The waitron.sh case asks
 that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside `apt_get()`,
 and that every `apt-get` in that body, other than one named inside quotes, runs under
 `"$limit" <n>` in its own command; it does not run the shell. The numbers `apt_get` hands to `timeout`,
@@ -3449,8 +3468,8 @@ cut off) by "the apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh
 workflow cases read steps through the same reader as the "apt installs" case, which takes the quotes
 off a one-line `run: "…"` or `run: '…'` value. The apt waits case therefore misses every install
 that case's comment lists as passing — among them apt run by a script the step calls, by a
-composite or Docker action, by a tool itself (`playwright install --with-deps`, which only the
-`--with-deps` case reads), or from a command
+composite or Docker action, by a tool itself (Playwright's dependency installs have their own
+case), or from a command
 built from a variable — and it checks neither the retry loop nor the step's `timeout-minutes`. It
 reads each line on its own, so a `timeout` at the end of a `\`-continued line is reported as
 unbounded. The Dockerfile case sees only `apt-get` named in a `RUN`, does not check that `bounded()`

@@ -3577,16 +3577,17 @@ reported five `clock_unconfirmed` failures and one pass. Supplying a synthetic 1
 the two build fixtures passed all six with the original test bodies preserved. Keep tests of real
 build provenance on real build metadata; these fixed-clock fixtures qualify command behavior.
 
-## The start-up probe runs WebKit only when asked
+## Theme start-up checks in Chromium and WebKit
 
 `apps/dashboard/src/venue-theme-startup.test.ts` and `apps/till/src/venue-theme-startup.test.ts`
 open each app's real `index.html` in a fresh browser context through the shared command
 `packages/ui/test/venue-theme-startup.ts`, and check the venue theme's first frames. Each file runs
 its eight cases once per engine named in `WAITRON_STARTUP_ENGINES`, read by
 `startupEnginesFromEnv` in that command file and passed to the test through each app's
-`vitest.config.ts` `provide`; unset, empty or blank, it is `chromium`. CI installs
-Chromium alone (every `playwright install` in `.github/workflows/` names `chromium`), so CI runs
-eight cases per app. A WebKit run is local:
+`vitest.config.ts` `provide`. An unset, empty or blank value runs Chromium. The dashboard and till
+shards use that default. When CI selects either app's tests, `test-webkit-startup` runs both suites
+with `WAITRON_STARTUP_ENGINES=webkit`. Vitest still needs Chromium's headless shell for its driver
+page. To run both engines locally, use these commands.
 
 ```sh
 pnpm --filter @waitron/till exec playwright install webkit   # once; into the shared Playwright cache
@@ -3594,7 +3595,7 @@ WAITRON_STARTUP_ENGINES=chromium,webkit pnpm --filter @waitron/dashboard exec vi
 WAITRON_STARTUP_ENGINES=chromium,webkit pnpm --filter @waitron/till exec vitest run src/venue-theme-startup.test.ts
 ```
 
-which runs sixteen per app. `node -e "const p=require('playwright').webkit.executablePath();console.log(p, require('fs').existsSync(p))"`,
+Each suite runs sixteen cases. `node -e "const p=require('playwright').webkit.executablePath();console.log(p, require('fs').existsSync(p))"`,
 run from an app, prints `true` when WebKit is installed. The command refuses any other engine name
 (`not a start-up engine: firefox`). Each result carries the engine's name and version and
 `firstThemedAtMs`, the page's `performance.now()` at the first frame that carried the theme root,
