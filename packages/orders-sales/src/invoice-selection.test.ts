@@ -423,9 +423,9 @@ describe("stored bill invoice selection", () => {
 describe("country-free recipient validation", () => {
   it("accepts a long recipient name only when the backend allows it", () => {
     const cappedName = "𐐀".repeat(120);
-    expect(checkedInvoiceRecipient(policy, { ...recipient, legalName: cappedName }).legalName).toBe(
-      cappedName,
-    );
+    expect(
+      checkedInvoiceRecipient(policy, { ...recipient, legalName: `  ${cappedName}  ` }).legalName,
+    ).toBe(cappedName);
 
     const legalName = "𐐀".repeat(121);
     expect(
