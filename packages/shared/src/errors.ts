@@ -16,7 +16,7 @@
  * because every code doubles as a translation key.
  *
  * `shared.*` is not an exception: it names the value types this package defines (ids, exact
- * decimals and the stored counts they convert to, and the printed code of a 24-byte key), common
+ * decimals and the stored counts they convert to, and the printed code of a 16-byte key), common
  * to every package that parses one.
  *
  * An augmenting `errors.ts` must be transitively reachable from its package's own `index.ts`.
@@ -92,8 +92,8 @@ export interface ErrorParams {
   "shared.invalid_cents": { value: string };
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
-  /** Not a 24-byte key, not its 41-symbol printed code, or typed text holding a character no
-   * printed code uses. Never carries the key or the text. */
+  /** Not a 16-byte key, or not its 28-symbol printed code: a symbol outside the alphabet, a wrong
+   * length, a wrong check or a number of 2^128 or more. Never carries the key or the text. */
   "shared.invalid_key_code": Record<string, never>;
   "release.version_invalid": Record<string, never>;
   "locale.unsupported": { locale: string };

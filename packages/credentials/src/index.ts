@@ -70,16 +70,12 @@ export {
 
 export {
   authorityKey,
-  backupKey,
-  diskKey,
   makeMasterKey,
   masterKeyCheckValue,
   masterKeyId,
   masterKeyMatches,
+  masterKeyName,
   printMasterKey,
   readMasterKey,
   sealingPublicKey,
-  sealingPublicKeyFrom,
 } from "./master-key.js";
-export type { SealingPublicKey } from "./master-key.js";
-export { openPacket, packetMasterKeyId, sealPacket } from "./sealed-packet.js";

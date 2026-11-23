@@ -61,17 +61,7 @@ declare module "@waitron/shared" {
     /** `set` could not read its payload from `--file` or stdin. `path` is the argument the operator
      * typed, never file CONTENT, and no underlying error message is carried. */
     "credentials.payload_unreadable": { source: "file" | "stdin"; path: string | null };
-    /** Not a master key: text that does not read as its printed form, bytes that are not 24 long,
-     * or bytes that are not an X25519 public key a packet can be sealed to. */
-    "master_key.invalid": { reason: "printed_form" | "length" | "public_key" };
-    /** A backup key number that is not a whole number from 1 to 0xffffffff (what an archive's
-     * four-byte field can name), or a box id that is not a UUID. */
-    "master_key.derivation_input_invalid": { input: "backup_key_number" | "box_id" };
-    /** Too short to be a sealed packet, or not one of this version. */
-    "sealed_packet.malformed": Record<string, never>;
-    /** The packet was sealed to another master key; nothing was decrypted. Key ids are public. */
-    "sealed_packet.other_master_key": { packetKeyId: string; masterKeyId: string };
-    /** The packet names this master key but did not open: a changed byte or a forged packet. */
-    "sealed_packet.unopenable": Record<string, never>;
+    /** The day handed for a master key's name is not `YYYY-MM-DD`. */
+    "master_key.name_day_invalid": { value: string };
   }
 }

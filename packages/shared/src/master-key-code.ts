@@ -1,66 +1,64 @@
 import { AppError } from "./errors.js";
 
-/** The 32 symbols of every printed code: digits and capitals without I, L, O and U. */
-export const TYPED_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const alphabet = TYPED_CODE_ALPHABET;
+const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const BASE = 31n;
+const KEY_BYTES = 16;
+const KEY_SYMBOLS = 26;
+// Divisibility by this prime is what makes every single changed symbol and every swap of two
+// different neighbours detectable (checked for all 28 positions, A1323 plan §3).
+const CHECK_PRIME = 953n;
+
 function refuse(): never {
   throw new AppError("shared.invalid_key_code", {});
 }
-/** Reads typed text as code symbols: drops spaces, tabs, line breaks and hyphens, upper-cases, and
- * reads O as 0 and I or L as 1. Refuses any other character. */
-export function normaliseTypedCode(text: string): string {
-  if (typeof text !== "string" || /[^0-9A-Za-z \t\r\n-]/.test(text)) refuse();
-  const value = text
-    .replace(/[ \t\r\n-]/g, "")
-    .toUpperCase()
-    .replaceAll("O", "0")
-    .replace(/[IL]/g, "1");
-  if (/[^0-9ABCDEFGHJKMNPQRSTVWXYZ]/.test(value)) refuse();
+
+function toNumber(bytes: Uint8Array): bigint {
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
   return value;
 }
-function residue(value: string): number {
-  let result = 0;
-  for (const symbol of value) result = (result * 32 + alphabet.indexOf(symbol)) % 1021;
-  return result;
-}
-/** Prints 24 bytes, given as base64url text, as 41 grouped symbols: 39 for the bytes, 2 to check. */
-export function encodeMasterKeyCode(secret: string): string {
-  if (typeof secret !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(secret)) refuse();
-  const bytes = atob(secret.replaceAll("-", "+").replaceAll("_", "/"));
-  let buffer = 0,
-    bits = 0,
-    value = "";
-  for (const byte of bytes) {
-    buffer = (buffer << 8) | byte.charCodeAt(0);
-    bits += 8;
-    while (bits >= 5) {
-      bits -= 5;
-      value += alphabet[(buffer >> bits) & 31]!;
-    }
-    buffer &= (1 << bits) - 1;
+
+function toSymbols(value: bigint, width: number): string {
+  let text = "";
+  for (let i = 0; i < width; ++i) {
+    text = ALPHABET[Number(value % BASE)]! + text;
+    value /= BASE;
   }
-  value += alphabet[buffer << 3]!;
-  // A base-32 value divisible by prime 1021 detects single-symbol changes and unequal adjacent swaps.
-  const check = (1021 - ((residue(value) * 1024) % 1021)) % 1021;
-  value += alphabet[check >> 5]! + alphabet[check & 31]!;
-  return value.match(/.{1,4}/g)!.join(" ");
+  return text;
 }
-/** Reads a printed code, in any case and spacing, back to its 24 bytes as base64url text. */
-export function decodeMasterKeyCode(printed: string): string {
-  const value = normaliseTypedCode(printed);
-  if (value.length !== 41 || residue(value) !== 0) refuse();
-  let buffer = 0,
-    bits = 0,
-    bytes = "";
-  for (const symbol of value.slice(0, 39)) {
-    buffer = (buffer << 5) | alphabet.indexOf(symbol);
-    bits += 5;
-    if (bits >= 8) {
-      bits -= 8;
-      bytes += String.fromCharCode(buffer >> bits);
-      buffer &= (1 << bits) - 1;
-    }
+
+/** Bytes as one unsigned big-endian number in base 31, padded with leading `2`s to the fewest
+ * symbols that hold any value of that many bytes. */
+export function keySymbols(bytes: Uint8Array): string {
+  // Exact: no power of 31 is a power of 2, so the quotient is never a whole number.
+  return toSymbols(toNumber(bytes), Math.ceil((8 * bytes.length) / Math.log2(31)));
+}
+
+/** Prints 16 bytes as 28 symbols in seven groups of four: 26 for the bytes, then 2 that make the
+ * whole number divisible by 953. */
+export function encodeMasterKeyCode(key: Uint8Array): string {
+  if (key.length !== KEY_BYTES) refuse();
+  const value = toNumber(key);
+  const check = (CHECK_PRIME - ((value * BASE * BASE) % CHECK_PRIME)) % CHECK_PRIME;
+  const code = toSymbols(value, KEY_SYMBOLS) + toSymbols(check, 2);
+  return code.match(/.{4}/g)!.join(" ");
+}
+
+/** Reads a printed code back to its 16 bytes, in any case, with spaces and dashes anywhere. */
+export function decodeMasterKeyCode(printed: string): Uint8Array {
+  // Checked before upper-casing, which turns some other letters (such as `ſ`) into alphabet ones.
+  if (typeof printed !== "string" || /[^2-9A-HJKMNP-Za-hjkmnp-z -]/.test(printed)) refuse();
+  const code = printed.replace(/[ -]/g, "").toUpperCase();
+  if (code.length !== KEY_SYMBOLS + 2) refuse();
+  let whole = 0n;
+  for (const symbol of code) whole = whole * BASE + BigInt(ALPHABET.indexOf(symbol));
+  if (whole % CHECK_PRIME !== 0n) refuse();
+  let value = whole / (BASE * BASE);
+  if (value >> 128n !== 0n) refuse();
+  const key = new Uint8Array(KEY_BYTES);
+  for (let i = KEY_BYTES - 1; i >= 0; --i) {
+    key[i] = Number(value & 0xffn);
+    value >>= 8n;
   }
-  if (buffer !== 0) refuse();
-  return btoa(bytes).replaceAll("+", "-").replaceAll("/", "_");
+  return key;
 }

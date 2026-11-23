@@ -2,38 +2,22 @@ import {
   createHash,
   createPrivateKey,
   createPublicKey,
-  diffieHellman,
-  generateKeyPairSync,
   hkdfSync,
   randomBytes,
   timingSafeEqual,
-  type KeyObject,
 } from "node:crypto";
-import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, isUuid } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, keySymbols } from "@waitron/shared";
 import "./errors.js";
 
-const MASTER_KEY_BYTES = 24;
+const MASTER_KEY_BYTES = 16;
 const SALT = Buffer.from("waitron.master-key.v1", "ascii");
 const X25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
-const X25519_SPKI_BYTES = 44;
-const LARGEST_BACKUP_KEY_NUMBER = 0xffff_ffff;
-const agreementProbe = generateKeyPairSync("x25519").privateKey;
-
-declare const sealingPublicKeyBrand: unique symbol;
-/** The sealing pair's public half as SPKI DER: the only key a sealed packet is sealed with. */
-export type SealingPublicKey = Buffer & { readonly [sealingPublicKeyBrand]: true };
-
-function checkedMasterKey(masterKey: Uint8Array): Uint8Array {
-  if (masterKey.length !== MASTER_KEY_BYTES) {
-    throw new AppError("master_key.invalid", { reason: "length" });
-  }
-  return masterKey;
-}
 
 function derive(masterKey: Uint8Array, info: string): Buffer {
-  return Buffer.from(
-    hkdfSync("sha256", checkedMasterKey(masterKey), SALT, Buffer.from(info, "ascii"), 32),
-  );
+  if (masterKey.length !== MASTER_KEY_BYTES) {
+    throw new AppError("shared.invalid_key_code", {});
+  }
+  return Buffer.from(hkdfSync("sha256", masterKey, SALT, Buffer.from(info, "ascii"), 32));
 }
 
 export function makeMasterKey(): Buffer {
@@ -41,17 +25,11 @@ export function makeMasterKey(): Buffer {
 }
 
 export function printMasterKey(masterKey: Uint8Array): string {
-  return encodeMasterKeyCode(Buffer.from(checkedMasterKey(masterKey)).toString("base64url"));
+  return encodeMasterKeyCode(masterKey);
 }
 
 export function readMasterKey(printed: string): Buffer {
-  let secret: string;
-  try {
-    secret = decodeMasterKeyCode(printed);
-  } catch {
-    throw new AppError("master_key.invalid", { reason: "printed_form" });
-  }
-  return Buffer.from(secret, "base64url");
+  return Buffer.from(decodeMasterKeyCode(printed));
 }
 
 export function authorityKey(masterKey: Uint8Array): Buffer {
@@ -73,60 +51,25 @@ export function masterKeyMatches(masterKey: Uint8Array, checkValue: string): boo
   return timingSafeEqual(expected, Buffer.from(checkValue, "hex"));
 }
 
-export function sealingPrivateKey(masterKey: Uint8Array): KeyObject {
-  return createPrivateKey({
+/** The sealing pair's public half as SPKI DER. The private half is never returned. */
+export function sealingPublicKey(masterKey: Uint8Array): Buffer {
+  const privateKey = createPrivateKey({
     key: Buffer.concat([X25519_PKCS8_PREFIX, derive(masterKey, "seal.x25519")]),
     format: "der",
     type: "pkcs8",
   });
+  return createPublicKey(privateKey).export({ format: "der", type: "spki" });
 }
 
-export function sealingPublicKeyOf(privateKey: KeyObject): SealingPublicKey {
-  return createPublicKey(privateKey).export({ format: "der", type: "spki" }) as SealingPublicKey;
-}
-
-export function sealingPublicKey(masterKey: Uint8Array): SealingPublicKey {
-  return sealingPublicKeyOf(sealingPrivateKey(masterKey));
-}
-
-/** Every agreement with a small-order point is all zeros, which Node refuses to return. */
-export function agreeOrRefuse(privateKey: KeyObject, publicKey: KeyObject): Buffer {
-  try {
-    return diffieHellman({ privateKey, publicKey });
-  } catch {
-    throw new AppError("master_key.invalid", { reason: "public_key" });
-  }
-}
-
-/** Checks the length itself: `createPublicKey` accepts an X25519 SPKI with a byte after it. */
-export function sealingPublicKeyFrom(spki: Uint8Array): SealingPublicKey {
-  let key: KeyObject;
-  try {
-    key = createPublicKey({ key: Buffer.from(spki), format: "der", type: "spki" });
-  } catch {
-    throw new AppError("master_key.invalid", { reason: "public_key" });
-  }
-  if (key.asymmetricKeyType !== "x25519" || spki.length !== X25519_SPKI_BYTES) {
-    throw new AppError("master_key.invalid", { reason: "public_key" });
-  }
-  agreeOrRefuse(agreementProbe, key);
-  return Buffer.from(spki) as SealingPublicKey;
-}
-
-export function masterKeyId(publicKey: SealingPublicKey): Buffer {
+/** The first 8 bytes of SHA-256 over the sealing public key's SPKI DER. */
+export function masterKeyId(publicKey: Uint8Array): Buffer {
   return createHash("sha256").update(publicKey).digest().subarray(0, 8);
 }
 
-export function backupKey(masterKey: Uint8Array, n: number): Buffer {
-  if (!Number.isInteger(n) || n < 1 || n > LARGEST_BACKUP_KEY_NUMBER) {
-    throw new AppError("master_key.derivation_input_invalid", { input: "backup_key_number" });
+/** `YYYY-MM-DD · XXXX`: the day given, then the first 4 of the 13 symbols that print the id. */
+export function masterKeyName(publicKey: Uint8Array, day: string): string {
+  if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(day)) {
+    throw new AppError("master_key.name_day_invalid", { value: day });
   }
-  return derive(masterKey, `backup-key.${String(n)}`);
-}
-
-export function diskKey(masterKey: Uint8Array, boxId: string): Buffer {
-  if (!isUuid(boxId)) {
-    throw new AppError("master_key.derivation_input_invalid", { input: "box_id" });
-  }
-  return derive(masterKey, `disk.${boxId.toLowerCase()}`);
+  return `${day} · ${keySymbols(masterKeyId(publicKey)).slice(0, 4)}`;
 }

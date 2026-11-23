@@ -13,7 +13,7 @@ import {
 } from "../archive-recovery-pack.js";
 import { downloadArchive } from "../archive-download.js";
 import { archiveNamespace } from "../archive-settings.js";
-import { artifactHeaderBytes } from "../artifact-cipher.js";
+import { ARTIFACT_HEADER_BYTES } from "../artifact-cipher.js";
 import { decryptArtifactFile, encryptArtifactFile } from "../artifact-cipher-file.js";
 import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
@@ -78,7 +78,7 @@ async function syntheticArchive(
   signal: AbortSignal,
 ): Promise<{ plainHash: string; path: string }> {
   const path = join(folder, "archive.backup.enc");
-  const plain = syntheticPlaintext(encryptedBytes - artifactHeaderBytes(1), seed);
+  const plain = syntheticPlaintext(encryptedBytes - ARTIFACT_HEADER_BYTES, seed);
   await encryptArtifactFile(plain.chunks, path, RECOVERY_KEY, signal);
   expect((await stat(path)).size).toBe(encryptedBytes);
   return { plainHash: plain.digest(), path };
