@@ -131,9 +131,9 @@ import { setProductCourse } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 
-/** The menu's defaults, whether the venue's region charges a product a second VAT class when it
- * is taken away, the takeaway rates a person may pick and today's dine-in rate: they travel here so
- * anyone who may edit products reads them. */
+/** The menu's defaults, whether the venue's region gives takeaway its own VAT rate, the takeaway
+ * rates a person may pick and today's dine-in rate: they travel here so anyone who may edit
+ * products reads them. */
 async function readMenuSettingsAnswer(
   tx: Transaction,
 ): Promise<MenuDefaults & { takeawayVat: boolean; vatRates: string[]; dineInVatRate: string }> {

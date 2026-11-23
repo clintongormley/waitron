@@ -27,18 +27,12 @@ import {
   useMenuDb,
 } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
+import { saveBodyOf } from "../test/save-body.js";
 
 const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "coffee.webp"));
 let input: Omit<ProductEditorInput, "vatClass">;
 
-/** An editor read without the eat-in class it still carries, which a save refuses. */
-function saveBodyOf<T>(body: T): T {
-  if (typeof body !== "object" || body === null) return body;
-  const rest = { ...body } as Record<string, unknown>;
-  delete rest.vatClass;
-  return rest as T;
-}
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await seedVenueSettings(fx.db);

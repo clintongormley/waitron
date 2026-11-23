@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { vatRatesFor } from "@waitron/country-packs";
 import {
   CORE_MIGRATIONS,
@@ -87,6 +87,25 @@ describe("dineInVatRateToday", () => {
       ],
     };
     expect(await app((tx) => dineInVatRateToday(tx, dated))).toBe("7.50");
+  });
+
+  it("reads the venue's date only for a dated list, so a broken saved zone refuses only that", async () => {
+    await seedVenue(suite.db);
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
+    const area = vatRatesFor("ES", "ES-common")!;
+    expect(await app((tx) => dineInVatRateToday(tx, area))).toBe("10.00");
+    const dated = {
+      ...area,
+      dineIn: [
+        { from: null, rate: "10.00" },
+        { from: "2000-01-01", rate: "7.5" },
+      ],
+    };
+    await expect(app((tx) => dineInVatRateToday(tx, dated))).rejects.toMatchObject({
+      code: "venue.time_zone_invalid",
+    });
   });
 });
 

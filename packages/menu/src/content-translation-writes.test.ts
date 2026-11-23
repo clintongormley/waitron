@@ -183,7 +183,7 @@ async function existingWrite(
       tx,
       id,
       kind === "option_list"
-        ? { ...saveBodyOf(value), customerName: names }
+        ? { ...value, customerName: names }
         : {
             ...value,
             labels: value.labels.map((label) =>
@@ -195,7 +195,7 @@ async function existingWrite(
   }
   if (kind === "extra_list") {
     const { id, ...value } = await getExtraList(tx, ids.extra_list);
-    return updateExtraList(tx, id, { ...saveBodyOf(value), customerName: names }, "en");
+    return updateExtraList(tx, id, { ...value, customerName: names }, "en");
   }
   return updateUnit(tx, ids.unit, { name: names }, "en");
 }

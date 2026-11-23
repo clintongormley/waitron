@@ -181,9 +181,14 @@ export async function takeawayVatRatesToday(
   return rates;
 }
 
-/** The area's dine-in rate in force on the venue's local date today (plan D14). */
+/**
+ * The area's dine-in rate in force on the venue's local date today, read as the takeaway rate's
+ * date is. The venue's date is read only when the list has a dated entry: without one, every date
+ * gives the list's one rate, so a broken saved time zone does not refuse it.
+ */
 export async function dineInVatRateToday(tx: Transaction, rates: AreaVatRates): Promise<string> {
-  return rateOn(rates.dineIn, await venueToday(tx));
+  const dated = rates.dineIn.some((entry) => entry.from !== null);
+  return rateOn(rates.dineIn, dated ? await venueToday(tx) : "1970-01-01");
 }
 
 async function venueToday(tx: Transaction): Promise<string> {

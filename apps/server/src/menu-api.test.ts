@@ -2396,9 +2396,7 @@ describe("mountMenuApi — products", () => {
     const read = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
-    // The read still carries the eat-in class, which a save refuses.
-    const value = { ...read };
-    delete value.vatClass;
+    const value = saveBodyOf(read);
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
@@ -6958,6 +6956,15 @@ describe("menu settings routes", () => {
       vatRates: SPAIN_PICKABLE,
       dineInVatRate: "10.00",
     });
+  });
+
+  it("answers the undated dine-in rate while the saved time zone is broken", async () => {
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
+    const loaded = await send(mountApp(), "GET", "/management-api/menu-settings");
+    expect(loaded.status).toBe(200);
+    expect(await loaded.json()).toMatchObject({ dineInVatRate: "10.00" });
   });
 
   it("refuses the retired new-product VAT class on the venue defaults and saves nothing", async () => {
