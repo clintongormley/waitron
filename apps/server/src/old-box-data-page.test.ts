@@ -12,9 +12,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
 import { generateSync } from "otplib";
+import { AppError } from "@waitron/shared";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import type { Logger } from "./logger.js";
 import { oldBoxDataRoute } from "./old-box-data-page.js";
+import type { PasswordThrottle } from "./password-throttle.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({
@@ -56,7 +58,13 @@ afterEach(() => {
   socket.destroy();
 });
 
-function appWith(options: { modules?: WaitronModule[]; resetOrdered?: () => boolean } = {}) {
+function appWith(
+  options: {
+    modules?: WaitronModule[];
+    resetOrdered?: () => boolean;
+    throttle?: PasswordThrottle;
+  } = {},
+) {
   const app = new Hono();
   oldBoxDataRoute({
     page: {
@@ -68,6 +76,7 @@ function appWith(options: { modules?: WaitronModule[]; resetOrdered?: () => bool
     },
     modules: options.modules ?? [fiscal],
     totpKeyRing: TOTP_KEY_RING,
+    throttle: options.throttle,
   })(app);
   return app;
 }
@@ -139,7 +148,7 @@ describe("POST /old-box-data on the old box", () => {
   it("refuses over plain HTTP, before checking any password", async () => {
     await admin();
     await expectPage(await post(appWith(), signIn, { secure: false }), 403);
-    expect(lines.some((line) => line.event === "old_box_data.downloaded")).toBe(false);
+    expect(lines).toEqual([]);
   });
 
   it("refuses a post from another site's page", async () => {
@@ -197,7 +206,7 @@ describe("POST /old-box-data on the old box", () => {
     expect(response.status).toBe(200);
   });
 
-  it("refuses a second download while one is being made", async () => {
+  it("refuses a second download while one is being made, after its own sign-in", async () => {
     await admin();
     let entered!: () => void;
     const seatEntered = new Promise<void>((resolve) => (entered = resolve));
@@ -216,14 +225,17 @@ describe("POST /old-box-data on the old box", () => {
     };
     const app = appWith({ modules: [slow] });
     const first = post(app, signIn);
-    await seatEntered;
-    await expectPage(await post(app, signIn), 409);
-    release();
+    try {
+      await seatEntered;
+      // The password is checked while the file is being made: a wrong one is told so.
+      await expectPage(await post(app, { ...signIn, password: "wrong horse" }), 401);
+      await expectPage(await post(app, signIn), 409);
+    } finally {
+      release();
+    }
     expect((await first).status).toBe(200);
     // The turn is given back once the first finishes.
-    const again = post(app, signIn);
-    await seatEntered;
-    expect((await again).status).toBe(200);
+    expect((await post(app, signIn)).status).toBe(200);
   }, 15_000);
 
   it("makes the person wait after repeated wrong passwords for one address", async () => {
@@ -231,9 +243,34 @@ describe("POST /old-box-data on the old box", () => {
     const app = appWith();
     for (let attempt = 0; attempt <= PIN_THROTTLE_FREE_ATTEMPTS; attempt++)
       await expectPage(await post(app, { ...signIn, password: "wrong horse" }), 401);
-    await expectPage(await post(app, signIn), 429);
+    const held = await post(app, signIn);
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(0);
+    await expectPage(held, 429);
     // Folded: another spelling of the same address is held too.
     await expectPage(await post(app, { ...signIn, email: EMAIL.toLowerCase() }), 429);
+  });
+
+  it("refuses a form larger than the cap", async () => {
+    await admin();
+    await expectPage(await post(appWith(), { ...signIn, totp: "1".repeat(5000) }), 400);
+    expect(lines).toEqual([]);
+  });
+
+  it("logs an unexpected refusal code as a fault and answers 500", async () => {
+    await admin();
+    const throttle: PasswordThrottle = {
+      begin: () => {
+        throw new AppError("setup.request_invalid", { field: "body" });
+      },
+    };
+    await expectPage(await post(appWith({ throttle }), signIn), 500);
+    expect(lines).toMatchObject([
+      {
+        level: "error",
+        event: "old_box_data.failed",
+        fields: { errorCode: "setup.request_invalid" },
+      },
+    ]);
   });
 
   it("logs the person's id and never the email", async () => {

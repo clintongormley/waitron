@@ -4,11 +4,12 @@ import { liveBackupQuery } from "@waitron/db";
 import { checkPasswordInCopy, foldedLoginEmail } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
-import { FALLBACK_LOCALE, hasCode, isAppError } from "@waitron/shared";
+import { FALLBACK_LOCALE, hasCode, isAppError, type AppError } from "@waitron/shared";
 import { isSecure } from "./encrypted-connection.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
 import { sentFromThisOrigin } from "./own-page.js";
+import { formBody } from "./recovery-start-again.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import {
   restrictedPageAnswer,
@@ -26,6 +27,25 @@ export interface OldBoxDataDeps {
 }
 
 type RefusalStatus = 400 | 401 | 403 | 409 | 429 | 500;
+
+/** The page's answer to a sign-in refusal; undefined for a code that is a fault, not a refusal. */
+function signInRefusal(
+  error: AppError,
+):
+  | { status: RefusalStatus; refusal: OldBoxDownloadRefusal; retryAfterSeconds?: number }
+  | undefined {
+  if (hasCode(error, "password.throttled"))
+    return {
+      status: 429,
+      refusal: "throttled",
+      retryAfterSeconds: error.params.retryAfterSeconds,
+    };
+  if (hasCode(error, "totp.required")) return { status: 401, refusal: "totpRequired" };
+  if (hasCode(error, "password.invalid")) return { status: 401, refusal: "signInRefused" };
+  if (hasCode(error, "authorization.not_permitted"))
+    return { status: 403, refusal: "notPermitted" };
+  return undefined;
+}
 
 /**
  * The replaced main box's download: a person holding `node.manage` signs in on this box's own page
@@ -54,57 +74,54 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
       if (!isSecure(c)) return refuse(403, "insecure");
       if (!sentFromThisOrigin(c)) return refuse(403, "otherPage");
       if (deps.page.resetOrdered?.() === true) return refuse(409, "wipeUnderWay");
-      let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+      let form: URLSearchParams;
       try {
-        form = await c.req.parseBody();
+        form = new URLSearchParams(await formBody(c));
       } catch {
         return refuse(400, "fieldsMissing");
       }
-      const text = (key: string) => (typeof form[key] === "string" ? form[key] : "");
+      const text = (key: string) => form.get(key) ?? "";
       const email = text("email").trim();
       const password = text("password");
       const totp = text("totp").trim();
       if (email === "" || password === "") return refuse(400, "fieldsMissing", email);
+      let personId: string;
+      try {
+        const finishAttempt = throttle.begin(foldedLoginEmail(email));
+        let outcome: "success" | "invalid" | "error" = "error";
+        try {
+          ({ personId } = await checkPasswordInCopy(
+            liveBackupQuery(deps.page.venue),
+            { email, password, ...(totp === "" ? {} : { totp }) },
+            { permission: "node.manage", totpKeyRing: deps.totpKeyRing },
+          ));
+          outcome = "success";
+        } catch (error) {
+          if (isAppError(error) && hasCode(error, "password.invalid")) outcome = "invalid";
+          throw error;
+        } finally {
+          finishAttempt(outcome);
+        }
+      } catch (error) {
+        const fields = {
+          errorCode: codeOf(error),
+          requestId,
+          ...(isAppError(error) && error.reason !== undefined ? { reason: error.reason } : {}),
+        };
+        const refusal = isAppError(error) ? signInRefusal(error) : undefined;
+        if (refusal === undefined) {
+          log("error", "old_box_data.failed", fields);
+          return refuse(500, "failed", email);
+        }
+        log("warn", "old_box_data.refused", fields);
+        if (refusal.retryAfterSeconds !== undefined)
+          c.header("Retry-After", String(refusal.retryAfterSeconds));
+        return refuse(refusal.status, refusal.refusal, email, refusal.retryAfterSeconds);
+      }
+      if (deps.page.resetOrdered?.() === true) return refuse(409, "wipeUnderWay", email);
       if (making) return refuse(409, "busy", email);
       making = true;
       try {
-        let personId: string;
-        try {
-          const finishAttempt = throttle.begin(foldedLoginEmail(email));
-          let outcome: "success" | "invalid" | "error" = "error";
-          try {
-            ({ personId } = await checkPasswordInCopy(
-              liveBackupQuery(deps.page.venue),
-              { email, password, ...(totp === "" ? {} : { totp }) },
-              { permission: "node.manage", totpKeyRing: deps.totpKeyRing },
-            ));
-            outcome = "success";
-          } catch (error) {
-            if (isAppError(error) && hasCode(error, "password.invalid")) outcome = "invalid";
-            throw error;
-          } finally {
-            finishAttempt(outcome);
-          }
-        } catch (error) {
-          const fields = {
-            errorCode: codeOf(error),
-            requestId,
-            ...(isAppError(error) && error.reason !== undefined ? { reason: error.reason } : {}),
-          };
-          if (!isAppError(error)) {
-            log("error", "old_box_data.failed", fields);
-            return refuse(500, "failed", email);
-          }
-          log("warn", "old_box_data.refused", fields);
-          if (hasCode(error, "password.throttled"))
-            return refuse(429, "throttled", email, error.params.retryAfterSeconds);
-          if (hasCode(error, "totp.required")) return refuse(401, "totpRequired", email);
-          if (hasCode(error, "password.invalid")) return refuse(401, "signInRefused", email);
-          if (hasCode(error, "authorization.not_permitted"))
-            return refuse(403, "notPermitted", email);
-          return refuse(500, "failed", email);
-        }
-        if (deps.page.resetOrdered?.() === true) return refuse(409, "wipeUnderWay", email);
         const madeAt = new Date();
         const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
         let bytes: Uint8Array<ArrayBuffer>;
