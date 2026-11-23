@@ -303,8 +303,8 @@ ventana nombra los sitios que fallaron y los deja marcados para que puedas volve
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
 En **Estructura**, selecciona una sección y copia la dirección de la página para volver a abrir
-esa misma sección. Si se rechaza quitar o arrastrar una fila en **Estructura**, encima del árbol
-verás la lista afectada y el motivo.
+esa misma sección. Si se rechaza quitar una fila o moverla con su control de arrastre, encima
+del árbol verás la lista afectada y el motivo.
 
 ## Cartas a precio fijo {#set-menus}
 

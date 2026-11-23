@@ -987,7 +987,7 @@ export class MenusScreen extends LitElement {
       void this.#url.write({ section }, true);
       return;
     }
-    // A live change can shorten the path while the person still has a draft on this page.
+    // Changing only the section stays in the same editor and preserves its drafts.
     const url = new URL(guard.href);
     url.pathname =
       tabAddress(menu, "structure") +

@@ -289,8 +289,8 @@ them ticked so you can try again. A menu's sections themselves are built under *
 Menus**.
 
 In **Structure**, select a section and copy the page address to open that same section later.
-While you are in **Structure**, a refused row removal or drag shows the list and the reason just
-above the tree.
+If removing a row or moving it with its drag handle is refused, look above the tree for the
+list and the reason.
 
 ## Set menus {#set-menus}
 
