@@ -876,9 +876,10 @@ from passing having read nothing, but lets a listing that drops a few other memb
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
 them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
-`.ts` file under `scripts/` but one is a guard SUITE, which Vitest leaves out of its own table
-whatever `coverage.include` says; the exception is `scripts/dev-server-proxy.ts`, and the T3
-subsection below says what it costs to leave it where it is.
+`.ts` file under `scripts/` is a guard SUITE, which Vitest leaves out of its own table whatever
+`coverage.include` says, except `scripts/dev-server-proxy.ts`, `scripts/english-only-still-to-clean.ts`
+and `scripts/personal-log-scan.ts`, which no table measures; the T3 subsection below says what it
+costs to leave the first where it is.
 
 ### The first promotion — measured 2026-09-23
 
