@@ -13,6 +13,7 @@ import {
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
+import { burgerAndBread } from "./testing/receipt-cases.js";
 import {
   receiptDateTime,
   receiptDateTimeNumeric,
@@ -973,47 +974,6 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     expect(rows.slice(2).map((r) => r.itemIndent)).toEqual([undefined, undefined]);
     expect(amountRows(document).some(([caption]) => caption!.startsWith("Descuento"))).toBe(false);
   });
-
-  const burgerAndBread = () => {
-    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
-    input.result.lines = [
-      {
-        descriptions: { "es-ES": "Hamburguesa" },
-        quantity: "1",
-        gross: "9.72",
-        listGross: "12.00",
-        listUnitPriceGross: "12.00",
-        net: {
-          unitPrice: "8.03",
-          priceQuantity: "1.000",
-          base: "8.03",
-          tax: "1.69",
-          rate: "21.00",
-        },
-        adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
-      },
-      {
-        descriptions: { "es-ES": "Pan de pueblo" },
-        quantity: "1",
-        gross: "2.25",
-        listGross: "2.50",
-        listUnitPriceGross: "2.50",
-        net: {
-          unitPrice: "2.05",
-          priceQuantity: "1.000",
-          base: "2.05",
-          tax: "0.20",
-          rate: "10.00",
-        },
-      },
-    ];
-    input.result.vatBreakdown = [
-      { rate: "21.00", base: "8.03", tax: "1.69" },
-      { rate: "10.00", base: "2.05", tax: "0.20" },
-    ];
-    input.result.total = "11.97";
-    return input;
-  };
 
   it("keeps a dish's own discount under it and its bill share at the end", () => {
     const input = burgerAndBread();
