@@ -1279,19 +1279,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Decisions and deliberate limits
 
-### A436 — a kitchen display with someone signed in, logged out only after a long idle time
-
-- **Owner, 2026-10-08, answering decisions 4 and 5 of the
-  [A366 slice 5 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
-  displays can have a login, but i would not expect them to log off automatically, or at least
-  only after an extended logout time (eg 30 minutes)". With nobody signed in, the device is the one
-  acting; with someone signed in, that person is recorded.
-
-The station shows who moved a dish when a cook is signed in. The pass and the other kitchen
-actions use their existing attribution. A kitchen profile starts with no automatic sign-out.
-The manager can set an idle timeout on the profile.
-
-
 - **A1325. Sales groups drawer closes by the current business-day rules** (watcher, 2026-11-22 05:35).
   A start change can move a finished close to the neighbouring date in Sales. It keeps its recorded time, count and withdrawal.
 
@@ -2259,6 +2246,18 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **Dishes are not moved, and bills not merged, between an eaten-here order and a takeaway one (`order.dining_differs`): lines follow their order, so a move would quietly change a sent line's VAT rate. A whole bill may move, to another table or from the counter to a table, and keeps its way, even into a department set the other way (owner, 2026-11-14, A1522: "Keep the refusal").**
 - **A takeaway order moved to a table stays takeaway, whatever the department (owner, 2026-11-14, A1522: "Stays Take away"; the offered alternative, becoming eaten here on arrival, was not taken).**
 - **Seated tables, and the calm and tint table-state colours, keep the old blue rather than the new brand teal (owner, 2026-11-19, in conversation; the new brand, #3840).** The design's words: "The builder check measured the teal as almost as dark as the green of a "ready" table, close enough in hue that staff could confuse "seated" and "ready" at a glance."
+
+### A436 — a kitchen display with someone signed in, logged out only after a long idle time
+
+- **Owner, 2026-10-08, answering decisions 4 and 5 of the
+  [A366 slice 5 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
+  displays can have a login, but i would not expect them to log off automatically, or at least
+  only after an extended logout time (eg 30 minutes)". With nobody signed in, the device is the one
+  acting; with someone signed in, that person is recorded.
+
+The station shows who moved a dish when a cook is signed in. The pass and the other kitchen
+actions use their existing attribution. A kitchen profile starts with no automatic sign-out.
+The manager can set an idle timeout on the profile.
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 

@@ -216,8 +216,8 @@ para aplicar tu elección.
 
 Para cerrar la sesión automáticamente tras un tiempo sin actividad, abre **General** en el perfil
 de cocina e introduce un valor como 30 en **Cierre de sesión automático (minutos)**. Deja el campo
-vacío para mantener la sesión abierta hasta que pulses **Cerrar sesión**. Guarda para aplicar el
-ajuste en las pantallas de estación abiertas.
+vacío para desactivar el cierre automático. Guarda para aplicar el ajuste en las pantallas de
+estación abiertas. El nuevo plazo empieza cuando la pantalla recibe el cambio.
 
 Si cambias el tiempo de inactividad, el fichaje o las pantallas disponibles en
 un perfil de dispositivo, el TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV

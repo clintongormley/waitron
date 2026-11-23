@@ -964,6 +964,32 @@ describe("device-profiles-screen editor form", () => {
     },
   );
 
+  it("starts with Never when an ordering profile becomes a kitchen display", async () => {
+    const profile: DeviceProfile = { ...profiles[0], inactivityTimeoutSeconds: 300 };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profile) });
+    const el = await mount(api);
+    await profileAction(el, "edit-p1");
+    await flush(el);
+
+    selectFormFactor(el, "kds");
+    await flush(el);
+
+    const input = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=profile-inactivity]",
+    );
+    expect(input?.value).toBe("");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+      "p1",
+      "Front counter",
+      [],
+      "kds",
+      null,
+      NO_PRINTERS,
+    );
+  });
+
   it("Edit seeds the inactivity-timeout input in minutes from the stored seconds (300 → 5)", async () => {
     const phone: DeviceProfile = {
       ...profiles[0],

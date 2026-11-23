@@ -1529,7 +1529,13 @@ export class DeviceProfilesScreen extends LitElement {
 
   #onFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    this.draftFormFactor = event.detail.value as FormFactor;
+    const formFactor = event.detail.value as FormFactor;
+    if (this.#ordering() && isSharedDisplay(formFactor)) {
+      this.draftInactivityMinutes = null;
+      this.invalidInactivityText = null;
+      this.#clearRefusal("inactivity");
+    }
+    this.draftFormFactor = formFactor;
     this.#clearRefusal("actions");
     this.#draftScope?.changed();
   }
