@@ -311,6 +311,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       name: "fiscal-verifactu",
       table: "__drizzle_migrations_fiscal",
       from: "../fiscal-verifactu/drizzle",
+      migrationTriggers: ["verifactu_submissions_guard_update", "verifactu_submissions_no_delete"],
     },
     classification: FISCAL_CLASSIFICATION,
     startAgainDeletable: FISCAL_START_AGAIN_DELETABLE,

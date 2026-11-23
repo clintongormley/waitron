@@ -55,6 +55,10 @@ before this cannot be restored or imported."
 - Preserve the production policy and record-only requests for record correction (#3128) and replacement invoices (#3235), including the existing full-invoice switch and returned-record allowance.
 - Measurement before code (Task 1).
 
+The watcher cleared two review fixes on 2026-11-23 at 19:15. Handover returns the
+twelve original delivery fields so the receiving box opens its own case. Both submission
+guards join the existing boot and trading audit through the fiscal descriptor and manifest.
+
 ## Review Focus
 
 1. **The guard refusing a legitimate write** (tables-fiscal §8 item 5). Every writer of the

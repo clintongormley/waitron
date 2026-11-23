@@ -87,7 +87,11 @@ export async function readReturnedOriginals(
       join refunds r on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
       where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
-  const deliveries = tx.all<ReturnRow>(sql`select e.* from verifactu_submissions e
+  // The receiver opens its own cases from the returned delivery evidence.
+  const deliveries = tx.all<ReturnRow>(sql`select e.registro_id, e.estado, e.intentos,
+    e.proximo_intento_en, e.incidencia, e.technical_incidence, e.csv, e.codigo_error,
+    e.mensaje_error, e.enviado_en, e.confirmado_en, e.reconciled_resubmit_at
+    from verifactu_submissions e
     join verifactu_records r on r.id = e.registro_id
     where r.node_id = ${sourceNodeId} order by e.registro_id`);
   const tenders = tx.all<ReturnRow>(

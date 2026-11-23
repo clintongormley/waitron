@@ -1283,6 +1283,67 @@ describe("a start that fails after the venue folder is opened gives the folder b
 });
 
 describe("append-only triggers at boot", () => {
+  it("restores the fiscal submission guards before serving", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    tamper(
+      venueDir,
+      "drop trigger verifactu_submissions_guard_update; drop trigger verifactu_submissions_no_delete",
+    );
+    const lines = await withLoggedLines(async () => {
+      const server = await startServer(env);
+      try {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+      } finally {
+        await server.close();
+      }
+    });
+    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+      expect.objectContaining({
+        triggers: ["verifactu_submissions_guard_update", "verifactu_submissions_no_delete"],
+      }),
+    ]);
+    const reopened = await openVenueDatabase(venueDir);
+    try {
+      expect(
+        reopened.venue.all(sql`select name from sqlite_master
+        where name in ('verifactu_submissions_guard_update', 'verifactu_submissions_no_delete')
+        order by name`),
+      ).toEqual([
+        { name: "verifactu_submissions_guard_update" },
+        { name: "verifactu_submissions_no_delete" },
+      ]);
+    } finally {
+      await reopened.close();
+    }
+  }, 60_000);
+
+  it.each(["verifactu_submissions_guard_update", "verifactu_submissions_no_delete"])(
+    "refuses an altered fiscal submission guard %s",
+    async (guard) => {
+      const venueDir = await seededVenueDir();
+      const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+      tamper(
+        venueDir,
+        `drop trigger ${guard}; create trigger ${guard}
+        before update on verifactu_submissions begin select 1; end`,
+      );
+      const outcome = await startServer(env).then(
+        async (server) => {
+          await server.close();
+          return server;
+        },
+        (error: unknown) => error,
+      );
+      expect(outcome).toMatchObject({
+        code: "append_only.triggers_changed",
+        params: { missing: [], altered: [guard] },
+      });
+      expect(readVenueHolder(venueDir)).toBeNull();
+    },
+    60_000,
+  );
+
   it("repairs both payment guards with Payments Off, retaining payment and journal", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir({ "fiscal-none": false, payments: false }, { leaf: true });
