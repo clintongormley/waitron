@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import type { DeploymentEnvironment } from "@waitron/db";
 import { withOperationAuthority } from "@waitron/module";
 import {
   applyVenue as applyMinuteVenue,
@@ -12,7 +13,10 @@ import { createHourTestClock, selectPastWaits } from "./hour-test-clock.js";
  * A venue applied with its first Veri*Factu setup chosen by the real minute selection, on a clock
  * ten minutes behind, its selection kept in `stateDir` as a real first setup keeps it.
  */
-export function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
+export function applyWithFirstSetup(
+  stateDir: string,
+  environment: DeploymentEnvironment = "preproduction",
+): typeof applyMinuteVenue {
   return async (actions, deps) => {
     // Leave room for selection's minute wait before the real-time sales.
     const clock = createHourTestClock(Date.now() - 10 * 60_000);
@@ -40,7 +44,7 @@ export function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
           },
         }),
       read: async () => ({
-        scope: { taxpayerNif: taxpayer.taxId, environment: "preproduction" },
+        scope: { taxpayerNif: taxpayer.taxId, environment },
         bases: actions
           .filter((action) => action.kind === "create-series")
           .map(({ code, purpose }) => ({ code, purpose })),

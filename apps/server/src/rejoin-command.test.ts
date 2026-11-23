@@ -21,6 +21,7 @@ import { completeRebuild } from "./rebuild-first-start.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
+import { REPLACED_RESET_FILE } from "@waitron/store";
 
 const RESTORE_RECORD = "flows/restore/record.json";
 
@@ -535,6 +536,36 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       }
       expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
       expect(await readFile(join(stateDir, "flows/restore/retained"), "utf8")).toBe("keep");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes a replaced box's reset marker before the wipe's first write", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "rejoin-replaced-reset-"));
+    try {
+      await writeFile(
+        join(stateDir, REPLACED_RESET_FILE),
+        JSON.stringify({ phase: "set_aside_refused", setAside: true }),
+      );
+      // Something at the note's path that no unlink removes, so the wipe's first write fails.
+      await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+      const { code } = await run(
+        { WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: join(stateDir, "venue") },
+        {
+          rejoin: async (d) => {
+            await d.closePreWipe();
+            await d.wipeDatabase();
+            return { wiped: true as const, carrierNodeId: "carrier-result" };
+          },
+        },
+      );
+
+      expect(code).toBe(1);
+      await expect(stat(join(stateDir, REPLACED_RESET_FILE))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      expect((await stat(join(stateDir, BACKUP_ROOM_NOTE_FILE))).isDirectory()).toBe(true);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

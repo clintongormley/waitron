@@ -5,6 +5,8 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  type NodeTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { readOpenHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
@@ -20,11 +22,51 @@ export function awaitsReturn(open: HandoverOperation | null): open is HandoverOp
   );
 }
 
+/** What an open handover operation here says about `nodeId`. */
+export function openFacts(open: HandoverOperation | null, nodeId: string) {
+  return {
+    returnOutstanding: awaitsReturn(open) && open.sourceNodeId === nodeId,
+    inOpenOperation:
+      open !== null && (open.sourceNodeId === nodeId || open.destinationNodeId === nodeId),
+  };
+}
+
 export function refuseReturnOutstanding(open: HandoverOperation): never {
   throw new AppError("handover.return_outstanding", {
     operationId: open.operationId,
     sourceNodeId: open.sourceNodeId,
   });
+}
+
+/** The `handover.return_abandoned` entry, in the caller's venue.db transaction. */
+export async function recordReturnAbandonedTx(
+  tx: Transaction,
+  args: {
+    readonly id: string;
+    readonly operationId: string;
+    readonly sourceNodeId: string;
+    readonly personId: string;
+  },
+): Promise<void> {
+  await recordActivity(tx, {
+    id: args.id,
+    kind: "handover.return_abandoned",
+    subjectId: args.sourceNodeId,
+    personId: args.personId,
+    data: { operationId: args.operationId, sourceNodeId: args.sourceNodeId },
+  });
+}
+
+/** Moves a takeover awaiting its return to `return_abandoned`, in the caller's node.db transaction. */
+export async function closeAbandonedReturnTx(
+  nodeTx: NodeTransaction,
+  nodeId: string,
+  open: HandoverOperation,
+): Promise<void> {
+  if (open.state === "activated") {
+    await advanceHandoverTx(nodeTx, nodeId, open.operationId, "return_pending", {});
+  }
+  await advanceHandoverTx(nodeTx, nodeId, open.operationId, "return_abandoned", {});
 }
 
 /**
@@ -42,18 +84,14 @@ export async function abandonReturn(
     }
     const { operationId } = open;
     await withTransaction(deps.db, (tx) =>
-      recordActivity(tx, {
+      recordReturnAbandonedTx(tx, {
         id: returnDigest({ kind: "handover.return_abandoned", operationId }),
-        kind: "handover.return_abandoned",
-        subjectId: args.sourceNodeId,
+        operationId,
+        sourceNodeId: args.sourceNodeId,
         personId: args.personId,
-        data: { operationId, sourceNodeId: args.sourceNodeId },
       }),
     );
-    if (open.state === "activated") {
-      await advanceHandoverTx(nodeTx, deps.nodeId, operationId, "return_pending", {});
-    }
-    await advanceHandoverTx(nodeTx, deps.nodeId, operationId, "return_abandoned", {});
+    await closeAbandonedReturnTx(nodeTx, deps.nodeId, open);
     return { operationId, state: "return_abandoned" };
   });
 }

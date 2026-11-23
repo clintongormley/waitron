@@ -30,6 +30,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { wipeVenueDatabases } from "./db-wipe.js";
+import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -512,6 +513,7 @@ async function runHeld(
     await updateRestoreFlow(deps.stateDir, next);
     record = next;
   };
+  await removeReplacedResetMarker(deps.stateDir);
   await rm(join(deps.stateDir, RESTORE_STAGING_DIR), { recursive: true, force: true });
   if (flow.phase === "placing") {
     await clearRestorePlacement(deps);
@@ -709,6 +711,7 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
 export async function clearRestorePlacement(
   deps: Pick<StagedRestoreDeps, "stateDir" | "venueDir">,
 ): Promise<void> {
+  await removeReplacedResetMarker(deps.stateDir);
   await wipeVenueDatabases(deps.venueDir, deps.stateDir);
   for (const name of [VENUE_FILE, NODE_FILE])
     await rm(join(deps.venueDir, `${name}${INCOMING_SUFFIX}`), { force: true });

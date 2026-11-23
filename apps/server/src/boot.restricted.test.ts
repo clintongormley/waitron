@@ -37,6 +37,8 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { RESTRICTED_RESET_WORDS } from "./i18n/restricted-page.js";
+import { removeReplacedResetMarker, writeReplacedResetMarker } from "./replaced-reset.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { beginHandover } from "./handover-store.js";
 import { awaitListening, httpsVia } from "./testing/boot-harness.js";
@@ -207,7 +209,7 @@ async function readStatusOfUnknown(port: number): Promise<{ status: number; code
 }
 
 describe("a box holding a handover restriction starts restricted", () => {
-  // Every case here only reads, so they share one start.
+  // The cases share one start; the one that writes a reset marker removes it in `finally`.
   const suite = useVenueDb({ migrations, resetPerTest: false });
   let started: { port: number; venue: Venue } | undefined;
   const start = () => {
@@ -344,6 +346,22 @@ describe("a box holding a handover restriction starts restricted", () => {
       );
     }
     expect((await fetch(`http://127.0.0.1:${port}/api/something-unknown`)).status).toBe(404);
+  }, 60_000);
+
+  it("reads the refused set-aside from this box's own state folder", async () => {
+    const { port } = start();
+    const text = RESTRICTED_RESET_WORDS["en-GB"].setAsideRefused;
+    const pageNow = () =>
+      fetch(`http://127.0.0.1:${port}/`, { headers: { "Accept-Language": "en-GB" } }).then((r) =>
+        r.text(),
+      );
+    expect(await pageNow()).not.toContain(text);
+    await writeReplacedResetMarker(scratch!, { phase: "set_aside_refused", setAside: true });
+    try {
+      expect(await pageNow()).toContain(`<p>${text}</p>`);
+    } finally {
+      await removeReplacedResetMarker(scratch!);
+    }
   }, 60_000);
 });
 

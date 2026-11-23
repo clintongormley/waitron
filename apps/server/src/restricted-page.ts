@@ -18,11 +18,13 @@ import { escapeHtml, httpsLinkLine } from "./html-page.js";
 import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import {
   RESTRICTED_PAGE_WORDS,
+  RESTRICTED_RESET_WORDS,
   RESTRICTED_RETURN_WORDS,
   RESTRICTED_MAIN_BOX_WORDS,
   RESTRICTED_STEP_WORDS,
   type RestrictedStepKind,
 } from "./i18n/restricted-page.js";
+import type { ReplacedResetMarker } from "./replaced-reset.js";
 import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
@@ -31,6 +33,9 @@ export interface RestrictedPageDeps {
   nodeId: string;
   log: Logger;
   returnState?(): ReturnState;
+  /** Whether this box has saved a reset the main box ordered, so it restarts shortly. */
+  resetOrdered?(): boolean;
+  resetPhase?(): Promise<ReplacedResetMarker["phase"] | null>;
 }
 
 interface Step {
@@ -49,6 +54,7 @@ interface RestrictedView {
   steps: Step[];
   timeZone: string;
   handoverPage?: string;
+  reset?: "ordered" | "setAsideRefused";
 }
 
 /** `Object.hasOwn`: the kind is read from a file, and `toString` must not find an inherited value. */
@@ -116,7 +122,7 @@ export function successorText(successor: Successor, locale: SupportedLocale): st
   return `<strong>${escapeHtml(successor.host)}</strong>${role}`;
 }
 
-async function linkOrNone<T>(
+async function readOrWarn<T>(
   deps: RestrictedPageDeps,
   requestId: string,
   event: string,
@@ -128,6 +134,20 @@ async function linkOrNone<T>(
     deps.log("warn", event, { errorCode: codeOf(error), requestId });
     return undefined;
   }
+}
+
+async function resetLine(
+  deps: RestrictedPageDeps,
+  requestId: string,
+): Promise<RestrictedView["reset"]> {
+  const phase = await readOrWarn(
+    deps,
+    requestId,
+    "restricted_page.reset_marker_unreadable",
+    async () => (await deps.resetPhase?.()) ?? undefined,
+  );
+  if (phase === "set_aside_refused") return "setAsideRefused";
+  return deps.resetOrdered?.() === true ? "ordered" : undefined;
 }
 
 async function readView(deps: RestrictedPageDeps, requestId: string): Promise<RestrictedView> {
@@ -158,7 +178,7 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     steps.push(...events);
   }
   // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
-  const successor = (await linkOrNone(
+  const successor = (await readOrWarn(
     deps,
     requestId,
     "restricted_page.successor_link_failed",
@@ -174,10 +194,11 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     handoverPage:
       operation === null
         ? undefined
-        : await linkOrNone(deps, requestId, "restricted_page.progress_link_failed", () =>
+        : await readOrWarn(deps, requestId, "restricted_page.progress_link_failed", () =>
             handoverPageOf({ db: deps.venue }, operation),
           ),
     returnState: deps.returnState?.() ?? "waiting",
+    reset: await resetLine(deps, requestId),
   };
 }
 
@@ -208,7 +229,7 @@ ${view.steps
 ${httpsLinkLine(view.successorUrl, text.openSuccessor)}
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${steps}
-<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale][view.returnState])}</p>`,
+<p>${escapeHtml(view.reset === undefined ? RESTRICTED_RETURN_WORDS[locale][view.returnState] : RESTRICTED_RESET_WORDS[locale][view.reset])}</p>`,
   );
 }
 

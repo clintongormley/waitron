@@ -16,6 +16,7 @@ import { wipeVenueDatabases } from "./db-wipe.js";
 import { createLogger } from "./logger.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
 import { endRestoreFlow } from "./restore-flow.js";
+import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { clearTradingEnv } from "./trading-config.js";
 import { tryLoadNodeIdentity } from "./node-config.js";
 import "./errors.js";
@@ -134,6 +135,7 @@ export async function runRejoin(deps: {
           closed = true;
         }),
       wipeDatabase: async () => {
+        await removeReplacedResetMarker(stateDir);
         await deleteBackupRoomNote(stateDir);
         const phase = await readRestoreFlowPhase(stateDir);
         if (phase === "first-start" || phase === "unreadable") await endRestoreFlow(stateDir);

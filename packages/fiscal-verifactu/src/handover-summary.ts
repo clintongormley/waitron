@@ -15,6 +15,7 @@ import {
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { ENVIO_STATES, type EnvioState } from "./filing-states.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
+import { chainHeads, fiscalHoldings, fiscalLacking, text } from "./handover-holdings.js";
 
 export { ENVIO_STATES, type EnvioState };
 
@@ -31,15 +32,6 @@ export type ChainSummary = {
   readonly acksSha256: string;
   readonly enviandoIds: readonly string[];
 };
-
-function required(value: BackupValue | undefined): BackupValue {
-  if (value === undefined) throw new Error("incomplete fiscal summary row");
-  return value;
-}
-
-function text(value: BackupValue | undefined): string {
-  return String(required(value));
-}
 
 function nullableText(value: BackupValue | undefined): string | null {
   return value === null ? null : text(value);
@@ -59,26 +51,8 @@ const ACK_REGISTRO = `a."${acks.registroId.name.replaceAll('"', '""')}"`;
 /** One entry per (node, SIF) pair that has a record, ordered by those two. Reads only. */
 export async function summariseChains(query: BackupQuery): Promise<ChainSummary[]> {
   const summaries: ChainSummary[] = [];
-  for await (const chain of query.rows(
-    `select r.node_id, r.sif_id, s.id_sistema_informatico, s.numero_instalacion,
-       count(*) as records, max(r.secuencia) as head
-     from verifactu_records r join verifactu_identities s on s.id = r.sif_id
-     group by r.node_id, r.sif_id order by r.node_id, r.sif_id`,
-  )) {
-    const nodeId = text(chain.node_id);
-    const sifId = text(chain.sif_id);
-
-    let headRegistroId = "";
-    let headHuella = "";
-    for await (const head of query.rows(
-      "select id, huella from verifactu_records where node_id = ? and secuencia = ?",
-      [nodeId, required(chain.head)],
-    )) {
-      headRegistroId = text(head.id);
-      headHuella = text(head.huella);
-    }
-
-    if (headRegistroId === "") throw new Error("missing fiscal summary head");
+  for await (const chain of chainHeads(query)) {
+    const { nodeId, sifId, headRegistroId, headHuella } = chain;
 
     const envios = Object.fromEntries(ENVIO_STATES.map((state) => [state, 0])) as Record<
       EnvioState,
@@ -113,9 +87,9 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
     summaries.push({
       nodeId,
       sifId,
-      idSistemaInformatico: text(chain.id_sistema_informatico),
-      numeroInstalacion: text(chain.numero_instalacion),
-      count: Number(required(chain.records)),
+      idSistemaInformatico: chain.idSistemaInformatico,
+      numeroInstalacion: chain.numeroInstalacion,
+      count: chain.count,
       headRegistroId,
       headHuella,
       envios,
@@ -129,6 +103,8 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
 export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
   summarise: summariseChains,
   checkCopy: checkFiscalChains,
+  holdings: fiscalHoldings,
+  lacking: fiscalLacking,
   returnRecords: {
     read: async (tx, source) =>
       makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],

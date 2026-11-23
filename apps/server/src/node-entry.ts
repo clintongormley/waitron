@@ -39,7 +39,7 @@ export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
-import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
+import { DEFAULT_HTTP_HOST, localBackupsDir, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -79,6 +79,7 @@ import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./sta
 import { resumeEnvironmentRecovery } from "./recovery-environment.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { deleteOldBackupsAtStart } from "./start-backup-room.js";
+import { finishReplacedReset, readReplacedResetMarker } from "./replaced-reset.js";
 import { maskPersonalData } from "./log-personal-data.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
@@ -318,6 +319,11 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    judges a database nothing has migrated yet, which the one-directional comparison in
  *    `assertNotAhead` makes safe. On the start that places a handover's accepted copy, in
  *    `bootServer`, this check has already run on the old file; the handover's compare checked the copy.
+ *    A replaced box's reset (`finishReplacedReset`), which removes or sets aside the venue files,
+ *    runs earlier still: after the full-disk clean-up and the spare's release, and before
+ *    first-setup resolution and the counter, so a wipe that fails restarts into another try rather
+ *    than the page. While its marker says it is wiping, the environment Move is not resumed: any
+ *    Move record is that reset's own.
  * 5. After the staged restore, the start holds the venue folder from clearing set-aside folders
  *    until `startServer` settles or an earlier step throws, so another process's placement cannot
  *    run in between: one that failed with the old database set aside would leave no `venue.db`,
@@ -353,28 +359,32 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
+  // While a replaced box's reset is wiping, any Move record is that reset's own, and its wipe
+  // finishes it without clearing `recovery.json`.
+  const wiping = (await readReplacedResetMarker(deps.stateDir))?.phase === "wiping";
   let environmentMoveError: AppError | undefined;
-  try {
-    const resumed = await resumeEnvironmentRecovery(deps);
-    if (resumed !== null)
-      deps = {
-        ...deps,
-        ...resumed,
-        baseEnv: {
-          ...deps.baseEnv,
-          WAITRON_STATE_DIR: resumed.stateDir,
-          WAITRON_VENUE_DIR: resumed.venueDir,
+  if (!wiping)
+    try {
+      const resumed = await resumeEnvironmentRecovery(deps);
+      if (resumed !== null)
+        deps = {
+          ...deps,
+          ...resumed,
+          baseEnv: {
+            ...deps.baseEnv,
+            WAITRON_STATE_DIR: resumed.stateDir,
+            WAITRON_VENUE_DIR: resumed.venueDir,
+          },
+        };
+    } catch (error) {
+      environmentMoveError = new AppError(
+        "setup.environment_move_unfinished",
+        {},
+        {
+          reason: isAppError(error) ? error.code : (errnoOf(error) ?? "move_failed"),
         },
-      };
-  } catch (error) {
-    environmentMoveError = new AppError(
-      "setup.environment_move_unfinished",
-      {},
-      {
-        reason: isAppError(error) ? error.code : (errnoOf(error) ?? "move_failed"),
-      },
-    );
-  }
+      );
+    }
   const now = deps.now ?? (() => new Date());
   const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
   const cleanUp = {
@@ -407,6 +417,26 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   });
 
   await releaseSpareToStart(deps);
+
+  // Before admission and the counter: a failure restarts into another try, never the page.
+  if (wiping)
+    try {
+      await finishReplacedReset(
+        {
+          stateDir: deps.stateDir,
+          venueDir: deps.venueDir,
+          backupsDir: localBackupsDir(deps.baseEnv),
+          log: deps.log,
+        },
+        cleanUp.lockVenue,
+      );
+    } catch (error) {
+      deps.log("error", "replaced-reset.wipe_failed", {
+        errorCode: codeOf(error),
+        errno: errnoOf(error) ?? null,
+      });
+      throw error;
+    }
 
   const admission =
     (environmentMoveError === undefined

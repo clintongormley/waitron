@@ -277,7 +277,13 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await vi.waitFor(() => expect(store).toHaveBeenCalledTimes(2), { timeout: 5_000 });
       const { backupStatus } = await sup.status();
       expect(backupStatus).toMatchObject({
-        destinations: [{ lastBackupAt: new Date(storedAt).toISOString(), stale: false }],
+        destinations: [
+          {
+            lastBackupAt: new Date(storedAt).toISOString(),
+            lastBackupStartedAt: new Date(storedAt).toISOString(),
+            stale: false,
+          },
+        ],
       });
       storedAt -= refs.config!.staleAfterMs;
       expect((await sup.status()).backupStatus).toMatchObject({ destinations: [{ stale: true }] });

@@ -14,7 +14,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { returnDigest } from "./return-records.js";
-import { readCompletedReturns, recordReturnBatchTx } from "./return-completion.js";
+import {
+  activationsBySource,
+  holdsCompletedReturnFrom,
+  readCompletedReturns,
+  recordReturnBatchTx,
+} from "./return-completion.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const operationId = "takeover";
@@ -24,13 +29,12 @@ const digests = [
   returnDigest({ module: "second-module", payload: "third" }),
 ];
 const inventory = returnDigest(digests);
-beforeEach(async () => {
-  await seedVenue(suite.db);
-  const sourceNodeId = await seedNode(suite.db);
-  const destinationNodeId = await seedNode(suite.db);
-  await suite.db.insert(handoverActivations).values({
-    operationId,
-    sourceNodeId,
+let sourceNodeId: string;
+let destinationNodeId: string;
+const activate = (id: string, source: string, activatedAt = "2026-11-12T10:00:00.000Z") =>
+  suite.db.insert(handoverActivations).values({
+    operationId: id,
+    sourceNodeId: source,
     destinationNodeId,
     scenario: "emergency",
     evidence: {
@@ -40,8 +44,13 @@ beforeEach(async () => {
       signature: "signature",
     },
     personId: "person",
-    activatedAt: "2026-11-12T10:00:00.000Z",
+    activatedAt,
   });
+beforeEach(async () => {
+  await seedVenue(suite.db);
+  sourceNodeId = await seedNode(suite.db);
+  destinationNodeId = await seedNode(suite.db);
+  await activate(operationId, sourceNodeId);
 });
 const completed = () => readCompletedReturns(suite.db);
 const record = (index: number, changes: Partial<Parameters<typeof recordReturnBatchTx>[1]> = {}) =>
@@ -132,4 +141,23 @@ it("does not confirm a digest-matching prefix when more batches were advertised"
   await record(0, { inventory: prefixInventory });
   await record(1, { inventory: prefixInventory });
   expect(await completed()).toEqual(new Set());
+});
+
+it("answers for one box from its own takeovers alone, whatever another box has returned", async () => {
+  const otherBox = await seedNode(suite.db);
+  await activate("other-takeover", otherBox, "2026-11-12T11:00:00.000Z");
+  for (const index of [0, 1, 2]) await record(index, { operationId: "other-takeover" });
+
+  expect(await holdsCompletedReturnFrom(suite.db, otherBox)).toBe(true);
+  expect(await holdsCompletedReturnFrom(suite.db, sourceNodeId)).toBe(false);
+  expect([...(await activationsBySource(suite.db, sourceNodeId)).entries()]).toEqual([
+    [sourceNodeId, { returnCompleted: false, scenario: "emergency" }],
+  ]);
+  expect(await readCompletedReturns(suite.db, [operationId])).toEqual(new Set());
+  expect(await readCompletedReturns(suite.db, [])).toEqual(new Set());
+
+  for (const index of [0, 1, 2]) await record(index);
+  expect(await holdsCompletedReturnFrom(suite.db, sourceNodeId)).toBe(true);
+  expect(await readCompletedReturns(suite.db, [operationId])).toEqual(new Set([operationId]));
+  expect((await activationsBySource(suite.db)).size).toBe(2);
 });

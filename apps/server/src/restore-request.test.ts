@@ -8,9 +8,9 @@ import { syncBuiltinESMExports } from "node:module";
 import { firstStartPending, readRestoreFlow, updateRestoreFlow } from "./restore-flow.js";
 import { promisify } from "node:util";
 import { AppError } from "@waitron/shared";
-import { VENUE_LOCK_FILE } from "@waitron/store";
+import { REPLACED_RESET_FILE, VENUE_LOCK_FILE } from "@waitron/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
+import { clearRestorePlacement, runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 
 const execFileAsync = promisify(execFile);
@@ -932,4 +932,53 @@ it.each([false, true])("erases its restart key after restore refusal=%s", async 
   else await expect(restoring).resolves.toBe(true);
   expect(derive).toHaveBeenCalledTimes(1);
   expect(await derive.mock.results[0]!.value).toEqual(Buffer.alloc(32));
+});
+
+describe("a restore removes a replaced box's reset marker", () => {
+  const MARKER = JSON.stringify({ phase: "set_aside_refused", setAside: true });
+
+  it("before a staged restore's first write", async () => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([1]),
+      recoveryKey: "key",
+      environment: "production",
+    });
+    await writeFile(join(stateDir, REPLACED_RESET_FILE), MARKER);
+    // A file where the scratch folder goes, so clearing the staging folder (the first write) fails.
+    await rm(join(stateDir, "scratch"), { recursive: true, force: true });
+    await writeFile(join(stateDir, "scratch"), "not a folder");
+    const restore = vi.fn(async () => {});
+
+    await expect(
+      runStagedRestore(
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
+        restore,
+      ),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
+
+    expect(restore).not.toHaveBeenCalled();
+    await expect(stat(join(stateDir, REPLACED_RESET_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("before clearing a placement's first write", async () => {
+    const stateDir = await fresh();
+    const venueDir = join(stateDir, "venue");
+    await mkdir(venueDir);
+    await writeFile(join(venueDir, "venue.db"), "partial");
+    await writeFile(join(stateDir, REPLACED_RESET_FILE), MARKER);
+    // Something at the note's path that no unlink removes, so the wipe's first write fails.
+    await mkdir(join(stateDir, "backup-room-note.json"));
+
+    await expect(clearRestorePlacement({ stateDir, venueDir })).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+
+    await expect(stat(join(stateDir, REPLACED_RESET_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("partial");
+  });
 });

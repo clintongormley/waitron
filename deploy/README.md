@@ -752,9 +752,9 @@ box then has no backup settings until someone sets them. Otherwise the box's own
 `secrets.env` and `backup.env` are kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
-server's dashboard, then System, then Servers, and in the box's row menu choose Remove and then
-Clear from list (only Clear from list if the row already says Removed), before joining the box
-again.
+server's dashboard, then System, then Servers, and in the box's row menu choose Remove from venue
+and then Clear from list (only Clear from list if the row already says Removed), before joining
+the box again.
 
 ### Wiping and installing in one run
 

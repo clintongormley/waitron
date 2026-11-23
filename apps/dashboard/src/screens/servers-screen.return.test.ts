@@ -21,6 +21,10 @@ const row = (overrides: Partial<ServerRow>): ServerRow => ({
   requiresRetirementConfirmation: false,
   returnOutstanding: false,
   needsResetStatement: false,
+  reset: null,
+  canReset: false,
+  returnScenario: null,
+  recoveredRecordsBackup: null,
   ...overrides,
 });
 
@@ -48,6 +52,7 @@ function stubApi(listing: ServerListing, overrides: Record<string, unknown> = {}
     abandonServerReturn: vi
       .fn()
       .mockResolvedValue({ operationId: "op", state: "return_abandoned" }),
+    orderServerReset: vi.fn().mockResolvedValue({ orderId: "order", acceptLoss: false }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -242,5 +247,222 @@ describe("removing a former main box", () => {
       [OLD, { resetStatement: true }],
     ]);
     expect(dialog(el, "remove").open).toBe(false);
+  });
+});
+
+describe("Wipe and remove", () => {
+  const resettable = listingWith({ removable: true, canReset: true, returnScenario: "controlled" });
+  const afterEmergency = listingWith({
+    removable: true,
+    canReset: true,
+    returnScenario: "emergency",
+  });
+  const lineIn = (el: ServersScreen, test: string) =>
+    dialog(el, "reset")
+      .querySelector(`[data-test=${test}]`)
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim() ?? null;
+
+  it("is offered in the row menu only when the server says a wipe can be ordered", async () => {
+    const el = await mount(stubApi(resettable));
+    expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Wipe and remove",
+    );
+    expect(menu(el)!.querySelector(`[data-test="remove-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Remove from venue",
+    );
+    cleanupWidgets();
+    const other = await mount(stubApi(returned));
+    expect(menu(other)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
+  });
+
+  it("is not offered while the return is still awaited, beside Will not return", async () => {
+    const el = await mount(stubApi(waiting));
+    expect(menu(el)!.querySelector(`[data-test="abandon-${OLD}"]`)).not.toBeNull();
+    expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
+  });
+
+  it("says wiping removes the box and it can come back as a spare, with no download line after a planned handover", async () => {
+    const el = await mount(stubApi(resettable));
+    await openAction(el, "reset");
+    expect(dialog(el, "reset").heading).toBe("Wipe the old main box and remove it?");
+    expect(lineIn(el, "reset-address")).toBe("https://old.venue.example");
+    expect(lineIn(el, "reset-warning")).toBe(
+      "Wiping this box removes it from the venue, after which you can re-add it as a spare.",
+    );
+    expect(lineIn(el, "reset-download")).toBeNull();
+    expect(dialog(el, "reset").textContent).not.toMatch(/Machine|will be lost/);
+  });
+
+  it("after an emergency switch, says to download the old box's data first, linking to its address in a new tab", async () => {
+    const el = await mount(stubApi(afterEmergency));
+    await openAction(el, "reset");
+    expect(lineIn(el, "reset-download")).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+    );
+    const link = dialog(el, "reset").querySelector<HTMLAnchorElement>(
+      "[data-test=reset-download] a",
+    )!;
+    expect(link.getAttribute("href")).toBe("https://old.venue.example");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toContain("noopener");
+  });
+
+  it.each([
+    [
+      "awaiting-backup",
+      "CAUTION: The records recovered from the old main box will exist only on the new main box until the next backup is made.",
+    ],
+    [
+      "no-backups",
+      "CAUTION: Backups are not set up, so the records recovered from the old main box will exist only on the new main box.",
+    ],
+    ["backed-up", null],
+    [null, null],
+  ] as const)("with recovered records %s, the CAUTION line reads %s", async (state, words) => {
+    const el = await mount(
+      stubApi(
+        listingWith({
+          removable: true,
+          canReset: true,
+          returnScenario: "controlled",
+          recoveredRecordsBackup: state,
+        }),
+      ),
+    );
+    await openAction(el, "reset");
+    expect(lineIn(el, "reset-caution")).toBe(words);
+    if (words !== null) {
+      expect(
+        dialog(el, "reset").querySelector("[data-test=reset-caution] strong")?.textContent,
+      ).toBe("CAUTION:");
+    }
+  });
+
+  it("shows every line in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(
+      stubApi(
+        listingWith({
+          removable: true,
+          canReset: true,
+          returnScenario: "emergency",
+          recoveredRecordsBackup: "no-backups",
+        }),
+      ),
+    );
+    await openAction(el, "reset");
+    expect(dialog(el, "reset").heading).toBe(es["servers.reset_spare_title"]);
+    expect(lineIn(el, "reset-warning")).toBe(es["servers.reset_spare_explanation"]);
+    expect(lineIn(el, "reset-download")).toBe(
+      es["servers.reset_download"].replace("{address}", "https://old.venue.example"),
+    );
+    expect(lineIn(el, "reset-caution")).toBe(
+      `${es["servers.reset_caution_label"]} ${es["servers.reset_caution_no_backups"]}`,
+    );
+    expect(confirmButton(el, "reset").textContent?.trim()).toBe("Borrar y retirar");
+  });
+
+  it("orders the reset with no tick to give, then closes and reads the list again", async () => {
+    const api = stubApi(resettable);
+    const el = await mount(api);
+    await openAction(el, "reset");
+    expect(confirmButton(el, "reset").disabled).toBe(false);
+    expect(confirmButton(el, "reset").variant).toBe("danger");
+    expect(confirmButton(el, "reset").textContent?.trim()).toBe(en["servers.reset_spare"]);
+    const reads = vi.mocked(api.listServers).mock.calls.length;
+    await confirm(el, "reset");
+    expect(api.orderServerReset).toHaveBeenCalledExactlyOnceWith(OLD);
+    expect(dialog(el, "reset").open).toBe(false);
+    expect(vi.mocked(api.listServers).mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("keeps the dialog open with the refusal as its one message", async () => {
+    const api = stubApi(resettable, {
+      orderServerReset: vi
+        .fn()
+        .mockRejectedValue({ code: "handover.reset_loss_unaccepted", status: 409 }),
+    });
+    const el = await mount(api);
+    await openAction(el, "reset");
+    await confirm(el, "reset");
+    expect(dialog(el, "reset").open).toBe(true);
+    expect(await messageIn(el, "reset")).toBe(codeMessage("handover.reset_loss_unaccepted"));
+  });
+
+  it("words each refusal the press can meet in both languages, naming no one to contact", () => {
+    for (const code of ["handover.reset_loss_unaccepted", "membership.node_not_replaced"]) {
+      for (const language of ["en", "es"] as const) {
+        const words = codeMessage(code, language);
+        expect(words).not.toBe(codeMessage("no.such_code", language));
+        if (language === "en") expect(words).not.toMatch(/support|contact/i);
+      }
+    }
+  });
+
+  it("says wipe, never reset, in every refusal this flow can show, in both languages", () => {
+    for (const code of [
+      "handover.reset_loss_unaccepted",
+      "handover.reset_not_previous_main",
+      "membership.node_not_replaced",
+      "membership.reset_statement_required",
+    ]) {
+      expect(codeMessage(code, "en")).not.toMatch(/reset/i);
+      expect(codeMessage(code, "en")).toMatch(/wipe/i);
+      expect(codeMessage(code, "es")).not.toMatch(/restablec/i);
+      expect(codeMessage(code, "es")).toMatch(/borr/i);
+    }
+    expect(codeMessage("handover.reset_loss_unaccepted", "en")).toContain(
+      "then choose Wipe and remove again.",
+    );
+  });
+});
+
+describe("the row of an old main box after a wipe is asked", () => {
+  const ordered = listingWith({
+    removable: true,
+    canReset: true,
+    returnScenario: "controlled",
+    reset: "ordered",
+  });
+  const removedByHand = listingWith({
+    standing: "evicted",
+    canClear: true,
+    reset: "ordered",
+    returnScenario: "controlled",
+  });
+  const askedLine = (el: ServersScreen) =>
+    table(el).querySelector(`[data-test="reset-asked-${OLD}"]`)?.textContent?.trim() ?? null;
+
+  it("says the wipe was asked and what happens next, and still offers Remove from venue", async () => {
+    const el = await mount(stubApi(ordered));
+    expect(askedLine(el)).toBe(
+      "Wipe asked. The old main box wipes itself and leaves the venue the next time it is on and can reach this box; you can then re-add it as a spare. If it was already wiped by hand, choose Remove from venue.",
+    );
+    expect(menu(el)!.querySelector(`[data-test="remove-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Remove from venue",
+    );
+    cleanupWidgets();
+    const before = await mount(
+      stubApi(listingWith({ removable: true, canReset: true, returnScenario: "controlled" })),
+    );
+    expect(askedLine(before)).toBeNull();
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(stubApi(ordered));
+    expect(askedLine(el)).toBe(es["servers.reset_asked"]);
+    expect(menu(el)!.querySelector(`[data-test="remove-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Retirar del local",
+    );
+  });
+
+  it("drops the wipe-asked line once Remove from venue has removed the box", async () => {
+    const el = await mount(stubApi(removedByHand));
+    expect(table(el).querySelector(`[data-test="role-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Removed",
+    );
+    expect(askedLine(el)).toBeNull();
   });
 });

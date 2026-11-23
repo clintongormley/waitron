@@ -41,11 +41,13 @@ import {
 import { createTurns } from "./backup-turns.js";
 import { recordReturnBatchTx } from "./return-completion.js";
 import { returnDigest } from "./return-records.js";
+import { orderReset } from "./reset-order.js";
 import { mountStreamApi } from "./stream-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
 
@@ -276,6 +278,7 @@ async function returnFrom(
   destinationNodeId: string,
   batches: "complete" | "one missing" = "complete",
   operationId: string = randomUUID(),
+  activation: { scenario?: "controlled" | "emergency"; activatedAt?: string } = {},
 ): Promise<string> {
   const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
   const inventory = returnDigest(digests);
@@ -284,7 +287,7 @@ async function returnFrom(
       operationId,
       sourceNodeId,
       destinationNodeId,
-      scenario: "emergency",
+      scenario: activation.scenario ?? "emergency",
       evidence: {
         purpose: "waitron.handover.declaration.v1",
         body: {},
@@ -292,7 +295,7 @@ async function returnFrom(
         signature: "signature",
       },
       personId: "person",
-      activatedAt: "2026-11-12T10:00:00.000Z",
+      activatedAt: activation.activatedAt ?? "2026-11-12T10:00:00.000Z",
     });
     const sent = batches === "complete" ? digests : digests.slice(0, -1);
     for (const [index, digest] of sent.entries()) {
@@ -1406,6 +1409,10 @@ describe("GET /management-api/servers", () => {
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
         {
           ...neverJoined,
@@ -1415,6 +1422,10 @@ describe("GET /management-api/servers", () => {
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
         {
           ...joined,
@@ -1424,6 +1435,10 @@ describe("GET /management-api/servers", () => {
           requiresRetirementConfirmation: true,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
         {
           ...former,
@@ -1433,6 +1448,10 @@ describe("GET /management-api/servers", () => {
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: true,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
         {
           ...evicted,
@@ -1442,6 +1461,10 @@ describe("GET /management-api/servers", () => {
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
       ],
     });
@@ -1551,6 +1574,256 @@ describe("GET /management-api/servers", () => {
       [p.nodeId, false],
       [gone.nodeId, false],
     ]);
+  });
+
+  describe("the reset fields", () => {
+    async function resetFields(p: Primary) {
+      const body = (await (await list(p, p.adminCookie)).json()) as {
+        nodes: { nodeId: string; reset: unknown; canReset: unknown; returnScenario: unknown }[];
+      };
+      return body.nodes.map(({ nodeId, reset, canReset, returnScenario }) => ({
+        nodeId,
+        reset,
+        canReset,
+        returnScenario,
+      }));
+    }
+
+    async function orderResetOf(p: Primary, nodeId: string, acceptLoss: boolean) {
+      // The route refuses loss orders until PR 10b, so one is made below it.
+      if (acceptLoss) {
+        await orderReset(
+          { db: p.db, node: suite.node, nodeId: p.nodeId },
+          { targetNodeId: nodeId, personId: p.adminPersonId, acceptLoss },
+        );
+        return;
+      }
+      const res = await p.app.request(`/management-api/servers/${nodeId}/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: p.adminCookie },
+        body: JSON.stringify({ acceptLoss }),
+      });
+      expect(res.status).toBe(200);
+    }
+
+    it("offers no reset to a replaced former main box before its return, and offers it once an order stands", async () => {
+      const p = await primary();
+      const spare = standby();
+      const replaced = former(await seedNode(p.db));
+      const neverReplaced = { ...former(), contactUrl: "https://never.deli.test" };
+      const gone = evicted(await seedNode(p.db));
+      await holdChart(p, [self(p), spare, replaced, neverReplaced, gone]);
+      await pinMainBoxKey(suite.node, p.nodeId, { nodeId: replaced.nodeId, publicKey: "old" });
+      await takeover(p, replaced.nodeId, "activated");
+      await returnFrom(p.db, gone.nodeId, p.nodeId);
+
+      const none = { reset: null, canReset: false, returnScenario: null };
+      expect(await resetFields(p)).toEqual([
+        { nodeId: p.nodeId, ...none },
+        { nodeId: spare.nodeId, ...none },
+        { nodeId: replaced.nodeId, reset: null, canReset: false, returnScenario: null },
+        { nodeId: neverReplaced.nodeId, ...none },
+        { nodeId: gone.nodeId, reset: null, canReset: false, returnScenario: "emergency" },
+      ]);
+
+      await orderResetOf(p, replaced.nodeId, true);
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: replaced.nodeId,
+        reset: "ordered",
+        canReset: true,
+        returnScenario: null,
+      });
+    });
+
+    it("offers a reset only to the old main box whose key this box pinned when it joined", async () => {
+      const p = await primary();
+      const first = { ...former(await seedNode(p.db)), contactUrl: "https://first.deli.test" };
+      const second = former(await seedNode(p.db));
+      await holdChart(p, [self(p), first, second]);
+      await returnFrom(p.db, first.nodeId, p.nodeId);
+      await returnFrom(p.db, second.nodeId, p.nodeId);
+      await pinMainBoxKey(suite.node, p.nodeId, { nodeId: second.nodeId, publicKey: "second" });
+
+      const fields = await resetFields(p);
+      expect(fields).toContainEqual(
+        expect.objectContaining({ nodeId: first.nodeId, canReset: false }),
+      );
+      expect(fields).toContainEqual(
+        expect.objectContaining({ nodeId: second.nodeId, canReset: true }),
+      );
+      const pressed = await p.app.request(`/management-api/servers/${first.nodeId}/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: p.adminCookie },
+        body: JSON.stringify({ acceptLoss: false }),
+      });
+      expect(pressed.status).toBe(409);
+      expect(await errorOf(pressed)).toEqual({
+        code: "handover.reset_not_previous_main",
+        params: {},
+      });
+      expect(await resetFields(p)).toContainEqual(
+        expect.objectContaining({ nodeId: first.nodeId, reset: null }),
+      );
+    });
+
+    it("offers a reset after a completed return, with the activation's scenario", async () => {
+      const p = await primary();
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [self(p), oldMain]);
+      await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
+      await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", randomUUID(), {
+        scenario: "controlled",
+      });
+
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: true,
+        returnScenario: "controlled",
+      });
+      await orderResetOf(p, oldMain.nodeId, false);
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: "ordered",
+        canReset: true,
+        returnScenario: "controlled",
+      });
+    });
+
+    it("offers no reset during an open emergency takeover waiting for the return, still naming its scenario", async () => {
+      const p = await primary();
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [self(p), oldMain]);
+      const operationId = await takeover(p, oldMain.nodeId, "activated", "emergency");
+      await returnFrom(p.db, oldMain.nodeId, p.nodeId, "one missing", operationId);
+
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: false,
+        returnScenario: "emergency",
+      });
+    });
+
+    it("offers no reset after Will not return when no return from the box is held", async () => {
+      const p = await primary();
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [self(p), oldMain]);
+      await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
+      const operationId = await takeover(p, oldMain.nodeId, "activated", "emergency");
+      await returnFrom(p.db, oldMain.nodeId, p.nodeId, "one missing", operationId);
+      const abandoned = await p.app.request(
+        `/management-api/servers/${oldMain.nodeId}/return-abandoned`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: p.adminCookie },
+          body: JSON.stringify({ confirmed: true }),
+        },
+      );
+      expect(abandoned.status).toBe(200);
+
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: false,
+        returnScenario: "emergency",
+      });
+      const pressed = await p.app.request(`/management-api/servers/${oldMain.nodeId}/reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: p.adminCookie },
+        body: JSON.stringify({ acceptLoss: false }),
+      });
+      expect(await errorOf(pressed)).toEqual({
+        code: "handover.reset_loss_unaccepted",
+        params: {},
+      });
+    });
+
+    it("offers no reset while an open handover names the box other than waiting for its return", async () => {
+      const p = await primary();
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [self(p), oldMain]);
+      await returnFrom(p.db, oldMain.nodeId, p.nodeId);
+      await withNodeTransaction(suite.node, (tx) =>
+        beginHandoverOperationTx(tx, {
+          nodeId: p.nodeId,
+          operationId: randomUUID(),
+          role: "source",
+          scenario: "controlled",
+          sourceNodeId: p.nodeId,
+          destinationNodeId: oldMain.nodeId,
+          binding: {},
+          fingerprint: "f",
+          state: "prepared",
+          waitingReason: null,
+        }),
+      );
+
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: false,
+        returnScenario: "emergency",
+      });
+    });
+
+    it("offers no reset on a box that is not the serving primary", async () => {
+      const p = await primary();
+      const other = { ...standby(await seedNode(p.db)), standing: "serving-primary" as const };
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [other, { ...self(p), standing: "serving-secondary" }, oldMain]);
+      await returnFrom(p.db, oldMain.nodeId, other.nodeId);
+
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: false,
+        returnScenario: "emergency",
+      });
+    });
+
+    it("names the scenario of the completed activation over a later one, else the latest, else none", async () => {
+      const p = await primary();
+      const [completedEarlier, bothOpen, emergencyOnly, noActivation] = await Promise.all([
+        seedNode(p.db),
+        seedNode(p.db),
+        seedNode(p.db),
+        seedNode(p.db),
+      ]);
+      await holdChart(
+        p,
+        [completedEarlier, bothOpen, emergencyOnly, noActivation].reduce(
+          (chart, id, i) => [...chart, { ...former(id), contactUrl: `https://old${i}.deli.test` }],
+          [self(p)],
+        ),
+      );
+      await returnFrom(p.db, completedEarlier, p.nodeId, "complete", randomUUID(), {
+        scenario: "controlled",
+        activatedAt: "2026-11-10T10:00:00.000Z",
+      });
+      await returnFrom(p.db, completedEarlier, p.nodeId, "one missing", randomUUID(), {
+        scenario: "emergency",
+        activatedAt: "2026-11-11T10:00:00.000Z",
+      });
+      await returnFrom(p.db, bothOpen, p.nodeId, "one missing", randomUUID(), {
+        scenario: "controlled",
+        activatedAt: "2026-11-11T10:00:00.000Z",
+      });
+      await returnFrom(p.db, bothOpen, p.nodeId, "one missing", randomUUID(), {
+        scenario: "emergency",
+        activatedAt: "2026-11-10T10:00:00.000Z",
+      });
+      await returnFrom(p.db, emergencyOnly, p.nodeId, "one missing");
+
+      const scenarios = (await resetFields(p)).map((n) => [n.nodeId, n.returnScenario]);
+      expect(scenarios).toEqual([
+        [p.nodeId, null],
+        [completedEarlier, "controlled"],
+        [bothOpen, "controlled"],
+        [emergencyOnly, "emergency"],
+        [noActivation, null],
+      ]);
+    });
   });
 
   it("answers term null and no nodes when no chart is held", async () => {

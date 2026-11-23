@@ -77,6 +77,8 @@ describe("signEnvelope", () => {
       "backup-settings",
       "switch-proof",
       "agent-enrol",
+      "reset-query",
+      "reset-order",
     ]);
   });
 

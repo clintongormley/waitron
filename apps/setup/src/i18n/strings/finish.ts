@@ -23,11 +23,11 @@ export const finishEn = {
   "reset.explanation":
     "This removes what the half-finished join left on this box and restarts it at a fresh setup. Nothing on the primary box is changed, so the primary may still list this box.",
   "reset.remove_plain":
-    "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this box again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove from venue, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this box again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.remove_before": "To take it off that list, open the primary's",
   "reset.servers_link": "Servers page",
   "reset.remove_after":
-    "and, in this box's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "and, in this box's row menu, choose Remove from venue, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.back": "Back",
   "reset.submit": "Reset this box",
   "reset.busy": "Resetting…",
@@ -152,11 +152,11 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.explanation":
     "Esto elimina lo que la unión a medias dejó en este servidor y lo reinicia con una configuración desde cero. No se cambia nada en el servidor principal, así que puede que el principal siga mostrando este servidor en su lista.",
   "reset.remove_plain":
-    "Para quitarlo de esa lista, abre el panel del servidor principal, luego Sistema y luego Servidores; abre el menú de la fila de este servidor y elige Retirar, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+    "Para quitarlo de esa lista, abre el panel del servidor principal, luego Sistema y luego Servidores; abre el menú de la fila de este servidor y elige Retirar del local, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
   "reset.remove_before": "Para quitarlo de esa lista, abre la",
   "reset.servers_link": "página Servidores",
   "reset.remove_after":
-    "del principal y, en el menú de la fila de este servidor, elige Retirar y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+    "del principal y, en el menú de la fila de este servidor, elige Retirar del local y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
   "reset.back": "Volver",
   "reset.submit": "Restablecer este servidor",
   "reset.busy": "Restableciendo…",

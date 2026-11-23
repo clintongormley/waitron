@@ -1,4 +1,5 @@
 import type { startReturnRecordsDuty } from "./return-records.js";
+import type { startResetOrderDuty } from "./reset-order-duty.js";
 import { restrictedBackgroundDuties, stopBackgroundDuties } from "./background-duties.js";
 import type { Hono, MiddlewareHandler } from "hono";
 import type { SignedMembershipDocument } from "@waitron/membership";
@@ -21,6 +22,7 @@ export interface RestrictedStartDeps {
   log: Logger;
   /** Binds the listeners and uses stopWork before closing the stores. */
   returnRecords?: ReturnType<typeof startReturnRecordsDuty>;
+  resetOrder: ReturnType<typeof startResetOrderDuty>;
   listen: (app: Hono, stopWork: () => Promise<void>) => StartedServer;
 }
 
@@ -36,10 +38,10 @@ export const MONEY_AND_DRAWER_WRITES = [
 
 /**
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
- * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
- * It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code; any other route it does
- * not serve stays a 404, except the till's and the dashboard's GET pages, which show the restricted
- * page (`restricted-page.ts`).
+ * move to the successor. Only the return sender and the reset-order duty run; it never sells, files
+ * or writes venue data. It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code;
+ * any other route it does not serve stays a 404, except the till's and the dashboard's GET pages,
+ * which show the restricted page (`restricted-page.ts`).
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
@@ -55,6 +57,6 @@ export function startRestricted(deps: RestrictedStartDeps): StartedServer {
     deps.log,
   );
   for (const mount of deps.routes) mount(deps.app);
-  const duties = restrictedBackgroundDuties(deps.returnRecords);
+  const duties = restrictedBackgroundDuties(deps.returnRecords, deps.resetOrder);
   return deps.listen(deps.app, () => stopBackgroundDuties(duties));
 }

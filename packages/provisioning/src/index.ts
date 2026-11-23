@@ -238,6 +238,10 @@ export {
   beginEnvironmentMove,
   resumeEnvironmentMove,
   finishEnvironmentMove,
+  probeEnvironmentMove,
+  environmentMoveInventory,
+  environmentMovePiecePath,
+  type EnvironmentMovePiece,
 } from "./environment-recovery-move.js";
 
 export { readRestoreFlowPhase, type RestoreFlowPhase } from "./restore-flow-phase.js";

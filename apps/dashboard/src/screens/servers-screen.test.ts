@@ -29,6 +29,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: STANDBY,
@@ -40,6 +44,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: FORMER,
@@ -51,6 +59,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: REMOVED,
@@ -62,6 +74,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
   ],
 };
@@ -240,8 +256,8 @@ describe("servers screen list", () => {
     },
   );
 
-  it("words Remove as Retirar in Spanish, matching the rest of the screen", () => {
-    expect(es["servers.remove"]).toBe("Retirar");
+  it("words Remove from venue as Retirar del local in Spanish, matching the rest of the screen", () => {
+    expect(es["servers.remove"]).toBe("Retirar del local");
     expect(es["servers.remove"]).not.toBe(es["action.remove"]);
   });
 
@@ -304,29 +320,27 @@ describe("servers screen list", () => {
     });
     expect(api.listServers).toHaveBeenCalledTimes(2);
   });
-  it("shows a short machine id on every row, beside the address or its placeholder", async () => {
+  it("introduces the list in one line and shows no machine number on any row", async () => {
     const el = await mount();
+    expect(el.shadowRoot!.querySelector(".intro")!.textContent!.trim()).toBe(
+      "The boxes that run this venue.",
+    );
     for (const id of [SELF, STANDBY, FORMER, REMOVED]) {
-      const tag = inTable(el, `machine-${id}`)!;
-      expect(tag.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        `${t("servers.machine")} ${id.slice(0, 8)}`,
-      );
+      const row = tableRoot(el).querySelector(`tr[data-row-key="${id}"]`)!;
+      expect(row.textContent).not.toContain("Machine");
+      expect(row.textContent).not.toContain(id.slice(0, 8));
     }
   });
 
-  it("paints the machine id in the monospace font token", async () => {
+  it("introduces the list in Spanish", async () => {
+    setLocale("es-ES");
     const el = await mount();
-    const id = inTable(el, `machine-id-${STANDBY}`)!;
-    const probe = document.createElement("span");
-    probe.style.fontFamily = "var(--wt-font-family-mono)";
-    el.shadowRoot!.append(probe);
-    const mono = getComputedStyle(probe).fontFamily;
-    probe.remove();
-    expect(getComputedStyle(id).fontFamily).toBe(mono);
-    expect(getComputedStyle(inTable(el, `address-${STANDBY}`)!).fontFamily).not.toBe(mono);
+    expect(el.shadowRoot!.querySelector(".intro")!.textContent!.trim()).toBe(
+      "Los servidores que hacen funcionar este local.",
+    );
   });
 
-  it("names a removable machine with no address by its short id, on the row menu and in the confirmation", async () => {
+  it("names a removable box with no address as having none, on the row menu and in the confirmation", async () => {
     const withBlank: ServerListing = {
       term: 3,
       nodes: [
@@ -341,18 +355,22 @@ describe("servers screen list", () => {
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
       ],
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(withBlank) }));
     expect(rowMenu(el, BLANK)!.getAttribute("label")).toBe(
-      `${t("servers.actions")}: ${t("servers.machine")} 55555555`,
+      `${t("servers.actions")}: ${t("servers.no_address")}`,
     );
     expect(inTable(el, `switch-label-${BLANK}`)).toBeNull();
     await openRemove(el, BLANK);
     const body = dialog(el).textContent!.replace(/\s+/g, " ");
     expect(body).toContain(t("servers.no_address"));
-    expect(body).toContain(`${t("servers.machine")} 55555555`);
+    expect(body).not.toContain("55555555");
   });
 
   it("says why nothing can be removed when this box is not the primary", async () => {
@@ -397,15 +415,6 @@ describe("servers screen list", () => {
       stubApi({ listServers: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
     );
     expect(failed.shadowRoot!.querySelector("[data-test=not-primary]")).toBeNull();
-  });
-
-  it("does not promise that a till never tries a removed machine, in either language", () => {
-    for (const key of ["servers.intro", "servers.remove_explanation"] as const) {
-      expect(en[key]).toContain("so tills stop trying to reach it");
-      expect(en[key]).not.toMatch(/never try/);
-      expect(es[key]).toContain("para que las cajas dejen de intentar conectar con él");
-      expect(es[key]).not.toMatch(/nunca intenten/);
-    }
   });
 });
 
@@ -802,7 +811,7 @@ describe("servers screen clearing", () => {
     expect(clearDialog(el).getAttribute("heading")).toBe(t("servers.clear_title"));
     const body = clearDialog(el).textContent!.replace(/\s+/g, " ");
     expect(body).toContain(t("servers.no_address"));
-    expect(body).toContain(`${t("servers.machine")} 44444444`);
+    expect(body).not.toContain("44444444");
     expect(body).toContain(t("servers.clear_explanation"));
     expect(api.clearServer).not.toHaveBeenCalled();
 
@@ -821,11 +830,7 @@ describe("servers screen clearing", () => {
     expect(en["servers.clear_explanation"]).toContain(
       "If it tries to come back under its old identity, this primary refuses it",
     );
-    for (const key of [
-      "servers.intro",
-      "servers.remove_explanation",
-      "servers.clear_explanation",
-    ] as const) {
+    for (const key of ["servers.clear_explanation"] as const) {
       expect(en[key]).toContain("To use that machine again, reset it and add it as a new spare.");
       expect(es[key]).toContain(
         "Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",

@@ -22,8 +22,12 @@ import {
 } from "@waitron/node-db";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { ReturnState } from "./return-records.js";
-import { restrictedPageRoute } from "./restricted-page.js";
-import { RESTRICTED_PAGE_WORDS, RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
+import { restrictedPageRoute, type RestrictedPageDeps } from "./restricted-page.js";
+import {
+  RESTRICTED_PAGE_WORDS,
+  RESTRICTED_RESET_WORDS,
+  RESTRICTED_RETURN_WORDS,
+} from "./i18n/restricted-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -92,6 +96,7 @@ function request(
   returnState?: ReturnState,
   path = "/",
   method = "GET",
+  extra: Pick<RestrictedPageDeps, "resetOrdered" | "resetPhase"> = {},
 ): Promise<Response> {
   const app = new Hono();
   app.use("*", async (c, next) => {
@@ -104,6 +109,7 @@ function request(
     nodeId: NODE,
     returnState: () => returnState ?? "waiting",
     log: (level, event, fields) => logged.push({ level, event, fields }),
+    ...extra,
   })(app);
   return Promise.resolve(app.request(path, { method, headers: { "Accept-Language": language } }));
 }
@@ -733,5 +739,126 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
     const html = await response.text();
     expect(html).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
     expect(html).toContain("font-family: var(--wt-font-family)");
+  });
+});
+
+describe("the restricted page after the main box asks this box to reset", () => {
+  const ORDERED = {
+    "en-GB": "The main box asked this box to reset. It restarts shortly as a new box.",
+    "es-ES":
+      "El servidor principal ha pedido restablecer este servidor. En breve se reinicia como un servidor nuevo.",
+  } as const;
+  const REFUSED = {
+    "en-GB":
+      "This box was asked to reset, but it could not set its records aside, so it did not reset. Nothing on it was changed or deleted. The venue runs on the main box and no longer needs this one, so you can switch it off.",
+    "es-ES":
+      "Se pidió a este servidor que se restableciera, pero no ha podido apartar sus registros, así que no se ha restablecido. No se ha cambiado ni borrado nada en él. El local funciona con el servidor principal y ya no necesita este, así que puedes apagarlo.",
+  } as const;
+  const languages = [
+    ["en-GB", "en-GB,en;q=0.9"],
+    ["es-ES", "es-ES,es;q=0.9"],
+  ] as const;
+
+  function html(
+    header: string,
+    extra: Pick<RestrictedPageDeps, "resetOrdered" | "resetPhase">,
+    returnState: ReturnState = "waiting",
+  ) {
+    return request(header, suite.db, returnState, "/", "GET", extra).then((r) => r.text());
+  }
+  const resetBesideReturn = languages.flatMap(([locale, header]) =>
+    (["waiting", "sending"] as const).map((state) => [locale, header, state] as const),
+  );
+
+  it("words both lines in English and in Spanish, naming nobody to contact", () => {
+    for (const [locale] of languages) {
+      expect(RESTRICTED_RESET_WORDS[locale].ordered).toBe(ORDERED[locale]);
+      expect(RESTRICTED_RESET_WORDS[locale].setAsideRefused).toBe(REFUSED[locale]);
+    }
+    for (const text of [...Object.values(ORDERED), ...Object.values(REFUSED)])
+      expect(text).not.toMatch(/support|contact|soporte|contacta|administrador|administrator/i);
+  });
+
+  it.each(languages)(
+    "shows the order's line while the box has one, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Main box"));
+      const page = await html(header, { resetOrdered: () => true, resetPhase: async () => null });
+      expect(page).toContain(`<p>${escapeHtml(ORDERED[locale])}</p>`);
+      expect(page).not.toContain(escapeHtml(REFUSED[locale]));
+      const other = locale === "en-GB" ? "es-ES" : "en-GB";
+      expect(page).not.toContain(escapeHtml(ORDERED[other]));
+    },
+  );
+
+  it.each(resetBesideReturn)(
+    "shows the order's line in place of the return's, in %s (asked as %s) while %s",
+    async (locale, header, state) => {
+      await handOver(await seedSuccessor("Main box"));
+      const page = await html(
+        header,
+        { resetOrdered: () => true, resetPhase: async () => null },
+        state,
+      );
+      expect(page).toContain(`<p>${escapeHtml(ORDERED[locale])}</p>`);
+      expect(page).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[locale][state]));
+    },
+  );
+
+  it.each(resetBesideReturn)(
+    "shows the refused set-aside in place of the return's line, in %s (asked as %s) while %s",
+    async (locale, header, state) => {
+      await handOver(await seedSuccessor("Main box"));
+      const page = await html(
+        header,
+        { resetOrdered: () => false, resetPhase: async () => "set_aside_refused" },
+        state,
+      );
+      expect(page).toContain(`<p>${escapeHtml(REFUSED[locale])}</p>`);
+      expect(page).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[locale][state]));
+    },
+  );
+
+  it.each(languages)(
+    "shows the refused set-aside in place of the order's line, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Main box"));
+      const page = await html(header, {
+        resetOrdered: () => true,
+        resetPhase: async () => "set_aside_refused",
+      });
+      expect(page).toContain(`<p>${escapeHtml(REFUSED[locale])}</p>`);
+      expect(page).not.toContain(escapeHtml(ORDERED[locale]));
+    },
+  );
+
+  it.each(languages)(
+    "shows neither line on a plain restricted box, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Main box"));
+      for (const extra of [
+        {},
+        { resetOrdered: () => false, resetPhase: async () => null },
+        { resetOrdered: () => false, resetPhase: async () => "wiping" as const },
+      ]) {
+        const page = await html(header, extra);
+        expect(page).not.toContain(escapeHtml(ORDERED[locale]));
+        expect(page).not.toContain(escapeHtml(REFUSED[locale]));
+        expect(page).toContain(`<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale].waiting)}</p>`);
+      }
+    },
+  );
+
+  it("still shows the page, without the refused line, when the marker cannot be read", async () => {
+    await handOver(await seedSuccessor("Main box"));
+    logged.length = 0;
+    const response = await request("en-GB", suite.db, "waiting", "/", "GET", {
+      resetPhase: () => Promise.reject(new Error("unreadable")),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain(escapeHtml(REFUSED["en-GB"]));
+    expect(logged).toContainEqual(
+      expect.objectContaining({ level: "warn", event: "restricted_page.reset_marker_unreadable" }),
+    );
   });
 });

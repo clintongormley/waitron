@@ -262,6 +262,15 @@ what the command prints, and what it refuses.
 
 ## Rejoining a returned box
 
+A replaced main box is normally reset from the new main box: once its invoice records are back,
+**Wipe and remove** on its row in **Servers** orders the reset, and the old box carries it
+out the next time it reaches the main box ([guide](src/guide/en/servers.md#old-box-returns)).
+A box that never receives the reset order — one removed from the venue, or one whose order stayed
+on a main box that was itself replaced — is reset from a terminal with
+`sudo bash waitron.sh reset --force-production` (see
+[`deploy/README.md`](../../deploy/README.md#resetting-a-box)), which wipes it back to setup's
+first page.
+
 When a failed on-prem box is replaced by a promoted cloud primary and later comes back, it returns as a
 FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud is now the serving primary.
 `waitron-rejoin rejoin` wipes that box's local database so you can re-adopt it as a secondary of the

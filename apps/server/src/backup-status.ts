@@ -9,10 +9,13 @@ export const STATUS_READ_TIMEOUT_MS = 30_000;
 /**
  * A destination holding no artifact yet, or one that could not be read, reads `stale: true` with
  * null times: unhealthy, not absent. `readErrorCode` is the read's code, never its message.
+ * `lastBackupStartedAt` is when that backup's run began, before its copy was taken: a change made
+ * before it is in that backup, a later one may not be.
  */
 export type DestinationStatus = {
   id: string;
   lastBackupAt: string | null;
+  lastBackupStartedAt: string | null;
   ageSeconds: number | null;
   stale: boolean;
   readErrorCode: string | null;
@@ -26,6 +29,7 @@ export type BackupStatus =
 export const unreadDestination = (id: string, readErrorCode: string | null): DestinationStatus => ({
   id,
   lastBackupAt: null,
+  lastBackupStartedAt: null,
   ageSeconds: null,
   stale: true,
   readErrorCode,
@@ -87,7 +91,10 @@ function freshness(
   // The listing is newest-first. A local folder's mtimes come from the box's clock, so after a
   // step back an archive can sit further ahead than staleAfterMs; it says nothing about how
   // recent the last backup is, so the newest archive not that far ahead is judged instead.
-  const archives = objects.filter(({ key }) => ownArchiveStamp(key, nodeId) !== null);
+  const archives = objects.flatMap((object) => {
+    const startedAt = ownArchiveStamp(object.key, nodeId);
+    return startedAt === null ? [] : [{ ...object, startedAt }];
+  });
   if (archives.length === 0) return unreadDestination(id, null);
   const judged = archives.find(({ mtimeMs }) => mtimeMs - now.getTime() <= staleAfterMs);
   const newest = judged ?? archives[0]!;
@@ -95,6 +102,7 @@ function freshness(
   return {
     id,
     lastBackupAt: new Date(newest.mtimeMs).toISOString(),
+    lastBackupStartedAt: newest.startedAt.toISOString(),
     ageSeconds: Math.floor(ageMs / 1000),
     stale: judged === undefined || ageMs > staleAfterMs,
     readErrorCode: null,

@@ -1348,8 +1348,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Se ha visto a otro servidor escribiendo la copia de este local en el mismo bucket, así que este servidor no copiará encima. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
   },
   "backup.spare_stream_active": {
-    en: "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row on the Servers page, then save again.",
-    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar en su fila de Servidores y vuelve a guardar.",
+    en: "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove from venue on its row on the Servers page, then save again.",
+    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar del local en su fila de Servidores y vuelve a guardar.",
   },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",
@@ -1610,8 +1610,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El servidor principal no se puede retirar ni quitar de la lista.",
   },
   "membership.reset_statement_required": {
-    en: "This box was the main box before and has not returned its invoice records, so it was not removed. Confirm that it has been reset or will never be switched on again: switched on with its data, it could sell beside the main box.",
-    es: "Este servidor fue el servidor principal y no ha devuelto sus registros de facturación, así que no se ha retirado. Confirma que se ha restablecido o que no se volverá a encender nunca: encendido con sus datos, podría vender a la vez que el servidor principal.",
+    en: "This box was the main box before and has not returned its invoice records, so it was not removed. Confirm that it has been wiped or will never be switched on again: switched on with its data, it could sell beside the main box.",
+    es: "Este servidor fue el servidor principal y no ha devuelto sus registros de facturación, así que no se ha retirado. Confirma que se ha borrado o que no se volverá a encender nunca: encendido con sus datos, podría vender a la vez que el servidor principal.",
   },
   "membership.standby_joined": {
     en: "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now.",
@@ -1658,8 +1658,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Se está añadiendo otro servidor como reserva, o se añadió hace un momento. Espera a que termine de unirse y vuelve a intentarlo con este dentro de unos minutos.",
   },
   "mirror.join_stopped_after_listing": {
-    en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
-    es: "Esta unión se detuvo mientras se preparaba la copia del servidor nuevo, así que no se ha enviado nada, pero esta página ya muestra el servidor nuevo. Elige Retirar en su fila y después Quitar de la lista; luego elige Empezar de nuevo en el servidor nuevo.",
+    en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove from venue in its row, then Clear from list, then choose Start again on the new box.",
+    es: "Esta unión se detuvo mientras se preparaba la copia del servidor nuevo, así que no se ha enviado nada, pero esta página ya muestra el servidor nuevo. Elige Retirar del local en su fila y después Quitar de la lista; luego elige Empezar de nuevo en el servidor nuevo.",
   },
   "mirror.spare_already_joined": {
     en: "This venue already has a spare box. Remove it on this page before adding another.",
@@ -1725,8 +1725,20 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
   },
   "handover.return_outstanding": {
-    en: "The last handover is still waiting for the former main box to return its invoice records. Switch it on, or choose Will not return for it on the Servers page. Will not return stops the wait; invoice records the former main box made after the copy this main box started from stay only on it.",
-    es: "El último traspaso sigue esperando a que el antiguo servidor principal devuelva sus registros de facturación. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación que el antiguo servidor principal hizo después de la copia con la que empezó este servidor principal se quedan solo en él.",
+    en: "The last handover is still waiting for the old main box to return its invoice records. Switch it on, or choose Will not return for it on the Servers page. Will not return stops the wait; invoice records the old main box made after the copy this main box started from stay only on it.",
+    es: "El último traspaso sigue esperando a que el servidor principal anterior devuelva sus registros de facturación. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación que el servidor principal anterior hizo después de la copia con la que empezó este servidor principal se quedan solo en él.",
+  },
+  "handover.reset_loss_unaccepted": {
+    en: "The old main box has not returned all its invoice records, so it was not asked to wipe itself. Keep it switched on and connected while it returns them, then choose Wipe and remove again.",
+    es: "El servidor principal anterior no ha devuelto todos sus registros de facturación, así que no se le ha pedido que se borre. Mantenlo encendido y conectado mientras los devuelve y luego vuelve a elegir Borrar y retirar.",
+  },
+  "handover.reset_not_previous_main": {
+    en: "This main box did not take over directly from that old main box, so it cannot send it the wipe, and it was not asked to wipe itself. Choose Remove from venue on its row, then wipe that box from a terminal.",
+    es: "Este servidor principal no sustituyó directamente a ese servidor principal anterior, así que no puede enviarle el borrado y no se le ha pedido que se borre. Elige Retirar del local en su fila y luego borra ese servidor desde un terminal.",
+  },
+  "membership.node_not_replaced": {
+    en: "That box is not listed as a replaced main box any more, so it was not asked to wipe itself. Refresh the list to see where it stands.",
+    es: "Ese servidor ya no figura como un servidor principal sustituido, así que no se le ha pedido que se borre. Actualiza la lista para ver en qué punto está.",
   },
   "handover.return_not_outstanding": {
     en: "No handover here is waiting for that box to return its invoice records, so nothing was changed. Refresh the list.",

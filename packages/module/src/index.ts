@@ -15,7 +15,7 @@ export {
   validateBackupModuleResult,
 } from "./backup-verification.js";
 export type { ModuleHandoverContribution, ReturnDiscrepancy } from "./handover.js";
-export { collectHandoverSummaries, checkHandoverCopy } from "./handover.js";
+export { collectHandoverSummaries, checkHandoverCopy, MalformedHoldingsError } from "./handover.js";
 export type {
   ActivityActor,
   WaitronModule,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   backgroundDuties,
+  restrictedBackgroundDuties,
   stopBackgroundDuties,
   type BackgroundDutyHandles,
 } from "./background-duties.js";
@@ -346,4 +347,19 @@ it("stops an owned follower once through the stepdown and shutdown table", async
   await closer!.close();
   await stopBackgroundDuties(duties);
   expect(calls.filter((call) => call === "stop follower")).toEqual(["stop follower"]);
+});
+
+it("stops a restricted box's return sender and reset-order duty, each once and each at a stepdown", async () => {
+  const calls: string[] = [];
+  const duties = restrictedBackgroundDuties(
+    { stop: () => void calls.push("stop returnRecords") },
+    { stop: () => void calls.push("stop resetOrder") },
+  );
+  expect(duties.closers.map(({ name, atStepdown }) => ({ name, atStepdown }))).toEqual([
+    { name: "returnRecords", atStepdown: true },
+    { name: "resetOrder", atStepdown: true },
+  ]);
+  await duties.closers[1]!.close();
+  await stopBackgroundDuties(duties);
+  expect(calls).toEqual(["stop resetOrder", "stop returnRecords"]);
 });

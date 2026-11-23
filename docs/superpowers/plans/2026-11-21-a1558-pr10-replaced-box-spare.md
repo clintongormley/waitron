@@ -67,7 +67,7 @@
 - **The main box's checks.** The signer must be a chart member standing `sell-only`, verified with its pinned key, and the venue must match. Otherwise the route refuses with `handover.reset_query_refused` and a `reason`. A removed box stands `evicted`, so it is refused here: that is what leaves no order waiting for it (answer 4).
 - **The answer** is signed `reset-order`: `{nonce, sourceNodeId, order: {orderId, acceptLoss} | null, lacking}`.
 
-**The order on the main box.** No new table: the order is a new kind of handover event row in `node.db` (`reset_ordered`, detail `{targetNodeId, orderId, acceptLoss}`), plus activity entries in `venue.db`.
+**The order on the main box.** No new table: the order is a new kind of handover event row in `node.db` (`reset_ordered`, detail `{targetNodeId, orderId, acceptLoss, personId}`; `personId`, the person who ordered it, was added in the build so the acknowledgement never reads `activity_log`), plus activity entries in `venue.db`.
 
 - **The route.** `POST /management-api/servers/:nodeId/reset` with `{acceptLoss: boolean}`. It needs `node.manage` and a fresh sign-in, as Will not return does (`membership-removal-api.ts:59-67`).
 - **Refusals** (all new codes except the last two):
@@ -99,7 +99,7 @@
 **The old box's checks, in one place.** A new helper, `replacedResetCheck`, runs only on the old box, before anything is saved:
 
 - It picks the main box exactly as `sendBatches` does. The target selection moves out of `return-records.ts` (`:104-109`) into the helper, and the return uses it too.
-- The answer's signature must verify against that box's pinned key, **its signer must be that box, its `nonce` must equal the one sent**, and the order must name this box. These are the checks `sendBatches` makes on a receipt (`return-records.ts:158-170`).
+- The answer's signature must verify against the key the return trusts for that box (`peerKeyOf`: a pinned key, or one a trusted held chart vouches for), **its signer must be that box, its `nonce` must equal the one sent**, and the order must name this box. These are the checks `sendBatches` makes on a receipt (`return-records.ts:158-170`); both now share `checkedPeerAnswer` in `main-box-answer.ts`.
 - This box must hold its restriction row, and either its chart fences it (`isFencedStanding`, `packages/membership/src/fence.ts:20-24`) or its chart still names itself main while its restriction names the target.
 - Without `acceptLoss`, a `return_confirmed` event must exist for the inventory read now.
 - It decides `setAside`: true for a loss order, or when anything is lacking.
@@ -114,7 +114,7 @@
    - Nothing else is prepared now: the inventory of what to move or delete is taken at the start, when no server is running and nothing new can appear (third read, finding 5).
 4. **Only then** does it send the acknowledgement (`ack: orderId`, plus `setAside` and the lacking chains), retrying every 10 seconds for up to 2 minutes. The wipe will destroy its key, so the acknowledgement cannot be sent later.
    - The main box appends `reset_acknowledged`, then removes the box through `removeStandby` (`membership-removal.ts:292`) with `resetStatement: true`, as the person who ordered it.
-   - If that removal is refused, the row says "Reset" and keeps **Remove**.
+   - If that removal is refused, the row keeps "Reset asked" and **Remove**, whose line already tells the person to remove the row (Task 16 review).
 5. **It asks for a restart** (`signalRestart`, `boot.ts:1513`), whether or not the acknowledgement arrived.
 
 **The wipe at start.**
@@ -326,3 +326,613 @@ It folded in the owner's four answers and the watcher's acceptance of the shape.
 5. **`setup-environment.json` made the whole setup start production.** Accepted then; the file is gone in revision 5.
 6. **The write order.** Accepted: two commits, stated; `orderId` derived so a retry is a no-op (`activity-log.ts:45-47`); `return_abandoned` only in the loss case (`states.ts:59,64-69`).
 7. **Question 3.** Answered by the owner at 11:46: the two dialog lines above.
+
+
+## Revision 6: the download of unreturned records, and the bucket check (cleared 2026-11-22 11:09)
+
+> **Cleared by the watcher at 11:09** (lane B's `questions.md`, "WATCHER 2026-11-22 11:09"), after a fresh read on the reviewer account, with all nine calls answered as recommended and four changes, which override the draft below where they differ. The owner's own words (2026-11-21 15:02): "what we should have for both is a download from the old box of the records, which can go to the accountant instead of being lost or left on the box". The draft's Option 1 (the old box makes the file; the person takes it from the old box's row on the main box's Servers page) is a download from the old box. No claim that the owner approved the route.
+
+**The watcher's four changes:**
+
+1. **The dialog's count comes from what the old box already sends** every 30 seconds (each run's count, last number and fingerprint). The main box keeps the latest per box. The separate count request, the seat's count-only mode and its "count matches rows" test are dropped; the only new box-to-box call is the file, on Download.
+2. **The bucket check is a one-off measurement**, run with a control each way, written into the PR and the A1323 item, not a permanent CI test (Task 24 becomes the measurement).
+3. **Task 21:** the bad-signature case is dropped (`packages/handover/src/envelope.test.ts` covers it); wrong sender, venue, destination, repeated one-time number and "busy" stay.
+4. **10a also closes the API:** `POST /management-api/servers/:nodeId/reset` refuses `acceptLoss: true` in 10a, so Reset anyway cannot ship without its download by any route.
+
+**Split.** PR 10a = Tasks 1-18 and the bucket measurement (Task 24), without the Reset anyway menu item, and with the route refusing `acceptLoss: true`. PR 10b = Tasks 19-23 plus Reset anyway (and Task 13's two-box Reset anyway test), landed straight after. If 10b runs past its slice, cut at Task 23 (the dialog block) and say so. Calls 4 and 8: the dialog and the alert say that after the reset the file can no longer be made; revocation of a removed spare's bucket keys goes with A1323, PR 10 carries only the measurement.
+
+## Revision 6 draft (as sent to the watcher), the download of unreturned records, and the bucket check
+
+> Lane B, 22 November 2026. A sized change to fold into the cleared plan
+> `docs/superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md` (revision 5.1) before it is built.
+> Every code claim below was **read, not run**, on `feat/a1558-replaced-box-spare` at main
+> `27cacb7990`. The only commands run were `git log -1`, `grep`, `sed`, `awk`, `cat` and `wc`.
+> Line numbers are on that commit.
+>
+> It answers two requests. First, the owner's (21 November 15:02): "what we should have for both is
+> a download from the old box of the records, which can go to the accountant instead of being lost
+> or left on the box", with the watcher's brief: a download of exactly the records the old box could
+> not return, readable by an accountant, offered before **Reset anyway** and as part of it, named by
+> every alert, with no new upload path and no automatic sending. Second, the watcher's check (14:58):
+> can a removed spare still reach the venue's backup storage with the keys it holds, and if so, what
+> should removing it revoke?
+
+### Words used here
+
+- **Old box**: the main box that was replaced. It now shows only its "restricted page" and sends
+  back its invoice records.
+- **Main box**: the box that runs the venue now.
+- **Chain**: the invoice records one box writes, in order. Each record carries a fingerprint (its
+  `huella`) that includes the fingerprint of the record before it.
+- **Unreturned records**: invoice records the old box holds that the main box does not.
+- **CSV file**: a plain-text table that Excel, LibreOffice and accounting software open.
+- **Signed message**: a message carrying a signature made with the sending box's own key. The
+  receiving box checks it against the key it already knows for that box.
+- **Set-aside folder**: the numbered folder under `records/` where PR 10 moves the old box's
+  databases instead of deleting them.
+- **Bucket**: the online storage the venue's backups go to. **Access keys** are the username and
+  password for it. The **recovery key** unlocks the backups stored in it.
+
+### What the code does today
+
+#### The old box's page has no sign-in, and nobody can sign in on a restricted box
+
+- The restricted page answers GET requests for the till's and the dashboard's addresses with a page
+  built from this box's own data. It checks no session (`apps/server/src/restricted-page.ts:221-244`).
+- A restricted start mounts only five sets of routes: the restricted page, peer status, membership,
+  handover status and the handover source (`apps/server/src/boot.ts:2192-2227`). On top of those it
+  adds the node API and refuses money and drawer writes. It leaves every other route unanswered
+  (`apps/server/src/restricted-start.ts:37-60`).
+- The management API, which holds the sign-in routes, is mounted only by the zone-repair start
+  (`boot.ts:2714`) and the full start (`boot.ts:3380`), and never by `restrictedStart`. So **nobody
+  can sign in on a restricted box today.**
+- Adding a sign-in there would clash with a guarded rule. A password sign-in ends by writing a
+  session row (`packages/identity/src/manager-login.ts:152`, `management-session.ts:52`) to
+  `dashboard_sessions`, which is in `venue.db` (`packages/db/src/classification.ts:356-360`). But
+  `apps/server/src/boot.restricted-quiet.test.ts:296-300` checks that a restricted start "writes
+  nothing to venue.db". A recovery code also writes, when it is used up (`manager-login.ts:137-141`).
+
+#### The accountant export is a spreadsheet workbook. A CSV for the accountant already exists elsewhere
+
+- The accountant export is an `.xlsx` workbook with three sheets: issued invoices, recorded
+  purchases, and other card machines (`apps/server/src/accountant-export.ts:184-280`, rendered by
+  `xlsx-workbook.ts`). Its route is `POST /management-api/reports/accountant-export`, guarded by
+  `report.export` (`report-api.ts:82,481-504`). Each download writes an activity entry
+  (`:491-496`).
+- The invoice sheet has one line for each VAT rate on an invoice, with the total on the first line
+  (`accountant-export.ts:192-225`). Its columns (`i18n/accountant-export.ts:48-67`, Spanish at
+  `:136-155`, plus the two extra headings at `:43-44` and `:131-132`) are: invoice id, node id,
+  invoice number, type, issue date, customer, customer tax number, identifier type, identifier
+  country, customer country, customer address, VAT rate, base, VAT, total, original invoice id,
+  original invoice number, voided at, notes, sale date, and payment on account.
+- It reads the `sales` table, not the invoice records (`accountant-export.ts:319-352`). It also
+  **leaves out substitution (F3) sales** (`:351`, `isNull(saleSubstitutions.id)`).
+- An accountant CSV already exists: the deferred-payments file, `text/csv`, from
+  `POST /management-api/reports/deferred-payment-export`, guarded by the same `report.export`
+  (`report-api.ts:452-476`, rendered at `deferred-payment-export.ts:137-178`). Its cell helper
+  quotes every cell. It puts an apostrophe in front of text that starts like a spreadsheet formula
+  (`attendance-export-csv.ts:3-10`). Amounts use a comma in Spanish (`deferred-payment-export.ts:18-21`).
+  No CSV of the invoice-sheet fields exists.
+- `report.export` is held by managers by default (`packages/identity/src/permissions.ts:25`).
+  `node.manage`, which the Servers dialogs need, has no default holders (`:29`). An administrator
+  holds every permission (`packages/identity/src/authority.ts:42-45`).
+
+#### What the old box can know about "exactly the records it could not return"
+
+- **On its own, only "all or nothing".** The return writes `return_confirmed` only when every
+  batch's receipt says `accounted: true` for the current inventory (`return-records.ts:69-89,163-177`).
+  A refusal ends the pass, and nothing keeps a list of the rows the main box accepted
+  (`:152,177`). So the old box alone can say "everything is back" or "not everything is back",
+  never which records.
+- **With the main box's help, exactly.** Each box numbers its own records without gaps. The next
+  number is the head's plus one (`packages/fiscal-verifactu/src/chain.ts:173`), and the number is
+  unique per box (`schema/registros.ts:124`, `registros_tenant_node_secuencia_uq`). Each record
+  stores its own fingerprint and the previous one's (`schema/registros.ts:100,108`). So suppose the
+  main box holds a box's records up to number `s`, with no gap and with the same fingerprint at `s`.
+  Then it holds the same history up to `s`, and the unreturned records of that box are those after
+  `s`.
+  - The plan's Task 3 seats already compare chains this way. `holdings` lists, for each chain, the
+    count, the last number and that record's fingerprint, grouped as `summariseChains` groups them
+    (`handover-summary.ts:60-79`). `lacking` names each chain the main box does not fully hold
+    (plan, "Other servers' records").
+  - The plan's `holdings` covers **every** chain the old box holds, its own included. So after
+    **Reset anyway**, the old box's own chain is "lacking" too. This matters for the alert (question 6).
+- **Every record has a sale.** `sale_id` is never empty (`schema/registros.ts:52-56`), so the
+  invoice fields the accountant export uses can be read for every unreturned record. The returned
+  batches already read those sales, on the restricted box, straight from the database and never
+  inside a write transaction (`handover-return.ts:55-125`, called at `return-records.ts:61-66`).
+
+#### Personal data
+
+Invoice records and their sales carry customers' names, tax numbers and addresses
+(`accountant-export.ts:327-332`). So the file must only ever go to a signed-in person who holds the
+right permission, and it must never be written to a log.
+
+### Revision 6: the download of unreturned records, and the bucket check
+
+#### What a person can do when it lands
+
+**On the main box, System → Servers, the old box's row.** Both of PR 10's dialogs, **Reset and add as
+spare** and **Reset anyway and turn into a spare**, gain a block at the top. When the dialog opens,
+the main box asks the old box how many records it holds that the main box lacks. The block then
+shows one of these:
+
+| State | English | Spanish |
+| --- | --- | --- |
+| Records found | "The old main server holds {count} invoice records that this server does not have." | "El servidor principal anterior tiene {count} registros de facturación que este servidor no tiene." |
+| (follows it) | "Download them for your accountant before you reset it. Once it has reset, they can no longer be downloaded." | "Descárgalos para tu gestor antes de restablecerlo. Una vez restablecido, ya no se podrán descargar." |
+| Button | "Download for accountant (CSV)" | "Descargar para tu gestor (CSV)" |
+| Some chains could not be matched | "Some servers' records could not be matched with this server's copy, so the file lists all of their records; this server may already have some of them." | "Algunos registros no se han podido cotejar con la copia de este servidor, así que el archivo incluye todos los de esos servidores; puede que este servidor ya tenga algunos." |
+| None (shown in Reset anyway only) | "The old main server holds no invoice records that this server does not have." | "El servidor principal anterior no tiene ningún registro de facturación que este servidor no tenga." |
+| Old box out of reach | "This server cannot reach the old main server just now, so it cannot list or download the invoice records the old server holds. Switch the old server on and connect it to the venue's network, then open this again." | "Ahora este servidor no puede comunicarse con el servidor principal anterior, así que no puede ver ni descargar los registros de facturación que tiene. Enciende el servidor anterior y conéctalo a la red del local, y vuelve a abrir esto." |
+| No `report.export` | "Downloading these records needs the right to export reports for the accountant, which your account does not have. Sign in with an account that has it to download them." | "Para descargar estos registros hace falta el permiso de exportar informes para el gestor, que tu cuenta no tiene. Inicia sesión con una cuenta que lo tenga para descargarlos." |
+
+The button follows the sales screen's accountant button, "Download for accountant (XLSX)" /
+"Descargar para tu gestor (XLSX)" (`apps/dashboard/src/i18n/strings.ts:3147,7909`). The button stays
+quiet while the count loads. A failed download shows its message on its own line at the bottom,
+above the buttons (Forms rules).
+
+**The Reset anyway tick** changes its words to match the block:
+
+- Records found: "I have downloaded the records for my accountant, or I accept that they stay set
+  aside on the old server and are no longer used." / "He descargado los registros para mi gestor, o
+  acepto que se queden apartados en el servidor anterior y dejen de usarse."
+- Old box out of reach: "I accept that the old server's records cannot be downloaded before it
+  resets, and that they stay set aside on it and are no longer used." / "Acepto que los registros
+  del servidor anterior no se puedan descargar antes de que se restablezca, y que se queden
+  apartados en él y dejen de usarse."
+
+**The file.** It is named `unreturned-invoice-records-<old box id>-<date>.csv` and written in the
+venue's language, as the accountant export is (`report-api.ts:500`). It has one line for each
+unreturned invoice record and each VAT rate on it, the same layout as the workbook's invoice sheet.
+The first seven columns are new and describe the record:
+
+| English | Spanish |
+| --- | --- |
+| Chain node id | Id. de nodo de la cadena |
+| Installation number | Número de instalación |
+| Record number in chain | Número de registro en la cadena |
+| Record type (Issue / Cancellation) | Tipo de registro (Alta / Anulación) |
+| Record created at (UTC) | Registro generado el (UTC) |
+| Sent to AEAT (Waiting / Being sent / Accepted / Accepted with errors / Refused / Stopped / Held) | Envío a la AEAT (Pendiente / Enviándose / Aceptado / Aceptado con errores / Rechazado / Detenido / Retenido) |
+| Whole chain listed (Yes when the main box's copy could not be matched) | Cadena completa (Sí cuando no se ha podido cotejar la copia del equipo principal) |
+
+The rest are the workbook's invoice columns and words, unchanged. Unlike the workbook, the file
+**includes** a record whose sale is a substitution (F3), because that record is unreturned too.
+The seven filing states are the module's own (`packages/fiscal-verifactu/src/filing-states.ts:5-13`).
+
+**On the old box's own page** (restricted page words, which call a box "equipo"):
+
+- "This box holds {count} invoice records that the main box does not have." / "Este equipo tiene
+  {count} registros de facturación que el equipo principal no tiene."
+- "To keep them for your accountant, download them on the main box: System → Servers, this box's
+  row, Download for accountant. Do this before this box is reset." / "Para guardarlos para tu
+  gestor, descárgalos en el equipo principal: Sistema → Servidores, la fila de este equipo,
+  Descargar para tu gestor. Hazlo antes de que se restablezca este equipo."
+- Before its first answer from the main box: "This box has not yet compared its invoice records with
+  the main box's." / "Este equipo aún no ha comparado sus registros de facturación con los del
+  equipo principal."
+
+The page already links to the main box (`restricted-page.ts:208`). The row item "Download for
+accountant" opens the same block in a small dialog of its own, so the old box's page can point
+somewhere that is not a reset.
+
+**The alert `chain.set_aside_on_reset`** (Task 4) keeps one message and gains two endings. The
+dashboard picks an ending by whichever of its true/false values is true
+(`packages/dashboard-kit/src/alert-messages.ts:18-20`). The message drops "of other servers"
+(question 6):
+
+- English: "When the old main server reset, it held invoice records that this server does not have.
+  Nothing was deleted: the old server set them aside and keeps them, but they are no longer used.
+  Keep that server rather than throwing it away."
+  - `downloaded`: " A list of them for your accountant was downloaded from System → Servers before
+    the reset."
+  - `notDownloaded`: " Nobody downloaded the list of them for your accountant before the reset, and
+    it can no longer be downloaded."
+- Spanish: "Al restablecerse, el servidor principal anterior tenía registros de facturación que este
+  servidor no tiene. No se ha borrado nada: el servidor anterior los ha apartado y los conserva, pero
+  ya no se usan. Conserva ese servidor en lugar de deshacerte de él."
+  - `downloaded`: " Antes del restablecimiento se descargó desde Sistema → Servidores una lista de
+    ellos para tu gestor."
+  - `notDownloaded`: " Nadie descargó la lista para tu gestor antes del restablecimiento, y ya no se
+    puede descargar."
+
+**New error codes**, with English and Spanish words in `apps/dashboard/src/i18n/codes.ts`:
+
+- `handover.unreturned_unreachable` uses the "Old box out of reach" words above.
+- `handover.unreturned_answer_invalid`: "The old main server's answer could not be verified as
+  coming from it, so nothing was downloaded. Try again in a minute." / "No se ha podido comprobar
+  que la respuesta venga del servidor principal anterior, así que no se ha descargado nada. Vuelve
+  a intentarlo en un minuto."
+- `handover.unreturned_busy`: "The old main server is already preparing a download. Try again in a
+  minute." / "El servidor principal anterior ya está preparando una descarga. Vuelve a intentarlo en
+  un minuto."
+
+#### Design options: where the download is served, and who may take it
+
+**Option 1 (recommended): the main box fetches the file from the old box when a person presses
+Download.**
+
+- The person signs in to the main box's dashboard as they do now.
+- The main box sends the old box a signed request over the box-to-box channel. That channel already
+  runs in this direction: the main box fetches the old box's final copy and posts its acceptance to
+  routes the restricted start serves (`handover-destination-duty.ts:400-433,517-544`;
+  `boot.ts:2214-2226`). The request carries the main box's own `holdings`.
+- The old box works out the unreturned records from those holdings and builds the CSV from its own
+  database, reading only. It answers with the file and a signed digest, a short fingerprint of the
+  file's bytes that proves the file came from that box unchanged.
+- The main box checks the signature and the digest, then streams the file to the person without
+  storing it. It records an activity entry and a `node.db` event saying who downloaded it and when.
+- **Who:** `report.export`, the accountant export's own permission (`report-api.ts:486-489`). The
+  count alone needs only `node.manage`, the dialog's permission, because a count shows no personal
+  data.
+- **What it gets right:**
+  - It uses the venue's current accounts and every sign-in method: password, passkey and Google.
+  - It writes nothing to the old box's `venue.db`, so `boot.restricted-quiet.test.ts` stays as it is.
+  - It keeps the record of who downloaded on the main box, in the usual activity log.
+  - It lets the dialog know whether anyone downloaded, which the alert needs. The alert reads a
+    `node.db` event, never the activity log, because no product decision may read the activity log
+    (CLAUDE.md §3).
+  - The new route on the old box only reads.
+- **Cost:**
+  - About 600 to 680 production lines. That includes a new signed message kind and a new route on
+    the old box.
+  - The main box must be able to reach the old box. The plan's reset works without that, because
+    the old box does the asking. When the main box cannot reach the old box, the dialog says so and
+    the tick says the records cannot be downloaded first.
+  - The old box's page points to the main box instead of offering the download itself. That is a
+    narrower reading of the watcher's "its page offers a download" (question 2).
+  - The records cross from the old box to the main box. They pass through and are never kept
+    (question 1).
+
+**Option 2: a sign-in on the old box's restricted page.**
+
+- A form on the old box's page takes an email, a password and an authenticator code. It checks them
+  against the old box's own copy of the venue's accounts, reading only. If the person holds
+  `report.export`, the same request answers with the CSV. No session is stored.
+- **What it gets right:** the old box's own page offers the download, word for word as the watcher
+  asked. It works while the main box is down or cannot reach the old box.
+- **Cost:**
+  - It adds a new sign-in on an unattended box, which counts as an authentication risk. It needs a
+    read-only password check in `packages/identity`, because today's `loginManager` writes a
+    session row (`manager-login.ts:152`). It also needs its own limit on repeated wrong attempts.
+  - It checks people against an **out-of-date copy of the accounts**. Someone removed, suspended or
+    given a new password on the main box since the handover would still be judged by their old
+    details.
+  - It supports passwords only. Passkeys and Google sign-in need a challenge row in `venue.db` and
+    the old box's own address. Recovery codes write when they are used up.
+  - The main box never learns whether a download was taken, so the alert cannot say.
+  - The same login refusal rules apply: one sentence, `password.invalid`, after the same hashing
+    work (CLAUDE.md §3, `manager-login.ts:95-152`).
+  - It is about the same size as Option 1, at roughly 550 to 620 production lines, but more of it
+    is sign-in code.
+
+**Option 3: the main box hands the browser a short-lived signed ticket, and the browser fetches the
+file from the old box itself.** Rejected unless it is measured. The browser would have to trust the
+old box's certificate for a background request. The guide tells people to "accept your browser's
+warning once" for a box's address (`apps/server/src/guide/en/servers.md:35`), and a background
+request cannot accept a warning. The ticket would also be a bearer secret in the browser, meaning
+whoever holds it can use it.
+
+**After the old box has reset.** The file can no longer be made under any option. A deleting reset
+has removed the records, and only after the main box held every one of them. A set-aside reset
+keeps them only in the set-aside folder, where nothing reads them without a terminal
+(`state-layout.ts:276-281`, plan item 9). Two choices:
+
+- **(a) Recommended:** say so. The dialog says it before the reset, and the alert ending says
+  whether anyone downloaded the file.
+- **(b)** Also write the CSV into the set-aside folder during a set-aside reset. That is about 25
+  production lines. But it is a file left on the box, which the owner said was not the goal, and it
+  still needs a terminal to reach.
+
+#### "Exactly" the unreturned records: the rule
+
+For each chain (a box id and an installation) on the old box, the main box's `holdings` give its
+count, last number `s` and fingerprint `h` for that chain. The old box then decides:
+
+1. If the main box lists the chain, the old box's record number `s` has fingerprint `h`, and the old
+   box's count of that chain up to `s` equals the main box's count, the unreturned records are the
+   old box's records of that chain numbered after `s`.
+2. Otherwise (the main box lacks the chain, the fingerprint differs, or the counts differ), every
+   record of that chain on the old box is listed. Those lines carry **Whole chain listed: Yes**, and
+   the dialog shows its "could not be matched" line.
+
+In the usual case the main box started from the spare's copy, so it holds an unbroken run of the old
+box's chain, and case 1 gives exactly the records written after that copy. Case 2 lists more than
+the missing records and says so. It never lists fewer.
+
+#### Tasks to add (numbered after the plan's 18)
+
+Each task starts with its failing test and ends with its focused tests and `format:check`. Each is
+sized for one implementer in well under 100 tool calls.
+
+19. **The fiscal seat for unreturned records.**
+    - Failing test: a new `packages/fiscal-verifactu/src/handover-unreturned.test.ts`. On a
+      database holding two boxes' chains, it checks:
+      - the main box holds the own chain up to 6 with the same fingerprint: records 7 to 10 are
+        listed;
+      - the main box lacks the other box's chain: all of it is listed, marked whole;
+      - the fingerprint at `s` differs: the chain is listed whole;
+      - the main box's count up to `s` is short (a gap): the chain is listed whole;
+      - the chains are identical: nothing is listed;
+      - the count mode returns the same numbers as the rows mode.
+    - The work:
+      - A third optional seat beside Task 3's two, `unreturned(query, mainHoldings)`. It returns
+        each chain's count and whole flag, and the rows: sale id, chain, number, record type,
+        created at and filing state, all in English names on the contract.
+      - Task 3's `lacking` entries also carry the main box's `{count, lastSequence, lastHash}`, so
+        the old box's page can count without a second request.
+    - Files: `packages/module/src/handover.ts`, `packages/fiscal-verifactu/src/handover-unreturned.ts`
+      (new), `handover-holdings.ts` and `handover-summary.ts` (wiring). Run
+      `packages/composition/src/composition.test.ts` and `scripts/module-seams.test.ts`.
+    - About 90 production and 200 test lines.
+20. **The CSV.**
+    - Failing test: a new `apps/server/src/unreturned-records-csv.test.ts`. It checks:
+      - the headings in English and Spanish;
+      - one line per VAT rate, with the total on the first;
+      - a customer name starting with `=` gets an apostrophe in front;
+      - an F2 invoice with no customer;
+      - a cancellation record;
+      - a part payment's "payment on account" cell;
+      - **a record whose sale is a substitution (F3) is listed**;
+      - 1,000 sale ids are read in chunks below `SQL_VARIABLE_LIMIT`, as the workbook's own read is
+        (`accountant-export.ts:170-182`).
+    - The work: move the invoice read of `listAccountantExport` (`:319-381`) into a helper that
+      takes either the date range or a list of sale ids. Only the range form keeps the F3 filter.
+      The accountant export's own tests run unedited. Write `renderUnreturnedRecordsCsv` with
+      `csvCell` and `amountCell`.
+    - Files: `accountant-export.ts`, `unreturned-records-csv.ts` (new),
+      `i18n/unreturned-records.ts` (new: the seven columns and the record-type and filing-state
+      words, in English and Spanish).
+    - About 100 production, 180 test and 50 string lines.
+21. **The old box's route.**
+    - Failing test: a new `apps/server/src/unreturned-records-api.test.ts`. It covers:
+      - a bad signature;
+      - a signer that is not the box this box treats as main;
+      - the wrong venue;
+      - the wrong destination;
+      - a repeated `nonce`;
+      - a count answer that is signed and matches Task 19's seat;
+      - a file answer whose signed digest matches the bytes;
+      - a second file request while one is running, refused `handover.unreturned_busy`;
+      - a log line that holds counts only.
+    - Plus `boot.restricted-quiet.test.ts`: the quiet case sends one count request and one file
+      request before `venue.db`'s hash is taken, and the hash must be unchanged.
+    - The work: `POST /api/node/unreturned-records`, mounted only on the restricted start, with a
+      peer body limit. It reads straight from the database, never inside `withTransaction`. It uses
+      Task 5's choice of main box (moved out of `return-records.ts:104-109`).
+    - Files: `unreturned-records-api.ts` (new), `boot.ts` (`restrictedStart`'s routes),
+      `replaced-reset-check.ts`, `errors.ts`.
+    - About 110 production and 220 test lines.
+22. **The main box's route.**
+    - Failing test: a new `apps/server/src/unreturned-records-route.test.ts`, against a stand-in old
+      box. It covers:
+      - a count with `node.manage`;
+      - a file with `report.export`, streamed as `text/csv; charset=utf-8` with `no-store` and
+        `nosniff` (as at `report-api.ts:472-476`);
+      - the `handover.unreturned_records_downloaded` activity entry and the `unreturned_downloaded`
+        `node.db` event for the takeover's operation;
+      - `authorization.not_permitted` without `report.export`;
+      - `membership.node_not_replaced` for a box that is not `sell-only`;
+      - `handover.unreturned_unreachable`;
+      - a forged digest refused `handover.unreturned_answer_invalid`, with nothing streamed.
+    - The work: `GET` (count) and `POST` (file) `/management-api/servers/:nodeId/unreturned-records`.
+      The request is signed with the main box's key and carries its `holdings`. The file is fetched
+      with `boxDownload` (`mirror-bundle-fetch.ts`, as `handover-destination-duty.ts:44` does).
+    - Files: `unreturned-records-route.ts` (new), `boot.ts` (full start),
+      `packages/db/src/activity-kinds.ts`, `errors.ts`, `apps/dashboard/src/i18n/codes.ts`.
+      Run `scripts/errors-reachable.test.ts`.
+    - About 130 production, 240 test and 20 string lines.
+23. **The dashboard block.**
+    - Failing tests: a new `apps/dashboard/src/widgets/unreturned-records-block.test.ts` and
+      `.a11y.test.ts`, in both themes. They cover:
+      - loading, found, none, out of reach, and no `report.export`;
+      - the button quiet while loading;
+      - a failure message on its own bottom line;
+      - the "could not be matched" line;
+      - the downloaded file's name.
+    - Plus, in `servers-screen.return.test.ts`: the row item opens the block, and the tick's words
+      follow the block's state.
+    - Files: `widgets/unreturned-records-block.ts` (new), `screens/servers-screen.ts`,
+      `api/client.ts`, `i18n/strings.ts`.
+    - About 130 production, 220 test and 40 string lines.
+24. **The bucket measurement** (see "The bucket check" below). Test only.
+
+#### What changes in existing tasks
+
+- **Task 3:** `lacking` entries carry the main box's count, last number and fingerprint (Task 19
+  builds it, Task 3's test gains a case). About 15 production and 30 test lines.
+- **Task 4:**
+  - The alert fires on any lacking chain, the old box's own included (question 6). It uses the
+    message and endings above. It chooses `downloaded` or `notDownloaded` by reading the
+    `unreturned_downloaded` event in `node.db`, never the activity log.
+  - The `handover.reset_acknowledged` entry gains `downloaded: true|false`.
+  - New cases: an acknowledgement after a download raises the alert with `downloaded`, and one
+    without a download raises it with `notDownloaded`.
+  - Run `scripts/alert-codes.test.ts`.
+  - About 20 production, 40 test and 10 string lines.
+- **Task 9:** the duty keeps the latest verified answer from the main box in memory, so the page can
+  count. About 10 production and 20 test lines.
+- **Task 13** (two-box Reset anyway): before the reset, download through the main box. The CSV must
+  list exactly the records after the spare's last copy. About 40 test lines.
+- **Task 15:** both dialogs carry Task 23's block, and the Reset anyway tick takes its two new
+  wordings. About 20 production, 40 test and 10 string lines.
+- **Task 17:** the three page lines above, from Task 9's in-memory answer. The page is still a
+  rendered string, checked in Chromium in both themes and at phone width. About 30 production, 50
+  test and 10 string lines.
+- **Task 18:** `servers.md`, English and Spanish, `#old-box-returns`: what the download holds, that
+  it needs `report.export`, and that it must be taken before the reset. About 30 lines of docs.
+
+#### Size
+
+| Part | Files | Production | Tests | Strings and docs |
+| --- | --- | --- | --- | --- |
+| Tasks 19 to 23 | 5 new production, 7 new test, about 10 changed | about 560 lines | about 1,060 lines | about 110 lines |
+| Changes to Tasks 3, 4, 9, 13, 15, 17, 18 | already in the plan's count | about 95 lines | about 220 lines | about 60 lines |
+| Task 24 (bucket) | 1 new test, 3 changed (harness, `ci.yml`, its guard) | 0 | about 200 lines | |
+| **Revision 6 in all** | **about 26 files touched, about 15 beyond the plan's 45** | **about 655 lines** | **about 1,480 lines** | **about 170 lines** |
+
+Nothing is generated: no table, no migration, no new state file. The new `node.db` event kind is
+free text (`packages/node-db/src/schema/node-handover.ts:75`). With revision 6, PR 10a grows from
+about 910 to about 1,565 production lines. That is why question 7 proposes splitting it.
+
+#### What PR 11 (working hours) will reuse
+
+- The old box's route and the main box's route. Both carry a `module` field from the start, so
+  PR 11 adds no new message kind.
+- The dashboard block: one line and one button per module.
+- The CSV cell helpers, the `unreturned_downloaded` event, and the alert endings, chosen the same
+  way.
+- PR 11 adds its own sibling seat in the workforce module, and its own file. It reuses the working
+  hours export's columns and `attendance-export-csv.ts`'s cell rules.
+
+#### The bucket check
+
+**What a spare holds today** (read, not run):
+
+- **The venue's live copy to a bucket ("bucket stream") and a spare cannot exist together.** A join
+  is refused while bucket-stream keys are saved (`apps/server/src/mirror-bundle-api.ts:236,262-268`,
+  `mirror.bucket_stream_active`). Saving bucket-stream settings is refused while a pair link exists
+  (`stream-api.ts:170-174,265-270`). So a spare never needs the bucket-stream keys.
+- **Scheduled backups to a bucket ("archive") are not refused while a spare exists.** Their access
+  keys are a sealed row in `venue.db`'s `venue_credentials`, purpose `backup.archive`
+  (`archive-settings.ts:37,285-303,408-409`). A grep for `readPairLink` found no check in the
+  archive path; it appears only in the stream path and the spare's own files.
+- **The spare gets a copy of that row and the key that opens it.**
+  - `venue_credentials` is sealed under the box's key ring, "which a spare receives from the main
+    box when it joins, so both open the main box's rows" (`packages/db/src/classification.ts:258-259,375`).
+  - The handover list puts the table "inside the copy" (`packages/handover/src/manifest.ts:158-163`).
+  - The join bundle carries the whole ring (`mirror-bundle.ts:80-83`). It also carries the main
+    box's `backup.env`, which holds `WAITRON_BACKUP_RECOVERY_KEY`, the key that unlocks the backups
+    (`mirror-bundle.ts:84-85,171,255`; written by `adopt.ts:106,236`).
+- **Removal revokes none of it.** `removeStandby` marks the box removed in a new chart, writes the
+  activity entry, and deletes the main box's own pair link (`membership-removal.ts:285-309,376-384`).
+  The only code that deletes the archive keys is the Backups page's save without keys
+  (`archive-settings.ts:408`). Nothing on either box rotates the recovery key or the ring at
+  removal.
+- **A removed spare does not send backups by itself.** The backup job runs only while the box is
+  primary (`boot.ts:3731`). So the exposure is keys sitting on a box that is no longer a member,
+  not backups it writes.
+- **PR 10 adds a second case.** A set-aside reset moves `venue.db`, `secrets.env` (the ring) and
+  `backup.env` into the set-aside folder (plan, "What it removes or moves"). The old box then keeps
+  the same keys after its reset. A deleting reset removes them.
+
+**Expected from reading:** a removed spare can still list and read the backups bucket with the
+archive keys in its copy, and can unlock the backups with its recovery key. This is an expectation;
+Task 24 measures it.
+
+**Task 24: the measurement.**
+
+- **Where:** a new `apps/server/src/removed-spare-bucket.e2e.test.ts`, built on the existing
+  two-box join scenario (`apps/server/src/testing/spare-join-scenario.ts`, used by
+  `spare-join.e2e.test.ts`). It uses real pinned Litestream and versitygw, the S3 test server from
+  `scripts/setup-s3-test-server.mjs`. The file is added to CI's `test-server-stream` job list
+  (`.github/workflows/ci.yml:1464-1479`) and to the matching `--exclude` list (`:1299-1314`). Run
+  `scripts/ci-workflow.test.mjs`. As in `spare-join.e2e.test.ts:25-36`, it skips locally without
+  the binaries and fails in CI.
+- **Steps:**
+  1. Start versitygw with an archive bucket. Save archive settings on the main box with keys that
+     can list that bucket, and put one object in it.
+  2. Join the spare and wait until its copy holds the `backup.archive` row.
+  3. Remove the spare through the real route.
+  4. From the spare's state folder only: load its ring from `secrets.env`, open its `venue.db`
+     read-only, call `readArchiveSettings`, and list the bucket with `createS3ObjectStore`.
+  5. Compare the fingerprint of the spare's recovery key with the main box's (`keyFingerprint`),
+     never the key itself.
+  6. Case B: run Task 7's set-aside on the spare's folder, then repeat step 4 from the set-aside
+     folder.
+- **Controls, so the probe can show either answer:**
+  - The main box's own keys list the bucket. This proves the bucket is reachable and the probe can
+    succeed.
+  - The spare's keys with one character of the secret changed are refused by versitygw. This proves
+    the probe can show a refusal.
+  - Both controls must pass for the measurement to count.
+- **What it prints:**
+  - The test asserts what it measures and says so in its name. It ends in a single line, either
+    `removed spare: archive keys LISTED the bucket (<n> objects); recovery key fingerprint matches
+    the main box's` or `removed spare: archive keys REFUSED (<S3 error name>)`.
+  - It prints only lengths and fingerprints of keys, never a key (global rule on secrets).
+  - It is written as a characterisation test, one that pins today's behaviour: its assertion pins
+    the measured answer. If it finds LISTED, the revocation item below flips it to REFUSED. If it
+    finds REFUSED, the expectation above was wrong, and the PR says so.
+- About 200 test lines, no production change. It is independent of Tasks 1 to 23 and can be built
+  first.
+
+**What removing a spare would need to revoke if the measurement shows LISTED** (design only, sized):
+
+1. **The archive access keys.** Waitron holds only the keys the owner typed in. It cannot make new
+   ones at the storage provider, so this is a step only the owner can take. When a spare is removed
+   (`removeStandby`, including PR 10's removal on acknowledgement) while a `backup.archive` key is
+   saved, the main box raises an owner alert in the same transaction. The alert says the removed
+   server still holds the storage keys. It asks the owner to make new access keys at the storage
+   provider, enter them on the Backups page and delete the old ones there. It closes by itself once
+   the saved key's revision changes after the removal (`readCredentialMeta`, `archive-settings.ts:325`).
+2. **The recovery key.** The same alert asks for a new recovery key through the existing Backups
+   rotation (`backup-api.ts:587-618`) and a new recovery pack. That part closes once
+   `WAITRON_BACKUP_KEY_ROTATED_AT` is later than the removal.
+3. **The ring and the pair store need nothing.** Once 1 and 2 are done, the sealed keys in the old
+   copy are dead. The pair link to the spare's own store is already deleted (`membership-removal.ts:376-384`).
+4. **A1323 changes this.** When it lands, the pack will no longer carry the storage password and
+   backups will come out only through the owner's Cloud sign-in. Point 1 then becomes a Cloud-side
+   revocation of the removed box, and should be designed there.
+
+Size: about 90 production, 180 test and 30 string lines, about 8 files. **Recommended as its own
+backlog item, bundled with A1323 in `docs/backlog/replication-cloud.md`, not in PR 10.** The fix is in
+backup settings and the Cloud, not in the reset, and A1323 changes which keys exist. PR 10 carries
+Task 24 and states its result in the PR.
+
+#### Questions, each with a recommended answer
+
+1. **(Watcher)** Does Option 1 fit "no new upload path and no automatic sending"? With it, the main
+   box fetches the file from the old box only when a person presses Download, and passes it
+   straight to that person without keeping it. *Recommended: yes. Nothing is stored, nothing is
+   sent unasked, and the records already travel this path in the return.*
+2. **(Owner)** Should the download be taken on the main box's Servers page, with the old box's page
+   pointing there (Option 1)? The alternative is the old box's own page offering it behind a
+   sign-in that checks an out-of-date copy of the accounts, with passwords only (Option 2).
+   *Recommended: Option 1.*
+3. **(Owner)** Should the file need `report.export`, the accountant export's permission, with the
+   count shown to anyone who can open the dialog? *Recommended: yes.*
+4. **(Owner)** After the reset the file can no longer be made. Is (a) saying so in the dialog and
+   the alert enough, or should (b) the file also be written into the set-aside folder?
+   *Recommended: (a). (b) leaves a file on the box that only a terminal can reach.*
+5. **(Watcher)** For Reset anyway, is one tick covering "downloaded, or accept" enough, rather than
+   blocking the button until a download is made? *Recommended: one tick. A download can fail, and
+   the person must still be able to reset.*
+6. **(Watcher)** As Task 4 is written, `chain.set_aside_on_reset` also fires after Reset anyway,
+   because the old box's own chain is then lacking. Should it keep firing then, with "invoice
+   records" in place of "invoice records of other servers"? *Recommended: yes. The managers who see
+   it are often not the person who pressed Reset anyway, and the accountant needs to know either
+   way.*
+7. **(Watcher)** Should PR 10 be split? PR 10a would be Tasks 1 to 18 and 24, without the Reset
+   anyway item in the row menu. PR 10b would be Tasks 19 to 23, the Reset anyway item, and the
+   Task 4, 13, 15 and 17 changes, landed straight after. *Recommended: yes. Otherwise one fiscal PR
+   reaches about 1,565 production lines. Reset anyway never ships without its download.*
+8. **(Watcher, then owner)** Should the removed-spare revocation be its own item bundled with A1323,
+   with PR 10 carrying only the measurement? *Recommended: yes. If the measurement shows LISTED,
+   the owner alert in point 1 is the first part of that item.*
+9. **(Owner)** For a `node.manage` holder without `report.export`: is an explanation plus "sign in
+   with an account that has it" acceptable? A different person signing in inside the dialog would
+   need a widget the dashboard does not have today. `widgets/fresh-sign-in.ts` re-checks only the
+   person already signed in (`:27-33`). *Recommended: yes. Such a person is rare, because
+   `node.manage` has no default holders and an administrator holds everything.*
+
+## As built, after the finish review (2026-11-22)
+
+The branch's review wave changed four things this plan describes. The set-aside alert is raised
+from `apps/server/src/reset-alert.ts`, not the route file, and its words now say the old box was
+told to set its databases aside and that its local backups are removed. Reset is offered, and an
+order accepted, only for the old main server whose key this box pinned when it joined
+(`handover.reset_not_previous_main` otherwise). The old box's page shows its reset line only once
+the box has saved its reset marker, so a box whose set-aside test was refused no longer says it
+restarts shortly. The main box works out which chains it lacks only
+while an order stands.
+
+**After the owner's approval of 22 November, 22:08.** The two actions are **Wipe and remove** and
+**Remove from venue**. A confirmed wipe removes the box and clears it from the list in one signed
+list update; only when the list of cleared boxes is full does it keep a **Removed** row. The wipe
+dialog has a one-line explanation; after an emergency switch, a line pointing to the old box's
+address to download its data first (the download itself is PR 10b's); and a CAUTION line chosen by
+the listing's `recoveredRecordsBackup`, which compares when a destination's newest backup started
+with when the return completed. The "will be lost" emergency paragraph and the machine number are
+gone.

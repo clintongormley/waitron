@@ -341,8 +341,10 @@ it("has English and Spanish copy for a bucket Save refused while the venue has a
   const code = "backup.spare_stream_active";
   expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
   expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
-  expect(codeMessage(code, "en")).toContain("choose Remove on its row on the Servers page");
-  expect(codeMessage(code, "es")).toContain("elige Retirar en su fila de Servidores");
+  expect(codeMessage(code, "en")).toContain(
+    "choose Remove from venue on its row on the Servers page",
+  );
+  expect(codeMessage(code, "es")).toContain("elige Retirar del local en su fila de Servidores");
 });
 
 // The bucket-copy routes' status map (`STATUS` in apps/server/src/stream-api.ts). Its fallback tag,

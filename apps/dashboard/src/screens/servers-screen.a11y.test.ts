@@ -20,6 +20,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: STANDBY,
@@ -31,6 +35,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: "33333333-3333-4333-8333-333333333333",
@@ -42,6 +50,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: "44444444-4444-4444-8444-444444444444",
@@ -53,6 +65,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
   ],
 };
@@ -214,6 +230,10 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           requiresRetirementConfirmation: false,
           returnOutstanding: false,
           needsResetStatement: false,
+          reset: null,
+          canReset: false,
+          returnScenario: null,
+          recoveredRecordsBackup: null,
         },
       ],
     };
@@ -387,6 +407,40 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
     await flush(el);
     const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
       "wt-dialog[data-test=abandon-dialog] wt-form-actions",
+    )!;
+    expect(await formMessageOf(actions)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders Wipe and remove after an emergency switch, with its CAUTION line and refusal, accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(
+            withFormer({
+              canReset: true,
+              returnScenario: "emergency",
+              recoveredRecordsBackup: "awaiting-backup",
+            }),
+          ),
+          orderServerReset: vi
+            .fn()
+            .mockRejectedValue({ code: "handover.reset_loss_unaccepted", status: 409 }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openOn(el, "reset");
+    expect(el.shadowRoot!.querySelector("[data-test=reset-download]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reset-caution]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-reset]")!.click();
+    await flush(el);
+    await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-dialog[data-test=reset-dialog] wt-form-actions",
     )!;
     expect(await formMessageOf(actions)).not.toBeNull();
     await expectNoA11yViolations(host);

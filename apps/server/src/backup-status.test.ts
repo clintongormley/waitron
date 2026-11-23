@@ -75,6 +75,7 @@ describe("readDestinationStatus", () => {
       {
         id: "foreign-only",
         lastBackupAt: null,
+        lastBackupStartedAt: null,
         ageSeconds: null,
         stale: true,
         readErrorCode: null,
@@ -82,6 +83,7 @@ describe("readDestinationStatus", () => {
       {
         id: "mixed",
         lastBackupAt: new Date(oldMs).toISOString(),
+        lastBackupStartedAt: new Date(oldMs).toISOString(),
         ageSeconds: 120,
         stale: true,
         readErrorCode: null,
@@ -95,6 +97,27 @@ describe("readDestinationStatus", () => {
       configured: true,
       destinations: [{ id: "a", ageSeconds: 1, stale: false }],
     });
+  });
+
+  it("reports when the judged archive's backup started, from the stamp in its name, beside when it was published", async () => {
+    const startedMs = Date.parse("2026-09-05T11:58:00.750Z");
+    const publishedMs = NOW.getTime() - 1000;
+    const started = listing("a", async () => [
+      {
+        key: backupArchiveKey(new Date(startedMs), { nodeId: BACKUP_NODE_ID }),
+        size: 1,
+        mtimeMs: publishedMs,
+      },
+    ]);
+    const s = await readAll([started, backend("empty", null)], 60_000, NOW);
+    expect(s.destinations).toMatchObject([
+      {
+        id: "a",
+        lastBackupAt: new Date(publishedMs).toISOString(),
+        lastBackupStartedAt: "2026-09-05T11:58:00.000Z",
+      },
+      { id: "empty", lastBackupAt: null, lastBackupStartedAt: null },
+    ]);
   });
 
   it("marks a destination stale past staleAfterMs", async () => {
@@ -122,6 +145,7 @@ describe("readDestinationStatus", () => {
         {
           id: "a",
           lastBackupAt: new Date(ahead).toISOString(),
+          lastBackupStartedAt: new Date(ahead).toISOString(),
           ageSeconds: -400 * 86_400,
           stale: true,
           readErrorCode: null,
@@ -139,6 +163,7 @@ describe("readDestinationStatus", () => {
         {
           id: "a",
           lastBackupAt: new Date(NOW.getTime() - 3 * DAY).toISOString(),
+          lastBackupStartedAt: new Date(NOW.getTime() - 3 * DAY).toISOString(),
           ageSeconds: 3 * 86_400,
           stale: true,
           readErrorCode: null,
@@ -174,11 +199,19 @@ describe("readDestinationStatus", () => {
         {
           id: "a",
           lastBackupAt: new Date(NOW.getTime() - 1000).toISOString(),
+          lastBackupStartedAt: new Date(NOW.getTime() - 1000).toISOString(),
           ageSeconds: 1,
           stale: false,
           readErrorCode: null,
         },
-        { id: "b", lastBackupAt: null, ageSeconds: null, stale: true, readErrorCode: null },
+        {
+          id: "b",
+          lastBackupAt: null,
+          lastBackupStartedAt: null,
+          ageSeconds: null,
+          stale: true,
+          readErrorCode: null,
+        },
       ],
     });
   });
@@ -200,6 +233,7 @@ describe("readDestinationStatus", () => {
         {
           id: "bucket",
           lastBackupAt: null,
+          lastBackupStartedAt: null,
           ageSeconds: null,
           stale: true,
           readErrorCode: "backup.destination_object_too_large",
@@ -207,6 +241,7 @@ describe("readDestinationStatus", () => {
         {
           id: "local",
           lastBackupAt: new Date(NOW.getTime() - 1000).toISOString(),
+          lastBackupStartedAt: new Date(NOW.getTime() - 1000).toISOString(),
           ageSeconds: 1,
           stale: false,
           readErrorCode: null,
@@ -231,6 +266,7 @@ describe("readDestinationStatus", () => {
         {
           id: "local",
           lastBackupAt: null,
+          lastBackupStartedAt: null,
           ageSeconds: null,
           stale: true,
           readErrorCode: "unknown",
@@ -291,6 +327,7 @@ describe("readDestinationStatus", () => {
           {
             id: "usb",
             lastBackupAt: null,
+            lastBackupStartedAt: null,
             ageSeconds: null,
             stale: true,
             readErrorCode: "backup.destination_timed_out",
@@ -298,6 +335,7 @@ describe("readDestinationStatus", () => {
           {
             id: "local",
             lastBackupAt: new Date(NOW.getTime() - 1000).toISOString(),
+            lastBackupStartedAt: new Date(NOW.getTime() - 1000).toISOString(),
             ageSeconds: 1,
             stale: false,
             readErrorCode: null,
@@ -409,11 +447,19 @@ describe("readDestinationStatus", () => {
         {
           id: "local",
           lastBackupAt: new Date(archiveMs).toISOString(),
+          lastBackupStartedAt: new Date(archiveMs).toISOString(),
           ageSeconds: 120,
           stale: true,
           readErrorCode: null,
         },
-        { id: "other", lastBackupAt: null, ageSeconds: null, stale: true, readErrorCode: null },
+        {
+          id: "other",
+          lastBackupAt: null,
+          lastBackupStartedAt: null,
+          ageSeconds: null,
+          stale: true,
+          readErrorCode: null,
+        },
       ],
     });
   });

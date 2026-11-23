@@ -1530,6 +1530,32 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("orders an old main box to reset without accepting a loss, passing a refusal's code through", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ orderId: "order", acceptLoss: false }))
+      .mockResolvedValueOnce(refusal("handover.reset_loss_unaccepted", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.orderServerReset("55555555-5555-4555-8555-555555555555")).resolves.toEqual({
+      orderId: "order",
+      acceptLoss: false,
+    });
+    await expect(api.orderServerReset("a/b")).rejects.toMatchObject({
+      code: "handover.reset_loss_unaccepted",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/servers/55555555-5555-4555-8555-555555555555/reset",
+        "POST",
+        { acceptLoss: false },
+      ],
+      ["/management-api/servers/a%2Fb/reset", "POST", { acceptLoss: false }],
+    ]);
+  });
+
   it("clears a removed server by its id, passing a refusal's code through", async () => {
     const fetchImpl = vi
       .fn()

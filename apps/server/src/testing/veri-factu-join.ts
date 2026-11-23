@@ -8,6 +8,7 @@ import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   stampDeployment,
   withTransaction,
+  type DeploymentEnvironment,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
@@ -48,11 +49,14 @@ interface TwoBoxes {
  * A main box set up in Spain with the modules its venue database enables, signed in as its
  * administrator, its chart listing only itself, and its real box-join routes mounted on `bundleApp`.
  */
-export async function veriFactuMainBox(boxes: TwoBoxes) {
+export async function veriFactuMainBox(
+  boxes: TwoBoxes,
+  environment: DeploymentEnvironment = "preproduction",
+) {
   const { mainBox, mainState, ring } = boxes;
   const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainBox.db));
-  await stampDeployment(mainBox.db, "preproduction");
-  const venue = await applyWithFirstSetup(mainState)(
+  await stampDeployment(mainBox.db, environment);
+  const venue = await applyWithFirstSetup(mainState, environment)(
     planVenue(
       {
         country: "ES",
@@ -216,10 +220,15 @@ export async function collectJoin(
 export async function joinSpare(
   boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
   main: { bundleApp: Hono; email: string },
-  options: { spareUrl?: string } = {},
+  options: {
+    spareUrl?: string;
+    /** What the new box's `WAITRON_ENV` names; null when it is unset, as on a fresh box. */
+    environment?: DeploymentEnvironment | null;
+  } = {},
 ) {
   const { spareBox, spareState, ring } = boxes;
-  const { identity, bundle, storeUrl } = await collectJoin(main, options);
+  const { environment = "preproduction", ...joinOptions } = options;
+  const { identity, bundle, storeUrl } = await collectJoin(main, joinOptions);
   const standby = { nodeId: identity.nodeId, publicKey: identity.publicKey };
   let spareId!: string;
   await adoptFromPrimary(
@@ -230,7 +239,7 @@ export async function joinSpare(
       ring,
       persistCredentialsRing: async () => {},
       assertStartsWith: () => {},
-      environment: "preproduction",
+      environment,
       persistTrading: async (args) => {
         spareId = args.nodeId;
       },

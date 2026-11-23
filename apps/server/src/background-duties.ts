@@ -147,11 +147,25 @@ export async function stopBackgroundDuties(
   if (failures.length > 0) throw failures[0];
 }
 
-export function restrictedBackgroundDuties(returnRecords?: Stopper): BackgroundDuties {
+export function restrictedBackgroundDuties(
+  returnRecords?: Stopper,
+  resetOrder?: Stopper,
+): BackgroundDuties {
   return {
     aborts: [],
-    closers: returnRecords
-      ? [{ name: "returnRecords", atStepdown: true, close: once(() => returnRecords.stop()) }]
-      : [],
+    closers: [
+      ...(returnRecords
+        ? [
+            {
+              name: "returnRecords",
+              atStepdown: true as const,
+              close: once(() => returnRecords.stop()),
+            },
+          ]
+        : []),
+      ...(resetOrder
+        ? [{ name: "resetOrder", atStepdown: true as const, close: once(() => resetOrder.stop()) }]
+        : []),
+    ],
   };
 }

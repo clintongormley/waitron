@@ -15,6 +15,9 @@ export interface ReturnDiscrepancy {
   held: CanonicalValue;
 }
 
+/** Thrown by a module's `lacking` seat when another box's `holdings` are not in its shape. */
+export class MalformedHoldingsError extends Error {}
+
 /** What a module vouches for, and checks, in a copy of the venue database handed to another box. */
 export interface ModuleHandoverContribution {
   summarise(query: BackupQuery): Promise<CanonicalValue>;
@@ -35,6 +38,13 @@ export interface ModuleHandoverContribution {
     ): Promise<boolean | { refusal: ErrorCode }>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
+  /** What this box holds of every box's records, as plain JSON, for another box to compare. */
+  holdings?(query: BackupQuery): Promise<CanonicalValue>;
+  /**
+   * Which of another box's `holdings` this database does not hold; empty when it holds them all.
+   * Holdings not in the module's shape throw `MalformedHoldingsError`.
+   */
+  lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;
 }
 
 function byName(modules: readonly WaitronModule[]): WaitronModule[] {

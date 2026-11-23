@@ -55,6 +55,27 @@ export const STANDING_DOWN_PAGE_WORDS: Readonly<
   },
 };
 
+/**
+ * Each shown in place of the return's line: once this box has saved the main box's reset order,
+ * and once a start could not set the records aside (`../replaced-reset.ts`'s `set_aside_refused`).
+ * The refused line wins because the start that wrote that phase did not reset.
+ */
+export const RESTRICTED_RESET_WORDS: Readonly<
+  Record<SupportedLocale, { ordered: string; setAsideRefused: string }>
+> = {
+  "en-GB": {
+    ordered: "The main box asked this box to reset. It restarts shortly as a new box.",
+    setAsideRefused:
+      "This box was asked to reset, but it could not set its records aside, so it did not reset. Nothing on it was changed or deleted. The venue runs on the main box and no longer needs this one, so you can switch it off.",
+  },
+  "es-ES": {
+    ordered:
+      "El servidor principal ha pedido restablecer este servidor. En breve se reinicia como un servidor nuevo.",
+    setAsideRefused:
+      "Se pidió a este servidor que se restableciera, pero no ha podido apartar sus registros, así que no se ha restablecido. No se ha cambiado ni borrado nada en él. El local funciona con el servidor principal y ya no necesita este, así que puedes apagarlo.",
+  },
+};
+
 /** The successor's role, after its address, where this box knows it is the main box. */
 export const RESTRICTED_MAIN_BOX_WORDS: Readonly<Record<SupportedLocale, string>> = {
   "en-GB": "main box",

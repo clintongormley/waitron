@@ -108,7 +108,7 @@ export const shellEn = {
   "shell.adopt.generic":
     "This box could not finish joining just now. Check that it is switched on and connected, then try again.",
   "shell.adopt.incomplete":
-    "A previous attempt to join this box to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this box clears what the stopped join left on this box and restarts setup from the first page. If the main box's Servers page lists this box, choose Remove in its row there, then Clear from list.",
+    "A previous attempt to join this box to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this box clears what the stopped join left on this box and restarts setup from the first page. If the main box's Servers page lists this box, choose Remove from venue in its row there, then Clear from list.",
 
   "shell.reset.generic": "The box could not be reset. Check the connection and try again.",
   "shell.reset.resetting":
@@ -329,7 +329,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.generic":
     "Este servidor no ha podido terminar la unión ahora. Comprueba que está encendido y conectado, e inténtalo de nuevo.",
   "shell.adopt.incomplete":
-    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Elegir Restablecer este servidor elimina lo que la unión detenida dejó en este servidor y vuelve a empezar la configuración desde la primera página. Si la página Servidores del servidor principal muestra este servidor, elige Retirar en su fila y después Quitar de la lista.",
+    "Un intento anterior de unir este servidor a un restaurante se detuvo a medias y lo dejó configurado a medias. No se puede terminar. Elegir Restablecer este servidor elimina lo que la unión detenida dejó en este servidor y vuelve a empezar la configuración desde la primera página. Si la página Servidores del servidor principal muestra este servidor, elige Retirar del local en su fila y después Quitar de la lista.",
 
   "shell.reset.generic":
     "No se ha podido restablecer el servidor. Comprueba la conexión e inténtalo de nuevo.",

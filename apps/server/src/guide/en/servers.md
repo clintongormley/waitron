@@ -70,10 +70,11 @@ network to open its [switch page](servers.md#emergency).
 
 ## Remove a spare box {#remove-a-spare}
 
-On the main box, open **System → Servers**, open the spare's row menu and choose **Remove**. For a
+On the main box, open **System → Servers**, open the spare's row menu and choose **Remove from venue**. For a
 spare that has finished joining, first switch it off and make sure nobody is restoring the venue from a backup or switching it to another box, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
-it and add it as a new spare.
+it from a terminal and add it as a new spare. The old main box this one took over from is wiped
+from its row once its records are back ([read more](servers.md#old-box-returns)).
 
 ## Start here when the main box has failed {#emergency}
 
@@ -152,20 +153,31 @@ If emergency hosting is available for your venue, the red strip or panel also of
 
 Use the new main box after it starts. Keep the failed box and its data for the return flow.
 Invoice records and their recorded payment facts can return to the new main box; this does not
-replay orders, stock changes, printing or drawer openings. Do not reset the old box while you
+replay orders, stock changes, printing or drawer openings. Do not wipe the old box while you
 still need its data.
 
 Switch the old box on and keep it connected: it returns its invoice records by itself. Until they
-arrive, its row in **System → Servers** on the new main box says **Waiting for the former main box to
+arrive, its row in **System → Servers** on the new main box says **Waiting for the old main box to
 return its invoice records**, and the venue cannot be handed over again or that box removed.
 
 If the old box will never come back with its data, choose **Will not return** in its row menu.
 Invoice records it made after the copy the new main box started from stay only on it, unless it is
 switched on again before you remove it.
 
-To remove a former main box, choose **Remove** in its row menu. If it has not returned its invoice
-records, tick that it has been reset or will never be switched on again. If it does come back,
-reset it, and never choose **Carry on as the main box** on it.
+Once its invoice records are back, its row menu offers **Wipe and remove**. After an emergency
+switch, the old main box may hold data that this box does not have: download that data from the old
+box's address, which the dialog links to, before wiping and reusing it. A **CAUTION** line in the
+dialog means the recovered records exist only on this box until a backup is made. Once you confirm,
+the row says **Wipe asked**. The old main box wipes itself and leaves the list the next time it is
+on and can reach this box, then restarts on setup's first page: [re-add it as a
+spare](servers.md#adding-a-spare) from there, comparing the code it shows with the one on this box.
+If it was already wiped by hand, choose **Remove from venue**. If this main box is itself replaced
+before the old one has wiped itself, the old one never receives the wipe: choose **Remove from
+venue** on the new main box and wipe it from a terminal.
+
+To remove an old main box without wiping it, choose **Remove from venue** in its row menu. If it has
+not returned its invoice records, tick that it has been wiped or will never be switched on again. If
+it does come back, wipe it from a terminal, and never choose **Carry on as the main box** on it.
 
 ## Hand over to a spare box {#hand-over}
 
@@ -231,12 +243,16 @@ check progress. Card refunds still in progress go with their original payments s
 can check their outcome. Filing with the tax agency continues on the main box. Confirmation means
 every returned fact was either received or covered by a specifically accepted payment difference;
 for an accepted difference, the main box keeps its own payment facts.
-Resetting the old box deletes its venue data, including sale lines and local backups. Those are
-not included in this return; keep the old box's data if you need them.
+
+Once the return is confirmed, the main box can ask this box to reset. The page then says so, and
+the box restarts shortly on setup's first page, ready to [join again as a
+spare](servers.md#adding-a-spare). The reset removes this box's venue data, including sale lines
+and local backups, which this return does not carry; keep the old box's data if you need them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.
-Reset remains available, but deletes the old box's venue data, including any records still waiting.
+A reset from a terminal remains possible, but deletes the old box's venue data, including any
+records still waiting.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
 payment differences can be accepted through the internal API. An administrator can inspect them
@@ -305,8 +321,8 @@ If the backup confirms that another box has taken over, this box refuses to carr
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
 Use the new main box. Older boxes may share an address: check which box you opened.
 
-Keep this box running with its data while it returns records. Reset remains available, but it
-deletes this box's venue data even if the return has stopped or is unfinished.
+Keep this box running with its data while it returns records. A reset from a terminal remains
+possible, but it deletes this box's venue data even if the return has stopped or is unfinished.
 
 After a box becomes the main box, open **Backups** and check that each backup folder is on this box.
 

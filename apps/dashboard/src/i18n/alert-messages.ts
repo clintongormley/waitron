@@ -222,6 +222,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "When an invoice record was written, Waitron's check of the previous invoice record found a problem. The new record was still written, and sales and sending to the tax agency (AEAT) carry on. Keep the box running and note when this appeared.",
     es: "Al escribir un registro de facturación, la comprobación de Waitron del registro anterior ha encontrado un problema. El registro nuevo se ha escrito igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
+  "chain.set_aside_on_reset": {
+    en: "The old main box holds invoice records that this box does not have, so it was told to set its databases aside when it wipes itself, instead of deleting them. They stay on that box but are no longer used; its local backups are removed. Keep that box rather than throwing it away.",
+    es: "El servidor principal anterior tiene registros de facturación que este servidor no tiene, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Se quedan en ese servidor, pero ya no se usan; sus copias de seguridad locales se eliminan. Conserva ese servidor en lugar de deshacerte de él.",
+  },
   "clock.degraded": {
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",
     es: "La hora de este servidor no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos.",

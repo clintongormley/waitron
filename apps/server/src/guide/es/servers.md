@@ -78,9 +78,12 @@ conectado a la red del local para abrir su [página de cambio](servers.md#emerge
 ## Retirar un servidor de reserva {#remove-a-spare}
 
 En el servidor principal, abre **Sistema → Servidores**, abre el menú de la fila del servidor de
-reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que nadie está restaurando el local desde una copia de seguridad ni pasándolo a otro servidor; después activa las dos declaraciones. Una vez retirado, el servidor principal
+reserva y elige **Retirar del local**. Si ha terminado de unirse, apágalo primero y asegúrate de que nadie está restaurando el local desde una copia de seguridad ni pasándolo a otro servidor; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
-volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva.
+volver a usar esa máquina, restablécela desde un terminal y añádela como un nuevo servidor de
+reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila una
+vez que ha devuelto sus registros
+([más información](servers.md#old-box-returns)).
 
 ## Iniciar aquí si ha fallado el servidor principal {#emergency}
 
@@ -166,20 +169,34 @@ Si el alojamiento de emergencia está disponible para tu local, la franja roja o
 Usa el nuevo servidor principal cuando arranque. Conserva el servidor averiado y sus datos para la
 devolución. Los registros de facturación y sus hechos de pago registrados pueden volver al nuevo
 servidor principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
-cajón. No restablezcas el servidor anterior mientras necesites sus datos.
+cajón. No borres el servidor anterior mientras necesites sus datos.
 
 Enciende el servidor anterior y mantenlo conectado: devuelve sus registros de facturación por sí
 solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servidor principal dice
-**Esperando a que el antiguo servidor principal devuelva sus registros de facturación**, y no se puede volver a
+**Esperando a que el servidor principal anterior devuelva sus registros de facturación**, y no se puede volver a
 traspasar el local ni retirar ese servidor.
 
 Si el servidor anterior no va a volver nunca con sus datos, elige **No volverá** en el menú de su
 fila. Los registros de facturación que hizo después de la copia con la que empezó el nuevo servidor
 principal se quedan solo en él, salvo que se vuelva a encender antes de que lo retires.
 
-Para retirar un antiguo servidor principal, elige **Retirar** en el menú de su fila. Si no ha
-devuelto sus registros de facturación, marca que se ha restablecido o que no se volverá a encender
-nunca. Si vuelve, restablécelo y no elijas nunca **Seguir como servidor principal** en él.
+Cuando haya devuelto sus registros de facturación, el menú de su fila ofrece **Borrar y retirar**.
+Tras un traspaso de emergencia, puede que el servidor principal anterior tenga datos que este
+servidor no tiene: descárgalos desde la dirección del servidor anterior, que el diálogo enlaza,
+antes de borrarlo y volver a usarlo. Una línea de **ATENCIÓN** en el diálogo indica que los registros
+recuperados solo están en este servidor hasta que se haga una copia de seguridad. Cuando lo
+confirmes, la fila dice **Borrado solicitado**. El servidor principal anterior se borra y sale de la
+lista la próxima vez que esté encendido y pueda conectar con este servidor, y se reinicia en la
+primera página de la configuración: desde ahí, [vuelve a añadirlo como servidor de
+reserva](servers.md#adding-a-spare), comparando el código que muestra con el de este servidor. Si ya
+se borró a mano, elige **Retirar del local**. Si este servidor principal también se sustituye antes
+de que el anterior se haya borrado, el anterior nunca recibe el borrado: elige **Retirar del local**
+en el nuevo servidor principal y bórralo desde un terminal.
+
+Para retirar un servidor principal anterior sin borrarlo, elige **Retirar del local** en el menú de
+su fila. Si no ha devuelto sus registros de facturación, marca que se ha borrado o que no se volverá
+a encender nunca. Si vuelve, bórralo desde un terminal y no elijas nunca **Seguir como servidor
+principal** en él.
 
 ## Traspasar el local a un servidor de reserva {#hand-over}
 
@@ -251,14 +268,19 @@ Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en c
 con sus pagos originales para que el principal pueda comprobar su resultado. El envío a Hacienda
 continúa en el principal. La confirmación significa que cada dato devuelto se ha recibido o se ha
 cubierto mediante una diferencia de pago aceptada expresamente; para una diferencia aceptada, el
-principal conserva sus propios datos de pago. Restablecer el servidor anterior borra sus datos del
-local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
-en esta devolución; conserva los datos del servidor anterior si los necesitas.
+principal conserva sus propios datos de pago.
+
+Cuando la devolución esté confirmada, el servidor principal puede pedir a este servidor que se
+restablezca. La página lo indica entonces, y el servidor se reinicia en breve en la primera página
+de la configuración, listo para [volver a unirse como servidor de
+reserva](servers.md#adding-a-spare). El restablecimiento retira sus datos del local, incluidas las
+líneas de venta y las copias de seguridad locales, que esta devolución no incluye; conserva los
+datos del servidor anterior si los necesitas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
-necesitas. La devolución no está confirmada. Puedes restablecer el servidor, pero eso borra sus
-datos del local, incluidos los registros que sigan pendientes.
+necesitas. La devolución no está confirmada. Puedes restablecer el servidor desde un terminal, pero
+eso borra sus datos del local, incluidos los registros que sigan pendientes.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
@@ -338,7 +360,7 @@ de continuar, este servidor deja de aceptar ventas. Usa el nuevo servidor princi
 pueden compartir dirección: comprueba qué servidor has abierto.
 
 Mantén este servidor encendido y conserva sus datos mientras devuelve los registros. Puedes
-restablecerlo, pero eso borra sus datos del local aunque la devolución se haya detenido o no haya
+restablecerlo desde un terminal, pero eso borra sus datos del local aunque la devolución se haya detenido o no haya
 terminado.
 
 Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y comprueba que cada carpeta de copias esté en este servidor.

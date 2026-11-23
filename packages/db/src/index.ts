@@ -265,6 +265,7 @@ export {
   CORE_BACKUP_TABLE_POLICIES,
 } from "./backup-evidence.js";
 export type { BackupTablePolicy } from "./backup-evidence.js";
+export { liveBackupQuery } from "./live-backup-query.js";
 export {
   insertReservedNodeTx,
   insertReservedSeriesTx,

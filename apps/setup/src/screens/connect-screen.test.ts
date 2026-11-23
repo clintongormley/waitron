@@ -753,7 +753,7 @@ describe("setup-connect-screen: added by the main box", () => {
     el.refusal = { code: "mirror.bundle_fetch_failed" };
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
-        "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
+        "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here for a new code.",
       ),
     );
     expect(q(el, "[data-test=start-again]")).not.toBeNull();
@@ -798,7 +798,7 @@ describe("setup-connect-screen: the words of every state", () => {
     ],
     [
       { state: "ended", reason: "stopped" },
-      "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+      "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here.",
     ],
     [
       { state: "ended", reason: "unknown" },
@@ -806,7 +806,7 @@ describe("setup-connect-screen: the words of every state", () => {
     ],
     [
       { state: "failed", error: "mirror.join_invalid" },
-      "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+      "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here.",
     ],
     [
       { state: "failed", error: "mirror.join_not_found" },

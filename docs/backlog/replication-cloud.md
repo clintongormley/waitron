@@ -404,8 +404,15 @@ qualification remain open. A1342’s marker is now stored and returned invoices 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
 their original capture and its settled-order anchor, without order lines; the new main uses its
-existing recovery worker to check the provider outcome without sending another refund. Reset deletes the old box's venue data, including the sale lines
-and local backups that this return does not carry. Correction
+existing recovery worker to check the provider outcome without sending another refund. Once the
+return is confirmed, the new main box's **Wipe and remove** orders the old box to reset; the
+old box asks for that order every 30 seconds while it is restricted (every 5 minutes after a
+refusal), and resets at its next start.
+The reset deletes the old box's venue data, including the sale lines and local backups that this
+return does not carry, unless the main box lacks another box's invoice records the old box holds:
+then it sets its databases and other venue state aside in `records/` instead, and still removes
+its local backups (A1558 PR 10). A box that never reaches the main
+box is reset with `waitron.sh reset --force-production`. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
 The correction refuses a returned sale whose invoice lines did not travel (the whole-credit probe reported `sale.correction_lines_mismatch` on main at `febf58a351` after the probe supplied the department by hand, and on the A1308 os8 candidate).
 Sale lines, reprints and real-box qualification remain outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains
@@ -590,10 +597,15 @@ Slice 3.
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
-- **What A1558 left open (22 November 2026).** Resetting a replaced main box into a spare from its
-  Servers row ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)) is
-  planned and cleared; lane B builds it. Chrome and Safari accepting the warning for a box's IP
-  address during a join is not yet tried on real boxes.
+- **What A1558 left open (22 November 2026).** Wiping a replaced main box from its Servers row once
+  its records are back is built (PR 10a). Left for PR 10b
+  ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): wiping it before
+  its return completes, the download of the data the old box holds that this box lacks (after an
+  emergency switch the 10a dialog already points to the old box's address for it), and checking in
+  the dialog whether the old box holds records this box lacks. Each as its own pull request: the old
+  box's own page redesign, and the old box also returning other boxes' invoice records it holds.
+  Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
+  real boxes.
 
 ## Bundle: Everything needing a third box or a Cloud peer
 
@@ -658,6 +670,20 @@ Slice 3.
 #443.** Setup's first page offers joining, and leads with **Join it as a spare** when another box
 answers the venue's name: the owner asked at 20:53, "Can we not detect that another box answers to
 waitron.local, say that, and offer to join?", and approved the pictures at 22:08.
+
+**A replaced main box whose set-aside is refused at the start, after the main box received its
+acknowledgement, is left restricted, and removed once the main box acts on the acknowledgement;
+only a terminal reset recovers it (the watcher,
+2026-11-21 12:22).** The reset-order duty tests the set-aside's renames before it saves anything
+(`probeEnvironmentMove`, `apps/server/src/reset-order-duty.ts`), so this needs the start's renames
+to fail after that test passed. The start then writes the reset marker's phase
+`set_aside_refused`, logs `replaced-reset.set_aside_unavailable` and carries on restricted,
+wiping nothing (`apps/server/src/replaced-reset.ts`). The main box has removed the box on the
+acknowledgement, or, if that removal was refused, its row still offers Remove; once removed, its
+later reset queries are refused as no longer a member. Its page says it
+did not reset, that nothing was changed or deleted, and that it can be switched off
+(`apps/server/src/i18n/restricted-page.ts`). Recovering the machine takes
+`waitron.sh reset --force-production`.
 
 **A box in setup mode can be trusted by mistake while it answers the venue's name; accepted, with
 a warning (owner, 2026-11-21).** Such a box answers `waitron.local` once its ask hears no other box

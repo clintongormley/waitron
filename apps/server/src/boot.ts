@@ -4,7 +4,10 @@ import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
+import { startResetOrderDuty } from "./reset-order-duty.js";
+import { readReplacedResetPhase } from "./replaced-reset.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { mountResetOrderApi } from "./reset-order-api.js";
 import { CLOUD_STAFF_CERT_FILE, SERVER_PEM_FILE, TAX_OFFICE_DOWNLOADS_DIR } from "@waitron/store";
 import {
   boxHostClient,
@@ -2017,7 +2020,7 @@ async function bootServer(
   // Before the start check: a spare that lost its node.db cannot sign its question, so the main box
   // it counts reads as silent and the start would wait, answering the venue's name.
   await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
-  // Restricted starts run only the return sender, which reads this venue's data.
+  // Restricted starts run only the return sender and the reset-order duty, which read this venue's data.
   const restrictedStart = () => {
     const returnRecords = startReturnRecordsDuty({
       db,
@@ -2030,10 +2033,25 @@ async function bootServer(
       log,
     });
     undoOnFailure.push(() => returnRecords.stop());
+    const resetOrder = startResetOrderDuty({
+      db,
+      node: store.node,
+      ring,
+      nodeId: node.nodeId,
+      modules: enabledAtStart,
+      stateDir: config.stateDir,
+      venueDir: config.venueDir,
+      returnPass: () => returnRecords.passNow(),
+      lookup: seams.boxLookup,
+      log,
+      restart: signalRestart,
+    });
+    undoOnFailure.push(() => resetOrder.stop());
     health.takesNoSales = true;
     return startRestricted({
       app,
       returnRecords,
+      resetOrder,
       nodeId: node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -2045,6 +2063,8 @@ async function bootServer(
           nodeId: node.nodeId,
           log,
           returnState: returnRecords.state,
+          resetOrdered: () => resetOrder.answer()?.order != null,
+          resetPhase: () => readReplacedResetPhase(config.stateDir),
         }),
         (restrictedApp) =>
           mountPeerStatusApi(
@@ -3416,6 +3436,19 @@ async function bootServer(
     },
     log,
   );
+  mountResetOrderApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      modules: enabledAtStart,
+      now,
+      reloadStream: () => backupTurns(() => streamHost.reload()),
+    },
+    log,
+  );
   for (const m of enabledAtStart) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
   mountReportApi(
@@ -4090,6 +4123,8 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       reloadStream: () => backupTurns(() => streamHost.reload()),
       readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
+      readBackup: () =>
+        backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
     },
     log,

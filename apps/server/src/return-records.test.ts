@@ -517,6 +517,76 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
   }
 });
 
+it("runs passNow() only after the duty's own pass in flight ends, so batch sends never overlap", async () => {
+  const app = destination();
+  let inFlight = 0;
+  let overlapped = false;
+  let begun!: () => void;
+  let proceed!: () => void;
+  const started = new Promise<void>((resolve) => {
+    begun = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    proceed = resolve;
+  });
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch: async (url, init) => {
+      inFlight++;
+      if (inFlight > 1) overlapped = true;
+      begun();
+      await release;
+      try {
+        return await app.request(String(url), init);
+      } finally {
+        inFlight--;
+      }
+    },
+  });
+  try {
+    await started;
+    const extra = duty.passNow();
+    // Long enough for an unqueued pass to reach its send while the first exchange is held.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    proceed();
+    expect(await extra).toBe("confirmed");
+    expect(overlapped).toBe(false);
+    expect(received).toEqual(["first", "second", "first", "second"]);
+  } finally {
+    proceed();
+    await duty.stop();
+  }
+});
+
+it("runs one pass on passNow() after the duty has confirmed and stopped", async () => {
+  const app = destination();
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch: async (url, init) => app.request(String(url), init),
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+    received = [];
+    expect(await duty.passNow()).toBe("confirmed");
+    expect(received).toEqual(["first", "second"]);
+    expect(duty.state()).toBe("confirmed");
+  } finally {
+    await duty.stop();
+  }
+});
+
 async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true) {
   registerModulePermissions([{ permission: "sample.accept", defaultHolders: [] }]);
   return database.withTransaction(suite.db, async (tx) => {
