@@ -196,13 +196,14 @@ describe("an advance files at the dine-in rate of the day it was paid", () => {
   /** The rates of the lines of the advance paid on `iso`, in basis points. */
   async function advanceRatesOn(billId: string, iso: string): Promise<number[]> {
     const venue = advanceVenue.venue;
+    const submissionId = randomUUID();
     const paid = await send(
       venue.appAt(clockAtIso(iso)),
       venue.cookie,
       "POST",
       `/api/working-orders/${billId}/payments`,
       {
-        submissionId: randomUUID(),
+        submissionId,
         kind: "contribution",
         amount: "10.00",
         method: "cash",
@@ -213,11 +214,15 @@ describe("an advance files at the dine-in rate of the day it was paid", () => {
       },
     );
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    const advances = await inTx(venue, (tx) =>
-      tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, billId)),
+    const [advance] = await inTx(venue, (tx) =>
+      tx
+        .select({ saleId: billAdvances.advanceSaleId })
+        .from(billAdvances)
+        .innerJoin(billPayments, eq(billPayments.id, billAdvances.billPaymentId))
+        .where(eq(billPayments.submissionId, submissionId)),
     );
     const rows = venue.db.all<{ vat_rate: number }>(
-      sql`select vat_rate from sale_lines where sale_id = ${advances.at(-1)!.advanceSaleId}`,
+      sql`select vat_rate from sale_lines where sale_id = ${advance!.saleId}`,
     );
     return rows.map((row) => row.vat_rate);
   }
