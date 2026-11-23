@@ -162,7 +162,7 @@ conserva los datos de ambos servidores.
 
 Cuando el local se haya iniciado, **Este servidor lleva ahora el local** te pide que no restablezcas el
 servidor principal antiguo: puede tener datos que este servidor no tiene. Cuando se vuelva a
-encender, devuelve aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
+encender, envía aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
 para él en la página Servidores de este servidor, en el panel.
 
 Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.

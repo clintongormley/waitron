@@ -146,7 +146,7 @@ opening the address on another device finds the switch; sign in and choose **Try
 against the saved switch, stop and keep both boxes’ data intact.
 
 When the venue has started, **This box now runs the venue** says not to reset the old main box: it
-may hold data this box does not have. When it is switched on again, it returns its invoice records
+may hold data this box does not have. When it is switched on again, it sends its invoice records
 here by itself and stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
 box's Servers page in the dashboard.
 

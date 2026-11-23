@@ -4036,7 +4036,7 @@ const doneWords = {
     heading: "This box now runs the venue",
     warning: "Do not reset the old main box!",
     oldBox:
-      "It may hold data that this box still needs. When it is switched on again, it sends any outstanding data to this box and then stands down.",
+      "It may hold data that this box still needs. When it is switched on again, it sends its invoice records to this box and then stands down.",
     afterwards: "Afterwards, you can choose Wipe and remove on the Servers page in the dashboard.",
     action: "Wipe and remove",
     servers: "Servers page",
