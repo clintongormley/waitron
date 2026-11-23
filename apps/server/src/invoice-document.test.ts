@@ -61,6 +61,7 @@ import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { TillSaleLine } from "./till-sale.js";
 import { layoutA4Invoice } from "./invoice-layout.js";
+import { pageRows } from "./testing/invoice-page-rows.js";
 import { INVOICE_PAGE_WIDTH, invoiceTextWidth } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
@@ -1551,10 +1552,15 @@ describe("a free item holding its share of the price paid", () => {
     ]);
   });
 
-  const tableRows = (document: Parameters<typeof buildReceiptDocument>[0]) =>
-    buildReceiptDocument({ ...document, surface: "a4" })
-      .elements.flatMap((e) => (e.kind === "table" ? e.table.rows : []))
-      .map(({ item, price, amount, rate }) => ({ item, price, amount, rate }));
+  // The full invoice's rows on the page: description, unit price and total before VAT, VAT rate.
+  const tableRows = (document: ReceiptDocumentInput) =>
+    pageRows(document).map(([item, , price, amount, rate]) => ({
+      item,
+      price: price!.replace(/ €$/u, ""),
+      amount: amount!.replace(/ €$/u, ""),
+      rate,
+    }));
+  const DISCOUNT = receiptLabelsFor("es-ES").discount;
 
   // D3b: each line comes to its filed base. The water's 0,27 is a bare discount like the salad's
   // 1,61: its comp's "100%" would contradict the amount.
@@ -1563,15 +1569,15 @@ describe("a free item holding its share of the price paid", () => {
     const document = await read(venue.backend, saleId);
     expect(tableRows(document)).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
-      { item: "Descuento", price: "", amount: "-1,61", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-1,61", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,27", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,27", rate: "21%" },
     ]);
     expect(tableRows({ ...document, invoiceLocale: "en-GB" }).map(({ item }) => item)).toEqual([
       "House salad",
-      "Discount",
+      receiptLabelsFor("en-GB").discount,
       "Mineral water",
-      "Discount",
+      receiptLabelsFor("en-GB").discount,
     ]);
   });
 
@@ -1581,9 +1587,9 @@ describe("a free item holding its share of the price paid", () => {
     const saleId = await comped("takeaway", true, { dishOffBp: 5000, paid: 500 });
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
-      { item: "Descuento", price: "", amount: "-5,61", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-5,61", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,96", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,96", rate: "21%" },
     ]);
   });
 
@@ -1591,9 +1597,9 @@ describe("a free item holding its share of the price paid", () => {
     const saleId = await comped("takeaway", true, { dish: "Pizza", dishOffBp: 1000, paid: 810 });
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "Margherita pizza", price: "8,18", amount: "8,18", rate: "10%" },
-      { item: "Descuento", price: "", amount: "-2,15", rate: "10%" },
+      { item: DISCOUNT, price: "", amount: "-2,15", rate: "10%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,44", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,44", rate: "21%" },
     ]);
   });
 
@@ -1602,8 +1608,8 @@ describe("a free item holding its share of the price paid", () => {
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,41", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-2,41", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-0,41", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-2,41", rate: "4%" },
     ]);
   });
 
@@ -1613,7 +1619,7 @@ describe("a free item holding its share of the price paid", () => {
     expect(tableRows(document)).toEqual([
       { item: "House salad", price: "9,09", amount: "9,09", rate: "10%" },
       { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
-      { item: "Descuento 100%", price: "", amount: "-1,82", rate: "10%" },
+      { item: `${DISCOUNT} 100%`, price: "", amount: "-1,82", rate: "10%" },
     ]);
   });
 });
@@ -1716,17 +1722,12 @@ describe("a correction's receipts", () => {
     { gross: "-2.45", listGross: undefined, adjustments: undefined },
     { gross: "-0.55", listGross: undefined, adjustments: undefined },
   ];
-  const itemRows = (document: Parameters<typeof buildReceiptDocument>[0]) => {
-    const elements = buildReceiptDocument({ ...document, surface: "a4" }).elements;
-    const rules = elements.flatMap((e, i) => (e.kind === "rule" ? [i] : []));
-    // The item rows sit between the rules around them, after the invoice numbers.
-    return elements
-      .slice(rules[2]! + 1, rules[3])
-      .map((e) => (e.kind === "amount" ? { caption: e.caption, amount: e.amount } : e));
-  };
+  // The simplified page's rows: description, quantity, price and amount.
+  const itemRows = (document: ReceiptDocumentInput) =>
+    pageRows(document).map((cells) => cells.map((cell) => cell.replace(/ €$/u, "")));
 
   // Fails if the corrective's lines take the list prices they copied from the original: the page
-  // then prints the salad at -10,00 with a discount of --7,55.
+  // then prints the salad at -10,00 and a discount row of 7,55 beneath it.
   it("the A4 page of a correction shows the filed figures and no discount", async () => {
     const saleId = await corrected();
     const document = await withTransaction(suite.db, (tx) =>
@@ -1734,8 +1735,8 @@ describe("a correction's receipts", () => {
     );
     expect(shown(document.result.lines)).toEqual(FILED);
     expect(itemRows(document)).toEqual([
-      { caption: "-1  House salad", amount: "-2,45" },
-      { caption: "-1  Mineral water", amount: "-0,55" },
+      ["House salad", "-1", "", "-2,45"],
+      ["Mineral water", "-1", "", "-0,55"],
     ]);
   });
 
