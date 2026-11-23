@@ -22,6 +22,7 @@ import {
   readTakeawayVatSchedules,
 } from "@waitron/menu";
 import { seedMenus } from "./seed-menus.js";
+import { seedCourses } from "./seed-courses.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
@@ -78,9 +79,11 @@ export async function seedDemoRestaurant(
   await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const seeded = await withTransaction(db, async (tx) => {
+    const courseIds = await seedCourses(tx, dataSet);
     const { productsByImage, menuIds, stationIds, deliListed } = await seedMenus(tx, {
       locale,
       dataSet,
+      courseIds,
     });
     const { languages } = await readContentLanguages(tx, locale);
     const demoPrinter = await createPrinter(tx, {

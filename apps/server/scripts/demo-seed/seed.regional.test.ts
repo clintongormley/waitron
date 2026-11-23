@@ -50,6 +50,12 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60000,
 });
+function seededCourse(productName: string): string | undefined {
+  return suite.db.all<{ course: string }>(sql`
+    select c.name as course
+    from products p join kitchen_courses c on c.id = p.course_id
+    where p.name = ${productName} and p.parent_id is null`)[0]?.course;
+}
 afterEach(() => vi.useRealTimers());
 for (const [province, postalCode, invoiceLocale] of [
   ["Barcelona", "08001", "ca-ES"],
@@ -91,6 +97,7 @@ for (const [province, postalCode, invoiceLocale] of [
       expect(gaps.flatMap((language) => language.gaps)).toEqual([]);
       const sausageNames = regionalProduct(selection.dataSet, "ca", expected.sausage.staff);
       const wineName = regionalProduct(selection.dataSet, "ca", expected.wine).staffName![locale];
+      expect(seededCourse(wineName)).toBe("Bebidas");
       const rows = suite.db.all<{
         name: string;
         kitchen_name: string;
@@ -285,6 +292,7 @@ for (const locale of ["en", "es"] as const)
       es: VALENCIA_DEMO_TEXT.dishCustomer,
       en: "House eel and potato stew",
     });
+    expect(seededCourse(staffName(VALENCIA_DEMO_TEXT.wine))).toBe("Bebidas");
     const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from menus`);
     for (const name of [
       selection.dataSet.menus.drinksName[locale],
@@ -522,6 +530,7 @@ for (const locale of ["en", "es"] as const)
       es: GALICIA_DEMO_TEXT.dishCustomerEs,
       en: "House Galician savoury pie",
     });
+    expect(seededCourse(staffName(GALICIA_DEMO_TEXT.wine))).toBe("Bebidas");
     const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from menus`);
     for (const name of [
       selection.dataSet.menus.drinksName[locale],

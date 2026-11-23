@@ -159,6 +159,10 @@ Los demás campos del producto sin guardar siguen como estaban.
 La columna **Curso** de la lista de Productos muestra el curso de cada producto. Cuando el local tiene
 cursos, el filtro **Curso** de **Filtros** elige uno o varios de ellos, o **Sin curso**.
 
+En una mesa de la demostración española, envía un primer pedido con bebidas y platos
+principales. Las bebidas van directamente a la barra y los platos principales esperan hasta
+que pulses **Marchar**. Los postres enviados en ese primer pedido esperan en su propio grupo.
+
 ## Añade variantes cuando un producto se vende de varias formas {#variants}
 
 Usa variantes para formas del mismo producto que necesitan nombres y precios distintos, como un café

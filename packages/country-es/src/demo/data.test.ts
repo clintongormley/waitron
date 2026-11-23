@@ -331,6 +331,92 @@ describe("Casa Delgado customer text", () => {
   });
 });
 
+describe("Casa Delgado courses", () => {
+  const sets: CountryDemoData[] = [
+    CASA_DELGADO_ES,
+    CASA_DELGADO_CA,
+    CASA_DELGADO_VALENCIA,
+    CASA_DELGADO_GL,
+  ];
+
+  it.each(sets)("defines every course used in $id in firing order", (set) => {
+    expect(set.courses?.map((course) => course.key)).toEqual([
+      "sharing",
+      "starters",
+      "mains",
+      "desserts",
+      "coffee",
+      "drinks",
+      "bread",
+    ]);
+    expect(set.courses?.slice(0, 4).map((course) => "starter" in course && course.starter)).toEqual(
+      SPAIN.starterCourses?.map(({ name }) => name),
+    );
+    expect(set.courses?.slice(4).map((course) => "fireNow" in course && course.fireNow)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    const available = new Set(set.courses?.map(({ key }) => key));
+    for (const menu of [set.menus.restaurant, set.menus.lunch]) {
+      for (const category of menu.categories) {
+        for (const product of category.products) {
+          expect(available.has((product.course ?? category.course)!), product.image).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("assigns each Madrid dish to its course and leaves deli food without one", () => {
+    const expected = {
+      sharing: [
+        "patatas-bravas",
+        "croquetas",
+        "gambas-al-ajillo",
+        "tortilla",
+        "pan-con-tomate",
+        "pulpo-a-la-gallega",
+        "pimientos-de-padron",
+        "calamares",
+        "tabla-de-quesos",
+      ],
+      starters: ["gazpacho", "ensalada-mixta", "lentejas"],
+      mains: ["paella", "solomillo", "bacalao", "merluza", "pollo-asado", "merluza-rebozada"],
+      desserts: ["crema-catalana", "tarta-de-santiago", "flan", "arroz-con-leche"],
+      coffee: ["cafe-solo"],
+      drinks: [
+        "negroni",
+        "vino-tinto",
+        "cana-cerveza",
+        "botellin-cerveza",
+        "refresco-cola",
+        "agua-mineral",
+        "zumo-naranja",
+        "coca-cola-zero-lata",
+      ],
+      bread: ["pan-de-la-casa"],
+    };
+    const { restaurant, lunch, deli } = sets[0]!.menus;
+    const assignments = [restaurant, lunch].flatMap((menu) =>
+      menu.categories.flatMap((category) =>
+        category.products.map((product) => [product.image, product.course ?? category.course]),
+      ),
+    );
+    expect(Object.fromEntries(assignments)).toEqual(
+      Object.fromEntries(
+        Object.entries(expected).flatMap(([course, images]) =>
+          images.map((image) => [image + ".png", course]),
+        ),
+      ),
+    );
+    for (const category of deli.categories) {
+      for (const product of category.products) {
+        expect(product.course ?? category.course, product.image).toBeUndefined();
+      }
+    }
+  });
+});
+
 describe("Casa Delgado VAT classes", () => {
   const sets: CountryDemoData[] = [
     CASA_DELGADO_ES,

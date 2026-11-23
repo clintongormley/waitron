@@ -25,10 +25,12 @@ import {
   setRoutingCell,
   saveSpecialDay,
   readBusinessDayScheduleRevision,
+  listDepartmentCourseSettings,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "../../src/modules.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
+import { listCourses } from "../../src/kitchen.js";
 import { seedDemoRestaurant } from "./seed.js";
 import * as salesSeed from "./seed-sales.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
@@ -1046,6 +1048,16 @@ describe("seedDemoRestaurant", () => {
       nifBase: 101_000_000,
       invoiceLocale: "en-GB",
     })();
+    const readCourseSetup = () =>
+      withTransaction(suite.db, async (tx) => ({
+        courses: (await listCourses(tx)).map(({ id, name, displayOrder }) => ({
+          id,
+          name,
+          displayOrder,
+        })),
+        settings: await listDepartmentCourseSettings(tx),
+      }));
+    const beforeCourses = await readCourseSetup();
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: "en",
@@ -1086,5 +1098,14 @@ describe("seedDemoRestaurant", () => {
     expect(read.registros).toBe(0);
     // Spain's 4% and 21% are not offered here, so every product takes the area's 0%.
     expect(read.takeawayRates).toEqual([0]);
+    const afterCourses = await readCourseSetup();
+    expect(afterCourses.courses).toEqual(beforeCourses.courses);
+    expect(Object.values(afterCourses.settings)).toEqual(
+      Object.values(beforeCourses.settings).flatMap((settings) => [settings, settings]),
+    );
+    expect(
+      (await suite.db.execute(sql`select course_id from products where course_id is not null`))
+        .rows,
+    ).toEqual([]);
   });
 });

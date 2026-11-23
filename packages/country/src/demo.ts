@@ -6,12 +6,20 @@ export type StaffText = Readonly<Record<"en" | "es", string>>;
 
 export type DemoText<L extends string> = Readonly<Record<"en" | "es", string> & Record<L, string>>;
 
+export type DemoCourseKey =
+  "sharing" | "starters" | "mains" | "desserts" | "coffee" | "drinks" | "bread";
+
+export type CountryDemoCourse<L extends string = string> =
+  | { readonly key: DemoCourseKey; readonly starter: string }
+  | { readonly key: DemoCourseKey; readonly name: DemoText<L>; readonly fireNow: boolean };
+
 interface CountryDemoProductFields<L extends string = string> {
   customerName: DemoText<L>;
   staffName?: DemoPlainText<L>;
   description?: DemoText<L>;
   kitchenName?: DemoPlainText<L>;
   dietaryDeclarations?: string[];
+  course?: DemoCourseKey;
   unit?: {
     staffName: DemoPlainText<L>;
     staffAbbreviation: DemoPlainText<L>;
@@ -42,6 +50,7 @@ interface CountryDemoCategoryFields<L extends string = string> {
   categoryName?: DemoPlainText<L>;
   sectionImage?: string;
   color: string;
+  course?: DemoCourseKey;
   station: "kitchen" | "bar" | "deli" | null;
   products: CountryDemoProduct<L>[];
 }
@@ -111,6 +120,7 @@ interface CountryDemoDataFields<L extends string = string> {
   }[];
 
   readonly contentLanguages: readonly L[];
+  readonly courses: readonly CountryDemoCourse<L>[];
   readonly menus: {
     readonly restaurant: CountryDemoMenu<L>;
     readonly deli: CountryDemoMenu<L>;

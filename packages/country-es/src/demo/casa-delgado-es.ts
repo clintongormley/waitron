@@ -77,6 +77,33 @@ export const CASA_DELGADO_ES = {
     { menu: "lunch", productImage: "negroni.png", grossPrice: "9.00" },
   ],
   contentLanguages: CASA_DELGADO_LANGUAGES,
+  courses: [
+    { key: "sharing", starter: "Sharing plates" },
+    { key: "starters", starter: "Starters" },
+    { key: "mains", starter: "Mains" },
+    { key: "desserts", starter: "Desserts" },
+    {
+      key: "coffee",
+      name: { en: "Coffee", es: "Café", ca: "Cafè", "ca-ES-valencia": "Café", gl: "Café" },
+      fireNow: false,
+    },
+    {
+      key: "drinks",
+      name: {
+        en: "Drinks",
+        es: "Bebidas",
+        ca: "Begudes",
+        "ca-ES-valencia": "Begudes",
+        gl: "Bebidas",
+      },
+      fireNow: true,
+    },
+    {
+      key: "bread",
+      name: { en: "Bread", es: "Pan", ca: "Pa", "ca-ES-valencia": "Pa", gl: "Pan" },
+      fireNow: true,
+    },
+  ],
   menus: {
     restaurant: CASA_DELGADO,
     deli: DELI_TAKEAWAY,

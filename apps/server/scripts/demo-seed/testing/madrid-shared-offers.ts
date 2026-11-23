@@ -21,6 +21,7 @@ export interface MadridSharedProduct {
   kitchenName: string;
   /** The captured category's name. */
   category: string;
+  courseId: string | null;
   vatClass: string;
   /** `null`: none of its own, so its offers take away at `vatClass`. */
   takeawayVatClass: string | null;
@@ -43,6 +44,13 @@ type Row = Record<string, unknown>;
 /** The cells that identify an added row, whatever its canonical key. */
 const SLOT = {
   products: (row: Row) => [row.id],
+  kitchen_courses: (row: Row) => [row.id, row.display_order],
+  department_courses: (row: Row) => [
+    row.department_id,
+    row.course_id,
+    row.held_until_fired,
+    row.reminder_minutes,
+  ],
   sections: (row: Row) => [row.id],
   section_members: (row: Row) => [row.section_id, row.product_id, row.child_section_id],
   menu_items: (row: Row) => [row.menu_id, row.product_id],
@@ -67,7 +75,7 @@ interface MenuDocument {
  * declared cell changes, to the capture. Refused: an existing row changed beyond the declared
  * cells, or removed; an added row not declared, or a declared one missing; a declared product
  * whose names, classes, price, pricing unit, category or image differ from its seeded row or from
- * any of its published offers; and a published document that, with the added sections, members
+ * any of its published offers, or whose seeded course differs; and a published document that, with the added sections, members
  * and offers taken out, the declared offer changes undone and its included-menu hashes set aside,
  * differs from the capture's. Taken from `seeded` on trust: every other cell of an added row, and
  * where the added members and sections sit. Returns the added row count per table. */
@@ -133,6 +141,7 @@ export function madridWithSharedOffers(
       ["customerName", product.customerName, row.customer_name],
       ["kitchenName", product.kitchenName, row.kitchen_name],
       ["category", categoryKey(product.category), row.category_id],
+      ["course", product.courseId, row.course_id],
       ["vatClass", product.vatClass, row.vat_class],
       ["takeawayVatClass", product.takeawayVatClass, row.takeaway_vat_class],
       ["unitPrice", product.unitPrice, row.unit_price],

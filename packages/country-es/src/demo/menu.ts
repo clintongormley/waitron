@@ -585,6 +585,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
   {
     sectionImage: "section-tapas.png",
     name: { en: "Tapas", es: "Tapas", ca: "Tapes", "ca-ES-valencia": "Tapes", gl: "Tapas" },
+    course: "sharing",
     station: "kitchen",
     color: "#ffa987",
     products: [
@@ -715,6 +716,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         pricingUnit: "each",
         unitPrice: "2.20",
         vatClass: "reduced",
+        course: "bread",
         image: "pan-de-la-casa.png",
       },
       {
@@ -755,6 +757,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Racions",
       gl: "Racións",
     },
+    course: "sharing",
     station: "kitchen",
     color: "#b9c5ef",
     products: [
@@ -871,6 +874,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Plats principals",
       gl: "Pratos principais",
     },
+    course: "mains",
     station: "kitchen",
     color: "#d9b6e6",
     products: [
@@ -993,6 +997,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Postres",
       gl: "Sobremesas",
     },
+    course: "desserts",
     station: "kitchen",
     color: "#f1bcb3",
     products: [
@@ -1109,6 +1114,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Còctels",
       gl: "Cócteles",
     },
+    course: "drinks",
     station: "bar",
     color: "#9fd5cb",
     products: [
@@ -1150,6 +1156,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Vi i cervesa",
       gl: "Viño e cervexa",
     },
+    course: "drinks",
     station: "bar",
     color: "#dfc395",
     products: [
@@ -1246,6 +1253,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
       "ca-ES-valencia": "Refrescos",
       gl: "Refrescos",
     },
+    course: "drinks",
     station: "bar",
     color: "#add7ef",
     products: [
@@ -1352,6 +1360,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
   {
     sectionImage: "section-coffee.png",
     name: { en: "Coffee", es: "Café", ca: "Cafè", "ca-ES-valencia": "Café", gl: "Café" },
+    course: "coffee",
     station: "bar",
     color: "#d2c0ad",
     products: [
@@ -1523,6 +1532,7 @@ export const MENU_DEL_DIA = {
         "ca-ES-valencia": "Primers",
         gl: "Primeiros",
       },
+      course: "starters",
       station: "kitchen",
       color: "#c7df92",
       products: [
@@ -1658,6 +1668,7 @@ export const MENU_DEL_DIA = {
         "ca-ES-valencia": "Segons del menú",
         gl: "Segundos do menú",
       },
+      course: "mains",
       station: "kitchen",
       color: "#c6cbed",
       products: [

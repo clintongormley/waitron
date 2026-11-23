@@ -131,12 +131,16 @@ function englishFallbackLanguages(starting: StartingContentLanguages): DemoLangu
   };
 }
 
+export function ownsDemoDataSet(set: DemoDataSet, geography: VenueGeography): boolean {
+  return (
+    resolveInstalledDemoIdentity(geography)?.dataSet === set.id ||
+    getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id
+  );
+}
+
 export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): DemoLanguages {
   const starting = demoContentLanguages(geography);
-  const ownsSet =
-    resolveInstalledDemoIdentity(geography)?.dataSet === set.id ||
-    getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id;
-  return ownsSet ? starting : englishFallbackLanguages(starting);
+  return ownsDemoDataSet(set, geography) ? starting : englishFallbackLanguages(starting);
 }
 
 export function demoPlainText(

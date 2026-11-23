@@ -19,13 +19,16 @@ import {
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/menu";
-import type { DemoPlainText } from "@waitron/country";
+import type { DemoCourseKey, DemoPlainText } from "@waitron/country";
 import type { SeedLocale } from "./locale.js";
 import { demoPlainText, demoLanguagesFor, type DemoDataSet, type SeedMenu } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 import { storeDemoImage } from "./seed-media.js";
 
+import { setProductCourse } from "../../src/kitchen.js";
+
 export interface SeedMenusInput {
+  courseIds?: ReadonlyMap<DemoCourseKey, string>;
   locale: SeedLocale;
   dataSet: DemoDataSet;
 }
@@ -91,7 +94,7 @@ async function resolveStationIds(
  */
 export async function seedMenus(
   tx: Transaction,
-  { locale, dataSet }: SeedMenusInput,
+  { locale, dataSet, courseIds }: SeedMenusInput,
 ): Promise<SeedMenusResult> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
   const stationIds = await resolveStationIds(tx, dataSet, locale);
@@ -202,6 +205,12 @@ export async function seedMenus(
           vatRates,
         );
         productIds.push(created.id);
+        const course = product.course ?? cat.course;
+        if (courseIds !== undefined && course !== undefined) {
+          const courseId = courseIds.get(course);
+          if (courseId === undefined) throw new Error(`seedMenus: no course "${course}"`);
+          await setProductCourse(tx, created.id, courseId);
+        }
         if (product.variants?.length) {
           await setProductVariants(
             tx,
