@@ -2,7 +2,8 @@ import { inflateSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReceiptElement } from "./receipt-document.js";
 import { formatReceipt } from "./receipt-ticket.js";
-import { layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import type { InvoicePageElement } from "./invoice-page.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { renderInvoiceRaster } from "./invoice-raster.js";
 import {
@@ -26,8 +27,14 @@ vi.mock("./receipt-document.js", async (importOriginal) => {
   };
 });
 
+vi.mock("./invoice-layout.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./invoice-layout.js")>();
+  return { ...real, layoutA4Invoice: vi.fn(real.layoutA4Invoice) };
+});
+
 afterEach(() => {
   injected.elements = undefined;
+  vi.mocked(layoutA4Invoice).mockReset();
 });
 
 const PLAIN: ReceiptElement = { kind: "text", text: "Gracias", indent: 0 };
@@ -49,31 +56,26 @@ function pdfContent(bytes: Buffer): string {
 }
 
 describe("styled elements on the A4 page", () => {
-  it("lays out bold text, double text and a bold amount with their weight and size", () => {
-    injected.elements = [
-      BOLD,
-      { kind: "text", text: "Grande", indent: 0, style: { double: true } },
-      { kind: "amount", caption: "Base", amount: "1,00 €", indent: 0, style: { bold: true } },
-      PLAIN,
-    ];
-    const texts = layoutInvoicePages(FULL_INVOICE_DOCUMENT_FIXTURE)[0]!.elements;
-    expect(texts).toEqual([
-      expect.objectContaining({ text: "Gracias", size: 10, weight: "bold", tone: "ink", y: 36 }),
-      expect.objectContaining({ text: "Grande", size: 20, weight: "regular", tone: "ink", y: 50 }),
-      expect.objectContaining({ text: "Base", size: 10, weight: "bold", tone: "ink", y: 78 }),
-      expect.objectContaining({ text: "1,00 €", size: 10, weight: "bold", tone: "ink", y: 78 }),
-      expect.objectContaining({ text: "Gracias", size: 10, weight: "regular", tone: "ink", y: 92 }),
-    ]);
+  const page = (elements: InvoicePageElement[]) =>
+    vi.mocked(layoutA4Invoice).mockReturnValue([{ elements }]);
+  const word = (weight: "regular" | "bold"): InvoicePageElement => ({
+    kind: "text",
+    text: "Gracias",
+    x: 36,
+    y: 36,
+    size: 10,
+    weight,
+    tone: "ink",
   });
 
   it("draws bold text in the bold face and plain text in the regular one, neither outlined", async () => {
-    injected.elements = [BOLD];
+    page([word("bold")]);
     const boldBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
     expect(boldBytes.toString("latin1")).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Bold\b/u);
     const bold = pdfContent(boldBytes);
     expect(bold).toContain("BT");
     expect(bold).not.toMatch(/\b[12] Tr\b/);
-    injected.elements = [PLAIN];
+    page([word("regular")]);
     const plainBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
     expect(plainBytes.toString("latin1")).not.toContain("NotoSans-Bold");
     const plain = pdfContent(plainBytes);
@@ -82,15 +84,15 @@ describe("styled elements on the A4 page", () => {
   });
 
   it("draws bold text with more ink than the same text plain in the raster", async () => {
-    const ink = async (element: ReceiptElement): Promise<number> => {
-      injected.elements = [element];
-      const [page] = await renderInvoiceRaster(FULL_INVOICE_DOCUMENT_FIXTURE, 300);
+    const ink = async (weight: "regular" | "bold"): Promise<number> => {
+      page([word(weight)]);
+      const [raster] = await renderInvoiceRaster(FULL_INVOICE_DOCUMENT_FIXTURE, 300);
       let count = 0;
-      for (const value of page!.pixels) if (value < 128) count++;
+      for (const value of raster!.pixels) if (value < 128) count++;
       return count;
     };
-    const plain = await ink(PLAIN);
-    const bold = await ink(BOLD);
+    const plain = await ink("regular");
+    const bold = await ink("bold");
     expect(plain).toBeGreaterThan(0);
     expect(bold).toBeGreaterThan(plain * 1.1);
   });
@@ -106,6 +108,31 @@ describe("styled elements on the roll", () => {
       }),
     ).filter((command) => command.text !== undefined);
   };
+
+  it("draws bold text, double text and a bold amount with their weight and size", () => {
+    const ink = (line: { bytes: Uint8Array }) =>
+      line.bytes.subarray(8).reduce((count, byte) => {
+        let bits = 0;
+        for (let value = byte; value > 0; value >>= 1) bits += value & 1;
+        return count + bits;
+      }, 0);
+    const lines = drawn([
+      BOLD,
+      { kind: "text", text: "Grande", indent: 0, style: { double: true } },
+      { kind: "amount", caption: "Base", amount: "1,00 €", indent: 0, style: { bold: true } },
+      { kind: "amount", caption: "Base", amount: "1,00 €", indent: 0 },
+      PLAIN,
+    ]);
+    expect(lines.map((line) => [line.text!.trimEnd(), line.heightDots])).toEqual([
+      ["Gracias", 28],
+      ["Grande", 56],
+      [expect.stringMatching(/^Base +1,00 €$/u), 28],
+      [expect.stringMatching(/^Base +1,00 €$/u), 28],
+      ["Gracias", 28],
+    ]);
+    expect(ink(lines[0]!)).toBeGreaterThan(ink(lines[4]!) * 1.1);
+    expect(ink(lines[2]!)).toBeGreaterThan(ink(lines[3]!) * 1.1);
+  });
 
   it("wraps a double text line at half of 58 mm's 30 columns, each line 56 dots high", () => {
     const lines = drawn([

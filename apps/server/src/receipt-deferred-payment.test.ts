@@ -14,7 +14,7 @@ import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { deferredTenderQuery, readDeferredPayment } from "./receipt-deferred-payment.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
-import { layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
 import { layOutSaleReceipt } from "./receipt-print.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -223,7 +223,7 @@ describe("deferred-payment instructions on the documents", () => {
     );
     expect(document.deferredPayment).toEqual({ account: { iban: IBAN, bankName: BANK } });
     const page = flat(
-      layoutInvoicePages(document).flatMap((one) =>
+      layoutA4Invoice(document).flatMap((one) =>
         one.elements.flatMap((element) => (element.kind === "text" ? [element.text] : [])),
       ),
     );

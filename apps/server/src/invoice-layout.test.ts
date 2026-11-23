@@ -22,15 +22,6 @@ import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js
 import * as receiptCases from "./testing/receipt-cases.js";
 import { sampleDocument } from "./sample-receipt.js";
 
-// Until printing switches to the new layout, the PDF test renders it through the old entry point.
-const layout = vi.hoisted(() => ({ pages: undefined as unknown }));
-vi.mock("./invoice-page.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./invoice-page.js")>()),
-  layoutInvoicePages: (input: ReceiptDocumentInput) =>
-    (layout.pages as (input: ReceiptDocumentInput) => InvoicePage[])(input),
-}));
-layout.pages = (input: ReceiptDocumentInput) => layoutA4Invoice(input);
-
 type Text = Extract<InvoicePageElement, { kind: "text" }>;
 type Box = Extract<InvoicePageElement, { kind: "box" }>;
 type Qr = Extract<InvoicePageElement, { kind: "qr" }>;
@@ -1494,7 +1485,6 @@ describe("layoutA4Invoice, printed", () => {
 
   it("forgets every remembered text width once the limit is reached", async () => {
     vi.resetModules();
-    vi.doUnmock("./invoice-page.js");
     const { invoiceFont: font } = await import("./invoice-font.js");
     const page = await import("./invoice-page.js");
     const measure = vi.spyOn(font, "layout");
@@ -1515,7 +1505,6 @@ describe("layoutA4Invoice, printed", () => {
 
   it("lays out the same invoice a second time without measuring any text again", async () => {
     vi.resetModules();
-    vi.doUnmock("./invoice-page.js");
     const { invoiceFont: font } = await import("./invoice-font.js");
     const fresh = await import("./invoice-layout.js");
     const measure = vi.spyOn(font, "layout");

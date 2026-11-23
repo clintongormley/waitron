@@ -1,5 +1,6 @@
 import { invoiceBoldFont, invoiceFont } from "./invoice-font.js";
-import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT, layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 const INK = "#000000";
@@ -22,7 +23,7 @@ export async function renderInvoiceRaster(
   const width = 2480 * scale;
   const height = 3508 * scale;
   const pages: InvoiceRasterPage[] = [];
-  for (const page of layoutInvoicePages(input)) {
+  for (const page of layoutA4Invoice(input)) {
     const paths: string[] = [];
     for (const element of page.elements) {
       if (element.kind === "text") {

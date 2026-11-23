@@ -1,7 +1,8 @@
 import { once } from "node:events";
 import PDFDocument from "pdfkit";
 import { invoiceBoldFontBytes, invoiceFontBytes } from "./invoice-font.js";
-import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT, layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 const INK = "#000000";
@@ -21,7 +22,7 @@ export async function renderInvoicePdf(input: ReceiptDocumentInput): Promise<Buf
   const chunks: Buffer[] = [];
   pdf.on("data", (chunk: Buffer) => chunks.push(chunk));
   const ended = once(pdf, "end");
-  for (const page of layoutInvoicePages(input)) {
+  for (const page of layoutA4Invoice(input)) {
     pdf.addPage({ size: [INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT], margin: 0 });
     for (const element of page.elements) {
       // PDFKit keeps the last fill colour for later drawing, so every element sets its own.

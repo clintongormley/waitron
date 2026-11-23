@@ -54,12 +54,13 @@ import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { buildReceiptDocument } from "./receipt-document.js";
-import { formatAmount } from "./receipt-money.js";
+import { buildReceiptDocument, CONTACT_SEPARATOR } from "./receipt-document.js";
+import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { TillSaleLine } from "./till-sale.js";
-import { INVOICE_PAGE_WIDTH, invoiceTextWidth, layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import { INVOICE_PAGE_WIDTH, invoiceTextWidth } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
@@ -1123,17 +1124,17 @@ describe("the theme's logo on the A4 invoice", () => {
     },
   );
 
-  it("the page draws the theme's dots centred, above the department's trading name", async () => {
+  it("the page draws the theme's dots at the right edge, above the department's trading name", async () => {
     const backend = none();
     const saleId = await saleIn(backend, await department());
     await putThemeInUse(suite.db);
     try {
-      const [first] = layoutInvoicePages(await read(backend, saleId));
+      const [first] = layoutA4Invoice(await read(backend, saleId));
       const logos = first!.elements.filter((element) => element.kind === "logo");
       expect(logos).toHaveLength(1);
       const [logo] = logos;
       expect(logo).toMatchObject({ raster: THEME_80MM });
-      expect(logo!.x + logo!.width / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2);
+      expect(logo!.x + logo!.width).toBeCloseTo(INVOICE_PAGE_WIDTH - 36);
       const name = first!.elements.find(
         (element) => element.kind === "text" && element.text === "Recorded dining",
       );
@@ -1237,7 +1238,7 @@ describe("a takeaway sale's A4 invoice", () => {
 
 describe("a card payment on the A4 page", () => {
   it("the A4 page names the card", () => {
-    const [page] = layoutInvoicePages({
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1250,21 +1251,23 @@ describe("a card payment on the A4 page", () => {
         },
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const caption = texts.findIndex(({ text }) => text === "Visa ****4034 (Sin contacto)");
-    expect(caption).toBeGreaterThanOrEqual(0);
-    const amount = texts.find(
-      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "19,69 €",
-    );
-    expect(amount).toBeDefined();
-    const authorisation = texts.find(({ text }) => text === "Autorización 354739");
-    expect(authorisation!.y).toBeGreaterThan(texts[caption]!.y);
+    const heading = texts.find(({ text }) => text === labels.paymentMethodHeading)!;
+    const footer = texts.filter(({ y }) => y > heading.y && y < heading.y + 20);
+    expect(footer.map(({ text }) => text)).toEqual([
+      [
+        labels.paid,
+        `Visa ****4034 (${labels.paymentContactless}) 19,69 €`,
+        `${labels.paymentAuthorization} 354739`,
+      ].join(CONTACT_SEPARATOR),
+    ]);
   });
 });
 
 describe("what is still owed on the A4 page", () => {
-  it("the A4 page prints Pendiente in bold after the payments", () => {
-    const [page] = layoutInvoicePages({
+  it("the A4 page prints Pendiente in bold after the payments, and no Pagado", () => {
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1282,22 +1285,19 @@ describe("what is still owed on the A4 page", () => {
         owed: "9.69",
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const cash = texts.findIndex(({ text }) => text === "Efectivo");
-    const caption = texts.findIndex(({ text }) => text === "Pendiente");
-    expect(cash).toBeGreaterThanOrEqual(0);
-    expect(texts[caption]!.y).toBeGreaterThan(texts[cash]!.y);
-    const amount = texts.find(
-      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "9,69 €",
-    );
-    expect(amount).toBeDefined();
-    expect([texts[caption]!.weight, amount!.weight]).toEqual(["bold", "bold"]);
+    const cash = texts.find(({ text }) => text === `${labels.cash} 10,00 €`)!;
+    const owed = texts.find(({ text }) => text === `${labels.owed} 9,69 €`)!;
+    expect(owed.y).toBeGreaterThan(cash.y);
+    expect([cash.weight, owed.weight]).toEqual(["regular", "bold"]);
+    expect(texts.some(({ text }) => text.startsWith(labels.paid))).toBe(false);
   });
 });
 
 describe("the simplified receipt's A4 tax table", () => {
   it("draws the simplified tax table on A4", () => {
-    const [page] = layoutInvoicePages({
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1309,35 +1309,32 @@ describe("the simplified receipt's A4 tax table", () => {
         })),
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const at = (text: string, after = 0): (typeof texts)[number] =>
-      texts.find((element, index) => index >= after && element.text === text)!;
-    const heading = at("Tipo");
-    const start = texts.indexOf(heading);
-    expect(texts.slice(start, start + 4).map(({ text }) => text)).toEqual([
-      "Tipo",
-      "Base",
-      "IVA",
-      "Total",
+    const right = (cell: (typeof texts)[number]): number =>
+      cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
+    const heading = texts.find(({ text }) => text === labels.taxRateColumn)!;
+    const headings = texts.filter(({ y }) => y === heading.y);
+    expect(headings.map(({ text }) => text)).toEqual([
+      labels.taxRateColumn,
+      labels.vatSummaryBaseColumn.split(" ")[0],
+      labels.vatSummaryAmountColumn,
+      labels.taxTotalColumn,
     ]);
-    expect(texts.slice(start, start + 4).every(({ weight }) => weight === "bold")).toBe(true);
+    expect(headings.every(({ weight, tone }) => weight === "regular" && tone === "muted")).toBe(
+      true,
+    );
     const rows = [
-      ["A 21%", "9,00", "1,89", "10,89"],
-      ["B 10%", "8,00", "0,80", "8,80"],
+      ["A 21%", "9,00 €", "1,89 €", "10,89 €"],
+      ["B 10%", "8,00 €", "0,80 €", "8,80 €"],
     ];
     for (const row of rows) {
-      const first = texts.findIndex((element, index) => index > start && element.text === row[0]);
+      const first = texts.findIndex(({ text, y }) => y > heading.y && text === row[0]);
       const cells = texts.slice(first, first + 4);
       expect(cells.map(({ text }) => text)).toEqual(row);
       expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
-      expect(cells[0]!.x).toBe(heading.x);
-      for (const [index, cell] of cells.entries()) {
-        if (index === 0) continue;
-        const head = texts[start + index]!;
-        expect(cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight)).toBeCloseTo(
-          head.x + invoiceTextWidth(head.text, head.size, head.weight),
-        );
-      }
+      for (const [index, cell] of cells.entries())
+        expect(right(cell)).toBeCloseTo(right(headings[index]!));
     }
     expect(texts.some(({ text }) => text.startsWith("Base imponible"))).toBe(false);
   });
@@ -1361,28 +1358,39 @@ describe("the simplified receipt's A4 tax table", () => {
           vatRate: `${net!.rate}.00`,
         })),
       };
-      const [page] = layoutInvoicePages({
+      const [page] = layoutA4Invoice({
         ...FULL_INVOICE_DOCUMENT_FIXTURE,
         result,
         invoiceLocale,
       });
       const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-      const heading = texts.findIndex(
+      const right = (cell: (typeof texts)[number]): number =>
+        cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
+      const heading = texts.find(
         ({ text }) => text === receiptLabelsFor(invoiceLocale).taxRateColumn,
-      );
+      )!;
+      const below = [...new Set(texts.map(({ y }) => y))]
+        .filter((y) => y >= heading.y)
+        .sort((first, second) => first - second);
       const amounts = ["-2727.27", "-272.73", "-2479.34", "-520.66", "-3000.00"].map((amount) =>
-        formatAmount(amount, invoiceLocale),
+        formatMoney(amount, invoiceLocale),
       );
-      const table = texts.slice(heading, heading + 12);
+      const isHeading = (y: number) =>
+        texts.some((cell) => cell.y === y && cell.size === heading.size);
+      const headingLines = below.slice(
+        0,
+        below.findIndex((y) => !isHeading(y)),
+      );
+      const rateRows = below.slice(headingLines.length, headingLines.length + 2);
+      const table = texts.filter(({ y }) => rateRows.includes(y));
       for (const amount of amounts) expect(table.map(({ text }) => text)).toContain(amount);
-      for (let row = 0; row < 3; row++) {
-        const cells = table.slice(row * 4, row * 4 + 4);
-        expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
+      for (const y of [...headingLines, ...rateRows]) {
+        const cells = texts.filter((cell) => cell.y === y);
+        if (y === heading.y || rateRows.includes(y)) expect(cells).toHaveLength(4);
         expect(cells[0]!.x).toBeGreaterThanOrEqual(36);
-        const right = (cell: (typeof cells)[number]): number =>
-          cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
-        for (let at = 1; at < 4; at++) expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
-        expect(right(cells[3]!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
+        for (let at = 1; at < cells.length; at++)
+          expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
+        expect(right(cells.at(-1)!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
       }
     },
   );
