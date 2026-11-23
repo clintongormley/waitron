@@ -320,10 +320,10 @@ administrator. A restart of the box counts as a start, whether after a power cut
 
 The time from the start until the clock no longer stops payments is called start-up here. Within about
 half a minute of the start, once the box has found it cannot confirm its time by itself, every till
-and handheld where someone is signed in ends its red clock line with **Check the time** instead of
+and handheld where someone is signed in, outside the clock-in and attendance pages, ends its red clock line with **Check the time** instead of
 **See Box status in the dashboard**. On a box whose clock reads before 28 October 2024, or one that does not send
 records to the tax agency, it does so at the till's next check, within about 15 seconds. Any staff member signed in on the
-till can press it once past the clock-in and attendance pages; it needs no permission. The [till notices guide](till-notices.md#notices) says
+till can press it; it needs no permission. The [till notices guide](till-notices.md#notices) says
 what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, **This device** sets the
