@@ -363,8 +363,9 @@ reading the adjustment records. Run on the prototype: water comped then €1.00 
 4%: 7.21 / 0.29 and 21%: 1.24 / 0.26. The alternative — paid dishes weigh at what they were charged,
 the free one at its menu price — gives, by hand, salad 7.36 (base 7.08, VAT 0.28) and water 1.64
 (1.36, 0.28). It decides filed VAT, so it is the owner's; question 14 asks the adviser too. The
-owner kept the default on 23 November 14:17 ("its the proportions which matter",
-`questions.md:1399`).
+watcher took the default on 23 November 14:17 as covered by the owner's O1 words ("its the
+proportions which matter", `questions.md:1399`); those words were about O1, so this is the
+watcher's reading, put back to the watcher on 23 November for the owner's own word.
 
 **Not affected, and why:**
 
@@ -1480,7 +1481,7 @@ backwards-compatibility or data-migration code until Waitron is in production").
 | --- | --- | --- | --- |
 | O1 | How a goodwill amount with no dishes ticked is split when a dish was discounted or partly given back before (section 4.1) | by what is left of each dish's price; menu price can take more than is left | 14:15 (`:1393-1395`): by menu-price proportions, a dish capped at what is left of it and the rest spread in the same proportions. Written in (section 4.1, the O1 prototype's figures; Task 5) |
 | O2 | A tip given back on its own while payment money is left (section 4.6) | allowed, up to what is left of the tip; a tip is not on the invoice | 14:17 (`:1398`): "Yes". Written in (section 4.6, Task 6) |
-| O3 | On a ticket with a free item, what other discounted dishes weigh (section 4.2) | their menu price, so their discounts are shared too | 14:17 (`:1399`): the default |
+| O3 | On a ticket with a free item, what other discounted dishes weigh (section 4.2) | their menu price, so their discounts are shared too | 14:17 (`:1399`): the default, as the watcher's reading of the owner's O1 words, not the owner's own answer (asked again 23 November) |
 | O4 | Money handed back by Cancel and refund after payment on a ticket A445 shared (section 4.3) | the dish's filed share (salad €8.33, free water €1.67), pinned by a Task 3 test | 14:17 (`:1400`): "they would have to return both, and get the 10€ back". Written in (section 4.3.1; Tasks 3b and 3c): each dish keeps its filed share; the free item comes back with the last paid dish and cannot be refunded alone; €10.00 in the owner's case. With several paid dishes, the free item goes with the last paid dish (chosen in this revision, section 4.3.1); a free item already served makes the last paid dish's Cancel and refund refuse, pointing to Correct invoice |
 | O5 | Choice 1 replaces A802's "goodwill refunds stay money-only" (section 0) | yes, on the owner's 18 and 21 November words — recorded here for the owner to see, not to re-decide | 14:18 (`:1403`): shown, no objection |
 | O6 | Complaint as a Correct invoice reason (section 0) | not built; staff pick **Other** with a note | 14:18 (`:1404`): "Add it". Written in (section 4.5, Task 5): Correct invoice, and its card step, offer every reason |
