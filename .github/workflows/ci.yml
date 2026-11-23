@@ -3852,6 +3852,7 @@ jobs:
           set -- "$@" --filter "!@waitron/menu"
           set -- "$@" --filter "!@waitron/workforce-es"
           set -- "$@" --filter "!@waitron/layouts"
+          set -- "$@" --filter "!@waitron/orders-sales"
           set -- "$@" --filter "!@waitron/printing"
           set -- "$@" --filter "!@waitron/print-agent"
           set -- "$@" --filter "!@waitron/print-agent-app"

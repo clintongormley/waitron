@@ -1495,6 +1495,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Veri*Factu reads the chain head from the latest fiscal record on the box.
   Fiscal history retains verified clock steps and replaces the three old clock-stop tables.
   Fiscal history also retains conflicts found in AEAT replies and lookups.
+  Orders and sales can run their receipt formatting and drawing suites independently. The next
+  package slices cover order errors and the shared code that still depends on the server.
+  [Package move](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 

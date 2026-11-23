@@ -311,7 +311,7 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 ## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
 
-The receipt table (`apps/server/src/receipt-table.ts`) wraps item text longer than the item
+The receipt table (`packages/orders-sales/src/receipt-table.ts`) wraps item text longer than the item
 column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
 for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
 there. Decide whether a short label should be kept whole. The wrapped text is pinned in
