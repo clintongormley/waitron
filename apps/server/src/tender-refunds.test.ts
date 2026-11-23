@@ -129,9 +129,12 @@ beforeEach(async () => {
   await setPrinterListsForTest(db, profileId, {
     cash_drawer: { ids: [drawerId], defaultId: drawerId },
   });
+  const backend = new FakeFiscalBackend(db);
+  // What the real backend answers for these hand-inserted sales, which have no filed record.
+  backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
   deps = {
     db,
-    backend: new FakeFiscalBackend(db),
+    backend,
     admission: testTradingAdmission(),
     cfg,
     clock: createTrustedClock({

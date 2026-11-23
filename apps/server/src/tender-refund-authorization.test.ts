@@ -38,7 +38,9 @@ import { payments } from "@waitron/payments";
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { departments, setProfileServiceAccess } from "@waitron/venue-service";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
-import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import { reserveTenderRefund, type RefundFiscal } from "./tender-refund-reservation.js";
+import { createTrustedClock } from "@waitron/fiscal";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import type { TenderRefundRequest } from "./tender-refund-types.js";
@@ -58,6 +60,18 @@ const PIN = "4567";
 const PIN_HASH = hashPin(PIN);
 const CAPS = ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"];
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+// What the real backend answers for these hand-inserted sales, which have no filed record.
+function noRecordFiscal(config: DeviceRequestConfig): RefundFiscal {
+  const backend = new FakeFiscalBackend(store.db);
+  backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
+  const clock = createTrustedClock({
+    deviceId: config.origin.deviceId,
+    monotonic: () => 0,
+    wallClock: () => Date.parse(AT),
+    degradedAfterSeconds: 300,
+  });
+  return { backend, reading: clock.now() };
+}
 let cfg: DeviceRequestConfig;
 let profileId: string;
 let personId: string;
@@ -221,6 +235,7 @@ async function reserve(
         req,
         { requestedBy: op.personId, authorizedBy: authorization.authorizedBy },
         AT,
+        noRecordFiscal(config),
       );
       return { ...held, authorization };
     },
@@ -571,6 +586,7 @@ describe("settled-tender refund authorization before reservation", () => {
             request(t.tenderId),
             { requestedBy: personId, authorizedBy: authorization.authorizedBy },
             AT,
+            noRecordFiscal(cfg),
           );
           throw new AppError("payment.provider_unknown", { providerId: "unavailable" });
         },

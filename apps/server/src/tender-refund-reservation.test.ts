@@ -26,7 +26,9 @@ import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js"
 import { deviceOrigin } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
-import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import { reserveTenderRefund, type RefundFiscal } from "./tender-refund-reservation.js";
+import { createTrustedClock } from "@waitron/fiscal";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 const AT = "2026-10-16T08:00:00.000Z";
 const ACTOR = {
@@ -175,8 +177,22 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
     ...patch,
   };
 }
+// What the real backend answers for these hand-inserted sales, which have no filed record.
+function noRecordFiscal(db: typeof store.db): RefundFiscal {
+  const backend = new FakeFiscalBackend(db);
+  backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
+  const clock = createTrustedClock({
+    deviceId: cfg.origin.deviceId,
+    monotonic: () => 0,
+    wallClock: () => Date.parse(AT),
+    degradedAfterSeconds: 300,
+  });
+  return { backend, reading: clock.now() };
+}
 const reserve = (saleId: string, req: TenderRefundRequest, config = cfg) =>
-  withTransaction(store.db, (tx) => reserveTenderRefund(tx, config, saleId, req, ACTOR, AT));
+  withTransaction(store.db, (tx) =>
+    reserveTenderRefund(tx, config, saleId, req, ACTOR, AT, noRecordFiscal(store.db)),
+  );
 const rows = () => store.db.select().from(refunds).where(isNotNull(refunds.saleId));
 async function prior(
   target: Awaited<ReturnType<typeof paid>>,
@@ -388,7 +404,15 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const target = await paid();
     await expect(
       withTransaction(store.db, async (tx) => {
-        await reserveTenderRefund(tx, cfg, target.saleId, request(target.tenderId), ACTOR, AT);
+        await reserveTenderRefund(
+          tx,
+          cfg,
+          target.saleId,
+          request(target.tenderId),
+          ACTOR,
+          AT,
+          noRecordFiscal(store.db),
+        );
         throw new Error("caller failed");
       }),
     ).rejects.toThrow("caller failed");
@@ -736,6 +760,7 @@ describe("cash reservation without the optional payments module", () => {
         request(tender!.id),
         ACTOR,
         AT,
+        noRecordFiscal(db),
       ),
     );
     expect(answer.refund).toMatchObject({
