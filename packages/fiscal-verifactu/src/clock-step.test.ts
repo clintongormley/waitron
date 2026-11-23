@@ -259,6 +259,8 @@ describe("a step of the box's clock", () => {
       address: "10.0.0.1",
       ...ANA_ON_A_DEVICE.reading,
     });
+    expect(stored[0]!.proof).not.toHaveProperty("admin");
+    expect(stored[0]!.proof).not.toHaveProperty("device");
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: stored[0]!.id },
     ]);
