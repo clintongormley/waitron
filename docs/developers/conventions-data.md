@@ -4496,8 +4496,9 @@ suites named in that procedure.
 
 The till follows the primary; only the primary sells. A joined local spare can take over by
 handover or emergency switch. The separate-database case in `apps/server/src/handover-two-boxes.test.ts`
-exercises both paths without real box restarts. Hardware and power-loss qualification remain in
-[A947](../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes); the Cloud runtime remains
+exercises both paths without real box restarts. The owner's emergency switch on two real boxes
+passed on 23 November 2026; what the real-box runs did not show is in the
+[failover residuals](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards); the Cloud runtime remains
 open in A1188. Do not read the local test as Cloud or disconnected-internet qualification.
 
 **Provisioning and boot**
@@ -6684,7 +6685,7 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. Local handover and emergency switch are exercised on separate databases in
   `apps/server/src/handover-two-boxes.test.ts`, without real box restarts. Remaining qualification:
-  [A947](../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes).
+  [failover residuals](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards).
 
 
 

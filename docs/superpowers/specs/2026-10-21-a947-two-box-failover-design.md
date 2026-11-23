@@ -1796,7 +1796,8 @@ adopts W41s-10b's format when it lands rather than inventing one.
 > would add nothing. A two-box venue keeps no live copy in a bucket: joining still refuses while
 > the venue streams to one. §8 and the 5e line in the slice list below record what was planned.
 > A947's build is done until the owner's rehearsal on two real boxes (the paragraph after the
-> slice list).
+> slice list). _23 November 2026: the owner's emergency switch on two real boxes passed, and A947
+> is complete; see the 23 November block under 3b._
 
 Each line is one pull request. **Fiscal** ones wait for the owner to land (lanes land their own
 pull requests except truly fiscal ones, owner 2026-10-21). Every slice adds its step to the stream
@@ -1945,6 +1946,28 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     password typed on the new box, the switch page's time zone taken from the browser —
     Europe/Rome against the venue's saved Europe/Madrid — and the series page that does not wait)
     are A1558, which starts with a plan for the owner.
+
+  **23 November 2026, the owner's second rerun: the emergency switch with a till signed in.** Run
+  from about 19:10 to 19:28 Madrid time by the owner; the campaign watcher relayed it at 19:28.
+  - **Set-up.** Lane K set up both boxes fresh on build c8feeb29c9, as a new venue in preparation.
+    This time the Lenovo was the main box, at `https://waitron.local`, and the test box
+    (192.168.10.10) was the spare, following. No till was enrolled beforehand. The owner was asked
+    to enrol a till, switch the main box off, and switch over from the till.
+  - **Seen.** The owner: "the switch happened and the till connected, all very smooth!" The owner
+    then made a sale on the new main box ("done"). The Lenovo came back, stood down and showed
+    "This box no longer runs the venue". The new main box's Servers page listed it as "Replaced;
+    not selling".
+  - **Result.** The two points that failed on 20 November now pass: the switch screens, and the
+    till signing in on the box that took over (the watcher's summary). With this run, A947's build
+    and its check on two real boxes are complete, and its backlog entry is retired.
+  - **Not in the record:** which device the till was, whether the internet was reachable, a
+    passkey sign-in, and the clocks. Of the rehearsal this section's last paragraph asks for, the
+    record does not show a plug pulled mid-sale, the old box rejoining as the spare, or a switch
+    back. These stay open in the backlog's
+    [failover residuals](../../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards).
+  - **Where it went.** The owner's findings on the pages went to two campaign items: lane D's
+    SWITCH-RERUN-FIXES (the switch screens and the till) and lane B's OLD-BOX-PAGE-FIXES (the
+    replaced box's pages).
 
 - **3c. The spare follows.** The waiting start mode; `restore -f` into the follower copy (follow mode
   exists at tag v0.5.18, `cmd/litestream/restore.go:38`, but has never been run in this repository —

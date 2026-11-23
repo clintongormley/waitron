@@ -332,12 +332,28 @@ Cloud's production store still needs its own run.
 
 A spare can join a Veri*Factu venue and take over. `handover-two-boxes.test.ts` exercises the
 handover and the reset old box's later emergency switch on separate databases, without real
-box restarts. Real hardware, disconnected internet and power-loss qualification remain open in
-[A947](#a947-go-live-on-two-local-boxes). The owner's 2026-10-21 request, “For go live I want one
-box with failover to another local box”, remains the target of the
-[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md). A second box is a
-choice for later venues (the owner's answer to question 4 of that design).
+box restarts. On 23 November 2026 the owner ran an emergency switch on two real boxes with a till
+signed in, and it passed (the dated block in
+[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §11). The owner's
+2026-10-21 request, “For go live I want one box with failover to another local box”, is that
+design's target. A second box is a choice for later venues (the owner's answer to question 4 of
+that design).
 
+- **What the real-box runs have not shown (left open by A947).** The records of 18, 20 and 23
+  November in the design's §11 do not show these parts of its rehearsal: a plug pulled mid-sale,
+  the old box rejoining as the spare by itself, a switch back, a switch with the internet
+  unplugged, or every box's and till's clock read at the start and the end. Nor do they show, on
+  till hardware, two-part `.local` names, the name cache after the main box dies, a passkey at each
+  way in, or the same-site cookie.
+- **Three limits 3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)) left in a
+  box's certificate check.** A box in the waiting start (waiting for its peers) or a restricted
+  start (handed over or superseded) serves its certificate before `ensureLeaf`
+  (`apps/server/src/box-secrets.ts`) checks it, so a certificate missing a new name or address is
+  served there until the next full start. A stop while a failed reissue is putting the old
+  certificate back can leave a certificate and key that do not belong together; the next start
+  reissues it, but the start's connection check may send the box to connection repair first. A
+  spare later promoted keeps `tls/joined.json`, so a plain reset of it also removes `tls/`, and its
+  devices must trust it again.
 - **Retirement and rejoin still lack a drain confirmation.** From source reading, `retireSelf`
   checks membership before self-eviction, and `rejoinAsSecondary` checks fencing and a carrier
   before wiping. Neither proves the old box's tail was carried forward. `rejoin --accept-loss`
@@ -590,7 +606,8 @@ Slice 3.
   [Detail](replication-cloud.md#adoption-transaction-boundaries-and-remaining-fixture-wording)
 - **Boot membership fetch.** The credential-free chart read remains.
   [Detail](replication-cloud.md#boot-membership-fetch)
-- **Replication, membership & failover residuals.** The setup-wizard choice, carry-in qualification,
+- **Replication, membership & failover residuals.** The rehearsal parts and till-hardware checks
+  A947's real-box runs did not show, the setup-wizard choice, carry-in qualification,
   retirement, re-admission, restore/promotion, certificates and payment qualification remain.
   [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)
 - **Task 1a: unverified concurrency claims.** Promotion, sealing and scheduler takeover.
@@ -902,67 +919,6 @@ The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linke
 artifacts are historical references for the dropped implementation. They do not add work or
 gates to A951-S.
 
-
-## A947. Go-live on two local boxes
-
-The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
-03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
-2026-10-24. Slice 3a ([plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-31-a947-3a-node-db.md)) landed as
-[#2371](https://github.com/clintongormley/waitron/pull/2371) on 2026-11-01: what a box remembers
-about itself is in its own `node.db`. The owner answered yes to both its questions on 2026-10-31:
-the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
-certificate fingerprint before it receives the venue's keys (2026-11-22: the join by code, A1558
-PR 9, replaced the fingerprint check). Slice 3b's build
-[plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
-eight pull requests, split on 2026-11-10 into eleven, two of them fiscal and landed by the owner (3b-G, the start steps that decide
-whether a box files; 3b-F, letting a Veri*Factu venue add a spare, under option (c) of question Q1, which the campaign
-watcher relayed as the owner's answer on 2026-11-04: its dormant tax-filing setup is written when the spare is switched on). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
-box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742); 3b-3 (a joining spare
-takes the venue's certificate authority as its own) as
-[#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
-asking the network, a spare listens on the venue's network, and what it serves there is walked by a
-test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
-the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
-that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email) and 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F (a Veri*Factu venue's spare joins with nothing fiscal written) landed too. Box status, Servers and the bell show measured spare progress and warnings. 4b (2026-11-14) makes an emergency switch first bring the spare's copy up to date from the followed copy; the activation writes the spare's dormant setup first (A947 3b-F, built). 4c (2026-11-15) gives a till or handheld a red strip after 20 s without the main box, whose button opens the spare's switch page and comes back; the switch's passkey, the dashboard's entry, the spare's banner and the same-site cookie measurement moved to 4d (watcher, 2026-11-14 22:01). 4d-1 (2026-11-15, [plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a947-4d-reach-the-switch.md)) landed as [#3329](https://github.com/clintongormley/waitron/pull/3329): a spare asks its main box every 5 s and, after 20 s of silence, answers the venue's name, sending a reloaded page there to its switch page (which tries the main box itself) and withdrawing the name when the main box answers; a switch label opened on the selling box goes to Servers; the spare's own page says how long the main box has been silent, or that the spare cannot reach it. 4d-2 (2026-11-15) lets a manager print a switch label for the main box and the spare from Servers: a QR code for that box's switch page and its address. 4d-3a (2026-11-15) lets the dashboard's passkey sign-in, enrolment and sign-in check accept each box's own https name that the box's held chart lists, as well as the venue's name, reading the chart at each local passkey check; a spare still shows its closed page at its own name, so in practice this is the selling box's own name. The box image sets `WAITRON_VENUE_DOMAIN=waitron.local` (2026-11-15), so a till's device cookie, set at `waitron.local`, names that domain. Such a cookie reaching a box's own name was measured in Chromium ([note](../research/2026-11-15-a947-4d-measurements.md)), and a till's move to the spare's own name after a switch is the case "follows the promoted box at its own name, then back to the page when the page answers as it" in `apps/till/src/api/server-router.test.ts`. A till enrolled at `waitron.local` by a box whose image did not yet set it holds a cookie for `waitron.local` only; enrolling it again replaces that cookie, because the enrolment's answer expires it before setting the new one, and the browser then sends only the new one (measured in Chromium 158 with `setDeviceCookie`'s own headers, 2026-11-15; WebKit was not run). Without that expiry the browser sent both, the old one first. 4d-3b (2026-11-15) lets a manager sign in to the emergency switch's steps with a passkey; the spare then carries a signed proof for 15 minutes, so a reload after the take needs no new unlock, and the controlled handover still asks for the password. Left: the measurements on till hardware (two-part `.local` names, the name cache after the main box dies, a passkey at each way in, and the same-site cookie).
-
-**14 November 2026, 3c measurement:** pinned `restore -f` applied an ordinary data-growth
-transaction but failed complete-byte equality against the same frozen generation's direct
-restore. Only header offsets 18, 19 and 24–27 differed. The watcher-revised integrity, every-table
-and other-byte checks passed, as did the small reconnect/restart/generation experiments.
-[Measurement and limits](../research/2026-11-14-a947-follow-mode.md). The joined spare now follows into isolated scratch output, and the main box shows its signed, cached progress on Box status, Servers and the bell. Since 4b an emergency switch promotes the followed copy, after checking it and the person's sign-in against it.
-
-A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
-A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
-of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
-
-The owner, 2026-10-21: "For go live I want one box with failover to another
-local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
-slices 3–5 into pull requests (§11) and answers several entries below: the vault-ring question
-(the spare gets the credentials key at joining), adding a spare with the internet down (the first
-copy over the LAN), the stored primary key (A45), and the drain confirmations rejoin lost (the
-tail receipt). All four questions are answered (§12): a manager switches from any till, signing
-in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
-switch never waits for the next hour, because every series name is five symbols for the UTC
-minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
-since slice 4a the recovery sheet and the restore form have no installation code, every name a
-box takes outside the preproduction throwaway refuses a box clock more than 30 seconds behind or
-ahead of another device's, and a setup or restore waits 90–150 seconds before naming (§6.5,
-§6.7). Any device, even a reloaded one, reaches the
-switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
-(§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
-the membership chart, so a till's router sees one server (§2); 3b-2 gives each box its own name in
-the chart, and the till hides a line for its page's own box.
-
-- **Three limits 3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)) left in a
-  box's certificate check.** A box in the waiting start (waiting for its peers) or a restricted
-  start (handed over or superseded) serves its certificate before `ensureLeaf`
-  (`apps/server/src/box-secrets.ts`) checks it, so a certificate missing a new name or address is
-  served there until the next full start. A stop while a failed reissue is putting the old
-  certificate back can leave a certificate and key that do not belong together; the next start
-  reissues it, but the start's connection check may send the box to connection repair first. A
-  spare later promoted keeps `tls/joined.json`, so a plain reset of it also removes `tls/`, and its
-  devices must trust it again.
 
 ## A1273: the shared key ring has no rotation path to the spare
 

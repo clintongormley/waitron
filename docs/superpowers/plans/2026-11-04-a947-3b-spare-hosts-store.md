@@ -674,7 +674,7 @@ the A1018 plan, not run.
   **2026-11-10 A1018 update:** the preparation and activation routes now share a password delay;
   the no-throttle grep below is historical. Lifting the exposed-mirror guard also makes
   controlled handover live on real boxes, whether or not emergency recovery has landed.
-  See the [A947 backlog](../../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes).
+  See the [A947 design](../specs/2026-10-21-a947-two-box-failover-design.md) §11.
   `assertMirrorBindSafe` and `WAITRON_MIRROR_ALLOW_EXPOSED` are retired. **2026-11-10 (Fable
   review), why the guard can go although A1113 kept it:** the watcher's A1113 ruling (2026-11-08,
   [narrowed A1113 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1113-spare-screen.md)) kept it for two reasons. Legacy promotion
