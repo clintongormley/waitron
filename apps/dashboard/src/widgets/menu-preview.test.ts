@@ -3,7 +3,7 @@ import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import type { DashboardApi, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
 import type { MenuDocumentTree } from "./menu-document-tree.js";
 import {
@@ -1421,4 +1421,78 @@ it("distinguishes a regional content version in the preview picker", async () =>
   } finally {
     setContentLanguages(before);
   }
+});
+
+it("names a clashing variant by its name, and by its id when the menu no longer offers it", async () => {
+  const offers = structuredClone(DOCUMENT.offers);
+  (offers["mi-burger"] as { variants: unknown[] }).variants = [{ id: "v-large", name: "Large" }];
+  const el = await mount({
+    preview: {
+      ...preview([]),
+      document: { ...DOCUMENT, offers },
+      clashes: [
+        { ...CLASH, variantId: "v-large" },
+        { ...CLASH, variantId: "v-gone" },
+        { ...CLASH, productId: "p-unknown" },
+      ],
+    },
+  });
+  const items = [...el.shadowRoot!.querySelectorAll('[data-test="clashes"] li')].map((li) =>
+    li.textContent!.replace(/\s+/g, " ").trim(),
+  );
+  expect(items[0]).toMatch(/^Burger — Large:/);
+  expect(items[1]).toMatch(/^Burger — v-gone:/);
+  expect(items[2]).toMatch(/^p-unknown:/);
+});
+
+it("asks for the price clashes when Show clashes is clicked", async () => {
+  const el = await mount({ preview: { ...preview([]), clashes: [CLASH] } });
+  const heard = vi.fn();
+  el.addEventListener("wt-preview-clashes", heard);
+  el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!.click();
+  expect(heard).toHaveBeenCalledOnce();
+});
+
+it("links each set menu with problems to its set menu tab, counting one problem and several", async () => {
+  const el = await mount({
+    preview: {
+      ...preview([]),
+      setMenuProblems: [
+        { menuId: "daily", name: "Daily menu", problems: [{ kind: "no_dishes" }] },
+        {
+          menuId: "weekend",
+          name: "Weekend menu",
+          problems: [{ kind: "no_dishes" }, { kind: "no_lines" }],
+        },
+      ],
+    },
+  });
+  const links = [
+    ...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('a[href$="/view/set-menu"]'),
+  ];
+  expect(links.map((link) => new URL(link.href).pathname)).toEqual([
+    "/menus/menu/daily/view/set-menu",
+    "/menus/menu/weekend/view/set-menu",
+  ]);
+  expect(links[0]!.textContent!.trim()).toBe(
+    fill("menu_preview.set_menu_problem_count_one", { name: "Daily menu", count: "1" }),
+  );
+  expect(links[1]!.textContent!.trim()).toBe(
+    fill("menu_preview.set_menu_problem_count", { name: "Weekend menu", count: "2" }),
+  );
+});
+
+it("closes the publish warning confirmation on Cancel and publishes nothing", async () => {
+  const el = await mount({
+    preview: preview([], [{ kind: "shortcut_missing", name: "Lemonade" }]),
+  });
+  const published = vi.fn();
+  el.addEventListener("wt-menu-publish", published);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).not.toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish-cancel"]')!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).toBeNull();
+  expect(published).not.toHaveBeenCalled();
 });
