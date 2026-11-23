@@ -18,5 +18,6 @@ export const request = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "RF",
   admin: { displayName: "Elena", email: "elena@example.test", password: PASSWORD, pin: "4826" },
 };

@@ -1,10 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi, type RecoveryPreparationRequest } from "../api/client.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import type { SetupRecoveryAllocation } from "./recovery-allocation.js";
 
-afterEach(() => cleanupWidgets());
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 const copy = {
   sourceId: "selected-copy",
@@ -385,6 +389,70 @@ it.each(["invalid", "unsupported"])(
           ? "This backup uses an unsupported format. Install a Waitron version that supports it, then try again."
           : "The backup manifest is damaged or incomplete. Choose another complete backup.",
       );
+    expect(el.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();
+  },
+);
+
+it.each([
+  [
+    "file",
+    "en-GB",
+    "restore.schema_too_new",
+    (el: SetupRecoveryCopy) => {
+      el.artifact = new File(["backup"], "copy.backup");
+      el.recoveryKey = "key";
+    },
+    "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
+  ],
+  [
+    "file",
+    "en-GB",
+    "provisioning.database_ahead",
+    (el: SetupRecoveryCopy) => {
+      el.artifact = new File(["backup"], "copy.backup");
+      el.recoveryKey = "key";
+    },
+    "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
+  ],
+  [
+    "bucket",
+    "es-ES",
+    "provisioning.database_ahead",
+    (el: SetupRecoveryCopy) => {
+      el.bucketKit = "kit";
+    },
+    t("shell.bucket.other_version", "es-ES"),
+  ],
+  [
+    "Cloud",
+    "en-GB",
+    "provisioning.database_ahead",
+    (el: SetupRecoveryCopy) => {
+      el.cloudPointId = "point";
+    },
+    "The snapshot was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
+  ],
+])(
+  "says a %s copy is from another Waitron version (%s) when its review is refused %s",
+  async (_, locale, code, choose, words) => {
+    setLocale(locale);
+    const api = new SetupApi("", async () =>
+      Response.json({ error: { code, params: {} } }, { status: 409 }),
+    );
+    const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", { api });
+    el.environment = "preproduction";
+    choose(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await expect
+      .poll(
+        () =>
+          (
+            el.shadowRoot!.querySelector("wt-form-actions") as
+              (HTMLElement & { error: string }) | null
+          )?.error,
+      )
+      .toBe(words);
     expect(el.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();
   },
 );

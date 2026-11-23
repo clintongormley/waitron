@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 afterEach(() => vi.restoreAllMocks());
 import { CustodySession } from "./custody-state.js";
-import { custodyPassphrase, custodyRequest } from "../testing/custodian-fixture.js";
+import { custodyBases, custodyPassphrase, custodyRequest } from "../testing/custodian-fixture.js";
 
 const refused = { message: "Custody material refused" };
 
@@ -29,6 +29,14 @@ it("refuses changed candidate rows, incomplete purposes and unknown/secret reque
     await expect(session.loadRequest(invalid)).rejects.toMatchObject(refused);
     expect(() => session.originalDocument("en")).toThrow("Custody material refused");
   }
+});
+
+it("refuses a request built on the old three series, with no full invoice corrective series", async () => {
+  const session = new CustodySession("new");
+  await expect(
+    session.loadRequest(await custodyRequest(custodyBases.slice(0, 3))),
+  ).rejects.toMatchObject(refused);
+  expect(() => session.originalDocument("en")).toThrow("Custody material refused");
 });
 
 it("locks original issue before print outcome and never treats afterprint/cancellation as success", async () => {

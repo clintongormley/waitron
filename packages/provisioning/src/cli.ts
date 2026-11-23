@@ -34,13 +34,14 @@ import {
   type FirstSetupCommandDeployment,
 } from "./first-setup-command-activation.js";
 import { resolveEnvironment } from "./environment.js";
-import { venueFiscalSelection } from "./venue-fiscal.js";
+import { validateVenueFields, venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
 import { applyVenue, type VenueApplyDeps } from "./venue-apply.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { readInitialVenueFile } from "./initial-venue-file.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
+import { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
 import { assertNoForeignTaxpayer, readTaxpayerIdentities } from "./taxpayer-guard.js";
 import "./errors.js";
 
@@ -94,11 +95,13 @@ const USAGE = [
   "           [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
-  "           [--corrective-series-code <code>] [--admin-name <name>] [--admin-email <email>]",
+  "           [--corrective-series-code <code>] [--full-corrective-series-code <code>]",
+  "           [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes] [--test-fiscal]",
   "           [--recovery-pdf <absolute path of a new file, outside box state and venue directories>]",
   "",
-  "Missing venue details are prompted for. --full-series-code defaults to FF.",
+  "Missing venue details are prompted for, except",
+  `--full-series-code (default ${DEFAULT_SERIES_CODES.fullSeriesCode}) and --full-corrective-series-code (default ${DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode}).`,
   "The admin's real name is left unset when --admin-first-names and --admin-last-names",
   "are omitted. Select --recovery-pdf explicitly; --yes never confirms that you kept it.",
   "Production reads certificate and email settings from WAITRON_SETUP_SETTINGS_FILE (JSON).",
@@ -180,6 +183,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "series-code": { type: "string" },
       "full-series-code": { type: "string" },
       "corrective-series-code": { type: "string" },
+      "full-corrective-series-code": { type: "string" },
       "admin-name": { type: "string" },
       "admin-first-names": { type: "string" },
       "admin-last-names": { type: "string" },
@@ -234,12 +238,16 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     );
     const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
     const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
-    const fullSeriesCode = resolveWithoutPrompt(values["full-series-code"]) ?? "FF";
+    const fullSeriesCode =
+      resolveWithoutPrompt(values["full-series-code"]) ?? DEFAULT_SERIES_CODES.fullSeriesCode;
     const correctiveSeriesCode = await resolveOption(
       values["corrective-series-code"],
-      "corrective series code: ",
+      "series code for correctives of simplified invoices: ",
       deps,
     );
+    const fullCorrectiveSeriesCode =
+      resolveWithoutPrompt(values["full-corrective-series-code"]) ??
+      DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode;
     const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
     // Never prompted for, so a script driving this command non-interactively meets no new question.
     const adminFirstNames = resolveWithoutPrompt(values["admin-first-names"]);
@@ -271,6 +279,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       seriesCode,
       fullSeriesCode,
       correctiveSeriesCode,
+      fullCorrectiveSeriesCode,
       admin: {
         displayName: adminName,
         firstNames: adminFirstNames,
@@ -285,14 +294,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const installed = runtime?.modules ?? deps.configureVenueModules?.(venueDir) ?? deps.modules;
     const selection = venueFiscalSelection(installed, request.fiscalTerritory);
     const fiscalConfig = selection.config;
-    // The regime's own rules on the fields just typed, through the seat the setup wizard uses, before
-    // anything is minted (CLAUDE.md §5). A regime that files nothing offers no seat.
-    selection.contribution?.venueFields?.validate({
-      legalName: request.legalName,
-      seriesCode: request.seriesCode,
-      fullSeriesCode: request.fullSeriesCode ?? "FF",
-      correctiveSeriesCode: request.correctiveSeriesCode,
-    });
+    // Before anything is minted (CLAUDE.md §5).
+    validateVenueFields(selection.contribution, request);
     const modules = enabledModules(installed, fiscalConfig);
 
     const actions = planVenue(request, modules);

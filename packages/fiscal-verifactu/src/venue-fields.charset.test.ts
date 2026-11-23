@@ -36,6 +36,7 @@ const GOOD = {
   seriesCode: "FS",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "FR",
+  fullCorrectiveSeriesCode: "RF",
 };
 
 function boundaryRefuses(validate: () => void): boolean {

@@ -1,4 +1,5 @@
 import { isAllocatedSeries } from "../allocation-identity.js";
+import { seriesPurposes } from "../setup/strings.js";
 import {
   parsePaperBlock,
   paperBlockBytes,
@@ -137,7 +138,7 @@ async function parseRequest(value: unknown): Promise<CustodyRequest> {
     value.softwareId !== "W1" ||
     !["production", "preproduction"].includes(value.environment as string) ||
     !Array.isArray(value.requiredBases) ||
-    value.requiredBases.length !== 3 ||
+    value.requiredBases.length !== seriesPurposes.length ||
     !Array.isArray(value.candidates) ||
     value.candidates.length < 1 ||
     value.candidates.length > 100
@@ -146,7 +147,7 @@ async function parseRequest(value: unknown): Promise<CustodyRequest> {
   const bases = value.requiredBases as { code: string; purpose: string }[];
   if (
     bases.some((base) => !exact(base, ["code", "purpose"])) ||
-    !["standard", "full", "corrective"].every((purpose) => bases.some((b) => b.purpose === purpose))
+    !seriesPurposes.every((purpose) => bases.some((b) => b.purpose === purpose))
   )
     refuse();
   const block = parsePaperBlock({

@@ -90,6 +90,7 @@ export class SetupRecoveryCopy extends LitElement {
     | "interrupted"
     | "manifest"
     | "unsupported"
+    | "version"
     | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
@@ -333,7 +334,10 @@ export class SetupRecoveryCopy extends LitElement {
                       ? "file"
                       : error?.code === "backup.stream_kit_invalid" || field === "kit"
                         ? "kit"
-                        : "failed";
+                        : error?.code === "provisioning.database_ahead" ||
+                            error?.code === "restore.schema_too_new"
+                          ? "version"
+                          : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -384,6 +388,12 @@ export class SetupRecoveryCopy extends LitElement {
       failed: "restore.preview_failed",
       capacity: "shell.restore.archive_resource_limit",
       interrupted: "shell.restore.upload_interrupted",
+      version:
+        this.bucketKit !== undefined
+          ? "shell.bucket.other_version"
+          : this.cloudPointId !== undefined
+            ? "shell.cloud.other_version"
+            : "shell.restore.other_version",
     } as const;
     return html` ${
         preview === undefined

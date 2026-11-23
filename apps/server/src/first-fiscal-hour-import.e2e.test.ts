@@ -107,6 +107,10 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
+/** The longest base a code may have, so the export's codes must carry no installation suffix. */
+const LONGEST_BASE = "ABCDEFGHIJKLMNOPQRSTU";
+const sourceRequest = { ...request, fullCorrectiveSeriesCode: LONGEST_BASE };
+
 async function configurationArtifact() {
   setClock("2026-10-16T10:40:00Z");
   const root = await mkdtemp(join(tmpdir(), "hour-import-source-"));
@@ -124,7 +128,7 @@ async function configurationArtifact() {
   const owned = await ownedHourSetup(
     async (input, init) => app.request(String(input), init),
     "https://source.test",
-    request,
+    sourceRequest,
     PASSWORD,
     undefined,
     testClock,
@@ -161,6 +165,7 @@ async function configurationArtifact() {
     ),
   ).toEqual([
     { code: "A-0CNM2", nextNumber: 42 },
+    { code: `${LONGEST_BASE}-0CNM2`, nextNumber: 42 },
     { code: "FF-0CNM2", nextNumber: 42 },
     { code: "R-0CNM2", nextNumber: 42 },
   ]);
@@ -241,8 +246,18 @@ it.each([
         status: 200,
         body: { modules: expect.arrayContaining(["core"]) },
       });
+      expect(exported.venue).toMatchObject({
+        seriesCode: "A",
+        fullSeriesCode: "FF",
+        correctiveSeriesCode: "R",
+        fullCorrectiveSeriesCode: LONGEST_BASE,
+      });
       const target = {
         ...request,
+        seriesCode: exported.venue.seriesCode,
+        fullSeriesCode: exported.venue.fullSeriesCode,
+        correctiveSeriesCode: exported.venue.correctiveSeriesCode,
+        fullCorrectiveSeriesCode: exported.venue.fullCorrectiveSeriesCode,
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
       const owned = await ownedHourSetup(
@@ -340,6 +355,7 @@ it.each([
           ).toEqual([
             { code: "R-0CNNY", purpose: "corrective", nextNumber: 1 },
             { code: "FF-0CNNY", purpose: "full", nextNumber: 1 },
+            { code: `${LONGEST_BASE}-0CNNY`, purpose: "full_corrective", nextNumber: 1 },
             { code: "A-0CNNY", purpose: "standard", nextNumber: 1 },
           ]);
           expect(

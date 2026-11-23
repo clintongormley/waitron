@@ -25,6 +25,7 @@ const preview: ConfigurationPreview = {
     seriesCode: "F",
     fullSeriesCode: "FF",
     correctiveSeriesCode: "R",
+    fullCorrectiveSeriesCode: "FR",
   },
   modules: ["core"],
   reconnectModules: ["core"],

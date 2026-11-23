@@ -42,6 +42,7 @@ let generation: NonNullable<ModuleRouteContext["recordGeneration"]>;
 let instant: Date;
 let confirmed: boolean;
 let correctiveId: string;
+let fullCorrectiveId: string;
 let body: Record<string, unknown>;
 let enabledRemedies: RemedyPolicy | undefined;
 const FULL_INVOICES_ON: RemedyPolicy = new Set([
@@ -155,6 +156,11 @@ beforeEach(async () => {
       .values({ nodeId: node.nodeId, code: "R", purpose: "corrective" })
       .returning();
     correctiveId = series!.id;
+    const [fullSeries] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: node.nodeId, code: "RF", purpose: "full_corrective" })
+      .returning();
+    fullCorrectiveId = fullSeries!.id;
   });
   const original = await refusedOriginal();
   body = {
@@ -377,7 +383,7 @@ it("replaces a full invoice with an R4 'S' naming the same customer, and resolve
     saleId: result.saleId,
     tipoFactura: "R4",
     tipoRectificativa: "S",
-    numSerieFactura: "R/1",
+    numSerieFactura: "RF/1",
     fechaExpedicionFactura: "2026-03-01",
     fechaOperacion: "2026-02-28",
     importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
@@ -393,9 +399,12 @@ it("replaces a full invoice with an R4 'S' naming the same customer, and resolve
       ],
     },
   });
-  const corrective = (rows: typeof before.series) =>
-    rows.find((row) => row.id === correctiveId)!.nextNumber;
-  expect(corrective(after.series)).toBe(corrective(before.series) + 1);
+  const nextNumber = (rows: typeof before.series, id: string) =>
+    rows.find((row) => row.id === id)!.nextNumber;
+  expect(nextNumber(after.series, fullCorrectiveId)).toBe(
+    nextNumber(before.series, fullCorrectiveId) + 1,
+  );
+  expect(nextNumber(after.series, correctiveId)).toBe(nextNumber(before.series, correctiveId));
   expect(after.sales.find((row) => row.id === result.saleId)).toMatchObject({
     correctsSaleId: original.saleId,
     replacesOriginal: true,
@@ -527,6 +536,20 @@ it("refuses when this node has no live corrective series", async () => {
     .set({ retiredAt: TODAY })
     .where(eq(invoiceSeries.id, correctiveId));
   await refuses(body, "series.no_corrective_for_node", 409);
+});
+
+it("refuses a full invoice when this node has no live full-invoice corrective series", async () => {
+  enabledRemedies = FULL_INVOICES_ON;
+  const original = await refusedOriginal(undefined, { customer: CUSTOMER });
+  await suite.db
+    .update(invoiceSeries)
+    .set({ retiredAt: TODAY })
+    .where(eq(invoiceSeries.id, fullCorrectiveId));
+  await refuses(
+    { ...body, caseId: original.caseId, registroId: original.registroId },
+    "series.no_full_corrective_for_node",
+    409,
+  );
 });
 
 it.each([

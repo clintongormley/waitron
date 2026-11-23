@@ -29,6 +29,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
 };
 const block = signPaperBlock(
@@ -85,6 +86,7 @@ const consumption = {
               ["A-P000042", "standard"],
               ["FF-P000042", "full"],
               ["R-P000042", "corrective"],
+              ["RF-P000042", "full_corrective"],
             ],
             "paper",
             "2026-10-12T08:00:00.000Z",
@@ -269,6 +271,7 @@ describe("signed recovery-key allocation", () => {
         { code: "A-S000042", purpose: "standard" },
         { code: "FF-S000042", purpose: "full" },
         { code: "R-S000042", purpose: "corrective" },
+        { code: "RF-S000042", purpose: "full_corrective" },
       ],
     };
     expect(

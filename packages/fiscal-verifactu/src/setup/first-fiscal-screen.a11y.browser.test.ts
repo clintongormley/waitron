@@ -28,9 +28,6 @@ for (const theme of ["light", "dark"] as const)
           environment: "production",
           venue: {
             taxId: "B12345674",
-            seriesCode: "A",
-            fullSeriesCode: "FF",
-            correctiveSeriesCode: "R",
           },
         };
         const request = {

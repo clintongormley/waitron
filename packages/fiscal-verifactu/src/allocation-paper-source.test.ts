@@ -46,6 +46,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -152,6 +153,7 @@ it("activates only the complete signed allocation confirmed by the separate file
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "corrective" },
+      { code: "RF-P000042", purpose: "full_corrective" },
     ]);
     expect(
       await suite.db
@@ -161,7 +163,7 @@ it("activates only the complete signed allocation confirmed by the separate file
     expect(
       await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
     ).toEqual([{ approval }]);
-    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(6);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(8);
   });
 });
 

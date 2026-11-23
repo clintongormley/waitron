@@ -203,6 +203,7 @@ export class SetupReviewScreen extends LitElement {
             ${this.#row(this.usesAllocation ? "review.series_base" : "review.series", venue?.seriesCode, "summary-seriesCode")}
             ${this.#row(this.usesAllocation ? "review.full_series_base" : "review.full_series", venue?.fullSeriesCode, "summary-fullSeriesCode")}
             ${this.#row(this.usesAllocation ? "review.corrective_series_base" : "review.corrective_series", venue?.correctiveSeriesCode, "summary-correctiveSeriesCode")}
+            ${this.#row(this.usesAllocation ? "review.full_corrective_series_base" : "review.full_corrective_series", venue?.fullCorrectiveSeriesCode, "summary-fullCorrectiveSeriesCode")}
             ${
               mode === "demo"
                 ? nothing

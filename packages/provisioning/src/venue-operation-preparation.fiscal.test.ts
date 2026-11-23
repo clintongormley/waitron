@@ -13,7 +13,7 @@ import {
   ALLOCATED_FISCAL_SEED,
 } from "@waitron/fiscal-verifactu";
 import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
-import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { FISCAL_SLOT, liveSeriesBases } from "@waitron/fiscal-verifactu";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -51,6 +51,7 @@ const request: VenueRequest = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "RF",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -71,6 +72,7 @@ const candidate = {
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
     { code: "R-S000042", purpose: "corrective" },
+    { code: "RF-S000042", purpose: "full_corrective" },
   ],
 };
 const approval = {
@@ -177,7 +179,7 @@ function owner() {
     provisioning: {
       seed: {
         summary: "activate signed initial allocation",
-        series: { resolve: readModuleAllocationSeries },
+        series: { bases: liveSeriesBases, resolve: readModuleAllocationSeries },
         run: async (tx, node, operation) => {
           const result = await activatePreparedModuleAllocation(tx, node, operation!);
           return result.activationEventId;
@@ -221,9 +223,10 @@ it("joins initial outside collection with the new account and exactly the alloca
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
     { code: "R-S000042", purpose: "corrective" },
+    { code: "RF-S000042", purpose: "full_corrective" },
   ]);
   expect(result.seriesIds).toEqual(
-    ["standard", "full", "corrective"].map(
+    ["standard", "full", "corrective", "full_corrective"].map(
       (purpose) => series.find((row) => row.purpose === purpose)!.id,
     ),
   );
@@ -235,7 +238,7 @@ it("joins initial outside collection with the new account and exactly the alloca
   expect(repeated.seriesIds).toEqual(result.seriesIds);
   expect(sourceRead).toBe(1);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
-  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
   expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
 });
 
@@ -265,9 +268,10 @@ it("runs the fiscal seed and its series resolver through initial provisioning an
     { code: "A-S000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000042", purpose: "full", nextNumber: 1 },
     { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
+    { code: "RF-S000042", purpose: "full_corrective", nextNumber: 1 },
   ]);
   expect(result.seriesIds).toEqual(
-    ["standard", "full", "corrective"].map(
+    ["standard", "full", "corrective", "full_corrective"].map(
       (purpose) => allSeries.find((row) => row.purpose === purpose)!.id,
     ),
   );

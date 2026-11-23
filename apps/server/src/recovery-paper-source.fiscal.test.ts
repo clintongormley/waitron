@@ -48,6 +48,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -189,6 +190,7 @@ it("combines real key authentication, configured paper files and the complete ac
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "corrective" },
+      { code: "RF-P000042", purpose: "full_corrective" },
     ]);
     expect(
       await suite.db

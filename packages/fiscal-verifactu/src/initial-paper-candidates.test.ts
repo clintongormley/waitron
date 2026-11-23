@@ -49,6 +49,7 @@ describe("host initial paper candidate validation", () => {
           { code: "A-S000001", purpose: "standard" },
           { code: "FF-S000001", purpose: "full" },
           { code: "R-S000001", purpose: "corrective" },
+          { code: "RF-S000001", purpose: "full_corrective" },
         ],
         source: "initial-paper",
         issuedAt: expect.any(String),
@@ -64,12 +65,16 @@ describe("host initial paper candidate validation", () => {
         "FF-S000001/9999999999",
         "R-S000001/1",
         "R-S000001/9999999999",
+        "RF-S000001/1",
+        "RF-S000001/9999999999",
         "A-S999999/1",
         "A-S999999/9999999999",
         "FF-S999999/1",
         "FF-S999999/9999999999",
         "R-S999999/1",
         "R-S999999/9999999999",
+        "RF-S999999/1",
+        "RF-S999999/9999999999",
       ]);
       expect(
         spy.mock.results.every(
@@ -104,16 +109,24 @@ describe("host initial paper candidate validation", () => {
       { code: "A", purpose: "standard" },
       { code: "A", purpose: "full" },
       { code: "R", purpose: "corrective" },
+      { code: "RF", purpose: "full_corrective" },
+    ],
+    [
+      { code: "A", purpose: "standard" },
+      { code: "FF", purpose: "full" },
+      { code: "R", purpose: "corrective" },
     ],
     [
       { code: "A", purpose: "standard" },
       { code: "FF", purpose: "full" },
       { code: "R", purpose: "full" },
+      { code: "RF", purpose: "full_corrective" },
     ],
     [
       { code: "A".repeat(22), purpose: "standard" },
       { code: "FF", purpose: "full" },
       { code: "R", purpose: "corrective" },
+      { code: "RF", purpose: "full_corrective" },
     ],
   ])("refuses incomplete or ambiguous purpose/base sets %j", (...bases) => {
     expect(() => validateInitialPaperCandidates({ ...context, bases }, [1])).toThrowError(invalid);
@@ -256,14 +269,15 @@ describe("host initial paper candidate validation", () => {
       { code: "A-S000042", purpose: "standard" },
       { code: "FF-S000042", purpose: "full" },
       { code: "R-S000042", purpose: "corrective" },
+      { code: "RF-S000042", purpose: "full_corrective" },
       { code: "B-S000042", purpose: "standard" },
     ]);
     for (const series of [
-      result.candidates[0]!.series.slice(0, 3),
+      result.candidates[0]!.series.slice(0, 4),
       result.candidates[0]!.series.map((s) =>
         s.code === "B-S000042" ? { ...s, purpose: "full" } : s,
       ),
-      [...result.candidates[0]!.series.slice(0, 3), result.candidates[0]!.series[0]!],
+      [...result.candidates[0]!.series.slice(0, 4), result.candidates[0]!.series[0]!],
     ]) {
       const candidates = [{ ...result.candidates[0]!, series }];
       const candidateDigest = createHash("sha256").update(JSON.stringify(candidates)).digest("hex");
@@ -283,6 +297,7 @@ describe("host initial paper candidate validation", () => {
       { code: "A-P000008", purpose: "standard" },
       { code: "FF-P000008", purpose: "full" },
       { code: "R-P000008", purpose: "corrective" },
+      { code: "RF-P000008", purpose: "full_corrective" },
     ]);
     expect(() => readInitialPaperCandidates(context, result)).toThrowError(invalid);
   });

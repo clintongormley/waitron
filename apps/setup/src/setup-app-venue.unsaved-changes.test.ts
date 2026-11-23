@@ -22,6 +22,7 @@ const initialVenue = {
   seriesCode: "FA",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "RF",
+  fullCorrectiveSeriesCode: "RFF",
   name: "Calle Mayor",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],

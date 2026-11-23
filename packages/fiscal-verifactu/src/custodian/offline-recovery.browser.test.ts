@@ -196,11 +196,15 @@ it("exports only the frozen public block/allocation and consumption/approval wit
   const snapshot = resume.snapshotDocument("es");
   expect(snapshot).toContain("A-S000001 / Ordinarias");
   expect(snapshot).toContain("FF-S000001 / Completas");
-  expect(snapshot).toContain("R-S000001 / Rectificativas");
+  expect(snapshot).toContain("R-S000001 / Rectificativas de simplificadas");
+  expect(snapshot).toContain("RF-S000001 / Rectificativas de completas");
   expect(snapshot).toContain("W1 / Producción");
   expect(snapshot).toContain("COPIA PÚBLICA");
   expect(snapshot).toContain("No sustituye al original");
   expect(snapshot).not.toContain("ORIGINAL PÚBLICO</h1>");
+  const englishSnapshot = resume.snapshotDocument("en");
+  expect(englishSnapshot).toContain("R-S000001 / Corrective of simplified invoices");
+  expect(englishSnapshot).toContain("RF-S000001 / Corrective of full invoices");
   expect(() => resume.originalDocument("en")).toThrow("Custody material refused");
   await expect(resume.consume("allocation-1", "retry")).rejects.toMatchObject(refused);
   await expect(resume.verifyChecks(fileReceipt, paperReceipt)).rejects.toMatchObject(refused);

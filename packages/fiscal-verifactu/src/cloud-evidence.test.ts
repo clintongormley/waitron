@@ -75,6 +75,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
       { code: "A-C000042", purpose: "standard" },
       { code: "FF-C000042", purpose: "full" },
       { code: "R-C000042", purpose: "corrective" },
+      { code: "RF-C000042", purpose: "full_corrective" },
     ]);
     expect(Object.isFrozen(result.allocation.series[0])).toBe(true);
     expect(Object.isFrozen(result.allocation.reservationEvidence)).toBe(true);
@@ -151,6 +152,7 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
           { code: "A", purpose: "standard" },
           { code: "FF", purpose: "standard" },
           { code: "R", purpose: "corrective" },
+          { code: "RF", purpose: "full_corrective" },
         ],
       }),
     ).toEqual({ ok: false, reason: "series_mismatch" });

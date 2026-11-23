@@ -7,6 +7,7 @@ import { AppError, nodeId } from "@waitron/shared";
 import { parseInitialVenueInput, type InitialVenueInput } from "./initial-venue-input.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { VenueRequest } from "./venue-plan.js";
+import { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
 import type { VenueResult } from "./venue-apply.js";
 import "./errors.js";
 
@@ -24,13 +25,18 @@ export async function recoverProvisionedVenue(
   if (initial === null) return refuse();
   const bases = [
     { code: venue.seriesCode, purpose: "standard" },
-    { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
+    { code: venue.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode, purpose: "full" },
     { code: venue.correctiveSeriesCode, purpose: "corrective" },
+    {
+      code: venue.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+      purpose: "full_corrective",
+    },
   ];
   const selection = venueFiscalSelection(availableModules, venue.fiscalTerritory);
   const owners = enabledModules(availableModules, selection.config).filter(
     (module) =>
-      module.fiscal?.id === selection.contribution?.id &&
+      selection.contribution !== undefined &&
+      module.fiscal?.id === selection.contribution.id &&
       module.provisioning?.seed?.series !== undefined,
   );
   if (owners.length > 1) return refuse();
@@ -56,9 +62,9 @@ export async function recoverProvisionedVenue(
     const series = await tx.execute<{ id: string; purpose: string; code: string }>(sql`
       select id, purpose, code from invoice_series where node_id = ${row.nodeId}`);
     if (
-      expected.length !== 3 ||
-      series.rows.length !== 3 ||
-      new Set(expected.map((reference) => reference.purpose)).size !== 3
+      expected.length !== bases.length ||
+      series.rows.length !== bases.length ||
+      new Set(expected.map((reference) => reference.purpose)).size !== bases.length
     )
       return refuse();
     const references = bases.map((base) => {

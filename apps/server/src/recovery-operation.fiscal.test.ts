@@ -51,6 +51,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
 };
 const block = signPaperBlock(
@@ -119,6 +120,7 @@ const consumption = {
               ["A-P000042", "standard"],
               ["FF-P000042", "full"],
               ["R-P000042", "corrective"],
+              ["RF-P000042", "full_corrective"],
             ],
             "paper",
             "2026-10-12T08:00:00.000Z",
@@ -286,7 +288,7 @@ describe("recovery-key fiscal attribution", () => {
     );
     expect(signed).toEqual(signedConsumption);
   });
-  it("activates all three purposes, then the role, without a person or a session", async () => {
+  it("activates every purpose, then the role, without a person or a session", async () => {
     const result = await promote();
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual(
       candidate.series,

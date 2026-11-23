@@ -150,6 +150,7 @@ it("owned development Live readiness runs the real certificate-free preproductio
   expect(first.series).toEqual([
     { purpose: "corrective", nextNumber: 1 },
     { purpose: "full", nextNumber: 1 },
+    { purpose: "full_corrective", nextNumber: 1 },
     { purpose: "standard", nextNumber: 2 },
   ]);
   const second = await f.post();

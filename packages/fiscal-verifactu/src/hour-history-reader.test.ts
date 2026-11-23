@@ -107,7 +107,7 @@ it("enumerates the higher retired other-node hour that current-node readers omit
     source.records.filter(
       (row) => typeof row === "object" && row !== null && "kind" in row && row.kind === "series",
     ),
-  ).toHaveLength(6);
+  ).toHaveLength(8);
   expect(
     source.records.filter(
       (row) =>

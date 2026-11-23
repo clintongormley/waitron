@@ -167,6 +167,7 @@ it.each(["demo", "prepare"])(
     ).toEqual([
       { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
+      { code: "FR-0CNNW", purpose: "full_corrective", nextNumber: 1 },
       { code: "R-0CNNW", purpose: "corrective", nextNumber: 1 },
     ]);
     await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
@@ -247,6 +248,7 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
   ).toEqual([
     { code: "A-0CNNY", nextNumber: 1 },
     { code: "FF-0CNNY", nextNumber: 1 },
+    { code: "FR-0CNNY", nextNumber: 1 },
     { code: "R-0CNNY", nextNumber: 1 },
   ]);
   expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(

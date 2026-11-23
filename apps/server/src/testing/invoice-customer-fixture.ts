@@ -106,7 +106,7 @@ function threeLines(total: string, locale: string) {
  * table lists.
  */
 export async function provisionInvoiceCustomerVenue(db: Database): Promise<InvoiceCustomerVenue> {
-  const venue = await provisionOrderVenue(db);
+  const venue = await provisionOrderVenue(db, { fullSeriesCode: "FF" });
   const clock = steppingClock();
   const fullSeriesId = await inTx(venue, async (tx) => {
     await tx.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });

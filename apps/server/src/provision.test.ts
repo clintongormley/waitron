@@ -164,7 +164,7 @@ describe("provisionVenue", () => {
       ["fiscal-verifactu", true],
       ["fiscal-none", false],
     ]);
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
   });
 
   it("leaves holiday storage empty, while the stored address reads its shipped holidays at once", async () => {
@@ -240,7 +240,7 @@ describe("provisionVenue", () => {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
     }
-    expect(result.seriesIds).toHaveLength(3);
+    expect(result.seriesIds).toHaveLength(4);
     expect(result.seeded.map((s) => s.module)).toEqual([
       "menu",
       "venue-service",
@@ -261,7 +261,7 @@ describe("provisionVenue", () => {
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
 
     const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-none")).toBe(false);
@@ -278,8 +278,8 @@ describe("provisionVenue", () => {
     );
 
     expect(result.seeded.map((s) => s.module)).toEqual(["menu", "venue-service", "adjustments"]);
-    expect(result.seriesIds).toHaveLength(3);
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 3, nodes: 1, registros: 0 });
+    expect(result.seriesIds).toHaveLength(4);
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 4, nodes: 1, registros: 0 });
 
     const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
@@ -317,7 +317,7 @@ describe("provisionVenue", () => {
       request,
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
 
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -513,7 +513,7 @@ describe("provisionVenue", () => {
       seriesIds: minted.seriesIds,
       seeded: [],
     });
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
   });
 
   it("refuses recovery when the submitted full invoice series differs from the committed one", async () => {
@@ -571,7 +571,7 @@ describe("provisionVenue", () => {
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
 
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(

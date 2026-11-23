@@ -31,6 +31,7 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       seriesCode: "FA",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "RF",
+      fullCorrectiveSeriesCode: "FX",
       admin: {
         firstNames: "Alba",
         lastNames: "Ramos",
@@ -372,9 +373,27 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
     expect(text(el, "[data-test=summary-fullSeriesCode]")).toBe("FF");
     expect(text(el, "[data-test=summary-correctiveSeriesCode]")).toBe("RF");
+    expect(text(el, "[data-test=summary-fullCorrectiveSeriesCode]")).toBe("FX");
     expect(text(el, "[data-test=summary-admin-name]")).toBe("Alba Ramos");
     expect(text(el, "[data-test=summary-admin]")).toBe("Alba");
     expect(text(el, "[data-test=summary-admin-email]")).toBe("alba@example.com");
+  });
+
+  it("lists the series standard, full, corrective, full corrective, each beside its label", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    const rows = [...el.shadowRoot!.querySelectorAll("[data-test$=eriesCode]")].map((value) => [
+      value.getAttribute("data-test"),
+      value.closest("dd")?.previousElementSibling?.textContent?.trim(),
+      value.textContent,
+    ]);
+    expect(rows).toEqual([
+      ["summary-seriesCode", "Invoice series", "FA"],
+      ["summary-fullSeriesCode", "Full invoice series", "FF"],
+      ["summary-correctiveSeriesCode", "Series for correctives of simplified invoices", "RF"],
+      ["summary-fullCorrectiveSeriesCode", "Series for correctives of full invoices", "FX"],
+    ]);
   });
 
   it("shows the certificate as attached, and NEVER renders any secret value", async () => {
@@ -486,7 +505,14 @@ describe("setup-review-screen in Spanish", () => {
       dt.textContent?.replace(dt.querySelector("wt-help-tooltip")?.textContent ?? "", "").trim(),
     );
     expect(labels).toContain("Razón social");
-    expect(labels).toContain("Serie rectificativa");
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "Serie de facturas",
+        "Serie de facturas completas",
+        "Serie rectificativa de simplificadas",
+        "Serie rectificativa de completas",
+      ]),
+    );
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
     expect(text(el, "[data-test=provision]")).toBe("Configurar este servidor");
     expect(text(el, "[data-test=back]")).toBe("Volver");

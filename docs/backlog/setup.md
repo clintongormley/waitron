@@ -14,11 +14,11 @@ What constrains the next change to the wizard:
   which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
   Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
   from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`).
-- **Default all three series codes to values with no trailing `-<name>`.** Each series a box opens
+- **Default all four series codes to values with no trailing `-<name>`.** Each series a box opens
   is named `<code>-<installation name>`, and `stripOwnSuffixes`
   (`packages/fiscal-verifactu/src/reserved-series.ts`) removes a trailing `-<name>` that matches a
-  recorded installation name, so the defaults are **FS** (simplified invoices), **FF** (full
-  invoices) and **FR** (correctives). Nothing in the dashboard can change or add a series today.
+  recorded installation name, so the defaults are **S** (simplified invoices), **F** (full
+  invoices), **SR** (correctives of simplified invoices) and **FR** (correctives of full invoices). Nothing in the dashboard can change or add a series today.
 - **A sale's operation description comes from its department.** Save it on the **Details** tab
   of the department's dialog. When the department has none, the installed fiscal contribution's
   default fills it (`apps/server/src/sale-operation-description.ts`).

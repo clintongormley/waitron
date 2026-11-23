@@ -4,6 +4,7 @@ import { resolveInstalledStarterLanguages, starterName } from "@waitron/country-
 import { DEFAULT_DEVICE_PROFILES, type CapabilityFlag, type FormFactor } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
+import { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
 import {
   STARTER_PROFILE_NAMES,
   STARTER_STATION_NAMES,
@@ -36,6 +37,7 @@ export interface VenueRequest {
   seriesCode: string;
   fullSeriesCode?: string;
   correctiveSeriesCode: string;
+  fullCorrectiveSeriesCode?: string;
   /** The initial admin. Both secrets arrive already hashed (`hashPin` / `hashPassword`), so no
    * plaintext secret enters the plan. */
   admin: {
@@ -110,7 +112,11 @@ export type VenueAction =
       }[];
     }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
-  | { kind: "create-series"; code: string; purpose: "standard" | "full" | "corrective" }
+  | {
+      kind: "create-series";
+      code: string;
+      purpose: "standard" | "full" | "corrective" | "full_corrective";
+    }
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
   | { kind: "seed-module"; module: string; summary: string; staffLanguage?: "en" | "es" };
@@ -146,8 +152,15 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // One code per purpose: applyVenue treats a repeated (node, code) as an existing row.
   const seriesCodes = [
     { code: request.seriesCode, field: "seriesCode" },
-    { code: request.fullSeriesCode ?? "FF", field: "fullSeriesCode" },
+    {
+      code: request.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode,
+      field: "fullSeriesCode",
+    },
     { code: request.correctiveSeriesCode, field: "correctiveSeriesCode" },
+    {
+      code: request.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+      field: "fullCorrectiveSeriesCode",
+    },
   ];
   const repeated = seriesCodes.find((entry, index) =>
     seriesCodes.slice(0, index).some((prior) => prior.code === entry.code),
@@ -228,8 +241,17 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       taxModule: fiscal.tax,
     },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
-    { kind: "create-series", code: request.fullSeriesCode ?? "FF", purpose: "full" },
+    {
+      kind: "create-series",
+      code: request.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode,
+      purpose: "full",
+    },
     { kind: "create-series", code: request.correctiveSeriesCode, purpose: "corrective" },
+    {
+      kind: "create-series",
+      code: request.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+      purpose: "full_corrective",
+    },
     // Module seeds run LAST, once every core row exists.
     ...modules.flatMap((m) =>
       m.provisioning?.seed === undefined

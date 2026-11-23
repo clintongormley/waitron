@@ -34,6 +34,7 @@ const request: VenueRequest = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "RF",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -45,6 +46,7 @@ const allocated = [
   { id: "c0000000-0000-4000-8000-000000000001", code: "A-S000042", purpose: "standard" },
   { id: "c0000000-0000-4000-8000-000000000002", code: "FF-S000042", purpose: "full" },
   { id: "c0000000-0000-4000-8000-000000000003", code: "R-S000042", purpose: "corrective" },
+  { id: "c0000000-0000-4000-8000-000000000004", code: "RF-S000042", purpose: "full_corrective" },
 ];
 type Reference = (typeof allocated)[number];
 type Resolve = (
@@ -65,7 +67,7 @@ const read: Resolve = async (tx, node, bases) => {
 function owner(resolve: Resolve = read, name = "fiscal-verifactu") {
   const seed = {
     summary: "activate the supplied series",
-    series: { resolve },
+    series: { bases: async () => SERIES_BASES, resolve },
     async run(tx: Transaction, node: ProvisionedNode) {
       if (seeded) throw new Error("a setup retry must not activate again");
       seeded = true;
@@ -137,10 +139,13 @@ describe("the filing module owns initial invoice series", () => {
 
   it.each([
     ["missing purpose", (refs: Reference[]) => refs.slice(0, 2)],
-    ["duplicate id", (refs: Reference[]) => [refs[0]!, { ...refs[1]!, id: refs[0]!.id }, refs[2]!]],
+    [
+      "duplicate id",
+      (refs: Reference[]) => [refs[0]!, { ...refs[1]!, id: refs[0]!.id }, ...refs.slice(2)],
+    ],
     [
       "duplicate purpose",
-      (refs: Reference[]) => [refs[0]!, { ...refs[1]!, purpose: "standard" }, refs[2]!],
+      (refs: Reference[]) => [refs[0]!, { ...refs[1]!, purpose: "standard" }, ...refs.slice(2)],
     ],
     [
       "unknown id",

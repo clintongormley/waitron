@@ -4,6 +4,7 @@ import { buildAltaRecord, validate } from "@waitron/verifactu";
 import { AppError } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
 import { isAllocatedSeries } from "./allocation-identity.js";
+import { seriesPurposes } from "./setup/strings.js";
 import { parsePaperAllocation, type PaperAllocation } from "./paper-protocol.js";
 import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
@@ -24,9 +25,9 @@ function checkContext(context: InitialSetupContext): void {
     context.country !== "ES" ||
     !["production", "preproduction"].includes(context.environment) ||
     !/^[A-Z0-9]{9}$/.test(context.taxId) ||
-    context.bases.length < 3 ||
-    purposes.size !== 3 ||
-    !["standard", "full", "corrective"].every((purpose) => purposes.has(purpose)) ||
+    context.bases.length < seriesPurposes.length ||
+    purposes.size !== seriesPurposes.length ||
+    !seriesPurposes.every((purpose) => purposes.has(purpose)) ||
     !isAllocatedSeries(
       context.bases.map(({ code, purpose }) => ({ code: `${code}-S000001`, purpose })),
       "S000001",

@@ -25,16 +25,13 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import { fileInputCopy } from "../file-input-copy.js";
-import { fiscalSetupStrings } from "./strings.js";
+import { fiscalSetupStrings, seriesPurposeLabel } from "./strings.js";
 
 type Context = {
   status: string;
   environment: "production" | "preproduction";
   venue: {
     taxId: string;
-    seriesCode: string;
-    fullSeriesCode?: string;
-    correctiveSeriesCode: string;
   };
 };
 type Input = {
@@ -455,7 +452,7 @@ export class FirstFiscalScreen extends LitElement {
                 <dd>${this.imported.allocation.installationIdentity}</dd>
                 <dt>${t.series}</dt>
                 <dd data-test="review-series">
-                  ${this.imported.allocation.series.map((series) => html`<div>${series.code} · ${series.purpose === "standard" ? t.standard : series.purpose === "full" ? t.full : t.corrective}</div>`)}
+                  ${this.imported.allocation.series.map((series) => html`<div>${series.code} · ${seriesPurposeLabel(series.purpose, this.locale)}</div>`)}
                 </dd>
                 <dt>${t.software}</dt>
                 <dd>${this.request?.softwareId}</dd>

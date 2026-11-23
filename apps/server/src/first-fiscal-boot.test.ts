@@ -434,7 +434,7 @@ it.each(["trading", "completion-state"])(
               "select (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series",
             )
             .all(),
-        ).toEqual([{ nextNumber: 1 }, { nextNumber: 1 }, { nextNumber: 1 }]);
+        ).toEqual([{ nextNumber: 1 }, { nextNumber: 1 }, { nextNumber: 1 }, { nextNumber: 1 }]);
       } finally {
         db.close();
       }

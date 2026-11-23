@@ -50,7 +50,7 @@ describe("first setup module seeds", () => {
       "adjustments",
     ]);
     expect(seeded[2]!.report).toMatch(
-      /^SIF .* \(installation S000001\); series A-S000001, FF-S000001, R-S000001$/,
+      /^SIF .* \(installation S000001\); series A-S000001, F-S000001, FR-S000001, R-S000001$/,
     );
 
     const live = await suite.db.execute<{

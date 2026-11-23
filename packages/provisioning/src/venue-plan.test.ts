@@ -64,7 +64,7 @@ describe("planVenue", () => {
     });
   });
 
-  it("emits ensure-taxpayer → seed-admin → seed-device-profiles → venueStep → node → three series → module seeds, in order, and no till", () => {
+  it("emits ensure-taxpayer → seed-admin → seed-device-profiles → venueStep → node → four series → module seeds, in order, and no till", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-taxpayer",
@@ -72,6 +72,7 @@ describe("planVenue", () => {
       "seed-device-profiles",
       "create-venue",
       "create-node",
+      "create-series",
       "create-series",
       "create-series",
       "create-series",
@@ -331,12 +332,13 @@ describe("planVenue", () => {
     expect(venue).toMatchObject({ dayCutover: stored });
   });
 
-  it("emits distinct standard, full and corrective series with the requested codes", () => {
+  it("emits distinct standard, full, corrective and full corrective series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
-      { kind: "create-series", code: "FF", purpose: "full" },
+      { kind: "create-series", code: "F", purpose: "full" },
       { kind: "create-series", code: "R", purpose: "corrective" },
+      { kind: "create-series", code: "FR", purpose: "full_corrective" },
     ]);
   });
 
@@ -347,11 +349,24 @@ describe("planVenue", () => {
     expect(series).toContainEqual({ kind: "create-series", code: "F1", purpose: "full" });
   });
 
+  it("plans a separate full invoice corrective series with its requested code", () => {
+    const series = planVenue(request({ fullCorrectiveSeriesCode: "FR1" }), MODULES).filter(
+      (action) => action.kind === "create-series",
+    );
+    expect(series).toContainEqual({
+      kind: "create-series",
+      code: "FR1",
+      purpose: "full_corrective",
+    });
+  });
+
   it.each([
     { overrides: { fullSeriesCode: "A" }, field: "fullSeriesCode", code: "A" },
     { overrides: { fullSeriesCode: "R" }, field: "correctiveSeriesCode", code: "R" },
-    { overrides: { seriesCode: "FF" }, field: "fullSeriesCode", code: "FF" },
-    { overrides: { correctiveSeriesCode: "FF" }, field: "correctiveSeriesCode", code: "FF" },
+    { overrides: { seriesCode: "F" }, field: "fullSeriesCode", code: "F" },
+    { overrides: { correctiveSeriesCode: "F" }, field: "correctiveSeriesCode", code: "F" },
+    { overrides: { fullCorrectiveSeriesCode: "A" }, field: "fullCorrectiveSeriesCode", code: "A" },
+    { overrides: { correctiveSeriesCode: "FR" }, field: "fullCorrectiveSeriesCode", code: "FR" },
   ])("refuses repeated code $code on $field", ({ overrides, field, code }) => {
     try {
       planVenue(request(overrides), MODULES);
@@ -462,6 +477,7 @@ describe("planVenue", () => {
       "create-series",
       "create-series",
       "create-series",
+      "create-series",
       "seed-module",
     ]);
   });
@@ -505,8 +521,9 @@ describe("describeVenueAction", () => {
       "create venue Mostrador in ES-common (es-ES)",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
-      "create full series FF",
+      "create full series F",
       "create corrective series R",
+      "create full_corrective series FR",
       "seed module probe: seed the probe",
     ]);
   });

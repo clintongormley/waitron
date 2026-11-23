@@ -31,7 +31,10 @@ export const invoiceSeries = table(
       foreignColumns: [nodes.id],
       name: "invoice_series_node_fk",
     }),
-    check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'full', 'corrective')`),
+    check(
+      "invoice_series_purpose_ck",
+      sql`${t.purpose} in ('standard', 'full', 'corrective', 'full_corrective')`,
+    ),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),
   ],
 );

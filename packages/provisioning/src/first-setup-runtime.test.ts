@@ -313,6 +313,7 @@ it.each(["production", "preproduction"] as const)(
             { code: "A-0CNNY", purpose: "standard" },
             { code: "FF-0CNNY", purpose: "full" },
             { code: "R-0CNNY", purpose: "corrective" },
+            { code: "RF-0CNNY", purpose: "full_corrective" },
           ],
         },
       },
@@ -353,6 +354,7 @@ it("an imported setup retains its fresh host identity and exact configured base 
         series: [
           { code: "FF-0CNNY", purpose: "full" },
           { code: "R-0CNNY", purpose: "corrective" },
+          { code: "RF-0CNNY", purpose: "full_corrective" },
           { code: "a/B_1.2-3-0CNNY", purpose: "standard" },
         ],
       },
@@ -479,6 +481,7 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
         { code: "injected", purpose: "standard" },
         { code: "FF", purpose: "full" },
         { code: "R", purpose: "corrective" },
+        { code: "RF", purpose: "full_corrective" },
       ],
     };
   });
@@ -492,6 +495,7 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
           { code: "A-0CNNY", purpose: "standard" },
           { code: "FF-0CNNY", purpose: "full" },
           { code: "R-0CNNY", purpose: "corrective" },
+          { code: "RF-0CNNY", purpose: "full_corrective" },
         ],
       },
     },

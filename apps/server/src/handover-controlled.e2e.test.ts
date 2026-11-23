@@ -2209,7 +2209,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     const { identity } = on.selected;
     const own = on.series.filter((row) => row.node_id === b.m2.nodeId);
     expect(own.map((row) => row.code)).toEqual(
-      ["A", "FF", "R"].map((prefix) => `${prefix}-${identity}`),
+      ["A", "F", "FR", "R"].map((prefix) => `${prefix}-${identity}`),
     );
     expect(own.every((row) => row.retired_at === null)).toBe(true);
     expect(on.cardSaleOnM1).toEqual([]);

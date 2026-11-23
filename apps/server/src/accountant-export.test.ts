@@ -816,11 +816,11 @@ describe("accountant period selection", () => {
     await FakeFiscalBackend.install(suite.db);
     const backend = new FakeFiscalBackend(suite.db);
     await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
-    const [full, corrective] = await suite.db
+    const [full, fullCorrective] = await suite.db
       .insert(invoiceSeries)
       .values([
         { nodeId: venue.nodeId, code: "F", purpose: "full" },
-        { nodeId: venue.nodeId, code: "R", purpose: "corrective" },
+        { nodeId: venue.nodeId, code: "RF", purpose: "full_corrective" },
       ])
       .returning({ id: invoiceSeries.id });
     const [person] = await seedPersons(suite.db, {
@@ -877,7 +877,7 @@ describe("accountant period selection", () => {
         operationDescription: "Test op",
         origin: deviceOrigin(venue.deviceId),
         nodeId: venue.nodeId,
-        seriesId: brandSeriesId(corrective!.id),
+        seriesId: brandSeriesId(fullCorrective!.id),
         correctsSaleId: original,
         authz: {
           sessionId: (

@@ -1,4 +1,7 @@
 import {
+  connectionPair,
+  drizzleNodeSqlite,
+  immutableFileUrl,
   VENUE_LOCK_FILE,
   INCOMING_SUFFIX,
   REPLACED_DATABASE_PREFIX,
@@ -53,7 +56,12 @@ import {
   type VenueLock,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
-import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
+import {
+  applyMigrations,
+  expectedSchemaVersion,
+  manifestSets,
+  migrationOptionsFor,
+} from "@waitron/migrations";
 
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
@@ -62,7 +70,7 @@ import {
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
-import { quoteIdent } from "@waitron/provisioning";
+import { assertNotAhead, quoteIdent } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -488,6 +496,7 @@ export async function writeValidated(
   let admitted = validated;
   try {
     await assertVenueFirstSetupAllowed(deps.venueDir, deps.stateDir);
+    await assertArchiveNotAhead(validated, deps);
     const check = deps.withModuleOperations?.checkBeforePlacement;
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;
@@ -542,6 +551,38 @@ export async function writeValidated(
     } finally {
       lock.release();
     }
+  }
+}
+
+/**
+ * The gate counts migrations; this compares their hashes, so a copy made before a starting
+ * migration was rebuilt is refused before placement rather than by the migration after it. Reads
+ * the main file alone, as placement moves it, and writes nothing beside it; the node copy is read
+ * from memory, and only when it replaces the box's.
+ */
+export async function assertArchiveNotAhead(
+  validated: Pick<ValidatedArtifact, "databasePath" | "nodeDump">,
+  deps: Pick<PlacementDeps, "skipSecrets" | "migrationsRoot">,
+): Promise<void> {
+  const venue = new DatabaseSync(immutableFileUrl(validated.databasePath), {
+    readOnly: true,
+    allowExtension: false,
+  });
+  const node = deps.skipSecrets
+    ? undefined
+    : new DatabaseSync(":memory:", { allowExtension: false });
+  try {
+    node?.deserialize(validated.nodeDump);
+    const handle = (connection: DatabaseSync) =>
+      drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
+    await assertNotAhead(
+      { venue: handle(venue), node: handle(node ?? venue) },
+      manifestSets().filter((set) => node !== undefined || set.database !== "node"),
+      deps.migrationsRoot,
+    );
+  } finally {
+    venue.close();
+    node?.close();
   }
 }
 

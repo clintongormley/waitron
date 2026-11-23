@@ -61,6 +61,7 @@ describe("developer allocation boundary", () => {
       expect(suite.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FA-0CNNW", purpose: "full" },
+        { code: "FR-0CNNW", purpose: "full_corrective" },
         { code: "R-0CNNW", purpose: "corrective" },
       ]);
       expect(

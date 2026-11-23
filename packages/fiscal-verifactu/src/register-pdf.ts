@@ -3,7 +3,7 @@ import { create, type Font } from "fontkit";
 import fontUrl from "./assets/register-noto-sans.ttf?url";
 import type { RegisterDocument } from "./paper-register-protocol.js";
 import { encodePosition, encodeNodeKey } from "./paper-register-compact.js";
-import { fiscalSetupStrings } from "./setup/strings.js";
+import { seriesPurposeLabel } from "./setup/strings.js";
 import {
   parseRegisterDocument,
   registerDocumentBytes,
@@ -114,16 +114,7 @@ export async function renderRegisterPdf(
         if (event.kind === "reserve") {
           write(`${event.allocation.installationIdentity} / ${event.recipientVenueId}`, 12);
           for (const series of event.allocation.series) {
-            const t = fiscalSetupStrings[locale];
-            const purpose =
-              series.purpose === "standard"
-                ? t.standard
-                : series.purpose === "full"
-                  ? t.full
-                  : series.purpose === "corrective"
-                    ? t.corrective
-                    : series.purpose;
-            write(`${series.code} / ${purpose}`);
+            write(`${series.code} / ${seriesPurposeLabel(series.purpose, locale)}`);
           }
           write(
             `${event.allocation.allocationId} / ${event.binding.eventId} / ${event.binding.targetNodeId}`,

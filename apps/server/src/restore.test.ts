@@ -172,10 +172,19 @@ const MANIFEST: BackupManifest = {
 };
 
 /**
- * Stands in for the archive's database entry in every case below that does not OPEN it: those
- * cases inject `migrate` and `openDb`, so nothing opens what `restoreDatabase` placed.
+ * Stands in for the archive's database entry in every case below that does not migrate it: those
+ * cases inject `migrate` and `openDb`. A database with no migration journal, which the check
+ * before placement reads, and a table that tells it apart from {@link NODE_BYTES}.
  */
-const VENUE_BYTES = Buffer.from("SQLite format 3\u0000 — placed, never opened by this suite");
+const VENUE_BYTES = (() => {
+  const venue = new DatabaseSync(":memory:");
+  try {
+    venue.exec("create table venue_copy (marker text)");
+    return Buffer.from(venue.serialize());
+  } finally {
+    venue.close();
+  }
+})();
 /** The archive's copy of node.db: an empty database. */
 const NODE_BYTES = (() => {
   const empty = new DatabaseSync(":memory:");
@@ -1009,7 +1018,7 @@ describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
 
-  it("restores standard, full and corrective series through the real fiscal hook", async () => {
+  it("restores every series purpose through the real fiscal hook", async () => {
     await withTransaction(suite.db, async (tx) => {
       const sif = await registerSif(tx, {
         ...T,
@@ -1019,9 +1028,10 @@ describe("restore hooks (identity phase)", () => {
         numeroInstalacion: "S000001",
       });
       expect(sif.numeroInstalacion).toBe("S000001");
-      await tx
-        .insert(invoiceSeries)
-        .values({ nodeId: T.nodeId, code: "FA-1", purpose: "corrective" });
+      await tx.insert(invoiceSeries).values([
+        { nodeId: T.nodeId, code: "FA-1", purpose: "corrective" },
+        { nodeId: T.nodeId, code: "FR", purpose: "full_corrective" },
+      ]);
     });
     await stampDeployment(suite.db, "preproduction");
     const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, T.nodeId);
@@ -1034,6 +1044,7 @@ describe("restore hooks (identity phase)", () => {
         { code: "FA", purpose: "standard" },
         { code: "FF", purpose: "full" },
         { code: "FA-1", purpose: "corrective" },
+        { code: "FR", purpose: "full_corrective" },
       ],
     });
     const held = fixture.request("restore");
@@ -1056,6 +1067,7 @@ describe("restore hooks (identity phase)", () => {
     `);
     expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
+      { code: `FR-${sif.numeroInstalacion}`, purpose: "full_corrective" },
       { code: `FF-${sif.numeroInstalacion}`, purpose: "full" },
       { code: `FA-1-${sif.numeroInstalacion}`, purpose: "corrective" },
     ]);

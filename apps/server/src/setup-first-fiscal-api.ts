@@ -16,7 +16,13 @@ import type { Context, Hono } from "hono";
 import { isSecure } from "./encrypted-connection.js";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import { VENUE_FIELDS, type StartAgainSummary, type VenueRequest } from "@waitron/provisioning";
+import {
+  VENUE_FIELDS,
+  validateVenueFields,
+  venueFiscalSelection,
+  type StartAgainSummary,
+  type VenueRequest,
+} from "@waitron/provisioning";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { registeredAddressRefusal } from "./registered-address-check.js";
@@ -429,7 +435,7 @@ export function mountSetupFirstFiscalApi(
           "correctiveSeriesCode",
           "admin",
         ],
-        ["staffLanguage"],
+        ["staffLanguage", "fullCorrectiveSeriesCode"],
       );
       const admin = exact(
         raw.admin,
@@ -470,6 +476,10 @@ export function mountSetupFirstFiscalApi(
         ) !== undefined
       )
         throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
+      validateVenueFields(
+        venueFiscalSelection(host.modules, venue.fiscalTerritory).contribution,
+        venue,
+      );
       const { pinHash: _, passwordHash: __, ...normalized } = venue.admin;
       void _;
       void __;

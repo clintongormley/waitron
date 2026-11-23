@@ -313,6 +313,7 @@ it.each(["archive", "bucket"])(
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
       { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
+      { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
     ]);
     expect(after.allocations.map((row) => row.approval)).toEqual([approval]);
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(NODE);

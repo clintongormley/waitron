@@ -48,6 +48,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -176,11 +177,12 @@ it("activates the complete signed set from independently collected evidence", as
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ]);
   const retained = await snapshot();
   expect(retained.sifs).toHaveLength(1);
-  expect(retained.series.filter((row) => row.retiredAt === null)).toHaveLength(3);
-  expect(retained.series.filter((row) => row.retiredAt !== null)).toHaveLength(3);
+  expect(retained.series.filter((row) => row.retiredAt === null)).toHaveLength(4);
+  expect(retained.series.filter((row) => row.retiredAt !== null)).toHaveLength(4);
   expect(retained.activations).toHaveLength(1);
   expect(retained.activations[0]?.approval.operatorId).toEqual(operator);
 });
@@ -431,7 +433,7 @@ it("detaches collected evidence before handing control to the transaction owner"
       .filter((row) => row.retiredAt === null)
       .map((row) => row.code)
       .sort(),
-  ).toEqual(["A-P000042", "FF-P000042", "R-P000042"]);
+  ).toEqual(["A-P000042", "FF-P000042", "R-P000042", "RF-P000042"]);
 });
 
 it.each([null, undefined, {}])("refuses an absent evidence receipt %#", async (value) => {
@@ -637,7 +639,7 @@ it.each([null, []])(
       },
     };
     const result = await attempt(async (request) => ({ ...request, evidence: host }), emergency);
-    expect(result.series).toHaveLength(3);
+    expect(result.series).toHaveLength(4);
     expect((await snapshot()).activations[0]?.installationIdentity).toBe(draw.identity);
     expect((await snapshot()).activations[0]?.allocation.reservationEvidence).toEqual({
       checksum: draw.checksum,

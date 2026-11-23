@@ -39,6 +39,7 @@ const bases = [
   { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
+  { code: "RF", purpose: "full_corrective" },
 ];
 const digest = (v: unknown) => createHash("sha256").update(declaredHistoryBytes(v)).digest("hex");
 const invalid = expect.objectContaining({ code: "sif.allocation_invalid" });
@@ -204,6 +205,7 @@ async function noWrites() {
     "B",
     "FF",
     "R",
+    "RF",
   ]);
 }
 
@@ -217,6 +219,7 @@ it.each(["S", "P"] as const)(
       { code: `B-${prefix}000043`, purpose: "standard" },
       { code: `FF-${prefix}000043`, purpose: "full" },
       { code: `R-${prefix}000043`, purpose: "corrective" },
+      { code: `RF-${prefix}000043`, purpose: "full_corrective" },
     ]);
     const [retained] = await suite.db.select().from(fiscalAllocations);
     expect(retained?.allocation).toEqual(f.input.allocation);
@@ -371,6 +374,7 @@ it("dispatches explicit unsigned host facts through the actual configured module
     "B-S000043",
     "FF-S000043",
     "R-S000043",
+    "RF-S000043",
   ]);
 });
 
@@ -433,7 +437,7 @@ it.each(["copied", "cloned", "forged", "expired"])(
             authority: { kind: "paper-declared", token },
           }),
         );
-        expect(result.series).toHaveLength(4);
+        expect(result.series).toHaveLength(5);
       });
     });
   },
@@ -652,7 +656,7 @@ it.each([
 it("keeps matching retained history in a fresh source confirmation", async () => {
   const f = fixture();
   const result = await attempt(f, (x) => Object.assign(x.known, { history: x.history }));
-  expect(result.series).toHaveLength(4);
+  expect(result.series).toHaveLength(5);
 });
 
 it.each(["input", "operator"])(

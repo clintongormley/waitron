@@ -6,6 +6,7 @@ export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
 export { planVenue, describeVenueAction, VENUE_FIELDS } from "./venue-plan.js";
+export { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
 export type { AdoptResult, VenueRequest, VenueAction } from "./venue-plan.js";
 export { applyVenue } from "./venue-apply.js";
 export { throwawayApplyInput } from "./throwaway-allocation.js";
@@ -29,7 +30,7 @@ export {
 } from "./module-preparation-state.js";
 export { createRecoveryPreparationHost } from "./recovery-preparation-host.js";
 export type { FiscalModules } from "./fiscal-modules.js";
-export { venueFiscalSelection } from "./venue-fiscal.js";
+export { validateVenueFields, venueFiscalSelection } from "./venue-fiscal.js";
 export type { VenueFiscalSelection } from "./venue-fiscal.js";
 export {
   assertNoForeignTaxpayer,

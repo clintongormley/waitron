@@ -62,6 +62,7 @@ export interface VenueDraft {
   seriesCode: string;
   fullSeriesCode: string;
   correctiveSeriesCode: string;
+  fullCorrectiveSeriesCode: string;
   admin: AdminDraft;
   name: string;
   fiscalTerritory: string;

@@ -49,10 +49,11 @@ it.each(["archive", "stream"] as const)(
       { code: "A-0CNQT", nextNumber: 1 },
       { code: "FF-0CNQT", nextNumber: 1 },
       { code: "R-0CNQT", nextNumber: 1 },
+      { code: "RF-0CNQT", nextNumber: 1 },
     ]);
     expect(
       rows.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
-    ).toEqual([123, 123, 123]);
+    ).toEqual([123, 123, 123, 123]);
     expect(f.journal()).toBe(before);
     expect(before).toContain('"identity":"0CNQT"');
     expect(before).not.toContain(f.key.secret);

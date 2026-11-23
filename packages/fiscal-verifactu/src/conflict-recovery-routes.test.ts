@@ -382,7 +382,12 @@ it("prepares, switches and returns the exact committed event through status and 
     kind: "committed",
     result: {
       activationEventId: "event-1",
-      series: [{ code: "A-0CNQT" }, { code: "FF-0CNQT" }, { code: "R-0CNQT" }],
+      series: [
+        { code: "A-0CNQT" },
+        { code: "FF-0CNQT" },
+        { code: "R-0CNQT" },
+        { code: "RF-0CNQT" },
+      ],
     },
   });
   expect(await answer({ kind: "status" })).toEqual({ kind: "status", active: [], event: result });

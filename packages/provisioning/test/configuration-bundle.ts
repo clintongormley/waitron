@@ -2,7 +2,7 @@ import type { ConfigurationBundle } from "../src/configuration-transfer.js";
 
 export function configurationBundle(): ConfigurationBundle {
   return {
-    version: 57,
+    version: 58,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -16,6 +16,7 @@ export function configurationBundle(): ConfigurationBundle {
       seriesCode: "A",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "R",
+      fullCorrectiveSeriesCode: "RF",
       name: "Synthetic source",
       invoiceLocales: ["en-GB"],
       fiscalTerritory: "GB-vat",

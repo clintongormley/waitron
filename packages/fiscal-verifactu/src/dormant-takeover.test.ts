@@ -49,6 +49,7 @@ const candidate: PaperAllocation = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
 };
 const join = {
@@ -262,7 +263,7 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
     },
   );
 
-  it("activates the exact spare identity and all three purposes without changing the primary or reservation", async () => {
+  it("activates the exact spare identity and every purpose without changing the primary or reservation", async () => {
     const primarySif = await suite.db
       .select()
       .from(verifactuIdentities)

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import {
   createFirstSetupCoordinator,
   createFirstSetupStore,
+  DEFAULT_SERIES_CODES,
   type FirstSetupFrozen,
 } from "@waitron/provisioning";
 import type { InitialSetupContext } from "@waitron/module";
@@ -17,7 +18,6 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { createFirstSetupOwner } from "../src/first-setup-owner.js";
-import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const PASSWORD = "SYNTHETIC-owner-password";
 export const MODULE = "fiscal-verifactu";
@@ -39,6 +39,7 @@ export const request = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "FR",
   admin: { displayName: "Elena", email: "elena@example.test", password: PASSWORD, pin: "4826" },
 };
 export async function firstFiscalFixture(parent: string = tmpdir()) {
@@ -68,7 +69,15 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
           taxId: venue.taxId,
           environment,
           recipientVenueId: sourceId,
-          bases: SERIES_BASES,
+          bases: [
+            { code: venue.seriesCode, purpose: "standard" },
+            { code: venue.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode, purpose: "full" },
+            { code: venue.correctiveSeriesCode, purpose: "corrective" },
+            {
+              code: venue.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+              purpose: "full_corrective",
+            },
+          ],
           binding: {
             module: MODULE,
             action: "setup",

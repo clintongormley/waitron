@@ -5,6 +5,7 @@ import nativeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
@@ -16,6 +17,15 @@ import { writeValidated } from "./restore.js";
 const dirs: string[] = [];
 const NODE_KEY_FILE = "flows/restore/node-key";
 const secret = "synthetic node credential";
+/** What placement reads before it moves anything: a database with no migration journal. */
+const EMPTY_DATABASE = (() => {
+  const empty = new DatabaseSync(":memory:");
+  try {
+    return Buffer.from(empty.serialize());
+  } finally {
+    empty.close();
+  }
+})();
 const operation = {
   binding: {
     module: "fiscal-verifactu",
@@ -193,7 +203,7 @@ it("retains an unmarked request when secrets staging fails before any database m
   const restore = async (args: Parameters<typeof writeValidated>[1]) => {
     // The real placement, from a copy already validated: the fake archive above cannot be opened.
     const databasePath = join(stateDir, "validated.db");
-    await writeFile(databasePath, "database", { mode: 0o600 });
+    await writeFile(databasePath, EMPTY_DATABASE, { mode: 0o600 });
     await writeValidated(
       {
         manifest: {
@@ -203,7 +213,7 @@ it("retains an unmarked request when secrets staging fails before any database m
           modules: {},
         },
         databasePath,
-        nodeDump: Buffer.from("node"),
+        nodeDump: EMPTY_DATABASE,
         discard: async () => {},
         secretEntries: [
           { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=1\n") },

@@ -229,6 +229,36 @@ describe("reserved-identity accessors", () => {
     expect(isAppError(err) && err.params).toEqual({ nodeId: node });
   });
 
+  it("readLiveSeriesIdTx throws series.no_full_corrective_for_node beside a ticket corrective series", async () => {
+    const node = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [{ nodeId: node, code: "R-8", purpose: "corrective" }]),
+    );
+    const err = await captureError(() =>
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "full_corrective")),
+    );
+    expect(isAppError(err) && err.code).toBe("series.no_full_corrective_for_node");
+    expect(isAppError(err) && err.params).toEqual({ nodeId: node });
+  });
+
+  it("readLiveSeriesIdTx reads the live full_corrective series", async () => {
+    const node = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { nodeId: node, code: "R-8", purpose: "corrective" },
+        { nodeId: node, code: "FR-8", purpose: "full_corrective" },
+      ]),
+    );
+    const id = await withTransaction(suite.db, (tx) =>
+      readLiveSeriesIdTx(tx, node, "full_corrective"),
+    );
+    const [row] = await suite.db
+      .select({ code: invoiceSeries.code })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, id));
+    expect(row).toEqual({ code: "FR-8" });
+  });
+
   it("readLiveSeriesIdTx is LOUD on two live corrective series", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>

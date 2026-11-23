@@ -75,6 +75,7 @@ const request: VenueRequest = {
   timeZone: "Europe/Madrid",
   dayCutover: "06:00",
   seriesCode: "F",
+  fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
   admin: {
     displayName: "Admin",

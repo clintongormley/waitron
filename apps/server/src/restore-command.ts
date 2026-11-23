@@ -437,6 +437,8 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
+  if (err.code === "provisioning.database_ahead")
+    return "restore failed: provisioning.database_ahead — this backup was made by a different version of Waitron, which this server's version cannot restore; this server's database and identity are unchanged. Install that version on this server and run the same command again";
   if (err.code === "migrations.apply_failed") {
     if (diskFullIn(err)) return RESTORE_DISK_FULL;
     return "restore failed: migrations.apply_failed — the backup's database could not be updated to this version of Waitron; install a version that fixes this, then run the same command again: it starts the restore over";

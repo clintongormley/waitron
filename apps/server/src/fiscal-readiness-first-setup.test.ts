@@ -211,6 +211,7 @@ it.each([true, false])(
       expect(first.series.map(({ code, nextNumber }) => ({ code, nextNumber }))).toEqual([
         { code: "A-0CNNW", nextNumber: 2 },
         { code: "FF-0CNNW", nextNumber: 1 },
+        { code: "FR-0CNNW", nextNumber: 1 },
         { code: "R-0CNNW", nextNumber: 1 },
       ]);
       await server.close();
@@ -281,7 +282,7 @@ it.each([true, false])(
         ]);
         expect(live.sales).toEqual([]);
         expect(live.records).toEqual([]);
-        expect(live.series.map(({ nextNumber }) => nextNumber)).toEqual([1, 1, 1]);
+        expect(live.series.map(({ nextNumber }) => nextNumber)).toEqual([1, 1, 1, 1]);
         for (const identity of live.identities)
           expect(first.identities).not.toContainEqual(identity);
         expect(calls.outside).toHaveBeenCalledTimes(1);

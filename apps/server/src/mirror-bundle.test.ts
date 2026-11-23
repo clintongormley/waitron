@@ -94,7 +94,9 @@ async function setupVenue(): Promise<AdoptResult> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "FA",
+        fullSeriesCode: "FF",
         correctiveSeriesCode: "RF",
+        fullCorrectiveSeriesCode: "RFF",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
@@ -185,12 +187,14 @@ describe("assembleMirrorBundle (primary side)", () => {
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "RF-P000042", purpose: "corrective" },
+      { code: "RFF-P000042", purpose: "full_corrective" },
     ]);
     await prepareStandbyDatabase(db, spare.db, primaryNode());
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
       { code: "FA-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "RF-P000042", purpose: "corrective" },
+      { code: "RFF-P000042", purpose: "full_corrective" },
     ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
@@ -327,12 +331,14 @@ describe("assembleMirrorBundle (primary side)", () => {
         { code: "FA-P000042", purpose: "standard" },
         { code: "FF-P000042", purpose: "full" },
         { code: "RF-P000042", purpose: "corrective" },
+        { code: "RFF-P000042", purpose: "full_corrective" },
       ]);
       await prepareStandbyDatabase(db, spare.db, primaryNode());
       expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
         { code: "FA-P000042", purpose: "standard" },
         { code: "FF-P000042", purpose: "full" },
         { code: "RF-P000042", purpose: "corrective" },
+        { code: "RFF-P000042", purpose: "full_corrective" },
       ]);
     } finally {
       (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
@@ -379,6 +385,7 @@ async function allocatedBundle(
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },
     { code: "RF", purpose: "corrective" },
+    { code: "RFF", purpose: "full_corrective" },
   ]);
   const original = [...ALL_MODULES];
   (ALL_MODULES as WaitronModule[]).splice(

@@ -11,6 +11,7 @@ export type ServerFieldKey =
   | "seriesCode"
   | "fullSeriesCode"
   | "correctiveSeriesCode"
+  | "fullCorrectiveSeriesCode"
   | "staffLanguage"
   | "dayCutover";
 
@@ -41,6 +42,12 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
   },
   correctiveSeriesCode: {
     key: "correctiveSeriesCode",
+    get message() {
+      return t("server_fields.series_code");
+    },
+  },
+  fullCorrectiveSeriesCode: {
+    key: "fullCorrectiveSeriesCode",
     get message() {
       return t("server_fields.series_code");
     },

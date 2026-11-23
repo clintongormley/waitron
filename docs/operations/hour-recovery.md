@@ -223,7 +223,7 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
 
 For example, a restore whose clocks are compared at 09:00:04 UTC on 24 October 2026 waits until
 09:02:00 and takes `0D0RY` (`hour-selection.test.ts`, the same restore test). With prefixes `A`,
-`FF` and `R`, that prepares `A-0D0RY`, `FF-0D0RY` and `R-0D0RY` for future invoices. Recovery
+`FF`, `R` and `RF`, that prepares `A-0D0RY`, `FF-0D0RY`, `R-0D0RY` and `RF-0D0RY` for future invoices. Recovery
 keeps recorded invoices and their recovered counters, retires the old active series from further
 issuance and starts the new series at one. It does not reuse the old series from the restored
 counter position.

@@ -98,6 +98,7 @@ describe("the throwaway allocation seat", () => {
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
         { code: "R-0CNNW", purpose: "corrective" },
+        { code: "RF-0CNNW", purpose: "full_corrective" },
       ]);
     });
 

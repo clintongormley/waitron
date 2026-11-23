@@ -1248,6 +1248,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
       { code: "A-0CNNW", purpose: "standard" },
       { code: "FF-0CNNW", purpose: "full" },
+      { code: "FR-0CNNW", purpose: "full_corrective" },
       { code: "R-0CNNW", purpose: "corrective" },
     ]);
     expect(db.all(sql`select environment from deployment`)).toEqual([
@@ -2830,6 +2831,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             seriesCode: "B",
             fullSeriesCode: "FB",
             correctiveSeriesCode: "RB",
+            fullCorrectiveSeriesCode: "RFB",
           },
         });
       };
@@ -2890,7 +2892,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
+      ).toEqual([
+        { code: "B-0CNNY" },
+        { code: "FB-0CNNY" },
+        { code: "RB-0CNNY" },
+        { code: "RFB-0CNNY" },
+      ]);
       expect(
         target.store.venue.all(
           sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where settings.module = 'venue'`,

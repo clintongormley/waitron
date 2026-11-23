@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 57,
+  version: 58,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -69,6 +69,7 @@ const bundle: ConfigurationBundle = {
     seriesCode: "F",
     fullSeriesCode: "FF",
     correctiveSeriesCode: "R",
+    fullCorrectiveSeriesCode: "RF",
   },
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
@@ -198,6 +199,7 @@ describe("staged configuration import", () => {
     ["pre-profile-scope export", { version: 48 }],
     ["export with a separate profile printer table", { version: 50 }],
     ["export before the payments settings switches", { version: 56 }],
+    ["export before the full invoice corrective series", { version: 57 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

@@ -3,7 +3,8 @@ import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
-import { venueFiscalSelection } from "./venue-fiscal.js";
+import { DEFAULT_SERIES_CODES } from "./default-series-codes.js";
+import { validateVenueFields, venueFiscalSelection } from "./venue-fiscal.js";
 
 /** A minimal fiscal contribution for a given slot id — only its `id` matters to the selection. */
 function contribution(id: string): FiscalContribution {
@@ -64,5 +65,48 @@ describe("venueFiscalSelection", () => {
   it("throws fiscal.regime_not_implemented for an unimplemented territory, before building either half", () => {
     expect(() => venueFiscalSelection(MODULES, "FR-tva")).toThrow(AppError);
     expect(() => venueFiscalSelection(MODULES, "FR-tva")).toThrow(/regime_not_implemented/);
+  });
+});
+
+describe("validateVenueFields", () => {
+  it("hands the regime the typed fields, filling left-out full codes from their defaults", () => {
+    const seen: unknown[] = [];
+    const regime: FiscalContribution = {
+      ...contribution("verifactu"),
+      venueFields: {
+        validateLegalName: () => {},
+        validateOperationDescription: () => {},
+        validate: (venue) => void seen.push(venue),
+      },
+    };
+    validateVenueFields(regime, {
+      legalName: "Olivo SL",
+      seriesCode: "A",
+      correctiveSeriesCode: "R",
+    });
+    validateVenueFields(regime, {
+      legalName: "Olivo SL",
+      seriesCode: "A",
+      fullSeriesCode: "FF",
+      correctiveSeriesCode: "R",
+      fullCorrectiveSeriesCode: "RF",
+    });
+    validateVenueFields(undefined, { legalName: "", seriesCode: "", correctiveSeriesCode: "" });
+    expect(seen).toEqual([
+      {
+        legalName: "Olivo SL",
+        seriesCode: "A",
+        fullSeriesCode: DEFAULT_SERIES_CODES.fullSeriesCode,
+        correctiveSeriesCode: "R",
+        fullCorrectiveSeriesCode: DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+      },
+      {
+        legalName: "Olivo SL",
+        seriesCode: "A",
+        fullSeriesCode: "FF",
+        correctiveSeriesCode: "R",
+        fullCorrectiveSeriesCode: "RF",
+      },
+    ]);
   });
 });

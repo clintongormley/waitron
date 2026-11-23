@@ -43,8 +43,8 @@ it("provisions Spain's demo business and files its practice sales under the demo
     province: "Madrid",
     timeZone: "Europe/Madrid",
     dayCutover: "04:00",
-    seriesCode: "FS",
-    correctiveSeriesCode: "FR",
+    seriesCode: "S",
+    correctiveSeriesCode: "SR",
     admin: {
       displayName: "Administrator",
       pinHash: hashPin("1234"),
@@ -110,8 +110,8 @@ it("names a Barcelona demo's dishes in Spanish for a Spanish-speaking admin, wit
     province: "Barcelona",
     timeZone: "Europe/Madrid",
     dayCutover: "04:00",
-    seriesCode: "FS",
-    correctiveSeriesCode: "FR",
+    seriesCode: "S",
+    correctiveSeriesCode: "SR",
     admin: {
       displayName: "Administrator",
       pinHash: hashPin("1234"),

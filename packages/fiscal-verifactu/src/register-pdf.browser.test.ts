@@ -35,10 +35,13 @@ function complete(): RegisterDocument {
     allocationId: "allocation-1",
     ...scope,
     installationIdentity: "S000001",
-    series: ["A", "B", "FF", "R"].map((code) => ({
-      code: `${code}-S000001`,
-      purpose: code === "FF" ? "full" : code === "R" ? "corrective" : "standard",
-    })),
+    series: [
+      { code: "A-S000001", purpose: "standard" },
+      { code: "B-S000001", purpose: "standard" },
+      { code: "FF-S000001", purpose: "full" },
+      { code: "R-S000001", purpose: "corrective" },
+      { code: "RF-S000001", purpose: "full_corrective" },
+    ],
     source: "initial-paper" as const,
     issuedAt: time,
   };
@@ -153,19 +156,22 @@ async function rawPdf(attachments: readonly (readonly [string, Uint8Array])[], f
   pdf.end();
   return output;
 }
-async function textOf(pdf: Uint8Array) {
+async function textItemsOf(pdf: Uint8Array) {
   const task = openRegisterPdf(pdf);
   try {
     const doc = await task.promise;
     const pages = [];
     for (let n = 1; n <= doc.numPages; n++) {
       const content = await (await doc.getPage(n)).getTextContent();
-      pages.push(content.items.map((i) => ("str" in i ? i.str : "")).join(" "));
+      pages.push(content.items.map((i) => ("str" in i ? i.str : "")));
     }
-    return pages.join("\n");
+    return pages;
   } finally {
     await task.destroy();
   }
+}
+async function textOf(pdf: Uint8Array) {
+  return (await textItemsOf(pdf)).map((items) => items.join(" ")).join("\n");
 }
 
 describe("register PDF", () => {
@@ -213,15 +219,30 @@ describe("register PDF", () => {
     };
     expect(await decodePosition(fields, scope)).toEqual({ sHighWater: 42, pHighWater: 7 });
   });
-  it("labels each series purpose in Spanish on the Spanish sheet", async () => {
-    const text = await textOf(await renderRegisterPdf(complete(), "es"));
-    for (const label of [
-      "A-S000001 / Simplificada",
-      "B-S000001 / Simplificada",
-      "FF-S000001 / Factura completa",
-      "R-S000001 / Rectificativa",
-    ])
-      expect(text).toContain(label);
+  it.each([
+    [
+      "en",
+      [
+        "A-S000001 / Standard",
+        "B-S000001 / Standard",
+        "FF-S000001 / Full invoice",
+        "R-S000001 / Corrective of simplified invoices",
+        "RF-S000001 / Corrective of full invoices",
+      ],
+    ],
+    [
+      "es",
+      [
+        "A-S000001 / Simplificada",
+        "B-S000001 / Simplificada",
+        "FF-S000001 / Factura completa",
+        "R-S000001 / Rectificativa de simplificadas",
+        "RF-S000001 / Rectificativa de completas",
+      ],
+    ],
+  ] as const)("labels each series purpose on the %s sheet", async (locale, labels) => {
+    const items = (await textItemsOf(await renderRegisterPdf(complete(), locale))).flat();
+    expect(items.filter((item) => item.includes("-S000001 / "))).toEqual(labels);
   });
   it.each(["en", "es"] as const)(
     "prints every base, supported glyph and grouped recovery field in %s",
@@ -229,7 +250,7 @@ describe("register PDF", () => {
       const document = complete();
       const pdf = await renderRegisterPdf(document, locale);
       const text = await textOf(pdf);
-      for (const code of ["A-S000001", "B-S000001", "FF-S000001", "R-S000001"])
+      for (const code of ["A-S000001", "B-S000001", "FF-S000001", "R-S000001", "RF-S000001"])
         expect(text).toContain(code);
       expect(text).toContain("Peña Λάδι");
       expect(text).toContain("[U+1F600]");

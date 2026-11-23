@@ -1,3 +1,5 @@
+import type { seriesPurposes } from "../setup/strings.js";
+
 export type CustodyLocale = "en" | "es";
 const en = {
   title: "Outside custody",
@@ -239,24 +241,30 @@ const es: typeof en = {
 export function custodyStrings(locale: CustodyLocale) {
   return locale === "es" ? es : en;
 }
-const valueLabels: Record<CustodyLocale, Readonly<Record<string, string>>> = {
+const valueLabels: Record<
+  CustodyLocale,
+  Readonly<Record<(typeof seriesPurposes)[number] | "production" | "preproduction", string>>
+> = {
   en: {
     standard: "Ordinary",
     full: "Full",
-    corrective: "Corrective",
+    corrective: "Corrective of simplified invoices",
+    full_corrective: "Corrective of full invoices",
     production: "Production",
     preproduction: "Preproduction",
   },
   es: {
     standard: "Ordinarias",
     full: "Completas",
-    corrective: "Rectificativas",
+    corrective: "Rectificativas de simplificadas",
+    full_corrective: "Rectificativas de completas",
     production: "Producción",
     preproduction: "Preproducción",
   },
 };
 export function custodyValueLabel(value: string, locale: CustodyLocale): string {
-  return valueLabels[locale][value] ?? value;
+  const labels: Readonly<Record<string, string>> = valueLabels[locale];
+  return labels[value] ?? value;
 }
 const stateLabels = {
   en: {

@@ -30,6 +30,7 @@ const standby = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "corrective" },
+  { code: "RF", purpose: "full_corrective" },
   { code: "a/B_1.2-3", purpose: "standard" },
 ];
 const reserveBinding: OperationBinding = {

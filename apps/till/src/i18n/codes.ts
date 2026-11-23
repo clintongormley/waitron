@@ -406,8 +406,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Indica el motivo",
   },
   "series.no_corrective_for_node": {
-    en: "This venue has no corrective invoice series set up. Tell a manager",
-    es: "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
+    en: "This venue has no series set up for correcting simplified invoices. Tell a manager",
+    es: "Este local no tiene una serie para rectificar facturas simplificadas. Avisa a un responsable",
   },
   "sale.total_exceeds_simplified_limit": {
     en: "This order is over the limit for a simplified invoice. Choose Full invoice, or remove items.",

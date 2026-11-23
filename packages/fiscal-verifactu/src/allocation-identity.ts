@@ -1,3 +1,5 @@
+import { seriesPurposes } from "./setup/strings.js";
+
 export function isInstallationIdentity(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.length === 7) {
@@ -66,7 +68,7 @@ export function seriesMatchBases(
       base.code.length === 0 ||
       base.code.length > 21 ||
       !/^[A-Za-z0-9/_.-]+$/.test(base.code) ||
-      !["standard", "full", "corrective"].includes(base.purpose)
+      !seriesPurposes.some((purpose) => purpose === base.purpose)
     )
       return false;
     const code = `${base.code}-${installationIdentity}`;

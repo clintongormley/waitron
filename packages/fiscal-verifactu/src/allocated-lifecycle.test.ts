@@ -223,6 +223,7 @@ it("the setup seed creates exactly the supplied SIF and every purpose without sc
     { code: "A-S000001", purpose: "standard", nextNumber: 1 },
     { code: "FF-S000001", purpose: "full", nextNumber: 1 },
     { code: "R-S000001", purpose: "corrective", nextNumber: 1 },
+    { code: "RF-S000001", purpose: "full_corrective", nextNumber: 1 },
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
@@ -261,6 +262,7 @@ it.each(["restore"])(
       { code: "A-P000042", purpose: "standard", nextNumber: 1 },
       { code: "FF-P000042", purpose: "full", nextNumber: 1 },
       { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
+      { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
     ]);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   },
@@ -473,6 +475,7 @@ it("promotes a retained dormant reservation once, without resetting counters on 
     { code: "A-P000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
     { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
+    { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
   ]);
   await advanceSeriesTo(suite.db, target.nodeId, 41);
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);

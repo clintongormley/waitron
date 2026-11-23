@@ -155,6 +155,7 @@ async function withReservingModule<T>(
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },
       { code: "RF", purpose: "corrective" },
+      { code: "RFF", purpose: "full_corrective" },
     ],
     approverId,
   );
@@ -242,7 +243,9 @@ beforeEach(async () => {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "FA",
+        fullSeriesCode: "FF",
         correctiveSeriesCode: "RF",
+        fullCorrectiveSeriesCode: "RFF",
         admin: {
           displayName: "Administrator",
           pinHash: fixturePinHash("1234"),

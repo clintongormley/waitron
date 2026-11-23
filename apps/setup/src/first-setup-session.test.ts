@@ -25,6 +25,7 @@ const venue: ProvisionBody["venue"] = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "FR",
   admin: {
     firstNames: "Elena",
     lastNames: "García",

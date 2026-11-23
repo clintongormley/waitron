@@ -657,8 +657,13 @@ it("the venue command activates its kept hour and completes checked publication"
   const series = await venue.db
     .select({ code: invoiceSeries.code, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
     .from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
-  expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+  expect(series.map((row) => row.code).sort()).toEqual([
+    "A-0CNNY",
+    "FF-0CNNY",
+    "FR-0CNNY",
+    "R-0CNNY",
+  ]);
+  expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
   expect(f.output).toContain(`node:     ${state.frozen.nodeId}`);
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
 });
@@ -1029,8 +1034,13 @@ it("the production venue command checks accepted readiness and seals its exact p
   expect(state.status).toBe("complete");
   expect(await readDeploymentEnvironment(venue.db)).toBe("production");
   const series = await venue.db.select(seriesWithNextNumber).from(invoiceSeries);
-  expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
-  expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+  expect(series.map((row) => row.code).sort()).toEqual([
+    "A-0CNNY",
+    "FF-0CNNY",
+    "FR-0CNNY",
+    "R-0CNNY",
+  ]);
+  expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
   const { withTransaction } = await import("@waitron/db");
   const ring = loadKeyRing(f.env);
@@ -1229,7 +1239,7 @@ it("the owned production command runs an explicitly confirmed isolated readiness
       (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
         (row) => row.nextNumber,
       ),
-    ).toEqual([1, 1, 1]);
+    ).toEqual([1, 1, 1, 1]);
     const { createFiscalReadinessStore, fiscalReadinessBinding } =
       await import("./fiscal-readiness.js");
     await expect(
@@ -1516,8 +1526,8 @@ it("stops production setup with an explicit Start again choice when its post-pro
     expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(refused).toBe(true);
     const before = await venue.db.select(seriesWithNextNumber).from(invoiceSeries);
-    expect(before).toHaveLength(3);
-    expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(before).toHaveLength(4);
+    expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1, 1]);
     expect(f.output).toContain(
       "Setup stopped after the invoice series were made. No invoice was issued. Open the box's setup page and choose Start again. It clears this unfinished setup so you can enter it again.",
     );

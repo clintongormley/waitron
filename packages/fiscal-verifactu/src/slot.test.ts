@@ -270,6 +270,7 @@ describe("FISCAL_SLOT.venueFields", () => {
       seriesCode: "Serie A",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "FR",
+      fullCorrectiveSeriesCode: "RF",
       operationDescription: "Venta en establecimiento",
     };
     let error: unknown;

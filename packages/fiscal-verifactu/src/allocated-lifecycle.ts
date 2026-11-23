@@ -5,6 +5,7 @@ import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readModuleAllocationSeries } from "./allocation-operation.js";
 import { currentSif } from "./registro-sif.js";
+import { liveSeriesBases } from "./reserved-series.js";
 
 async function activate(
   tx: Transaction,
@@ -29,6 +30,7 @@ export const ALLOCATED_FISCAL_SEED: NodeSeed = {
     return activate(tx, node, operation, ["setup"]);
   },
   series: {
+    bases: liveSeriesBases,
     async resolve(tx, node, bases) {
       try {
         return await readModuleAllocationSeries(tx, node, bases);

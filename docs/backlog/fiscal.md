@@ -294,6 +294,12 @@ A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full
 Table bill payments, unpaid departures and Counter bills paid through the shared Pay window can issue F1; no route calls `recordSubstitution`. The separate-series
 basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-findings.md).
 **Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) remains open for F3 and R5.
+_2026-11-23: every box has a fourth series, `full_corrective` (default code `FR`), for correctives of
+full invoices. A replacement takes it when the invoice it replaces names a customer and `corrective`
+otherwise, and core refuses the wrong series before a number is taken
+(`packages/core/src/record-replacement.ts`); a correction by differences refuses any invoice naming a customer
+(`packages/core/src/correction-eligibility.ts`) and stays on `corrective`. The basis is the second half of adviser answer 1.14 (15 November; B8 in
+[the answers](../compliance/2026-11-15-adviser-answers.md))._
 
 <a id="a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06"></a>
 
@@ -1313,6 +1319,9 @@ _2026-11-21: since the corrections report's PR 1, a replacement made after its r
 has ended leaves that period's VAT return as it was and is on the corrections workbook of the period
 it is made in (pinned by "B: a replacement naming an earlier quarter leaves that quarter as it was"
 in `vat-return.test.ts`)._
+_2026-11-23: the R4 "S" now numbers from the full-invoice corrective series
+(`packages/fiscal-verifactu/src/record-remedy-replacement.ts`); it stays switched off until AEAT's
+test service has accepted one._
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

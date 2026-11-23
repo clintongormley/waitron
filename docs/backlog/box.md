@@ -1623,6 +1623,18 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   last and keeps the independent first-start obligation. An unreadable request stops the box while
   its saved-hashes attachment remains. Boot removes it before serving; damage to a retained record
   after that keeps first start pending without preventing boot.
+  An archive holding a migration this version does not ship (as one made before or after a rebuild
+  of a starting migration does) is refused with `provisioning.database_ahead` before anything is
+  placed, the box's database and identity unchanged (`assertArchiveNotAhead`,
+  `apps/server/src/restore.ts`). Three steps run it: the review of a backup
+  (`readRecoveryCopyPreview`, `apps/server/src/recovery-backup-preview.ts`), which answers the setup
+  page's Review backup and runs first on the command line's `--confirm-sole-recovery`; the setup
+  page's staging of an archive file; and placement (`writeValidated`). The setup page words that
+  refusal as a backup from another Waitron version. Pinned in
+  `apps/server/src/restore-rebuilt-baseline.test.ts` (the review of an archive file, staging, the
+  command line with and without a recovery operation, and the staged restore at the next start) and
+  `apps/setup/src/screens/recovery-copy.test.ts` (the review's words). The setup page's restore with
+  a recovery operation, and a bucket or Cloud review, were not run against such an archive.
   The HTTPS recovery page offers **Throw this restore away**, authenticated with an administrator
   password from the selected backup. Once copying began this removes the partial data and both
   identity files, so you can restore again or set up; it does not recover the previous database.

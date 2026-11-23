@@ -21,7 +21,11 @@ import { createReadStream } from "node:fs";
 import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { venueFiscalSelection, parseInitialVenueInput } from "@waitron/provisioning";
+import {
+  validateVenueFields,
+  venueFiscalSelection,
+  parseInitialVenueInput,
+} from "@waitron/provisioning";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   findAdministrativeArea,
@@ -605,6 +609,14 @@ function parseVenue(
     seriesCode: asString(v.seriesCode, "seriesCode"),
     fullSeriesCode: asString(v.fullSeriesCode, "fullSeriesCode"),
     correctiveSeriesCode: asString(v.correctiveSeriesCode, "correctiveSeriesCode"),
+    ...(v.fullCorrectiveSeriesCode === undefined
+      ? {}
+      : {
+          fullCorrectiveSeriesCode: asString(
+            v.fullCorrectiveSeriesCode,
+            "fullCorrectiveSeriesCode",
+          ),
+        }),
     admin: {
       ...parseSetupAdmin(v.admin, heldAdmin),
       // The DISPLAY language, not the fiscal `invoiceLocales`. Never null: the till after a
@@ -691,12 +703,7 @@ async function parseProvisionPayload(
   const contribution = selection.contribution;
   // The regime's own rules on the typed fields, run before `provision` mints the chain so a refusal
   // leaves nothing behind and the operator fixes the field in the wizard rather than at the till.
-  contribution.venueFields?.validate({
-    legalName: venue.legalName,
-    seriesCode: venue.seriesCode,
-    fullSeriesCode: venue.fullSeriesCode ?? "FF",
-    correctiveSeriesCode: venue.correctiveSeriesCode,
-  });
+  validateVenueFields(contribution, venue);
   const secret = contribution.provisioningSecret;
   const secretExpected = secret?.required(environment) ?? false;
   const present = body.aeatCert !== undefined;

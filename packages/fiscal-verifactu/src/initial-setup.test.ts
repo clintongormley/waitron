@@ -463,6 +463,7 @@ it("the historical paper collector activates independently bound evidence", asyn
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
     { code: "R-S000001", purpose: "corrective" },
+    { code: "RF-S000001", purpose: "full_corrective" },
   ]);
   expect((await suite.db.select().from(fiscalAllocations))[0]?.allocation).toEqual(
     f.input.allocation,

@@ -19,9 +19,10 @@ import {
 } from "@waitron/country-packs";
 import { STARTER_JOB_ROLE_NAMES } from "./starter-content.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import {
   AppError,
+  nodeId as brandNodeId,
   businessDayAt,
   cutoverForBusinessDay,
   firstUnusedStationColour,
@@ -31,6 +32,7 @@ import {
 } from "@waitron/shared";
 import {
   recordActivity,
+  invoiceSeries,
   persons,
   personStaffRoles,
   staffRoles,
@@ -57,6 +59,7 @@ import {
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
+import { venueFiscalSelection } from "./venue-fiscal.js";
 import {
   privacyContactChecked,
   readPrivacyContact,
@@ -86,10 +89,11 @@ export interface PreparedVenue {
   seriesCode: string;
   fullSeriesCode: string;
   correctiveSeriesCode: string;
+  fullCorrectiveSeriesCode: string;
 }
 
 export async function buildConfigurationBundle(
-  db: Database | Transaction,
+  db: Transaction,
   source: {
     nodeId: string;
     sourceOperatorId?: string;
@@ -103,40 +107,52 @@ export async function buildConfigurationBundle(
     taxId: string;
     legalName: string;
     taxpayerDomicile: string | null;
-    seriesCode: string | null;
-    fullSeriesCode: string | null;
-    correctiveSeriesCode: string | null;
   }>(sql`
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
-      t.taxpayer_domicile as "taxpayerDomicile",
-      max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
-      max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
-      max(s.code) filter (where s.purpose = 'corrective') as "correctiveSeriesCode"
+      t.taxpayer_domicile as "taxpayerDomicile"
     from taxpayer t
     join nodes n on n.id = ${source.nodeId}
-    join invoice_series s on s.node_id = n.id and s.retired_at is null
-    group by t.id
   `);
   const row = taxpayer.rows[0];
+  if (row === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
+  const node = { nodeId: brandNodeId(source.nodeId) };
+  const fields = await readVenue(db);
+  const filing = venueFiscalSelection(modules, fields.fiscalTerritory).contribution?.id;
+  const owners = modules.filter(
+    (module) =>
+      filing !== undefined &&
+      module.fiscal?.id === filing &&
+      module.provisioning?.seed?.series !== undefined,
+  );
+  if (owners.length > 1) throw new AppError("setup.request_invalid", { field: "venue" });
+  const owner = owners[0];
+  const live =
+    owner === undefined
+      ? await db
+          .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+          .from(invoiceSeries)
+          .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
+      : await owner.provisioning!.seed!.series!.bases(db, node);
+  const codeFor = (purpose: string) =>
+    live
+      .filter((series) => series.purpose === purpose)
+      .map((series) => series.code)
+      .sort()
+      .at(-1);
+  const seriesCode = codeFor("standard");
+  const fullSeriesCode = codeFor("full");
+  const correctiveSeriesCode = codeFor("corrective");
+  const fullCorrectiveSeriesCode = codeFor("full_corrective");
   if (
-    row === undefined ||
-    row.seriesCode === null ||
-    row.fullSeriesCode === null ||
-    row.correctiveSeriesCode === null
+    seriesCode === undefined ||
+    fullSeriesCode === undefined ||
+    correctiveSeriesCode === undefined ||
+    fullCorrectiveSeriesCode === undefined
   ) {
     throw new AppError("setup.request_invalid", { field: "venue" });
   }
-  const {
-    country,
-    taxId,
-    legalName,
-    taxpayerDomicile,
-    seriesCode,
-    fullSeriesCode,
-    correctiveSeriesCode,
-  } = row;
-  const fields = await readVenue(db);
+  const { country, taxId, legalName, taxpayerDomicile } = row;
   const { doc } = await readVenueSettings(db);
   const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
@@ -144,7 +160,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 57,
+    version: 58,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -157,6 +173,7 @@ export async function buildConfigurationBundle(
       seriesCode,
       fullSeriesCode,
       correctiveSeriesCode,
+      fullCorrectiveSeriesCode,
     },
     privacyContact: (await readPrivacyContact(db))!,
     contentLanguages:
@@ -175,7 +192,7 @@ export async function buildConfigurationBundle(
 }
 
 export interface ConfigurationBundle {
-  version: 57;
+  version: 58;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
@@ -566,10 +583,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.configuration_unreadable", {});
   }
-  if (typeof value.version === "number" && value.version > 57) {
+  if (typeof value.version === "number" && value.version > 58) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 57) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 58) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -601,6 +618,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "seriesCode",
     "fullSeriesCode",
     "correctiveSeriesCode",
+    "fullCorrectiveSeriesCode",
     "name",
     "fiscalTerritory",
     "dayCutover",

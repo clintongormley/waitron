@@ -27,7 +27,8 @@ export interface RecordReplacementInput {
   operationDescription: string;
   /** The node that issues the replacement and whose chain it extends. */
   nodeId: NodeId;
-  /** Must be this node's live `corrective` series. */
+  /** This node's live `full_corrective` series when the original names a customer, else its
+   * `corrective` one. */
   seriesId: SeriesId;
   /** The invoice the replacement takes the place of. */
   correctsSaleId: SaleId;
@@ -93,7 +94,12 @@ export async function recordReplacement(
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }
 
-  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
+  const series = await requireCorrectiveSeries(
+    tx,
+    input.seriesId,
+    input.nodeId,
+    original.counterpartyTaxId === null ? "corrective" : "full_corrective",
+  );
 
   const authorization =
     "managementSessionId" in input.authz

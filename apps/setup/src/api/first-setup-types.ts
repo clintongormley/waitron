@@ -23,8 +23,12 @@ export interface FirstSetupState {
     | "uncertain";
   consumptionIntent: boolean;
   environment: "production" | "preproduction";
-  venue: Omit<ProvisionBody["venue"], "admin" | "fullSeriesCode" | "taxpayerDomicile"> & {
+  venue: Omit<
+    ProvisionBody["venue"],
+    "admin" | "fullSeriesCode" | "fullCorrectiveSeriesCode" | "taxpayerDomicile"
+  > & {
     fullSeriesCode?: string;
+    fullCorrectiveSeriesCode?: string;
     taxpayerDomicile?: string | null;
     admin: {
       firstNames?: string | null;

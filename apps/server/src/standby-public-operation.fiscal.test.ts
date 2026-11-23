@@ -86,6 +86,7 @@ const allocation = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -390,6 +391,7 @@ it("consumes signed public reservation and takeover evidence through both HTTP r
     { code: "A-P000042", purpose: "standard", nextNumber: 1 },
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
     { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
+    { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
   ]);
   expect(live.allocations[0]?.approval.operatorId).toEqual({
     kind: "recovery-key",

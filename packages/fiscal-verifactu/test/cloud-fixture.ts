@@ -23,6 +23,11 @@ export function cloudReceiptFixture(change?: (payload: CloudAllocationReceipt["p
   // so the rename list never rewrites it.
   for (const series of payload.allocation.series)
     if (/^rectificative$/.test(series.purpose)) Reflect.set(series, "purpose", "corrective");
+  // The original also predates the full-invoice corrective series, so the copy gains it.
+  Reflect.set(payload.allocation, "series", [
+    ...payload.allocation.series,
+    { code: `RF-${payload.allocation.installationIdentity}`, purpose: "full_corrective" },
+  ]);
   change?.(payload);
   const keys = generateKeyPairSync("ed25519");
   const bytes = keys.publicKey.export({ type: "spki", format: "der" });

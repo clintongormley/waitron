@@ -144,6 +144,7 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
         { code: "R-0CNNW", purpose: "corrective" },
+        { code: "RF-0CNNW", purpose: "full_corrective" },
       ],
     },
   });

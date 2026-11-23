@@ -157,12 +157,24 @@ async function sellFull(backend: FiscalBackend, counterparty: Counterparty) {
   });
 }
 
-async function rectSeriesNext(): Promise<number | undefined> {
+async function seedFullCorrectiveSeries(): Promise<SeriesId> {
+  const [row] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "RF", purpose: "full_corrective" })
+    .returning({ id: invoiceSeries.id });
+  return brandSeriesId(row!.id);
+}
+
+async function seriesNext(id: SeriesId): Promise<number | undefined> {
   const [series] = await suite.db
     .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
     .from(invoiceSeries)
-    .where(eq(invoiceSeries.id, rectSeriesId));
+    .where(eq(invoiceSeries.id, id));
   return series?.n;
+}
+
+function rectSeriesNext(): Promise<number | undefined> {
+  return seriesNext(rectSeriesId);
 }
 
 async function countCorrectives(originalId: SaleId): Promise<number> {
@@ -358,8 +370,12 @@ describe("recordReplacement — a full invoice", () => {
     const { saleId: originalId } = await sellFull(backend, counterparty);
     await suite.db.update(taxpayer).set({ taxpayerDomicile: "9 New Street, 28002 Madrid" });
     const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
+    const fullRect = await seedFullCorrectiveSeries();
 
-    const { saleId } = await replace(backend, originalId, { operationDate: "2026-02-27" });
+    const { saleId } = await replace(backend, originalId, {
+      operationDate: "2026-02-27",
+      seriesId: fullRect,
+    });
 
     const customer = {
       counterpartyTaxId: sales.counterpartyTaxId,
@@ -435,6 +451,40 @@ describe("recordReplacement — refusals use no number", () => {
     );
   });
 
+  it("refuses a full invoice replaced from the ticket corrective series", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sellFull(backend, {
+      taxId: "12345678Z",
+      legalName: "Ann Smith",
+      countryCode: "ES",
+    });
+    await expectRefused(
+      backend,
+      saleId,
+      { seriesId: rectSeriesId },
+      {
+        code: "sale.series_wrong_purpose",
+        params: { seriesId: rectSeriesId, expected: "full_corrective", actual: "corrective" },
+      },
+    );
+  });
+
+  it("refuses a ticket replaced from the full-invoice corrective series", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    const fullRect = await seedFullCorrectiveSeries();
+    await expectRefused(
+      backend,
+      saleId,
+      { seriesId: fullRect },
+      {
+        code: "sale.series_wrong_purpose",
+        params: { seriesId: fullRect, expected: "corrective", actual: "full_corrective" },
+      },
+    );
+    expect(await seriesNext(fullRect)).toBe(1);
+  });
+
   it("refuses another node's corrective series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
@@ -485,7 +535,14 @@ describe("recordReplacement — refusals use no number", () => {
       countryCode: "ES",
     });
     await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
-    await expectRefused(backend, saleId, {}, { code: "fiscal.taxpayer_domicile_missing" });
+    const fullRect = await seedFullCorrectiveSeries();
+    await expectRefused(
+      backend,
+      saleId,
+      { seriesId: fullRect },
+      { code: "fiscal.taxpayer_domicile_missing" },
+    );
+    expect(await seriesNext(fullRect)).toBe(1);
   });
 
   it.each(["counterpartyLegalName", "counterpartyCountryCode", "counterpartyAddress"] as const)(
@@ -510,10 +567,12 @@ describe("recordReplacement — refusals use no number", () => {
         .returning({ id: sales.id });
       const saleId = copy!.id as SaleId;
       const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
-      await expect(replace(backend, saleId)).rejects.toThrow(
+      const fullRect = await seedFullCorrectiveSeries();
+      await expect(replace(backend, saleId, { seriesId: fullRect })).rejects.toThrow(
         "A sale names a customer's tax number without their name, country or address",
       );
       expect(await rectSeriesNext()).toBe(1);
+      expect(await seriesNext(fullRect)).toBe(1);
       expect(await countCorrectives(saleId)).toBe(0);
       expect(recordCorrectionSpy).not.toHaveBeenCalled();
     },

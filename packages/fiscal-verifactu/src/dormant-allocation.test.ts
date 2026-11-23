@@ -38,6 +38,7 @@ const allocation: PaperAllocation = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper",
   issuedAt: "2026-10-12T08:00:00.000Z",

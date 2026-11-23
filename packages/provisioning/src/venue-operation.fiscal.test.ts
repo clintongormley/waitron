@@ -9,7 +9,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { activateAuthenticatedAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
 import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
-import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { FISCAL_SLOT, liveSeriesBases } from "@waitron/fiscal-verifactu";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
@@ -47,6 +47,7 @@ const request: VenueRequest = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "RF",
   admin: {
     displayName: "Owner",
     pinHash: "hash",
@@ -67,6 +68,7 @@ const candidate = {
     { code: "A-S000042", purpose: "standard" },
     { code: "FF-S000042", purpose: "full" },
     { code: "R-S000042", purpose: "corrective" },
+    { code: "RF-S000042", purpose: "full_corrective" },
   ],
 };
 const approval = {
@@ -147,7 +149,9 @@ async function establish(input = { allocation, approval, context }, managesSerie
     provisioning: {
       seed: {
         summary: "qualify initial allocation inside setup",
-        series: managesSeries ? { resolve: readModuleAllocationSeries } : undefined,
+        series: managesSeries
+          ? { bases: liveSeriesBases, resolve: readModuleAllocationSeries }
+          : undefined,
         run: async (tx, node, operation) => {
           const supplied = operation!.input as typeof input;
           const result = await activateAuthenticatedAllocation(
@@ -192,6 +196,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       { code: "A-S000042", purpose: "standard" },
       { code: "FF-S000042", purpose: "full" },
       { code: "R-S000042", purpose: "corrective" },
+      { code: "RF-S000042", purpose: "full_corrective" },
     ]);
     const [held] = await suite.db.select().from(fiscalAllocations);
     expect(held!.approval.operatorId).toBe(ADMIN);
@@ -247,7 +252,7 @@ it("hands setup the signed allocation's active references with no unsuffixed sca
       }))
       .sort((a, b) => a.code.localeCompare(b.code)),
   ).toEqual(ledger!.result.series.map((row) => ({ ...row, retiredAt: null, nextNumber: 1 })));
-  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
 });
 
 it("reapplies allocated setup without creating another SIF, allocation or series", async () => {

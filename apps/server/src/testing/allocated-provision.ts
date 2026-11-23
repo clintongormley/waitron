@@ -7,7 +7,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { withOperationAuthority } from "@waitron/module";
 import { enabledModules } from "@waitron/module";
 import { getVenueSetupCountryPack } from "@waitron/country-packs";
-import { planVenue } from "@waitron/provisioning";
+import { DEFAULT_SERIES_CODES, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../modules.js";
 import { provisionVenue, type ProvisionDeps, type ProvisionRequest } from "../provision.js";
 import { writeAllocationInput } from "./allocation-input.js";
@@ -20,6 +20,7 @@ export async function initialSetupInput(
     seriesCode: string;
     fullSeriesCode?: string;
     correctiveSeriesCode: string;
+    fullCorrectiveSeriesCode?: string;
   },
   environment: "preproduction" | "production" = "preproduction",
 ) {
@@ -36,8 +37,12 @@ export async function initialSetupInput(
     operatorId: administratorId,
     bases: [
       { code: venue.seriesCode, purpose: "standard" },
-      { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
+      { code: venue.fullSeriesCode ?? DEFAULT_SERIES_CODES.fullSeriesCode, purpose: "full" },
       { code: venue.correctiveSeriesCode, purpose: "corrective" },
+      {
+        code: venue.fullCorrectiveSeriesCode ?? DEFAULT_SERIES_CODES.fullCorrectiveSeriesCode,
+        purpose: "full_corrective",
+      },
     ],
   });
   const held = fixture.request("setup");

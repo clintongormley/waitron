@@ -69,6 +69,7 @@ it("the default seed activates exactly the independently supplied identity and p
     { code: "A-S000001", purpose: "standard" },
     { code: "FF-S000001", purpose: "full" },
     { code: "R-S000001", purpose: "corrective" },
+    { code: "RF-S000001", purpose: "full_corrective" },
   ]);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });

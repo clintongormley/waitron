@@ -108,6 +108,7 @@ const VALID: Record<string, string> = {
   seriesCode: "FA",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "RF",
+  fullCorrectiveSeriesCode: "RFF",
 };
 
 async function fillValid(
@@ -141,6 +142,7 @@ const EXPECTED_VENUE = {
   seriesCode: "FA",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "RF",
+  fullCorrectiveSeriesCode: "RFF",
 };
 
 /** The parts `VALID` types, which the draft keeps beside the line it sends. */
@@ -290,7 +292,13 @@ describe("setup-venue-screen", () => {
         input.getAttribute(attr),
       );
     };
-    for (const name of ["taxId", "seriesCode", "fullSeriesCode", "correctiveSeriesCode"])
+    for (const name of [
+      "taxId",
+      "seriesCode",
+      "fullSeriesCode",
+      "correctiveSeriesCode",
+      "fullCorrectiveSeriesCode",
+    ])
       expect(await attributes(name)).toEqual(["none", "off", "false"]);
     expect(await attributes("legalName")).toEqual([null, null, null]);
   });
@@ -869,6 +877,19 @@ describe("setup-venue-screen form errors", () => {
     expect(errorOf(el, "legalName")).toBe("");
   });
 
+  it("names each empty corrective series code field in a sentence that reads", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await fillValid(el, { correctiveSeriesCode: "", fullCorrectiveSeriesCode: "" });
+    next(el).click();
+    await el.updateComplete;
+    expect(errorOf(el, "correctiveSeriesCode")).toBe(
+      "Enter the series code for correctives of simplified invoices.",
+    );
+    expect(errorOf(el, "fullCorrectiveSeriesCode")).toBe(
+      "Enter the series code for correctives of full invoices.",
+    );
+  });
+
   it("on a failed press marks each bad field, says so above Next, focuses the first and disables Next", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
@@ -990,6 +1011,7 @@ describe("setup-venue-screen form errors", () => {
     ["seriesCode", true],
     ["fullSeriesCode", false],
     ["correctiveSeriesCode", true],
+    ["fullCorrectiveSeriesCode", false],
   ])(
     "words a refused repeated series code as the form does; editing %s drops it: %s",
     async (edited, drops) => {
@@ -1487,9 +1509,10 @@ describe("A2 shop form", () => {
   it("prefills the invoice series and day cutover", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     for (const [field, value] of Object.entries({
-      seriesCode: "FS",
-      fullSeriesCode: "FF",
-      correctiveSeriesCode: "FR",
+      seriesCode: "S",
+      fullSeriesCode: "F",
+      correctiveSeriesCode: "SR",
+      fullCorrectiveSeriesCode: "FR",
       dayCutover: "04:00",
     })) {
       expect((q(el, `[data-test=${field}]`) as HTMLInputElement).value).toBe(value);
@@ -1507,6 +1530,7 @@ describe("A2 shop form", () => {
       "seriesCode",
       "fullSeriesCode",
       "correctiveSeriesCode",
+      "fullCorrectiveSeriesCode",
       "locale-es-ES",
     ])
       expect(q(el, `[data-test=${field}]`)).toBeNull();
@@ -1523,9 +1547,10 @@ describe("A2 shop form", () => {
     expect(venue.taxId).toBe("B00000000");
     expect(venue.legalName).toBe("Waitron Demo S.L.");
     expect(venue.name).toBe("Calle Mayor");
-    expect(venue.seriesCode).toBe("FS");
-    expect(venue.fullSeriesCode).toBe("FF");
-    expect(venue.correctiveSeriesCode).toBe("FR");
+    expect(venue.seriesCode).toBe("S");
+    expect(venue.fullSeriesCode).toBe("F");
+    expect(venue.correctiveSeriesCode).toBe("SR");
+    expect(venue.fullCorrectiveSeriesCode).toBe("FR");
     const validation = getVenueSetupCountryPack("ES")!.taxIdentifier!.validate(venue.taxId);
     expect(validation).toEqual({ valid: true, normalized: venue.taxId, kind: "entity" });
     const returned = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
@@ -1662,6 +1687,7 @@ it.each([
   ["seriesCode", "server_fields.series_code"],
   ["fullSeriesCode", "server_fields.series_code"],
   ["correctiveSeriesCode", "server_fields.series_code"],
+  ["fullCorrectiveSeriesCode", "server_fields.series_code"],
 ] as const)(
   "shows a Demo refusal of the hidden %s above Next, and pressing Next tries again",
   async (invalidField, message) => {
@@ -1895,6 +1921,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
       seriesCode: "A",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "B",
+      fullCorrectiveSeriesCode: "FB",
     }))
       await type(el, field, value);
     q(el, "[data-test=next]")!.click();
@@ -1931,6 +1958,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
               seriesCode: "A",
               fullSeriesCode: "FF",
               correctiveSeriesCode: "B",
+              fullCorrectiveSeriesCode: "FB",
             },
           },
         },
@@ -2255,6 +2283,7 @@ it("advances from a country whose filing module offers no description", async ()
       seriesCode: "A",
       fullSeriesCode: "FF",
       correctiveSeriesCode: "B",
+      fullCorrectiveSeriesCode: "FB",
     }))
       await type(el, field, value);
     q(el, "[data-test=next]")!.click();
@@ -2302,6 +2331,7 @@ describe("owner's fixes of 2026-11-20", () => {
         "seriesCode",
         "fullSeriesCode",
         "correctiveSeriesCode",
+        "fullCorrectiveSeriesCode",
       ]) {
         const field = q(el, `wt-input[data-test=${key}]`) as HTMLElement & {
           updateComplete: Promise<unknown>;
@@ -2327,6 +2357,7 @@ describe("owner's fixes of 2026-11-20", () => {
         seriesCode: "off",
         fullSeriesCode: "off",
         correctiveSeriesCode: "off",
+        fullCorrectiveSeriesCode: "off",
       });
     } finally {
       packs.pop();
@@ -2354,7 +2385,12 @@ describe("owner's fixes of 2026-11-20", () => {
   ] as const)("tells the person to keep the invoice series defaults (%s)", async (locale, text) => {
     setLocale(locale);
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
-    for (const field of ["seriesCode", "fullSeriesCode", "correctiveSeriesCode"]) {
+    for (const field of [
+      "seriesCode",
+      "fullSeriesCode",
+      "correctiveSeriesCode",
+      "fullCorrectiveSeriesCode",
+    ]) {
       expect(
         q(el, `[data-test=${field}] wt-help-tooltip[slot=help]`)!.textContent!.trim(),
         field,

@@ -7,6 +7,7 @@ export const venue: ProvisionBody["venue"] = {
   seriesCode: "A",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "R",
+  fullCorrectiveSeriesCode: "FR",
   name: "Olivo",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],

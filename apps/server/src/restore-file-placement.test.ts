@@ -481,7 +481,9 @@ describe("a restore from an archive and the node copy", () => {
       log: () => {},
       ...overrides,
     });
-    const dump: ArchiveEntry = { name: "db.dump", bytes: Buffer.from("NEW-DATABASE") };
+    const archivedVenue = join(placement.root, "archived-venue.db");
+    nodeFile(archivedVenue, "ARCHIVE-VENUE");
+    const dump: ArchiveEntry = { name: "db.dump", bytes: await readFile(archivedVenue) };
     const node: ArchiveEntry = { name: "node.dump", bytes: placement.nodeDump };
     return { ...placement, deps, dump, node, secrets };
   }
@@ -502,7 +504,7 @@ describe("a restore from an archive and the node copy", () => {
   it("keeps the target's own node.db under skipSecrets", async () => {
     const { deps, dump, node, secrets, target, venueDir } = await restoreFixture();
     await restoreFromArtifact(deps([dump, node, ...secrets], { skipSecrets: true }));
-    expect(await readFile(target, "utf8")).toBe("NEW-DATABASE");
+    expect(nodeIdsIn(target)).toEqual(["ARCHIVE-VENUE"]);
     expect(nodeIdsIn(join(venueDir, "node.db"))).toEqual(["NEW"]);
   });
 });

@@ -126,7 +126,7 @@ export async function provisionBillVenue(
   db: Database,
   // Unset, a historical fiscal identity, as existing-sale suites want. A suite whose box must pass a
   // real selection later hands the first setup it means to run.
-  options: { apply?: typeof applyVenue; identity?: SoftwareIdentity } = {},
+  options: { apply?: typeof applyVenue; identity?: SoftwareIdentity; fullSeriesCode?: string } = {},
 ): Promise<BillVenue> {
   registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
   const clock = systemClock();
@@ -154,6 +154,7 @@ export async function provisionBillVenue(
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
         seriesCode: "A",
+        ...(options.fullSeriesCode !== undefined && { fullSeriesCode: options.fullSeriesCode }),
         correctiveSeriesCode: "R",
         admin: {
           displayName: "Administrator",

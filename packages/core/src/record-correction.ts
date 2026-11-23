@@ -161,7 +161,7 @@ export async function recordCorrection(
     throw new AppError("sale.voided", { saleId: correctsSaleId });
   }
 
-  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
+  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId, "corrective");
 
   const authorization =
     "invoiceCorrectionId" in input.authz

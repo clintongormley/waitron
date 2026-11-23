@@ -403,10 +403,11 @@ describe("selected-hour admission before archive placement", () => {
         { code: "A-0CNQT", nextNumber: 1 },
         { code: "FF-0CNQT", nextNumber: 1 },
         { code: "R-0CNQT", nextNumber: 1 },
+        { code: "RF-0CNQT", nextNumber: 1 },
       ]);
       expect(
         before.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
-      ).toEqual([125, 123, 123]);
+      ).toEqual([125, 123, 123, 123]);
       const journal = await readFile(
         join(f.roots.stateDir, "module-records/fiscal-verifactu.json"),
         "utf8",
@@ -628,9 +629,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNQT",
         "FF-0CNQT",
         "R-0CNQT",
+        "RF-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        123, 123, 123,
+        123, 123, 123, 123,
       ]);
     } finally {
       await restored.close();
@@ -655,9 +657,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNSP",
         "FF-0CNSP",
         "R-0CNSP",
+        "RF-0CNSP",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        125, 123, 123,
+        125, 123, 123, 123,
       ]);
     } finally {
       await placed.close();
@@ -696,9 +699,10 @@ describe("selected-hour admission before archive placement", () => {
         "A-0CNQT",
         "FF-0CNQT",
         "R-0CNQT",
+        "RF-0CNQT",
       ]);
       expect(restored.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual(
-        [125, 123, 123],
+        [125, 123, 123, 123],
       );
       await advanceSeriesTo(placed.venue, node.nodeId, 917);
       rows = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
@@ -927,7 +931,7 @@ describe("selected-hour admission before archive placement", () => {
 function expectedSeriesCodes(f: Awaited<ReturnType<typeof archiveHost>>) {
   const identity = (f.outcome.input as { allocation: { installationIdentity: string } }).allocation
     .installationIdentity;
-  return ["A", "FF", "R"].map((code) => `${code}-${identity}`);
+  return ["A", "FF", "R", "RF"].map((code) => `${code}-${identity}`);
 }
 
 async function unretiredSeriesCodes(venueDir: string) {

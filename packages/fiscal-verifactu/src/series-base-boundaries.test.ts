@@ -11,20 +11,23 @@ const venue = {
   seriesCode: "FS",
   fullSeriesCode: "FF",
   correctiveSeriesCode: "FR",
+  fullCorrectiveSeriesCode: "RF",
   operationDescription: "Venta en establecimiento",
 };
 
-it.each(["seriesCode", "fullSeriesCode", "correctiveSeriesCode"] as const)(
-  "accepts a 21-character %s and refuses 22 before setup",
-  (field) => {
-    expect(() =>
-      validateVenueFiscalFields({ ...venue, [field]: "ABCDEFGHIJKLMNOPQRSTU" }),
-    ).not.toThrow();
-    expect(() =>
-      validateVenueFiscalFields({ ...venue, [field]: "ABCDEFGHIJKLMNOPQRSTUV" }),
-    ).toThrow(expect.objectContaining({ code: "setup.request_invalid", params: { field } }));
-  },
-);
+it.each([
+  "seriesCode",
+  "fullSeriesCode",
+  "correctiveSeriesCode",
+  "fullCorrectiveSeriesCode",
+] as const)("accepts a 21-character %s and refuses 22 before setup", (field) => {
+  expect(() =>
+    validateVenueFiscalFields({ ...venue, [field]: "ABCDEFGHIJKLMNOPQRSTU" }),
+  ).not.toThrow();
+  expect(() => validateVenueFiscalFields({ ...venue, [field]: "ABCDEFGHIJKLMNOPQRSTUV" })).toThrow(
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } }),
+  );
+});
 
 const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS] });
 beforeEach(() => seedTaxpayers(suite.db));

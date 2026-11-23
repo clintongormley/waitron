@@ -896,12 +896,21 @@ for (const locale of ["en", "es"] as const) {
           return [renamed, { ...row, id: renamed, purpose: "corrective" }];
         }),
       );
+      // Every box provisions a fourth series, for correctives of full invoices.
+      for (const row of Object.values(series.rows).filter((row) => row.purpose === "corrective")) {
+        const id = `@invoice_series:${stable([row.node_id, "FR", "full_corrective"])}`;
+        series.rows[id] = { ...row, id, code: "FR", purpose: "full_corrective", next_number: 1 };
+      }
     }
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      expect(phases[phase]!.invoice_series).toBe(phase === "before" ? 0 : 3);
+      phases[phase]!.invoice_series = Object.keys(
+        expected[phase].tables.invoice_series!.rows,
+      ).length;
       const profilePrinters = expected[phase].tables.device_profile_printers!;
       const kitchenProfiles = new Set(
         Object.values(expected[phase].tables.device_profiles!.rows)

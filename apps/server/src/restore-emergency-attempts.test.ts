@@ -105,6 +105,7 @@ it("retains the selected hour after a real hook transaction rolls back", async (
     { code: "A-0CNNY", nextNumber: 123, retiredAt: null },
     { code: "FF-0CNNY", nextNumber: 123, retiredAt: null },
     { code: "R-0CNNY", nextNumber: 123, retiredAt: null },
+    { code: "RF-0CNNY", nextNumber: 123, retiredAt: null },
   ]);
   expect(f.journal()).toBe(retained);
   expect(retained).not.toContain("injected callback interruption");
