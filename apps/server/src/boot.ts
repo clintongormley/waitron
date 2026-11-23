@@ -372,7 +372,7 @@ import { deleteBackupRoomNote } from "./backup-room-note.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
-  stageConfigurationImport,
+  stageConfigurationImportFile,
 } from "./configuration-import.js";
 import {
   importConfigurationTables,
@@ -1653,17 +1653,24 @@ async function bootServer(
             log,
             openStore: openBoundedBucket,
           }),
-        stageConfiguration: (artifact, passphrase) =>
-          stageConfigurationImport(config.stateDir, ring, artifact, passphrase, async (bundle) => {
-            const resolvedConfig = venueModuleConfig(moduleConfig, bundle.venue.fiscalTerritory);
-            const modules = enabledModules(availableModules, resolvedConfig);
-            validateConfigurationBundle(
-              bundle,
-              modules,
-              await schemaVersionsByModule(store, modules),
-            );
-            return modules;
-          }),
+        stageConfiguration: (artifactPath, passphrase, signal) =>
+          stageConfigurationImportFile(
+            config.stateDir,
+            ring,
+            artifactPath,
+            passphrase,
+            async (bundle) => {
+              const resolvedConfig = venueModuleConfig(moduleConfig, bundle.venue.fiscalTerritory);
+              const modules = enabledModules(availableModules, resolvedConfig);
+              validateConfigurationBundle(
+                bundle,
+                modules,
+                await schemaVersionsByModule(store, modules),
+              );
+              return modules;
+            },
+            signal,
+          ),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
         runFiscalTest: async ({ request, contribution, secret }) => {
           const resolvedConfig = venueModuleConfig(moduleConfig, request.venue.fiscalTerritory);

@@ -227,10 +227,10 @@ for these boxes, is still open to the owner.
   archive. Decide whether those tests should
   place archives through `runStagedRestore` instead, then delete it. Left open by A1131bc slice 4.
 
-## Stream recovery archive uploads and configuration imports
+## Stream the remaining recovery archive uploads
 
 The unused archive branch of `/recovery/preparation` and emergency handover buffer archive uploads
-within 256 MiB. Configuration imports have their own buffer.
+within 256 MiB.
 
 ## Qualify year-sized Cloud backups and revisit incremental copies with venue measurements
 

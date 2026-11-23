@@ -8,7 +8,12 @@ import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import type { WaitronModule } from "@waitron/module";
-import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
+import {
+  mkdirDurable,
+  publishFileDurable,
+  syncFolderHolding,
+  writeFileDurable,
+} from "./fs-atomic.js";
 import {
   decodeConfigurationBundleAsync,
   type ConfigurationBundle,
@@ -109,23 +114,65 @@ function previewOf(
   };
 }
 
+type ValidateConfiguration = (
+  bundle: ConfigurationBundle,
+) => Promise<readonly TransferringModule[]>;
+
 export async function stageConfigurationImport(
   stateDir: string,
   ring: KeyRing,
   artifact: Uint8Array,
   passphrase: string,
-  /** Refuses a bundle the box cannot import, else answers the modules it was checked against. */
-  validate: (bundle: ConfigurationBundle) => Promise<readonly TransferringModule[]>,
+  validate: ValidateConfiguration,
 ): Promise<ConfigurationPreview> {
   const snapshot = Buffer.from(artifact);
-  const bundle = await decodeConfigurationBundleAsync(snapshot, passphrase);
+  return validateAndStage(stateDir, ring, snapshot, passphrase, validate, (target) =>
+    writeFileDurable(target, snapshot, 0o600),
+  );
+}
+
+/** Takes over the private upload file once the bundle has been validated. */
+export async function stageConfigurationImportFile(
+  stateDir: string,
+  ring: KeyRing,
+  artifactPath: string,
+  passphrase: string,
+  validate: ValidateConfiguration,
+  signal?: AbortSignal,
+): Promise<ConfigurationPreview> {
+  const artifact = await readFile(artifactPath, { signal });
+  return validateAndStage(
+    stateDir,
+    ring,
+    artifact,
+    passphrase,
+    validate,
+    (target) => publishFileDurable(artifactPath, target),
+    signal,
+  );
+}
+
+async function validateAndStage(
+  stateDir: string,
+  ring: KeyRing,
+  artifact: Uint8Array,
+  passphrase: string,
+  validate: ValidateConfiguration,
+  publishArtifact: (target: string) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<ConfigurationPreview> {
+  const bundle = await decodeConfigurationBundleAsync(artifact, passphrase);
   const preview = previewOf(bundle, await validate(bundle));
-  await mkdirDurable(dirname(join(stateDir, MARKER)), 0o700);
-  await rm(join(stateDir, MARKER), { force: true });
+  const marker = join(stateDir, MARKER);
+  await mkdirDurable(dirname(marker), 0o700);
+  signal?.throwIfAborted();
+  // Disarm the old import durably before its ciphertext and key can disagree after a restart.
+  await rm(marker, { force: true });
+  await syncFolderHolding(marker);
   try {
-    await writeFileDurable(join(stateDir, ARTIFACT), snapshot, 0o600);
+    await publishArtifact(join(stateDir, ARTIFACT));
     await writeFileDurable(join(stateDir, KEY), wrapPassphrase(ring, passphrase), 0o600);
-    await writeFileDurable(join(stateDir, MARKER), JSON.stringify({ version: 1 }), 0o600);
+    await writeFileDurable(marker, JSON.stringify({ version: 1 }), 0o600);
   } catch (error) {
     await clearStagedConfigurationImport(stateDir);
     throw error;

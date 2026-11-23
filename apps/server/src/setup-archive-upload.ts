@@ -20,6 +20,7 @@ export interface ArchiveUploadOptions {
   fields?: readonly string[];
   exactFields?: boolean;
   maxBytes?: number;
+  oversizeIsInvalid?: boolean;
   reserveBytes?: number;
 }
 function invalid(field = "artifact"): AppError {
@@ -44,9 +45,10 @@ export async function receiveSetupArchive(
     .startsWith("multipart/form-data");
   const declared = Number(request.headers.get("content-length"));
   const limit = max + (multipart ? 262144 : 0);
+  const oversize = () => (options.oversizeIsInvalid ? invalid() : capacity());
   if (declared > limit) {
     await request.body?.cancel();
-    throw capacity();
+    throw oversize();
   }
   if (!request.body) throw invalid();
   let dir: string | undefined;
@@ -66,7 +68,7 @@ export async function receiveSetupArchive(
     const bound = new Transform({
       transform(chunk: Buffer, _encoding, done) {
         total += chunk.length;
-        if (total > limit) return done(capacity());
+        if (total > limit) return done(oversize());
         freeBytes(dir!).then((free) => {
           if (
             free === null ||
@@ -80,7 +82,7 @@ export async function receiveSetupArchive(
     const count = new Transform({
       transform(chunk: Buffer, _encoding, done) {
         byteLength += chunk.length;
-        done(byteLength > max ? capacity() : null, chunk);
+        done(byteLength > max ? oversize() : null, chunk);
       },
     });
     if (!multipart) {

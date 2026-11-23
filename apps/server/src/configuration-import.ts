@@ -1,5 +1,6 @@
 export {
   stageConfigurationImport,
+  stageConfigurationImportFile,
   readStagedConfigurationImport,
   clearStagedConfigurationImport,
   type ConfigurationPreview,

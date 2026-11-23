@@ -11,6 +11,7 @@ import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
   stageConfigurationImport,
+  stageConfigurationImportFile,
 } from "./configuration-import.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -221,6 +222,77 @@ it("disarms an import whose publication failed at folder sync", async () => {
   await expect(
     stageConfigurationImport(root, ring, artifact, passphrase, async () => []),
   ).rejects.toMatchObject({ code: "EIO" });
+  expect(await readStagedConfigurationImport(root, ring)).toBeNull();
+});
+
+it("publishes the validated ciphertext from a completed upload", async () => {
+  const root = await directory();
+  const uploaded = join(root, "uploaded");
+  const bundle = configurationBundle();
+  const artifact = encodeConfigurationBundle(bundle, passphrase);
+  await writeFile(uploaded, artifact, { mode: 0o600 });
+
+  await expect(
+    stageConfigurationImportFile(root, ring, uploaded, passphrase, validated),
+  ).resolves.toEqual({ venue: bundle.venue, modules: [], reconnectModules: [] });
+  expect(await readStagedConfigurationImport(root, ring)).toEqual({ bundle, artifact, passphrase });
+  expect(existsSync(uploaded)).toBe(false);
+});
+
+it.each(["validation", "disconnect"])(
+  "keeps the earlier import when replacement stops during %s",
+  async (reason) => {
+    const { root, bundle, artifact } = await staged();
+    const uploaded = join(root, "uploaded");
+    const replacement = configurationBundle();
+    replacement.venue.legalName = "Replacement venue";
+    await writeFile(uploaded, encodeConfigurationBundle(replacement, passphrase));
+    const abort = new AbortController();
+    const stopped = new Error("replacement stopped");
+
+    await expect(
+      stageConfigurationImportFile(
+        root,
+        ring,
+        uploaded,
+        passphrase,
+        async () => {
+          if (reason === "validation") throw stopped;
+          abort.abort(stopped);
+          return [];
+        },
+        abort.signal,
+      ),
+    ).rejects.toBe(stopped);
+    expect(await readStagedConfigurationImport(root, ring)).toEqual({
+      bundle,
+      artifact,
+      passphrase,
+    });
+  },
+);
+
+it("disarms the old import before replacing its ciphertext and leaves an incomplete replacement unreadable", async () => {
+  const { root } = await staged();
+  const uploaded = join(root, "uploaded");
+  const replacement = configurationBundle();
+  replacement.venue.legalName = "Replacement venue";
+  const artifact = encodeConfigurationBundle(replacement, passphrase);
+  await writeFile(uploaded, artifact);
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  const stopped = new Error("could not write key");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    if (String(args[0]) === join(root, "flows/setup/import/key.tmp")) {
+      expect(await readFile(join(root, "flows/setup/import/artifact"))).toEqual(artifact);
+      expect(await readStagedConfigurationImport(root, ring)).toBeNull();
+      throw stopped;
+    }
+    return actual.open(...args);
+  });
+
+  await expect(
+    stageConfigurationImportFile(root, ring, uploaded, passphrase, validated),
+  ).rejects.toBe(stopped);
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
 
