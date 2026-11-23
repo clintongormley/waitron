@@ -1141,7 +1141,7 @@ export class SetupHandoverScreen extends LitElement {
       if (refusal === undefined) {
         this.actionError = this.#emergencyError(cause);
         // A take resent while catching up carries the same passkey answer, which the spare forgets
-        // when it restarts or once its challenge lapses (2 minutes, or 15 once given back).
+        // when it restarts or once its challenge lapses.
         if (unlock === "none" && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
           this.#reopenSignIn();

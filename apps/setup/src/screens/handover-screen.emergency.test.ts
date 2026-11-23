@@ -3321,7 +3321,7 @@ it("a passkey answer the held copy did not know still signs in after catching up
   expect(get).toHaveBeenCalledTimes(1);
 });
 
-it("a passkey answer that lapses while the spare catches up says so, and checking again asks anew", async () => {
+it("a kept passkey answer the spare has forgotten by a later catch-up request says so, and checking again asks anew", async () => {
   const get = stubPasskey();
   const proof = newProof();
   proof.refusals = ["passkey.not_registered"];

@@ -140,7 +140,8 @@ interface HeldChallenge {
 /**
  * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
  * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once, and is live
- * for 2 minutes from when it is made, or 15 from when it is given back.
+ * for 2 minutes from when it is made, or 15 from when it is given back or last kept alive by a
+ * catch-up request.
  */
 export function createSwitchChallenges() {
   const made = new Map<string, HeldChallenge>();
@@ -155,11 +156,11 @@ export function createSwitchChallenges() {
   return {
     live,
     async make(rpId: string) {
-      prune();
       const options = await generateAuthenticationOptions({
         rpID: rpId,
         userVerification: "required",
       });
+      prune();
       made.set(options.challenge, {
         until: Date.now() + SWITCH_CHALLENGE_TTL_MS,
         givenBack: false,
@@ -177,6 +178,12 @@ export function createSwitchChallenges() {
       if (held.givenBack) return;
       prune();
       made.set(challenge, { until: Date.now() + SWITCH_PROOF_TTL_MS, givenBack: true });
+    },
+    /** A live challenge that was given back stays live for as long as a proof from now. */
+    keepAlive(challenge: string): void {
+      const held = made.get(challenge);
+      if (held?.givenBack === true && live(challenge))
+        held.until = Date.now() + SWITCH_PROOF_TTL_MS;
     },
   };
 }
@@ -257,7 +264,7 @@ async function checkSwitchSignIn(
     ));
   } catch (error) {
     // A copy that does not know the passkey has checked nothing, so the challenge is held again,
-    // once, for the catch-up step to check the same answer against a newer copy.
+    // once, so a later step can check the same answer against a newer copy.
     if (isAppError(error) && error.code === "passkey.not_registered")
       sw.challenges.giveBack(challenge, held);
     throw error;
@@ -275,6 +282,29 @@ export async function precheckSwitchCredentials(
   signIn: SwitchSignInRequest,
 ): Promise<void> {
   if (signIn.kind !== "password") await checkSwitchSignIn(c, sw, signIn);
+}
+
+/**
+ * For a take answered while the spare catches up: a proof that still passes against `db` is
+ * renewed, and a given-back passkey challenge that is still live is kept alive. A sign-in that
+ * cannot be kept alive is left as it is and not refused here.
+ */
+export async function keepSwitchSignInAlive(
+  c: Context,
+  sw: SwitchSignIn,
+  db: Database,
+  signIn: SwitchSignInRequest,
+): Promise<void> {
+  if (signIn.kind === "passkey") {
+    if (signIn.challenge !== undefined) sw.challenges.keepAlive(signIn.challenge);
+    return;
+  }
+  if (signIn.kind !== "proof") return;
+  try {
+    await checkSwitchSignIn(c, sw, signIn, db);
+  } catch (error) {
+    if (!isAppError(error) || error.code !== "password.invalid") throw error;
+  }
 }
 
 /**

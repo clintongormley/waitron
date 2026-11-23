@@ -863,6 +863,7 @@ describe("the switch's passkey and proof", () => {
       expect(accepted.body.error?.code ?? accepted.status).toBe(
         step === "backup" ? "handover.backup_key_missing" : 200,
       );
+      expect(accepted.setCookie?.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
       const refused = await s.post(bodies[step](), true, step, await proofCookie("not-a-proof"));
       expect(refused.body.error?.code).toBe("password.invalid");
     },

@@ -12,6 +12,7 @@ import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signEnvelope } from "@waitron/handover";
 import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readTakeFailures } from "@waitron/node-db";
 import type { Logger } from "@waitron/server-kit";
@@ -339,15 +340,103 @@ it("a passkey answer refused as unknown is accepted past two minutes, until 15 m
   await restarted(s);
 });
 
-it("a take that checks this box's proof before stopping, then waits, does not renew it", async () => {
-  const proof = await makeSwitchProof(
-    { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
-    ADMIN,
-  );
+const switchProof = () =>
+  makeSwitchProof({ db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId }, ADMIN);
+const cookieOf = (proof: string) => ({ cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
+/** The proof a renewing answer sets, read from its Set-Cookie header. */
+function renewedProof(answer: { setCookie?: string }): string {
+  const [pair] = answer.setCookie!.split("; ");
+  expect(pair!.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
+  return pair!.slice(SWITCH_PROOF_COOKIE.length + 1);
+}
+/** A passkey answer the held copy has refused as unknown, so the spare has given it back. */
+async function givenBackAnswer(s: ReturnType<typeof service>) {
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.not_registered");
+  return signIn;
+}
+
+it("a take that the stop's own look finds behind renews this box's proof", async () => {
   const s = service({ catchingUp: true });
-  const answer = await s.post({}, "followed", { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
+  const answer = await s.post({}, "followed", cookieOf(await switchProof()));
   expect(answer.body).toEqual({ state: "catching-up" });
   expect(s.stopForSwitch).toHaveBeenCalledOnce();
+  renewedProof(answer);
+});
+
+it("a proof made at sign-in lasts through a catch-up longer than 15 minutes while the page keeps asking", async () => {
+  const seen = progress({ uploadedTXID: "00000000000000b2" });
+  const s = service({ progress: seen });
+  const signedIn = await switchProof();
+  let proof = signedIn;
+  for (let poll = 0; poll < 4; poll++) {
+    vi.setSystemTime(Date.now() + 5 * 60_000);
+    const answer = await s.post({}, "followed", cookieOf(proof));
+    expect(answer.body).toEqual({ state: "catching-up" });
+    proof = renewedProof(answer);
+  }
+  seen.uploadedTXID = seen.appliedTXID;
+  expect((await s.post({}, "preview", cookieOf(signedIn))).body.error?.code).toBe(
+    "password.invalid",
+  );
+  expect((await s.post({}, "followed", cookieOf(proof))).body).toEqual({ state: "restarting" });
+  await restarted(s);
+});
+
+it("a passkey answer refused as unknown lasts through a catch-up longer than 15 minutes while the page keeps asking", async () => {
+  const seen = progress({ uploadedTXID: "00000000000000b2" });
+  const s = service({ progress: seen });
+  const signIn = await givenBackAnswer(s);
+  for (let poll = 0; poll < 4; poll++) {
+    vi.setSystemTime(Date.now() + 5 * 60_000);
+    expect((await s.post({ signIn })).body).toEqual({ state: "catching-up" });
+  }
+  seen.uploadedTXID = seen.appliedTXID;
+  expect((await s.post({ signIn })).body).toEqual({ state: "restarting" });
+  await restarted(s);
+});
+
+it("a passkey answer nobody has checked keeps its two minutes while the page keeps asking", async () => {
+  const seen = progress({ uploadedTXID: "00000000000000b2" });
+  const s = service({ progress: seen });
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  vi.setSystemTime(Date.now() + 90_000);
+  expect((await s.post({ signIn })).body).toEqual({ state: "catching-up" });
+  vi.setSystemTime(Date.now() + 60_000);
+  seen.uploadedTXID = seen.appliedTXID;
+  expect((await s.post({ signIn })).body.error?.code).toBe("passkey.challenge_expired");
+  expect(s.stopForSwitch).not.toHaveBeenCalled();
+});
+
+it.each([
+  [
+    "is suspended",
+    () => placed.venue.run(sql`update persons set status = 'suspended' where id = ${ADMIN}`),
+  ],
+  ["no longer holds node.manage", () => setBuiltInRoleForTest(placed.venue, ADMIN, "staff")],
+] as const)(
+  "a catching-up answer does not renew a proof whose person the held copy says %s",
+  async (_name, change) => {
+    const s = service({ progress: progress({ uploadedTXID: "00000000000000b2" }) });
+    const proof = await switchProof();
+    await change();
+    const answer = await s.post({}, "followed", cookieOf(proof));
+    expect(answer.body).toEqual({ state: "catching-up" });
+    expect(answer.setCookie).toBeUndefined();
+  },
+);
+
+it("a catching-up answer to a passkey answer it cannot read keeps nothing alive and refuses nothing", async () => {
+  const s = service({ progress: progress({ uploadedTXID: "00000000000000b2" }) });
+  const garbled = { passkey: { id: "x", response: { clientDataJSON: "not-json" } } };
+  const answer = await s.post({ signIn: garbled });
+  expect(answer.body).toEqual({ state: "catching-up" });
   expect(answer.setCookie).toBeUndefined();
 });
 
@@ -359,48 +448,46 @@ it.each([
     { error: { code: "password.invalid" } },
   ],
 ] as const)("the take %s", async (_name, valid, expected) => {
-  const proof = await makeSwitchProof(
-    { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
-    ADMIN,
-  );
+  const proof = await switchProof();
   if (!valid) {
     const followed = new DatabaseSync(followedVenue());
     followed.prepare("update persons set status = 'suspended' where id = ?").run(ADMIN);
     followed.close();
   }
   const s = service();
-  const answer = await s.post({}, "followed", { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
+  const answer = await s.post({}, "followed", cookieOf(proof));
   expect(answer.body).toMatchObject(expected);
+  if (valid) renewedProof(answer);
   await restarted(s);
 });
 
 it.each([
-  ["a passkey whose challenge", "passkey.challenge_expired"],
-  ["a proof that", "password.invalid"],
+  ["a passkey answer refused as unknown", "passkey.challenge_expired"],
+  ["a proof", "password.invalid"],
 ] as const)(
-  "a take that waited while catching up refuses %s has lapsed before it stops following",
+  "%s lapses once the page sends nothing for 15 minutes while catching up, and is refused before the take stops following",
   async (credential, code) => {
     const seen = progress({ uploadedTXID: "00000000000000b2" });
     const s = service({ progress: seen });
-    const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
-    const proof = await makeSwitchProof(
-      { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
-      ADMIN,
-    );
-    const [body, headers] = credential.includes("passkey")
-      ? [
-          {
-            signIn: {
-              passkey: signingPasskey("spare.example").assert(challenge, "https://spare.example"),
-            },
-          },
-          {},
-        ]
-      : [{}, { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` }];
-    expect((await s.post(body, "followed", headers)).body).toEqual({ state: "catching-up" });
-    vi.setSystemTime(Date.now() + 15 * 60_000);
+    let proof = await switchProof();
+    const signIn = credential.includes("passkey") ? await givenBackAnswer(s) : undefined;
+    const poll = () =>
+      signIn === undefined
+        ? s.post({}, "followed", cookieOf(proof))
+        : s.post({ signIn }, "followed");
+    for (let kept = 0; kept < 2; kept++) {
+      vi.setSystemTime(Date.now() + 5 * 60_000);
+      const answer = await poll();
+      expect(answer.body).toEqual({ state: "catching-up" });
+      if (signIn === undefined) proof = renewedProof(answer);
+    }
+    vi.setSystemTime(Date.now() + SWITCH_PROOF_TTL_MS);
+    // A request after the gap answers as before and brings nothing back.
+    const late = await poll();
+    expect(late.body).toEqual({ state: "catching-up" });
+    expect(late.setCookie).toBeUndefined();
     seen.uploadedTXID = seen.appliedTXID;
-    expect((await s.post(body, "followed", headers)).body.error?.code).toBe(code);
+    expect((await poll()).body.error?.code).toBe(code);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(s.stopForSwitch).not.toHaveBeenCalled();
     expect(s.restart).not.toHaveBeenCalled();

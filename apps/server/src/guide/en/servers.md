@@ -134,7 +134,7 @@ and this device's, both in the venue's time zone. If they agree and both are rig
 the device you are using; after **The box is correct** or **Both are wrong**, correct this
 device's time and choose **Check again**. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
-you choose a step and the spare needs it, usually once, and again after 15 minutes; if instead it
+you choose a step and the spare needs it, usually once, and again only if the page waits 15 minutes for you to choose a step; if instead it
 says your passkey sign-in needs checking again, choose the step again (after **Switch to this
 box**, choose **Try again**, or use your password). Your reason and statements
 stay in place.
