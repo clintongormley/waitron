@@ -60,6 +60,7 @@ export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format
 export { formatBytes } from "./bytes-format.js";
 export {
   BANK_NAME_MAX_LENGTH,
+  formatIban,
   ibanGroups,
   ibanProblem,
   ibanShapeProblem,

@@ -65,8 +65,13 @@ export function ibanGroups(iban: string): string[] {
   return iban.match(/.{1,4}/g) ?? [];
 }
 
+/** The IBAN in groups of four, as it is printed and typed: `ES91 2100 0418 …`. */
+export function formatIban(iban: string): string {
+  return ibanGroups(iban).join(" ");
+}
+
 /** For an IBAN `ibanShapeProblem` accepts: the first four and last four characters, every other one `•`, in groups of four. */
 export function maskIban(iban: string): string {
   const hidden = iban.slice(0, 4) + "•".repeat(iban.length - 8) + iban.slice(-4);
-  return ibanGroups(hidden).join(" ");
+  return formatIban(hidden);
 }

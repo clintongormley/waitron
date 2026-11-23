@@ -19,7 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
 import { getCountryPack } from "@waitron/country-packs";
-import { classifySavedTimeZone, foldForSearch, ibanGroups } from "@waitron/shared";
+import { classifySavedTimeZone, foldForSearch, formatIban } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -877,7 +877,7 @@ export class VenueDetailsPanel extends LitElement {
                 {
                   label: t("venue_details.bank_account"),
                   value: model.bankAccount
-                    ? html`<div>${ibanGroups(model.bankAccount.iban).join(" ")}</div>
+                    ? html`<div>${formatIban(model.bankAccount.iban)}</div>
                         ${
                           model.bankAccount.bankName
                             ? html`<div>${model.bankAccount.bankName}</div>`

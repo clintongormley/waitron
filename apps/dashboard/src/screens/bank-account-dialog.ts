@@ -1,7 +1,7 @@
 import { css, html, type TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { BANK_NAME_MAX_LENGTH, ibanGroups, ibanProblem, normalizeIban } from "@waitron/shared";
+import { BANK_NAME_MAX_LENGTH, formatIban, ibanProblem, normalizeIban } from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
 import {
   normalizedText,
@@ -53,7 +53,7 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
   ];
 
   protected override draftFor(stored: BankAccountValue): BankAccountValue {
-    return { iban: ibanGroups(stored.iban).join(" "), bankName: stored.bankName };
+    return { iban: formatIban(stored.iban), bankName: stored.bankName };
   }
 
   protected override storedForm(value: BankAccountValue): BankAccountValue {
@@ -67,14 +67,12 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
   protected override fieldErrors(draft: BankAccountValue): Record<string, string> {
     const { iban, bankName } = this.storedForm(draft);
     const errors: Record<string, string> = {};
+    const { refusals } = this.settings;
     if (iban === "") {
-      if (bankName !== "") errors.iban = t("venue_details.bank_iban_required");
+      if (bankName !== "") errors.iban = t(refusals.required!);
     } else {
       const problem = ibanProblem(iban);
-      if (problem !== undefined)
-        errors.iban = t(
-          problem === "checksum" ? "venue_details.iban_checksum" : "venue_details.iban_format",
-        );
+      if (problem !== undefined) errors.iban = t(refusals[problem]!);
     }
     if ([...bankName].length > BANK_NAME_MAX_LENGTH) errors.bankName = tooLong();
     return errors;
