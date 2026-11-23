@@ -292,9 +292,15 @@ Every place piece A touches. Every task's requirements include this list.
 - **"Sale-path read changed:"** (CLAUDE.md §4, the A1308 rule) — PR 2's description carries
   "Sale-path read changed: issuing a takeaway order, and pricing a new takeaway basket, read the
   products' takeaway rates in one query (`readTakeawayVatSchedules`)." PR 3's carries "Sale-path
-  read changed: issuing an order, pricing a new basket and issuing an advance read the venue's area
-  (taxpayer row and venue settings) once for the dine-in list." Rates are read **only** by `readLockedLinesForIssuance` and `priceOrderLines`;
-  `readLockedLines` and every gross-only reader read none.
+  read changed: the dine-in rate is read from the venue's area, the taxpayer row and the venue
+  settings (`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts:28`), once per call of
+  `readLineVatRates` that has eaten-in lines (`apps/server/src/line-vat-rates.ts:24`) and once per
+  advance invoice (`issueAdvance`, `apps/server/src/bill-advances.ts:132`). `readLineVatRates` is
+  called when an order is issued (`readLockedLinesForIssuance`, `apps/server/src/working-order.ts:1275`,
+  through `priceStoredOrderForIssuance` at :1467) and by the corrections report's free-items listing
+  (`listFreeItems`, `apps/server/src/free-items.ts:185`, once per way of selling)." Pricing a new
+  basket (`priceOrderLines`, `working-order.ts:652`) reads no rate, since PR 2 its gross lines carry
+  `vatRates: []` (:951, :1013); `readLockedLines` (:1231) reads none either.
 - **Compiling:** each task says which packages do not typecheck until which later task in the same
   PR. No PR ends with a package that does not typecheck: each PR's last task runs `pnpm -r typecheck`.
   Suites failing at runtime inside a PR are named in the task that starts them (only PR 3's D10
