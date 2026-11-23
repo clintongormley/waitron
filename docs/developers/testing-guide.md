@@ -3645,6 +3645,18 @@ WebKit cases printed `Tests 6 failed | 2 passed (8)`, the stored-copy case
 The fixture's light background was typed by hand then; it is now derived from the theme and reads
 `#f0f9f3`.
 
+## The dashboard colour field in WebKit
+
+`test-webkit-startup` also runs `apps/dashboard/src/widgets/color-field.test.ts` in WebKit. Setting
+`WAITRON_DASHBOARD_WEBKIT=1` adds a `webkit` instance to the dashboard's browser project for that
+file alone. In Playwright 1.65.1's WebKit, measured on macOS on 2026-11-23, Tab did not reach an
+`<input type="color">`, even with `tabindex="0"`, while `focus()` did, so the cases that check the
+colour input's focus ring press Tab in Chromium and focus the input directly in WebKit.
+
+```sh
+WAITRON_DASHBOARD_WEBKIT=1 pnpm --filter @waitron/dashboard exec vitest run src/widgets/color-field.test.ts --project webkit
+```
+
 ## Qualify the compiled backup-verification entry and its owners separately
 
 The private verifier has two boundaries: its compiled distribution and the data each module owns.

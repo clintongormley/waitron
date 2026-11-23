@@ -4102,6 +4102,17 @@ describe("the WebKit start-up job", () => {
     expect(apt?.command).toContain('Dpkg::Use-Pty "false"');
   });
 
+  it("blocks CI if the dashboard colour field's WebKit run fails", () => {
+    const steps = workflowSteps(job("test-webkit-startup").body.join("\n"));
+    const suite = steps.find((step) => step.command.includes("src/widgets/color-field.test.ts"));
+    expect(suite?.env.WAITRON_DASHBOARD_WEBKIT).toBe("1");
+    expect(suite?.if).toBeUndefined();
+    expect(suite?.continueOnError).toBeUndefined();
+    expect(suite?.command.trim()).toBe(
+      "node scripts/run-with-deadline.mjs 120 --diagnostics -- pnpm --fail-if-no-match --filter @waitron/dashboard exec vitest run src/widgets/color-field.test.ts --project webkit --reporter=verbose",
+    );
+  });
+
   it("restores Chromium and saves only WebKit under a separate cache key", () => {
     const steps = workflowSteps(job("test-webkit-startup").body.join("\n"));
     const [chromium, webkit] = steps.filter((step) => step.uses?.startsWith("actions/cache"));

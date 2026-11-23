@@ -1,7 +1,7 @@
 import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page, server, userEvent } from "vitest/browser";
 import { baseStyles, CATEGORY_PALETTE } from "@waitron/ui";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
 import {
@@ -166,12 +166,19 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-/** Moves keyboard focus onto the Custom square from the swatch before it, as a Tab press does. */
+/** In Playwright 1.65.1's WebKit, measured on macOS, Tab did not reach an <input type="color">
+ * even with tabindex="0", so there the input is focused directly. */
+async function tabOnto(input: HTMLInputElement): Promise<void> {
+  if (server.browser === "webkit") input.focus();
+  else await userEvent.tab();
+}
+
+/** Moves keyboard focus onto the Custom square from the swatch before it, as Tab does in Chromium. */
 async function tabToCustom(el: ColorFieldHost): Promise<HTMLInputElement> {
   const swatches = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".swatch");
   swatches[swatches.length - 1]!.focus();
-  await userEvent.tab();
   const input = el.shadowRoot!.querySelector<HTMLInputElement>('.custom input[type="color"]')!;
+  await tabOnto(input);
   expect(el.shadowRoot!.activeElement).toBe(input);
   expect(input.matches(":focus-visible")).toBe(true);
   return input;
@@ -531,7 +538,7 @@ describe("colourValueField", () => {
     const { el } = await mountValue(options());
     const input = picker(el);
     expect(getComputedStyle(input).outlineStyle).toBe("none");
-    await userEvent.tab();
+    await tabOnto(input);
     expect(el.shadowRoot!.activeElement).toBe(input);
     const probe = getComputedStyle(el.shadowRoot!.querySelector(".probe")!);
     const ring = getComputedStyle(input);

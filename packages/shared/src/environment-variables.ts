@@ -230,6 +230,9 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_TEST_CRASH_AT: variable("test", "text", tests),
   WAITRON_PRE_PUSH_FETCH_SECONDS: variable("test", "count", ["pre-push"]),
   WAITRON_STARTUP_ENGINES: variable("test", "list", ["bench"]),
+  WAITRON_DASHBOARD_WEBKIT: variable("test", "choice", tests, {
+    rule: "1 adds a WebKit run of the dashboard colour field's tests",
+  }),
   WAITRON_WRITE_GOLDEN: variable("test", "choice", tests),
   WAITRON_CERT_CHECK_PFX_BASE64: variable("test", "key", tests),
   WAITRON_CERT_CHECK_PASSPHRASE: variable("test", "text", tests, secret),

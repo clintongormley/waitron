@@ -50,10 +50,10 @@ packages, runs ESLint and Prettier with no saved results, collects coverage and 
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
 that their test script exists before running, including when result uploads are skipped.
 
-When CI selects the dashboard or till tests, `test-webkit-startup` runs the eight theme start-up
-cases for each app in WebKit. Changes scoped to the shared UI package reach these cases on the
-next full run. The job reports to `ci` and runs on GitHub-hosted Ubuntu for its
-sudo and APT installation. Vitest's driver uses the existing Chromium cache in restore-only
+When CI selects the dashboard or till tests, `test-webkit-startup` runs in WebKit the eight theme
+start-up cases for each app and the dashboard colour field's tests. Changes scoped to the shared UI
+package reach these on the next full run. The job reports to `ci` and runs on GitHub-hosted Ubuntu
+for its sudo and APT installation. Vitest's driver uses the existing Chromium cache in restore-only
 mode, with a headless-shell install on a miss. The same browser directory holds WebKit, but
 the WebKit cache archives only `webkit-*` under a key for the OS, architecture, Ubuntu release
 and Playwright version. Before a matching default-branch cache exists, each selected pull request
