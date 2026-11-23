@@ -199,7 +199,7 @@ cursor: not-allowed;
 }`;
 
 /** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw; the page's
- * own text takes the same typeface and colours as the box pages. */
+ * body takes the box pages' typeface, text colour and background. */
 export const BOX_FORM_HEAD = `<style>:root {
 color-scheme: light dark;
 ${tokenDeclarations()}

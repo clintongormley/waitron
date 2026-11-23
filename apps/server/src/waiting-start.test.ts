@@ -1058,6 +1058,7 @@ describe("the waiting start", () => {
         "color: var(--wt-color-text);",
         "font-family: var(--wt-font-family);",
         "font-size: var(--wt-font-size-md);",
+        "line-height: 1.5;",
       ])
         expect(body!.split("\n")).toContain(declaration);
     });
