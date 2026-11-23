@@ -140,6 +140,12 @@ export class WtPriceInput extends WtInput {
         cursor: pointer;
       }
 
+      /* The amount's text sits below the field's middle by half the difference of its block
+         padding; the same difference in the button's own padding lowers its label onto that line. */
+      .field:not([data-compact]) button.unit {
+        padding-block: calc(var(--wt-space-3) + var(--wt-font-size-sm) - var(--wt-space-2)) 0;
+      }
+
       button.unit:disabled {
         ${disabledStyles}
       }

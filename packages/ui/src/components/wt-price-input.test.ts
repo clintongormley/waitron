@@ -952,6 +952,54 @@ test.each(["", "hide-label"])(
   },
 );
 
+/** Where a zero-size marker appended to `parent` sits: the top of an empty inline-block is its baseline. */
+function baselineIn(parent: Node) {
+  const marker = document.createElement("span");
+  marker.style.cssText = "display: inline-block; width: 0; height: 0; vertical-align: baseline";
+  parent.appendChild(marker);
+  const y = marker.getBoundingClientRect().top;
+  marker.remove();
+  return y;
+}
+
+/** The amount's baseline: a probe in the input's font, centred in its content box as the input
+ * centres its one line. */
+function amountBaseline(input: HTMLInputElement) {
+  const box = input.getBoundingClientRect();
+  const s = getComputedStyle(input);
+  const px = (v: string) => Number.parseFloat(v);
+  const probe = document.createElement("div");
+  probe.style.cssText = `position: fixed; display: flex; align-items: center; margin: 0;
+    left: ${box.left}px; width: ${box.width}px;
+    top: ${box.top + px(s.borderTopWidth) + px(s.paddingTop)}px;
+    height: ${box.height - px(s.borderTopWidth) - px(s.borderBottomWidth) - px(s.paddingTop) - px(s.paddingBottom)}px`;
+  const line = document.createElement("span");
+  line.style.cssText = `font: ${s.font}; line-height: ${s.lineHeight}; white-space: pre`;
+  line.textContent = input.value;
+  probe.append(line);
+  document.body.append(probe);
+  const y = baselineIn(line);
+  probe.remove();
+  return y;
+}
+
+test.each([
+  ["en-GB", "1.60", ""],
+  ["en-GB", "1.60", "hide-label"],
+  ["es-ES", "1,60", ""],
+  ["es-ES", "1,60", "hide-label"],
+])(
+  "the unit button's label sits on the amount's text line (%s, %s, %s)",
+  async (locale, value, hide) => {
+    const { el, input } = await mountPrice(
+      `<wt-price-input label="Price" unit="Each" locale="${locale}" value="${value}" ${hide}></wt-price-input>`,
+    );
+    const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+    expect(field(el).field.hasAttribute("data-compact")).toBe(hide !== "");
+    expect(Math.abs(baselineIn(button) - amountBaseline(input))).toBeLessThanOrEqual(1);
+  },
+);
+
 test("a fixed unit is drawn as text with no box of its own", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
   host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
