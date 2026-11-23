@@ -771,8 +771,8 @@ in the zone also sells its product and variant on its own, and otherwise refuses
 `menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
 `late_send_needs_manager` is on, someone holding `venue.configure` authorises it — the
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). The kitchen ticket and kitchen screen
-read the period name and whether a confirmer was recorded through `readLateSendMarks`. A confirmed
-dish also records `working_order_lines.late_period_id` when its period is known. The
+read the stored `late_period_name` and whether there was a confirmer through `readLateSendMarks`.
+A confirmed dish records `working_order_lines.late_period_id` when its period is known. This
 id survives period deletion and follows the dish if the bill is split. Sends without a confirmation
 and confirmations that identify only a menu leave the id empty. Plan D19–D28.
 

@@ -740,6 +740,7 @@ export async function priceOrderLines(
         });
   };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
+  // Dishes and extras added to sent dishes can be marked when their menu ended earlier today.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
   let alsoSold: ReadonlySet<string> = new Set();
   const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
