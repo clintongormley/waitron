@@ -24,36 +24,12 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/` and
   `scripts/fake-bluez.py`, which is outside the checker.
 
-## Transfer lock cases left by the comment-pruning sweeps
-
-- The lock-ordering and deadlock cases for transfers, merges and split bills went with PostgreSQL
-  and nothing replaced them (one write transaction per venue file is what serialises those writers
-  now).
-
-## "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too wide
-
-- "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
-  deleted from `apps/setup/src/server-fields.ts`, is too wide: with
-  `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime
-  checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
-  `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
-
 ## Comments and test titles still cite sections of specs that were deleted
 
-**OPEN (2026-09-26).**
-The docs prune that day, and the pruning passes of 2026-11-19, deleted the specs and plans for built
-work. A pointer that names only a SECTION of one ("spec §3.2", "(§9)", "KDS-1 §3d") has been checked,
-and the dead ones dropped, everywhere except `apps/server`, `bench` and `packages/fiscal-verifactu`;
-the comments left elsewhere name documents that still exist or outside standards. Find the rest with
-`git grep -nIE -e "§[0-9]" --and --not -e "CLAUDE\.md.? §" -- apps/server bench packages/fiscal-verifactu`.
-It also finds sections of outside standards (RFCs, AEAT's documents) and of kept specs, which
-stay, so check which document each one names before cutting it. Three test titles elsewhere still
-carry a section tag from a design or plan no longer in `docs/`, and a comments-only sweep cannot
-change a test title: "§9b's words" in `apps/setup/src/setup-app-recover.test.ts` (#2335),
-"series purpose guard (§5)" in `packages/core/src/record-correction.test.ts` (#46) and "(§4)" in
-`packages/payments-stripe/src/device-provider.test.ts` (#64).
-**Next action:** fold into the comment-pruning sweeps: drop the tag, or re-point it to the pull
-request that built the work. The three test titles need a pull request of their own.
+The remaining dead section references in this bundle are in
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts`. Leave them in place while the fiscal
+golden test must pass unedited. The watcher confirmed this in Lane K questions.md on
+2026-11-23 at 00:59.
 
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
@@ -749,6 +725,8 @@ also qualifies the historical operation-description references in this section.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 
+- A39 (#671) left some server shutdown duties registered both in the failed-start unwind and in the normal close order. The background-duties suite pins the normal order.
+
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
@@ -973,47 +951,16 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-12 entries, size M.
+4 entries.
 
-- **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
-  engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
-  [Detail](menu.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
 - **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
   may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
   `packages/menu`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
   whether to keep pinning it is the owner's call.
-- **A test comment still names the old savepoint error.**
-  `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
-  `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
-  the comment (a comment in a fiscal test, not the fiscal core).
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
-- **Server comment pruning notes** — found by #656 while pruning comments.
-  [Detail](box.md#server-comment-pruning-notes)
-
-- **fiscal-verifactu's schema files keep `v8 ignore` pairs with no stated reason.**
-  [Detail](ci.md#fiscal-verifactus-schema-files-keep-v8-ignore-pairs-with-no-stated-reason).
-- **Fiscal source comments still describe the migration sets A760 retired.**
-  `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
-  `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
-  `clock-stop-restarts.ts:6` says A760 will drop that table (A760 changed no table's shape); and
-  `src/drain.ts`'s `codeOf` comment names `@waitron/scheduler`, now part of `@waitron/payments`. A760
-  left
-  them because fiscal source stays unedited in that change; fix them in the next fiscal change.
-- **A fiscal test title says a collision would "poison the whole transaction"** — found by #587's
-  review. `packages/fiscal-verifactu/src/chain.test.ts`'s "retries inside a savepoint, so a real
-  collision does not poison the whole transaction": on this engine a refused unique-key insert backs
-  out by itself and leaves the transaction usable. Rename it in the next fiscal change.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **Transfer lock cases left by the comment-pruning sweeps**
-  [Detail](architecture.md#transfer-lock-cases-left-by-the-comment-pruning-sweeps)
-- **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
-  wide** — found by #567 while pruning comments. The same claim stands in
-  `packages/fiscal-verifactu/src/venue-fields.ts`.
-  [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
-- **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).
-  **Next action:** fold into the comment-pruning sweeps: re-point each to
-  the pull request that built the work, or drop the tag.
+- **Protected fiscal test still cites deleted specs.**
   [Detail](architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)

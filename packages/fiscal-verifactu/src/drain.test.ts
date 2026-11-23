@@ -466,7 +466,7 @@ describe("drain — stale claim recovery", () => {
   });
 });
 
-describe("resetInFlightClaims — the restart reset (topology design §5.2)", () => {
+describe("resetInFlightClaims — the restart reset", () => {
   const now = new Date("2026-07-21T00:01:00Z");
 
   /** Leaves the seeded rows as a previous run's claim: `enviando`, stamped one second ago. */

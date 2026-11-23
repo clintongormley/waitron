@@ -1,8 +1,7 @@
 /**
  * Promotion: how a box takes the venue for a term, and what stops two boxes taking it at once.
  *
- * A MODEL of the topology design's promotion step
- * (`docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md` §5.1), not that step. It
+ * A model of the promotion step in the topology design linked from the benchmark README. It
  * keeps the two things S1 measures — a claim the store can refuse, and a generation named
  * `gen-<term>-<node-id>` (§2.2) — and drops everything else a promotion does: no restore, no seat,
  * no fiscal identity, and no node that follows the pointer afterwards.

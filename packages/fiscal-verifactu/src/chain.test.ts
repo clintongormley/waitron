@@ -217,15 +217,10 @@ describe("appendToChain", () => {
     });
   });
 
-  it("retries inside a savepoint, so a real collision does not poison the whole transaction", async () => {
+  it("reports contention after three attempts at an occupied chain position", async () => {
     // REAL refusals, with no concurrency: a single writer against a position that is ALREADY
     // occupied before appendToChain runs, so it reaches exhaustion through three refusals the
     // database issued.
-    //
-    // Weaker than its name: this case does NOT hold appendToChain's savepoint. Replacing the nested
-    // `tx.transaction(...)` with a plain `attemptAppend(tx, …)` leaves it passing, and the stubbed
-    // cases below fail that deletion only because their stub has nothing but `transaction`. No case
-    // in this file holds the savepoint.
     const occupied = await seedSale(suite.db, node, 1);
     await suite.db.insert(verifactuRecords).values({
       source: "device",

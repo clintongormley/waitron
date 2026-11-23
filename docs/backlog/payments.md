@@ -186,6 +186,8 @@ returned; its status alone cannot establish what remains collected.
 
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
+- An earlier pending-payment sweep returned `database is locked` despite its busy timeout (#653). The reason remains unknown.
+
 - A1089: repair a charged card payment that Waitron still cannot record after retries, preserving its original details and preventing a second charge.
 - SumUp has no permanent lock: its sweep resolves every `attempting` row this box owns against
   SumUp, and fails one SumUp has never heard of after 15 minutes, with an incident. It also leaves uncertain refund evidence attempting for another check. The manager action refuses a SumUp payment

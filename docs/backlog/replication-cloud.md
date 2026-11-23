@@ -1075,6 +1075,8 @@ unverified. The sequential promotion and sealed-row tests do not qualify those c
 
 ## Loose ends left by SQLite slice 2 Task 9a
 
+- A38 (#669) asks whether callers of `readNodeMembership` can trust the restored row. The restore trust questions below track that check.
+
 - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
   asserts it.
 - [Restore fencing when the cloud peer does not answer](#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker).

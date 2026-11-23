@@ -488,7 +488,7 @@ describe("requireDevice (venue database)", () => {
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
-  it("carries the device's assigned profile + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
+  it("carries the device's assigned profile + hardware bindings back on the binding", async () => {
     const { deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,

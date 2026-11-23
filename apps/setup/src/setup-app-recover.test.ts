@@ -66,7 +66,7 @@ for (const c of cases)
   });
 
 for (const [locale, lang] of locales)
-  it(`Recover's confirmation says §9b's words (${locale})`, async () => {
+  it(`Recover shows the confirmation text and requires the tick (${locale})`, async () => {
     const s = initialOwnerStrings[lang];
     const { app } = await wipeFixture({ summary: () => Response.json(namedSummary) });
     setLocale(locale);

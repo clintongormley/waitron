@@ -1415,7 +1415,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 /**
  * Insert an open order on ANOTHER node at the venue. The row exists to prove reads are
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
- * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
+ * tagged with the dead node's id. `node_id` is the foreign node's on purpose.
  */
 async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
@@ -3968,7 +3968,7 @@ async function createOfferedOrder(
 async function placeOrderWith(
   tx: Transaction,
   cfg: DeviceRequestConfig,
-  // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
+  // `note` is the per-line KDS customisation (non-fiscal) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: ProductLine[],
   shape: "portions" | "grouped" = "portions",
@@ -4470,7 +4470,7 @@ describe("fireLines (routing resolver + snapshot)", () => {
     });
   });
 
-  it("snapshots the line note at fire, and a later draft edit never moves the fired ticket (NON-FISCAL, spec §2/§3)", async () => {
+  it("snapshots the line note at fire, and a later draft edit never moves the fired ticket (non-fiscal)", async () => {
     // The note counterpart of "Re-route the category AFTER firing" above: a fired ticket_items
     // row is a SNAPSHOT (like station_id/course_id), so editing the working_order_line afterwards must
     // NOT rewrite food already sent to the pass. tabs.test.ts pins that fire CAPTURES
@@ -6095,7 +6095,7 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     });
   });
 
-  // Order-line customisation (spec §2/§3): the station/expo reads surface the SNAPSHOTTED
+  // Order-line customisation: the station/expo reads surface the SNAPSHOTTED
   // per-line `note` so the cook sees it. Read off `ticket_items` (the snapshot frozen at fire), never
   // the live line — a later draft edit must not change what the kitchen already sees.
   it("surfaces a fired line's snapshotted note on listStationQueue and the pass board", async () => {
@@ -6386,7 +6386,7 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     });
   });
 
-  // KDS order-timing alerts (design §3/§6/§11) — the group carries the station's thresholds (Controller
+  // Kitchen timing alerts — the group carries the station's thresholds (Controller
   // Ruling A), each item its own age band classified against them.
   it("bands each item by the station's thresholds and carries them on the group", async () => {
     const { cfg } = await setupVenue();
@@ -7466,7 +7466,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
     });
   });
 
-  // KDS order-timing alerts (design §3/§6/§11) — the expo spans stations, so PER-ITEM thresholds
+  // Kitchen timing alerts — the expo spans stations, so PER-ITEM thresholds
   // (Controller Ruling A) prove the join resolved each item's OWN station, not another's (CLAUDE.md §3's
   // correlated-subquery caution: a wrong join binds to the wrong row silently).
   it("carries each item's own station thresholds and band", async () => {
@@ -7519,7 +7519,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
     });
   });
 
-  it("drops a served line, and its band, off the pass board (design §3 — ages until it reaches the guest)", async () => {
+  it("drops a served line and its timing band from the pass board", async () => {
     const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true }); // 5/10/15 defaults

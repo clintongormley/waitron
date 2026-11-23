@@ -161,8 +161,7 @@ describe("ranking work", () => {
 });
 
 /**
- * Read, not run, when this plan was written: the spec's receipt (§4.6) is the review's own
- * `EXPLAIN QUERY PLAN` on `node:sqlite`. The planner's wording and choice can change with the SQLite
+ * The wording and choice in `EXPLAIN QUERY PLAN` can change with the SQLite
  * version Node ships and with ANALYZE statistics (none are kept). If a case fails, print the plan in
  * the PR and report it; do not loosen the pattern.
  */

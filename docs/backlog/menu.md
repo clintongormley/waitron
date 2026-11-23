@@ -3,15 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the menu". This file holds
 their full text.
 
-## `MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this engine
-
-**`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
-engine — OPEN (found by #603).** Read only, not run: `MAX_MODIFIER_INTEGER`
-(`packages/menu/src/modifier-limits.ts`, 2147483647) and the extras contract's `whole` bound
-were PostgreSQL's integer maximum; the test names "refuses a pick bound above what the column can
-hold" and "refuses a maxQuantity above what the column can hold" (`src/extra-contract.test.ts`)
-assume a column limit.
-
 ## The media library still reads every matching image for search and name sorting, inside the venue write lock
 
 **The media library still reads every matching image for search and name sorting, inside the venue

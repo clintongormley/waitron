@@ -21,7 +21,7 @@ export function storedDeviceOrigin(row: { source: string; deviceId: string | nul
 
 /**
  * Who an alert about a stored payment row names: the caller's own origin, or `"stored"`, the device
- * the row was started on, for a manager acting on the row from the dashboard (spec §5).
+ * the row was started on, for a manager acting on the row from the dashboard.
  */
 export type AlertOrigin = Origin | "stored";
 

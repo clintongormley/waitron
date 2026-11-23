@@ -26,7 +26,5 @@ export const verifactuSendingState = table(
     // A response may close only the interruption its own request observed.
     technicalIncidentToken: id("technical_incident_token"),
   },
-  /* v8 ignore start */
   (t) => [check("verifactu_sending_state_singleton_ck", sql`${t.id} = 1`)],
-  /* v8 ignore stop */
 );

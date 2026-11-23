@@ -313,21 +313,6 @@ carry none.
   folder, or something that is not a folder. The lock-file measurement kept in `db-wipe.ts` names no engine version
   or platform.
 
-## Server comment pruning notes
-
-- **Decided (owner, 2026-09-25): leave `keyFingerprint` as it is** — the first 8 hex characters
-  of the recovery key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who
-  can read the status can test a guessed key against it.
-
-The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. A note #653's prune
-deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
-`database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
-a busy wait on the server's own thread,
-[testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
-Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
-list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
-(`background-duties.ts`), whose order `background-duties.test.ts` pins.
-
 ## Backup & restore — carry-forwards (B2)
 
 The image ships with backups OFF, deliberately.
@@ -1316,6 +1301,8 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+- **Keep the recovery-key fingerprint in backup status** (owner, 2026-09-25). `backup-supervisor.ts` shows the first eight hex characters of its SHA-256. A reader of that status can compare a guessed key against it.
 
 **A branch install does not clear Docker's build cache (owner, 2026-11-09).** `docker builder prune` also deletes what other software on the machine left (`deploy/README.md` says so where it describes clearing the cache by hand): "no — the step is dropped and `deploy/README.md` stays as it is."
 

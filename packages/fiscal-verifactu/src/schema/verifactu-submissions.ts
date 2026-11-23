@@ -18,9 +18,7 @@ export const verifactuSubmissions = table(
     // is no shape of this table in which a registro can have two envío rows.
     registroId: id("registro_id")
       .primaryKey()
-      /* v8 ignore start */
       .references(() => verifactuRecords.id),
-    /* v8 ignore stop */
     estado: label("estado").notNull().default("pendiente"),
     intentos: count("intentos").notNull().default(0),
     // Persisted, never an in-memory timer. This is what makes art. 16.4's hourly duty survive a
@@ -43,7 +41,6 @@ export const verifactuSubmissions = table(
     // reconcile has never had to remediate. See reconcile.ts's noTrace lifecycle.
     reconciledResubmitAt: ts("reconciled_resubmit_at"),
   },
-  /* v8 ignore start */
   (t) => [
     // The drainer's access path: oldest due first.
     index("verifactu_submissions_drenaje_idx").on(t.estado, t.proximoIntentoEn),
@@ -54,5 +51,4 @@ export const verifactuSubmissions = table(
       sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')`,
     ),
   ],
-  /* v8 ignore stop */
 );
