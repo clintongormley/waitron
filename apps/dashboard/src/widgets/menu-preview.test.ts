@@ -1445,11 +1445,16 @@ it("names a clashing variant by its name, and by its id when the menu no longer 
   expect(items[2]).toMatch(/^p-unknown:/);
 });
 
-it("asks for the price clashes when Show clashes is clicked", async () => {
+it("asks the page for the price clashes instead of following the link when Show clashes is clicked", async () => {
   const el = await mount({ preview: { ...preview([]), clashes: [CLASH] } });
   const heard = vi.fn();
-  el.addEventListener("wt-preview-clashes", heard);
-  el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!.click();
+  document.addEventListener("wt-preview-clashes", heard);
+  onTestFinished(() => document.removeEventListener("wt-preview-clashes", heard));
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!;
+  const followed = link.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  expect(followed).toBe(false);
   expect(heard).toHaveBeenCalledOnce();
 });
 

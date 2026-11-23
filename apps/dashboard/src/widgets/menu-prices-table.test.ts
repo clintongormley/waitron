@@ -3835,14 +3835,31 @@ describe("names holding replacement patterns or another placeholder", () => {
   });
 });
 
-it("sorts by main category, and sorts a product placed nowhere with those at the menu's top", async () => {
+it("sorts by main category", async () => {
   const el = await mount({ rows: [lager, lemonade, { ...burger, placements: [] }] });
   await sortBy(el, "category");
   // Beverages and Main courses are departments, which the column leaves out.
   expect(column(el, "category")).toEqual(["", "", "Brews"]);
   expect(shown(el)).toEqual(["mi-lemonade", "mi-burger", "mi-lager"]);
+});
+
+it("sorts a product placed nowhere with those at the menu's top", async () => {
+  const specials = { ...sections[0]!, id: "s-specials", internalName: "Specials" };
+  const soup = { ...burger, menuItemId: "mi-soup", productId: "p-soup", name: "Soup" };
+  const special = { ...lager, menuItemId: "mi-special", placements: [["s-specials"]] };
+  const el = await mount({
+    sections: [...sections, specials],
+    rows: [lager, lemonade, soup, special, { ...burger, placements: [] }],
+  });
   await sortBy(el, "placements");
-  expect(shown(el)).toEqual(["mi-lager", "mi-lemonade", "mi-burger"]);
+  expect(shown(el)).toEqual(["mi-lager", "mi-lemonade", "mi-soup", "mi-burger", "mi-special"]);
+  expect(column(el, "placements")).toEqual([
+    "Drinks › Beer",
+    "Favourites Drinks",
+    t("menu_prices.top_level"),
+    "",
+    "Specials",
+  ]);
 });
 
 it("sends nothing when the quiet Save is pressed with no price changed", async () => {

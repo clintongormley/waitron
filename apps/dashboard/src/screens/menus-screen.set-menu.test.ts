@@ -714,17 +714,19 @@ it("opens a created set menu and reports a failed re-read of the menus", async (
   );
 });
 
-it("reads the menus list again after the set menu's terms are saved", async () => {
+it("shows the saved name in the heading after the set menu's terms are saved", async () => {
   const client = api();
   const screen = await mount(dailyPath, client);
-  const price = page.getByRole("textbox", { name: "Price per set menu" });
-  await price.fill("15.00");
-  const reads = client.listMenus.mock.calls.length;
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect.element(heading).toHaveTextContent("Daily menu");
+  await page.getByRole("textbox", { name: "Name", exact: false }).first().fill("Weekday menu");
+  client.listMenus.mockResolvedValue([menu, { ...daily, name: "Weekday menu" }]);
   const form = screen
     .shadowRoot!.querySelector("dashboard-set-menu-editor")!
     .shadowRoot!.querySelector("dashboard-set-menu-terms-form")!;
   await form.updateComplete;
   form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   await vi.waitFor(() => expect(client.updateMenuDetails).toHaveBeenCalledOnce());
-  await vi.waitFor(() => expect(client.listMenus.mock.calls.length).toBeGreaterThan(reads));
+  await expect.element(heading).toHaveTextContent("Weekday menu");
+  expect(heading.element().textContent).not.toContain("Daily menu");
 });

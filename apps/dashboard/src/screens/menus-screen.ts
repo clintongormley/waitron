@@ -2601,9 +2601,7 @@ export class MenusScreen extends LitElement {
         const { created } = event.detail;
         if (!this.menus.some(({ id }) => id === created.id)) this.menus = [...this.menus, created];
         this.#open(created.id, "set-menu");
-        void this.#watchMenus().catch(() => {
-          this.loadError = true;
-        });
+        void this.#watchMenus().catch(() => undefined);
       }}
     ></dashboard-set-menu-terms-form>`;
   }

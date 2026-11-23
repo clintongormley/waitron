@@ -418,18 +418,23 @@ it.each(reviewFailures)("keeps review hidden after %s", async (code) => {
 const DRAFT = { reportId: "report", description: "Printer jammed", time: 1767225600000 };
 
 it("reloads the drafts when the screen is shown again", async () => {
-  const load = vi.fn().mockResolvedValue([DRAFT]);
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce([DRAFT])
+    .mockResolvedValue([{ ...DRAFT, reportId: "later", description: "Card reader offline" }]);
   const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
     api: stubApi({ getProblemDescriptions: load }),
     canReviewDescriptions: true,
   });
-  await flush(el);
-  expect(load).toHaveBeenCalledOnce();
+  const drafts = () =>
+    [...el.shadowRoot!.querySelectorAll("[data-problem-description] pre")].map(
+      (draft) => draft.textContent,
+    );
+  await expect.poll(drafts).toEqual(["Printer jammed"]);
   const parent = el.parentElement!;
   el.remove();
   parent.append(el);
-  await flush(el);
-  expect(load).toHaveBeenCalledTimes(2);
+  await expect.poll(drafts).toEqual(["Card reader offline"]);
 });
 
 it("does not start a second draft read while the first is still loading", async () => {
@@ -511,17 +516,22 @@ it("clears a failed poll's message once a later poll succeeds", async () => {
 });
 
 it("shows only the clock for today's lines and spells out non-text details", async () => {
-  const at = new Date().toISOString();
-  const api = stubApi({
-    getRecentLogs: vi.fn().mockResolvedValue({
-      lines: [{ at, level: "warn", event: "printer.retry", attempts: 3 }],
-      timeZone: "UTC",
-      oldestScannedAt: null,
-    }),
-  });
-  const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
-  await flush(el);
-  const row = q(el, "li.lvl-warn")!;
-  expect(row.querySelector("time")!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-  expect(row.textContent).toContain("attempts=3");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-08-31T12:00:00Z"));
+    const api = stubApi({
+      getRecentLogs: vi.fn().mockResolvedValue({
+        lines: [{ at: "2026-08-31T10:00:00Z", level: "warn", event: "printer.retry", attempts: 3 }],
+        timeZone: "UTC",
+        oldestScannedAt: null,
+      }),
+    });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+    await flush(el);
+    const row = q(el, "li.lvl-warn")!;
+    expect(row.querySelector("time")!.textContent).toBe("10:00:00");
+    expect(row.textContent).toContain("attempts=3");
+  } finally {
+    vi.useRealTimers();
+  }
 });
