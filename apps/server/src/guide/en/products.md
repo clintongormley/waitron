@@ -338,8 +338,9 @@ own sections leaves the source as it was; included menus still point to the same
 ## Review unpublished menu changes {#preview-undo}
 
 Open **Preview** to review your changes before publishing. Choose **View** beside a change to
-see where it appears. To change a shared product or an included menu, follow the **Edit** link beside the
-change. When the price comes from an included menu, that link opens its **Price overrides** tab.
+see where it appears. Follow the **Edit** link to open the product or included menu. For a price
+change, **Edit product** opens the product, and the included menu's **Edit** link opens its
+**Price overrides** tab.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 

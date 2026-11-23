@@ -5909,9 +5909,10 @@ Publish still includes every change. Keep hidden IDs in component state for the 
 intersecting them with each refreshed change list; leaving the menu forgets them.
 
 An Edit link sits after View and before Hide. A shared product's change links to Edit product,
-or to Edit extras list for an extras item's portion or maximum quantity. An included menu's
-change links to its Price overrides tab for a product price or variant-only change. Other changes to
-an included menu link to its Structure tab.
+or to Edit extras list for an extras item's portion or maximum quantity. When both editions record
+the source of a changed price, a product's own price links to Edit product even through an include.
+An included override that changed or was cleared links to the included menu's Price overrides tab,
+as does an included variant-only change. Other included-menu changes link to Structure.
 A set-menu addition or edit links to its editor. The link destinations and wrapping are checked in
 `apps/dashboard/src/widgets/menu-preview.edit-links.test.ts`.
 

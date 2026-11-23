@@ -398,6 +398,10 @@ document does not record where its price came from. A product's own price change
 menu only through an include, where no menu sets a price, therefore stays credited to the included
 menu; that is backlog item A1373.
 
+**2026-11-23 update.** [A1373](2026-11-23-a1373-preview-price-source.md) records the source of
+each resolved price. Once the live edition records it, Preview links a product price change to
+the product and an included override that was cleared to the included menu.
+
 When this menu's own dish price moved and a variant's price follows the dish, the variant's
 `product_changed` is credited to `this_menu` too (`productFields`, the `priceSource.kind ===
 "parent"` branch); every other variant price change is credited as before.

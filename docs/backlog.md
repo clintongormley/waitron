@@ -532,12 +532,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
-- **A1373 — The Preview credits a product's own price change seen through an include to the
-  included menu**, not the shared product, when no menu sets a price of its own; telling it apart
-  from an included menu clearing its price needs the published menu document to record where each
-  live price came from.
-  [Detail](backlog/menu.md#a1373--the-preview-credits-a-products-own-price-change-seen-through-an-include-to-the-included-menu)
-
 - **One kind of unit refusal on the price field reads "The server rejected this value…"**, which
   after a price message reads as the price; a unit-specific sentence needs the owner's wording
   (left open by #1188's review, W66).

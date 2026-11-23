@@ -536,6 +536,13 @@ for (const locale of ["en", "es"] as const) {
       provisioned.tables.dashboard_sessions!.rows,
     );
     expect(seeded.tables.products!.rows.length).toBeGreaterThan(45);
+    // The recorded baseline predates Preview price origins.
+    for (const snapshot of [before, provisioned, seeded])
+      for (const row of snapshot.tables.menu_versions?.rows ?? []) {
+        const document = JSON.parse(String(row.document)) as Record<string, unknown>;
+        delete document.priceOrigins;
+        row.document = JSON.stringify(document);
+      }
     const canonical = {
       before: await canonicalMadridSemantics(before),
       provisioned: await canonicalMadridSemantics(provisioned),

@@ -114,6 +114,9 @@ export interface PublishedSetMenu {
   changedAt: string;
 }
 
+type MenuPriceOrigin =
+  { kind: "product" } | { kind: "this_menu" } | { kind: "included_menu"; id: string; name: string };
+
 export interface MenuDocument {
   format: 4;
   /** Direct active inclusions' working hashes. */
@@ -125,6 +128,8 @@ export interface MenuDocument {
   /** Keyed by menu-item id: one per distinct product the menu offers. */
   offers: Record<string, FrozenOffer>;
   setMenus?: Record<string, PublishedSetMenu>;
+  /** Resolved price origins for Preview, keyed by dish or variant product id. */
+  priceOrigins?: Record<string, MenuPriceOrigin>;
   /** The Device Home Page: its shortcuts in order, an empty slot for a target this document does
    * not hold, and how each device presents it. */
   home: DeviceHome;

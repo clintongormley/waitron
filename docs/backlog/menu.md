@@ -214,18 +214,6 @@ the 2026-09-30 folders design; what remains:
   `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
   directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
 
-## A1373 — The Preview credits a product's own price change seen through an include to the included menu
-
-- **A1373 — The Preview credits a product's own price change seen through an include to the
-  included menu (found in A353's review, 2026-11-06).** When a product's own price changes and a
-  menu reaches it only through an included menu, with no menu along the way setting a price of its
-  own, the Preview's change list credits the change to the included menu rather than to the shared
-  product, so its action opens that menu's Price overrides tab instead of the product. Telling that
-  apart from an included menu clearing its own price needs the published (frozen) menu document to
-  record where each live price came from, which is a change to the published document's format.
-  The case "leaves a menu out of also-on when its own matching change is its own setting" in
-  `packages/menu/src/menu-publication.test.ts` pins today's answer.
-
 ## What #1151 left open (2026-10-03)
 
 - **A very long number is cut off in the narrower box.** The request check accepts up to
