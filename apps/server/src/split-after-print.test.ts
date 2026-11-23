@@ -30,7 +30,6 @@ import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitr
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
-import { copyBillDishes } from "./split-after-print.js";
 import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
@@ -43,7 +42,6 @@ import {
 } from "./testing/bill-venue.js";
 import {
   departed,
-  parked,
   placedIssuedBill,
   provisionOrderVenue,
   type OrderVenue,
@@ -964,51 +962,5 @@ describe("the Given free sheet for a printed bill", () => {
     expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");
     expect(await freeOn(party.tabId)).toEqual([]);
-  });
-});
-
-describe("copyBillDishes", () => {
-  it("throws on a set-menu line, which no printed bill holds", async () => {
-    const from = await parked(venue, "Tarta");
-    const to = await parked(venue, "Croquettes");
-
-    const copied = inTx(venue, async (tx) => {
-      await tx.run(sql`pragma defer_foreign_keys = on`);
-      const [line] = await tx
-        .select()
-        .from(workingOrderLines)
-        .where(
-          and(eq(workingOrderLines.workingOrderId, from), isNull(workingOrderLines.parentLineId)),
-        );
-      await tx.insert(workingOrderLines).values({
-        ...line!,
-        id: randomUUID(),
-        lineNo: 2,
-        productId: null,
-        menuItemId: null,
-        menuId: null,
-        menuName: null,
-        offerDepartmentId: null,
-        departmentName: null,
-        unitId: null,
-        soldInEach: null,
-        offerUnitName: null,
-        offerUnitPrecision: null,
-        offerVatClass: null,
-        offerCategoryName: null,
-        courseId: null,
-        groupId: null,
-        cohortId: null,
-        cohortOrdinal: null,
-        wholePortion: null,
-        setMenuRole: "set_menu",
-        setMenuId: randomUUID(),
-        setMenuVersionId: randomUUID(),
-      });
-      return copyBillDishes(tx, from, to);
-    });
-
-    await expect(copied).rejects.toThrow(/set-menu/);
-    expect(await dishesOf(to)).toHaveLength(1);
   });
 });

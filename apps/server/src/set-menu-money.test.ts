@@ -14,7 +14,6 @@ import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { issueIfFullyPaid, type BillPaymentRequest } from "./bill-payments.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
-import { endMeal } from "./meal-end.js";
 import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import {
@@ -33,9 +32,11 @@ import {
   saveSpecDishes,
   sendSpecDraft,
   setSpecCount,
+  printSpecBill,
   setupSetMenuSpecVenue,
   specBill,
   specRows,
+  specSaleLines,
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -97,26 +98,8 @@ function wholePayment(applied = "26.00") {
   } as const;
 }
 
-async function printBill(partyId: string, billId: string) {
-  const expectedPartyRevision = await revisionOf(venue, partyId);
-  return inTx(venue, async (tx) => {
-    const { editorVersion, draftId, draftRevision } = await readBillEditState(tx, billId);
-    return endMeal(
-      tx,
-      deps(),
-      venue.cfg,
-      partyId,
-      {
-        billId,
-        expectedPartyRevision,
-        expectedEdits: [{ billId, editorVersion, draftId, draftRevision }],
-        submissionId: crypto.randomUUID(),
-        printAnyway: true,
-      },
-      venue.operator.personId,
-      null,
-    );
-  });
+function printBill(partyId: string, billId: string) {
+  return printSpecBill(spec, partyId, billId);
 }
 
 async function adjustmentArgs(
@@ -324,79 +307,115 @@ it("still accepts a contribution on a bill without set menus", async () => {
   ]);
 });
 
-it.each(["open", "placed"] as const)("takes the reader on a %s set-menu bill", async (status) => {
-  const id = await bill();
-  if (status === "placed") await placeByHand(venue, id);
+/** Each stored line of the bill against each line of the sale it filed: name, quantity and gross. */
+async function expectFiledAsStored(billId: string) {
+  const stored = (await specRows(spec, billId)).map(({ name, quantity, lineTotal }) => [
+    name,
+    quantity,
+    lineTotal,
+  ]);
+  const filed = (await specSaleLines(spec, billId)).map(({ name, quantity, lineGross }) => [
+    name,
+    quantity,
+    lineGross,
+  ]);
+  expect(stored).toHaveLength(12);
+  expect(filed).toEqual(stored);
+}
+
+async function payAtReader(billId: string) {
   const provider = new FakePaymentProvider(venue.db);
   await takeReaderBillPayment(
     { ...deps(), provider },
     venue.cfg,
-    id,
-    { ...wholePayment(), method: "card", entry: "reader" },
+    billId,
+    { ...wholePayment("73.00"), method: "card", entry: "reader" },
     venue.operator,
   );
   expect(provider.collectCalls).toHaveLength(1);
-});
+}
 
-it("collects an already placed set-menu order", async () => {
-  const id = await bill();
-  await placeByHand(venue, id);
-  await takeBillPayment(
-    deps(),
-    venue.cfg,
-    id,
-    { ...wholePayment(), method: "cash", tendered: "26.00" },
-    venue.operator,
-  );
-  expect(await paymentsOf(venue, id)).toMatchObject([{ applied: 2600, state: "received" }]);
-});
+async function payWhole(
+  billId: string,
+  request: Parameters<typeof takeBillPayment>[3] = {
+    ...wholePayment("73.00"),
+    method: "cash",
+    tendered: "73.00",
+  },
+) {
+  await takeBillPayment(deps(), venue.cfg, billId, request, venue.operator);
+  expect(await paymentsOf(venue, billId)).toMatchObject([{ applied: 7300, state: "received" }]);
+}
 
-it("records an unpaid departure on a set-menu bill", async () => {
-  const id = await bill();
-  const { partyId } = await billRow(venue, id);
-  const expectedPartyRevision = await revisionOf(venue, partyId!);
-  await inTx(venue, async (tx) =>
-    recordUnpaidDeparture(
-      tx,
-      deps(),
-      venue.cfg,
-      partyId!,
-      {
-        billId: id,
-        expectedPartyRevision,
-        expectedEdits: [await readBillEditState(tx, id)],
-        reason: "Left before paying",
-      },
-      { ...venue.operator, attempts: { throttle: createPinThrottle(), slot: "departure" } },
-    ),
-  );
-  expect(await revisionOf(venue, partyId!)).toBeGreaterThan(expectedPartyRevision);
-});
+const paths: Record<string, (tab: { partyId: string; tabId: string }) => Promise<void>> = {
+  "whole by cash": ({ tabId }) => payWhole(tabId),
+  "whole by hand-keyed card": ({ tabId }) =>
+    payWhole(tabId, { ...wholePayment("73.00"), method: "card", entry: "manual" }),
+  "whole at the reader": ({ tabId }) => payAtReader(tabId),
+  "placed, then collected": async ({ tabId }) => {
+    await placeByHand(venue, tabId);
+    await payWhole(tabId);
+  },
+  "placed, then collected at the reader": async ({ tabId }) => {
+    await placeByHand(venue, tabId);
+    await payAtReader(tabId);
+  },
+  "unpaid departure": async ({ partyId, tabId }) => {
+    const expectedPartyRevision = await revisionOf(venue, partyId);
+    await inTx(venue, async (tx) =>
+      recordUnpaidDeparture(
+        tx,
+        deps(),
+        venue.cfg,
+        partyId,
+        {
+          billId: tabId,
+          expectedPartyRevision,
+          expectedEdits: [await readBillEditState(tx, tabId)],
+          reason: "Left before paying",
+        },
+        { ...venue.operator, attempts: { throttle: createPinThrottle(), slot: "departure" } },
+      ),
+    );
+    expect(await revisionOf(venue, partyId)).toBeGreaterThan(expectedPartyRevision);
+  },
+  "deferred close": async ({ tabId }) => {
+    await inTx(venue, async (tx) =>
+      closeBillDeferredTx(
+        tx,
+        { ...deps(), admitPartyRelease: async () => "allowed" },
+        venue.cfg,
+        {
+          id: tabId,
+          submissionId: crypto.randomUUID(),
+          expectedRevision: await readOrderRevision(tx, tabId),
+          expectedEdit: await readBillEditState(tx, tabId),
+          expectedTotal: "73.00",
+          invoiceType: "F2",
+          recipient: null,
+          receiptLanguage: venue.cfg.locale,
+          delivery: null,
+          partyFinish: null,
+        },
+        venue.operator.personId,
+      ),
+    );
+    expect((await billRow(venue, tabId)).status).not.toBe("open");
+  },
+  "Print the bill": async ({ partyId, tabId }) => {
+    await printBill(partyId, tabId);
+    expect((await billRow(venue, tabId)).status).toBe("placed");
+  },
+};
 
-it("closes a set-menu bill as deferred", async () => {
-  const id = await bill();
-  await inTx(venue, async (tx) =>
-    closeBillDeferredTx(
-      tx,
-      { ...deps(), admitPartyRelease: async () => "allowed" },
-      venue.cfg,
-      {
-        id,
-        submissionId: crypto.randomUUID(),
-        expectedRevision: await readOrderRevision(tx, id),
-        expectedEdit: await readBillEditState(tx, id),
-        expectedTotal: "26.00",
-        invoiceType: "F2",
-        recipient: null,
-        receiptLanguage: venue.cfg.locale,
-        delivery: null,
-        partyFinish: null,
-      },
-      venue.operator.personId,
-    ),
-  );
-  expect((await billRow(venue, id)).status).not.toBe("open");
-});
+it.each(Object.keys(paths))(
+  "a set-menu bill is paid whole or issued through each path: %s",
+  async (path) => {
+    const tab = await specBill(spec, "fire");
+    await paths[path]!(tab);
+    await expectFiledAsStored(tab.tabId);
+  },
+);
 
 it.each(["comp", "discount_percent", "discount_amount"] as const)(
   "previews and applies %s on a set-menu bill",

@@ -22,6 +22,7 @@ import { orderTableLabel } from "./kitchen-print.js";
 import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
+import { carryBillSetMenuCopies } from "./set-menu-bill.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
@@ -150,10 +151,6 @@ export async function copyBillDishes(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromBillId))
     .orderBy(workingOrderLines.lineNo);
-  // Print the bill refuses a bill holding set-menu lines, so a printed bill never reaches here
-  // with one; their copies would also need `bill_set_menu_copies`.
-  if (rows.some((row) => row.setMenuRole !== null))
-    throw new Error(`copyBillDishes: bill ${fromBillId} holds set-menu lines`);
   const copyOf = new Map(rows.map((row) => [row.id, randomUUID()]));
   // The originals keep their cohorts, and `(cohort_id, cohort_ordinal)` is unique.
   const cohorts = new Map<string, string>();
@@ -171,11 +168,13 @@ export async function copyBillDishes(
       workingOrderId: toBillId,
       lineNo: index + 1,
       parentLineId: row.parentLineId === null ? null : copyOf.get(row.parentLineId)!,
+      setMenuLineId: row.setMenuLineId === null ? null : copyOf.get(row.setMenuLineId)!,
       cohortId: row.cohortId === null ? null : cohortFor(row.cohortId),
     })),
   );
   const pairs = rows.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
   await carryLineReductions(tx, pairs);
+  await carryBillSetMenuCopies(tx, fromBillId, toBillId);
   const cancellations = await tx
     .select({ cancellation: lineServiceCancellations })
     .from(lineServiceCancellations)
