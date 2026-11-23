@@ -1457,9 +1457,13 @@ export class SetupHandoverScreen extends LitElement {
       : nothing;
   }
   #signInPage() {
-    return html`${this.#signInFields()}
-      <wt-form-actions .error=${this.#formError}>${this.#signInSubmit()}</wt-form-actions>
-      ${this.#links()}`;
+    return html`${this.#signInFields()}${this.#signInChoices()}`;
+  }
+  /** The emergency sign-in's message and full-width buttons, laid out as Ready to switch is. */
+  #signInChoices() {
+    return html`${formMessage(this.#formError)}
+      <div class="choices">${this.#signInSubmit()} ${this.#goBackButton()}</div>
+      ${this.#refusalLink()}`;
   }
   #progressRow(name: "follow" | "check", label: StringKey, state: "done" | "working" | "waiting") {
     return html`<li data-test=${`step-${name}`} data-state=${state}>
@@ -1634,7 +1638,7 @@ export class SetupHandoverScreen extends LitElement {
   }
   #goBackButton() {
     return html`<a class="button" data-test="go-back" href=${this.#leaveHref}
-      >${t(this.#leaveLabel)}</a
+      >${t(this.#declared ? "handover.emergency.leave_saved" : this.#leaveLabel)}</a
     >`;
   }
   /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
@@ -1694,8 +1698,10 @@ export class SetupHandoverScreen extends LitElement {
     if (page === "preparing") return this.#preparingPage();
     if (page === "ready") return this.#readyPage();
     const reopened = this.#isEmergency && !this.copyPreview;
-    return html`${reopened ? html`<p>${t("handover.emergency.switching_body")}</p>` : nothing}
-      ${this.#signInShown ? this.#signInFields(this.#isEmergency && !reopened) : nothing}
+    if (reopened)
+      return html`<p>${t("handover.emergency.switching_body")}</p>
+        ${this.#signInShown ? this.#signInFields() : nothing} ${this.#signInChoices()}`;
+    return html` ${this.#signInShown ? this.#signInFields(this.#isEmergency) : nothing}
       ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
@@ -1706,26 +1712,24 @@ export class SetupHandoverScreen extends LitElement {
       }
       <wt-form-actions .error=${this.#formError}>
         ${
-          reopened
-            ? this.#signInSubmit()
-            : this.entry
-              ? this.activationHeld || this.retrying
-                ? html`<wt-button
-                    data-test="retry-activation"
-                    .disabled=${!this.busy && !this.#valid()}
-                    ?loading=${this.busy}
-                    variant="primary"
-                    @click=${() => void this.#retry()}
-                    >${t("handover.try_again")}</wt-button
-                  >`
-                : nothing
-              : html`<wt-button
-                  data-test="authenticate"
-                  .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
-                  variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
-                  @click=${() => void this.#authenticate()}
-                  >${t("handover.compare")}</wt-button
+          this.entry
+            ? this.activationHeld || this.retrying
+              ? html`<wt-button
+                  data-test="retry-activation"
+                  .disabled=${!this.busy && !this.#valid()}
+                  ?loading=${this.busy}
+                  variant="primary"
+                  @click=${() => void this.#retry()}
+                  >${t("handover.try_again")}</wt-button
                 >`
+              : nothing
+            : html`<wt-button
+                data-test="authenticate"
+                .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
+                variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
+                @click=${() => void this.#authenticate()}
+                >${t("handover.compare")}</wt-button
+              >`
         }
       </wt-form-actions>
       ${this.#isEmergency ? this.#links() : nothing}`;
