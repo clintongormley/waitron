@@ -309,6 +309,7 @@ it("disarms the old import before replacing its ciphertext and leaves an incompl
   await expect(
     stageConfigurationImportFile(root, ring, uploaded, passphrase, validated),
   ).rejects.toBe(stopped);
+  expect(vi.mocked(fs.open).mock.calls.some(([path]) => path === uploaded)).toBe(true);
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });
 

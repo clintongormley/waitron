@@ -2322,10 +2322,13 @@ describe("POST /setup-api/configuration", () => {
       modules: ["core"],
       reconnectModules: ["core"],
     } as never;
-    const stageConfiguration = vi.fn(async (path: string) => {
-      expect(await readFile(path)).toEqual(Buffer.from([1, 2, 3]));
-      return preview;
-    });
+    const stageConfiguration = vi.fn<NonNullable<SetupDeps["stageConfiguration"]>>(
+      async (path, passphrase) => {
+        expect(await readFile(path)).toEqual(Buffer.from([1, 2, 3]));
+        expect(passphrase).toBe("a strong passphrase");
+        return preview;
+      },
+    );
     const app = new Hono();
     mountSetup(
       app,
@@ -2355,11 +2358,7 @@ describe("POST /setup-api/configuration", () => {
     const response = await request;
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(preview);
-    expect(stageConfiguration).toHaveBeenCalledWith(
-      expect.any(String),
-      "a strong passphrase",
-      uploadRequest.signal,
-    );
+    expect(stageConfiguration.mock.calls[0]?.[2]).toBe(uploadRequest.signal);
   });
 
   it("refuses a chunked configuration upload over 64 MiB", async () => {
