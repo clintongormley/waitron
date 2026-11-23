@@ -76,7 +76,7 @@ function width(text: string, size: number, weight: InvoiceTextWeight = "regular"
   }
   return (advance * size) / font.unitsPerEm;
 }
-export { width as invoiceTextWidth };
+export { width as invoiceTextWidth, wrap as wrapInvoiceText, wrapParts as wrapInvoiceParts };
 
 const weightOf = (bold: boolean): InvoiceTextWeight => (bold ? "bold" : "regular");
 
