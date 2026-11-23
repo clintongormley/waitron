@@ -1464,7 +1464,7 @@ it.each([
       await vi.waitFor(() => expect(names()).toEqual([]));
       await userEvent.fill(search!, "");
       await vi.waitFor(() => expect(names()).toEqual(["Dinner Menu", "Lunch Menu"]));
-      // Status is the only column that could be chosen, so the list offers no chooser.
+      // No column of the list can be hidden, so it offers no chooser.
       expect(list.shadowRoot.querySelector(".columns-trigger")).toBeNull();
     });
   },
@@ -1475,7 +1475,7 @@ describe("the menus list's columns", () => {
     [1280, 900],
     [390, 844],
   ] as const)(
-    "offers no Customise columns, where Status is the only column that could be chosen (%i px)",
+    "offers no Customise columns, where no column can be hidden (%i px)",
     async (width, height) => {
       await at([width, height], "en-GB", async () => {
         const el = await mount();
@@ -2127,7 +2127,7 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
-  it("offers no column chooser on a desktop list, where Status is the only column that could be chosen", async () => {
+  it("offers no column chooser on a desktop list, where no column can be hidden", async () => {
     await at([1280, 900], "en-GB", async () => {
       const el = await listed(mixed());
       expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
@@ -2150,6 +2150,38 @@ describe("the menus list's Status column and its changes link", () => {
           "Lunch Menu Published · 1 hour ago Unpublished changes",
         );
       });
+    });
+  });
+
+  it("keeps Status and its links shown beside a set menu's Kind column when a saved choice hides Status", async () => {
+    localStorage.setItem(`${LIST_KEY}:columns`, JSON.stringify({ status: false, changes: true }));
+    localStorage.setItem(`${LIST_KEY}:column-order`, JSON.stringify(["changes", "status"]));
+    const set: MenuSummary = {
+      id: "set-daily",
+      name: "Daily menu",
+      active: true,
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "reduced",
+    };
+    await at([1280, 900], "en-GB", async () => {
+      const el = await listed(
+        mixed({
+          listMenus: vi.fn().mockResolvedValue([...menus, BRUNCH, set]),
+          getMenuStatuses: vi.fn().mockResolvedValue({
+            ...statuses(),
+            "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+            "menu-brunch": { state: "unpublished", clashes: 0 },
+          }),
+        }),
+      );
+      expect(heads(el).slice(1)).toEqual([t("menus.status"), t("menus.kind"), t("menus.actions")]);
+      const cell = statusColumnCell(el, "menu-lunch");
+      expect(text(cell.querySelector('[data-test="changes-menu-lunch"]'))).toBe(
+        "Unpublished changes",
+      );
+      expect(text(cell.querySelector('[data-test="clashes-menu-lunch"]'))).toBe("2 price clashes");
+      expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
     });
   });
 
@@ -9954,7 +9986,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("lists the status column, and beside a set menu's Kind column offers a chooser with no Changes in it", async () => {
+  it("lists the status column beside a set menu's Kind column, with no Changes column and no chooser", async () => {
     setLocale("es-ES");
     const set = {
       id: "set-daily",
@@ -9971,23 +10003,10 @@ describe("publishing", () => {
       await table(el).updateComplete;
       expect(headerTexts()).toContain(t("menus.status"));
     });
+    expect(headerTexts()).toContain(t("menus.kind"));
     expect(headerTexts()).not.toContain("Cambios");
-    const root = table(el).shadowRoot;
-    const chooser = root.querySelector<HTMLButtonElement>(".columns-trigger")!;
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    const inputBox = search.getBoundingClientRect();
-    const chooserBox = chooser.getBoundingClientRect();
-    expect(
-      Math.abs(inputBox.top + inputBox.height / 2 - chooserBox.top - chooserBox.height / 2),
-    ).toBeLessThan(2);
-    expect(inputBox.right).toBeLessThanOrEqual(chooserBox.left);
-    chooser.click();
-    await table(el).updateComplete;
-    expect(
-      [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map(
-        (input) => input.dataset.column,
-      ),
-    ).toEqual(["status"]);
+    // Status carries the menu's links, so it cannot be hidden, and Kind cannot be either.
+    expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
   });
 
   it("shows each menu's state under its name on a phone-width list, with no status column", async () => {

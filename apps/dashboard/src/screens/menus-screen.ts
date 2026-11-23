@@ -2396,7 +2396,6 @@ export class MenusScreen extends LitElement {
             {
               key: "status",
               label: t("menus.status"),
-              choosable: "shown" as const,
               activatesRow: false as const,
               sortValue: (menu: MenuRow) =>
                 STATUS_ORDER.indexOf(

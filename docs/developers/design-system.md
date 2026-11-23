@@ -1624,8 +1624,8 @@ probe element:
   opens nothing; a click on the link opens only its Preview tab. The name wraps within the list's
   width less three `--wt-tap-min` and `--wt-menu-list-status-room`, room for the row menu and for
   Status. Wrapping lets the name column shrink further so the state and its time stay before
-  Actions. With Status its only movable column, the list has no Customise columns button unless a
-  set menu adds its Kind column.
+  Actions. Status, which holds the links, cannot be hidden, so the list has no Customise columns
+  button, not even beside a set menu's Kind column.
 - At `30rem` or less, the state, its time and the links stack under the name, as the variants
   table's prices do (above). A click on the Name cell's blank space opens nothing; the name's
   button, the row menu's Open and the Actions cell's blank space still open the menu.
@@ -2138,8 +2138,7 @@ A table with `choosable` columns draws a Customise columns icon button at the to
 end, but only while its current columns hold at least two movable ones — every column but the first
 and a `pinned: "end"` one. With one, the dialog could change nothing: that column can neither move
 nor be hidden, because the last shown movable column stays shown. So a list whose only movable
-column sits between its name and its buttons draws no Customise button, and nor does the Menus list
-unless a set menu adds its Kind column beside Status. A
+column sits between its name and its buttons draws no Customise button. A
 stored choice is kept meanwhile and applies again when the columns offer a choice; one that hides
 that single column leaves it shown. An open dialog closes when the columns stop offering a choice.
 The dialog lists every column in table order. A column the person can hide has an eye control. A
